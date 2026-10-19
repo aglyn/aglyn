@@ -184,6 +184,7 @@ export type AiJobNeedsInputReason =
   | 'plan'
   | 'doctrine'
   | 'limit'
+  | 'input'
 
 export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   AiJobNeedsInputReason,
@@ -192,6 +193,7 @@ export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   plan: 'its plan is ready for review',
   doctrine: 'its answer broke a building rule twice',
   limit: 'the site reached an allowance of its plan',
+  input: 'it needs an ID only the person can give',
   band: 'the included AI band is used up',
   cap: 'the overage ceiling was reached',
   messages: 'the monthly message cap was reached',

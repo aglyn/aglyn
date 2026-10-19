@@ -18,7 +18,10 @@
 // Named modules rather than the `@aglyn/aglyn` barrel: both apps load this
 // on the server at boot, and the full barrel carries client-only contexts
 // (AGL-405).
-import { AI_ADDON_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  aiTierQuotaPerUnit,
+  planSellsAiTiers,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { registerPluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
 import {
   registerPluginEntitlements,
@@ -41,8 +44,8 @@ import { registerAiActivityActions } from './activity/ai-activity-actions'
  * reaches a provider, Firestore or React.
  *
  * The plan tables keep the per-plan defaults for `aiGenerative` and
- * `aiAssist`, and `PLAN_PRICING` keeps the add-on's price, so this names
- * keys and bands and restates no price.
+ * `aiAssist`, and `AI_TIERS` keeps each tier's price and credits, so this
+ * names keys and restates no figure.
  *
  * `ai-assist` and `ai-generate` are separate levers because the two doors
  * spend at different rates and an incident on one need not stop the other
@@ -57,11 +60,15 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
       key: 'aiAddon',
       label: 'AI add-on',
       maxUnits: 1,
+      // The purchased tier's credits on top of the plan's included band
+      // (AGL-3965): one pool, widened by what was bought rather than by
+      // which plan bought it.
       quota: {
         key: 'assistCreditsPerMonth',
-        perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH,
+        perUnit: aiTierQuotaPerUnit,
       },
       features: ['aiGenerative', 'aiAssist'],
+      soldOn: planSellsAiTiers,
     },
   ],
   features: [

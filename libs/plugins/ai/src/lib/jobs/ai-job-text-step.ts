@@ -21,6 +21,7 @@ import type {
   AiJobOutput,
   AiJobPlan,
   AiJobReview,
+  AiJobInputRequest,
   AiJobItemFailure,
   AiJobItemLedger,
   AiJobItemStatus,
@@ -121,6 +122,13 @@ export interface AiJobStepOutcome {
    * step back, so trying again runs the same one.
    */
   review?: AiJobReview
+  /**
+   * With a `plan` review: the plan needs an answer only the person can give
+   * first (AGL-3978) — a tracking change with no pixel ID. The machine keeps
+   * the plan and its review and parks the job `needs_input` with these
+   * fields instead of `needs_review`; the answer returns it to the review.
+   */
+  input?: AiJobInputRequest
   /**
    * The answer was refused by the platform's own checks, not the model's
    * (AGL-3594): the machine meters the step as any other and then gives the

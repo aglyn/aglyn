@@ -24,13 +24,16 @@
  * The Aglyn AI add-on lands on the org through the webhook (AGL-2897).
  *
  * Nothing in checkout or the add-ons route grants the add-on. Both attach a
- * `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]` item to the subscription, and the
- * subscription events rewrite `org.seatAddons` from the items through
- * `addonQuantitiesFromItems` — so `seatAddons.aiAddon` is 1 exactly while the
- * item is on the subscription, and 0 the moment it is not. `seatAddons` is an
- * ENTITLEMENT INPUT: `resolveOrgEntitlements` folds it into
- * `features.aiGenerative` and the assist band, which is what this file pins
- * end to end rather than at either half.
+ * tier's `STRIPE_PRICE_AI_{TIER}[_YEARLY]` item to the subscription
+ * (AGL-3965), and the subscription events rewrite `org.seatAddons` and
+ * `org.aiTier` from the items through `addonQuantitiesFromItems` and
+ * `aiTierFromItems` — so `seatAddons.aiAddon` is 1 exactly while the item is
+ * on the subscription, and 0 the moment it is not, and `aiTier` names the
+ * tier it is. A legacy per-plan `STRIPE_PRICE_{PLAN}_AI_ADDON` item still on
+ * a subscription reads as the tier with its price and band. Both are
+ * ENTITLEMENT INPUTS: `resolveOrgEntitlements` folds the tier's credits into
+ * the assist band, which is what this file pins end to end rather than at
+ * either half.
  *
  * Harness lifted from `billing-webhook-ga-cancellation.spec.ts`. NO STRIPE
  * PATH IS EXERCISED: `global.fetch` is a jest mock.
@@ -46,7 +49,7 @@ import type { Ga4SendResult } from '@aglyn/tenant-data-admin'
 // the assertion is that the map the webhook wrote flips the feature, and a
 // stubbed resolver would answer whatever this file told it to.
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
   PLAN_ENTITLEMENTS,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -68,8 +71,14 @@ const BASE_ENV = {
   STRIPE_WEBHOOK_SECRET: 'whsec_fake',
   STRIPE_PRICE_PRO: 'price_pro_monthly',
   STRIPE_PRICE_PRO_YEARLY: 'price_pro_annual',
+  // The legacy per-plan add-on price (AGL-2897), still recognised.
   STRIPE_PRICE_PRO_AI_ADDON: 'price_pro_ai_addon',
   STRIPE_PRICE_PRO_AI_ADDON_YEARLY: 'price_pro_ai_addon_yearly',
+  // The tiers (AGL-3965).
+  STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
+  STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
+  STRIPE_PRICE_AI_STUDIO: 'price_ai_studio',
+  STRIPE_PRICE_AI_STUDIO_YEARLY: 'price_ai_studio_yearly',
   STRIPE_PRICE_PRO_EXTRA_HOST: 'price_pro_extra_host',
 }
 
@@ -429,7 +438,66 @@ describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
     expect(mockActivityRows).toEqual([])
   })
 
-  it('the written map flips aiGenerative and widens the assist band', async () => {
+  it('writes the tier the item is beside the quantities (AGL-3965)', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([
+        item('price_pro_monthly'),
+        item('price_ai_studio'),
+      ]))),
+    )
+    expect(mirrored().seatAddons.aiAddon).toBe(1)
+    expect(mirrored().aiTier).toBe('studio')
+  })
+
+  it('reads a legacy per-plan item as the tier with its price and band', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([
+        item('price_pro_annual', 1, 'year'),
+        item('price_pro_ai_addon_yearly', 1, 'year'),
+      ]))),
+    )
+    // Pro's $19 / 9,000 add-on IS Boost.
+    expect(mirrored().aiTier).toBe('boost')
+  })
+
+  it('writes aiTier: null, not absent, once the item is gone', async () => {
+    const post = loadWebhook()
+    await post(signed(subscriptionEvent(subscription([item('price_pro_monthly')]))))
+    expect(Object.prototype.hasOwnProperty.call(mirrored(), 'aiTier')).toBe(true)
+    expect(mirrored().aiTier).toBeNull()
+  })
+
+  it('the written map widens the assist band by the TIER bought, not by the plan', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([
+        item('price_pro_monthly'),
+        item('price_ai_studio'),
+      ]))),
+    )
+    const { seatAddons, aiTier } = mirrored()
+    const granted = resolveOrgEntitlements({ plan: 'pro', seatAddons, aiTier })
+    expect(granted.features.aiGenerative).toBe(true)
+    expect(granted.features.aiAssist).toBe(true)
+    // Studio on Pro: the decoupling — Pro's own add-on would have been 9,000.
+    expect(granted.assistCreditsPerMonth).toBe(
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.studio.credits,
+    )
+
+    // …and the removal takes the credits back, from the SAME writer. The
+    // generative door stays open: one pool, the plan's own credits pay for
+    // generation on every paid plan (AGL-3965).
+    mockBillingWrites.length = 0
+    await post(signed(subscriptionEvent(subscription([item('price_pro_monthly')]))))
+    const after = mirrored()
+    const revoked = resolveOrgEntitlements({ plan: 'pro', seatAddons: after.seatAddons, aiTier: after.aiTier })
+    expect(revoked.features.aiGenerative).toBe(true)
+    expect(revoked.assistCreditsPerMonth).toBe(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
+  })
+
+  it('a legacy item with no aiTier written yet still widens by its own band', async () => {
     const post = loadWebhook()
     await post(
       signed(subscriptionEvent(subscription([
@@ -437,18 +505,11 @@ describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
         item('price_pro_ai_addon'),
       ]))),
     )
+    // An org doc written before AGL-3965 carries `seatAddons` and no
+    // `aiTier`: it reads as the tier with the plan's old band.
     const granted = resolveOrgEntitlements({ plan: 'pro', seatAddons: mirrored().seatAddons })
-    expect(granted.features.aiGenerative).toBe(true)
-    expect(granted.features.aiAssist).toBe(true)
     expect(granted.assistCreditsPerMonth).toBe(
-      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.pro,
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.boost.credits,
     )
-
-    // …and the removal takes it back, from the SAME writer.
-    mockBillingWrites.length = 0
-    await post(signed(subscriptionEvent(subscription([item('price_pro_monthly')]))))
-    const revoked = resolveOrgEntitlements({ plan: 'pro', seatAddons: mirrored().seatAddons })
-    expect(revoked.features.aiGenerative).toBe(false)
-    expect(revoked.assistCreditsPerMonth).toBe(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
   })
 })

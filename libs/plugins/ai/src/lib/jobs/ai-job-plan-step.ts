@@ -18,6 +18,15 @@
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiSiteHomeArc, aiSiteHomeArcSentence, type AiSiteHomeArc } from '../model/ai-site-home-arcs'
 import { aiSiteSeed } from '../model/ai-site-look'
+import { AI_SITE_INSPIRATION_INPUT } from '../model/ai-site-inspiration'
+import {
+  aiSiteInspirationHomeOrder,
+  aiSiteInspirationPlanLines,
+  readAiJobSiteInspiration,
+  type AiSiteInspirationReader,
+  type AiSiteInspirationStart,
+} from './ai-site-inspiration'
+import type { AiSiteInspiration } from './ai-site-inspiration-signals'
 import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
@@ -105,8 +114,10 @@ import { readAiSiteContext } from '../runtime/site-context'
 import { aiInstructionsWithSiteContext, type AiSiteContextInput } from '../model/ai-site-context'
 import {
   AI_BUILD_CREATE_KINDS,
+  AI_BUILD_NEEDS_INPUT_CODE,
   AI_BUILD_STRUCTURAL_OPS,
   aiBuildPageLimit,
+  aiBuildPlanInputFields,
   aiBuildPlanShapeRefusal,
   type AiBuildOps,
 } from '../model/ai-build-job'
@@ -216,9 +227,12 @@ export function aiJobPlanPrompt(
   inventory: AiSiteInventory | null = null,
   ops: AiBuildOps | null = null,
   now: Date | null = null,
+  options: AiPlanSiteOptions = {},
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
+    // The sites a person likes are read by code, never shown (AGL-3975).
+    if (key === AI_SITE_INSPIRATION_INPUT) continue
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       lines.push(`${key}: ${String(value)}`)
     }
@@ -230,9 +244,18 @@ export function aiJobPlanPrompt(
     lines.push(AI_PLAN_NO_FORM_SENTENCE)
   }
   lines.push(...aiPlanTemplateTokenLines(job))
-  lines.push(...aiPlanSiteLines(job, inventory, capabilities))
+  lines.push(...aiPlanSiteLines(job, inventory, capabilities, options))
   lines.push(...aiPlanBuildLines(job, capabilities, ops, now))
   return lines.join('\n')
+}
+
+/** What a site plan's turn is told beyond its job (AGL-3975). */
+export interface AiPlanSiteOptions {
+  /**
+   * The sites the person likes give the home its order (`aiSiteInspirationHomeOrder`),
+   * so the seeded home arc (AGL-3899) is not stated beside it.
+   */
+  ownOrder?: boolean
 }
 
 /**
@@ -281,6 +304,7 @@ export function aiPlanSiteLines(
   job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs' | 'brief' | '$id'>>,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
+  options: AiPlanSiteOptions = {},
 ): string[] {
   if (job.kind !== 'site') return []
   const lines: string[] = []
@@ -322,8 +346,9 @@ export function aiPlanSiteLines(
     const bands = aiSiteKindOfInputs(job.inputs)?.id === 'store' ? AI_SITE_STORE_HOME_BANDS : AI_SITE_HOME_BANDS
     lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${bands}.`)
     // And its own arc, chosen by the job's seed (AGL-3899): two identical
-    // briefs are two different homes.
-    const arc = aiSitePlanHomeArc(job)
+    // briefs are two different homes. A start whose person named sites they
+    // like takes its order from them instead (AGL-3975).
+    const arc = options.ownOrder ? null : aiSitePlanHomeArc(job)
     if (arc) lines.push(aiSiteHomeArcSentence(arc))
   }
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
@@ -1024,6 +1049,11 @@ export interface AiJobPlanStepDeps {
    * their own.
    */
   countDatasetRecords?: AiDatasetRecordCounter
+  /**
+   * The signals of the sites a site start's person likes (AGL-3975); specs
+   * hand in recorded pages, and `null` turns it off.
+   */
+  readInspiration?: AiSiteInspirationReader | null
 }
 
 /** What a job's site context is read with (AGL-3661). */
@@ -1094,6 +1124,20 @@ export function aiPlanWithItemCredits<T extends AiBuildPlan>(ops: AiBuildOps | n
   }
 }
 
+/**
+ * A plan with THIS job's inspiration signals (AGL-3975), or with none: a
+ * reused plan's were the other job's, and a plan the model answered holds
+ * none of its own. The look unit pins them; the plan was told the structure.
+ */
+export function aiPlanWithInspiration<T extends AiBuildPlan & { inspiration?: AiSiteInspiration }>(
+  plan: T,
+  inspiration: AiSiteInspiration | null,
+): T {
+  const rest: T = { ...plan }
+  delete rest.inspiration
+  return inspiration ? { ...rest, inspiration } : rest
+}
+
 export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
   const findPlansByKey =
@@ -1104,6 +1148,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
   const readFreeCredits = deps.readFreeCredits === undefined ? readFreeAiCreditsLeft : deps.readFreeCredits
   const readSiteEvents = deps.readSiteEvents === undefined ? readAiSiteEventPlanning : deps.readSiteEvents
+  const readInspiration = deps.readInspiration === undefined ? readAiJobSiteInspiration : deps.readInspiration
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
     // A site start counts each dataset's records (AGL-3912): it reuses only
@@ -1133,10 +1178,19 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const site = job.kind === 'site'
     // An event-led start's first events (AGL-3755), only where the build's
     // gate admits the events plugin's operation here and its writer this member.
-    const siteEvents =
+    // And the sites the person likes, as signals (AGL-3975): read only on a
+    // site start that names some, while the release flag is on.
+    const [siteEvents, inspiration] = await Promise.all([
       site && readSiteEvents
-        ? await readSiteEvents({ job, org, firestore, now, readOps: () => readOps({ job, org, firestore, freeTaste }) })
-        : null
+        ? readSiteEvents({ job, org, firestore, now, readOps: () => readOps({ job, org, firestore, freeTaste }) })
+        : Promise.resolve(null),
+      site && readInspiration
+        ? readInspiration({ job, org, freeTaste, ...(signal ? { signal } : {}) }).catch((error: unknown) => {
+            console.warn('ai plan: the sites the person likes could not be read', { orgId: job.orgId, jobId: job.$id, error })
+            return null
+          })
+        : Promise.resolve(null),
+    ])
     const itemOps = ops ?? siteEvents?.ops ?? null
     // A kept plan waits for its confirmation; a Free build's card is told what
     // is left, so it says before Confirm whether the build fits (AGL-3722).
@@ -1157,7 +1211,23 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // provider's fast tier (AGL-3594), unless the creator picked a model.
     const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = [aiJobPlanPrompt(job, capabilities, inventory, ops, now), ...(siteEvents ? aiSiteEventPlanLines(siteEvents, now) : [])].join('\n')
+    // What this start can build of what the person's sites offer (AGL-3975):
+    // a restaurant is never offered the events list an event-led start
+    // drafts, or a store's sign-up; and their first site's order, where it
+    // gives one, is the home's in place of the seeded arc.
+    const inspirationStart: AiSiteInspirationStart = {
+      siteKind: aiSiteKindOfInputs(job.inputs)?.id ?? null,
+      posts: aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
+      sells: aiSiteContentPart(job.inputs ?? null, freeTaste) === 'products',
+      events: Boolean(siteEvents),
+      customerWords: aiPlanHasCustomerWords({ brief: job.brief, inventory, siteKind: aiSiteKindOfInputs(job.inputs)?.id }),
+    }
+    const ownOrder = Boolean(aiSiteInspirationHomeOrder(inspiration, inspirationStart))
+    const prompt = [
+      aiJobPlanPrompt(job, capabilities, inventory, ops, now, { ownOrder }),
+      ...(siteEvents ? aiSiteEventPlanLines(siteEvents, now) : []),
+      ...aiSiteInspirationPlanLines(inspiration, { paid: !freeTaste, start: inspirationStart }),
+    ].join('\n')
 
     /**
      * The confirm door's answer for this plan, asked before the plan is kept
@@ -1175,6 +1245,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
      *   2026-10-09 16:38Z (600 credits estimated, 164 left).
      * - the 429 "nothing left" still fails the job with its sentence, but as
      *   the customer's limit, which raises no staff alert.
+     *
+     * A plan only the person can complete — a tracking change with no pixel
+     * ID (AGL-3978) — is KEPT too, and waits in `needs_input` with a field per
+     * id, its review beside it: nothing about it failed, and the answer
+     * returns it to the plan card. Only an item that names no tag at all,
+     * so has no field to fill, still ends with the question.
      */
     const refusalOnKeep = async (plan: AiJobPlan, outcome: AiJobStepOutcome): Promise<AiJobStepOutcome | null> => {
       let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>> = null
@@ -1192,6 +1268,10 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         console.error('ai plan admission failed', { orgId: job.orgId, jobId: job.$id, error })
       }
       if (!refusal || refusal.code === AI_CREDITS_CONFIRM_CODE) return null
+      const fields = refusal.code === AI_BUILD_NEEDS_INPUT_CODE ? aiBuildPlanInputFields(plan, itemOps) : []
+      if (fields.length) {
+        return { ...outcome, plan, review: await planReview(outcome.estCostUsd), input: { message: refusal.error, fields } }
+      }
       return {
         ...outcome,
         failure: refusal.error,
@@ -1234,7 +1314,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       // Settled again against what the datasets hold now (AGL-3912).
       const kept = site ? aiSettlePlanDatasets(aiSettleSiteForeignDatasets(reused.plan, inventory, capabilities), capabilities) : reused.plan
       const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
-        ...kept,
+        ...aiPlanWithInspiration(kept, inspiration),
         status: 'proposed',
         labels: aiPlanLabels(kept, inventory),
         proposedAt: now as unknown as AiJobPlan['proposedAt'],
@@ -1359,7 +1439,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const answered = site && aiSiteKindOfInputs(job.inputs)?.id === 'store' ? aiSiteStorefrontPlan(result.value, { paid: !freeTaste }) : result.value
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
     const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
-      ...answered,
+      ...aiPlanWithInspiration(answered, inspiration),
       status: 'proposed',
       labels: aiPlanLabels(answered, inventory),
       // A Date the Admin SDK stores as a timestamp, like every instant the machine writes.

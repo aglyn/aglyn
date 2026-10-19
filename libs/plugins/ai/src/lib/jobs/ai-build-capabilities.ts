@@ -37,7 +37,7 @@ import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plug
 import { aiJobStepRunnerFor } from './ai-jobs'
 import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
 import { AI_MEDIA_ARGS_SCHEMA, AI_MEDIA_LIMITS, AI_MEDIA_WHERE } from './ai-job-media-step'
-import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingMissingInput } from './ai-job-tracking-step'
+import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingInputFields, aiTrackingMissingInput } from './ai-job-tracking-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -419,6 +419,8 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     live: true,
     // An item with no usable id asks for it instead of being built (AGL-3751).
     missingInput: aiTrackingMissingInput,
+    // …and waits for it in `needs_input`, with a field naming the provider (AGL-3978).
+    inputFields: aiTrackingInputFields,
     // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',

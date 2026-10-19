@@ -35,8 +35,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   addonKindFromPriceId,
-  addonPriceId,
+  addonTargetPriceId,
   addonQuantitiesFromItems,
+  aiTierFromItems,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -640,7 +641,9 @@ async function handler(request: Request): Promise<Response> {
     for (const item of items) {
       const kind = addonKindFromPriceId(item?.price?.id)
       if (!kind) continue
-      const target = addonPriceId(kind, targetPlan as OrgPlan, targetInterval)
+      // The AI add-on keeps its tier and only follows the interval
+      // (AGL-3965); every other kind re-prices to the target plan.
+      const target = addonTargetPriceId(kind, targetPlan as OrgPlan, targetInterval, item?.price?.id)
       if (target === item?.price?.id) continue
       if (target) {
         itemChanges.push([['id', String(item.id)], ['price', target]])
@@ -1020,6 +1023,7 @@ async function handler(request: Request): Promise<Response> {
       await org.ref.set({ plan: targetPlan }, { merge: true })
       await writeOrgBilling(org.ref.id, {
         seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
+        aiTier: aiTierFromItems(updated?.items?.data ?? []),
         subscription: {
           status: updated.status ?? subscription.status,
           priceId: targetPrice,

@@ -1906,6 +1906,52 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     ])
   })
 
+  it('parks a plan that needs an ID only the person has in needs_input, tells them once, and the beat leaves it for them (AGL-3978)', async () => {
+    const message = 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.'
+    const field = { item: 'Meta pixel', arg: 'metaPixel', label: 'Meta pixel ID', shape: '8–20 digits', pattern: '^[0-9]{8,20}$' }
+    planRunner.mockResolvedValue({ ...proposedOutcome(), input: { message, fields: [field] } })
+    const told: Array<{ to: string; status: string }> = []
+    registerAiJobTransitionListener(async ({ job: changed, to }) => {
+      told.push({ to, status: changed.status })
+    })
+    try {
+      const job = await newSiteJob()
+      const run = await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+      expect(run.outcome).toBe('needs_input')
+      const stored = await getAiJob(firestore, ORG, job.$id)
+      expect(stored).toMatchObject({
+        status: 'needs_input',
+        error: message,
+        lease: null,
+        creditsReserved: 0,
+        input: { message, fields: [field] },
+        plan: { status: 'proposed' },
+        review: { reason: 'plan' },
+      })
+      expect(stored?.steps.map((step) => step.status)).toEqual(['done', 'pending'])
+      expect(aiJobSummary(stored as AiJob, NOW).input).toEqual({ message, fields: [field] })
+      expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledWith(ORG, { uid: null }, { jobId: job.$id, kind: 'site', reason: 'input' })
+      expect(told).toEqual([{ to: 'needs-review', status: 'needs_input' }])
+
+      // Rested past the meter's retry, the beat runs nothing and moves it to the back.
+      const later = NOW.getTime() + AI_JOB_NEEDS_INPUT_RETRY_MS
+      const swept = await sweepAiJobs({ firestore, owner: 'beat', now: () => later })
+      expect(swept).toMatchObject({ due: 1, ran: 0, skipped: 1 })
+      const rested = await getAiJob(firestore, ORG, job.$id)
+      expect(rested?.status).toBe('needs_input')
+      expect(new Date(rested?.updatedAt as unknown as Date).getTime()).toBe(later)
+      expect(siteRunner).not.toHaveBeenCalled()
+      expect(planRunner).toHaveBeenCalledTimes(1)
+
+      // A Resume without the answer, or with a wrong one, changes nothing.
+      expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)).changed).toBe(false)
+      expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW, { input: { 'Meta pixel/metaPixel': 'x' } })).changed).toBe(false)
+      expect(told).toHaveLength(1)
+    } finally {
+      registerAiJobTransitionListener(null)
+    }
+  })
+
   it('parks a proposed plan for review in the write that records the step, and the beat never picks it up', async () => {
     planRunner.mockResolvedValue(proposedOutcome())
     const job = await newSiteJob()

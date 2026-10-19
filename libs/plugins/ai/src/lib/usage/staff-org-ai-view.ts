@@ -17,6 +17,7 @@
 
 // Imported by the staff card (client) and by the App Route that serves it, so it
 // imports neither entry barrel (see `staff-org-ai.ts`).
+import { AI_TIERS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiUsageMonthLabel } from './ai-usage-wire'
 import {
   aiCreditsCell,
@@ -72,7 +73,7 @@ export function poolPartsSentence(pool: StaffOrgAiPool, addonName: string): stri
     parts.push(`${credits(pool.planCredits)} plan band`)
   }
   if (pool.addonCredits > 0) {
-    parts.push(`${credits(pool.addonCredits)} ${addonName} add-on`)
+    parts.push(`${credits(pool.addonCredits)} ${addonName} tier`)
   }
   return parts.join(' + ')
 }
@@ -252,8 +253,12 @@ export function staffOrgAiView(
     month: data.month,
     addon: {
       on: addon.on,
-      status: addon.on ? `${addonName} on` : `${addonName} off`,
-      price: addon.priceUsd !== null ? `${usd(addon.priceUsd)}/mo on this plan` : 'Not sold on this plan',
+      // The tier held (AGL-3965): sold on its own, at one price on any paid
+      // plan, so the price is the tier's rather than "on this plan".
+      status: addon.on
+        ? `${addonName}${addon.tier ? ` ${AI_TIERS[addon.tier].label}` : ''} on`
+        : `${addonName} off`,
+      price: addon.priceUsd !== null ? `${usd(addon.priceUsd)}/mo` : 'No tier',
       since: addon.on ? addon.since : null,
       sinceNote: addon.on ? addonSinceNote(addon) : '',
     },

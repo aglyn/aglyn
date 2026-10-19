@@ -47,7 +47,7 @@
 // VALUES. Comments, formatting and helper functions move freely; a number or
 // a boolean that a customer is charged or granted does not.
 
-import { parsePlanRecord, parseUnitRates } from './pricing-drift.mjs'
+import { AI_TIER_IDS, parsePlanRecord, parseUnitRates } from './pricing-drift.mjs'
 
 /** Where the repo-side Decision Log lives. */
 export const DECISION_LOG_PATH = 'docs/DECISION_LOG.md'
@@ -95,6 +95,11 @@ export const WATCHED = Object.freeze([
       'SITE_CARE_PROJECT_REDESIGN_FROM_USD',
       'SITE_CARE_PROJECT_BRAND_KIT_FROM_USD',
       'SITE_CARE_PROJECT_SPLIT_ABOVE_USD',
+    ]),
+    // The Aglyn AI tiers (AGL-3965): a record keyed by tier rather than by
+    // plan. Optional only until the base ref carries it, like the scalars.
+    optionalKeyedRecords: Object.freeze([
+      Object.freeze({ name: 'AI_TIERS', keys: AI_TIER_IDS }),
     ]),
   }),
   Object.freeze({
@@ -201,6 +206,19 @@ export function priceSurface(sources) {
       for (const plan of plans) {
         for (const [field, value] of Object.entries(record[plan])) {
           values[`${name}.${plan}.${field}`] = resolveConstant(src, value)
+        }
+      }
+    }
+    for (const { name, keys } of spec.optionalKeyedRecords ?? []) {
+      if (!new RegExp(`export const ${name}\\b`).test(src)) continue
+      const record = parsePlanRecord(src, name, keys)
+      if (!Object.keys(record).length) {
+        unreadable.push({ key: `${name}`, detail: `could not be parsed in ${spec.path}` })
+        continue
+      }
+      for (const [key, fields] of Object.entries(record)) {
+        for (const [field, value] of Object.entries(fields)) {
+          values[`${name}.${key}.${field}`] = value
         }
       }
     }

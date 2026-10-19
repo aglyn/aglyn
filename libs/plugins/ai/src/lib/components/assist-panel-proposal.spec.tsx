@@ -52,7 +52,14 @@ const routeScope = {
 }
 
 const currentOrg = {
-  org: { plan: 'pro', billingStatus: 'active' } as Record<string, unknown>,
+  // Below the generative rung, so only the chat door is open: since AGL-3965
+  // every plan carries generation (one pool) and only a per-org override
+  // closes it.
+  org: {
+    plan: 'pro',
+    billingStatus: 'active',
+    entitlements: { features: { aiGenerative: false } },
+  } as Record<string, unknown>,
   orgId: 'org-1',
   ready: true,
 }
@@ -167,7 +174,11 @@ async function ask(question = 'How do I publish?'): Promise<void> {
 beforeEach(() => {
   posts.length = 0
   tracked.length = 0
-  currentOrg.org = { plan: 'pro', billingStatus: 'active' }
+  currentOrg.org = {
+    plan: 'pro',
+    billingStatus: 'active',
+    entitlements: { features: { aiGenerative: false } },
+  }
   routeScope.pathname = '/acme/hosts/host-1/screens'
   sessionStorage.clear()
   chatResponse = null

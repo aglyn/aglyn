@@ -81,7 +81,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
 }))
 
 import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
-import AiProductsHubCard from './ai-products-hub-card.component'
+import AiProductsHubCard, { NO_PRODUCTS_FOR_COPY } from './ai-products-hub-card.component'
 import AiCreateProductsButton from './ai-products-create-button.component'
 import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
@@ -234,6 +234,23 @@ describe('whether the card is here', () => {
 })
 
 describe('copy for many products', () => {
+  it('says why it is off with no products listed, and how to get some (AGL-3982)', async () => {
+    render(<AiProductsHubCard {...props({ products: [] })} />)
+    const button = (await screen.findByRole('button', { name: 'Write copy for products' })) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    // The reason rides the disabled control for hover and a screen reader…
+    expect(button.closest('span')?.getAttribute('aria-label')).toBe(NO_PRODUCTS_FOR_COPY)
+    // …and stands in plain view for a touch screen.
+    expect(screen.getByText(NO_PRODUCTS_FOR_COPY)).toBeTruthy()
+  })
+
+  it('THE CONTROL: with products listed it is on and says nothing', async () => {
+    render(<AiProductsHubCard {...props()} />)
+    const button = (await screen.findByRole('button', { name: 'Write copy for products' })) as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    expect(screen.queryByText(NO_PRODUCTS_FOR_COPY)).toBeNull()
+  })
+
   it('starts one job for the products picked, with the ids its step reads', async () => {
     render(<AiProductsHubCard {...props()} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Write copy for products' }))

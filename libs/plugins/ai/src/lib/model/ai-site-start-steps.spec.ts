@@ -44,7 +44,8 @@ describe('the guided start’s steps (AGL-3898)', () => {
   it('asks every answer the job is built from on exactly one step, and the example on none (the form never asked it)', () => {
     const asked = Object.values(AI_SITE_START_STEP_FIELDS).flat()
     expect(new Set(asked).size).toBe(asked.length)
-    expect(asked.sort()).toEqual(Object.keys(AI_SITE_START_ANSWERS).filter((key) => key !== 'example').sort())
+    // The sites a person likes are an optional answer no default holds (AGL-3975).
+    expect(asked.sort()).toEqual([...Object.keys(AI_SITE_START_ANSWERS).filter((key) => key !== 'example'), 'inspiration'].sort())
   })
 
   it('keeps what kind of site it is the one required answer', () => {

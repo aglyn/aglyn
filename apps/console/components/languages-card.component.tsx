@@ -17,6 +17,8 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { deleteField, doc } from 'firebase/firestore'
@@ -26,10 +28,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
-import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
+import { usePlanFeatureLock } from '../hooks/use-plan-feature-lock'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 const LOCALE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
@@ -46,7 +49,12 @@ export function LanguagesCard(props: { hostId: string }) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { ready: orgReady } = useCurrentOrg()
+  const multilingual = usePlanFeatureLock('multilingual')
+  const multilingualReason = planLockReason(
+    'Publishing in more than one language',
+    multilingual.planLabel,
+  )
   const {
     data: host,
     status: hostStatus,
@@ -93,11 +101,11 @@ export function LanguagesCard(props: { hostId: string }) {
     }
     // One language is a site's language, not a multilingual site: every plan
     // may say what it publishes in. The entitlement is for a second one.
-    if (parsed.length > 1 && !hasEntitlement('multilingual', org)) {
-      return void enqueueSnackbar(
-        'Multilingual sites require a Business plan — see Billing',
-        { variant: 'warning', persist: false },
-      )
+    if (parsed.length > 1 && multilingual.locked) {
+      return void enqueueSnackbar(`${multilingualReason} See Billing to upgrade.`, {
+        variant: 'warning',
+        persist: false,
+      })
     }
     try {
       /**
@@ -152,7 +160,8 @@ export function LanguagesCard(props: { hostId: string }) {
       })
     }
   }, [
-    org,
+    multilingual.locked,
+    multilingualReason,
     orgReady,
     firestore,
     hostId,
@@ -178,6 +187,16 @@ export function LanguagesCard(props: { hostId: string }) {
             'button). Add a Language Switcher element so visitors can ' +
             'change language.'}
         </Typography>
+        {multilingual.locked ? (
+          <PlanUpsellNotice
+            planLabel={multilingual.planLabel}
+            upgradeHref={multilingual.upgradeHref}
+          >
+            {'Publish this site in more than one language, with translated ' +
+              'pages and a language switcher. Naming the one language it ' +
+              'publishes in works on every plan.'}
+          </PlanUpsellNotice>
+        ) : null}
         <Stack direction="row" spacing={1}>
           <TextField
             label="Languages"
@@ -204,15 +223,20 @@ export function LanguagesCard(props: { hostId: string }) {
             ))}
           </TextField>
         </Stack>
-        <Button
-          size="small"
-          variant="contained"
-          color="primary"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={handleSave}
+        <BlockedControl
+          blocked={multilingual.locked && parsed.length > 1}
+          reason={multilingualReason}
         >
-          {'Save languages'}
-        </Button>
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={handleSave}
+          >
+            {'Save languages'}
+          </Button>
+        </BlockedControl>
       </Stack>
     </CardDisplay>
   )

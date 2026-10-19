@@ -47,6 +47,7 @@ export type ReleaseFlagKey =
   | 'release_video_delivery'
   | 'release_ai_generative'
   | 'release_crm_assist_whole_record'
+  | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
 
 export interface ReleaseFlagDefinition {
@@ -212,6 +213,23 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'the Subprocessors row were republished; see ' +
       'docs/drafts/agl-3520-crm-assistance-whole-record-disclosure.md.',
     defaultEnabled: true,
+  },
+  // Per org, with no staff preview on the server: the site job reads the
+  // sites a person names only where the org's verdict is on, and the guided
+  // start asks for them by the same verdict. `model/ai-site-inspiration.ts`
+  // in the AI plugin holds the key.
+  {
+    key: 'release_ai_site_inspiration',
+    label: 'AI site start: sites you like',
+    description:
+      'The guided AI site start asks for sites the person likes (AGL-3975): ' +
+      'one on Free, three on a paid plan. The site job reads each home page ' +
+      'and two of its stylesheets through the SSRF-guarded fetch and keeps ' +
+      'signals only (section order, spacing, header, colors, type mood, ' +
+      'button and card shape, motion, and on a paid plan the features it ' +
+      'offers), never its words, images or logos. OFF by default: no field ' +
+      'is shown and no site is read.',
+    defaultEnabled: false,
   },
   // Platform-wide, never per org: the nightly job reads only the platform
   // value, because it is the operator's own marketing and no workspace's

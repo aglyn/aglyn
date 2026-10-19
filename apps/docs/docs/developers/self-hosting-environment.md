@@ -513,7 +513,7 @@ variable the code looks up:
 | Extra members | `STRIPE_PRICE_{…}_EXTRA_MEMBER[_YEARLY]` |
 | Extra datasets | `STRIPE_PRICE_{…}_EXTRA_DATASET[_YEARLY]` |
 | Extra hosts | `STRIPE_PRICE_{…}_EXTRA_HOST[_YEARLY]` |
-| Aglyn AI | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
+| Aglyn AI, bought before tiers (read only, to recognize the item) | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
 
 Flat add-ons, priced the same across plans:
 
@@ -527,6 +527,13 @@ The Site Care price also names the product that Site Care extra time is billed
 under: the extra-time invoice item is priced against that product, and its tax code
 must be `txcd_10103001`, or the charge is refused rather than billed under the wrong
 code.
+
+Aglyn AI tiers, the same price on every paid plan, one id per tier and
+interval:
+
+```
+STRIPE_PRICE_AI_{SPARK|BOOST|PLUS|MAX|ULTRA|STUDIO}[_YEARLY]
+```
 
 :::warning Half-configured add-ons sell and then read back empty
 The sell path only uppercases the plan name, so it will happily create a
