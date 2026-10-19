@@ -210,6 +210,7 @@ const areas = [
   ['accounting', 'seedAccounting'],
   ['listings', 'seedListings'],
   ['white-label', 'seedWhiteLabel'],
+  ['usage', 'seedUsage'],
 ]
 let staff = null
 for (const [file, name] of areas) {
