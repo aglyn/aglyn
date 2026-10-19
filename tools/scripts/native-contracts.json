@@ -916,7 +916,8 @@
         "ThemeAccentSwatch",
         "ThemeDensityId",
         "ThemeDensity",
-        "ThemePreview"
+        "ThemePreview",
+        "ThemeColorsPair"
       ],
       "values": [
         "THEME_PALETTES",
@@ -927,7 +928,8 @@
         "THEME_DARK_RAIL_SEEDS",
         "THEME_TEXT_CONTRAST",
         "THEME_NON_TEXT_CONTRAST",
-        "THEME_CONSOLE_FIELDS"
+        "THEME_CONSOLE_FIELDS",
+        "THEME_FIGMA_BASE"
       ]
     },
     "libs/aglyn/src/lib/app-utils/org-role-grants.ts": {

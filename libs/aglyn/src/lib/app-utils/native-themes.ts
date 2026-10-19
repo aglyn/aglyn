@@ -353,6 +353,19 @@ const FIGMA_AGLYN_DARK: ThemeColors = {
   ...DANGER_DARK,
 }
 
+/** A light and a dark palette. */
+export interface ThemeColorsPair {
+  light: ThemeColors
+  dark: ThemeColors
+}
+
+/**
+ * The palettes `deriveThemeFromPreview` starts from (the original Figma Aglyn
+ * mode), exported so each platform can port the derivation and replay its
+ * cases against the same base.
+ */
+export const THEME_FIGMA_BASE: ThemeColorsPair = { light: FIGMA_AGLYN_LIGHT, dark: FIGMA_AGLYN_DARK }
+
 /**
  * The Aglyn theme is the look that ships: the console's resolved MUI scheme
  * (`getConsoleTheme`, the same scheme the native shared tokens are generated
