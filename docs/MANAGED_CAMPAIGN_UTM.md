@@ -1,0 +1,93 @@
+# The Managed campaign and its per-event UTM labels
+
+Aglyn's own marketing, not a product feature: how the `/managed` landing page
+on aglyn.com, its form and its campaign fit together, and how the QR codes we
+hand out at events and on doorsteps are labeled so every lead says where it
+came from (AGL-3960).
+
+## What exists
+
+| Thing | Where | Id |
+| -- | -- | -- |
+| Landing page `/managed` | `hosts/DXnRbPH4CQ/screens/…`, Landing Pages group, visibility PUBLIC | `qnuMY13VsS`, first version `COCDoTk7vn` |
+| Form "Managed" | `hosts/DXnRbPH4CQ/forms/…` | `chjqg6-XOD`, first version `cRbJ2BWB3Q` |
+| Campaign "Managed · Events and door to door" | `orgs/jWmGooWE3L/emailCampaigns/…`, label `managed-2026-10` | `h3Gg7rSecF` |
+
+All three were written on 2026-10-19 by
+`tools/scripts/publish-managed-landing-page.mjs` (dry run by default).
+
+The page and the form are both filed under the campaign, so a visit to the
+page counts toward the campaign's reach and a submission is credited to it
+even when the link carried no label at all.
+
+The page sells Managed (a plan plus Site Care, one price) to people who want
+to read about it rather than have a site built on the spot. Its figures are
+listed in `docs/PRICING_SURFACES.md`; a price change owes it a republish.
+
+## The link on a QR code
+
+| Where it is handed out | Link |
+| -- | -- |
+| An event | `https://aglyn.com/managed?utm_source=event&utm_medium=qr&utm_campaign=<track>-<yyyy-mm-dd>` |
+| Door to door | `https://aglyn.com/managed?utm_source=door&utm_medium=qr&utm_campaign=<town>` |
+| Anything else (a card with no event on it) | `https://aglyn.com/managed?utm_source=print&utm_medium=qr&utm_campaign=managed-2026-10` |
+
+A label is lowercase words joined by hyphens: `cota-mx-2026-10-25`,
+`round-rock`. Never a person's name, an address or an email; the parser drops
+an email-shaped value, and nothing else stops the rest.
+
+**The event goes in `utm_campaign`, not `utm_content`.** The platform keeps
+exactly three labels, `utm_source`, `utm_medium` and `utm_campaign`
+(`libs/aglyn/src/lib/app-utils/utm-attribution.ts`, `utm-touch.ts`);
+`utm_content` and `utm_term` are dropped on purpose. A link that put the event
+in `utm_content` would land with no trace of which event it was.
+
+## Add each event's label to the campaign before the QR goes out
+
+In the console: Marketing → Campaigns → "Managed · Events and door to door" →
+Edit → **utm_campaign labels**, and add the new label beside the ones already
+there.
+
+This is not optional. A label no campaign declares is a "bare" label, and on
+the visit that ends in a submission the page's own campaign touch wins over a
+bare label (`pickCampaignTouch` in
+`libs/plugins/marketing/src/lib/server/campaign-conversion-attribution.ts`).
+The submission is still credited to the campaign, but through the page, and
+the record keeps none of the three labels, so the event is lost. A declared
+label wins, and the record keeps `source`, `medium` and `campaign`.
+
+One campaign answers to at most 20 labels (`CAMPAIGN_UTM_LABELS_MAX`). When a
+month's events and towns pass that, start the next month's campaign
+(`managed-2026-11`) the same way, file the page and the form under it too, and
+point new QR codes at its labels.
+
+## Where a submission lands
+
+- the Inbox, with the form's alert to the site's notification recipients;
+- the person as a contact in the CRM;
+- `hosts/DXnRbPH4CQ/campaignAttributions/form:{submissionId}` (and
+  `contact:…`, or `lead:…` once lead routing is on) with `campaignId`,
+  `source`, `medium` and `campaign` when the link carried a declared label.
+
+Following up is the sales routine's job: a lead from this form joins the
+"One job" sequence that fits it, as every other inbound lead does.
+
+## Lead routing is off until the funnel count moves
+
+The form was written with `routing.lead: false`. `/api/health/funnel` grades
+an exact count of live lead forms against `AGLYN_FUNNEL_MIN_LEAD_FORMS` on the
+`aglyn-tenant` Vercel project (15 on 2026-10-19), so flipping a sixteenth form
+on without moving that number turns the check red. Moving it is a production
+config change and a redeploy, so it waits for the account owner's go. To flip
+it, in this order:
+
+1. Set `AGLYN_FUNNEL_MIN_LEAD_FORMS=16` on `aglyn-tenant` (it is a sensitive
+   variable: set it through `PATCH /v9/projects/aglyn-tenant/env/<id>`, since
+   piped `vercel env add` can store it blank).
+2. Set `routing.lead: true` on the form.
+3. Redeploy the current production tenant deployment
+   (`vercel redeploy <url> --target production`).
+4. Read `https://aglyn.com/api/health/funnel` until `leadForms` and `required`
+   are both 16 with no faults. The probe memoizes for two minutes per
+   instance, so expect the Lead forms monitor to blip once while the build
+   runs.

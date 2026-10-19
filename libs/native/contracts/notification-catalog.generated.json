@@ -57,6 +57,13 @@
           "consoleDefault": true,
           "emailDefault": true,
           "level": "warning"
+        },
+        {
+          "type": "billing.domain",
+          "label": "Domain",
+          "consoleDefault": true,
+          "emailDefault": true,
+          "level": "info"
         }
       ],
       "description": "Invoices, failed payments, cancellations, and usage that crosses a plan limit.",

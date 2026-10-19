@@ -837,6 +837,28 @@ export const CONSOLE_WIDGET_SLOTS = {
   /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
   /**
+   * The site's Custom Domain page, above the card that connects a domain the
+   * owner already holds (AGL-3961): where a plugin offers a domain of its own
+   * making — one bought for the site — and manages it once it is there.
+   * Props: {@link ConsoleHostDomainZoneProps}.
+   *
+   * The connect card is the page's own and works with nothing here, so a
+   * zone with no widget is the page as it always was.
+   */
+  hostDomain: 'hostDomain',
+  /**
+   * Inside the connect card, under the domain the owner typed (AGL-3961): a
+   * way to write that domain's DNS records FOR them instead of printing the
+   * records to copy. Props: {@link ConsoleHostDomainConnectZoneProps}.
+   *
+   * A widget draws nothing for a domain it cannot help with, so the printed
+   * records stay the answer wherever no widget can do better. A widget that
+   * writes the records connects the domain through `connectHostCustomDomain`
+   * on the server, the claim the card's own button uses, after checking the
+   * records resolve here.
+   */
+  hostDomainConnect: 'hostDomainConnect',
+  /**
    * The top of the page a newly created site lands on (AGL-2918): where a
    * widget may offer to START the site for the person rather than leave them
    * an empty one. Props: {@link ConsoleHostFirstRunZoneProps}.
@@ -1305,6 +1327,24 @@ export interface ConsoleCreatedSite {
   /** Its subdomain, which is what a console URL names a site by. */
   host: string
   orgSlug: string
+}
+
+/** What the `hostDomain` zone hands each widget (AGL-3961). */
+export interface ConsoleHostDomainZoneProps {
+  hostId: string
+  /** The site's org document; `undefined` while it resolves. */
+  org: Record<string, unknown> | undefined
+  /** The domain the site holds now, or null. */
+  connectedDomain: string | null
+}
+
+/** What the `hostDomainConnect` zone hands each widget (AGL-3961). */
+export interface ConsoleHostDomainConnectZoneProps {
+  hostId: string
+  /** The domain typed into the card, lowercased; empty until one is typed. */
+  domain: string
+  /** Tells the card the domain connected, so it re-reads the site. */
+  onConnected: () => void
 }
 
 /** What the `hostFirstRun` zone hands each widget (AGL-2918). */

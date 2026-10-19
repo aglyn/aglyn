@@ -210,6 +210,12 @@ const LOAD_MORE_ALLOWED = [
   // over the reader's site memberships, every filter and the search on it —
   // so what grows is always a page of the answer, never a loaded window.
   'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
+  // The Get a domain card's search results (AGL-3962): one search answers at
+  // most MAX_CANDIDATES (24) names, all fetched and priced at once, and
+  // "Show N more" only reveals the rest of that answer after the first six.
+  // Nothing is loaded and nothing grows past the one answer, so there is no
+  // page to turn.
+  'libs/plugins/domains/src/lib/components/buy-domain-card.component.tsx',
 ]
 
 /**

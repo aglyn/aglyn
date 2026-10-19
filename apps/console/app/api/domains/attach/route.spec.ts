@@ -147,6 +147,14 @@ function mockMakeFirestore() {
   }
 }
 
+const mockFirebaseAdmin = {
+  app: () => ({
+    auth: () => ({ verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args) }),
+    firestore: () => mockMakeFirestore(),
+  }),
+  firestore: { FieldValue: { delete: () => DELETE } },
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   // The REAL `domainStateServes` (AGL-2011). The predicate that decides
@@ -176,13 +184,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../../libs/tenant/data/admin/src/lib/server/platform-domain-names',
   ),
-  firebaseAdmin: {
-    app: () => ({
-      auth: () => ({ verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args) }),
-      firestore: () => mockMakeFirestore(),
-    }),
-    firestore: { FieldValue: { delete: () => DELETE } },
-  },
+  firebaseAdmin: mockFirebaseAdmin,
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -202,6 +204,50 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // CAPTURED (AGL-3356): a claimed domain is handed to the phishing screen's
   // lookalike check, which files a staff row for a brand's disguise.
   flagLookalikeCustomDomain: (...args: unknown[]) => mockFlagLookalike(...args),
+  // The REAL connect sequence (AGL-3961): the claim, attach, probe, redirect,
+  // activity and event moved out of the route into the library. Its own
+  // imports are pointed at the same doubles below, so every assertion in this
+  // file still reads what the customer's button does.
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/host-custom-domain',
+  ),
+}))
+
+jest.mock(
+  '../../../../../../libs/tenant/data/admin/src/lib/server/firebase-admin',
+  () => ({ __esModule: true, default: mockFirebaseAdmin, firebaseAdmin: mockFirebaseAdmin }),
+)
+jest.mock(
+  '../../../../../../libs/tenant/data/admin/src/lib/server/hosted-page-review',
+  () => ({
+    __esModule: true,
+    flagLookalikeCustomDomain: (...args: unknown[]) => mockFlagLookalike(...args),
+  }),
+)
+jest.mock(
+  '../../../../../../libs/tenant/data/admin/src/lib/server/host-memberships',
+  () => ({
+    __esModule: true,
+    syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
+  }),
+)
+jest.mock(
+  '../../../../../../libs/tenant/data/admin/src/lib/server/organizations',
+  () => ({ __esModule: true, logHostActivity: async () => undefined }),
+)
+jest.mock(
+  '../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
+  () => ({
+    __esModule: true,
+    ...jest.requireActual(
+      '../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
+    ),
+    projectDomainStatus: (...args: unknown[]) => mockProjectDomainStatus(...args),
+  }),
+)
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-events', () => ({
+  __esModule: true,
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
 }))
 
 const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({
@@ -767,3 +813,108 @@ describe('the claim covers every name Vercel holds (AGL-1430)', () => {
   })
 })
 
+
+describe('the www twin is claimed with its domain (AGL-3961)', () => {
+  const { connectHostCustomDomain, customDomainTwinOf } = jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/host-custom-domain',
+  ) as typeof import('../../../../../../libs/tenant/data/admin/src/lib/server/host-custom-domain')
+  const actor = { uid: 'user-1', email: null }
+
+  it('pairs a name only with its own www sibling', () => {
+    expect(customDomainTwinOf('example.com', 'www.example.com')).toBe(true)
+    expect(customDomainTwinOf('www.example.com', 'example.com')).toBe(true)
+    expect(customDomainTwinOf('example.com', 'shop.example.com')).toBe(false)
+    expect(customDomainTwinOf('example.com', 'www.other.com')).toBe(false)
+    expect(customDomainTwinOf('example.com', 'example.com')).toBe(false)
+  })
+
+  it('REFUSES the manual card a name that is another site’s twin', async () => {
+    seedHost('mine')
+    seedHost('theirs', { cname: 'example.com', cnameTwin: 'www.example.com' })
+
+    const response = await POST(
+      post({ hostId: 'mine', domain: 'www.example.com' }),
+    )
+
+    expect(response.status).toBe(409)
+    expect(docs.get('hosts/mine')?.['cname']).toBeUndefined()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('REFUSES a twin that is another site’s domain, claiming neither name', async () => {
+    seedHost('mine')
+    seedHost('theirs', { cname: 'www.example.com' })
+
+    const result = await connectHostCustomDomain({
+      hostId: 'mine',
+      domain: 'example.com',
+      twin: 'www.example.com',
+      actor,
+    })
+
+    expect(result).toMatchObject({ ok: 'refused', status: 409, code: 'taken' })
+    expect(docs.get('hosts/mine')?.['cname']).toBeUndefined()
+    expect(docs.get('hosts/mine')?.['cnameTwin']).toBeUndefined()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('claims both names and registers the twin as a redirect to the domain', async () => {
+    seedHost('mine')
+
+    const result = await connectHostCustomDomain({
+      hostId: 'mine',
+      domain: 'example.com',
+      twin: 'www.example.com',
+      actor,
+    })
+
+    expect(result).toMatchObject({ ok: 'connected', twin: 'www.example.com' })
+    expect(docs.get('hosts/mine')).toMatchObject({
+      cname: 'example.com',
+      cnameTwin: 'www.example.com',
+    })
+    expect(docs.get('hosts/mine')?.['cnameTwinPending']).toBeUndefined()
+    const twinCalls = redirectCalls('www.example.com')
+    expect(twinCalls.length).toBeGreaterThan(0)
+    expect(
+      twinCalls.some(([, init]) =>
+        String(init?.body ?? '').includes('"redirect":"example.com"'),
+      ),
+    ).toBe(true)
+  })
+
+  it('ignores a twin that is not the domain’s www sibling', async () => {
+    seedHost('mine')
+
+    const result = await connectHostCustomDomain({
+      hostId: 'mine',
+      domain: 'example.com',
+      twin: 'shop.example.com',
+      actor,
+    })
+
+    expect(result).toMatchObject({ ok: 'connected', twin: null })
+    expect(docs.get('hosts/mine')?.['cnameTwin']).toBeUndefined()
+    expect(redirectCalls('shop.example.com')).toHaveLength(0)
+  })
+
+  it('records a twin that did not land for the completer', async () => {
+    seedHost('mine')
+    fetchMock.mockImplementation(async (url: unknown, init?: RequestInit) =>
+      String(init?.body ?? '').includes('www.example.com') ||
+      String(url).includes('www.example.com')
+        ? respond(500, { error: { code: 'internal' } })
+        : respond(200, { name: 'example.com' }),
+    )
+
+    const result = await connectHostCustomDomain({
+      hostId: 'mine',
+      domain: 'example.com',
+      twin: 'www.example.com',
+      actor,
+    })
+
+    expect(result).toMatchObject({ ok: 'connected' })
+    expect(docs.get('hosts/mine')?.['cnameTwinPending']).toBe(true)
+  })
+})

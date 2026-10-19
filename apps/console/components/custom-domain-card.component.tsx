@@ -35,6 +35,7 @@ import { hasEntitlement } from '../constants/entitlements'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import PluginWidgetSlot from './plugin-widget-slot.component'
 // The target, the apex address, and the instruction copy come from the SAME
 // module the verify route reads (AGL-1275). They used to be private constants
 // here, and the apex one had its own `NEXT_PUBLIC_AGLYN_TENANT_APEX_A` that
@@ -541,6 +542,20 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
                 {checking ? 'Verifying…' : 'Verify & connect'}
               </Button>
             </Stack>
+            {/*
+              A plugin that can write the records for this domain's DNS
+              provider offers to here (AGL-3961), so the records above stay
+              the answer only where nothing can do better.
+            */}
+            <PluginWidgetSlot
+              slot="hostDomainConnect"
+              hostId={hostId}
+              domain={domain.trim().toLowerCase()}
+              onConnected={() => {
+                setDomain('')
+                void refreshStatus()
+              }}
+            />
           </>
         )}
       </Stack>
