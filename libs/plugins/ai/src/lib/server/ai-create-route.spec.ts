@@ -163,8 +163,21 @@ describe('GET /api/ai/create', () => {
     expect(view.door).toBe('hidden')
   })
 
-  it('is the add-on’s offer on a paid plan that could buy it, with the action only for billing managers', async () => {
+  it('opens on every paid plan against its own credits: one pool (AGL-3965)', async () => {
     mockOrg = { plan: 'business', billingStatus: 'active' }
+    expect((await (await door({ kind: 'form' })).json()).door).toBe('create')
+    mockOrg = { plan: 'starter', billingStatus: 'active' }
+    expect((await (await door({ kind: 'form' })).json()).door).toBe('create')
+  })
+
+  it('is the add-on’s offer where generation is closed on a plan that sells tiers, with the action only for billing managers', async () => {
+    // Since AGL-3965 no plan lacks generation; a per-org override closing it
+    // is what reaches this door.
+    mockOrg = {
+      plan: 'business',
+      billingStatus: 'active',
+      entitlements: { features: { aiGenerative: false } },
+    }
     const owner = await (await door({ kind: 'form' })).json()
     expect(owner.door).toBe('upsell')
     expect(owner.upsell.action).toMatch(/^Add /)

@@ -10,7 +10,8 @@
  * POS, AGL-3651): one member, one workspace on the Pro plan, one site with a
  * few redirect rules, then each area's rows (the notification feed among them) from `./seed-native/*.mjs`, in
  * the shapes the console writes, so every screen has data under the real
- * rules.
+ * rules. The last area gives the member a second workspace, a white-label one
+ * on the Agency plan with its own brand (`./seed-native/white-label.mjs`).
  *
  *   node tools/scripts/seed-native-emulator.mjs [--auth 127.0.0.1:9099] [--firestore 127.0.0.1:8082] [--project demo-aglyn]
  *     [--storage 127.0.0.1:9199 [--bucket <the console's bucket>]]
@@ -208,6 +209,7 @@ const areas = [
   ['sequences', 'seedSequences'],
   ['accounting', 'seedAccounting'],
   ['listings', 'seedListings'],
+  ['white-label', 'seedWhiteLabel'],
 ]
 let staff = null
 for (const [file, name] of areas) {

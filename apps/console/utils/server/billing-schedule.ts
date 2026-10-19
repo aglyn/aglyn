@@ -19,7 +19,7 @@ import type { OrgPlan } from '@aglyn/aglyn/server'
 import {
   addonMaxForPlan,
   addonKindFromPriceId,
-  addonPriceId,
+  addonTargetPriceId,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -140,7 +140,7 @@ export function buildTargetItems(
     if (isMeteredPriceId(priceId)) continue
     const kind = addonKindFromPriceId(priceId)
     if (kind) {
-      const target = addonPriceId(kind, options.targetPlan, options.targetInterval)
+      const target = addonTargetPriceId(kind, options.targetPlan, options.targetInterval, priceId)
       if (!target) {
         droppedAddons.push(kind)
         continue

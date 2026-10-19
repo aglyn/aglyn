@@ -1191,6 +1191,9 @@ const FORBIDDEN_ROOT_FIELDS = [
   'stripeCustomerId',
   'billing',
   'seatAddons',
+  // Which Aglyn AI tier `seatAddons.aiAddon` is (AGL-3965): an entitlement
+  // input beside it, written only from the subscription's own item.
+  'aiTier',
   'releaseFlags',
   'ownerUid',
   'memberRoles',

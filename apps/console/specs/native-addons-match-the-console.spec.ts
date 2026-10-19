@@ -18,9 +18,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ADDON_KINDS } from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  isCustomPricedPlan,
   PLAN_ENTITLEMENTS,
-  PLAN_PRICING,
+  planSellsAiTiers,
   type OrgPlan,
 } from '@aglyn/aglyn'
 
@@ -29,17 +29,17 @@ import {
  * the component drags MUI into this spec for one three-line rule.
  */
 function aiAddonOffer(plan: OrgPlan): 'included' | 'upgrade' | 'sold' {
-  const { aiGenerative, aiAssist } = PLAN_ENTITLEMENTS[plan].features
-  if (aiGenerative && aiAssist) return 'included'
-  return PLAN_PRICING[plan].aiAddonMonthlyUsd == null ? 'upgrade' : 'sold'
+  if (planSellsAiTiers(plan)) return 'sold'
+  return isCustomPricedPlan(plan) ? 'included' : 'upgrade'
 }
 
 /**
- * The native "Plan add-ons" screen restates three things the console works out
- * in code, because a screen spec has no arithmetic or plan tables: which add-on
- * kinds exist, how many AI credits each plan's add-on brings, and which plan
- * has the AI add-on included rather than for sale. This keeps them from
- * drifting from `BillingAddonsCardComponent`.
+ * The native "Plan add-ons" screen restates what the console works out in
+ * code, because a screen spec has no arithmetic or plan tables: which add-on
+ * kinds exist, and which plan has Aglyn AI included rather than for sale.
+ * Since AGL-3965 it restates no credit figure of its own: the credits a tier
+ * adds are read off the route (`catalog.aiAddon.credits`), so a tier the
+ * workspace holds is the one the row describes.
  */
 const SPEC = join(
   __dirname,
@@ -57,12 +57,20 @@ describe('native plan add-ons', () => {
     ])
   })
 
-  it('names the same AI credits per plan', () => {
-    expect(screen.constants.aiCredits).toEqual(AI_ADDON_CREDITS_PER_MONTH)
+  it('reads the AI credits off the route, not a per-plan table', () => {
+    expect(screen.constants.aiCredits).toBeUndefined()
+    const badges = screen.blocks.find((b: { type: string }) => b.type === 'list').badges
+    const credits = badges.find((b: { text: string }) => /credits\/mo/.test(b.text))
+    expect(credits.text).toBe('+{data.addons.catalog[@item.kind].credits:number} credits/mo')
+    expect(credits.when).toBe('item.kind == aiAddon && data.addons.catalog[@item.kind].credits')
+    // The row says one pool, as the console's `aiAddonDescription` does.
+    const ai = screen.constants.addons.find((row: { kind: string }) => row.kind === 'aiAddon')
+    expect(ai.description).toContain('one pool of AI credits')
+    expect(ai.description).not.toMatch(/\{const\./)
   })
 
   it('says "Included in your plan" for exactly the plans the console does', () => {
-    const included = (Object.keys(PLAN_PRICING) as OrgPlan[]).filter(
+    const included = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
       (plan) => aiAddonOffer(plan) === 'included',
     )
     // The badge is keyed on the plan being enterprise.

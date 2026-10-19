@@ -70,12 +70,12 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#from-a-brief': 'Open Components for the site and choose Create with AI, beside Templates and Create Component.',
   },
   aiCreate: {
-    '#without-the-add-on': 'On a paid plan without the Aglyn AI add-on, the button is still there.',
+    '#without-the-add-on': 'On every paid plan, Create with AI runs on the AI credits your plan includes each month; nothing else needs to be bought.',
   },
   aiCredits: {
     '#before-a-job-starts': 'Every job tells you what it will cost before it spends anything: A plan shows Estimated cost: About N credits (up to M) beside Confirm plan: about what jobs like it cost on real builds, and the most it can cost.',
     '#past-the-band': 'On a paid plan, AI keeps working past the included band, and the extra credits are billed on your monthly invoice at your plan\'s rate per 1,000 credits.',
-    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the included band, and what the add-on adds.',
+    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the pool, and how many of them your tier adds.',
   },
   aiCrm: {
     '#draft-an-email': 'In the email composer on a contact, a deal or a lead, describe what the email should say (for example, "follow up on the quote and offer a call next week") and press Draft the message.',

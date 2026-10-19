@@ -88,7 +88,7 @@ import StaffOrgAiCard from './staff-org-ai-card.component'
 function body(overrides: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse {
   return {
     month: '2026-09',
-    addon: { on: true, priceUsd: 19, since: '2026-09-02T10:00:00.000Z', sinceSource: 'stripe' },
+    addon: { on: true, tier: 'boost', priceUsd: 19, since: '2026-09-02T10:00:00.000Z', sinceSource: 'stripe' },
     pool: {
       planCredits: 4_000,
       overrideCredits: 12_000,
@@ -195,8 +195,9 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
 
   it('names the add-on as on, at its price, since its Stripe date', async () => {
     render(<StaffOrgAiCard orgId="org-1" />)
-    await waitFor(() => expect(screen.getByText('Acme AI on')).toBeTruthy())
-    expect(screen.getByText('$19.00/mo on this plan')).toBeTruthy()
+    // The tier held, at the tier's own price (AGL-3965).
+    await waitFor(() => expect(screen.getByText('Acme AI Boost on')).toBeTruthy())
+    expect(screen.getByText('$19.00/mo')).toBeTruthy()
     expect(screen.getByText(/^since /)).toBeTruthy()
   })
 
@@ -204,7 +205,7 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     render(<StaffOrgAiCard orgId="org-1" />)
     await waitFor(() =>
       expect(
-        screen.getByText('21,000 credits = 12,000 staff override + 9,000 Acme AI add-on'),
+        screen.getByText('21,000 credits = 12,000 staff override + 9,000 Acme AI tier'),
       ).toBeTruthy(),
     )
     // The credits are what the workspace DREW and the dollars are what it
@@ -214,7 +215,7 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
 
   it('reads as off, with the plan band alone, when the add-on is not bought', async () => {
     mockAnswer.payload = body({
-      addon: { on: false, priceUsd: 19, since: null, sinceSource: 'no-subscription' },
+      addon: { on: false, tier: null, priceUsd: null, since: null, sinceSource: 'no-subscription' },
       pool: { ...body().pool, overrideCredits: null, addonCredits: 0, totalCredits: 4_000, remainingCredits: 1_500 },
     })
     render(<StaffOrgAiCard orgId="org-1" />)
@@ -229,7 +230,7 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     mockAnswer.payload = JSON.parse(
       JSON.stringify(
         body({
-          addon: { on: false, priceUsd: null, since: null, sinceSource: 'no-subscription' },
+          addon: { on: false, tier: null, priceUsd: null, since: null, sinceSource: 'no-subscription' },
           pool: {
             ...body().pool,
             planCredits: 116_000,
@@ -465,14 +466,14 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
 
   it('names no give-back and no allowance for a paid workspace that has neither', async () => {
     render(<StaffOrgAiCard orgId="org-1" />)
-    await waitFor(() => expect(screen.getByText('Acme AI on')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Acme AI Boost on')).toBeTruthy())
     expect(screen.queryByText(/given back/)).toBeNull()
     expect(screen.queryByText(/Owner’s Free allowance/)).toBeNull()
   })
 
   it('draws no token section for a route that sends none', async () => {
     render(<StaffOrgAiCard orgId="org-1" />)
-    await waitFor(() => expect(screen.getByText('Acme AI on')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Acme AI Boost on')).toBeTruthy())
     expect(screen.queryByText(/cache hit rate/)).toBeNull()
   })
 })
