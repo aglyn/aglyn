@@ -212,9 +212,16 @@ A guided start **publishes** the site when it finishes, so it is live at its add
 
 - the new home page takes the site's address, and an untouched starter home page is moved
   to the trash;
-- each page gets an entry in the header's navigation;
+- each page gets an entry in the header's navigation, and takes its place in **Pages** in
+  the order the plan lists it, which the
+  [built-in error page](../building-sites/site-protection/error-screens.md)'s links follow too;
 - a page that cannot be published stays a draft, and **Building your site** names it with
-  the reason, for you to fix in **Edit your pages** and publish.
+  the reason, for you to fix in **Edit your pages** and publish;
+- a page that **Couldn't be built**, or stayed a draft, is linked from nowhere on the
+  published site: its header and footer entries, and the buttons on other pages that went
+  to it, are taken out, so no visitor follows a link to a missing page. **Try again what
+  failed** adds the page's header entry back once it is built; a button you want on
+  another page, add in the Besigner.
 
 The site is **open to search engines from the start**. A guided start never hides a site
 from search. If you want to keep it out of search results for now, use the site's
