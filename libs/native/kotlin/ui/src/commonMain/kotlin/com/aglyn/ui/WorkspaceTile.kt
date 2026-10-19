@@ -42,6 +42,12 @@ fun workspaceInitials(name: String): String {
   }
 }
 
+/** Figma's paper plate under a workspace logo (brand/white). */
+internal val LogoPlate = Color.White
+
+/** Each side of the plate around the logo's slot: (40 − 28) / 2 / 40, the same 6 / 40 and 5 / 32 as Figma's. */
+internal const val LogoSlotInset = 0.15f
+
 /**
  * A workspace's picture: its logo when it has one, else its initials on its color (the person's pick, its brand color, a
  * color taken from its logo, else the brand slate). [selected] rings it; [badge] shows a count of what waits there.
@@ -74,12 +80,17 @@ fun WorkspaceTile(
   Box(modifier.size(if (selected) ringBox else size), contentAlignment = Alignment.Center) {
     // Selected: a 2 dp ring clear of the tile (the rail adds its 3 dp bar at the edge).
     if (selected) Box(Modifier.size(ringBox).border(2.dp, shell.ring, RoundedCornerShape(ringRadius ?: (radius + 4.dp))))
+    // A logo sits on Figma's paper plate (Rail/Workspace tile, Type=Logo: 5:47 / 97:899): white in light and dark, a 1 dp
+    // subtle border, the logo fitted in the 70% slot (28 of 40 on a tablet, 22 of 32 on the desktop), so a transparent
+    // mark reads on it at the same size as Apple's.
     Box(
-      Modifier.size(size).clip(shape).background(if (image != null) MaterialTheme.colorScheme.surfaceContainerLowest else fill),
+      Modifier.size(size).clip(shape)
+        .background(if (image != null) LogoPlate else fill)
+        .then(if (image != null) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape) else Modifier),
       contentAlignment = Alignment.Center,
     ) {
       if (image != null) {
-        Image(image, contentDescription = null, modifier = Modifier.size(size).padding(size * 0.12f), contentScale = ContentScale.Fit)
+        Image(image, contentDescription = null, modifier = Modifier.size(size).padding(size * LogoSlotInset), contentScale = ContentScale.Fit)
       } else {
         Text(
           workspaceInitials(name),
