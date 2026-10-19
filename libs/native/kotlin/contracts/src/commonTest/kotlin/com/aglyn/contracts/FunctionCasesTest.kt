@@ -37,6 +37,25 @@ class FunctionCasesTest {
     assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions", "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency")))
   }
 
+  /** The plan card's meters (AGL-3992): which leads for the screen in front, the order of the rest, and whether it shows. */
+  @Test
+  fun thePlanCardPicksItsMetersAsTheConsoleDoes() {
+    fun readings(json: JsonElement) = json.jsonArray.map {
+      val o = it.jsonObject
+      fun num(key: String) = (o[key] as? JsonPrimitive)?.takeIf { p -> p !is JsonNull }?.double
+      PlanCardReading(o.getValue("meter").jsonPrimitive.content, num("used"), num("limit"))
+    }
+    cases("planCardMeterOrder").forEach { (args, result) ->
+      assertEquals(result.jsonArray.map { it.jsonPrimitive.content }, planCardMeterOrder(readings(args[0]), str(args[1])), args.toString())
+    }
+    cases("planCardContext").forEach { (args, result) ->
+      assertEquals(str(result), planCardContext(str(args[0]), args[1].jsonPrimitive.boolean), args.toString())
+    }
+    cases("planCardShows").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.boolean, planCardShows(readings(args[0]), args[1].jsonPrimitive.boolean), args.toString())
+    }
+  }
+
   /** A CRM currency field's amounts (AGL-3971): USD's two decimals, JPY's none, BHD's three, as the console's Intl. */
   @Test
   fun currencyFieldAmountsUseEachCurrencysOwnDecimals() {
