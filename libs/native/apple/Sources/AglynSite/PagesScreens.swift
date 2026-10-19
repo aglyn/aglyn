@@ -558,6 +558,10 @@ struct PageDetail: View {
     .onReceive(NotificationCenter.default.publisher(for: RestFirestoreReader.rereadNotification)) { _ in
       Task { await model.reread([pageID]) }
     }
+    #if os(iOS)
+      // The record's head already shows the page's name large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .accessibilityIdentifier("page-detail")
   }
 }

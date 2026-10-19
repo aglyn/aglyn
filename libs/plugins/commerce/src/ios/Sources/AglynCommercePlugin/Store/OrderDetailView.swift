@@ -51,6 +51,10 @@ struct OrderDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.number ?? "Order") : "Orders")
+    #if os(iOS)
+      // The record's head below already shows the number large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .task(id: "\(context.hostID ?? ""):\(orderID)") {
       model.start(context.firestore, hostID: context.hostID, orderID: orderID)
     }

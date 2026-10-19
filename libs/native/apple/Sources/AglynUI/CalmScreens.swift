@@ -68,7 +68,13 @@ public struct AglynRecordHeader: View {
               if primary.busy {
                 ProgressView().controlSize(.small)
               } else {
-                Label(primary.label, systemImage: primary.systemImage).lineLimit(1)
+                // The icon is drawn in the button's own text color: a list row would tint it the accent, the button's fill.
+                Label {
+                  Text(primary.label).lineLimit(1)
+                } icon: {
+                  Image(systemName: primary.systemImage).foregroundStyle(AglynColor.primaryContrast)
+                }
+                .frame(minHeight: 24)
               }
             }
             .buttonStyle(.borderedProminent)
@@ -101,7 +107,7 @@ public struct AglynRecordMoreMenu: View {
     } label: {
       Label("More actions", systemImage: "ellipsis")
         .labelStyle(.iconOnly)
-        .frame(minWidth: 28, minHeight: 20)
+        .frame(minWidth: 28, minHeight: 24)
     }
     .menuStyle(.button)
     .buttonStyle(.bordered)

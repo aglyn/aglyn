@@ -65,7 +65,8 @@ final class PushCenter: NSObject {
 
   /// Asks for permission (the system asks only once) and registers with APNs: called by the signed-in shell, never
   /// from the signed-out screens.
-  func askPermission() {
+  func askPermission(for uid: String?) {
+    // The person's own id, not `self.uid`: the shell can appear before `signedIn` has run for them.
     guard uid != nil, receivesPushes else { return }
     #if DEBUG
       // Screenshot and UI-test runs keep the system's permission sheet away.

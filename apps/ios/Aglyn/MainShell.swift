@@ -35,7 +35,8 @@ struct MainShell: View {
       #endif
     }
     .task(id: "\(model.workspace?.org?.id ?? ""):\(model.auth?.user?.uid ?? ""):\(model.orgAccess.memberRoleID ?? "")") {
-      model.orgAccess.follow(reader: model.reader, orgID: model.workspace?.org?.id, uid: model.auth?.user?.uid)
+      model.orgAccess.follow(
+        reader: model.reader, api: model.api, orgID: model.workspace?.org?.id, uid: model.auth?.user?.uid)
     }
     .task(id: model.workspace?.ready == true) {
       guard !seeded, let seed, model.workspace?.ready == true else { return }
@@ -428,7 +429,8 @@ struct TitleBarItems: ToolbarContent {
         .font(AglynFont.subheadline)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .frame(minWidth: 220)
+        // A fixed width: the Mac's toolbar moves an item of flexible width out of sight.
+        .frame(width: 240)
         .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.page))
         .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
       }

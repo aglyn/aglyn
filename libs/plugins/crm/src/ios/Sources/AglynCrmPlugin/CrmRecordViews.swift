@@ -324,6 +324,10 @@ struct RecordDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(row.title)
+    #if os(iOS)
+      // The record's head already shows the name large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .sheet(item: Binding(get: { action.flatMap { $0.confirmsInAlert ? nil : $0 } }, set: { action = $0 })) { action in
       sheet(action, row: row, fields: fields, values: values)
     }

@@ -15,8 +15,11 @@ final class OrgAccess {
   @ObservationIgnored private let role = ObservedDocument()
   @ObservationIgnored private var orgID: String?
   @ObservationIgnored private var roleID: String?
+  /// The workspace's features as the console resolves them (`/api/orgs/entitlements`: the plan, its comp, add-ons such
+  /// as the events calendar, and per-workspace overrides); nil until read.
+  private var resolvedFeatures: [String: Bool]?
 
-  func follow(reader: FirestoreReader?, orgID: String?, uid: String?) {
+  func follow(reader: FirestoreReader?, api: ConsoleAPIClient?, orgID: String?, uid: String?) {
     guard let reader, let orgID, let uid else {
       stop()
       return
@@ -24,7 +27,16 @@ final class OrgAccess {
     if orgID != self.orgID {
       self.orgID = orgID
       roleID = nil
+      resolvedFeatures = nil
       org.start(reader, ["orgs", orgID])
+      if let api {
+        Task {
+          guard let body = try? await api.request("/api/orgs/entitlements", query: [("orgId", orgID)]),
+            self.orgID == orgID, case .object(let map)? = body["features"]
+          else { return }
+          resolvedFeatures = map.compactMapValues(\.boolValue)
+        }
+      }
       member.start(reader, ["orgs", orgID, "members", uid])
       role.stop()
     }
@@ -40,6 +52,7 @@ final class OrgAccess {
 
   func stop() {
     orgID = nil
+    resolvedFeatures = nil
     roleID = nil
     org.stop()
     member.stop()
@@ -53,8 +66,10 @@ final class OrgAccess {
       uniquingKeysWith: { a, _ in a })
   }
 
-  /// Whether the workspace's plan carries each feature the keys name.
+  /// Whether the workspace carries each feature the keys name: the console's resolved answer, else (before it is read,
+  /// or offline) the plan's default from the workspace's own document.
   func features(_ keys: [String]) -> [String: Bool] {
-    Dictionary(keys.map { ($0, planFeatureCarried(org.document?.data, $0)) }, uniquingKeysWith: { a, _ in a })
+    Dictionary(
+      keys.map { ($0, resolvedFeatures?[$0] ?? planFeatureCarried(org.document?.data, $0)) }, uniquingKeysWith: { a, _ in a })
   }
 }
