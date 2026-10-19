@@ -8,6 +8,8 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
@@ -146,6 +148,19 @@ class NavShellUiTest {
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("search-results") > 0 }
     assertEquals(0, onAllNodesWithTagCount("one-box"))
     onNodeWithTag("search-results-field").assertTextContains("pages")
+  }
+
+  @Test
+  fun aDoubleClickOnTheTabRowZoomsTheWindow() = runComposeUiTest {
+    var zooms = 0
+    setContent {
+      androidx.compose.runtime.CompositionLocalProvider(LocalWindowDoubleClick provides { zooms++ }) { AglynShell(testServices(userDoc = emptyMap())) }
+    }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-strip") > 0 }
+    // The row's empty end, past the tabs and +, stands in for the title bar.
+    onNodeWithTag("tab-strip").performTouchInput { doubleClick(androidx.compose.ui.geometry.Offset(width - 40f, height / 2f)) }
+    waitUntil(timeoutMillis = 3_000) { zooms == 1 }
   }
 
   @Test
