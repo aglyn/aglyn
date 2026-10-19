@@ -25,7 +25,7 @@
 import { LOCAL_BUSINESS_TYPES } from '@aglyn/aglyn/app-utils/local-business'
 import { siteEntityJsonLd } from '@aglyn/aglyn/app-utils/site-entity-json-ld'
 import { AI_SITE_KINDS } from './ai-site-kinds'
-import { AI_SITE_KIND_SCHEMA, aiSiteEntityUpdates, aiSiteEntityValues, aiSiteSchemaOf } from './ai-site-entity'
+import { AI_SITE_CONTACT_TYPE, AI_SITE_KIND_SCHEMA, aiSiteEntityUpdates, aiSiteEntityValues, aiSiteSchemaOf } from './ai-site-entity'
 
 const PLUMBER = {
   businessType: 'a family plumbing company',
@@ -46,16 +46,21 @@ const PLUMBER = {
   languages: 'English, Spanish',
 }
 
-/** A host's `seo` with dotted updates applied, as Firestore would. */
-function applied(seo: Record<string, unknown>, updates: Record<string, unknown>): Record<string, unknown> {
-  const next = JSON.parse(JSON.stringify(seo)) as Record<string, unknown>
+/** A host with dotted updates applied, as Firestore would. */
+function appliedHost(host: Record<string, unknown>, updates: Record<string, unknown>): Record<string, unknown> {
+  const next = JSON.parse(JSON.stringify(host)) as Record<string, unknown>
   for (const [path, value] of Object.entries(updates)) {
-    const parts = path.split('.').slice(1)
+    const parts = path.split('.')
     let at = next
     for (const part of parts.slice(0, -1)) at = (at[part] ??= {}) as Record<string, unknown>
     at[parts[parts.length - 1]] = value
   }
   return next
+}
+
+/** A host's `seo` with the updates to it applied. */
+function applied(seo: Record<string, unknown>, updates: Record<string, unknown>): Record<string, unknown> {
+  return (appliedHost({ seo }, updates)['seo'] ?? {}) as Record<string, unknown>
 }
 
 describe('the schema type a kind of site publishes as', () => {
@@ -138,9 +143,39 @@ describe('what a publish writes on the host', () => {
     })
   })
 
+  it('says what the contact answers, names the site’s logo, and fills the Business details card', () => {
+    const updates = aiSiteEntityUpdates({}, aiSiteEntityValues(PLUMBER), { logoUrl: 'media:host-1/logo', business: {} })
+    expect(updates).toMatchObject({
+      'seo.entity.contactType': AI_SITE_CONTACT_TYPE,
+      'seo.entity.logo': 'media:host-1/logo',
+      'business.supportEmail': 'hello@pipeworks.co',
+      'business.address': '214 Main Street, Austin, TX 78701, US',
+    })
+    // The owner's own words are kept, and a contact the start did not write is not labeled.
+    const kept = aiSiteEntityUpdates(
+      { entity: { logo: 'https://cdn.example.com/own.png', email: 'own@pipeworks.co', telephone: '(512) 555-9999' } },
+      aiSiteEntityValues(PLUMBER),
+      { logoUrl: 'media:host-1/logo', business: { supportEmail: 'own@pipeworks.co', address: 'PO Box 9' } },
+    )
+    expect(kept).not.toHaveProperty('seo.entity.logo')
+    expect(kept).not.toHaveProperty('seo.entity.contactType')
+    expect(kept).not.toHaveProperty('business.supportEmail')
+    expect(kept).not.toHaveProperty('business.address')
+  })
+
+  it('a site with no logo names none, and a Person’s picture is never the site logo', () => {
+    expect(aiSiteEntityUpdates({}, aiSiteEntityValues(PLUMBER))).not.toHaveProperty('seo.entity.logo')
+    const person = aiSiteEntityUpdates({}, aiSiteEntityValues({ businessType: 'my resume', siteKind: 'personal', businessName: 'Ana Ruiz' }), {
+      logoUrl: 'media:host-1/logo',
+    })
+    expect(person).not.toHaveProperty('seo.entity.logo')
+  })
+
   it('nothing a second time', () => {
-    const first = aiSiteEntityUpdates({}, aiSiteEntityValues(PLUMBER))
-    expect(aiSiteEntityUpdates(applied({}, first), aiSiteEntityValues(PLUMBER))).toEqual({})
+    const site = { logoUrl: 'media:host-1/logo' }
+    const first = aiSiteEntityUpdates({}, aiSiteEntityValues(PLUMBER), site)
+    const host = appliedHost({}, first) as { seo?: unknown; business?: unknown }
+    expect(aiSiteEntityUpdates(host.seo, aiSiteEntityValues(PLUMBER), { ...site, business: host.business })).toEqual({})
   })
 
   it('a start with no details writes its name, description, type and guidance, and no empty field', () => {
@@ -149,13 +184,14 @@ describe('what a publish writes on the host', () => {
   })
 
   it('makes every page’s JSON-LD the kind’s type, with telephone, email, address, hours, areas and profiles', () => {
-    const seo = applied({ title: 'Pipeworks', description: 'Welcome' }, aiSiteEntityUpdates({}, aiSiteEntityValues(PLUMBER)))
+    const seo = applied({ title: 'Pipeworks', description: 'Welcome' }, aiSiteEntityUpdates({}, aiSiteEntityValues(PLUMBER), { logoUrl: 'https://cdn.example.com/pipeworks.png' }))
     const node = siteEntityJsonLd({ displayName: 'Pipeworks', seo } as never, { origin: 'https://pipeworks.aglyn.app' })
     expect(node).toMatchObject({
       '@type': 'Plumber',
       name: 'Pipeworks',
       telephone: '(512) 555-0142',
-      contactPoint: { '@type': 'ContactPoint', email: 'hello@pipeworks.co', telephone: '(512) 555-0142' },
+      contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email: 'hello@pipeworks.co', telephone: '(512) 555-0142' },
+      logo: 'https://cdn.example.com/pipeworks.png',
       address: { '@type': 'PostalAddress', streetAddress: '214 Main Street', addressLocality: 'Austin', addressRegion: 'TX', postalCode: '78701' },
       areaServed: [
         { '@type': 'City', name: 'Austin' },

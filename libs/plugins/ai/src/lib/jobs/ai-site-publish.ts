@@ -524,11 +524,16 @@ export async function aiPublishGuidedSite(
   )
   if (language) Object.assign(hostUpdates, language)
   // Who publishes the site, from the start's answers (AGL-3979): its Setup ->
-  // SEO -> Entity and AI agents fields, each only where empty, so every page's
-  // structured data and the site's /llms.txt name its business type, phone,
-  // email, address, hours, areas and profiles. Every page carries the entity,
-  // so the announce asks for the whole site when any of it changes.
-  const entity = aiSiteEntityUpdates(host.get('seo'), aiSiteEntityValues(job.inputs, { language: input.language ?? null }))
+  // SEO -> Entity and AI agents fields and its Business details, each only
+  // where empty, so every page's structured data and the site's /llms.txt
+  // name its business type, phone, email, address, hours, areas, profiles and
+  // logo. Every page carries the entity, so the announce asks for the whole
+  // site when any of it changes.
+  const entity = aiSiteEntityUpdates(
+    host.get('seo'),
+    aiSiteEntityValues(job.inputs, { language: input.language ?? null }),
+    { logoUrl: host.get('logoUrl'), business: host.get('business') },
+  )
   Object.assign(hostUpdates, entity)
   const entireHost = layoutWrites.length > 0 || language !== null || Object.keys(entity).length > 0
   batch.update(hostRef, hostUpdates)

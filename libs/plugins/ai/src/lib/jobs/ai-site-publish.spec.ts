@@ -617,7 +617,10 @@ describe('a guided start fills the site’s Entity and AI-agent fields (AGL-3979
       openingHours: 'Mo-Fr 08:00-18:00',
       sameAs: ['https://instagram.com/pipeworks'],
     })
+    expect(seo['entity']).toMatchObject({ contactType: 'customer support' })
     expect(seo['agent']).toMatchObject({ whenToUse: expect.stringContaining('Pipeworks'), howToUse: expect.stringContaining('hello@pipeworks.co') })
+    // The Business details card's support email, which a form that cannot take a message names.
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['business']).toEqual({ supportEmail: 'hello@pipeworks.co' })
     const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
     expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
   })
@@ -626,5 +629,14 @@ describe('a guided start fills the site’s Entity and AI-agent fields (AGL-3979
     seedSite()
     await publish()
     expect((docs.get('hosts/host-1') as Record<string, unknown>)['seo']).toBeUndefined()
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['business']).toBeUndefined()
+  })
+
+  it('names the site’s own logo as the Entity logo', async () => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), logoUrl: 'media:host-1/logo' })
+    await aiPublishGuidedSite(firestore, { job: DETAILED, outputs: OUTPUTS, now: NOW }, { sendSitePublished: sendSitePublished as never, dropCache })
+    const seo = (docs.get('hosts/host-1') as Record<string, Record<string, Record<string, unknown>>>)['seo']
+    expect(seo['entity']['logo']).toBe('media:host-1/logo')
   })
 })

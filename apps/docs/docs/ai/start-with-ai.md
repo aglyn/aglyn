@@ -77,7 +77,7 @@ for, and it decides which questions the contact form asks. For example, *local d
 who want a regular groom booked online*.
 
 Both answers also fill your site's [business profile](./business-profile.md), which every
-later AI job for the site reads.
+later AI job for the site reads, and so do the areas you serve, from **More details**.
 
 **More details** here: the **Areas you serve** (cities, towns or neighborhoods, one a
 line), your **Price range** ($ to $$$$) and the **Languages you serve customers in**.
@@ -133,8 +133,9 @@ line, such as *instagram.com/yourbusiness*.
 
 The last step lists every answer: the kind of site, who it is for, the style, where form
 submissions go, the pages and, on a paid plan, the welcome email, then every detail you
-gave, such as the phone, the email, the address and the opening hours. **Edit** beside an answer
-opens its step, and **Back to review** returns here. **Plan my site** starts the site.
+gave, such as the phone, the email, the address and the opening hours. **Edit** beside an
+answer opens its step, and **Back to review** returns here. **Plan my site** starts the
+site.
 
 ![The Review step: each answer with Edit beside it, and at the bottom the estimate, the model switch, Back and Plan my site](/img/ai/start-with-ai-review.png)
 
@@ -159,7 +160,8 @@ builds, in this order:
 
 1. **A look**: a base theme, colors, fonts and the style of buttons, cards and forms, made
    for your kind of site. See [Looks and themes](./site-looks.md).
-2. **A header and footer**, as the layout every page sits in, with a link to each page.
+2. **A header and footer**, as the layout every page sits in, with a link to each page. The
+   footer shows the phone and email you gave, as links that call and write.
 3. **A contact form**, saved on the Forms page, routed the way you chose, and placed on the
    page that needs it.
 4. **Your first posts or products**, when the site is a blog or, on paid plans, a store.
@@ -170,12 +172,14 @@ builds, in this order:
 5. **Your pages**, each with its sections, its address and its own search title and
    description. A home page opens with a hero and has several bands below it, such as
    services, about, social proof and a closing call to action. Photos come from your media
-   library or a [stock photo](./stock-photos.md).
+   library or a [stock photo](./stock-photos.md), and every photo gets a description for
+   screen readers and search engines. The page with your contact form also shows the
+   phone and email you gave.
 6. **A welcome email draft**, if you asked for one.
 7. **Publishing**: see [Published, and found by search engines](#published-and-indexable).
 
-Contact details are never made up. A phone number, address or opening hours appear only
-when you have entered them in your site settings.
+Contact details are never made up. A phone number, email, address or opening hours appear
+only when you gave them on the **Details** step or entered them in your site settings.
 
 ## Building your site {#building-your-site}
 
@@ -263,11 +267,19 @@ When the site is published, your answers also fill the site's
 [structured data](../building-sites/seo/overview.md#entity-card) in **Setup** → **SEO**, so search
 engines and AI assistants can tell who runs the site and how to reach you:
 
-- **Entity**: the business's name and description, its phone and email, its address, and
-  what kind of business it is, from the style you picked (a plumber, a restaurant, a
-  salon), with the areas it serves, its opening hours, its price range and its social
-  profiles where you gave them. A personal site is published as a person.
+- **Entity**: the business's name and description, its phone and email (with **Contact is
+  for** set to *customer support*), its address, and what kind of business it is, from the
+  style you picked (a plumber, a restaurant, a salon), with the areas it serves, its
+  opening hours, its price range and its social profiles where you gave them. A personal
+  site is published as a person.
+- **Entity logo**: your site logo, when the site already has one.
 - **AI agents**: when an assistant should use the site, and how to reach a person there.
+  These open the site's guide for AI assistants, so an assistant asked about your business
+  finds what it does, where it works and how to reach you.
+
+The email and the street address also fill **Setup** → **Details** →
+[**Business details**](../building-sites/bindings/overview.md#site-details), as the site's
+support email and postal address.
 
 Only empty fields are filled, so nothing you already entered there is replaced. Change any
 of it in **Setup** → **SEO** at any time.

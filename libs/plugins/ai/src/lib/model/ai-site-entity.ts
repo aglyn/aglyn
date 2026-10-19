@@ -157,6 +157,8 @@ export interface AiSiteEntityValues {
     postalCode: string
     addressCountry: string
   }
+  /** The street address as one line, as Setup → Details → Business details holds it; `''` without a street. */
+  postalAddress: string
   businessType: string
   areaServed: string[]
   openingHours: string
@@ -262,6 +264,7 @@ export function aiSiteEntityValues(
       postalCode: details.postalCode,
       addressCountry: details.country,
     },
+    postalAddress: address,
     businessType: schema.businessType ?? '',
     areaServed,
     openingHours: details.hours,
@@ -280,6 +283,9 @@ const isBlank = (value: unknown): boolean =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+/** The contact a start's phone or email answers, as the Setup form's **Contact is for** says it: its default. */
+export const AI_SITE_CONTACT_TYPE = 'customer support'
+
 /**
  * The host updates that put a start's Entity and AI-agent values on its site,
  * as field paths (`seo.entity.telephone`), for the publish's own batch: only
@@ -287,11 +293,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * The address is written whole or not at all — a start's street beside the
  * owner's own city would be an address of neither. `{}` when there is
  * nothing to write.
+ *
+ * Beside the Entity, from what the site already has and the same answers:
+ * - the Entity logo is the site's own logo, where it has one and the Entity
+ *   names none (a Person's Entity picture is their photo, never a logo);
+ * - **Contact is for** says what the phone or email this start wrote answers;
+ * - Setup → Details → Business details gets the email as the support email
+ *   (which `{{host.supportEmail}}` and a form that cannot take a message name)
+ *   and the street address as its one block of text.
  */
-export function aiSiteEntityUpdates(seo: unknown, values: AiSiteEntityValues): Record<string, unknown> {
+export function aiSiteEntityUpdates(
+  seo: unknown,
+  values: AiSiteEntityValues,
+  site: { logoUrl?: unknown; business?: unknown } = {},
+): Record<string, unknown> {
   const current = isRecord(seo) ? seo : {}
   const entity = isRecord(current['entity']) ? current['entity'] : {}
   const agent = isRecord(current['agent']) ? current['agent'] : {}
+  const business = isRecord(site.business) ? site.business : {}
   const updates: Record<string, unknown> = {}
   const fill = (path: string, now: unknown, next: string | string[]) => {
     if (!isBlank(next) && isBlank(now)) updates[path] = next
@@ -303,6 +322,9 @@ export function aiSiteEntityUpdates(seo: unknown, values: AiSiteEntityValues): R
   fill('seo.entity.description', entity['description'], values.description)
   fill('seo.entity.email', entity['email'], values.email)
   fill('seo.entity.telephone', entity['telephone'], values.telephone)
+  if (updates['seo.entity.email'] || updates['seo.entity.telephone']) {
+    fill('seo.entity.contactType', entity['contactType'], AI_SITE_CONTACT_TYPE)
+  }
   const address = isRecord(entity['address']) ? entity['address'] : {}
   if (Object.values(address).every(isBlank)) {
     for (const [field, value] of Object.entries(values.address)) {
@@ -312,6 +334,7 @@ export function aiSiteEntityUpdates(seo: unknown, values: AiSiteEntityValues): R
   // A Person carries none of a business's fields (`siteEntityJsonLd`).
   const isPerson = person || Number(entity['type']) === HostEntityType.PERSON
   if (!isPerson) {
+    fill('seo.entity.logo', entity['logo'], typeof site.logoUrl === 'string' ? site.logoUrl.trim() : '')
     fill('seo.entity.businessType', entity['businessType'], values.businessType)
     fill('seo.entity.areaServed', entity['areaServed'], values.areaServed)
     fill('seo.entity.openingHours', entity['openingHours'], values.openingHours)
@@ -320,5 +343,7 @@ export function aiSiteEntityUpdates(seo: unknown, values: AiSiteEntityValues): R
   fill('seo.entity.sameAs', entity['sameAs'], values.sameAs)
   fill('seo.agent.whenToUse', agent['whenToUse'], values.whenToUse)
   fill('seo.agent.howToUse', agent['howToUse'], values.howToUse)
+  fill('business.supportEmail', business['supportEmail'], values.email)
+  fill('business.address', business['address'], values.postalAddress)
   return updates
 }
