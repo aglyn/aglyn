@@ -48,7 +48,7 @@ import {
   runValidatedGeneration,
   type AiValidatedTree,
 } from '../runtime/ai-doctrine'
-import type { AiDoctrineTree, AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import { aiBracketedFacts, type AiDoctrineTree, type AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { aiHasPlaceholderToken } from '../runtime/ai-placeholder-tokens'
 import { AI_PALETTE } from '../runtime/ai-palette.generated'
@@ -412,6 +412,53 @@ export function aiFormPlaceholderIsMarker(placeholder: string): boolean {
 }
 
 /**
+ * The props of a form's elements a visitor never reads (AGL-3988): a field's
+ * name, an answer's value, an accessible name, the dataset's and the form's
+ * own names. A marker in one is nothing the owner can find on the page, so
+ * the draft's note never names it.
+ */
+const UNREAD_FORM_PROPS: readonly string[] = ['name', 'fieldName', 'ariaLabel', 'value', 'datasetName', 'formName']
+
+/**
+ * What a draft's note says the owner fills in before the form is published
+ * (AGL-3056, AGL-3988): the facts in square brackets a visitor reads — a
+ * label, a choice, a helper line, the button — and, said apart, those in the
+ * message shown once a visitor sends it, which is on no page. The beta.270
+ * Sugar Hollow form's note asked the owner to "replace the facts in square
+ * brackets… [number]", and nothing on the site showed one. A marker in a
+ * prop no visitor reads is never named. `null` when there is nothing to fill.
+ */
+export function aiFormBracketedFactsNote(
+  tree: { rootId: string; nodes: NodesMap },
+  inventory: Parameters<typeof aiBracketedFactsNote>[0]['inventory'],
+): string | null {
+  const read: Record<string, Record<string, unknown>> = {}
+  const after: string[] = []
+  for (const [id, node] of Object.entries(tree.nodes as unknown as Record<string, Record<string, unknown>>)) {
+    const props = { ...((node['props'] as Record<string, unknown> | undefined) ?? {}) }
+    for (const name of UNREAD_FORM_PROPS) delete props[name]
+    if (typeof props['successMessage'] === 'string') {
+      after.push(props['successMessage'] as string)
+      delete props['successMessage']
+    }
+    read[id] = { ...node, props }
+  }
+  const shown = aiBracketedFactsNote({
+    tree: { rootId: tree.rootId, nodes: read as unknown as AiDoctrineTree['nodes'] },
+    inventory,
+  })
+  const listed = new Set((shown ?? '').toLowerCase().match(/\[[^\]]+\]/g) ?? [])
+  const later = aiBracketedFacts(after).filter((fact) => !listed.has(fact.toLowerCase()))
+  const message = later.length
+    ? `The message a visitor sees after sending the form, the Form's Success message, holds ${later.length === 1 ? later[0] : `${later.slice(0, -1).join(', ')} and ${later[later.length - 1]}`}: replace ${later.length === 1 ? 'it' : 'them'} before you publish.`
+    : null
+  return [shown, message].filter(Boolean).join(' ') || null
+}
+
+/** Whether a choice of a list is a marker, which no visitor can pick as their answer (AGL-3988). */
+const isMarkerChoice = (text: string) => BRACKETED.test(text) || aiHasPlaceholderToken(text)
+
+/**
  * The draft a validated design and its answer make: the form node bound to
  * `formId` and captioned `name`, the platform's consent field when the
  * fields can yield an email address, the canvas root above, and the
@@ -438,6 +485,21 @@ export function aiFormDraft(
     const props = nodes[id]?.props as Record<string, unknown>
     const placeholder = props['placeholder']
     if (typeof placeholder === 'string' && aiFormPlaceholderIsMarker(placeholder)) delete props['placeholder']
+    // Nor is a choice that is a marker one a visitor can pick (AGL-3988).
+    const options = props['options']
+    if (typeof options === 'string' && isMarkerChoice(options)) {
+      const kept = options.split(/\s*[;\n]\s*/).filter((choice) => choice && !isMarkerChoice(choice))
+      props['options'] = kept.join('; ')
+    }
+  }
+  // A list's option that is a marker goes, as its placeholder would (AGL-3988).
+  for (const [id, node] of Object.entries(nodes)) {
+    const label = (node?.props as Record<string, unknown> | undefined)?.['children']
+    if (node?.componentId !== 'muiSelectOption' || typeof label !== 'string' || !isMarkerChoice(label)) continue
+    for (const parent of Object.values(nodes)) {
+      if (Array.isArray(parent?.nodes) && (parent.nodes as string[]).includes(id)) parent.nodes = (parent.nodes as string[]).filter((child) => child !== id)
+    }
+    delete nodes[id]
   }
   const form = nodes[formNodeId]
   let consentFieldName: string | null = null
@@ -1008,11 +1070,8 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     const note = [
       aiFormOutputNote(draft.answer),
       draft.dataset ? aiFormDatasetNote(draft.dataset.dataset, draft.dataset.binding) : null,
-      // Read off the draft as written, so a marker it never shows is never listed.
-      aiBracketedFactsNote({
-        tree: { rootId: draft.rootId, nodes: draft.nodes as unknown as AiDoctrineTree['nodes'] },
-        inventory,
-      }),
+      // Read off the draft as written, so a marker it never shows is never listed (AGL-3988).
+      aiFormBracketedFactsNote({ rootId: draft.rootId, nodes: draft.nodes }, inventory),
     ]
       .filter(Boolean)
       .join(' ')

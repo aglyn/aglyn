@@ -115,6 +115,7 @@ import {
   AI_JOB_FORM_MAX_TOKENS,
   AI_JOB_FORM_TOOL,
   aiFormOutputNote,
+  aiFormBracketedFactsNote,
   aiFormPlaceholderIsMarker,
   aiJobFormPrompt,
   createAiJobFormStep,
@@ -733,12 +734,41 @@ describe('the form step', () => {
   it('adds the facts in square brackets the form shows after what the member decides (AGL-3056)', async () => {
     const golden = GOLDENS['newsletterSignup']
     const answer = structuredClone(golden.answer) as Golden['answer'] & { tree: { nodes: Record<string, { props?: Record<string, unknown> }> } }
-    answer.tree.nodes['signup'].props = { ...answer.tree.nodes['signup'].props, successMessage: 'Thanks. Your first issue arrives on [send day].' }
+    answer.tree.nodes['signup'].props = { ...answer.tree.nodes['signup'].props, submitLabel: 'Join by [send day]' }
     mockRunAiRequest.mockResolvedValueOnce(completion(answer))
     const outcome = await createAiJobFormStep()(context(goldenJob('newsletterSignup')))
     expect(outcome.outputs[0]?.note).toBe(
       `${EXPECTED['newsletterSignup'].note} Before you publish, replace the facts in square brackets, which the brief did not give: [send day].`,
     )
+  })
+
+  /*
+   * The beta.270 Sugar Hollow Photography form (AGL-3988): its note asked the
+   * owner to "replace the facts in square brackets… [number]", and nothing on
+   * the site showed one.
+   */
+  it('says a fact in the message shown after a visitor sends the form is there, since no page shows it (AGL-3988)', async () => {
+    const golden = GOLDENS['newsletterSignup']
+    const answer = structuredClone(golden.answer) as Golden['answer'] & { tree: { nodes: Record<string, { props?: Record<string, unknown> }> } }
+    answer.tree.nodes['signup'].props = { ...answer.tree.nodes['signup'].props, successMessage: 'Thanks. Your first issue arrives on [send day].' }
+    mockRunAiRequest.mockResolvedValueOnce(completion(answer))
+    const outcome = await createAiJobFormStep()(context(goldenJob('newsletterSignup')))
+    expect(outcome.outputs[0]?.note).toBe(
+      `${EXPECTED['newsletterSignup'].note} The message a visitor sees after sending the form, the Form's Success message, holds [send day]: replace it before you publish.`,
+    )
+    expect(outcome.outputs[0]?.note).not.toContain('Before you publish, replace the facts in square brackets')
+  })
+
+  it('never names a marker in a name or a value no visitor reads, and drops a choice that is one (AGL-3988)', () => {
+    const tree = {
+      rootId: 'form',
+      nodes: {
+        form: { $id: 'form', componentId: 'form', props: { formName: 'Inquiry' }, nodes: ['count', 'pick'] },
+        count: { $id: 'count', componentId: 'muiInput', props: { name: 'guests_[number]', ariaLabel: 'Up to [number] guests' }, nodes: [] },
+        pick: { $id: 'pick', componentId: 'muiSelectOption', props: { children: 'Two people', value: '[number]' }, nodes: [] },
+      },
+    }
+    expect(aiFormBracketedFactsNote(tree as never, null)).toBeNull()
   })
 
   it('drops a field’s placeholder that is a bracketed marker, and asks the owner to fill in no fact for it (AGL-3942)', async () => {
@@ -758,6 +788,22 @@ describe('the form step', () => {
     expect(named('damageDescription')?.['placeholder']).toBe(answer.tree.nodes['damageInput'].props?.['placeholder'])
     expect(outcome.outputs[0]?.note).toBe(EXPECTED['roofingQuote'].note)
     expect(outcome.outputs[0]?.note).not.toContain('[Phone number]')
+  })
+
+  it('drops a list’s choice that is a bracketed marker, which no visitor can pick (AGL-3988)', async () => {
+    const golden = GOLDENS['roofingQuote']
+    const answer = structuredClone(golden.answer) as Golden['answer'] & { tree: { nodes: Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }> } }
+    const select = Object.entries(answer.tree.nodes).find(([, node]) => node.componentId === 'muiSelect')
+    if (select) {
+      answer.tree.nodes['markerChoice'] = { componentId: 'muiSelectOption', props: { children: '[number]+ people', value: 'many' }, nodes: [] }
+      select[1].nodes = [...(select[1].nodes ?? []), 'markerChoice']
+    }
+    mockRunAiRequest.mockResolvedValueOnce(completion(answer))
+    const outcome = await createAiJobFormStep()(context())
+    const stored = mockDocs.get(`hosts/host-1/forms/${FORM_ID}`) as Record<string, unknown>
+    const nodes = Object.values(decodeStoredNodes<Record<string, { props?: Record<string, unknown> }>>(stored['nodes']) ?? {})
+    expect(nodes.some((node) => node?.props?.['children'] === '[number]+ people')).toBe(false)
+    expect(outcome.outputs[0]?.note).not.toContain('[number]')
   })
 
   it('reads a placeholder as a marker only when it is a bracketed fact or a template token (AGL-3942)', () => {
