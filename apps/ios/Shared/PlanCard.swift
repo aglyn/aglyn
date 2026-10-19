@@ -240,6 +240,8 @@ struct PlanCard: View {
         .font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).lineLimit(1)
       // The meter, cross-faded as the card moves on (Figma plan card 98:1048: the title and Upgrade, the bar, then the
       // figures with the page dots at the trailing edge).
+      // One layer per meter in a ZStack, so the outgoing and incoming meters cross-fade in place rather than stack.
+      ZStack(alignment: .topLeading) {
       VStack(alignment: .leading, spacing: 8) {
         HStack(spacing: 8) {
           Text(meter.label).font(.system(size: AglynShellMetrics.rowText, weight: .semibold))
@@ -269,12 +271,18 @@ struct PlanCard: View {
       }
       .id(meter.id)
       .transition(.opacity)
-      HStack(spacing: 8) {
-        Text(meter.figures).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).monospacedDigit().lineLimit(1)
-          .id("figures-\(meter.id)")
-          .transition(.opacity)
-        Spacer(minLength: 0)
-        if shown.count > 1 { dots(shown) }
+      }
+      // The figures never truncate: with many meters the dots take their own row under them.
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          figures(meter)
+          Spacer(minLength: 0)
+          if shown.count > 1 { dots(shown) }
+        }
+        VStack(alignment: .leading, spacing: 4) {
+          figures(meter)
+          if shown.count > 1 { dots(shown).frame(maxWidth: .infinity) }
+        }
       }
       .frame(minHeight: 16)
     }
@@ -307,6 +315,15 @@ struct PlanCard: View {
     .accessibilityAction(named: "Upgrade") { upgrade() }
     .accessibilityAction(named: "Open usage") { openUsage() }
     .accessibilityIdentifier("plan-card")
+  }
+
+  private func figures(_ meter: PlanMeters.Meter) -> some View {
+    ZStack(alignment: .leading) {
+      Text(meter.figures).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).monospacedDigit()
+        .lineLimit(1).fixedSize()
+        .id("figures-\(meter.id)")
+        .transition(.opacity)
+    }
   }
 
   /// The card's inset: Figma's Compact 10, Touch 12.
