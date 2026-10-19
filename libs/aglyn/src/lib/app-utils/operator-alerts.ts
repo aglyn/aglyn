@@ -319,11 +319,12 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     // request's billed hours and the Stripe invoice item that carries them
     // disagree, or one exists without the other. Should know, not must:
     // nothing is lost yet, the next invoice has not gone, and the fix is on
-    // the request.
+    // the request. The same check compares a flat-quoted project's
+    // invoices (AGL-3970), whose findings arrive with `month` "projects".
     type: 'billing.siteCareReconciliation',
-    label: 'Site Care extra time does not match Stripe',
+    label: 'Site Care billing does not match Stripe',
     description:
-      'A Site Care request’s billed hours, amount or line description disagree with its Stripe invoice item, a Stripe item has no request row behind it, or a month’s total disagrees with its statement. Open the workspace’s Site Care month on its staff page and correct it from the request — never by hand in Stripe.',
+      'A Site Care request’s billed hours, amount or line description disagree with its Stripe invoice item, a Stripe item has no request row behind it, a month’s total disagrees with its statement, or a project invoice’s status or amount disagrees with Stripe (or exists in Stripe with no project row). Open the workspace’s staff page and correct it from the request or the project — never by hand in Stripe.',
     tier: 'should',
     category: 'billing',
     title: 'Site Care billing mismatch on {{orgName}} ({{month}})',

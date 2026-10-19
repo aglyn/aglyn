@@ -80,6 +80,7 @@ import { domainSystemEmailTemplates } from './domain-emails'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { retentionSystemEmailTemplates } from './retention-emails'
 import { SITE_CARE_SYSTEM_EMAIL_TEMPLATES } from './site-care-emails'
+import { SITE_CARE_PROJECT_SYSTEM_EMAIL_TEMPLATES } from './site-care-project-emails'
 import { welcomeEmailMergeValues } from './welcome-email'
 
 /** The welcome email's next steps, as a new workspace's owner gets them. */
@@ -1709,6 +1710,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN, SAMPLE_DOCS_ORIGIN),
     // Site Care requests (AGL-3959), beside their own sender's notes.
     ...SITE_CARE_SYSTEM_EMAIL_TEMPLATES,
+    // Site Care projects (AGL-3970): the flat quote's acceptance, invoices,
+    // payments and reversals.
+    ...SITE_CARE_PROJECT_SYSTEM_EMAIL_TEMPLATES,
     // A domain bought through the domains plugin (AGL-3962), whose keys and
     // copy live in `domain-emails.ts`.
     ...domainSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),

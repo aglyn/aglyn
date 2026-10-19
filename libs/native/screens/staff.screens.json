@@ -8814,6 +8814,34 @@
             "editable": true
           },
           {
+            "key": "site-care-project-acceptance",
+            "name": "Site Care project: quote accepted",
+            "description": "Sent to the workspace owner the moment staff record their yes to a flat project quote, and again, marked corrected, when the record is corrected. It is the written record of the scope and price they accepted, sent before anything is invoiced.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-invoice",
+            "name": "Site Care project: invoice to pay",
+            "description": "Sent to the workspace owner with each project invoice — the deposit, the balance at launch, or the whole price — and its secure pay link.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-paid",
+            "name": "Site Care project: payment received",
+            "description": "Sent to the workspace owner when a project invoice is paid: what was paid, and what happens next.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-reversed",
+            "name": "Site Care project: invoice voided, credited or refunded",
+            "description": "Sent to the workspace owner when staff void, credit or refund a project invoice from the project record.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "domain-purchased",
             "name": "Domain purchased",
             "description": "Sent to a workspace's owners and admins when a domain bought for one of its sites is registered.",
@@ -14359,6 +14387,199 @@
               "name": "sender.email",
               "description": "The address the message came from",
               "sample": "someone@example.com"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-acceptance": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "project.scope",
+              "description": "What the price covers, one deliverable per line",
+              "sample": "- A landing page for the holiday sale\n- A sign-up form for the sale list"
+            },
+            {
+              "name": "acceptance.heading",
+              "description": "“You accepted our quote”, or “Corrected” on a correction",
+              "sample": "You accepted our quote"
+            },
+            {
+              "name": "acceptance.sentence",
+              "description": "The price, how it is billed, and how and when the owner said yes",
+              "sample": "You accepted our quote for “Holiday sale landing page”: $249, paid in full before work starts. You said yes in person on Oct 19, 2026, 2:10 PM CDT."
+            },
+            {
+              "name": "acceptance.correction",
+              "description": "What was corrected and why, on a correction; blank otherwise",
+              "sample": "This corrects the earlier record: the owner said yes by phone, not in person."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-invoice": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "project.scope",
+              "description": "What the price covers, one deliverable per line",
+              "sample": "- A landing page for the holiday sale\n- A sign-up form for the sale list"
+            },
+            {
+              "name": "invoice.heading",
+              "description": "“Your deposit invoice”, “Your balance invoice” or “Your invoice”",
+              "sample": "Your invoice"
+            },
+            {
+              "name": "invoice.sentence",
+              "description": "What this invoice is for and what is left after it",
+              "sample": "This is the $249 for “Holiday sale landing page”, in full. Tax is added at checkout."
+            },
+            {
+              "name": "invoice.amount",
+              "description": "The invoice total, tax included",
+              "sample": "$269.54"
+            },
+            {
+              "name": "invoice.number",
+              "description": "The invoice number",
+              "sample": "A1B2C3D4-0001"
+            },
+            {
+              "name": "invoice.due",
+              "description": "When it is due",
+              "sample": "Nov 2, 2026"
+            },
+            {
+              "name": "invoice.payUrl",
+              "description": "The secure page the invoice is paid on",
+              "sample": "https://invoice.stripe.com/i/acct_test/test"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-paid": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "payment.amount",
+              "description": "What was paid, tax included",
+              "sample": "$269.54"
+            },
+            {
+              "name": "payment.sentence",
+              "description": "What the payment was for",
+              "sample": "Thank you. We received your payment of $269.54 for “Holiday sale landing page”."
+            },
+            {
+              "name": "payment.next",
+              "description": "What happens next",
+              "sample": "The project is paid in full. We will let you know when it is live."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-reversed": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "reversal.heading",
+              "description": "“Invoice canceled”, “Invoice credited” or “Payment refunded”",
+              "sample": "Invoice canceled"
+            },
+            {
+              "name": "reversal.sentence",
+              "description": "What happened to the money",
+              "sample": "We canceled the $124.50 deposit invoice for “Holiday sale landing page”. You do not owe it."
+            },
+            {
+              "name": "reversal.reason",
+              "description": "Why",
+              "sample": "The invoice went out with the wrong scope."
             },
             {
               "name": "brand.productName",

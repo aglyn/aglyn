@@ -99,6 +99,18 @@ function metadataParams(metadata: Readonly<Record<string, string>>): Record<stri
   return params
 }
 
+/**
+ * The pinned, form-encoded Stripe call and its helpers, shared with the
+ * flat-quoted project invoice (AGL-3970, `site-care-project-stripe.ts`) so
+ * both Site Care money paths speak to Stripe the same way.
+ */
+export {
+  metadataParams as siteCareStripeMetadata,
+  stripeCall as siteCareStripeCall,
+  stripeMessage as siteCareStripeMessage,
+}
+export type { StripeAnswer as SiteCareStripeAnswer }
+
 export type SiteCareStripeResult<T> = ({ ok: true } & T) | { ok: false; error: string }
 
 /**
