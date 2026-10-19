@@ -515,16 +515,17 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
         current == null -> SkeletonList(rows = 4)
         current.door == "upsell" && current.upsell != null -> {
           val upsell = current.upsell
-          SectionCard(upsell.title) {
-            Text(upsell.does, style = MaterialTheme.typography.bodyMedium)
-            Text(upsell.offer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-              upsell.action?.let { action ->
-                Button(onClick = { context.navigate("core.billing.addons") }, modifier = Modifier.testTag("ai-create-add-on")) { Text(action) }
-              }
-              TextButton(onClick = { context.back() }, modifier = Modifier.testTag("ai-create-dismiss")) { Text(upsell.dismiss) }
-            }
-          }
+          // The console's AiUpsellDialog as the add-on's promo card (Figma Promo/Add-on card 121:18655): its title, what the
+          // entry does, the offer, then the dismissal (Close for a member who cannot buy it) and the add-on's action.
+          com.aglyn.ui.AddOnPromoCard(
+            title = upsell.title,
+            does = upsell.does,
+            offer = upsell.offer,
+            dismissTitle = upsell.dismiss,
+            actionTitle = upsell.action,
+            onDismiss = { context.back() },
+            onAction = { context.navigate("core.billing.addons") },
+          )
         }
         current.door == "create" && current.copy != null -> {
           val copy = current.copy
