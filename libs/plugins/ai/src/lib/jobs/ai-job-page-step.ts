@@ -98,6 +98,7 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
+import { aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
 import {
   AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
@@ -883,7 +884,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         sectionNames,
         seed,
         ...(photoWords.language ? { language: photoWords.language } : {}),
-        source: (deps.stockPhotos ?? aiLayoutStockPhotoSource)({
+        // The owner's own photos first (AGL-3957), the stock library for the rest.
+        source: (deps.stockPhotos ?? aiLayoutSitePhotoSource)({
           hostId,
           uid: job.createdBy,
           seed,

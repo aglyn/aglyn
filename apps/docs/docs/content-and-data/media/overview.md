@@ -370,6 +370,38 @@ back afterwards, so Aglyn asks first.
   allowed: upload that as a new file. Cropping, rotating and resizing stay images-only,
   for the obvious reason.
 
+### Photos from a phone {#photo-link}
+
+The quickest way to get a business's own photos into its site is to let them come
+straight from the phone that took them. On the site's **Media** page, in the
+**This site** tab, choose **Get a photo link**, then **New link**. The dialog shows
+a QR code and the link's address, with **Copy** beside it, so you can show the code
+to someone in person or send the address in a text or an email.
+
+Whoever opens the link sees **Send photos to** and the site's name, picks photos
+from their camera roll, several at a time, and sends them. They do not sign in, and
+nothing else on the phone is read. The photos land in this site's library in a
+folder named **From the owner**, filed as the business's own photos.
+
+- **A link works for 7 days** and takes up to **40 photos**. You can **revoke** it
+  sooner from the same dialog. Its address is shown only once and is not kept, so if
+  it is lost, make a new link.
+- **Location and camera details are removed.** Every photo arrives upright and no
+  wider than 2560 pixels, and the GPS position, camera details and other data inside
+  the file are stripped before it is stored. JPEG, PNG and WebP are accepted; an
+  iPhone's HEIC photo is converted on the phone where its browser can open it.
+- **Who can make a link.** Admins, editors and authors who can upload to the site's
+  library. The organization library has no photo link.
+- **Storage counts as usual.** Each photo is stored as if the member who made the
+  link had uploaded it, and counts toward your [storage](#storage) like any upload.
+
+**Aglyn AI uses these photos first.** When AI writes a page, during
+[Start a new site with AI](../../ai/start-with-ai.md) or when it
+[generates pages](../../ai/generate-a-site.md) for a site that already exists, it puts
+the photos sent through a photo link in the page's hero, about and gallery pictures
+before it looks for stock photos. A product's photo, a person's portrait and
+a record's cover still come from stock.
+
 ### Size and plan limits
 
 | Upload | Cap | Plan |
