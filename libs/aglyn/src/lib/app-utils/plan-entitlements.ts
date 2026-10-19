@@ -377,6 +377,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: false,
       multilingual: false,
       eventCalendar: false,
+      // Site Care (AGL-3954) is never granted by a tier, on this plan or any
+      // other: it is the managed-website add-on, switched on only by a live
+      // `seatAddons.siteCare` purchase (or a staff override), never by a row.
+      siteCare: false,
       redirects: false,
       screenAnalytics: false,
       /**
@@ -496,6 +500,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: false,
       multilingual: false,
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: false,
       mediaCdn: true,
@@ -609,6 +614,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: true,
       multilingual: false,
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
@@ -679,6 +685,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: true,
       multilingual: true,
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
@@ -752,6 +759,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: true,
       multilingual: true,
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
@@ -822,6 +830,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: true,
       multilingual: true,
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
@@ -896,6 +905,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       siteExport: true,
       multilingual: true,
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
@@ -1007,6 +1017,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       multilingual: true,
       // Event Calendar stays an add-on purchase, as on every other tier.
       eventCalendar: false,
+      siteCare: false,
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
@@ -1084,6 +1095,19 @@ export function isCustomPricedPlan(plan: OrgPlan | undefined | null): boolean {
   return plan === 'enterprise'
 }
 
+/**
+ * Whether a plan sells the Site Care add-on (AGL-3954): every paid self-serve
+ * plan, never `free` (no subscription to bill it on) and never a
+ * custom-priced plan (Enterprise names it in the agreement instead). An
+ * unknown plan string sells nothing. The ONE reading of that rule — the
+ * add-on ceiling, the checkout refusal and the Billing card all ask it.
+ */
+export function planSellsSiteCare(plan: OrgPlan | string | undefined | null): boolean {
+  if (!plan || plan === 'free') return false
+  if (isCustomPricedPlan(plan as OrgPlan)) return false
+  return SELF_SERVE_PLANS.includes(plan as OrgPlan)
+}
+
 /** Human plan names — the ONE source every plan badge/label reads. */
 export const PLAN_LABELS: Record<OrgPlan, string> = {
   free: 'Free',
@@ -1109,6 +1133,25 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
  * The marketing copy on /pricing is written against that behaviour.
  */
 export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
+
+/**
+ * Site Care add-on (AGL-3954): $49/mo per organization, the managed-website
+ * service. It buys staff time, not capacity: small changes to the owner's
+ * existing site (hours, prices, photos, a staff member, a seasonal banner, a
+ * section on an existing page), up to about one hour of work a month, done
+ * within two business days, minutes logged and no rollover. New pages, new
+ * forms, redesigns, brand work, photography, whole-site copy and ads are
+ * quoted separately, and it never raises a plan limit — a 26th page or a
+ * second site is still an upgrade.
+ *
+ * Flat across plans, like the Event Calendar, because the work it pays for
+ * is the same hour whichever tier the site is on; the yearly price is ×12
+ * with no discount, as every add-on's is. Sold on every paid self-serve plan
+ * and never on Free (no subscription to carry it) or Enterprise (quoted per
+ * deal) — `planSellsSiteCare` is that rule. `resolveOrgEntitlements` flips
+ * the org-wide `features.siteCare` from any purchased quantity >= 1.
+ */
+export const SITE_CARE_ADDON_MONTHLY_USD = 49
 
 /**
  * POS Pro register add-on (AGL-329): $89/mo per extra register/location
@@ -2156,6 +2199,7 @@ export function orgListPriceMonthlyUsd(
     seats(addons.hosts, pricing.extraHostMonthlyUsd) +
     seats(addons.posRegisters, POS_REGISTER_ADDON_MONTHLY_USD) +
     seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD) +
+    seats(siteCareUnits(addons), SITE_CARE_ADDON_MONTHLY_USD) +
     // A toggle, not a quantity: one purchase covers the org, so a stored
     // quantity above one bills once.
     seats(aiAddonUnits(addons), pricing.aiAddonMonthlyUsd)
@@ -2170,6 +2214,16 @@ export function orgListPriceMonthlyUsd(
  */
 export function aiAddonUnits(addons: OrgSeatAddons | null | undefined): 0 | 1 {
   const quantity = Number(addons?.aiAddon ?? 0)
+  return Number.isFinite(quantity) && quantity >= 1 ? 1 : 0
+}
+
+/**
+ * How many Site Care add-ons a purchase map counts as: 0 or 1 (AGL-3954).
+ * Org-wide like the Aglyn AI add-on, so a quantity above one is one
+ * purchase, and a non-number, `NaN` or a negative is none.
+ */
+export function siteCareUnits(addons: OrgSeatAddons | null | undefined): 0 | 1 {
+  const quantity = Number(addons?.siteCare ?? 0)
   return Number.isFinite(quantity) && quantity >= 1 ? 1 : 0
 }
 
@@ -3201,6 +3255,19 @@ export function hasAiAddon(
 }
 
 /**
+ * Whether the org's Site Care add-on currently applies (AGL-3954): bought,
+ * and on a subscription that is still paying for it, so a dead subscription
+ * reads false here exactly as it drops `features.siteCare`. The reader for
+ * surfaces that ask about the purchase rather than the resolved feature —
+ * the staff org page's chip, the request intake.
+ */
+export function hasSiteCare(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return siteCareUnits(resolvePurchasedAddons(org)) === 1
+}
+
+/**
  * Numeric entitlement keys that were REMOVED from `PLAN_ENTITLEMENTS` and
  * must never be resolved again from a stored override (AGL-2133).
  *
@@ -3291,7 +3358,7 @@ function withEveryCapLifted(
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
  * `hostLimit`, `seatAddons.eventCalendar` switches the `eventCalendar`
- * feature on, and every seat add-on a plugin declared through
+ * feature on, `seatAddons.siteCare` switches `siteCare` on, and every seat add-on a plugin declared through
  * `registerPluginEntitlements` (AGL-2940) widens the quota it names by its
  * per-plan figure per unit and switches its features on — the Aglyn AI
  * add-on (AGL-2896) is the first such declaration. (Seat/dataset add-ons
@@ -3413,19 +3480,23 @@ function resolveCappedOrgEntitlements(
   const purchased = resolvePurchasedAddons(org)
   const extraHosts = Math.max(0, purchased.hosts ?? 0)
   const eventCalendar = (purchased.eventCalendar ?? 0) >= 1
+  const siteCare = siteCareUnits(purchased) === 1
   // A declared add-on's quota is added AFTER the per-org override, so a
   // contracted figure and a purchased add-on stack the way a raised
   // `hostLimit` and purchased sites do. The per-unit figure is the PLAN's,
   // read off the effective plan rather than the stored one, so a dead
   // subscription that resolved to free adds free's figure.
   const folded = foldPluginSeatAddons(resolved, purchased, resolvePlan(org))
-  if (!extraHosts && !eventCalendar && folded === resolved) return resolved
+  if (!extraHosts && !eventCalendar && !siteCare && folded === resolved) {
+    return resolved
+  }
   return {
     ...folded,
     hostLimit: folded.hostLimit + extraHosts,
     features: {
       ...folded.features,
       ...(eventCalendar ? { eventCalendar: true } : {}),
+      ...(siteCare ? { siteCare: true } : {}),
     },
   }
 }

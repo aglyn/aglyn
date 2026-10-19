@@ -22,9 +22,11 @@ import {
   THEME_ACCENT_SWATCHES,
   THEME_DARK_RAIL_SEEDS,
   THEME_DENSITIES,
+  THEME_FIGMA_BASE,
   THEME_PALETTES,
   THEME_PREVIEWS,
   themeContrast,
+  themeLerp,
   type ThemeColors,
 } from './native-themes'
 
@@ -159,6 +161,15 @@ describe('the themes', () => {
 it('names the shipping theme after the configured brand, never a literal', () => {
   const aglyn = THEME_PALETTES.find((theme) => theme.id === 'aglyn')
   expect(aglyn).toMatchObject({ label: '', brandLabel: true })
+})
+
+it('exports the Figma base the preview derivation starts from, so the platforms can replay it', () => {
+  expect(THEME_FIGMA_BASE.light.borderSubtle).toBe('#e3e7ec')
+  expect(THEME_FIGMA_BASE.dark.surface).toBe('#1e262e')
+  const ocean = deriveThemeFromPreview(THEME_PREVIEWS.ocean, THEME_DARK_RAIL_SEEDS.ocean)
+  expect(ocean.light.borderSubtle).toBe(themeLerp(THEME_FIGMA_BASE.light.borderSubtle, THEME_PREVIEWS.ocean.rail, 0.18))
+  expect(ocean.dark.canvas).toBe(themeLerp(THEME_FIGMA_BASE.dark.canvas, THEME_DARK_RAIL_SEEDS.ocean, 0.22))
+  expect(ocean.light.textPrimary).toBe(THEME_FIGMA_BASE.light.textPrimary)
 })
 
 describe('the densities', () => {

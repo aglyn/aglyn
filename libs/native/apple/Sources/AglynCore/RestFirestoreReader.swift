@@ -111,7 +111,8 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
   }
 
   func runQueryURL(_ query: FirestoreQuery) -> String {
-    let parent = query.collection.dropLast()
+    // A collection group is queried from the database's root, every collection of that name beneath it.
+    let parent = query.collectionGroup ? [] : query.collection.dropLast()
     return parent.isEmpty ? "\(root):runQuery" : "\(root)/\(Self.encodePath(Array(parent))):runQuery"
   }
 
@@ -227,7 +228,9 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
   }
 
   func runQueryBody(_ query: FirestoreQuery) -> [String: Any] {
-    var structured: [String: Any] = ["from": [["collectionId": query.collection.last ?? ""]]]
+    var from: [String: Any] = ["collectionId": query.collection.last ?? ""]
+    if query.collectionGroup { from["allDescendants"] = true }
+    var structured: [String: Any] = ["from": [from]]
     let filters = query.allFilters.map { fieldFilter($0, collection: query.collection) }
     if filters.count == 1 {
       structured["where"] = filters[0]

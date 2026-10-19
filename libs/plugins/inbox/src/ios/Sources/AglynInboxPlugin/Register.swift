@@ -17,7 +17,7 @@ public let inboxSubmissionScreen = "inbox.submission"
 /// messages; and the console's Inbox links opening the same screens.
 @MainActor
 public func registerInboxNative(_ r: NativePluginRegistrar) {
-  r.screen(inboxSubmissionsScreen, title: "Submissions", requiresSite: true, icon: InboxSymbols.inbox) {
+  r.screen(inboxSubmissionsScreen, title: "Submissions", requiresSite: true, workspaceView: true, icon: InboxSymbols.inbox) {
     context, params in
     SubmissionsScreen(
       context: context, formID: params["formId"] ?? params["form"], formName: params["formName"],
@@ -29,7 +29,7 @@ public func registerInboxNative(_ r: NativePluginRegistrar) {
       context: context, formID: params["formId"] ?? params["form"], formName: params["formName"],
       initialSubmissionID: params["submission"] ?? params["submissionId"] ?? params["id"])
   }
-  r.screen(inboxPeopleScreen, title: "Members & leads", requiresSite: true, icon: "person.2") { ctx, _ in
+  r.screen(inboxPeopleScreen, title: "Members & leads", requiresSite: true, workspaceView: true, icon: "person.2") { ctx, _ in
     PeopleScreen(context: ctx)
   }
   r.widget("inbox.glance", title: "Inbox", icon: "tray", order: 60, size: .half, requiresSite: true) {

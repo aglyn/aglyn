@@ -12,7 +12,7 @@ import AglynScreens
 @MainActor
 public func registerEmailNative(_ r: NativePluginRegistrar) {
   for section in EmailSection.allCases {
-    r.screen(section.screen, title: section == .messages ? "Emails" : section.label, requiresSite: true, icon: section.symbol) { ctx, params in
+    r.screen(section.screen, title: section == .messages ? "Emails" : section.label, requiresSite: true, workspaceView: true, icon: section.symbol) { ctx, params in
       EmailHubScreen(context: ctx, section: section, initial: params["message"] ?? params["list"] ?? params["id"], composeCampaign: params["campaign"])
     }
   }

@@ -34,8 +34,8 @@ The script prints the env block to paste into the console app's environment
   `_EXTRA_DATASET` and `_AI_ADDON`, each with a `_YEARLY` variant, for the
   same six plans (the per-plan add-ons read by
   `apps/console/utils/server/billing-addons.ts`)
-- `STRIPE_PRICE_POS_REGISTER`, `STRIPE_PRICE_EVENT_CALENDAR` and their
-  `_YEARLY` variants (the flat add-ons)
+- `STRIPE_PRICE_POS_REGISTER`, `STRIPE_PRICE_EVENT_CALENDAR`,
+  `STRIPE_PRICE_SITE_CARE` and their `_YEARLY` variants (the flat add-ons)
 - `STRIPE_PRICE_METERED`, `STRIPE_PRICE_METERED_YEARLY`, `STRIPE_METER_ID`,
   `STRIPE_METER_EVENT_NAME`
 - `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`
@@ -56,6 +56,25 @@ set in production. Where an env is unset (a fresh environment, a self-host),
 the add-on is refused at purchase (501 naming the env) rather than sold on a
 missing price, and `npm run check:pricing-drift` reports the missing lookup
 key as `UNREADABLE` like any other minted price that has gone missing.
+
+### The Site Care add-on (AGL-3954)
+
+The managed-website add-on: staff make the owner's small site changes. One
+flat price on every paid self-serve plan, `SITE_CARE_ADDON_MONTHLY_USD`
+(annual is ×12), from the lookup keys `aglyn_site_care_addon` and
+`aglyn_site_care_addon_yearly` on the product "Aglyn Site Care", which
+carries the platform tax code like every other product. It reaches Stripe
+the same two ways the Aglyn AI add-on does: `POST /api/billing/checkout`
+with `siteCare: true`, and `POST /api/billing/addons` with
+`kind: 'siteCare'` on a live subscription. The webhook mirrors the item onto
+`org.seatAddons.siteCare`, which switches `features.siteCare` on.
+
+Free never buys it (no subscription to carry it) and Enterprise is not sold
+it self-serve: the add-on ceiling is 0 on both, and checkout refuses the
+pair with a 400. Until `STRIPE_PRICE_SITE_CARE` and
+`STRIPE_PRICE_SITE_CARE_YEARLY` are set in an environment, a purchase is
+refused with a 501 naming the env rather than sold on a missing price. Mint
+the pair with `tools/scripts/setup-stripe.mjs` (dry run first against live).
 
 ### `STRIPE_PRICE_*` are deliberately NOT `sensitive` (AGL-1362)
 

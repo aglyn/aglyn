@@ -19,7 +19,8 @@
 
 import { mdiImageMultipleOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { Tab, Tabs } from '@mui/material'
+import { Button, Tab, Tabs } from '@mui/material'
+import { useState } from 'react'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useTabParam } from '@aglyn/shared-ui-next/hooks/use-tab-param'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -28,6 +29,7 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import MediaLibraryComponent from '../../../../../../components/media/media-library.component'
+import { PhotoLinkDialogOnOpen } from '../../../../../../components/media/photo-link-dialog.component'
 import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
@@ -53,6 +55,7 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
   const { tab, onTabChange } = useTabParam({
     ids: hasOrgTab ? WITH_ORG_TAB : SITE_TAB_ONLY,
   })
+  const [photoLinkOpen, setPhotoLinkOpen] = useState(false)
 
   return (
     <DashboardLayout
@@ -71,6 +74,14 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Media',
         icon: { path: mdiImageMultipleOutline.path },
       }}
+      // Photo links feed this site's library, so the button rides its tab.
+      headerRight={
+        tab === 'site' ? (
+          <Button size="small" variant="outlined" onClick={() => setPhotoLinkOpen(true)}>
+            {'Get a photo link'}
+          </Button>
+        ) : null
+      }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay
@@ -109,6 +120,7 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
           ) : null}
         </CardDisplay>
       </Container>
+      <PhotoLinkDialogOnOpen hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />
     </DashboardLayout>
   )
 }

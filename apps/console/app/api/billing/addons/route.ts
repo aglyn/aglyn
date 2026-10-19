@@ -454,7 +454,7 @@ async function handler(request: Request): Promise<Response> {
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
     const unitUsd = addonUnitUsd(kind, plan)
-          const max = addonMax(kind, baseline)
+          const max = addonMax(kind, baseline, plan)
           return [kind, {
             unitUsd,
             max,
@@ -484,7 +484,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown add-on' }, { status: 400 })
     }
     const quantity = Math.floor(Number(body?.quantity))
-    const max = addonMax(kind, baseline)
+    const max = addonMax(kind, baseline, plan)
     if (!Number.isFinite(quantity) || quantity < 0 || quantity > max) {
       return Response.json({
         error: max <= 0

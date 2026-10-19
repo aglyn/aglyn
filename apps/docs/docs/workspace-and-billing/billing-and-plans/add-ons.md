@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Add-ons
-description: Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.
+description: Buy extra seats, sites, datasets, POS registers, the Event Calendar, Aglyn AI and Site Care from the Billing page — prorated, self-serve, no support ticket.
 ---
 
 # Add-ons
@@ -36,6 +36,7 @@ just be a second copy to keep in step.
 | POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
 | Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
 | Aglyn AI | Generative building — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
+| Site Care | Our team makes your small site changes for you, about an hour of work a month, workspace-wide | Flat per month — the same on every paid plan |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
@@ -48,6 +49,8 @@ just be a second copy to keep in step.
   [Events calendar](../../content-and-data/events/overview.md).
 - **Aglyn AI** is a single workspace-wide toggle too, bought once for the workspace
   rather than per seat or per site — see [Aglyn AI](#aglyn-ai).
+- **Site Care** is a workspace-wide toggle as well, on any paid plan — see
+  [Site Care](#site-care).
 
 ## Assigning register seats
 
@@ -182,6 +185,58 @@ credits run out, because the add-on widens one band rather than adding a second.
 plan that sells credits past it the assistant keeps going and the extra is metered,
 unless you turn on the stop switch or set a monthly ceiling. See
 [AI credits and overage](overview.md#assist-overage).
+
+## Site Care {#site-care}
+
+**Site Care** is the add-on for owners who would rather not make site changes
+themselves. You tell us what to change, and our team makes the change on your site
+for you. It is bought once for the workspace, on any paid plan, and covers every site
+in it.
+
+**What is included.** Small changes to the site you already have, up to about an hour
+of our work a month:
+
+- your hours, prices, menu or service list
+- swapping or adding photos you send us
+- adding or removing a staff member
+- a seasonal banner or announcement
+- a new section on a page that already exists
+- fixing a typo, a link or a phone number
+
+We make each change within **2 business days** of your request and keep a log of the
+minutes it took, so you can always see how much of the month's time has been used.
+Unused time does not roll over to the next month.
+
+**What is quoted first.** Bigger jobs are outside the monthly time and are quoted at a
+flat price before any work starts, so nothing is billed by the hour:
+
+- a new page or a new form
+- a redesign of a page or the whole site
+- logo or brand work
+- photography
+- writing the copy for a whole site
+- ads
+
+**What it never covers.** Site Care is our time, not more capacity. Your plan's limits
+still apply: a page past your plan's page count, a form past its form count, campaign
+email or a second site still need a plan upgrade. See
+[Billing & plans](overview.md) for what each plan includes.
+
+**How to ask for a change.** Email **support@aglyn.com** or reply to any message
+from us, and say which site and what to change. Send photos as attachments. If a
+request is bigger than the monthly time, we reply with a quote before doing anything.
+
+- **Fair use.** About an hour a month is a guide, not a meter that cuts you off
+  mid-change. If your requests run well past it month after month, we will talk with
+  you about a quote or a plan that fits.
+- **Price.** A flat monthly price, the same on every paid plan. It is on
+  [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you
+  confirm; on annual billing it bills yearly with the plan, like every add-on.
+- **Free workspaces** cannot add it: there is no subscription for it to bill on.
+  Choose a paid plan first, and the switch on **Billing → Add-ons** turns on.
+  Enterprise workspaces arrange it in their agreement instead.
+- **Turning it off** takes effect at the end of the period you already paid for, like
+  every add-on removal. Every change we already made stays on your site.
 
 ## How changes bill
 
