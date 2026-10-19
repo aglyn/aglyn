@@ -550,7 +550,8 @@ public struct AglynListColumnHeader<Actions: View>: View {
         .menuStyle(.button)
         .fixedSize()
     }
-    .frame(height: 36)
+    // Figma's title row is the height of its small buttons (28), 20 below the column's top and 12 above the search.
+    .frame(height: 28)
     .padding(.horizontal, AglynListColumnHeader<EmptyView>.inset)
     .padding(.top, 20)
     .padding(.bottom, 12)
