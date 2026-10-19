@@ -62,7 +62,7 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   }
 
   private fun build(query: FirestoreQuery): Query {
-    var q: Query = db.collection(query.collectionPath)
+    var q: Query = if (query.collectionGroup) db.collectionGroup(query.collectionPath) else db.collection(query.collectionPath)
     for (filter in query.filters) {
       val field = if (filter.field == "__name__") FieldPath.documentId() else FieldPath.of(*filter.field.split('.').toTypedArray())
       // A timestamp filter (a date range, the tombstones a quota count leaves out) is the SDK's Timestamp. An id filter names

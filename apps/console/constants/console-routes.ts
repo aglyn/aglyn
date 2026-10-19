@@ -41,6 +41,8 @@ export const CONSOLE_TOP_LEVEL_SEGMENTS = new Set([
   'edit-access',
   'kiosk',
   'manage',
+  // A site photo link's page (AGL-3957): `/p/{linkId}`, opened on a phone with no sign-in.
+  'p',
   'reset-password',
   'signin',
   'signout',
@@ -82,6 +84,10 @@ export const APEX_PATH_SEGMENTS: ReadonlySet<string> = new Set([
   // subdomain or a custom console domain must reach the same route rather
   // than `/{slug}/kiosk/…`.
   'kiosk',
+  // A site photo link's page (AGL-3957): `/p/{linkId}` names a link, never a
+  // workspace, and the address is scanned off a screen on whatever host the
+  // console answers to.
+  'p',
 ])
 
 /**

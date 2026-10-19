@@ -262,12 +262,15 @@ fun SettingsSection(context: NativePluginContext, scope: CrmScope, reference: Cr
           enabled = scope.canManage,
         )
       }
-      SectionCard("Default owner for this site", Modifier.fillMaxWidth()) {
-        FieldEditor(
-          FieldSpec("defaultOwner", "Owner", FieldKind.SELECT, options = reference.members.map { FieldOption(it.uid, it.label) }, emptyLabel = "Nobody"),
-          hostSettings?.get("defaultOwnerUid") as? String ?: "",
-          { uid -> if (scope.canManage) write(mapOf("hosts" to mapOf(scope.hostId to mapOf("defaultOwnerUid" to (uid.ifEmpty { null } ?: FirestoreDelete))))) },
-        )
+      // A site's own default owner is set from that site; the workspace's page has none of its own.
+      scope.hostId?.let { siteId ->
+        SectionCard("Default owner for this site", Modifier.fillMaxWidth()) {
+          FieldEditor(
+            FieldSpec("defaultOwner", "Owner", FieldKind.SELECT, options = reference.members.map { FieldOption(it.uid, it.label) }, emptyLabel = "Nobody"),
+            hostSettings?.get("defaultOwnerUid") as? String ?: "",
+            { uid -> if (scope.canManage) write(mapOf("hosts" to mapOf(siteId to mapOf("defaultOwnerUid" to (uid.ifEmpty { null } ?: FirestoreDelete))))) },
+          )
+        }
       }
       SectionCard("Round robin", Modifier.fillMaxWidth()) {
         Text("New records without a rule's owner go to these people in turn.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

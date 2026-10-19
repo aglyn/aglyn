@@ -48,7 +48,7 @@ enum class CrmSection(val key: String, val label: String, val screen: String, va
 fun scopedQuery(scope: CrmScope, collection: String, filters: List<FirestoreFilter> = emptyList(), orderBy: List<FirestoreOrder> = emptyList(), limit: Int = 200) =
   FirestoreQuery(
     crmPath(scope.orgId, collection),
-    filters = listOf(FirestoreFilter("visibleTo", FilterOp.ARRAY_CONTAINS_ANY, scope.readTokens)) + filters,
+    filters = listOfNotNull(scope.readTokens?.let { FirestoreFilter("visibleTo", FilterOp.ARRAY_CONTAINS_ANY, it) }) + filters,
     orderBy = orderBy,
     limit = limit,
   )
@@ -152,9 +152,10 @@ fun rememberCrmReference(context: NativePluginContext, scope: CrmScope, api: Crm
 @Composable
 fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi, CrmReference) -> Unit) {
   val orgId = context.orgId
+  // No site: the whole workspace's CRM, as the console's workspace page shows it.
   val hostId = context.hostId
-  if (orgId == null || hostId == null) {
-    EmptyState("Pick a site", body = "The CRM shows the records a site may see.", icon = AglynIcons.named("public"))
+  if (orgId == null) {
+    EmptyState("Pick a workspace", body = "The CRM shows the records a workspace holds.", icon = AglynIcons.named("workspaces"))
     return
   }
   val flow = remember(orgId, hostId, context.uid, context.firestore) { observeCrmScope(context.firestore, orgId, hostId, context.uid) }
@@ -169,6 +170,16 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
           body = "Leads, contacts, companies, deals and tasks come with the Starter plan and above. Change the plan under Billing to use them.",
           icon = AglynIcons.named("group"),
           modifier = Modifier.testTag("crm-suite-locked"),
+        )
+        return
+      }
+      if (scope.workspaceWide && !scope.orgWide) {
+        // Only a member who reaches every site reads every record; anyone else reads them a site at a time.
+        EmptyState(
+          "Pick a site to see its records",
+          body = "The whole workspace's CRM is for owners, admins and members with every site. Your records are on the sites you belong to.",
+          icon = AglynIcons.named("public"),
+          modifier = Modifier.testTag("crm-workspace-reach"),
         )
         return
       }

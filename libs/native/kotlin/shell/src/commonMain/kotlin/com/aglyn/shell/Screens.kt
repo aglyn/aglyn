@@ -66,42 +66,6 @@ import com.aglyn.ui.WidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.launch
 
-@Composable
-internal fun WorkspaceChip(workspace: WorkspaceState, onClick: () -> Unit) {
-  AssistChip(
-    onClick = onClick,
-    label = { Text(workspace.site?.name ?: workspace.org?.name ?: "Workspace", maxLines = 1) },
-    leadingIcon = { Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp)) },
-    modifier = Modifier.padding(end = 8.dp).testTag("workspace-chip"),
-  )
-}
-
-/** The workspace and site at the foot of the permanent drawer; opens the switcher. */
-@Composable
-internal fun WorkspaceFooter(workspace: WorkspaceState, origin: String, onClick: () -> Unit) {
-  androidx.compose.material3.Surface(
-    onClick = onClick,
-    modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("sidebar-switcher").semantics { contentDescription = "Switch workspace or site" },
-    shape = MaterialTheme.shapes.medium,
-    color = MaterialTheme.colorScheme.surface,
-  ) {
-    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      // The workspace's logo (dark-theme art in dark mode), as the console's workspace switcher shows it.
-      BrandPicture(
-        mediaPreviewUrl(workspace.orgLogo?.light, origin, null, 160),
-        mediaPreviewUrl(workspace.orgLogo?.dark, origin, null, 160),
-        size = 28.dp,
-        shape = MaterialTheme.shapes.small,
-      ) { Icon(AglynIcons.named("workspaces"), null, tint = MaterialTheme.colorScheme.primary) }
-      Column(Modifier.weight(1f)) {
-        Text(workspace.org?.name ?: "No workspace", style = MaterialTheme.typography.titleSmall, maxLines = 1)
-        Text(workspace.site?.name ?: "Pick a site", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-      }
-      Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-  }
-}
-
 /** The workspace and site picker. */
 @Composable
 internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, origin: String, onDone: () -> Unit) {
@@ -181,40 +145,6 @@ internal fun shellPlaces(registry: com.aglyn.pluginhost.NativePluginRegistry, ap
   return tabs + actions
 }
 
-/** Every place the plugins add, on phones (wide windows list them in the drawer), with the site's Analytics first. */
-@Composable
-internal fun MoreScreen(services: ShellServices, context: NativePluginContext, siteName: String?, onAnalytics: () -> Unit) {
-  val version by services.registry.version.collectAsState()
-  val places = remember(version) { shellPlaces(services.registry, NativeApp.AGLYN) }
-  if (places.isEmpty() && siteName == null) {
-    EmptyState("Nothing here yet", body = "Features you turn on show up here.", icon = AglynIcons.named("apps"))
-    return
-  }
-  LazyColumn(Modifier.fillMaxSize()) {
-    item { SectionHeader(siteName ?: "Site") }
-    if (siteName != null) {
-      item {
-        AglynListItem(
-          title = "Analytics",
-          icon = AglynIcons.named("bar_chart"),
-          trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-          onClick = onAnalytics,
-          modifier = Modifier.testTag("more-analytics"),
-        )
-      }
-    }
-    items(places, key = { it.id }) { place ->
-      AglynListItem(
-        title = place.title,
-        icon = AglynIcons.named(place.icon),
-        trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-        onClick = { context.navigate(place.screen, emptyMap()) },
-        modifier = Modifier.testTag("more-${place.id}"),
-      )
-    }
-  }
-}
-
 @Composable
 internal fun PluginScreenHost(
   services: ShellServices,
@@ -284,13 +214,12 @@ internal fun SettingsScreen(
       supporting = user?.email?.takeIf { it != accountTitle },
       icon = AglynIcons.named("account_circle"),
     )
-    // The console's own areas, as core screens (libs/native/screens), by group.
+    // Your account's own screens (profile, email addresses, security, support). The workspace's and the site's settings
+    // are settings modes of the sidebar now; staff reach the staff list from the rail's Admin button, or here on a phone.
     if (context != null) {
       val groups = buildList {
-        add("workspace" to (workspace.org?.name ?: "Workspace"))
-        if (workspace.site != null) add("site" to "Site · ${workspace.site?.name}")
         add("account" to "Your account")
-        if (staff) add("staff" to "Staff")
+        if (staff && com.aglyn.ui.currentWidthClass() == com.aglyn.ui.WidthClass.COMPACT) add("staff" to "Admin")
       }
       for ((group, heading) in groups) {
         val screens = com.aglyn.screens.ScreenCatalog.group(group)

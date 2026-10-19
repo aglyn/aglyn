@@ -156,6 +156,18 @@ tasks.register<JavaExec>("automationSnapshots") {
   (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
 }
 
+// The navigation shell's scopes, settings mode and picker at phone, tablet and
+// desktop widths, light and dark (a development tool; see NavSnapshots.kt).
+tasks.register<JavaExec>("navSnapshots") {
+  val test = kotlin.jvm("desktop").compilations.getByName("test")
+  dependsOn(test.compileTaskProvider)
+  classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+  mainClass.set("com.aglyn.desktop.NavSnapshotsKt")
+  jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
+  (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
+  (findProperty("aglyn.snapshotOnly") as String?)?.let { systemProperty("aglyn.snapshotOnly", it) }
+}
+
 // The content areas (sites, pages, media, forms, submissions, data) at phone,
 // tablet and desktop widths (a development tool; see ContentSnapshots.kt).
 tasks.register<JavaExec>("contentSnapshots") {

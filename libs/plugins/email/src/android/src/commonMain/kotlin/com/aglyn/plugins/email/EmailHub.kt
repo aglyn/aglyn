@@ -44,6 +44,7 @@ import com.aglyn.core.listquery.toFirestoreQuery
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.PerSiteSection
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -155,9 +156,12 @@ private fun JsonObject?.bool(key: String): Boolean = (this?.get(key) as? JsonPri
 private fun JsonObject?.array(key: String): List<JsonObject> = (this?.get(key) as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
 
 /** The Emails hub's writes, as the console makes them. */
-class EmailActions(val context: NativePluginContext, val orgId: String, val hostId: String) {
+class EmailActions(val context: NativePluginContext, val orgId: String, val hostId: String?) {
   private suspend fun post(route: String, fields: Map<String, Any?>, withHost: Boolean = true): JsonObject? =
     context.api.request(route, ApiMethod.POST, firestoreJson((if (withHost) fields + ("hostId" to hostId) else fields).filterValues { it != null })).obj()
+
+  /** The same actions as one site: what adding people from the workspace's page enrolls them as. */
+  fun forSite(siteId: String) = EmailActions(context, orgId, siteId)
 
   /** A new design: the screen, then its first version (`createEmailScreen`). Returns (screenId, versionId). */
   suspend fun createDesign(name: String): Pair<String, String> {
@@ -256,7 +260,9 @@ data class SendingView(
 @Composable
 fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, initial: String? = null, composeCampaign: String? = null) {
   val orgId = context.orgId ?: return
-  val hostId = context.hostId ?: return
+  // No site: the workspace's own Emails page. Audiences and topics are the workspace's already; messages, templates,
+  // sending and suppressions are each site's own, read a site at a time as the console's workspace page reads them.
+  val hostId = context.hostId
   var section by rememberSaveable { mutableStateOf(initialSection) }
   val actions = remember(orgId, hostId, context) { EmailActions(context, orgId, hostId) }
   Column(Modifier.fillMaxSize()) {
@@ -266,13 +272,32 @@ fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, i
       { section = EmailSection.valueOf(it) },
       Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("email-sections"),
     )
-    when (section) {
-      EmailSection.MESSAGES -> EmailsScreen(context, initial, composeCampaign)
-      EmailSection.TEMPLATES -> TemplatesSection(context, actions)
-      EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
-      EmailSection.TOPICS -> TopicsSection(context, actions)
-      EmailSection.SENDING -> SendingSection(actions)
-      EmailSection.SUPPRESSIONS -> SuppressionsSection(context, actions)
+    if (hostId != null) {
+      when (section) {
+        EmailSection.MESSAGES -> EmailsScreen(context, initial, composeCampaign)
+        EmailSection.TEMPLATES -> TemplatesSection(context, actions)
+        EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
+        EmailSection.TOPICS -> TopicsSection(context, actions)
+        EmailSection.SENDING -> SendingSection(actions)
+        EmailSection.SUPPRESSIONS -> SuppressionsSection(context, actions)
+      }
+    } else {
+      when (section) {
+        EmailSection.MESSAGES -> PerSiteSection(context, "messages", "An email is sent as one site. Pick a site to see what it sent, or to write one.") { site ->
+          EmailsScreen(site, initial, composeCampaign)
+        }
+        EmailSection.TEMPLATES -> PerSiteSection(context, "templates", "Each template is one site's design. Pick a site to see its templates.") { site ->
+          TemplatesSection(site, EmailActions(site, orgId, site.hostId))
+        }
+        EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
+        EmailSection.TOPICS -> TopicsSection(context, actions)
+        EmailSection.SENDING -> PerSiteSection(context, "sending", "Each site sends from its own address. Pick a site to set up how it sends.") { site ->
+          SendingSection(EmailActions(site, orgId, site.hostId))
+        }
+        EmailSection.SUPPRESSIONS -> PerSiteSection(context, "suppressions", "Each site keeps its own do-not-email list. Pick a site to see its list.") { site ->
+          SuppressionsSection(site, EmailActions(site, orgId, site.hostId))
+        }
+      }
     }
   }
 }
@@ -302,7 +327,8 @@ fun templateRowOf(doc: FirestoreDoc) = TemplateRow(
 @Composable
 fun TemplatesSection(context: NativePluginContext, actions: EmailActions) {
   val coroutines = rememberCoroutineScope()
-  val list = remember(actions.hostId) { LiveQueryList(context.firestore, coroutines, 25, ::templateRowOf) }
+  val hostId = actions.hostId ?: return
+  val list = remember(hostId) { LiveQueryList(context.firestore, coroutines, 25, ::templateRowOf) }
   val canEdit = rememberCanSend(context)
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
@@ -311,7 +337,7 @@ fun TemplatesSection(context: NativePluginContext, actions: EmailActions) {
   var deleting by remember { mutableStateOf<TemplateRow?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   val busy = remember { Busy() }
-  LaunchedEffect(list, asked) { list.show { limit -> templatesQuery(actions.hostId, asked, limit) } }
+  LaunchedEffect(list, asked) { list.show { limit -> templatesQuery(hostId, asked, limit) } }
 
   fun open(row: TemplateRow) {
     val version = row.versionId ?: return run { notice = "This design has no version to open yet." to StatusTone.WARNING }
@@ -483,7 +509,16 @@ fun ListDetail(context: NativePluginContext, actions: EmailActions, listId: Stri
       )
     }
   }
-  if (adding) AddPeopleSheet(actions, listId, { adding = false }) { notice = "Added $it to the list." to StatusTone.SUCCESS }
+  if (adding) {
+    // From the workspace's page, people are enrolled as the site the person picks (the console's enroll-as choice).
+    var site by remember { mutableStateOf(actions.hostId) }
+    val enrollAs = site
+    if (enrollAs == null) {
+      com.aglyn.pluginhost.WhichSiteDialog(context, "enrollment", onPick = { site = it.id }, onDismiss = { adding = false })
+    } else {
+      AddPeopleSheet(if (enrollAs == actions.hostId) actions else actions.forSite(enrollAs), listId, { adding = false }) { notice = "Added $it to the list." to StatusTone.SUCCESS }
+    }
+  }
   if (renaming) NameSheet("Rename list", row?.name.orEmpty(), "Save", { renaming = false }) { actions.renameList(listId, it) }
   if (deleting) ActionDialog(
     title = "Delete list?",
@@ -609,7 +644,8 @@ data class SuppressionRow(val id: String, val email: String, val reason: String?
 @Composable
 fun SuppressionsSection(context: NativePluginContext, actions: EmailActions) {
   val coroutines = rememberCoroutineScope()
-  val list = remember(actions.hostId) {
+  val hostId = actions.hostId ?: return
+  val list = remember(hostId) {
     LiveQueryList(context.firestore, coroutines, 25) { SuppressionRow(it.id, it.string("email") ?: it.id, it.string("reason"), millisOf(it.data["createdAt"])) }
   }
   var search by rememberSaveable { mutableStateOf("") }
@@ -618,7 +654,7 @@ fun SuppressionsSection(context: NativePluginContext, actions: EmailActions) {
   var removing by remember { mutableStateOf<SuppressionRow?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   val busy = remember { Busy() }
-  LaunchedEffect(list, asked) { list.show { limit -> suppressionsQuery(actions.hostId, asked, limit) } }
+  LaunchedEffect(list, asked) { list.show { limit -> suppressionsQuery(hostId, asked, limit) } }
   val now = remember { nowMillis() }
   Column(Modifier.fillMaxSize()) {
     Row(Modifier.padding(horizontal = space(2f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {

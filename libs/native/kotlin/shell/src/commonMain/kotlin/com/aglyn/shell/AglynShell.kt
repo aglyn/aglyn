@@ -39,7 +39,6 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynLogo
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
-import com.aglyn.ui.AglynNavigationSuite
 import com.aglyn.ui.AglynTheme
 import com.aglyn.ui.NavDestination
 import com.aglyn.ui.WidthClass
@@ -66,7 +65,7 @@ fun AglynShell(
   /** The intro has handed over to the destination (the desktop's window grows then). */
   onIntroRevealed: () -> Unit = {},
 ) {
-  AglynTheme(dark = dark ?: isSystemInDarkTheme()) {
+  AglynTheme(dark = dark ?: appearanceDark(services)) {
     androidx.compose.runtime.CompositionLocalProvider(
       com.aglyn.ui.LocalImageLoader provides services.imageLoader,
       com.aglyn.ui.LocalMediaPicker provides (com.aglyn.ui.LocalMediaPicker.current ?: services.mediaPicker),
@@ -94,18 +93,34 @@ fun AglynShell(
     LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
       when (state) {
         AuthState.Restoring -> Unit
-        AuthState.SignedOut -> SignedOutScreen(services, autoSignIn)
+        AuthState.SignedOut -> AddAccountFrame(services) { SignedOutScreen(services, autoSignIn) }
         // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
         is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
         // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
         is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
-        is AuthState.SignedIn -> Box(Modifier.graphicsLayer { alpha = reveal.alpha; translationY = reveal.rise.dp.toPx() }) {
-          SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
+        // Keyed by the account: switching accounts starts the shell over, so nothing of one account's shows in the other's.
+        is AuthState.SignedIn -> androidx.compose.runtime.key(state.user.uid) {
+          Box(Modifier.graphicsLayer { alpha = reveal.alpha; translationY = reveal.rise.dp.toPx() }) {
+            AccountSwitchReset(navigator, state.user.uid)
+            SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
+          }
         }
       }
     }
     }
     }
+  }
+}
+
+/** Dark or light as the account's appearance says (Light, Dark, Match system), the system's until it is read. */
+@Composable
+internal fun appearanceDark(services: ShellServices): Boolean {
+  val appearance = services.accountPrefs.state.collectAsState().value.theme.appearance
+  val system = isSystemInDarkTheme()
+  return when (appearance) {
+    com.aglyn.contracts.AppAppearance.DARK -> true
+    com.aglyn.contracts.AppAppearance.LIGHT -> false
+    else -> system
   }
 }
 
@@ -114,235 +129,4 @@ internal fun Loading() {
   Box(Modifier.fillMaxSize().semantics { contentDescription = "Loading" }, contentAlignment = Alignment.Center) {
     CircularProgressIndicator()
   }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
-@Composable
-private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
-  val impersonation by services.auth.impersonation.collectAsState()
-  // A support session reads the customer's workspaces but never registers this device's notifications under their account.
-  LaunchedEffect(uid) { if (services.auth.impersonation.value == null) services.push.register(uid) }
-  // Entering or leaving a support session starts from home: nothing open belonged to the other person.
-  val supporting = impersonation != null
-  var wasSupporting by remember { mutableStateOf(supporting) }
-  LaunchedEffect(supporting) {
-    if (supporting != wasSupporting) {
-      wasSupporting = supporting
-      navigator.select(ShellNavigator.HOME)
-    }
-  }
-  val exitScope = rememberCoroutineScope()
-  val workspace by services.workspace.state.collectAsState()
-  val version by services.registry.version.collectAsState()
-  val widthClass = currentWidthClass()
-  // Every plugin place gets its own row only in the permanent drawer (840 dp and up); a rail holds a handful of
-  // destinations (Material: 3 to 7), so a medium window keeps the phone's Home, Apps, Notifications and Settings.
-  val wide = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
-
-  // The plugins' places (their tabs, then the quick actions that open a screen) become top-level destinations on wide windows.
-  val topLevel = remember(version) {
-    shellPlaces(services.registry, NativeApp.AGLYN).mapNotNull { place -> services.registry.screen(place.screen)?.let { it to place.icon } }
-  }
-  val context = ShellPluginContext(uid, workspace, services, navigator, if (wide) topLevel.map { it.first.id }.toSet() else emptySet())
-
-  val destinations = buildList {
-    add(NavDestination(ShellNavigator.HOME, "Home", AglynIcons.named("home")))
-    if (wide) {
-      // The Mac app's order: Home and Notifications, the site's areas under its name, then Settings.
-      add(NavDestination(ShellNavigator.NOTIFICATIONS, "Notifications", AglynIcons.named("notifications")))
-      topLevel.forEachIndexed { i, (screen, icon) ->
-        add(NavDestination(ShellNavigator.screenKey(screen.id), screen.title, AglynIcons.named(icon), section = if (i == 0) (workspace.site?.name ?: "Site") else null))
-      }
-    } else {
-      add(NavDestination(ShellNavigator.MORE, "Apps", AglynIcons.named("apps")))
-    }
-    if (!wide) add(NavDestination(ShellNavigator.NOTIFICATIONS, "Notifications", AglynIcons.named("notifications")))
-    add(NavDestination(ShellNavigator.SETTINGS, "Settings", AglynIcons.named("settings"), section = if (wide) "" else null))
-  }
-  // A top-level key that is not a destination at this width moves to its equivalent.
-  val keys = destinations.map { it.key }
-  LaunchedEffect(keys, navigator.top) {
-    if (navigator.top in keys) return@LaunchedEffect
-    val screenId = navigator.top.removePrefix("screen:")
-    if (navigator.top.startsWith("screen:")) {
-      navigator.select(ShellNavigator.MORE)
-      navigator.push(Route.Screen(screenId))
-    } else if (navigator.top == ShellNavigator.MORE) {
-      navigator.select(ShellNavigator.HOME)
-    }
-  }
-
-  // A link that switched workspace or site opens once that workspace is on screen.
-  LaunchedEffect(navigator.deferredLink, workspace) { context.settleDeferredLink() }
-  LaunchedEffect(pendingLink, workspace.ready) {
-    if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
-      context.openLink(pendingLink)
-      onLinkOpened()
-    }
-  }
-  // The first verified session of an account with no workspace creates the one its sign-up asked for; a new workspace with a
-  // plan lands on billing with it.
-  LaunchedEffect(uid, workspace.ready) { services.settleFirstRun(workspace) }
-  val landingLink = services.authFlow.landingLink
-  LaunchedEffect(landingLink, workspace.ready, workspace.org?.slug) {
-    val link = landingLink ?: return@LaunchedEffect
-    val slug = link.removePrefix("/").substringBefore('/')
-    if (workspace.ready && workspace.orgs.any { it.slug == slug }) {
-      workspace.orgs.firstOrNull { it.slug == slug }?.let { services.workspace.selectOrg(it.id) }
-      services.authFlow.landingLink = null
-      context.openLink(link)
-    }
-  }
-
-  BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.back() }
-  val entries = rememberSaveableStateHolder()
-  // A popped screen's saved state goes with it: opening it again starts it fresh.
-  val liveKeys = navigator.keys
-  val pushedKeys = remember { mutableSetOf<String>() }
-  LaunchedEffect(liveKeys) {
-    pushedKeys.filter { it !in liveKeys }.forEach(entries::removeState)
-    pushedKeys.retainAll(liveKeys.toSet())
-    pushedKeys += liveKeys.filter { ShellNavigator.isPushedKey(it) }
-  }
-
-  // The token's claims gate the staff section; read from the token itself, as the console does.
-  var claims by remember(uid) { mutableStateOf(com.aglyn.core.TokenClaims()) }
-  LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
-  val authState by services.auth.state.collectAsState()
-  val user = (authState as? AuthState.SignedIn)?.user
-  // A passkey can be made where the app is configured for one and the platform bound a creator.
-  val passkeyRelyingParty = services.config.passkeyRelyingParty.takeIf { com.aglyn.screens.LocalPasskeyCreator.current != null }
-  // Google can be connected where the platform bound a way to sign in to it.
-  val googleSource = com.aglyn.screens.LocalGoogleCredentialSource.current
-  val screenSession = com.aglyn.screens.ScreenSession(
-    passkeyRelyingParty = passkeyRelyingParty,
-    googleConfigured = googleSource != null,
-    email = user?.email,
-    displayName = user?.displayName,
-    orgName = workspace.org?.name,
-    orgRole = workspace.org?.role,
-    siteName = workspace.site?.name,
-    claims = claims,
-    origin = services.config.consoleOrigin,
-    reauthenticate = { password -> services.auth.signInWithEmail(user?.email.orEmpty(), password) },
-    impersonate = { token, tenantId -> services.auth.beginImpersonation(token, tenantId) },
-    refreshClaims = { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()) },
-    openHostedPage = services.openHostedPage,
-    back = { navigator.back() },
-    account = com.aglyn.screens.AccountOperations(
-      changePassword = { current, new -> services.auth.changePassword(current, new) },
-      updateDisplayName = { name -> services.auth.updateDisplayName(name) },
-      linkGoogle = {
-        val source = googleSource ?: throw com.aglyn.core.GoogleLinkError("Connecting Google is not set up in this build.")
-        services.auth.linkGoogle(source.idToken(user?.email))
-        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
-      },
-      unlinkProvider = { provider ->
-        services.auth.unlinkProvider(provider)
-        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
-      },
-    ),
-  )
-
-  androidx.compose.runtime.CompositionLocalProvider(com.aglyn.screens.LocalScreenSession provides screenSession) {
-  // Every plain web page a screen opens is pushed onto this stack as the browser screen (AGL-3935).
-  com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage, openPage = navigator::openWeb) {
-  val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
-  val inDrawer = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
-  AglynNavigationSuite(
-    destinations, navigator.top, onSelect = navigator::select,
-    drawerHeader = {
-      // The logo kit's lockup with the mark's height of clear space on every side.
-      AglynLogo(
-        Modifier.padding(28.dp).height(28.dp).semantics { heading() },
-        contentDescription = services.config.brandName,
-      )
-    },
-    drawerFooter = { WorkspaceFooter(workspace, services.api.origin) { navigator.push(Route.Switcher) } },
-  ) {
-    val route = navigator.current
-    if (route is Route.Web) {
-      // The browser screen brings its own bar (title, address, history and its menu); the navigation stays beside it.
-      entries.SaveableStateProvider(navigator.currentKey) {
-        com.aglyn.webview.WebPageScreen(
-          route.url,
-          onClose = { navigator.back() },
-          openInBrowser = openInBrowser,
-          header = { impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) } },
-        )
-      }
-    } else {
-    // A pushed screen may name itself once its data is in (an AI job by its brief); a fresh state per screen.
-    val screenTitle = remember(navigator.currentKey) { mutableStateOf<String?>(null) }
-    val title = when (route) {
-      is Route.Screen -> screenTitle.value ?: services.registry.screen(route.screenId)?.title ?: "Not found"
-      is Route.Besigner -> "Besigner"
-      Route.Analytics -> "Analytics"
-      Route.Switcher -> "Switch workspace or site"
-      Route.NotificationSettings -> "Notifications"
-      is Route.Web -> ""
-      null -> destinations.firstOrNull { it.key == navigator.top }?.label ?: ""
-    }
-    Scaffold(
-      containerColor = MaterialTheme.colorScheme.background,
-      topBar = {
-        Column {
-        impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
-        TopAppBar(
-          title = {
-            if (route == null && navigator.top == ShellNavigator.HOME) {
-              if (!inDrawer) AglynLogo(Modifier.height(28.dp), contentDescription = services.config.brandName)
-            } else {
-              Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            }
-          },
-          navigationIcon = {
-            if (route != null) {
-              WithTooltip("Back") { IconButton(onClick = { navigator.back() }) {
-                Icon(AglynIcons.named("arrow_back"), contentDescription = "Back")
-              } }
-            }
-          },
-          actions = {
-            if (route == null && navigator.top != ShellNavigator.HOME && !inDrawer) {
-              WorkspaceChip(workspace) { navigator.push(Route.Switcher) }
-            }
-          },
-          colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-        )
-        }
-      },
-    ) { padding ->
-      androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle) {
-      Box(Modifier.padding(padding).fillMaxSize()) {
-        // Each destination and each pushed screen keeps its own saved state (selection, scroll, filters), so Back returns to
-        // the screen below as it was left, and a destination never inherits the one before it.
-        entries.SaveableStateProvider(navigator.currentKey) {
-        when (route) {
-          is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
-          is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
-          Route.Analytics -> AnalyticsScreen(services, context)
-          Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
-          Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
-          is Route.Web -> Unit
-          null -> when {
-            navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
-            navigator.top == ShellNavigator.MORE -> MoreScreen(services, context, workspace.site?.name) { navigator.push(Route.Analytics) }
-            navigator.top == ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
-            navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services, context, screenSession.claims.isStaff) { navigator.push(Route.NotificationSettings) }
-            navigator.top.startsWith("screen:") ->
-              PluginScreenHost(services, context, navigator.top.removePrefix("screen:"), emptyMap(), workspace.site != null) {
-                navigator.select(ShellNavigator.HOME)
-              }
-            else -> HomeScreen(services, context, workspace, widthClass, navigator)
-          }
-        }
-        }
-      }
-      }
-    }
-    }
-  }
-  }
-}
 }

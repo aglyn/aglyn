@@ -131,7 +131,7 @@ internal fun HomeScreen(
         FirstRunContent(services)
         return@Column
       }
-      SiteHeader(workspace, host, now, services.api.origin, onSwitch = { navigator.push(Route.Switcher) }) { url -> runCatching { uriHandler.openUri(url) } }
+      SiteHeader(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
 
       val actionsSection: @Composable () -> Unit = {
         if (actions.isNotEmpty()) {
