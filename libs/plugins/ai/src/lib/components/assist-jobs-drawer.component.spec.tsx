@@ -66,7 +66,8 @@ import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-re
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 const ENTITLED = { plan: 'pro', billingStatus: 'active', seatAddons: { aiAddon: true } }
-const PLAIN_PRO = { plan: 'pro', billingStatus: 'active' }
+/** Below the rung: since AGL-3965 only a per-org override closes generation. */
+const PLAIN_PRO = { plan: 'pro', billingStatus: 'active', entitlements: { features: { aiGenerative: false } } }
 const USER = { uid: 'viewer', getIdToken: async () => 'tok' }
 
 function job(patch: Record<string, unknown>) {

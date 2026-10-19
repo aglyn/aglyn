@@ -143,10 +143,13 @@ export function aiUpsellLabel(kind: AiUpsellKind): string {
  * `feature` is what the entry is called: "Create with AI" unless it is an ask.
  */
 export function aiUpsellOffer(canManageBilling: boolean, feature = AI_UPSELL_CREATE_LABEL): string {
+  // Since AGL-3965 every paid plan's own credits pay for generation, so this
+  // door is reached only where it is switched off for the workspace and an
+  // Aglyn AI tier (which switches it on with its credits) is for sale.
   const addon = aiAddonName()
   return canManageBilling
-    ? `${feature} comes with the ${addon} add-on, which you can add to this ` +
-        'workspace from Billing.'
-    : `${feature} comes with the ${addon} add-on. Ask a workspace owner or admin ` +
-        'to add it from Billing.'
+    ? `${feature} is switched off for this workspace. It comes with an ${addon} ` +
+        'tier, which you can choose in Billing.'
+    : `${feature} is switched off for this workspace. It comes with an ${addon} ` +
+        'tier. Ask a workspace owner or admin to choose one in Billing.'
 }

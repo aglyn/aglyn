@@ -1186,13 +1186,13 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(
       quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z"]),
       "Move down to Business? Nothing is charged today, and nothing changes yet. You keep Pro — and everything you've already paid for — until Nov 1, 2026, when this organization moves to Business. You can keep your current plan any time before then.")
-    // The AI add-on is dropped where the target does not sell it, and over-limit counts are named.
+    // The AI tier is dropped where the target sells none, and over-limit counts are named.
     var data = base["data"] ?? .null
     data = ScreenContext.with(data, "org", ["plan": "pro", "subscription": ["status": "active"], "seatAddons": ["aiAddon": 1]])
     data = ScreenContext.with(data, "seats", ["managerSeats": 7])
     base = ScreenContext.with(base, "item", ["id": "free", "label": "Free"])
     let text = quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": ["aiAddon"]], data: data)
-    XCTAssertTrue(text.contains("Your Aglyn AI add-on is not sold on Free, so it is removed"))
+    XCTAssertTrue(text.contains("Your Aglyn AI tier is not sold on Free, so it is removed"))
     XCTAssertTrue(text.contains("over the Free plan on: 2 sites (Free includes 1)"))
     XCTAssertTrue(text.contains("7 team members (Free includes 1)"))
     XCTAssertTrue(text.contains("Nothing is deleted and these keep working"))

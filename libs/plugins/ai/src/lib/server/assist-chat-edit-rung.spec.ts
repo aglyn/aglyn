@@ -186,7 +186,11 @@ const { POST } = require('./assist-chat') as {
   POST: (request: Request) => Promise<Response>
 }
 
-/** Free carries AI generation as its taste; Pro does not without the add-on. */
+/**
+ * Free carries AI generation as its taste, and since AGL-3965 every paid plan
+ * carries it against its own credits (one pool); `PRO_ORG` is below the rung
+ * because a per-org override closed generation.
+ */
 const FREE_ORG = 'org-free'
 const PRO_ORG = 'org-pro'
 const ADDON_ORG = 'org-addon'
@@ -321,7 +325,12 @@ beforeEach(() => {
   global.fetch = mockFetch as unknown as typeof fetch
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
   mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Freebies', plan: 'free' })
-  mockDocs.set(`orgs/${PRO_ORG}`, { name: 'Pros', plan: 'pro', billingStatus: 'active' })
+  mockDocs.set(`orgs/${PRO_ORG}`, {
+    name: 'Pros',
+    plan: 'pro',
+    billingStatus: 'active',
+    entitlements: { features: { aiGenerative: false } },
+  })
   mockDocs.set(`orgs/${ADDON_ORG}`, {
     name: 'Addons',
     plan: 'pro',

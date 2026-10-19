@@ -62,7 +62,14 @@ const routeScope = {
  * bug is that this object is present on a page that named no workspace.
  */
 const currentOrg = {
-  org: { plan: 'pro', billingStatus: 'active' } as Record<string, unknown>,
+  // Below the generative rung, so only the chat door is open: since AGL-3965
+  // every plan carries generation (one pool) and only a per-org override
+  // closes it.
+  org: {
+    plan: 'pro',
+    billingStatus: 'active',
+    entitlements: { features: { aiGenerative: false } },
+  } as Record<string, unknown>,
   orgId: 'org-1',
   ready: true,
 }
@@ -179,7 +186,11 @@ beforeEach(() => {
   aiPermissions.use = true
   aiPermissions.generate = true
   mockFlagVisible = true
-  currentOrg.org = { plan: 'pro', billingStatus: 'active' }
+  currentOrg.org = {
+    plan: 'pro',
+    billingStatus: 'active',
+    entitlements: { features: { aiGenerative: false } },
+  }
   currentOrg.orgId = 'org-1'
   routeScope.namesOrg = true
   routeScope.pathOrgSlug = 'acme'
@@ -365,7 +376,7 @@ describe('the AI jobs drawer is mounted in the panel (AGL-2904)', () => {
     expect(posts.map(([url]) => url)).toEqual(['/api/ai/jobs?orgId=org-1&status=active&limit=20'])
   })
 
-  it('is absent on a plan without aiGenerative', async () => {
+  it('is absent on an org without aiGenerative (a per-org override closed it)', async () => {
     render(<AssistPanelComponent {...dockProps()} />)
     fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
     await screen.findByPlaceholderText('How do I…')

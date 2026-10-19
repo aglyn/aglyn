@@ -307,8 +307,12 @@ const ENTITLED_ORG = {
   billingStatus: 'active',
   seatAddons: { aiAddon: true },
 }
-/** Pro without the add-on: `aiAssist` yes, `aiGenerative` no. */
-const PLAIN_PRO_ORG = { plan: 'pro', billingStatus: 'active' }
+/**
+ * Below the generative rung. Since AGL-3965 every plan's included credits
+ * pay for generation (one pool), so no plan lacks `aiGenerative`; what does
+ * is a per-org override that closed it.
+ */
+const PLAIN_PRO_ORG = { plan: 'pro', billingStatus: 'active', entitlements: { features: { aiGenerative: false } } }
 
 const USAGE = {
   inputTokens: 1_000,
@@ -432,7 +436,7 @@ describe('POST /api/ai/jobs — the ladder', () => {
     expect((await createJob(post(VALID))).status).toBe(200)
   })
 
-  it('403 on a plan without aiGenerative — Pro without the add-on', async () => {
+  it('403 on an org without aiGenerative — a per-org override closed it', async () => {
     mockGetOrgForUser.mockResolvedValue({ orgId: ORG, org: PLAIN_PRO_ORG })
     const response = await createJob(post(VALID))
     expect(response.status).toBe(403)

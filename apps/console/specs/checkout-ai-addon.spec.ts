@@ -21,14 +21,17 @@
  */
 
 /**
- * The Aglyn AI add-on is sold WITH the plan (AGL-2897).
+ * The Aglyn AI add-on is sold WITH the plan (AGL-2897), as a tier (AGL-3965).
  *
  * A visitor who clicks the add-on CTA on /pricing arrives at the Billing page
- * with `?plan=pro&interval=month&ai=1`, and the page posts `aiAddon: true` to
- * this route. The add-on becomes a second recurring item on the same
- * subscription — after the metered item, quantity 1 — so the webhook mirrors
- * it onto `seatAddons.aiAddon` exactly as a later purchase through
- * `/api/billing/addons` would, and the quote on the plan card carries it.
+ * with `?plan=pro&interval=month&ai=1` (or `&ai=<tier>`), and the page posts
+ * `aiAddon: true` (and `aiTier`) to this route. The add-on becomes a second
+ * recurring item on the same subscription — after the metered item,
+ * quantity 1 — so the webhook mirrors it onto `seatAddons.aiAddon` and
+ * `aiTier` exactly as a later purchase through `/api/billing/addons` would,
+ * and the quote on the plan card carries it. `aiAddon: true` with no tier is
+ * the tier with the plan's old price and band (Pro's is Boost), so a link
+ * published before tiers still sells what it quoted.
  *
  * What cannot happen: the route selling the plan and quietly dropping the
  * add-on. An unconfigured price is refused by name, and a dead one is named
@@ -94,9 +97,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  // The REAL plan model: `addonUnitUsd('aiAddon', plan)` reads
-  // `PLAN_PRICING[plan].aiAddonMonthlyUsd` to decide whether the plan sells
-  // the add-on at all, and a stub would make that decision about nothing.
+  // The REAL plan model: `addonUnitUsd('aiAddon', plan, tier)` reads
+  // `AI_TIERS` and `planSellsAiTiers` to decide whether the plan sells a tier
+  // at all, and a stub would make that decision about nothing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   claimAttempt: jest.requireActual('@aglyn/aglyn/app-utils/api-idempotency')
     .claimAttempt,
@@ -148,8 +151,10 @@ const METERED = {
   STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
 const AI_ADDON = {
-  STRIPE_PRICE_PRO_AI_ADDON: 'price_pro_ai_addon',
-  STRIPE_PRICE_PRO_AI_ADDON_YEARLY: 'price_pro_ai_addon_yearly',
+  STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
+  STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
+  STRIPE_PRICE_AI_STUDIO: 'price_ai_studio',
+  STRIPE_PRICE_AI_STUDIO_YEARLY: 'price_ai_studio_yearly',
 }
 
 /** Every Stripe request the route made, in order. */
@@ -257,8 +262,35 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
     const body = subscribeBody()
     expect(body?.get('items[0][price]')).toBe('price_pro_monthly')
     expect(body?.get('items[1][price]')).toBe('price_metered_usage')
-    expect(body?.get('items[2][price]')).toBe('price_pro_ai_addon')
+    expect(body?.get('items[2][price]')).toBe('price_ai_boost')
     expect(body?.get('items[2][quantity]')).toBe('1')
+  })
+
+  it('sells the tier named, on any paid plan: Studio with Pro', async () => {
+    const handler = loadCheckout({ ...METERED, ...AI_ADDON })
+    const response = await post(handler, { aiAddon: true, aiTier: 'studio' })
+    expect(response.status).toBe(200)
+    expect(subscribeBody()?.get('items[2][price]')).toBe('price_ai_studio')
+  })
+
+  it('a tier alone is the ask: `aiTier` without `aiAddon` still sells it', async () => {
+    const handler = loadCheckout({ ...METERED, ...AI_ADDON })
+    await post(handler, { aiTier: 'studio', interval: 'year' })
+    expect(subscribeBody()?.get('items[2][price]')).toBe('price_ai_studio_yearly')
+  })
+
+  it('refuses a tier that does not exist rather than guessing one', async () => {
+    const handler = loadCheckout({ ...METERED, ...AI_ADDON })
+    const response = await post(handler, { aiAddon: true, aiTier: 'mega' })
+    expect(response.status).toBe(400)
+    expect(subscribeBody()).toBeNull()
+  })
+
+  it('refuses a tier on a plan that sells none', async () => {
+    const handler = loadCheckout({ ...METERED, ...AI_ADDON })
+    const response = await post(handler, { plan: 'free', aiAddon: true })
+    expect(response.status).toBeGreaterThanOrEqual(400)
+    expect(subscribeBody()).toBeNull()
   })
 
   it('follows the annual interval — one recurring.interval per subscription', async () => {
@@ -266,14 +298,14 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
     await post(handler, { aiAddon: true, interval: 'year' })
     const body = subscribeBody()
     expect(body?.get('items[0][price]')).toBe('price_pro_yearly')
-    expect(body?.get('items[2][price]')).toBe('price_pro_ai_addon_yearly')
+    expect(body?.get('items[2][price]')).toBe('price_ai_boost_yearly')
   })
 
   it('takes slot [1] when no metered price is configured', async () => {
     const handler = loadCheckout(AI_ADDON)
     await post(handler, { aiAddon: true })
     const body = subscribeBody()
-    expect(body?.get('items[1][price]')).toBe('price_pro_ai_addon')
+    expect(body?.get('items[1][price]')).toBe('price_ai_boost')
     expect(body?.get('items[1][quantity]')).toBe('1')
     expect(body?.get('items[2][price]')).toBeNull()
   })
@@ -283,7 +315,7 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
     await post(handler, {})
     const body = subscribeBody()
     expect(body?.get('items[2][price]')).toBeNull()
-    expect(body?.toString()).not.toContain('ai_addon')
+    expect(body?.toString()).not.toContain('price_ai_')
   })
 
   it('quotes the add-on on the same preview invoice as the plan', async () => {
@@ -292,7 +324,7 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
     expect(response.status).toBe(200)
     const query = previewQuery()
     expect(query?.get('subscription_details[items][0][price]')).toBe('price_pro_monthly')
-    expect(query?.get('subscription_details[items][2][price]')).toBe('price_pro_ai_addon')
+    expect(query?.get('subscription_details[items][2][price]')).toBe('price_ai_boost')
     expect(query?.get('subscription_details[items][2][quantity]')).toBe('1')
     expect(subscribeBody()).toBeNull()
   })
@@ -301,12 +333,13 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
     const handler = loadCheckout(METERED)
     const response = await post(handler, { aiAddon: true })
     expect(response.status).toBe(501)
-    expect((await response.json()).error).toContain('STRIPE_PRICE_PRO_AI_ADDON')
+    expect((await response.json()).error).toContain('STRIPE_PRICE_AI_BOOST')
     // Nothing reached Stripe: a refusal above the claim burns no attempt.
     expect(subscribeBody()).toBeNull()
-    // The yearly variant is named for an annual request.
-    const annual = await post(loadCheckout(METERED), { aiAddon: true, interval: 'year' })
-    expect((await annual.json()).error).toContain('STRIPE_PRICE_PRO_AI_ADDON_YEARLY')
+    // The yearly variant is named for an annual request, and the tier asked
+    // for rather than the plan's default.
+    const annual = await post(loadCheckout(METERED), { aiAddon: true, aiTier: 'studio', interval: 'year' })
+    expect((await annual.json()).error).toContain('STRIPE_PRICE_AI_STUDIO_YEARLY')
   })
 
   it('names the add-on env, not the plan or metered one, when Stripe rejects its price', async () => {
@@ -317,7 +350,7 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
         error: {
           code: 'resource_missing',
           param: 'items[2][price]',
-          message: "No such price: 'price_pro_ai_addon'",
+          message: "No such price: 'price_ai_boost'",
         },
       },
     }
@@ -325,7 +358,7 @@ describe('the Aglyn AI add-on is sold with the plan (AGL-2897)', () => {
     const response = await post(handler, { aiAddon: true })
     expect(response.status).toBe(501)
     const { error } = await response.json()
-    expect(error).toContain('STRIPE_PRICE_PRO_AI_ADDON')
+    expect(error).toContain('STRIPE_PRICE_AI_BOOST')
     expect(error).not.toContain('STRIPE_PRICE_METERED')
   })
 })
