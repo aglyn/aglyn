@@ -82,6 +82,7 @@ fun AglynListItem(
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
   val content = if (selected) colors.onPrimaryContainer else colors.onSurface
+  val compact = LocalUiDensity.current.compact
   Row(
     modifier
       .fillMaxWidth()
@@ -97,8 +98,8 @@ fun AglynListItem(
         },
       )
       .semantics(mergeDescendants = onClick != null) { if (selected) this.selected = true }
-      .heightIn(min = if (supporting != null) 72.dp else 56.dp)
-      .padding(horizontal = ListRowInset, vertical = 10.dp),
+      .heightIn(min = if (supporting != null) (if (compact) 60.dp else 72.dp) else (if (compact) 48.dp else 56.dp))
+      .padding(horizontal = ListRowInset, vertical = if (compact) 6.dp else 10.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(16.dp),
   ) {

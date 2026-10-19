@@ -70,6 +70,8 @@ class ShellServices(
   val signInThroughConsoleOnly: Boolean = false,
   /** The Windows build's console-minted App Check (AGL-3816): seeded by the hand-off, dropped on sign-out. */
   val consoleAppCheck: com.aglyn.core.ConsoleMintedAppCheck? = null,
+  /** The home-screen icon picker (Theme ▸ App icon): Android's launcher aliases in the Aglyn app; null where there is none. */
+  val appIcons: AppIconSwitcher? = null,
 ) {
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()
@@ -107,6 +109,8 @@ sealed interface Route {
   data object Analytics : Route
   data object Switcher : Route
   data object NotificationSettings : Route
+  /** Account ▸ Theme: appearance, theme, accent, density and the rest. */
+  data object ThemeSettings : Route
   /** A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen. */
   data class Web(val url: String) : Route
 }

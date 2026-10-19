@@ -43,14 +43,16 @@ data class ShellColors(
 /** The brand gradient's middle stop (242°, #00B0FF → #7A5CF0 → #E040FB), the only brand color with no palette intent. */
 private val BrandViolet = Color(0xFF7A5CF0)
 
-fun shellColors(scheme: ColorScheme, palette: AglynPalette): ShellColors {
+fun shellColors(scheme: ColorScheme, palette: AglynPalette, surfaces: ThemeSurfaces? = null): ShellColors {
   val dark = scheme.background.luminance() < 0.5f
-  val rail = lerp(scheme.background, palette.tertiary.main, if (dark) 0.18f else 0.07f)
+  val rail = surfaces?.rail ?: lerp(scheme.background, palette.tertiary.main, if (dark) 0.18f else 0.07f)
+  // A rail darker than the page it sits on (Ocean's) takes light ink.
+  val onRail = if (rail.luminance() < 0.25f && !dark) Color.White.copy(alpha = 0.86f) else scheme.onSurfaceVariant
   return ShellColors(
     rail = rail,
-    onRail = scheme.onSurfaceVariant,
+    onRail = onRail,
     sidebar = scheme.surfaceContainerLow,
-    titleBar = scheme.surfaceContainerLow,
+    titleBar = surfaces?.titleBar ?: scheme.surfaceContainerLow,
     selected = scheme.primaryContainer,
     onSelected = scheme.onPrimaryContainer,
     badge = palette.secondary.main,

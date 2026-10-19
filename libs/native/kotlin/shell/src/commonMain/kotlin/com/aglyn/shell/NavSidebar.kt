@@ -305,6 +305,7 @@ internal fun NavLine(
   onClick: () -> Unit,
 ) {
   val shell = shellColors
+  val density = com.aglyn.ui.LocalUiDensity.current
   Row(
     Modifier
       .fillMaxWidth()
@@ -312,7 +313,7 @@ internal fun NavLine(
       .clip(RoundedCornerShape(8.dp))
       .background(if (selected) shell.selected else Color.Transparent)
       .clickable(onClick = onClick)
-      .heightIn(min = if (dense) 36.dp else 52.dp)
+      .heightIn(min = if (dense) density.row.dp else density.phoneRow.dp)
       .padding(horizontal = 10.dp)
       .testTag(tag)
       .semantics(mergeDescendants = true) { role = Role.Button; this.selected = selected },

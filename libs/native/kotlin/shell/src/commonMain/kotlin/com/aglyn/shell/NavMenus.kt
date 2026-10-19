@@ -69,6 +69,7 @@ internal class ShellActions(
   val enterSettings: (NativeNavListId) -> Unit,
   val openWeb: (String) -> Unit,
   val accountSettings: () -> Unit,
+  val themeSettings: () -> Unit,
   val addAccount: () -> Unit,
   val switchAccount: (slot: String) -> Unit,
   val signOut: () -> Unit,
@@ -129,7 +130,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
     }
   }
   HorizontalDivider()
-  MenuRow("Theme", "contrast", trailing = appearanceLabel(prefs.theme.appearance) + "  ›", tag = "account-menu-theme") { themeOpen = !themeOpen }
+  MenuRow("Appearance", "contrast", trailing = appearanceLabel(prefs.theme.appearance) + "  ›", tag = "account-menu-appearance") { themeOpen = !themeOpen }
   if (themeOpen) {
     for (appearance in Contracts.appAppearances) {
       MenuRow(
@@ -141,6 +142,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
       }
     }
   }
+  MenuRow("Theme", "palette", trailing = themeLabel(prefs.theme.theme), tag = "account-menu-theme") { close(); actions.themeSettings() }
   MenuRow("Settings", "settings", tag = "account-menu-settings") { close(); actions.accountSettings() }
   MenuRow("Marketplace", "storefront", tag = "account-menu-marketplace") { close(); actions.openScreen("marketplace.sell", emptyMap()) }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }

@@ -5,3 +5,6 @@ internal expect val isMacPlatform: Boolean
 
 /** Whether the window has a menu bar whose shortcuts reach the shell as commands (the desktop), not as key events. */
 internal expect val hasMenuBar: Boolean
+
+/** Whether the app sets its own text size (the desktop); phones and tablets follow the system's. */
+internal expect val appSetsTextSize: Boolean

@@ -180,7 +180,10 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   val (orgColor, tints) = workspace.org?.id?.let { rememberWorkspaceColor(it, workspace, prefs, services.api.origin) } ?: (null to false)
   val dark = MaterialTheme.colorScheme.background.let { (it.red + it.green + it.blue) / 3 < 0.5f }
-  val tint = if (tints && orgColor != null) workspaceTint(orgColor, shellColors.sidebar, dark) else null
+  // A workspace's color tints the app while it is on screen (it stands in for the accent); the sidebar wears it too unless
+  // the Sidebar setting is Plain.
+  val brand = orgColor?.takeIf { tints }
+  val tint = if (brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN) workspaceTint(brand, shellColors.sidebar, dark) else null
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
   val actions = remember(navigator, chrome, services) {
@@ -197,6 +200,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       },
       openWeb = navigator::openWeb,
       accountSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS) },
+      themeSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.ThemeSettings) },
       addAccount = { services.accounts?.startAdding() },
       switchAccount = { slot -> exitScope.launch { services.accounts?.switchTo(slot) } },
       signOut = { exitScope.launch { services.signOut() } },
@@ -291,7 +295,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current)
+  WorkspaceBrandTheme(services, dark, brand) {
+  val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
   CompositionLocalProvider(
     com.aglyn.screens.LocalScreenSession provides screenSession,
     LocalShellActions provides actions,
@@ -347,7 +352,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val body: @Composable () -> Unit = {
       CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle) {
         entries.SaveableStateProvider(tabKey + navigator.currentKey) {
-          ShellBody(services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff)
+          ShellBody(services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff) { chrome.colorFor = it }
         }
       }
     }
@@ -474,6 +479,13 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
   }
   }
+  }
+}
+
+/** The account's theme again with a workspace's color as the accent, while that workspace tints the app. */
+@Composable
+private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, brand: androidx.compose.ui.graphics.Color?, content: @Composable () -> Unit) {
+  if (brand == null) content() else AccountTheme(services, dark, brand, content)
 }
 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */
@@ -553,6 +565,7 @@ private fun titleFor(services: ShellServices, navigator: ShellNavigator, route: 
   Route.Analytics -> "Overview"
   Route.Switcher -> "Switch workspace or site"
   Route.NotificationSettings -> "Notifications"
+  Route.ThemeSettings -> "Theme"
   is Route.Web -> ""
   null -> when (navigator.top) {
     ShellNavigator.HOME -> "Home"
@@ -578,6 +591,7 @@ private fun ShellBody(
   openInBrowser: (String) -> Unit,
   banner: @Composable () -> Unit,
   staff: Boolean,
+  onWorkspaceColor: (String) -> Unit,
 ) {
   when (route) {
     is Route.Web -> com.aglyn.webview.WebPageScreen(route.url, onClose = { navigator.back() }, openInBrowser = openInBrowser, header = banner)
@@ -586,10 +600,11 @@ private fun ShellBody(
     Route.Analytics -> AnalyticsScreen(services, context)
     Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
     Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
+    Route.ThemeSettings -> ThemeSettingsScreen(services, workspace, onWorkspaceColor)
     null -> when (val top = navigator.top) {
       ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
       ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
-      ShellNavigator.SETTINGS -> SettingsScreen(services, context, staff) { navigator.push(Route.NotificationSettings) }
+      ShellNavigator.SETTINGS -> SettingsScreen(services, context, staff, onTheme = { navigator.push(Route.ThemeSettings) }) { navigator.push(Route.NotificationSettings) }
       ShellNavigator.MENU -> Unit
       else -> {
         val (screen, params) = NavKeys.parse(top) ?: ("" to emptyMap())
@@ -642,7 +657,7 @@ private fun WideTitleBar(
   trailing: @Composable () -> Unit = {},
 ) {
   Row(
-    Modifier.fillMaxWidth().background(shellColors.titleBar).padding(top = LocalTitleBarInset.current).height(52.dp).padding(horizontal = 8.dp).testTag("title-bar"),
+    Modifier.fillMaxWidth().background(shellColors.titleBar).padding(top = LocalTitleBarInset.current).height(com.aglyn.ui.LocalUiDensity.current.titleBar.dp).padding(horizontal = 8.dp).testTag("title-bar"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {

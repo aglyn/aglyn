@@ -60,7 +60,7 @@ fun AglynShell(
   /** Light or dark regardless of the system's; null follows the system. */
   dark: Boolean? = null,
 ) {
-  AglynTheme(dark = dark ?: appearanceDark(services)) {
+  AccountTheme(services, dark) {
     androidx.compose.runtime.CompositionLocalProvider(
       com.aglyn.ui.LocalImageLoader provides services.imageLoader,
       com.aglyn.ui.LocalMediaPicker provides (com.aglyn.ui.LocalMediaPicker.current ?: services.mediaPicker),
@@ -98,6 +98,25 @@ fun AglynShell(
     }
     }
   }
+}
+
+/**
+ * The account's theme over the whole app (its appearance, theme, accent, density and, on the desktop, text size), the
+ * device's own when "Apply to this device only" is on; [dark] forces light or dark (tests, snapshots).
+ */
+@Composable
+internal fun AccountTheme(services: ShellServices, dark: Boolean? = null, brand: androidx.compose.ui.graphics.Color? = null, content: @Composable () -> Unit) {
+  val prefs by services.accountPrefs.state.collectAsState()
+  val theme = prefs.theme
+  // The home-screen icon follows the account's choice, set on another device too.
+  LaunchedEffect(theme.appIcon, prefs.loaded) { if (prefs.loaded) services.appIcons?.apply(theme.appIcon) }
+  AglynTheme(
+    dark = dark ?: appearanceDark(services),
+    appTheme = theme,
+    brand = brand,
+    textScale = if (appSetsTextSize) com.aglyn.ui.textScaleOf(theme.textSize) else 1f,
+    content = content,
+  )
 }
 
 /** Dark or light as the account's appearance says (Light, Dark, Match system), the system's until it is read. */
