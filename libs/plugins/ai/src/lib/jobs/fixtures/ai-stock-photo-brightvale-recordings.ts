@@ -24,7 +24,9 @@ import type { StockPhoto } from '@aglyn/aglyn/plugin-manager/stock-photo-provide
  * read back from production's `stockPhotoSearches` by each search's key (a
  * SHA-256 of the provider and the request's canonical parameters), never
  * searched again. Ids, sizes, page slugs and tags are Pixabay's own, in its
- * order; the contributor is left out. A hit whose download address is not a
+ * order; the contributor is left out. The closing band's and one more of its
+ * home page's answers are kept too, as photos no slot of a marketer may take.
+ * A hit whose download address is not a
  * .jpg keeps its extension, as Pixabay's own address names it: 10157445's is a
  * .png, labeled image/png, and its bytes were not PNG.
  */
@@ -224,4 +226,92 @@ export const SMALL_BUSINESS_OWNER_TALL: StockPhoto[] = [
   hit(1851108, 904, 1280, 'terrier-dog-puppy-animal-breed-1851108', 'terrier, dog, puppy, animal, nature, breed, canine, adorable, cute, domestic, fur, grass, little, mammal, pedigree, pet, portrait, purebred, furry'),
   hit(9432600, 1097, 1280, 'bird-animal-wildlife-avian-9432600', 'bird, animal, wildlife, avian, nature, hyderabad, india, zoo'),
   hit(4906607, 853, 1280, 'veterinarian-examination-dog-4906607', 'veterinarian, examination dog, ambulance, clinic, pets, dog, health, nature, prevention, animal, diagnosis, dog diseases, vaccination, care, pet, treatment, petcare'),
+]
+
+/** `ready talk marketing` (horizontal, min_width 900, category people), the home page's closing band, read as a picture of people for the "about" in "Ready to talk about your marketing?"; key `cc8084e352c19e774009237406ddeda4d228b4cacb45415533c10be734042f39`, answered 2026-10-18T19:44:22.401Z. */
+export const READY_TALK_MARKETING_PEOPLE: StockPhoto[] = [
+  hit(238488, 1280, 853, 'tin-can-speak-talk-microphone-can-238488', 'tin can, speak, talk, microphone, can, tin, mouth, say, communicate, string, yell, hand, teeth, man, guy, speak, speak, speak, talk, talk'),
+  hit(5616861, 1280, 853, 'woman-bride-smile-make-up-5616861', 'woman, bride, smile, make up, getting ready, lashes, mascara, hairstyle, wedding, married, getting ready, lashes, lashes, lashes, lashes, lashes, mascara, mascara'),
+  hit(7061934, 1280, 853, 'couple-love-romance-together-7061934', 'couple, love, romance, together, outdoors, man, woman, nature, sunset, talk, talk, talk, talk, talk, talk'),
+  hit(6027213, 1280, 853, 'man-viking-axe-knight-medieval-6027213', 'man, viking, axe, knight, medieval, warrior, battle, fantasy, weapon, scandinavian, fighter, barbarian, viking, viking, viking, viking, viking, warrior'),
+  hit(5935801, 1280, 853, 'women-market-african-scene-talk-5935801', 'women, market, african, scene, talk, table, adults, people, life, outdoors, lifestyle, africa, african, african, african, african, african, talk, people, africa'),
+  hit(5060639, 1280, 853, 'man-talking-seated-call-looking-5060639', 'man, talking, seated, call, looking, mobile, gray mobile, gray talk, gray talking'),
+  hit(5446268, 1280, 912, 'woman-smiling-black-woman-ethnic-5446268', 'woman, smiling, black woman, ethnic, conversation, communication, smile, people, talk, person, girl, talking, women, face, cute, contact, information, black woman, black woman, black woman'),
+  hit(451281, 1280, 932, 'career-man-laugh-smile-happy-451281', 'career, man, laugh, smile, happy, relaxed, glasses, open, on the places, finished, los, begin, beginning, starting shot, at the beginning, entry, profession, get ahead, opportunities, young people'),
+  hit(1565486, 1280, 853, 'softball-player-girl-action-1565486', 'softball, player, girl, action, short stop, focused, competition, game, teen, play, uniform, female, athlete, field, sport, teenager, infield, base, concentration, glove'),
+  hit(3036181, 1280, 853, 'businessman-man-afraid-angry-3036181', 'businessman, man, 4k wallpaper, afraid, angry, announce, boss, beautiful wallpaper, business, laptop wallpaper, wallpaper hd, employee, fear, full hd wallpaper, loud, loudspeaker, male, megaphone, shout, desktop backgrounds'),
+  hit(9738545, 1280, 853, 'woman-samurai-ninja-cosplay-katana-9738545', 'woman, samurai, ninja, cosplay, katana, sword, killer, warrior, japanese style, oriental, asiatic, latex, overalls, black suit, pose, fighting posture, rack'),
+  hit(6881081, 1280, 853, 'tennis-sports-girl-6881081', 'tennis, sports, girl, physical education, physical education, physical education, physical education, physical education, physical education'),
+  hit(6274746, 1280, 960, 'sisters-secret-whisper-kids-6274746', 'sisters, secret, whisper, kids, children, girls, young, family, friends, friendship, gossip, whispering, happy, smile, portrait, friendship day, whisper, whisper, whisper, whisper'),
+  hit(1584808, 1280, 914, 'softball-player-female-infielder-1584808', 'softball, player, female, infielder, sport, uniform, teen, competition, game, teenager, concentration, glove, ballgame, young, infield, girl, athlete, watching, action, athletic'),
+  hit(3826830, 1280, 854, 'children-girls-conversation-3826830', 'children, girls, conversation, discussion, translate, gestures, childhood, friend, people, together, game, conversation, conversation, conversation, conversation, conversation'),
+  hit(7971754, 1280, 854, 'digital-marketing-advertising-man-7971754', 'digital, marketing, advertising, man, portrait, concept, marketing, marketing, marketing, marketing, marketing, advertising, advertising, concept'),
+  hit(3100981, 1280, 427, 'car-communication-conversation-3100981', 'car communication, conversation, self talk, inner dialogue, communication, faces, woman, contact, dialog, smartphone, mobile, compared to, mirrors, mirror image, to speak, psychology, voice, interior, process, intrapersonal communication'),
+  hit(4622280, 1280, 921, 'india-colorful-culture-discussion-4622280', 'india, colorful, culture, discussion, color, asia, hinduism, religion, people, hindu, worker, tourism, traditional, travel, portrait, strong, female, fashion, woman, wonderful'),
+  hit(7269055, 1280, 853, 'men-friends-talk-people-greece-7269055', 'men, friends, talk, people, greece, street cafe, meet, discuss, typical greece, old men, outdoors'),
+  hit(7765672, 1280, 720, 'lake-fishing-people-exercise-7765672', 'lake, fishing, people, exercise, open air, mild weather, walk, sport, relationship, landscape, park, nature, to run, talk, communication'),
+  hit(8318489, 1280, 853, 'people-dinning-outdoors-terrace-8318489', 'people, dinning, outdoors, terrace, restaurant, girls, sitting, backgammon, relaxation, talk, drinks, lifestyle, nature, urban, plants, autumn'),
+  hit(835890, 1280, 960, 'volleyball-women-game-sport-young-835890', 'volleyball, women, game, sport, young, people, lifestyle, fitness, athlete, person, exercise, fun, volleyball, volleyball, volleyball, volleyball, volleyball'),
+  hit(10322093, 1280, 956, 'meeting-discussion-caf%C3%A9-coffee-10322093', 'meeting, discussion, café, coffee, suit, collaboration, older man, young man, serious, bar, table, concentrated, young, older, networking, partner, working relations, interaction, consulting'),
+  hit(3100980, 1280, 800, 'car-communication-conversation-3100980', 'car communication, conversation, self talk, inner dialogue, communication, faces, woman, contact, dialog, window, compared to, mirrors, mirror image, to speak, psychology, voice, interior, process, intrapersonal communication, i'),
+  hit(1577606, 1280, 1024, 'softball-batter-female-hitter-1577606', 'softball, batter, female, hitter, focus, concentration, game, competition, bat, helmet, uniform, player, competitive, playing, watching, athlete, home, sport, play, action'),
+  hit(3746871, 1280, 853, 'baby-girl-kids-childhood-people-3746871', 'baby, girl, kids, childhood, people, faces, summer, entertainment, happiness, person, nature, talk'),
+  hit(1572951, 1280, 825, 'softball-first-baseman-girl-player-1572951', 'softball, first baseman, girl, player, athlete, base, game, glove, play, active, summer, nature, competition, concentration, crouched, female, infield, prepared, ready, teen'),
+  hit(1533195, 1280, 852, 'football-teenager-greenery-sports-1533195', 'football, teenager, greenery, sports, child, training, ball, goalkeeper, football, goalkeeper, goalkeeper, goalkeeper, goalkeeper, goalkeeper'),
+  hit(10283016, 1280, 715, 'ai-generated-therapy-psychologist-10283016', 'ai generated, therapy, psychologist, office, woman, patient, conversation, two people, session, psychology, therapist, consultation, counseling, interior, discussion, help, professional, psychoanalysis, clinic, books', 'png'),
+  hit(3818482, 1280, 853, 'young-man-male-boy-japanese-anime-3818482', 'young, man, male, boy, japanese, anime, cartoon, television, youtube, film, video, series, basket, ball, sports, character, toy, figurine, small, painted'),
+  hit(5446270, 1280, 853, 'conversation-phone-call-smartphone-5446270', 'conversation, phone, call, smartphone, communication, mobile, talking, contact, talk, cellphone, telephone, technology, message, chat, communicate, connection, cellular, modern, woman, black woman'),
+  hit(3100983, 1280, 800, 'car-communication-conversation-3100983', 'car communication, conversation, self talk, inner dialogue, communication, faces, man, figure, comic, phone, make a phone call, contact, dialog, window, compared to, mirrors, mirror image, to speak, psychology, voice'),
+  hit(1578185, 1280, 848, 'groom-wedding-marriage-elegant-man-1578185', 'groom, wedding, marriage, elegant, man, to marry, weddingfeast, fixed, shoes, before, preparation, firstlook, commitment, festive'),
+  hit(3203095, 1280, 853, 'people-grown-up-portrait-a-male-3203095', 'people, grown up, portrait, a, male, side view, facial expression, father son, to talk, conversation, secret, love, father son, father son, father son, father son, father son, conversation, conversation'),
+  hit(4998990, 1280, 853, 'women-talk-sit-phone-female-said-4998990', 'women, talk, sit, phone, female, said, young, people, said, said, said, said, said'),
+  hit(3600555, 1280, 442, 'silence-talk-freedom-of-speech-3600555', 'silence, talk, freedom of speech, woman, girl, to speak, finger, lips, quiet, calm, taboo, communication, flood of speech, taboo, taboo, taboo, taboo, taboo'),
+  hit(2717014, 1280, 848, 'office-business-notebook-statistics-2717014', 'office, business, notebook, statistics, technology, digital, computer, internet, marketing, accounting, corporate, job, communication, creative, table, meeting, businessman, ideas, woman, project'),
+  hit(5277513, 1280, 853, 'sports-young-team-train-talk-5277513', 'sports, young, team, train, talk, field, football, baseball, far, line, green, active, coach, teach, kit, group, spirit, people, grow, learn'),
+  hit(4116444, 1280, 428, 'car-communication-conversation-4116444', 'car communication, conversation, self talk, inner dialogue, communication, faces, man, contact, dialog, smartphone, mobile, compared to, mirrors, mirror image, to speak, psychology, voice, interior, process, intrapersonal communication'),
+  hit(3105927, 1280, 800, 'car-communication-conversation-3105927', 'car communication, conversation, self talk, inner dialogue, communication, faces, woman, contact, dialog, smartphone, mobile, compared to, mirrors, mirror image, to speak, psychology, voice, interior, process, intrapersonal communication'),
+]
+
+/** a home-page search (horizontal or vertical, people) whose words this fixture could not recover from its key; Pixabay answered pets and their owners; key `19aae3eb5dd061c944f5a483d98fe2be93ea66e7bcc5d95c4fbfa68d1563443f`, answered 2026-10-18T19:44:21.415Z. */
+export const PETS_AND_OWNERS_UNNAMED: StockPhoto[] = [
+  hit(1838969, 1280, 660, 'standup-paddleboarding-man-dog-1838969', 'standup paddleboarding, animal, man, dog, friendship, companion, pet, owner, paddleboard, paddle, together, stand, standing, ocean, person, nature, sea, surfboard, water, leisure'),
+  hit(5623231, 1280, 853, 'girl-dog-pet-friendship-companion-5623231', 'girl, dog, pet, friendship, companion, owner, caucasian, blonde, caucasian female, blonde female, canine, domestic dog, doggy, happy, animal, nature, love, woman, cute, puppy'),
+  hit(3344414, 1280, 854, 'dog-adorable-animal-cute-happiness-3344414', 'dog, nature, adorable, animal, cute, happiness, happy, man, pet, portrait, puppy, purebred, retriever'),
+  hit(5751151, 1280, 853, 'dog-woman-owner-pet-companion-5751151', 'dog, woman, owner, pet, animal, companion, friends, friendship, canine, fur, furry, furry dog, mammal, adorable, cuddle, cute'),
+  hit(1868563, 1280, 853, 'man-kitten-pet-owner-kitty-tabby-1868563', 'man, kitten, pet, owner, kitty, tabby, cat, gray tabby, tabby cat, adorable, animal, cute, feline, nature, caring, hands, holding, portrait'),
+  hit(5249583, 1280, 887, 'arabian-horse-horse-man-golden-hour-5249583', 'arabian horse, horse, man, golden hour, mane, equestrian, animal, nature, portrait, horse, horse, horse, horse, horse'),
+  hit(237193, 1280, 853, 'dog-puppy-bath-water-person-girl-237193', 'dog, puppy, nature, bath, animal, water, person, girl, friendship, kiss, pet'),
+  hit(2607704, 1280, 854, 'animals-dogs-friendship-pets-eyes-2607704', 'animals, dogs, friendship, pets, eyes, muzzle, adorable, nature, miniature, man, male, people, owner, love, love wallpaper'),
+  hit(3047316, 1280, 853, 'business-businessman-closing-couch-3047316', 'business, businessman, closing, couch, display, indian, male, man, market, metal, metallic, motor, motorcycle, rider, owner, person, seller, shop, shop owner, sitting'),
+  hit(5753302, 1280, 853, 'dog-pet-pet-owner-animal-owner-5753302', 'dog, pet, pet owner, animal, owner, domestic dog, canine, harness, dog harness, mammal, cute, adorable, woman, female, nature, outdoors, saxony, germany, leipzig'),
+  hit(2557396, 1280, 853, 'people-girls-women-students-2557396', 'people, girls, women, students, friends, talking, meeting, study, group, activity, homework, group work, brainstorming, group study, people, people, people, students, students, students'),
+  hit(594090, 1280, 853, 'startup-meeting-brainstorming-594090', 'startup, meeting, brainstorming, business, teamwork, team, people, office, group, corporate, conference, colleagues, company, partnership, seminar, project, table, professionals, casual, partners'),
+  hit(594091, 1280, 853, 'meeting-brainstorming-business-594091', 'meeting, brainstorming, business, teamwork, team, people, office, group, corporate, conference, colleagues, company, partnership, project, table, partners, plan, sketch, notepad, coworkers'),
+  hit(594132, 1280, 853, 'office-startup-business-home-office-594132', 'office, startup, business, home office, businessman, notebook, laptop, computer, company, people, marketing, planning, strategy, project, creative, technology, start-up, organization, development, commerce'),
+  hit(2284501, 1280, 800, 'meeting-business-architect-office-2284501', 'meeting, business, architect, office, team, plan, blueprints, teamwork, group, people, project, workplace, table, desk, meeting, meeting, meeting, business, business, business'),
+  hit(1868728, 1280, 853, 'concept-man-papers-person-plan-1868728', 'concept, man, papers, person, plan, planning, research, thinking, whiteboard, blue paper, blue thinking, blue research, blue plan, blue planning, blue think, plan, plan, planning, planning, research'),
+  hit(2557399, 1280, 853, 'people-girls-women-students-2557399', 'people, girls, women, students, friends, study, school, activity, homework, colorful, pens, drawing, sketch, students, students, students, friends, study, study, school'),
+  hit(8441683, 1280, 938, 'girls-pretty-fashion-reviewing-8441683', 'girls, pretty, fashion, reviewing, photos, smartphone, outdoors, winter, women'),
+  hit(841174, 1280, 858, 'company-model-woman-message-girl-841174', 'company, model, woman, message, girl, open, model, woman, message, message, message, open, open, open, open, open'),
+  hit(888389, 1280, 740, 'woman-portrait-dog-hobby-pet-888389', 'woman, portrait, dog, hobby, pet, doberman pinscher, nature, friendship, people, animal, animals'),
+  hit(5467838, 1280, 854, 'woman-entrepreneur-owner-business-5467838', 'woman, entrepreneur, owner, business, shop, store, clothing, manager, saleswoman, retail, sales, small business, retail, small business, small business, small business, small business, small business'),
+  hit(4070864, 1280, 854, 'people-woman-sitting-two-together-4070864', 'people, woman, sitting, two, together, bench, togetherness, friends, dog, animal, pet, domestic, nature, park, brown dog, brown animals, brown park, brown pets, brown together'),
+  hit(8699010, 1280, 1024, 'man-dog-pet-canine-animal-owner-8699010', 'man, dog, pet, canine, animal, owner, nature, leash, street, urban, friendship, lifestyle'),
+  hit(7109714, 1280, 853, 'shetland-sheepdog-friendship-pet-7109714', 'shetland sheepdog, friendship, pet, dog, nature, companion, woman, owner, animal, raise, canine, young girl lou'),
+  hit(867238, 1280, 853, 'dog-friend-companion-pet-animal-867238', 'dog, friend, companion, pet, animal, cute, puppy, young, portrait, happy, canine, friendship, funny, nature, doggy, love, adorable, domestic, together, white'),
+  hit(4411622, 1280, 720, 'chihuahua-scared-astonished-fun-4411622', 'chihuahua, scared, astonished, fun, small, cute, dog, animal, on the lap, man, hands, poor, animal portrait, love, lifestyle, loyal friend, maul, pet, nose, snout'),
+  hit(1551705, 1280, 848, 'leisure-time-leisure-activities-1551705', 'leisure time, leisure activities, dog photography, pet, dog, dog runs, animal, nature, fun, dog human, dog with human, comrade, plays, action, dog plays, dogs portrait, portrait, man dog, dog with man, forest'),
+  hit(2352886, 1280, 1019, 'friendship-domestic-animal-bulldog-2352886', 'friendship, domestic animal, bulldog, trust, rule, family, snout, wildlife, fur, animal, race, together, dog portrait, dog look, to sit, rude, loyal to, human, man, riverbank'),
+  hit(3226922, 1280, 849, 'dog-canine-mammal-animal-white-dog-3226922', 'dog, canine, mammal, animal, white dog, leash, man, person, people, walking the dog, pet, leg, foot, nature, road'),
+  hit(5786067, 1280, 839, 'dog-large-poodle-the-person-walk-5786067', 'dog, animal, large poodle, the person, walk, owner, leash, friendship, pet, road, dog walk, purebred dogs, walking, autumn, domestic dogs, purebred dog, on a leash, the side of the road'),
+  hit(2897935, 1280, 853, 'white-dog-golden-retriever-animal-2897935', 'white dog, golden retriever, animal, puppy, white, furry, hdr, look, lake, portrait, pet, friend, hair, walk, vigilance, pure-breed dog, man\'s friend, dog, autumn, seasons'),
+  hit(6467803, 1280, 1072, 'man-dog-pet-brown-dog-leash-6467803', 'man, dog, pet, brown dog, leash, dog owner, walk, leisure, together, friendship, pavement, street, outdoors, animal, urban, city'),
+  hit(6015991, 1280, 853, 'civita-di-bathroom-town-bridge-6015991', 'civita di bathroom, town, bridge, owner, pet, person, human, townscape, buildings, old town, hill, hilltop, italy, tuscany, architecture, old, landscape, nature, hilltop, hilltop'),
+  hit(888409, 1280, 831, 'woman-dog-pacsi-paw-hobby-pet-888409', 'woman, dog, nature, pacsi, animal, paw, hobby, pet, doberman pinscher, friendship, people, animals'),
+  hit(163341, 1280, 854, 'kat-people-face-person-animals-163341', 'kat, people, face, nature, person, animals, cats, pet, brown pets'),
+  hit(2680910, 1280, 960, 'man-dog-company-grandfather-2680910', 'man, dog, company, grandfather, grandpa, old man, older, senior, retired, pensionary, retirees, old age, pet, animal love, labrador, companion, together, trust, friendship, a friend'),
+  hit(7645685, 1280, 853, 'living-room-interior-woman-7645685', 'living room, interior, woman, evening dress, young woman, sheath dress, house, apartment, space, owner, mistress, fashion, style, beautiful, model, pose, apartments, living room, living room, living room'),
+  hit(743429, 1280, 850, 'sunset-dog-owner-man-nature-743429', 'sunset, dog, owner, man, nature, sweden, pet, animal, brown dog, brown sunset'),
+  hit(9607514, 1280, 853, 'dog-pet-leash-drinking-water-9607514', 'dog, pet, animal, leash, drinking, water, people, owner, nature, keeping, hands, arms, outdoors, park, fountain'),
+  hit(5818108, 1280, 853, 'woman-dog-canine-friendship-pet-5818108', 'woman, dog, canine, friendship, pet, labrador, girl, owner, companion, happy, puppy, cute, animal, outside, outdoors, park, portrait, nature'),
 ]

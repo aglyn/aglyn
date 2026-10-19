@@ -35,7 +35,19 @@ import {
  * module evaluated twice registers once.
  */
 
-const registrations = new Map<string, OperatorAlertDefinition>()
+/**
+ * On `globalThis` under `Symbol.for`, never at module scope (AGL-3947).
+ * The alert types are registered at boot, from `instrumentation.ts`, and Next
+ * compiles that file apart from the routes, so the boot and a route each hold
+ * their own copy of this module. At module scope, the boot filled its copy and
+ * every route read an empty one (AGL-3412, AGL-3868).
+ */
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:operator-alerts')
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: Map<string, OperatorAlertDefinition>
+}
+const registrations: Map<string, OperatorAlertDefinition> =
+  globalScope[REGISTRY_KEY] ?? (globalScope[REGISTRY_KEY] = new Map())
 
 const CORE_TYPES = new Set(CORE_OPERATOR_ALERTS.map((entry) => entry.type))
 

@@ -1257,6 +1257,7 @@ data class MobilePushData(
     val link: String? = null,
     val orgId: String? = null,
     val type: String,
+    val uid: String? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -1329,6 +1330,53 @@ internal object NativeNavConsoleSurfaceSerializer :
     RawEnumSerializer<NativeNavConsoleSurface>("com.aglyn.contracts.NativeNavConsoleSurface", NativeNavConsoleSurface.entries, NativeNavConsoleSurface.UNKNOWN, { it.raw })
 
 @Serializable
+data class NativeNavContribution(
+    val group: String,
+    val list: NativeNavListId,
+    val row: NativeNavRow,
+)
+
+@Serializable
+data class NativeNavCreateContribution(
+    val item: NativeNavCreateItem,
+    val scope: NativeNavCreateScope,
+)
+
+@Serializable
+data class NativeNavCreateItem(
+    val blockedReason: String? = null,
+    val console: NativeNavConsoleRef,
+    val hostRoles: List<String>? = null,
+    val icon: NativeNavIcon,
+    val id: String,
+    val label: String,
+    val order: Double? = null,
+    val params: Map<String, String>? = null,
+    val permission: String? = null,
+    val planFeature: String? = null,
+    val pluginId: String? = null,
+    val requiresHostAdmin: Boolean? = null,
+    val screen: String,
+)
+
+@Serializable
+data class NativeNavCreateList(
+    val items: List<NativeNavCreateItem>,
+    val scope: NativeNavCreateScope,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = NativeNavCreateScopeSerializer::class)
+enum class NativeNavCreateScope(val raw: String) {
+    SITE("site"),
+    WORKSPACE("workspace"),
+    UNKNOWN(""),
+}
+
+internal object NativeNavCreateScopeSerializer :
+    RawEnumSerializer<NativeNavCreateScope>("com.aglyn.contracts.NativeNavCreateScope", NativeNavCreateScope.entries, NativeNavCreateScope.UNKNOWN, { it.raw })
+
+@Serializable
 data class NativeNavElsewhere(
     val console: NativeNavConsoleRef,
     val where: String,
@@ -1371,6 +1419,7 @@ internal object NativeNavListIdSerializer :
 
 @Serializable
 data class NativeNavManifest(
+    val create: List<NativeNavCreateList>? = null,
     val elsewhere: List<NativeNavElsewhere>,
     val lists: List<NativeNavList>,
     val shellScreens: List<String>,
@@ -1382,10 +1431,12 @@ data class NativeNavRow(
     val console: NativeNavConsoleRef,
     val consoleLabel: String? = null,
     val description: String? = null,
+    val docs: String? = null,
     val icon: NativeNavIcon,
     val id: String,
     val keywords: List<String>? = null,
     val label: String,
+    val order: Double? = null,
     val params: Map<String, String>? = null,
     val pluginId: String? = null,
     val requiresHostAdmin: Boolean? = null,
@@ -1396,6 +1447,7 @@ data class NativeNavRow(
 @Serializable
 data class NativeNavSection(
     val console: NativeNavConsoleRef,
+    val docs: String? = null,
     val id: String,
     val label: String,
     val params: Map<String, String>? = null,
@@ -2652,6 +2704,25 @@ data class RecentItem(
 )
 
 @Serializable
+data class ResolvedCreateItem(
+    val blocked: Boolean,
+    val blockedReason: String? = null,
+    val console: NativeNavConsoleRef,
+    val hostRoles: List<String>? = null,
+    val icon: NativeNavIcon,
+    val id: String,
+    val label: String,
+    val order: Double? = null,
+    val params: Map<String, String>? = null,
+    val permission: String? = null,
+    val planFeature: String? = null,
+    val pluginId: String? = null,
+    val reason: String? = null,
+    val requiresHostAdmin: Boolean? = null,
+    val screen: String,
+)
+
+@Serializable
 data class ResolvedNavList(
     val groups: List<NativeNavGroup>,
     val id: NativeNavListId,
@@ -3072,6 +3143,9 @@ internal data class ContractValuesPart3(
 @Serializable
 internal data class ContractValuesPart4(
     @SerialName("NATIVE_CONTACT_LIFECYCLE_STAGES") val nativeContactLifecycleStages: List<String>,
+    @SerialName("NATIVE_CREATE_PERMISSION_REASON") val nativeCreatePermissionReason: String,
+    @SerialName("NATIVE_CREATE_PLAN_REASON") val nativeCreatePlanReason: String,
+    @SerialName("NATIVE_CREATE_SITE_ROLE_REASON") val nativeCreateSiteRoleReason: String,
     @SerialName("NATIVE_CRM_ACTIVITY_DIRECTIONS") val nativeCrmActivityDirections: Map<String, List<String>>,
     @SerialName("NATIVE_CRM_ACTIVITY_KINDS") val nativeCrmActivityKinds: List<String>,
     @SerialName("NATIVE_CRM_FIELD_OBJECTS") val nativeCrmFieldObjects: List<String>,
@@ -3116,13 +3190,13 @@ internal data class ContractValuesPart4(
     @SerialName("OUTREACH_ENROLLMENT_LIST_QUERY") val outreachEnrollmentListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
     @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
-    @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
-    @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
-    @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
+    @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
+    @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
@@ -3168,13 +3242,13 @@ internal data class ContractValuesPart5(
     @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
     @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
     @SerialName("RECENTS_FIELD") val recentsField: String,
-    @SerialName("RECENTS_MAX") val recentsMax: Long,
-    @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
-    @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("RECENTS_MAX") val recentsMax: Long,
+    @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
+    @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
     @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
@@ -3374,6 +3448,9 @@ class ContractValues internal constructor(
     val nameTokenMaxPrefix: Long get() = part3.nameTokenMaxPrefix
     val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem> get() = part3.nativeCampaignSendStatuses
     val nativeContactLifecycleStages: List<String> get() = part4.nativeContactLifecycleStages
+    val nativeCreatePermissionReason: String get() = part4.nativeCreatePermissionReason
+    val nativeCreatePlanReason: String get() = part4.nativeCreatePlanReason
+    val nativeCreateSiteRoleReason: String get() = part4.nativeCreateSiteRoleReason
     val nativeCrmActivityDirections: Map<String, List<String>> get() = part4.nativeCrmActivityDirections
     val nativeCrmActivityKinds: List<String> get() = part4.nativeCrmActivityKinds
     val nativeCrmFieldObjects: List<String> get() = part4.nativeCrmFieldObjects
@@ -3418,9 +3495,9 @@ class ContractValues internal constructor(
     val outreachEnrollmentListQuery: ListQueryDeclaration get() = part4.outreachEnrollmentListQuery
     val outreachMaxEmailSteps: Long get() = part4.outreachMaxEmailSteps
     val outreachMaxStepDelayBusinessDays: Long get() = part4.outreachMaxStepDelayBusinessDays
-    val outreachMaxSteps: Long get() = part4.outreachMaxSteps
-    val outreachMinEmailFollowUpBusinessDays: Long get() = part4.outreachMinEmailFollowUpBusinessDays
-    val outreachSequenceListQuery: ListQueryDeclaration get() = part4.outreachSequenceListQuery
+    val outreachMaxSteps: Long get() = part5.outreachMaxSteps
+    val outreachMinEmailFollowUpBusinessDays: Long get() = part5.outreachMinEmailFollowUpBusinessDays
+    val outreachSequenceListQuery: ListQueryDeclaration get() = part5.outreachSequenceListQuery
     val outreachSequenceNameMax: Long get() = part5.outreachSequenceNameMax
     val outreachTaskTitleMax: Long get() = part5.outreachTaskTitleMax
     val paymentAcceptedMaxLength: Long get() = part5.paymentAcceptedMaxLength
@@ -3466,9 +3543,9 @@ class ContractValues internal constructor(
     val recentOrgsField: String get() = part5.recentOrgsField
     val recentOrgsMax: Long get() = part5.recentOrgsMax
     val recentsField: String get() = part5.recentsField
-    val recentsMax: Long get() = part5.recentsMax
-    val refundBlockedByDispute: String get() = part5.refundBlockedByDispute
-    val reminderWindowEndHours: Long get() = part5.reminderWindowEndHours
+    val recentsMax: Long get() = part6.recentsMax
+    val refundBlockedByDispute: String get() = part6.refundBlockedByDispute
+    val reminderWindowEndHours: Long get() = part6.reminderWindowEndHours
     val reminderWindowStartHours: Long get() = part6.reminderWindowStartHours
     val replyBodyMax: Long get() = part6.replyBodyMax
     val replySubjectMax: Long get() = part6.replySubjectMax

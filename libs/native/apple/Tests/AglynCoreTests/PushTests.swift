@@ -44,6 +44,7 @@ final class PushContractTests: XCTestCase {
       XCTAssertEqual(read?.link, expected["link"] as? String, "case \(index)")
       XCTAssertEqual(read?.orgID, expected["orgId"] as? String, "case \(index)")
       XCTAssertEqual(read?.hostID, expected["hostId"] as? String, "case \(index)")
+      XCTAssertEqual(read?.uid, expected["uid"] as? String, "case \(index)")
     }
   }
 }

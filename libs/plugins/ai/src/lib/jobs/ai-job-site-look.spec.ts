@@ -21,6 +21,7 @@ import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type { AiJob } from '../model/ai-jobs.types'
 import { aiSiteKind } from '../model/ai-site-kinds'
 import { aiSiteLookSignature, aiSiteSeed, aiSiteStyleFor, type AiSiteLookAnswer, type AiSiteStyle } from '../model/ai-site-look'
+import { AI_SITE_MOTION_STYLE_RANGES, aiSiteMotionStylesFor } from '../layout-language/ai-layout-motion'
 import { aiRunSiteLook, aiSiteLookPrompt, aiSiteThemeUntouched } from './ai-job-site-look'
 
 const trades = aiSiteKind('trades') as NonNullable<ReturnType<typeof aiSiteKind>>
@@ -48,6 +49,19 @@ describe('the look unit (AGL-3660)', () => {
     expect(one).toContain('Kind of site: Home services & trades.')
     const line = (prompt: string) => prompt.split('\n').find((text) => text.startsWith('Base themes')) ?? ''
     expect(line(one)).not.toBe(line(two))
+  })
+
+  it('offers the motion styles that suit the kind, each with what it does, in the job’s own order (AGL-3941)', () => {
+    const bases = trades.look.bases.map((base) => ({ base, words: base }))
+    const motionLine = (id: string) =>
+      aiSiteLookPrompt({ job: job({ $id: id }), kind: trades, bases })
+        .split('\n')
+        .find((text) => text.startsWith('Motion that suits it: ')) ?? ''
+    const offered = (line: string) => [...line.matchAll(/(?:: |; )([a-z]+) \(/g)].map((match) => match[1])
+    const lines = ['job-a', 'job-b', 'job-c', 'job-d', 'job-zz'].map(motionLine)
+    for (const line of lines) expect([...offered(line)].sort()).toEqual([...aiSiteMotionStylesFor('trades')].sort())
+    expect(lines[0]).toContain(`sides (${AI_SITE_MOTION_STYLE_RANGES.sides.words})`)
+    expect(new Set(lines.map((line) => offered(line)[0])).size).toBeGreaterThan(1)
   })
 
   it('draws the site apart from the workspace’s other sites, saves it, and reports one output', async () => {

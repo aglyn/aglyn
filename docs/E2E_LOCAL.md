@@ -306,15 +306,18 @@ screenshots into `tmp/e2e-artifacts/`.
 ## Launch smoke — the whole first-customer path (AGL-1514)
 
 ```bash
-# emulators + a console dev server with the emulator flags (any port,
-# default 4300) + a tenant server on 4500
+# from a checkout `npm run worktree:new` made (it brings the env files)
+(cd cloud && npx -y -p firebase-tools@15.24.0 firebase emulators:start \
+  --config firebase.e2e.json --project aglyn-main --only auth,firestore)
+npm run serve:console:emulated -- --port 4300
+npm run serve:tenant:emulated -- --port 4500
 FIRESTORE_EMULATOR_HOST=localhost:8082 \
 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
   node tools/e2e/launch-smoke.e2e.mjs
 ```
 
-`tools/e2e/launch-smoke.e2e.mjs` walks SIGN UP → ORG → HOST → PUBLISH →
-served on the local stand-in for `*.aglyn.app`, which is the
+`tools/e2e/launch-smoke.e2e.mjs` walks SIGN UP → (name held) → VERIFY →
+WORKSPACE → HOST → PUBLISH → served on the local stand-in for `*.aglyn.app`, which is the
 `*.localhost:4500` branch of `apps/tenant/middleware.ts` — the same
 string-strip as the `.aglyn.app` branch one case above it. Like
 `seed-e2e.mjs` it refuses to run without both emulator-host vars, so it can
@@ -327,6 +330,31 @@ not be run reports `INCONCLUSIVE`, never `PASS`. That matters for the ISR
 assertions in particular: under `next dev` there is no incremental cache at
 all, so the MISS/HIT pair only means something against a production build,
 and the harness marks those inconclusive when it finds a dev server.
+
+Three things the walk does the way the product does, which are easy to get
+wrong (each cost a run on 2026-10-18):
+
+- **The workspace is made after verification, not at sign-up** (AGL-2590).
+  Sign-up only holds the typed name on `users/{uid}.pendingSignUpWorkspace`;
+  the console home page claims it on the first verified session. The harness
+  presses "Continue to Aglyn" after verifying and waits for the workspace in
+  Firestore. Calling `/api/hosts/create` first would make a workspace named
+  after the person instead.
+- **A site with nothing published answers its root with the holding page**
+  (AGL-3594): a 200 titled "Coming soon", noindex. The "not published yet"
+  negatives assert that page, and the absence of this run's content, rather
+  than a 404.
+- **The live page changes when the cache drop lands.** A publish writes its
+  announce to the `publishOutbox` in the same batch (AGL-2575), and
+  production delivers it to `https://{subdomain}.aglyn.app`, which a local
+  stack does not have. So the harness asserts the outbox entry, then
+  delivers that announce to the local tenant's `/api/revalidate`, which
+  `serve:tenant:emulated` starts with a local-only `REVALIDATE_SECRET`
+  (`emulated-revalidate-secret` unless you set one).
+
+Repeated runs from one machine meet the workspace-create rate limiter (429),
+by design. The harness names it in the failure. Clear the emulator's
+`rateLimits` collection and run again.
 
 What it cannot exercise locally, and does not claim to: Vercel's edge,
 wildcard DNS, wildcard TLS. Knobs: `SMOKE_CONSOLE_URL`, `SMOKE_TENANT_PORT`,
