@@ -16,6 +16,7 @@
  */
 
 import { aiSiteKind } from './ai-site-kinds'
+import { parseAiSiteInspiration } from './ai-site-inspiration'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
   aiPlanFormDatasetNames,
@@ -707,6 +708,12 @@ export interface AiSiteJobInputs {
   submissions: AiSiteSubmissions | null
   /** The batch this job was created under (AGL-2911); `null` for a single site. */
   batchId: string | null
+  /**
+   * The sites the person likes (AGL-3975), as https addresses in the order
+   * they gave them; empty for none. Read as signals only, behind
+   * `release_ai_site_inspiration`, and never put in front of a model.
+   */
+  inspiration?: string[]
 }
 
 /**
@@ -844,6 +851,10 @@ export function parseAiSiteJobInputs(
         ? rawBatch
         : undefined
   if (batchId === undefined) return 'batchId is not a batch id'
+  // https addresses only, at most three; the door holds a workspace to its
+  // plan's own limit (`aiSiteInspirationRefusal`).
+  const inspiration = parseAiSiteInspiration(inputs)
+  if (typeof inspiration === 'string') return inspiration
   return {
     businessType,
     audience: audience as string,
@@ -856,6 +867,7 @@ export function parseAiSiteJobInputs(
     welcomeEmail: inputs?.['welcomeEmail'] !== false,
     submissions,
     batchId,
+    ...(inspiration.length ? { inspiration } : {}),
   }
 }
 

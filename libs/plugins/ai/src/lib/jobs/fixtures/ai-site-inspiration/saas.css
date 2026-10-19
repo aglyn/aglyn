@@ -1,0 +1,11 @@
+body { background: #ffffff; color: #0f172a; font-family: 'Inter', system-ui, sans-serif; }
+h1, h2 { font-family: 'Inter', sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+.navbar { display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; }
+section { padding: 32px 24px; }
+.button { border-radius: 9999px; background-color: #4f46e5; color: #ffffff; }
+.button-primary { background-color: #4f46e5; }
+.card { border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; }
+.hero h1 { color: #4f46e5; }
+.stats p { color: #10b981; }
+.badge-success { background: #10b981; }
+a { color: #4f46e5; }
