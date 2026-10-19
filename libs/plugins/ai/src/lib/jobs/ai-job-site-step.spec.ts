@@ -888,6 +888,16 @@ describe('what the welcome email is told', () => {
     }
   })
 
+  it('names it for the business in Marketing, never "New email" (AGL-3988)', () => {
+    // The beta.270 Sugar Hollow start's welcome email was listed as "New email".
+    expect(emailJob({ businessName: 'Sugar Hollow Photography' }).inputs?.['name']).toBe('Sugar Hollow Photography welcome email')
+    expect(emailJob().inputs?.['name']).toBe('Welcome email')
+    const job = siteJob({ inputs: { businessType: 'dog groomer', businessName: 'Waggle', pages: AI_SITE_PAGES.min, welcomeEmail: true } })
+    for (const unit of aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true }).filter((each) => each.kind !== 'email')) {
+      expect(aiSiteUnitJob(job, unit, new Map()).inputs?.['name']).toBeUndefined()
+    }
+  })
+
   it('keeps the scaffold’s own answers on the email’s inputs beside the kind', () => {
     // The kind is added to the inputs, not swapped for them: the form's
     // routing and the audience are read off the same job.

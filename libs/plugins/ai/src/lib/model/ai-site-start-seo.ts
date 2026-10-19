@@ -119,10 +119,13 @@ function clip(value: string, max: number): string {
 /**
  * Where the first clause of an answer ends: "a dog groomer in Austin THAT
  * takes bookings for…" is a subject and then a sentence about it. A title
- * keeps the subject.
+ * keeps the subject. Never at "and", which joins the parts of one subject
+ * (AGL-3988): the beta.270 Sugar Hollow listing was cut to "Sugar Hollow
+ * Photography — Wedding" from "a wedding and family photographer in the
+ * Blue Ridge Mountains who books sessions and elopements".
  */
 const CLAUSE_BOUNDARY =
-  /\s+(?:that|which|who|whose|where|offering|providing|specializing|serving|helping|so|because|with|for|to|by|and|but)(?![\p{L}\p{M}\p{N}])|[,;:(—–]|\s-\s/iu
+  /\s+(?:that|which|who|whose|where|offering|providing|specializing|serving|helping|so|because|with|for|to|by|but)(?![\p{L}\p{M}\p{N}])|[,;:(—–]|\s-\s/iu
 
 /**
  * A short search title (AGL-3596): the business's name, what it is and where,

@@ -565,6 +565,18 @@ export function aiSiteBriefLines(
 }
 
 /**
+ * What a guided start's welcome email is called in Marketing (AGL-3988): the
+ * business's welcome email, else "Welcome email". The beta.270 Sugar Hollow
+ * start's was listed as "New email", the email step's name for one nothing
+ * named.
+ */
+export function aiSiteWelcomeEmailName(inputs: Readonly<Record<string, unknown>> | null | undefined): string {
+  const raw = inputs?.['businessName']
+  const business = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 100) : ''
+  return business ? `${business} welcome email` : 'Welcome email'
+}
+
+/**
  * What the welcome email is told (AGL-2918), beyond that it is a welcome
  * email.
  *
@@ -724,6 +736,8 @@ export function aiSiteUnitJob(
   // The look pins what the sites the person likes say of style (AGL-3975):
   // the signals the plan step read, never the sites themselves.
   if (unit.kind === 'theme' && plan.inspiration) unitInputs[AI_SITE_INSPIRATION_SIGNALS_INPUT] = plan.inspiration
+  // The welcome email is named for the business in Marketing, never "New email" (AGL-3988).
+  if (unit.kind === 'email' && typeof unitInputs['name'] !== 'string') unitInputs['name'] = aiSiteWelcomeEmailName(job.inputs)
   // A page is told the pages built before it, whose photos it does not place
   // again (AGL-3660): the maker's portrait in About is never a vase in Work.
   if (unit.screen) {

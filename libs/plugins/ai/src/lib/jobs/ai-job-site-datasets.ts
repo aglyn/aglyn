@@ -768,7 +768,10 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     const spent = aiGenerationSpent(generation)
     if (generation.status === 'refused') return { ...spent, refused: true }
     if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
-    const designed = aiDatasetDraftContent(creation.name, generation.value, { recordPages: input.recordPages })
+    const designed = aiDatasetDraftContent(creation.name, generation.value, {
+      recordPages: input.recordPages,
+      ...((job.plan as AiJobPlan | null)?.language ? { language: (job.plan as AiJobPlan).language } : {}),
+    })
     // What each record is filed under, which its photo and the sections that list it by its value read (AGL-3856).
     const category = aiSiteDatasetCategoryOf(generation.value)
     // A list a visitor looks at keeps its records' photos (AGL-3616): searched
