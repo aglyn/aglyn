@@ -3449,7 +3449,6 @@ internal data class ContractValuesPart6(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
-    @SerialName("RAIL_ALL_WORKSPACES_AT_MOST") val railAllWorkspacesAtMost: Long,
     @SerialName("RAIL_RECENT_ORGS") val railRecentOrgs: Long,
     @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
     @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
@@ -3486,11 +3485,11 @@ internal data class ContractValuesPart6(
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
-    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
@@ -3777,7 +3776,6 @@ class ContractValues internal constructor(
     val productListOptions: Map<String, List<ListFilterOption>> get() = part6.productListOptions
     val productListQuery: ListQueryDeclaration get() = part6.productListQuery
     val productListSelectFields: List<String> get() = part6.productListSelectFields
-    val railAllWorkspacesAtMost: Long get() = part6.railAllWorkspacesAtMost
     val railRecentOrgs: Long get() = part6.railRecentOrgs
     val recentOrgsField: String get() = part6.recentOrgsField
     val recentOrgsMax: Long get() = part6.recentOrgsMax
@@ -3814,7 +3812,7 @@ class ContractValues internal constructor(
     val submissionReadOptions: List<ListFilterOption> get() = part6.submissionReadOptions
     val suppressionListQuery: ListQueryDeclaration get() = part6.suppressionListQuery
     val taskListDeclaration: ListQueryDeclaration get() = part6.taskListDeclaration
-    val templateKindOptions: List<ListFilterOption> get() = part7.templateKindOptions
+    val templateKindOptions: List<ListFilterOption> get() = part6.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part7.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part7.templateListQuery
     val tenantEmailCollection: String get() = part7.tenantEmailCollection

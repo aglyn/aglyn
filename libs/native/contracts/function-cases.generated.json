@@ -31818,15 +31818,14 @@
             ]
           ],
           "result": {
-            "allTile": false,
+            "allTile": true,
             "pinned": [
               "b"
             ],
-            "recent": [],
-            "rest": [
-              "a",
+            "recent": [
               "c"
             ],
+            "rest": [],
             "total": 3
           }
         },
@@ -31956,20 +31955,58 @@
             []
           ],
           "result": {
-            "allTile": false,
+            "allTile": true,
             "pinned": [],
             "recent": [],
-            "rest": [
-              "o1",
-              "o2",
-              "o3",
-              "o4",
-              "o5",
-              "o6",
-              "o7",
-              "o8"
-            ],
+            "rest": [],
             "total": 8
+          }
+        },
+        {
+          "args": [
+            [
+              "w1",
+              "w2",
+              "w3",
+              "w4",
+              "w5",
+              "w6"
+            ],
+            [
+              "w6"
+            ],
+            [
+              "w6",
+              "w2"
+            ]
+          ],
+          "result": {
+            "allTile": true,
+            "pinned": [
+              "w6"
+            ],
+            "recent": [
+              "w2"
+            ],
+            "rest": [],
+            "total": 6
+          }
+        },
+        {
+          "args": [
+            [
+              "w1",
+              "w2"
+            ],
+            [],
+            []
+          ],
+          "result": {
+            "allTile": true,
+            "pinned": [],
+            "recent": [],
+            "rest": [],
+            "total": 2
           }
         }
       ]
@@ -67790,6 +67827,65 @@
               "slug": "/"
             }
           ]
+        }
+      ]
+    },
+    "workspaceInitial": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "Juniper Street Co."
+          ],
+          "result": "J"
+        },
+        {
+          "args": [
+            "elevated concepts"
+          ],
+          "result": "E"
+        },
+        {
+          "args": [
+            "EDR Construction"
+          ],
+          "result": "E"
+        },
+        {
+          "args": [
+            "  42 Studio"
+          ],
+          "result": "4"
+        },
+        {
+          "args": [
+            "Ölstudio Berlin"
+          ],
+          "result": "Ö"
+        },
+        {
+          "args": [
+            "— Aglyn"
+          ],
+          "result": "A"
+        },
+        {
+          "args": [
+            "🌿 Fern & Fig"
+          ],
+          "result": "F"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "?"
+        },
+        {
+          "args": [
+            "—"
+          ],
+          "result": "?"
         }
       ]
     }
