@@ -41,6 +41,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'outreach.sequences',
       pluginId: 'outreach',
       order: 80,
+      docs: '/content-and-data/crm/sequences',
       console: nativeNavRef('orgPluginTab', '/outreach'),
     },
   },

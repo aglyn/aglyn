@@ -41,6 +41,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'redirects.list',
       pluginId: 'redirects',
       order: 20,
+      docs: '/building-sites/redirects/overview',
       console: nativeNavRef('hostPluginTab', '/redirects'),
     },
   },

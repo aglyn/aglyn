@@ -21,6 +21,7 @@ import {
   nativeNavRef,
   type NativeNavContribution,
 } from '@aglyn/aglyn/app-utils/native-nav'
+import { MARKETPLACE_LICENSES_SECTION_ID } from './model/marketplace-section-ids'
 
 /**
  * The Marketplace in the native apps' navigation (AGL-3943): the rows this plugin
@@ -28,7 +29,8 @@ import {
  * `order` (`assembleNativeNav`, `generate:native-contracts`). Labels are the
  * console's words, held by `apps/console/specs/native-nav-manifest.spec.ts`.
  *
- * Imports only the core's plain nav module, so the native contracts read it.
+ * Imports only the core's plain nav module and the hub's section id, so the
+ * native contracts read it.
  */
 
 export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
@@ -42,12 +44,12 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'marketplace.browse',
       pluginId: 'marketplace',
       order: 110,
-      // Licenses open from the account menu's Marketplace entry
-      // (`marketplace.licenses`), where the proposal puts installs and licenses.
       sections: [
         nativeNavHubSection('org', '/marketplace', 'browse', 'Browse All', 'marketplace.browse'),
         nativeNavHubSection('org', '/marketplace', 'installed', 'Installed', 'marketplace.installed'),
+        nativeNavHubSection('org', '/marketplace', MARKETPLACE_LICENSES_SECTION_ID, 'Licenses', 'marketplace.licenses'),
       ],
+      docs: '/developers/plugins/overview',
       console: nativeNavRef('orgPluginTab', '/marketplace'),
     },
   },

@@ -1969,6 +1969,70 @@ public struct NativeNavContribution: Codable, Hashable, Sendable {
   }
 }
 
+public struct NativeNavCreateContribution: Codable, Hashable, Sendable {
+  public var item: NativeNavCreateItem
+  public var scope: NativeNavCreateScope
+
+  public init(item: NativeNavCreateItem, scope: NativeNavCreateScope) {
+    self.item = item
+    self.scope = scope
+  }
+}
+
+public struct NativeNavCreateItem: Codable, Hashable, Sendable {
+  public var blockedReason: String?
+  public var console: NativeNavConsoleRef
+  public var hostRoles: [String]?
+  public var icon: NativeNavIcon
+  public var id: String
+  public var label: String
+  public var order: Double?
+  public var params: [String: String]?
+  public var permission: String?
+  public var planFeature: String?
+  public var pluginId: String?
+  public var requiresHostAdmin: Bool?
+  public var screen: String
+
+  public init(blockedReason: String? = nil, console: NativeNavConsoleRef, hostRoles: [String]? = nil, icon: NativeNavIcon, id: String, label: String, order: Double? = nil, params: [String: String]? = nil, permission: String? = nil, planFeature: String? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String) {
+    self.blockedReason = blockedReason
+    self.console = console
+    self.hostRoles = hostRoles
+    self.icon = icon
+    self.id = id
+    self.label = label
+    self.order = order
+    self.params = params
+    self.permission = permission
+    self.planFeature = planFeature
+    self.pluginId = pluginId
+    self.requiresHostAdmin = requiresHostAdmin
+    self.screen = screen
+  }
+}
+
+public struct NativeNavCreateList: Codable, Hashable, Sendable {
+  public var items: [NativeNavCreateItem]
+  public var scope: NativeNavCreateScope
+
+  public init(items: [NativeNavCreateItem], scope: NativeNavCreateScope) {
+    self.items = items
+    self.scope = scope
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum NativeNavCreateScope: String, Codable, CaseIterable, Hashable, Sendable {
+  case site = "site"
+  case workspace = "workspace"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct NativeNavElsewhere: Codable, Hashable, Sendable {
   public var console: NativeNavConsoleRef
   public var `where`: String
@@ -2032,11 +2096,13 @@ public enum NativeNavListId: String, Codable, CaseIterable, Hashable, Sendable {
 }
 
 public struct NativeNavManifest: Codable, Hashable, Sendable {
+  public var create: [NativeNavCreateList]?
   public var elsewhere: [NativeNavElsewhere]
   public var lists: [NativeNavList]
   public var shellScreens: [String]
 
-  public init(elsewhere: [NativeNavElsewhere], lists: [NativeNavList], shellScreens: [String]) {
+  public init(create: [NativeNavCreateList]? = nil, elsewhere: [NativeNavElsewhere], lists: [NativeNavList], shellScreens: [String]) {
+    self.create = create
     self.elsewhere = elsewhere
     self.lists = lists
     self.shellScreens = shellScreens
@@ -2048,6 +2114,7 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
   public var console: NativeNavConsoleRef
   public var consoleLabel: String?
   public var description: String?
+  public var docs: String?
   public var icon: NativeNavIcon
   public var id: String
   public var keywords: [String]?
@@ -2059,11 +2126,12 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
   public var screen: String
   public var sections: [NativeNavSection]?
 
-  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
+  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
     self.actions = actions
     self.console = console
     self.consoleLabel = consoleLabel
     self.description = description
+    self.docs = docs
     self.icon = icon
     self.id = id
     self.keywords = keywords
@@ -2079,14 +2147,16 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
 
 public struct NativeNavSection: Codable, Hashable, Sendable {
   public var console: NativeNavConsoleRef
+  public var docs: String?
   public var id: String
   public var label: String
   public var params: [String: String]?
   public var pluginId: String?
   public var screen: String
 
-  public init(console: NativeNavConsoleRef, id: String, label: String, params: [String: String]? = nil, pluginId: String? = nil, screen: String) {
+  public init(console: NativeNavConsoleRef, docs: String? = nil, id: String, label: String, params: [String: String]? = nil, pluginId: String? = nil, screen: String) {
     self.console = console
+    self.docs = docs
     self.id = id
     self.label = label
     self.params = params
@@ -4036,6 +4106,42 @@ public struct RecentItem: Codable, Hashable, Sendable {
   }
 }
 
+public struct ResolvedCreateItem: Codable, Hashable, Sendable {
+  public var blocked: Bool
+  public var blockedReason: String?
+  public var console: NativeNavConsoleRef
+  public var hostRoles: [String]?
+  public var icon: NativeNavIcon
+  public var id: String
+  public var label: String
+  public var order: Double?
+  public var params: [String: String]?
+  public var permission: String?
+  public var planFeature: String?
+  public var pluginId: String?
+  public var reason: String?
+  public var requiresHostAdmin: Bool?
+  public var screen: String
+
+  public init(blocked: Bool, blockedReason: String? = nil, console: NativeNavConsoleRef, hostRoles: [String]? = nil, icon: NativeNavIcon, id: String, label: String, order: Double? = nil, params: [String: String]? = nil, permission: String? = nil, planFeature: String? = nil, pluginId: String? = nil, reason: String? = nil, requiresHostAdmin: Bool? = nil, screen: String) {
+    self.blocked = blocked
+    self.blockedReason = blockedReason
+    self.console = console
+    self.hostRoles = hostRoles
+    self.icon = icon
+    self.id = id
+    self.label = label
+    self.order = order
+    self.params = params
+    self.permission = permission
+    self.planFeature = planFeature
+    self.pluginId = pluginId
+    self.reason = reason
+    self.requiresHostAdmin = requiresHostAdmin
+    self.screen = screen
+  }
+}
+
 public struct ResolvedNavList: Codable, Hashable, Sendable {
   public var groups: [NativeNavGroup]
   public var id: NativeNavListId
@@ -4552,6 +4658,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nameTokenMaxPrefix: Int
   public let nativeCampaignSendStatuses: [NativeCampaignSendStatusesItem]
   public let nativeContactLifecycleStages: [String]
+  public let nativeCreatePermissionReason: String
+  public let nativeCreatePlanReason: String
+  public let nativeCreateSiteRoleReason: String
   public let nativeCrmActivityDirections: [String: [String]]
   public let nativeCrmActivityKinds: [String]
   public let nativeCrmFieldObjects: [String]
@@ -4833,6 +4942,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
     case nativeCampaignSendStatuses = "NATIVE_CAMPAIGN_SEND_STATUSES"
     case nativeContactLifecycleStages = "NATIVE_CONTACT_LIFECYCLE_STAGES"
+    case nativeCreatePermissionReason = "NATIVE_CREATE_PERMISSION_REASON"
+    case nativeCreatePlanReason = "NATIVE_CREATE_PLAN_REASON"
+    case nativeCreateSiteRoleReason = "NATIVE_CREATE_SITE_ROLE_REASON"
     case nativeCrmActivityDirections = "NATIVE_CRM_ACTIVITY_DIRECTIONS"
     case nativeCrmActivityKinds = "NATIVE_CRM_ACTIVITY_KINDS"
     case nativeCrmFieldObjects = "NATIVE_CRM_FIELD_OBJECTS"

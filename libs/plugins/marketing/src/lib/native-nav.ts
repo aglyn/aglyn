@@ -52,6 +52,7 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
       nativeNavHubSection(scope, '/marketing', 'overlays', 'Overlays', 'marketing.overlays'),
       nativeNavHubSection(scope, '/marketing', 'experiments', 'A/B testing', 'marketing.experiments'),
     ],
+    docs: '/marketing-and-automation/marketing-overlays/overview',
     console: nativeNavRef(scope === 'org' ? 'orgPluginTab' : 'hostPluginTab', '/marketing'),
   }
 }
