@@ -114,7 +114,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -246,10 +246,12 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
 
     expect(body.month).toBe('2026-09')
 
-    // Add-on: on, priced at the plan's figure, no Stripe key → unavailable.
+    // Add-on: on, as the tier Pro's old add-on became (Boost, AGL-3965),
+    // priced at that tier, no Stripe key → unavailable.
     expect(body.addon).toEqual({
       on: true,
-      priceUsd: PLAN_PRICING.pro.aiAddonMonthlyUsd,
+      tier: 'boost',
+      priceUsd: AI_TIERS.boost.monthlyUsd,
       since: null,
       sinceSource: 'unavailable',
     })
@@ -258,12 +260,12 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     // the same fold `resolveOrgEntitlements` makes for the meter.
     expect(body.pool.planCredits).toBe(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
     expect(body.pool.overrideCredits).toBe(12_000)
-    expect(body.pool.addonCredits).toBe(AI_ADDON_CREDITS_PER_MONTH.pro)
-    expect(body.pool.totalCredits).toBe(12_000 + AI_ADDON_CREDITS_PER_MONTH.pro)
+    expect(body.pool.addonCredits).toBe(AI_TIERS.boost.credits)
+    expect(body.pool.totalCredits).toBe(12_000 + AI_TIERS.boost.credits)
     // $2.50 of provider spend is 2,500 credits, rounded up.
     expect(body.pool.usedCredits).toBe(2_500)
     expect(body.pool.providerUsd).toBe(2.5)
-    expect(body.pool.remainingCredits).toBe(12_000 + AI_ADDON_CREDITS_PER_MONTH.pro - 2_500)
+    expect(body.pool.remainingCredits).toBe(12_000 + AI_TIERS.boost.credits - 2_500)
     expect(body.pool.projectedCredits).toBeGreaterThanOrEqual(2_500)
     expect(body.pool.messages).toBe(40)
     expect(body.pool.deflected).toBe(7)
@@ -341,7 +343,7 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     ])
 
     // Margin: add-on price plus the override's dollar value, spend under it.
-    expect(body.margin.addonRevenueUsd).toBe(PLAN_PRICING.pro.aiAddonMonthlyUsd)
+    expect(body.margin.addonRevenueUsd).toBe(AI_TIERS.boost.monthlyUsd)
     expect(body.margin.planAssistShareUsd).toBe(12)
     expect(body.margin.spendUsd).toBe(2.5)
     expect(body.margin.underwater).toBe(false)
@@ -422,12 +424,12 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     expect(body.addon.on).toBe(true)
     expect(body.pool).toMatchObject({
       planCredits: PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth,
-      addonCredits: AI_ADDON_CREDITS_PER_MONTH.starter,
+      addonCredits: AI_TIERS.spark.credits,
       totalCredits: 4_750,
       usedCredits: 10_500,
     })
     expect(
-      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter,
+      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_TIERS.spark.credits,
     ).toBe(4_750)
     expect(body.overage).toMatchObject({
       overageCredits: 5_750,
@@ -495,9 +497,9 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     ]
     staff()
     const view = await (await get({ token: 'tok', view: 'prepared' })).json()
-    const band = 12_000 + AI_ADDON_CREDITS_PER_MONTH.pro
+    const band = 12_000 + AI_TIERS.boost.credits
     expect(view.pool.band).toBe(
-      `${band.toLocaleString('en-US')} credits = 12,000 staff override + ${AI_ADDON_CREDITS_PER_MONTH.pro.toLocaleString('en-US')} Aglyn AI add-on`,
+      `${band.toLocaleString('en-US')} credits = 12,000 staff override + ${AI_TIERS.boost.credits.toLocaleString('en-US')} Aglyn AI tier`,
     )
     expect(view.pool.used).toBe(`Used 2,500 credits ($2.50 provider spend) \u00b7 ${(band - 2_500).toLocaleString('en-US')} remaining`)
     expect(view.refusals.heading).toBe('Refusals this month \u00b7 3')

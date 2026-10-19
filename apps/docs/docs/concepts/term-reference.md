@@ -40,8 +40,9 @@ the first syllable (IPA `/ˈæɡlɪn/`).
 
 The generative side of the assistant: the doors that build a page, layout,
 page template, reusable component, form, email, campaign, product copy, SEO
-text or theme change from a description. An add-on on any paid plan, carried
-by agreement on Enterprise, and metered in credits. Everything it makes is a
+text or theme change from a description. Included on every plan and metered
+in its AI credits, with Aglyn AI tiers that add credits on top; carried by
+agreement on Enterprise. Everything it makes is a
 draft — it never publishes, changes a live page in place or sends anything.
 → [Aglyn AI](../ai/overview.md),
 [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)
@@ -603,7 +604,7 @@ The unit every AI request is measured in — an assistant answer, a rewrite, a
 generated section, a whole site — drawn from one monthly pool per workspace
 rather than a meter per feature. What a request costs varies with how much
 work it is, and a job estimates itself before you confirm. A plan includes a
-band each month, the Aglyn AI add-on widens it, and a workspace can stop at
+band each month, an Aglyn AI tier adds credits on top, and a workspace can stop at
 the band or set a ceiling on what it will pay past it.
 → [Credits and caps](../ai/overview.md#credits-and-caps),
 [AI assist overage](../workspace-and-billing/billing-and-plans/overview.md#assist-overage)
