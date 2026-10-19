@@ -22,8 +22,9 @@
  * page 2:8; collections Aglyn / Theme, Aglyn / Appearance, Aglyn / Accent,
  * Aglyn / Brand and Aglyn / Density), which win wherever they define a value:
  *
- * - `THEME_PALETTES`: Aglyn, Quiet, Night and High contrast, light and dark,
- *   exactly as Figma's Theme modes hold them. Ocean and Warm exist in Figma
+ * - `THEME_PALETTES`: Aglyn is the look that ships, the console's resolved
+ *   MUI scheme (see `AGLYN_LIGHT`); Quiet, Night and High contrast, light and
+ *   dark, are exactly as Figma's Theme modes hold them. Ocean and Warm exist in Figma
  *   only as four-color previews (rail, surface, canvas, accent), so their
  *   full palettes are derived here by `deriveThemeFromPreview`, the rule
  *   below, and drawn back into Figma as swatch boards.
@@ -76,12 +77,18 @@ export interface ThemeColors {
   dangerFillPressed: string
 }
 
-/** Where a theme's values come from. */
-export type ThemeSource = 'figma' | 'derived'
+/**
+ * Where a theme's values come from: the console's resolved MUI scheme (the
+ * look that ships, Aglyn), Figma's variables, or derived from a Figma preview.
+ */
+export type ThemeSource = 'console' | 'figma' | 'derived'
 
 export interface ThemePalette {
   id: ThemePaletteId
+  /** The name a picker shows; empty when `brandLabel` says to show the configured brand name. */
   label: string
+  /** The theme is named after the product: show the build's configured brand name (white-label safe). */
+  brandLabel?: boolean
   light: ThemeColors
   dark: ThemeColors
   /** The theme's own accent ("Accent: Theme"), as a raw color for `deriveAccent`. */
@@ -286,7 +293,13 @@ export const THEME_NON_TEXT_CONTRAST = 3
 const DANGER_LIGHT = { dangerFill: '#b3261e', dangerFillHover: '#9c211a', dangerFillPressed: '#861c16' }
 const DANGER_DARK = { dangerFill: '#c93a31', dangerFillHover: '#b3261e', dangerFillPressed: '#9c211a' }
 
-const AGLYN_LIGHT: ThemeColors = {
+/**
+ * Figma's Aglyn mode as it stood before that mode moved to the console's
+ * scheme (2026-10-19): the base Quiet's status colors and the Ocean and Warm
+ * derivations build on, as the native shells' themes already do. Kept by
+ * value, so moving the shipping Aglyn look moves nothing else.
+ */
+const FIGMA_AGLYN_LIGHT: ThemeColors = {
   canvas: '#f5f5f5',
   surface: '#ffffff',
   raised: '#ffffff',
@@ -313,7 +326,7 @@ const AGLYN_LIGHT: ThemeColors = {
   ...DANGER_LIGHT,
 }
 
-const AGLYN_DARK: ThemeColors = {
+const FIGMA_AGLYN_DARK: ThemeColors = {
   canvas: '#161c21',
   surface: '#1e262e',
   raised: '#27313b',
@@ -340,8 +353,81 @@ const AGLYN_DARK: ThemeColors = {
   ...DANGER_DARK,
 }
 
+/**
+ * The Aglyn theme is the look that ships: the console's resolved MUI scheme
+ * (`getConsoleTheme`, the same scheme the native shared tokens are generated
+ * from), with translucent text, dividers and hover composited onto the paper
+ * they sit on, and the status colors as the console's MUI Alert draws them
+ * (standard: the intent's light shade lightened 90% for the ground and
+ * darkened 60% for the text in light, the reverse in dark). Where the console
+ * scheme has no such color (sunken, rail, titlebar, the strong border, the
+ * "new" status, the scrim) Figma's Aglyn mode supplies it, and so does the
+ * danger FILL: the console's `error.main` carries white text at 4.36:1, under
+ * the 4.5:1 a button label owes. `apps/console/specs/native-theme-aglyn.spec.ts`
+ * holds these to the console's scheme.
+ */
+const AGLYN_LIGHT: ThemeColors = {
+  ...FIGMA_AGLYN_LIGHT,
+  canvas: '#f5f5f5',
+  surface: '#ffffff',
+  raised: '#ffffff',
+  hover: '#f5f5f5',
+  borderSubtle: '#e0e0e0',
+  textPrimary: '#212121',
+  textSecondary: '#666666',
+  textTertiary: '#9e9e9e',
+  successBg: '#f0f8f1',
+  successFg: '#2c4c2e',
+  warningBg: '#fff8ef',
+  warningFg: '#664a28',
+  dangerBg: '#fceeed',
+  dangerFg: '#5c2220',
+  infoBg: '#ecf4fb',
+  infoFg: '#1c3a56',
+}
+
+const AGLYN_DARK: ThemeColors = {
+  ...FIGMA_AGLYN_DARK,
+  canvas: '#161c21',
+  surface: '#2a3440',
+  raised: '#2a3440',
+  hover: '#3b444f',
+  borderSubtle: '#444c57',
+  textPrimary: '#ffffff',
+  textSecondary: '#bfc2c6',
+  textTertiary: '#959aa0',
+  successBg: '#0b130b',
+  successFg: '#c5e5c7',
+  warningBg: '#19120a',
+  warningFg: '#ffe3c1',
+  dangerBg: '#170c0b',
+  dangerFg: '#f7c9c8',
+  infoBg: '#091015',
+  infoFg: '#bfd9f1',
+}
+
+/** The Aglyn theme's fields the console's scheme supplies; the rest are Figma's Aglyn mode. */
+export const THEME_CONSOLE_FIELDS: readonly string[] = [
+  'canvas',
+  'surface',
+  'raised',
+  'hover',
+  'borderSubtle',
+  'textPrimary',
+  'textSecondary',
+  'textTertiary',
+  'successBg',
+  'successFg',
+  'warningBg',
+  'warningFg',
+  'dangerBg',
+  'dangerFg',
+  'infoBg',
+  'infoFg',
+]
+
 const QUIET_LIGHT: ThemeColors = {
-  ...AGLYN_LIGHT,
+  ...FIGMA_AGLYN_LIGHT,
   canvas: '#f4f4f2',
   surface: '#ffffff',
   raised: '#ffffff',
@@ -357,7 +443,7 @@ const QUIET_LIGHT: ThemeColors = {
 }
 
 const QUIET_DARK: ThemeColors = {
-  ...AGLYN_DARK,
+  ...FIGMA_AGLYN_DARK,
   canvas: '#1a1a19',
   surface: '#222221',
   raised: '#2b2b29',
@@ -475,12 +561,12 @@ export const THEME_DARK_RAIL_SEEDS: Readonly<Record<'ocean' | 'warm', string>> =
  *
  * Light: the preview's canvas, surface and rail as given; raised = surface;
  * sunken = canvas 25% toward the rail; hover = surface 10% toward the rail;
- * titlebar = surface 35% toward the canvas; the borders are Aglyn's, 18%
- * (subtle) and 22% (strong) toward the rail. Text, status, scrim and the
- * danger fill are Aglyn's.
+ * titlebar = surface 35% toward the canvas; the borders are Figma's Aglyn
+ * mode's, 18% (subtle) and 22% (strong) toward the rail. Text, status, scrim
+ * and the danger fill are Figma's Aglyn mode's.
  *
- * Dark: Aglyn's dark appearance tinted toward the dark rail seed: canvas
- * 22%, surface and raised 18%, rail 45%; everything else is Aglyn's dark.
+ * Dark: Figma's Aglyn dark mode tinted toward the dark rail seed: canvas
+ * 22%, surface and raised 18%, rail 45%; everything else is that mode's.
  *
  * "Toward" is a straight per-channel sRGB blend, rounded to the byte.
  */
@@ -490,7 +576,7 @@ export function deriveThemeFromPreview(preview: ThemePreview, darkRailSeed: stri
 } {
   return {
     light: {
-      ...AGLYN_LIGHT,
+      ...FIGMA_AGLYN_LIGHT,
       canvas: preview.canvas,
       surface: preview.surface,
       raised: preview.surface,
@@ -498,15 +584,15 @@ export function deriveThemeFromPreview(preview: ThemePreview, darkRailSeed: stri
       sunken: themeLerp(preview.canvas, preview.rail, 0.25),
       hover: themeLerp(preview.surface, preview.rail, 0.1),
       titlebar: themeLerp(preview.surface, preview.canvas, 0.35),
-      borderSubtle: themeLerp(AGLYN_LIGHT.borderSubtle, preview.rail, 0.18),
-      borderStrong: themeLerp(AGLYN_LIGHT.borderStrong, preview.rail, 0.22),
+      borderSubtle: themeLerp(FIGMA_AGLYN_LIGHT.borderSubtle, preview.rail, 0.18),
+      borderStrong: themeLerp(FIGMA_AGLYN_LIGHT.borderStrong, preview.rail, 0.22),
     },
     dark: {
-      ...AGLYN_DARK,
-      canvas: themeLerp(AGLYN_DARK.canvas, darkRailSeed, 0.22),
-      surface: themeLerp(AGLYN_DARK.surface, darkRailSeed, 0.18),
-      raised: themeLerp(AGLYN_DARK.raised, darkRailSeed, 0.18),
-      rail: themeLerp(AGLYN_DARK.rail, darkRailSeed, 0.45),
+      ...FIGMA_AGLYN_DARK,
+      canvas: themeLerp(FIGMA_AGLYN_DARK.canvas, darkRailSeed, 0.22),
+      surface: themeLerp(FIGMA_AGLYN_DARK.surface, darkRailSeed, 0.18),
+      raised: themeLerp(FIGMA_AGLYN_DARK.raised, darkRailSeed, 0.18),
+      rail: themeLerp(FIGMA_AGLYN_DARK.rail, darkRailSeed, 0.45),
     },
   }
 }
@@ -519,7 +605,7 @@ const AGLYN_ACCENT = '#00b0ff'
 
 /** Every theme, in the order the Theme settings sheet lists them. */
 export const THEME_PALETTES: readonly ThemePalette[] = [
-  { id: 'aglyn', label: 'Aglyn', light: AGLYN_LIGHT, dark: AGLYN_DARK, accent: AGLYN_ACCENT, source: 'figma' },
+  { id: 'aglyn', label: '', brandLabel: true, light: AGLYN_LIGHT, dark: AGLYN_DARK, accent: AGLYN_ACCENT, source: 'console' },
   { id: 'quiet', label: 'Quiet', light: QUIET_LIGHT, dark: QUIET_DARK, accent: AGLYN_ACCENT, source: 'figma' },
   { id: 'night', label: 'Night', light: NIGHT, dark: NIGHT, accent: AGLYN_ACCENT, alwaysDark: true, source: 'figma' },
   { id: 'ocean', label: 'Ocean', light: OCEAN.light, dark: OCEAN.dark, accent: THEME_PREVIEWS.ocean.accent, source: 'derived' },
@@ -615,7 +701,7 @@ export const THEME_ACCENTS: readonly ThemeNamedAccent[] = FIGMA_ACCENTS.map(({ i
 
 /** The accent picker's swatches, in Figma's order. */
 export const THEME_ACCENT_SWATCHES: readonly ThemeAccentSwatch[] = [
-  { id: 'aglynBlue', label: 'Aglyn blue', color: '#0073ae' },
+  { id: 'aglynBlue', label: 'Brand blue', color: '#0073ae' },
   { id: 'sky', label: 'Sky', color: '#00b0ff' },
   { id: 'violet', label: 'Violet', color: '#7a5cf0' },
   { id: 'pink', label: 'Pink', color: '#e040fb' },

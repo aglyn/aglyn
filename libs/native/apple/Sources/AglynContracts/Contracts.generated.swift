@@ -4698,15 +4698,17 @@ public struct ThemeNamedAccent: Codable, Hashable, Sendable {
 public struct ThemePalette: Codable, Hashable, Sendable {
   public var accent: String
   public var alwaysDark: Bool?
+  public var brandLabel: Bool?
   public var dark: ThemeColors
   public var id: ThemePaletteId
   public var label: String
   public var light: ThemeColors
   public var source: ThemeSource
 
-  public init(accent: String, alwaysDark: Bool? = nil, dark: ThemeColors, id: ThemePaletteId, label: String, light: ThemeColors, source: ThemeSource) {
+  public init(accent: String, alwaysDark: Bool? = nil, brandLabel: Bool? = nil, dark: ThemeColors, id: ThemePaletteId, label: String, light: ThemeColors, source: ThemeSource) {
     self.accent = accent
     self.alwaysDark = alwaysDark
+    self.brandLabel = brandLabel
     self.dark = dark
     self.id = id
     self.label = label
@@ -4747,6 +4749,7 @@ public struct ThemePreview: Codable, Hashable, Sendable {
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ThemeSource: String, Codable, CaseIterable, Hashable, Sendable {
+  case console = "console"
   case derived = "derived"
   case figma = "figma"
   case unknown = ""
@@ -5094,6 +5097,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let tenantEmails: [TenantEmailEntry]
   public let themeAccentSwatches: [ThemeAccentSwatch]
   public let themeAccents: [ThemeNamedAccent]
+  public let themeConsoleFields: [String]
   public let themeDarkRailSeeds: [String: String]
   public let themeDensities: [ThemeDensity]
   public let themeNonTextContrast: Int
@@ -5388,6 +5392,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case tenantEmails = "TENANT_EMAILS"
     case themeAccentSwatches = "THEME_ACCENT_SWATCHES"
     case themeAccents = "THEME_ACCENTS"
+    case themeConsoleFields = "THEME_CONSOLE_FIELDS"
     case themeDarkRailSeeds = "THEME_DARK_RAIL_SEEDS"
     case themeDensities = "THEME_DENSITIES"
     case themeNonTextContrast = "THEME_NON_TEXT_CONTRAST"
