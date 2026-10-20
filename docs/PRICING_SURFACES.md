@@ -321,7 +321,8 @@ Decision Log figures; a change to any of them owes this page a new version.
 `/managed` (screen `qnuMY13VsS`) is no longer a pricing surface. Version
 `W4VceCRSjF`, which replaced `COCDoTk7vn`, states no price, rate or starting
 figure in its body, its FAQ or its SEO description, so a price change owes it
-nothing. Prices are published on `/pricing`, and only there. The page says
+nothing; `4EvGpOyRjG`, live since, keeps that and only changes the hero's
+picture and the FAQ's background. Prices are published on `/pricing`, and only there. The page says
 what is true without one: one price covers the plan and Site Care, monthly or
 yearly, with no build fee; a bigger job has one flat price agreed before work
 starts; extra time is billed only after a yes.

@@ -54,11 +54,14 @@
  * detail hero, the Capabilities band, the How it works band and the Marketing
  * CTA (all reusable components, so they stay in step with every other page
  * that uses them), three deep-dive rows, a fair-use list, the form and an
- * FAQ. The template's plans section is dropped, with everything in it, and
- * the form's section takes its background so the bands still alternate. Two
- * deep-dive rows play a product film, placed the way the film band places it
- * and read from a live page that plays it (`lib/marketing-film.mjs`); the
- * third shows a picture. Every node gets a new id. Each slot the copy
+ * FAQ. The template's plans section is dropped, with everything in it; the
+ * form's section takes its background and the FAQ's takes white, so the bands
+ * still alternate. Two deep-dive rows play a product film, placed the way the
+ * film band places it and read from a live page that plays it
+ * (`lib/marketing-film.mjs`); the third shows a picture. The hero shows a
+ * small business's site, never a film's poster frame: its media slot only
+ * takes a picture, and a poster carries the film's burned-in caption. Every
+ * node gets a new id. Each slot the copy
  * replaces is found by its section and node names, and its current text is
  * asserted before it changes, so a template that has moved makes the run
  * refuse instead of pouring copy one slot out. After the pour, no text of the
@@ -160,7 +163,7 @@ const INSTANCES = {
       'Managed is an Aglyn plan with Site Care on top. We build your site, you look it over, and ' +
       'from then on you email us what changed (new hours, prices, photos, a new face on the team) ' +
       'and we make the change for you. One price covers both, monthly or yearly, with no build fee.',
-    mockup: 'media:org:jWmGooWE3L/uQc5k6NyKH',
+    mockup: 'media:org:jWmGooWE3L/DJdz0ISx5R', // Northwind's storefront, commerce-storefront.png
     mockupAlt: 'A small business website live on its own domain, built and published with Aglyn',
     primaryCtaLabel: 'Tell us about your business',
     primaryCtaHref: '#start',
@@ -725,6 +728,8 @@ let formNodeId = null
 // ---- FAQ -----------------------------------------------------------------
 {
   const sec = section('FAQ')
+  // White, so it does not sit on a grey close to the form's above it.
+  if (sec) sec.sx = { ...sec.sx, bgcolor: 'background.paper' }
   const list = sec && one(sec, 'Questions', 'FAQ')
   const items = kids(list)
   if (!items.length) problems.push('FAQ: no questions in the template')
