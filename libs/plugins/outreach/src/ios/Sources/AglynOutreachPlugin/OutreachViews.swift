@@ -50,7 +50,7 @@ struct OutreachHubScreen: View {
           case .compliance: ComplianceSection(context: context, api: api, orgID: orgID)
           }
         }
-        .background(AglynColor.page)
+        .background(AglynGround())
       } else {
         AglynEmptyState("Not available", systemImage: "lock", message: "This workspace does not have this area.")
       }
@@ -264,7 +264,6 @@ struct SequenceDetail: View {
           }
         }
         .formStyle(.aglynGrouped)
-        .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "sequence") {
@@ -807,7 +806,6 @@ struct ComplianceSection: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .task {
       let orgID = orgID
       domains.show(context.firestore) { doNotContactDomainsQuery(orgID, search: "", limit: $0) }

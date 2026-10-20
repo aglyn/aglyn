@@ -85,7 +85,6 @@ struct FieldsSection: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("crm-fields")
     .sheet(isPresented: $creating) { NewFieldSheet(context: context, scope: scope, reference: reference, object: object) }
     .sheet(item: $editing) { def in EditFieldSheet(context: context, scope: scope, definition: def) }
@@ -258,7 +257,6 @@ struct SettingsSection: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .disabled(!scope.canManage)
     .accessibilityIdentifier("crm-settings")
   }

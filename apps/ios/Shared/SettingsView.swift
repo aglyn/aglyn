@@ -85,7 +85,7 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Settings")
     .signOutConfirmation(isPresented: $confirmSignOut)
   }

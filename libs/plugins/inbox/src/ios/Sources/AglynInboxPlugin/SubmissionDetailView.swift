@@ -186,7 +186,6 @@ struct SubmissionDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("submission-detail")
   }
 }

@@ -258,7 +258,7 @@ struct EmailHubScreen: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .navigationTitle(section == .messages ? "Emails" : section.label)
     .aglynScreenTitle(section == .messages ? "Emails" : section.label)
   }
@@ -962,7 +962,6 @@ struct SendingSection: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .task { await load() }
     .refreshable { await load() }
     .sheet(item: $editing) { sender in SenderSheet(actions: actions, sender: sender) { Task { await load() } } }

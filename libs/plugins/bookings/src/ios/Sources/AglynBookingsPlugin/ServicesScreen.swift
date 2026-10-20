@@ -265,7 +265,6 @@ struct ServiceEditor: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .navigationTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
     .aglynScreenTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add service.

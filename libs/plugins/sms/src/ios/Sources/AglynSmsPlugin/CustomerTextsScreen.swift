@@ -82,6 +82,5 @@ struct CustomerTextsScreen: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
   }
 }

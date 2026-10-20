@@ -325,7 +325,7 @@ public struct AglynRecordForm<Content: View>: View {
     } else {
       Form { content }
         .formStyle(.grouped)
-        .aglynListBackground()
+        .aglynFormBackground()
     }
   }
 }

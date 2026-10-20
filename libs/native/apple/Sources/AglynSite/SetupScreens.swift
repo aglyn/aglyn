@@ -131,7 +131,6 @@ struct SetupDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .navigationTitle(section.title)
     .aglynScreenTitle(section.title)
     .accessibilityIdentifier("setup-detail-\(section.id)")

@@ -231,6 +231,9 @@ public final class ScreenModel {
   public var order: [String: ListOrder] = [:]
   /// The columns each list shows, where the person has picked; absent is the list's own defaults.
   public var shown: [String: Set<String>] = [:]
+  /// The value picked in each list's `chips` filter (by its key); absent or empty shows every row. On the Mac and iPad
+  /// the choice is in the list toolbar's Filter menu, so it lives here rather than in the list.
+  public var chips: [String: String] = [:]
   /// The `{attempt}` key of each action's last request, by action, path and body: a retry of the
   /// same request reuses it, and a different request gets its own.
   @ObservationIgnored private var attempts: [String: String] = [:]

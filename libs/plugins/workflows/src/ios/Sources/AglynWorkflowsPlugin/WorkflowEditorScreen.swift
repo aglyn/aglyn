@@ -40,7 +40,7 @@ struct WorkflowEditorScreen: View {
   var body: some View {
     Group {
       if let editingID, !stored.loaded {
-        Form { SkeletonRows(count: 6) }.formStyle(.aglynGrouped).aglynListBackground()
+        Form { SkeletonRows(count: 6) }.formStyle(.aglynGrouped)
           .accessibilityIdentifier("workflow-editor-loading-\(editingID)")
       } else if editingID != nil && stored.doc == nil {
         AglynEmptyState("This workflow is gone", systemImage: "point.3.connected.trianglepath.dotted")

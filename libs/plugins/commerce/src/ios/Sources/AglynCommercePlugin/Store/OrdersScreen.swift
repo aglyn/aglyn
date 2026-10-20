@@ -310,7 +310,7 @@ struct OrdersScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder

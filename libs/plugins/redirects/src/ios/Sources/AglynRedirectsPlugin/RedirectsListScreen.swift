@@ -247,7 +247,6 @@ struct RedirectDetail: View {
         }
       }
       .formStyle(.aglynGrouped)
-      .aglynListBackground()
       .navigationTitle(titled ? row.source : "Redirects")
       .aglynScreenTitle(titled ? row.source : "Redirects")
     } else {

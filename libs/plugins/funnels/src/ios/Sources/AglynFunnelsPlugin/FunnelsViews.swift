@@ -204,7 +204,7 @@ struct FunnelDetail: View {
       }
       .aglynContentEdges().padding(.vertical, AglynSpace.two)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .navigationTitle(row.name)
     .aglynScreenTitle(row.name)
     .task(id: "\(row.id)|\(row.version)|\(days)|\(editor.refreshKey)") {

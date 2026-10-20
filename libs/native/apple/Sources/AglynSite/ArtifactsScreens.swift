@@ -205,7 +205,7 @@ struct ArtifactsScreen: View {
       }
       rows(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -357,7 +357,6 @@ private struct ArtifactDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .task(id: row.parentLayoutID) {
       guard kind == .layout, let parentID = row.parentLayoutID else { return }
       await parent.bind(context.firestore, ["hosts", hostID, "layouts", parentID])

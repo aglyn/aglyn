@@ -294,7 +294,7 @@ struct RegisterPrintersView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Receipt printers")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)

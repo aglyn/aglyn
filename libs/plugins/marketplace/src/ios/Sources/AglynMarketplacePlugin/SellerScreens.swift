@@ -64,10 +64,9 @@ struct SellScreen: View {
             }
           }
           .formStyle(.aglynGrouped)
-          .aglynListBackground()
           .accessibilityIdentifier("sell-\(section.rawValue)")
         }
-        .background(AglynColor.page)
+        .background(AglynGround())
         .task(id: orgID) { await profile.bind(context.firestore, publisherProfilePath(orgID: orgID)) }
         .onAppear { if let initialSection, let start = SellSection(rawValue: initialSection) { section = start } }
       } else {

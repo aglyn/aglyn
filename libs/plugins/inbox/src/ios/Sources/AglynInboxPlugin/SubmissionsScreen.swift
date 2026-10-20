@@ -212,7 +212,7 @@ struct SubmissionsScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   private var filtered: Bool {

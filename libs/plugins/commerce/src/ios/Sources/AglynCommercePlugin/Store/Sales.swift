@@ -289,7 +289,6 @@ struct SalesScreen: View {
           }
         }
         .formStyle(.aglynGrouped)
-        .aglynListBackground()
       } else {
         List { SkeletonRows(count: 4) }.aglynListBackground()
       }

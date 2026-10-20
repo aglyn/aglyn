@@ -316,7 +316,8 @@ struct WorkflowsSection: View {
     let (window, truncated) = ceilinged(live.docs, AutomationCeilings.workflows)
     let rows = visibleWorkflows(window)
     let used = serverCount ?? rows.count
-    List {
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    AglynGroupedForm(plain: true) {
       Section {
         if live.docs == nil {
           SkeletonRows(count: 3)
@@ -332,9 +333,13 @@ struct WorkflowsSection: View {
             Button {
               context.navigate(workflowScreen, ["id": row.id, "hostId": hostID])
             } label: {
-              AutomationRowLabel(title: row.name, caption: row.caption)
+              // A row that opens shows it: the disclosure, the row wash under the pointer and the link pointer.
+              HStack(spacing: AglynSpace.one) {
+                AutomationRowLabel(title: row.name, caption: row.caption)
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+              }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             trailingMenu(row)
           }
           .contextMenu { menu(row) }
@@ -359,13 +364,14 @@ struct WorkflowsSection: View {
         } label: {
           Label("Add workflow", systemImage: "plus")
         }
+        .buttonStyle(.aglynRow)
+        .foregroundStyle(AglynColor.tint)
         .accessibilityIdentifier("add-workflow")
       } footer: {
         AglynQuotaReadout(
           ready: entitlements != nil, used: used, limit: entitlements?.quota("workflowsPerHost")?.cap, noun: "workflow")
       }
     }
-    .aglynListBackground()
     .accessibilityIdentifier("workflows-list")
     .automationConfirm($confirm)
     .sheet(item: $duplicating) { row in
@@ -530,7 +536,8 @@ struct ActionsSection: View {
   var body: some View {
     let (window, truncated) = ceilinged(live.docs, AutomationCeilings.actions)
     let (rows, elements) = visibleActions(window)
-    List {
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    AglynGroupedForm(plain: true) {
       Section {
         Text(
           "When a site event fires, run automations in order — trigger a workflow, show the visitor an alert, chain a custom event, or write to a dataset. Pro plans and up."
@@ -550,9 +557,13 @@ struct ActionsSection: View {
             Button {
               context.navigate(actionScreen, ["id": row.id, "hostId": hostID])
             } label: {
-              AutomationRowLabel(title: row.name, caption: row.caption, warning: placeholderLine(row.placeholders.count))
+              // A row that opens shows it: the disclosure, the row wash under the pointer and the link pointer.
+              HStack(spacing: AglynSpace.one) {
+                AutomationRowLabel(title: row.name, caption: row.caption, warning: placeholderLine(row.placeholders.count))
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+              }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             Menu {
               menu(row)
             } label: {
@@ -588,11 +599,12 @@ struct ActionsSection: View {
         } label: {
           Label("Add action", systemImage: "plus")
         }
+        .buttonStyle(.aglynRow)
+        .foregroundStyle(AglynColor.tint)
         .accessibilityIdentifier("add-action")
       }
       SiteOrgAutomationsPanel(context: context, hostID: hostID, rows: sortedOrgAutomations(orgLive.docs ?? []))
     }
-    .aglynListBackground()
     .accessibilityIdentifier("actions-list")
     .automationConfirm($confirm)
     .task(id: hostID) {
@@ -751,7 +763,8 @@ struct WebhooksSection: View {
   var body: some View {
     let rows = visibleWebhooks(ceilinged(live.docs, AutomationCeilings.webhooks).rows)
     let siteBase = HostStatus.publicOrigin(host.doc?.data) ?? ""
-    List {
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    AglynGroupedForm(plain: true) {
       Section {
         Text("Send signed JSON to outside systems from the actions builder, or accept calls that run a workflow. Business plans.")
           .font(AglynFont.subheadline).foregroundStyle(.secondary)
@@ -788,10 +801,11 @@ struct WebhooksSection: View {
         } label: {
           Label("Add webhook", systemImage: "plus")
         }
+        .buttonStyle(.aglynRow)
+        .foregroundStyle(AglynColor.tint)
         .accessibilityIdentifier("add-webhook")
       }
     }
-    .aglynListBackground()
     .accessibilityIdentifier("webhooks-list")
     .automationConfirm($confirm)
     .task(id: hostID) {

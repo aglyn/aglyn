@@ -28,7 +28,7 @@ struct OrgAutomationEditorScreen: View {
       if context.orgID == nil {
         AglynEmptyState("Pick a workspace", systemImage: "building.2")
       } else if editingID != nil && !stored.loaded {
-        Form { SkeletonRows(count: 6) }.formStyle(.grouped).aglynListBackground()
+        Form { SkeletonRows(count: 6) }.formStyle(.grouped).aglynFormBackground()
       } else if editingID != nil && stored.doc == nil {
         AglynEmptyState("This org automation is gone", systemImage: "building.2")
       } else {

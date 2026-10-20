@@ -276,7 +276,7 @@ struct DatasetsScreen: View {
       // Calm rule 8: no banner at rest. Who a new dataset is shared with is said in New dataset itself.
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -618,7 +618,6 @@ struct DatasetDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("dataset-detail")
     .task(id: "\(dataset.id)-\(dataset.updatedAt?.timeIntervalSince1970 ?? 0)") {
       guard let orgID = context.orgID else { return }

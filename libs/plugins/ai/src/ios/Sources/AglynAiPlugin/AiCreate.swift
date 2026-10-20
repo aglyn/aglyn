@@ -323,7 +323,7 @@ struct AiCreateScreen: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle(title)
     .aglynScreenTitle(title)
     .task {

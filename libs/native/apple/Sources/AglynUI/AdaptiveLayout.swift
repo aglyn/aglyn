@@ -99,15 +99,22 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
 
   public var body: some View {
     HStack(spacing: 0) {
+      // Both columns stand on the content surface (Zach, 2026-10-19: never a grey ground): the list's rows on E, and the
+      // detail's forms plain (`AglynGroupedForm`), its sections on the surface with no cards.
       if showsDetail {
         list
+          .environment(\.aglynListColumn, true)
           .frame(
             minWidth: max(320, listWidth - 40), idealWidth: listWidth, maxWidth: max(440, listWidth), maxHeight: .infinity,
             alignment: .top)
+          .background(AglynColor.paper)
         Divider()
-        detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+        detail
+          .environment(\.aglynDetailColumn, true)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(AglynColor.paper)
       } else {
-        list.aglynListColumn()
+        list.environment(\.aglynListColumn, true).aglynListColumn()
       }
     }
     .animation(.snappy(duration: 0.2), value: showsDetail)

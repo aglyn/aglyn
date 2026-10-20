@@ -550,7 +550,6 @@ struct PageDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     // Back from the Besigner: the tree reads a page once, so what its publish changed (Published, Updated, the
     // live version) is read again now rather than shown stale until the list is reopened.
     .onReceive(NotificationCenter.default.publisher(for: RestFirestoreReader.rereadNotification)) { _ in

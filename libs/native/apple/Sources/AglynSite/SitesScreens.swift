@@ -80,7 +80,7 @@ struct SitesScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -292,7 +292,6 @@ struct SiteOverview: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("site-detail")
   }
 }

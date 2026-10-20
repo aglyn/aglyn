@@ -124,7 +124,7 @@ struct EmailsScreen: View {
         List { rows(selectable: false) }.refreshable { list.retry() }.aglynListBackground()
       }
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -283,7 +283,7 @@ struct EmailDetail: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle(send.subject)
     .aglynScreenTitle(send.subject)
     .sheet(item: $sheet) { kind in sendSheet(kind, send) }

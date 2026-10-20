@@ -63,7 +63,7 @@ struct ScanScreen: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Scan")
     .aglynScreenTitle("Scan")
     .onAppear { if !AglynBarcodeScanner.isAvailable { focused = true } }

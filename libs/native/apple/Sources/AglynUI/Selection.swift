@@ -80,16 +80,19 @@ public struct AglynRowHighlight: View {
   let selected: Bool
   let hovered: Bool
   let pressed: Bool
+  /// A full-width content row's fill: square, edge to edge.
+  let square: Bool
 
-  public init(selected: Bool, hovered: Bool = false, pressed: Bool = false) {
+  public init(selected: Bool, hovered: Bool = false, pressed: Bool = false, square: Bool = false) {
     self.selected = selected
     self.hovered = hovered
     self.pressed = pressed
+    self.square = square
   }
 
   public var body: some View {
     WindowActiveReader { active in
-      RoundedRectangle(cornerRadius: AglynRadius.row, style: .continuous)
+      RoundedRectangle(cornerRadius: square ? 0 : AglynRadius.row, style: .continuous)
         .fill(AglynRowState.of(selected: selected, windowActive: active, pressed: pressed, hovered: hovered).fill)
     }
     .animation(.easeOut(duration: 0.12), value: selected)
@@ -159,21 +162,42 @@ public struct AglynSelectableRowStyle: ButtonStyle {
   }
 
   struct RowBody: View {
+    @Environment(\.aglynWideChrome) private var wide
     let configuration: Configuration
     let selected: Bool
     let density: AglynRowDensity
     @State private var hovered = false
 
     var body: some View {
+      // A content list's row on the Mac and iPad is a full-width row (Figma List/Site row, Zach 2026-10-19: no inset
+      // pills): its fill runs the list's width, square, and its content sits on E. A sidebar row keeps its pill.
+      let flush = wide && density == .list
       configuration.label
         .environment(\.aglynRowPadding, density.vertical)
         .fontWeight(selected && density == .sidebar ? .semibold : nil)
-        .padding(.horizontal, density.horizontal)
+        .padding(.leading, flush ? AglynContentInsets.horizontal - AglynContentInsets.listBuiltIn.leading : density.horizontal)
+        .padding(.trailing, flush ? AglynContentInsets.horizontal - AglynContentInsets.listBuiltIn.trailing : density.horizontal)
         .padding(.vertical, density.vertical)
         .frame(maxWidth: .infinity, minHeight: density.minHeight, alignment: .leading)
-        .background(AglynRowHighlight(selected: selected, hovered: hovered, pressed: configuration.isPressed))
-        .contentShape(RoundedRectangle(cornerRadius: AglynRadius.row, style: .continuous))
+        .background(AglynRowHighlight(selected: selected, hovered: hovered, pressed: configuration.isPressed, square: flush))
+        .contentShape(Rectangle())
         .onHover { hovered = $0 }
+        .modifier(AglynLinkPointer(enabled: true))
+    }
+  }
+}
+
+/// A selectable row's insets in its list: none at the sides for a content list on the Mac and iPad (the row draws E
+/// itself and its fill runs the width), else the density's.
+struct AglynSelectableRowInsets: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+  let density: AglynRowDensity
+
+  func body(content: Content) -> some View {
+    if wide && density == .list {
+      content.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+    } else {
+      content.listRowInsets(density.insets)
     }
   }
 }
@@ -201,24 +225,49 @@ public struct AglynRowButtonStyle: ButtonStyle {
   struct RowBody: View {
     let configuration: Configuration
     @Environment(\.isEnabled) private var enabled
+    /// In a plain form's row the fill runs the row edge to edge (`AglynGroupedForm`); elsewhere it is a rounded fill
+    /// just past the label.
+    @Environment(\.aglynRowBleed) private var rowBleed
     @State private var hovered = false
 
     var body: some View {
+      let fill = AglynRowState.of(
+        selected: false, windowActive: true, pressed: enabled && configuration.isPressed, hovered: enabled && hovered
+      ).fill
       configuration.label
         .contentShape(Rectangle())
         .background {
-          RoundedRectangle(cornerRadius: AglynRadius.row, style: .continuous)
-            .fill(
-              AglynRowState.of(
-                selected: false, windowActive: true, pressed: enabled && configuration.isPressed, hovered: enabled && hovered
-              ).fill
-            )
-            .padding(AglynRowButtonStyle.bleed)
+          if let rowBleed {
+            Rectangle().fill(fill).padding(rowBleed)
+          } else {
+            RoundedRectangle(cornerRadius: AglynRadius.row, style: .continuous)
+              .fill(fill)
+              .padding(AglynRowButtonStyle.bleed)
+          }
         }
         .onHover { hovered = $0 }
+        .modifier(AglynLinkPointer(enabled: enabled))
         .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
         .animation(.easeOut(duration: 0.08), value: hovered)
     }
+  }
+}
+
+/// A row that opens something shows the pointing hand on the Mac, as a link does (Zach, 2026-10-19: "it's not obvious
+/// this is clickable").
+struct AglynLinkPointer: ViewModifier {
+  let enabled: Bool
+
+  func body(content: Content) -> some View {
+    #if os(macOS)
+      if enabled, #available(macOS 15, *) {
+        content.pointerStyle(.link)
+      } else {
+        content
+      }
+    #else
+      content
+    #endif
   }
 }
 
@@ -243,7 +292,7 @@ extension View {
   ) -> some View {
     Button(action: action) { self }
       .buttonStyle(AglynSelectableRowStyle(selected: selected, density: density))
-      .listRowInsets(density.insets)
+      .modifier(AglynSelectableRowInsets(density: density))
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
       .accessibilityAddTraits(selected ? [.isSelected] : [])

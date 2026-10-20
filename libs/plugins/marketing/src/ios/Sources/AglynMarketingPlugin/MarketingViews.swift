@@ -54,7 +54,7 @@ struct MarketingHubScreen: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .navigationTitle(section == .overview ? "Marketing" : section.label)
     .aglynScreenTitle(section == .overview ? "Marketing" : section.label)
     .task(id: context.hostID) { access.start(context) }
@@ -366,7 +366,6 @@ struct CampaignDetail: View {
           }
         }
         .formStyle(.aglynGrouped)
-        .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "campaign") {
@@ -872,7 +871,6 @@ struct ExperimentDetail: View {
           }
         }
         .formStyle(.aglynGrouped)
-        .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "experiment") {

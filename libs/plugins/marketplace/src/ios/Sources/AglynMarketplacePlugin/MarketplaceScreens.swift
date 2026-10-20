@@ -154,7 +154,7 @@ struct BrowseScreen: View {
       content(selectable: selectable)
     }
     .aglynListColumn()
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -741,7 +741,7 @@ struct InstalledScreen: View {
         List { SkeletonRows(count: 4) }.aglynListBackground()
       }
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .task(id: "\(hostID)-\(context.orgID ?? "")") {
       sitePins.start(context.firestore, FirestoreQuery(["hosts", hostID, "installs"], limit: 50))
       if let orgID = context.orgID {
@@ -860,7 +860,7 @@ struct LicencesScreen: View {
       .aglynListBackground()
       .accessibilityIdentifier("licences-list")
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .task(id: orgID) { held.start(context.firestore, licencesQuery(orgID: orgID)) }
     .task(id: licensedTo ?? "") { mine.start(context.firestore, boughtByYouQuery(uid: context.uid, licensedTo: licensedTo)) }
     .task(id: ((heldRows ?? []) + (mineRows ?? [])).map(\.listingID)) {

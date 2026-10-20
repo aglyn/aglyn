@@ -929,7 +929,12 @@ struct AreaHeaderActions: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Breadcrumbs(row: row).hidden()
-      HStack(spacing: 8) {
+      // On the title row, centered on it (Figma Mac Sites 13:3: the primary's center on the title's, its right edge on
+      // E). The title, hidden and of no width, gives the row the head's own height, so the buttons center on the same
+      // line as the title at every window size, never on the crumbs-and-title block's bottom.
+      HStack(alignment: .center, spacing: 8) {
+        Text(row.label).font(.system(size: 22, weight: .semibold)).lineLimit(1).hidden().frame(width: 0)
+          .accessibilityHidden(true)
         Spacer(minLength: 0)
         HStack(spacing: 8) {
           ForEach(entries) { $0.content }
@@ -937,7 +942,6 @@ struct AreaHeaderActions: View {
         .buttonStyle(AglynHeaderButtonStyle())
         .menuStyle(.button)
         .fixedSize()
-        .frame(height: 36)
         if let primary {
           // Off for a reason, it says why: on hover on the Mac, on a tap on iPad.
           AglynPrimaryHeaderButton.blockable(primary)

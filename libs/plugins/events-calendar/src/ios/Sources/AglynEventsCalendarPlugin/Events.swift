@@ -365,7 +365,6 @@ struct EventEditor: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .navigationTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .aglynScreenTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .onAppear { if draft.startsAt == nil { draft.startsAt = Self.nextHour } }
