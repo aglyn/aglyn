@@ -42,8 +42,9 @@
  *     C's poster frame, caption and all; the hero's media slot is the
  *     component's image (an instance passes it only a picture, and the
  *     component is not edited here), so it shows `HERO_MOCKUP` instead: a
- *     small business's site from the org's media library, captioned by
- *     nothing, which the run refuses if the library tags it a film poster;
+ *     small business's site live on its own domain, from the org's media
+ *     library, with no caption and no price in it, which the run refuses if
+ *     the library tags it a film poster;
  *  2. the prices section ("What it costs", `#cost`) goes, with everything in
  *     it: it stated the price and nothing else. Its two buttons are the
  *     page's own twice over (the form, and every plan in the closing band),
@@ -116,7 +117,7 @@ const SCREEN = 'qnuMY13VsS' // /managed
 const ROUTE = '/managed'
 const HERO_COMPONENT = 'T-RdDkvVLW' // Product detail hero
 
-const VERSION_NAME = 'No prices; films where their posters were; a site in the hero; FAQ band (AGL-3998)'
+const VERSION_NAME = 'No prices; films where their posters were; a live site in the hero; FAQ band (AGL-3998)'
 
 /** A dollar figure, which nothing on the page may state once this has run. */
 const FIGURE = /\$\s?\d/
@@ -127,7 +128,11 @@ const HERO_LEDE_KEPT =
   'Managed is an Aglyn plan with Site Care on top. We build your site, you look it over, and ' +
   'from then on you email us what changed (new hours, prices, photos, a new face on the team) ' +
   'and we make the change for you.'
-/** The hero instance's values that change, `[prop, from, to]`. */
+/**
+ * The hero instance's values that change, `[prop, from, to]`. `from` is the
+ * value the page carries before the change, or every value it has carried, in
+ * order, when the change was made in steps.
+ */
 const HERO = [
   [
     'lede',
@@ -136,9 +141,15 @@ const HERO = [
   ],
   ['secondaryCtaLabel', 'See what it costs', 'See what’s included'],
   ['secondaryCtaHref', '#cost', `#${INCLUDED_ANCHOR}`],
-  ['mockup', `media:org:${ORG}/uQc5k6NyKH`, `media:org:${ORG}/DJdz0ISx5R`], // film C's poster → a shop's site
+  // The hero's picture, in three steps. Film C's poster frame (`uQc5k6NyKH`)
+  // carried the film's burned-in caption. Northwind's shop grid
+  // (`DJdz0ISx5R`, `commerce-storefront.png`, 2026-10-20 00:01Z) printed a
+  // price under each of its twelve products, on a page that states none. The
+  // Northlight studio's site live on its own domain, a frame of film C with no
+  // caption and no figure (`dl2ylkIvsu`), replaced it.
+  ['mockup', [`media:org:${ORG}/uQc5k6NyKH`, `media:org:${ORG}/DJdz0ISx5R`], `media:org:${ORG}/dl2ylkIvsu`],
 ]
-/** The hero's picture once this has run: Northwind's storefront, `commerce-storefront.png`. */
+/** The hero's picture once this has run: "Northlight studio site, Film C frame". */
 const HERO_MOCKUP = HERO.find(([key]) => key === 'mockup')[2]
 
 const SEO_KEPT =
@@ -377,14 +388,16 @@ function oneText(from, to, sectionName, where) {
   const values = hero.props.propValues ?? {}
   for (const [key, from, to] of HERO) {
     const where = `hero, ${key}`
-    if (values[key] === to) {
+    const froms = [from].flat()
+    const now = values[key]
+    if (now === to) {
       already.push(`${hero.$id} (${where}) already reads "${to}"`)
-    } else if (values[key] !== from) {
-      problems.push(`${hero.$id} (${where}) reads "${values[key]}", expected "${from}"`)
+    } else if (!froms.includes(now)) {
+      problems.push(`${hero.$id} (${where}) reads "${now}", expected ${froms.map((value) => `"${value}"`).join(' or ')}`)
     } else {
       values[key] = to
       intended.add(hero.$id)
-      changes.push({ id: hero.$id, where, field: `props.propValues.${key}`, from, to })
+      changes.push({ id: hero.$id, where, field: `props.propValues.${key}`, from: now, to })
     }
   }
   hero.props = { ...hero.props, propValues: values }
