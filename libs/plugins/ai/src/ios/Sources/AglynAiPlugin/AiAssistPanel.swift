@@ -373,13 +373,14 @@ struct AiAssistPanel: View {
   }
 }
 
-/// An answer's next step or document: an outlined button (Figma Button, Secondary, Small), touch-sized on a phone.
+/// An answer's next step or document: an outlined button (Figma Button, Secondary, Small: the surface, a border/strong
+/// outline, primary text in semibold), touch-sized on a phone.
 private struct AssistActionStyle: ButtonStyle {
   let m: AssistMetrics
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(m.font(m.action, .medium))
+      .font(m.font(m.action, .semibold))
       .foregroundStyle(AglynColor.textPrimary)
       .labelStyle(.titleAndIcon)
       .padding(.horizontal, 10)
@@ -387,7 +388,7 @@ private struct AssistActionStyle: ButtonStyle {
       .background(
         RoundedRectangle(cornerRadius: m.actionRadius, style: .continuous)
           .fill(configuration.isPressed ? AglynColor.hover : AglynColor.paper))
-      .overlay(RoundedRectangle(cornerRadius: m.actionRadius, style: .continuous).strokeBorder(AglynColor.divider))
+      .overlay(RoundedRectangle(cornerRadius: m.actionRadius, style: .continuous).strokeBorder(AglynColor.borderStrong))
   }
 }
 
