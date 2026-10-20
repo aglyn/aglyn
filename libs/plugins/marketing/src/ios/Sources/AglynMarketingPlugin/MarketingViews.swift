@@ -848,8 +848,8 @@ struct ExperimentDetail: View {
             PropertyRow("Goal", row.goalEvent)
             if access.canEdit && row.status != "done" {
               HStack {
-                if row.status != "running" { Button("Start") { run { try await actions.setExperimentStatus(row, "running") } }.buttonStyle(.borderedProminent) }
-                if row.status == "running" { Button("Pause") { run { try await actions.setExperimentStatus(row, "paused") } }.buttonStyle(.bordered) }
+                if row.status != "running" { Button("Start") { run { try await actions.setExperimentStatus(row, "running") } }.buttonStyle(.aglynProminent) }
+                if row.status == "running" { Button("Pause") { run { try await actions.setExperimentStatus(row, "paused") } }.buttonStyle(.aglynSecondary) }
               }
             }
           }

@@ -232,7 +232,7 @@ struct PagesScreen: View {
       AglynEmptyState(
         "No pages yet", systemImage: SiteSymbols.page, message: "Add a page, then design it in the Besigner."
       ) {
-        if canEdit { Button("New page") { open(.newPage) }.buttonStyle(.borderedProminent) }
+        if canEdit { Button("New page") { open(.newPage) }.buttonStyle(.aglynProminent) }
         SlotWidgets(context: context, slot: ListCreateZone.pages)
       }
     case .ready(let rows):

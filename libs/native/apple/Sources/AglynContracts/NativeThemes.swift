@@ -115,38 +115,25 @@ private func themeWithAlpha(_ color: String, _ alpha: Double) -> String {
 
 // MARK: Accents
 
-/// Text and icons on a fill that keeps a light brand color.
-private let darkOnLightness = 0.08
-
-/// An accent from any brand color, as the console derives it: a color one of Figma's Accent modes rings returns that
-/// mode exactly. Otherwise the fill keeps the color while white text reads on it at 4.5:1; a fill white reads at 3:1
-/// that near-black reads at 4.5:1 keeps the color with near-black text; else the fill darkens in 2% steps. Hover and
-/// pressed are 4% and 8% darker, soft is the color at 16% alpha, ring is the color, the icon walks to 3:1 on the light
-/// page and the two text shades to 4.5:1 on each page. Nil for anything that is not `#RRGGBB`.
+/// An accent from any brand color, as the console derives it: a retired blue reads as the color that replaced it
+/// (`THEME_RETIRED_ACCENTS`), and a color one of Figma's Accent modes rings returns that mode exactly. Otherwise the fill
+/// keeps the color while white reads on it at 3:1, else it darkens in 2% steps until white reads at 4.5:1; the content
+/// on the fill is always white. Hover and pressed are 4% and 8% darker, soft is the color at 16% alpha, ring is the
+/// color, the icon walks to 3:1 on the light page and the two text shades to 4.5:1 on each page. Nil for anything that
+/// is not `#RRGGBB`.
 public func deriveAccent(_ color: String) -> ThemeAccent? {
   guard isThemeColor(color) else { return nil }
   let values = ContractValues.shared
-  let raw = color.lowercased()
+  let raw = values.themeRetiredAccents[color.lowercased()] ?? color.lowercased()
   if let named = values.themeAccents.first(where: { $0.accent.ring == raw }) { return named.accent }
   let text = Double(values.themeTextContrast)
   let nonText = Double(values.themeNonTextContrast)
   let aglyn = themePalette("aglyn")
   let white = "#ffffff"
-  let onWhite = themeContrast(raw, white)
-  var fill = raw
-  var on = white
-  if onWhite < text, let rgb = themeChannels(raw) {
-    let (h, s, _) = themeToHsl(rgb)
-    let nearBlack = themeFromHsl(h, min(s, 0.8), darkOnLightness)
-    if onWhite >= nonText && themeContrast(raw, nearBlack) >= text {
-      on = nearBlack
-    } else {
-      fill = themeWalkToContrast(raw, against: white, text, -1)
-    }
-  }
+  let fill = themeContrast(raw, white) >= nonText ? raw : themeWalkToContrast(raw, against: white, text, -1)
   return ThemeAccent(
     fill: fill, hover: themeShiftLightness(fill, -0.04),
-    icon: themeWalkToContrast(raw, against: aglyn.light.surface, nonText, -1), on: on,
+    icon: themeWalkToContrast(raw, against: aglyn.light.surface, nonText, -1), on: white,
     pressed: themeShiftLightness(fill, -0.08), ring: raw, soft: themeWithAlpha(raw, 0.16),
     textDark: themeWalkToContrast(raw, against: aglyn.dark.surface, text, 1),
     textLight: themeWalkToContrast(raw, against: aglyn.light.surface, text, -1))

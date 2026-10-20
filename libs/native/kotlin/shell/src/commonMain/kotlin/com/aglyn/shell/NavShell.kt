@@ -793,7 +793,7 @@ internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSel
             Text(
               section.label, maxLines = 1, fontSize = 14.sp, lineHeight = 20.sp,
               fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-              color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+              color = if (on) com.aglyn.ui.aglynAccentText else MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
           // The underline spans the label, the console's tab indicator.
@@ -997,7 +997,7 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
       onDismissRequest = { full = false },
       title = { Text("Starred is full") },
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
-      confirmButton = { androidx.compose.material3.TextButton(onClick = { full = false }) { Text("OK") } },
+      confirmButton = { com.aglyn.ui.TextButton(onClick = { full = false }) { Text("OK") } },
     )
   }
 }

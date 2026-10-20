@@ -20,6 +20,7 @@ public enum AglynTone: Sendable {
 
 /// A small capsule naming a status ("On", "Paid", "Draft").
 public struct StatusChip: View {
+  @Environment(\.aglynRowSelected) private var rowSelected
   let text: String
   let tone: AglynTone
 
@@ -34,7 +35,10 @@ public struct StatusChip: View {
       .padding(.horizontal, 8)
       .padding(.vertical, 3)
       .foregroundStyle(tone.color)
-      .background(tone.color.opacity(0.14), in: Capsule())
+      // On a selected row: the paper with a 1-point ring in the secondary text, so the chip stands off the selection's
+      // wash (4.9:1 light, 5.4:1 dark; Figma 11:343).
+      .background(rowSelected ? AnyShapeStyle(AglynColor.paper) : AnyShapeStyle(tone.color.opacity(0.14)), in: Capsule())
+      .overlay { if rowSelected { Capsule().strokeBorder(AglynColor.secondaryText, lineWidth: 1) } }
       .accessibilityLabel(text)
   }
 }

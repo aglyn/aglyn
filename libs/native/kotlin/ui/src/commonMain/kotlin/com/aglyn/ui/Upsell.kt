@@ -18,10 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -245,7 +243,7 @@ fun PlanMeterCarousel(
           Text(meter.label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
           if (onUpgrade != null) {
             Text(
-              "Upgrade", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1,
+              "Upgrade", fontSize = 13.sp, lineHeight = 18.sp, color = aglynAccentText, maxLines = 1,
               modifier = Modifier.clickable(onClick = onUpgrade).testTag("plan-card-upgrade"),
             )
           }

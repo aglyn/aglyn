@@ -20,10 +20,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +61,7 @@ import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
@@ -71,6 +70,7 @@ import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -341,7 +341,7 @@ private fun SiteRows(context: NativePluginContext, kind: SiteListKind, site: Org
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
-      Text(row.name, Modifier.weight(1.4f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      Text(row.name, Modifier.weight(1.4f), style = MaterialTheme.typography.bodyMedium, color = com.aglyn.ui.aglynAccentText, maxLines = 2, overflow = TextOverflow.Ellipsis)
       Text(site.name, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
       Text(row.trigger, Modifier.weight(1.2f), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
       Text(row.status, Modifier.weight(0.6f), style = MaterialTheme.typography.bodySmall)

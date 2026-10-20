@@ -54,6 +54,7 @@ struct RootView<Shell: View>: View {
         docksToLockup: { [self] in self.stage == .signedOut || self.stage == .verify })
     }
     .tint(AglynColor.tint)
+    .toggleStyle(AglynToggleStyle())
     .font(AglynFont.body)
     // Every plain web page (a live site, a preview, a docs or legal page) opens in the in-app browser screen, pushed
     // onto the section on screen (AGL-3935).
