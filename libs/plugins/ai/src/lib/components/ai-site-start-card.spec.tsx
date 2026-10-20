@@ -1142,7 +1142,8 @@ describe('a site staff are building for a client (AGL-3958)', () => {
     render(<Widget {...zoneProps({ leave, clientBuild: { intake, onStarted, ready } })} />)
     await onStep('review')
     expect(ready).toHaveBeenCalledWith(true)
-    expect(screen.getByText(/^Also from the client’s details: Harbor Plumbing, serving Austin and Round Rock/)).toBeTruthy()
+    // The phone, email, towns and hours are rows of the review itself (AGL-3995).
+    expect(screen.getByText('Also from the client’s details: Harbor Plumbing and the owner\'s own words.')).toBeTruthy()
     // The follow that replaces the review reads the job from the same route.
     mockFetch.mockResolvedValue(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -1166,6 +1167,35 @@ describe('a site staff are building for a client (AGL-3958)', () => {
     expect(mockPush).not.toHaveBeenCalled()
     expect(leave).not.toHaveBeenCalled()
     expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('sends the towns as the place only until the review is given an address (AGL-3995)', async () => {
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
+    render(<Widget {...zoneProps({ clientBuild: { intake, onStarted: jest.fn(), ready: jest.fn() } })} />)
+    await onStep('review')
+    // The intake filled the Details step's own rows.
+    const review = screen.getByRole('list', { name: 'Your answers' })
+    expect(review.textContent).toContain('(512) 555-0123')
+    expect(review.textContent).toContain('Austin, Round Rock')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit phone' }))
+    await onStep('details')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    typeAnswer(/Street address/, '214 Main Street')
+    typeAnswer(/City or town/, 'Round Rock')
+    pressNext()
+    await onStep('review')
+    mockFetch.mockResolvedValue(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    expect(JSON.parse(postCall()[1].body).inputs).toEqual(
+      expect.objectContaining({
+        street: '214 Main Street',
+        city: 'Round Rock',
+        serviceArea: 'Austin\nRound Rock',
+        businessName: 'Harbor Plumbing',
+      }),
+    )
   })
 
   it('tells the build when it will not draw', async () => {

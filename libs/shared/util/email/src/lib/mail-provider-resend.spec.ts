@@ -100,7 +100,23 @@ describe('the received message', () => {
       text: 'October, please.',
       html: '<p>October, please.</p>',
       receivedAtMs: Date.parse('2026-09-07T23:41:11.894Z'),
+      autoSubmitted: false,
     })
+  })
+
+  it('marks a message its headers say a machine sent, and only that (AGL-3997)', () => {
+    const marked = (headers: Record<string, unknown>) =>
+      normalizeResendReceivedEmail({ ...MESSAGE, headers })?.autoSubmitted
+    expect(marked({ 'Auto-Submitted': 'auto-replied' })).toBe(true)
+    expect(marked({ 'auto-submitted': 'auto-generated; owner-email="ada@example.com"' })).toBe(true)
+    expect(marked({ 'X-Autoreply': 'yes' })).toBe(true)
+    expect(marked({ 'X-Autorespond': 'Out of office' })).toBe(true)
+    expect(marked({ Precedence: 'auto_reply' })).toBe(true)
+    expect(marked({ 'Auto-Submitted': 'no' })).toBe(false)
+    // A group delivering a person's message onward stamps these on every one.
+    expect(marked({ Precedence: 'list', 'List-Id': '<support.example.com>' })).toBe(false)
+    expect(marked({ Precedence: 'bulk' })).toBe(false)
+    expect(marked({})).toBe(false)
   })
 
   it('falls back to the header for the Message-ID, to the clock for the instant, and to nothing for a null text', () => {

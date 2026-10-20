@@ -22,11 +22,12 @@
  */
 
 /**
- * `/api/site-care/inbound` (AGL-3959): the Site Care address's webhook. The
- * Svix signature is checked for real (signed here with a test secret); the
- * provider's event reader and the filing are doubles. Only a signed message
- * to the Site Care address is filed; anything else is acknowledged, never
- * refused, so the provider does not retry it forever.
+ * `/api/site-care/inbound` (AGL-3959, AGL-3997): the Site Care intake's
+ * webhook. The Svix signature is checked for real (signed here with a test
+ * secret); the provider's event reader and the filing are doubles. Only a
+ * signed message to the support address is filed; anything else is
+ * acknowledged with a 200, never refused, so the provider does not retry it
+ * forever.
  */
 
 import { createHmac } from 'node:crypto'
@@ -37,7 +38,6 @@ let mockUnmet: string | null = null
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  inboundMailDomain: () => 'in.aglyn.com',
   pluginRequestFromWeb: jest.requireActual('@aglyn/aglyn/app-utils/api-adapter').pluginRequestFromWeb,
 }))
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -50,11 +50,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => ({ fake: 'firestore' }) }) },
 }))
+const mockAddresses = { domain: 'in.aglyn.com', supportEmail: 'help@example.com', platformSender: null }
 jest.mock('@aglyn/tenant-data-admin/server/site-care-inbound', () => ({
   __esModule: true,
   fileSiteCareInboundEmail: (...args: unknown[]) => mockFile(...args),
-  siteCareInboundTarget: (recipients: string[], domain: string) =>
-    recipients.includes(`care@${domain}`) ? { kind: 'new' } : null,
+  siteCareInboundAddresses: () => mockAddresses,
+  siteCareInboundTarget: (recipients: string[], addresses: typeof mockAddresses) =>
+    recipients.includes(addresses.supportEmail) || recipients.includes(`support@${addresses.domain}`)
+      ? { kind: 'new' }
+      : null,
 }))
 
 import { POST } from './route'
@@ -79,7 +83,7 @@ function signed(event: unknown, secret = SECRET) {
   })
 }
 
-const RECEIVED = { type: 'email.received', data: { email_id: 'em_1', to: ['care@in.aglyn.com'] } }
+const RECEIVED = { type: 'email.received', data: { email_id: 'em_1', to: ['help@example.com'] } }
 
 const saved = { site: process.env['SITE_CARE_INBOUND_WEBHOOK_SECRET'], resend: process.env['RESEND_WEBHOOK_SECRET'] }
 beforeEach(() => {
@@ -118,30 +122,41 @@ describe('the Site Care webhook', () => {
     expect((await POST(signed(RECEIVED))).status).toBe(200)
   })
 
-  it('files a message to the Site Care address', async () => {
+  it('files a message to the support address', async () => {
     const response = await POST(signed(RECEIVED))
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ outcome: 'opened', requestId: 'ticket-1' })
     expect(mockReceived).toHaveBeenCalledWith('em_1')
     expect(mockFile).toHaveBeenCalledWith(
       { fake: 'firestore' },
-      { target: { kind: 'new' }, message: { id: 'em_1', from: 'owner@example.com' } },
+      { target: { kind: 'new' }, message: { id: 'em_1', from: 'owner@example.com' }, addresses: mockAddresses },
     )
   })
 
-  it('acknowledges, without filing, other events and other addresses', async () => {
+  it('files the copy the support mailbox delivers to support@ the inbound domain', async () => {
+    const copy = await POST(signed({ ...RECEIVED, data: { email_id: 'em_3', to: ['support@in.aglyn.com'] } }))
+    expect(copy.status).toBe(200)
+    expect(mockFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('acknowledges with a 200, without reading or filing, other events and other addresses', async () => {
     const other = await POST(signed({ type: 'email.delivered', data: {} }))
     expect(other.status).toBe(200)
     expect(await other.json()).toEqual({ ignored: true, reason: 'not-received-event' })
-    const elsewhere = await POST(signed({ ...RECEIVED, data: { email_id: 'em_2', to: ['sales@in.aglyn.com'] } }))
-    expect(elsewhere.status).toBe(202)
-    expect(await elsewhere.json()).toEqual({ filed: false, reason: 'not-site-care' })
+    for (const to of [['sales@in.aglyn.com'], ['care@in.aglyn.com']]) {
+      const elsewhere = await POST(signed({ ...RECEIVED, data: { email_id: 'em_2', to } }))
+      expect(elsewhere.status).toBe(200)
+      expect(await elsewhere.json()).toEqual({ ignored: true, reason: 'not-site-care' })
+    }
+    expect(mockReceived).not.toHaveBeenCalled()
     expect(mockFile).not.toHaveBeenCalled()
   })
 
-  it('answers 202 for a stranger, so the provider does not retry', async () => {
-    mockFile.mockResolvedValue({ outcome: 'unknown-sender' })
-    expect((await POST(signed(RECEIVED))).status).toBe(202)
+  it('answers 200 for mail it leaves to the support inbox, so the provider does not retry', async () => {
+    mockFile.mockResolvedValue({ outcome: 'ignored', reason: 'not-a-member' })
+    const response = await POST(signed(RECEIVED))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ignored: true, reason: 'not-a-member' })
   })
 
   it('says so when the provider cannot read received mail', async () => {

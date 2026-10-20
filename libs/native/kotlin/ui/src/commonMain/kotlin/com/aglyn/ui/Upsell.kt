@@ -202,7 +202,8 @@ fun PlanMeterCarousel(
     }
   }
   Column(
-    modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface)
+    // Figma's bg/surface (white in light), not the scheme's surface, which a theme sets to its grey canvas.
+    modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerLowest)
       .then(Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape))
       .hoverable(interaction)
       .pointerInput(Unit) {

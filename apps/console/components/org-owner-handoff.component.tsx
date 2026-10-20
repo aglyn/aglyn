@@ -41,19 +41,15 @@ import {
   TextField,
 } from '@mui/material'
 import { useState } from 'react'
+import { bundleDraftBody, StaffBundleFields } from './staff-bundle-fields.component'
 import {
-  bundleDraftBody,
-  DEFAULT_BUNDLE_DRAFT,
-  StaffBundleFields,
-  type BundleDraft,
-} from './staff-bundle-fields.component'
-import {
-  EMPTY_BUNDLE_DOMAIN,
+  ClientBuildOwnDomainNote,
   StaffBundleDomainFields,
   StaffBundleLinkActions,
+  useClientBuildBundleDraft,
   useDomainsAvailable,
-  type BundleDomainDraft,
   type BundleSiteOption,
+  type ClientBuildHandoff,
 } from './staff-bundle-link.component'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -142,6 +138,12 @@ export interface StaffOrgOwnerHandoffProps {
   org?: Partial<AglynOrgBilling> | null
   /** The workspace's sites, for a bundle link that carries a domain. */
   sites?: readonly BundleSiteOption[]
+  /**
+   * The workspace's build for a client, when it has one (AGL-3958): the
+   * dialog opens on its plan, add-ons, cadence, coupon and domain. Without
+   * one it opens on the default bundle.
+   */
+  build?: ClientBuildHandoff | null
   /** Called once the invitation is sent. */
   onSent?: () => void
 }
@@ -161,18 +163,19 @@ export interface StaffOrgOwnerHandoffProps {
  * invitation and the proposal commit together, and the email carries the
  * bundle checkout link. The dialog header copies that link or shows its QR
  * for an owner standing in front of you (AGL-3955). "Ask to upgrade" stays
- * for an owner who already exists.
+ * for an owner who already exists. A workspace built for a client opens the
+ * dialog on what its build agreed with the owner (AGL-3958).
  */
 export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
-  const { orgId, orgName, org, sites = [], onSent } = props
+  const { orgId, orgName, org, sites = [], build, onSent } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [previousOwner, setPreviousOwner] =
     useState<OwnerHandoffPreviousOwner>('stay')
-  const [draft, setDraft] = useState<BundleDraft>(DEFAULT_BUNDLE_DRAFT)
-  const [domain, setDomain] = useState<BundleDomainDraft>(EMPTY_BUNDLE_DOMAIN)
+  // The same bundle the staff org page's link card starts on (AGL-3995).
+  const { draft, setDraft, domain, setDomain } = useClientBuildBundleDraft(build, sites)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const emailValid = EMAIL_PATTERN.test(email.trim())
@@ -295,6 +298,7 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
                   available={domainsAvailable}
                   disabled={busy}
                 />
+                <ClientBuildOwnDomainNote build={build} />
               </>
             )}
           </Stack>

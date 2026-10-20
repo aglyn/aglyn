@@ -22,6 +22,7 @@ import {
   domainsError,
   domainsGate,
   domainsJson,
+  purchaseClearance,
   purchaseRefusal,
   PURCHASE_REFUSAL_COPY,
   type DomainsActor,
@@ -170,7 +171,7 @@ export async function purchaseRoute(request: Request): Promise<Response> {
       fields: invalid,
     })
   }
-  const refusal = await purchaseRefusal(actor, domain)
+  const { refusal, preclearanceId } = await purchaseClearance(actor, domain)
   if (refusal) {
     return domainsError(409, PURCHASE_REFUSAL_COPY[refusal], { code: refusal })
   }
@@ -179,6 +180,9 @@ export async function purchaseRoute(request: Request): Promise<Response> {
     domain,
     expectedFirstYearCents: Math.round(Number(body['expectedFirstYearCents'] ?? -1)),
     contact: contact as RegistrantContact,
+    // Set only when a staff preclearance stood in for the payment history;
+    // the purchase spends it after the hold, before the charge (AGL-3955).
+    preclearanceId,
   })
   if (outcome.ok === 'refused') {
     return domainsError(outcome.status, outcome.error, {
