@@ -202,6 +202,8 @@ object ShellMotion {
   const val FOLD_MS = 200
   const val PILL_MS = 250
   const val CROSS_FADE_MS = 150
+  /** How far a pushed (or uncovered) screen travels as it comes in (Figma Motion 121:6714; Apple's 40 pt, AGL-4009). */
+  val PUSH_OFFSET = 40.dp
   /** The drill's spring: about 250 ms with a little bounce (SwiftUI's `.spring(duration: 0.25, bounce: 0.1)`). */
   fun <T> drill() = androidx.compose.animation.core.spring<T>(dampingRatio = 0.9f, stiffness = 632f)
   /** The pill's spring (`.spring(duration: 0.25, bounce: 0.15)`). */
