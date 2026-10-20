@@ -103,7 +103,7 @@ struct OrdersScreen: View {
                 "commerce.ordersBulk",
                 ["orderIds": picked.sorted().joined(separator: ","), "run": UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()])
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(picked.isEmpty || picked.count > 50)
             .accessibilityIdentifier("orders-bulk-more")
           }
@@ -296,7 +296,7 @@ struct OrdersScreen: View {
             "\(openDisputesTitle(disputes.summary, more: disputes.more)). \(openDisputesDetail(disputes.summary))",
             tone: disputes.summary.overdue ? .error : .warning)
           if model.filter != .disputes {
-            Button("Show them") { model.filter = .disputes }.buttonStyle(.bordered)
+            Button("Show them") { model.filter = .disputes }.buttonStyle(.aglynSecondary)
           }
         }
         .aglynContentEdges()

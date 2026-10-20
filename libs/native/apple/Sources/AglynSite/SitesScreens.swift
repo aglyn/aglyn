@@ -400,7 +400,7 @@ struct CreateSiteSheet: View {
                   subdomain = suggestion
                   edited = true
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aglynSecondary)
               }
             }
           }

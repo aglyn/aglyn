@@ -566,7 +566,7 @@ struct DatasetDetailView: View {
           } label: {
             Label("Add record", systemImage: "plus")
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .disabled(!canWrite)
           .accessibilityIdentifier("dataset-add-record")
         }

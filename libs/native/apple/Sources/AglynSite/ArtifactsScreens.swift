@@ -425,7 +425,7 @@ private struct ArtifactDetail: View {
       } label: {
         Label("Preview", systemImage: "eye")
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
       .disabled(preview == nil)
       .accessibilityIdentifier("artifact-preview")
       if kind == .template {
@@ -434,7 +434,7 @@ private struct ArtifactDetail: View {
         } label: {
           Label(row.isStarterBundle ? "Use this starter site" : "Use this template", systemImage: "plus")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         .disabled(!canEdit)
         .accessibilityIdentifier("use-template")
       }

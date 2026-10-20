@@ -326,7 +326,7 @@ struct EditListingSheet: View {
       }
       if screenshots.count < maxListingScreenshots {
         Button("Add from media") { choosingScreenshot = true }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .accessibilityIdentifier("listing-screenshot-add")
       }
     }
@@ -396,7 +396,7 @@ private struct PayoutsSection: View {
         Text(payoutsSentence(readiness)).foregroundStyle(.secondary)
         if chargesEnabled {
           Button(runner.busy ? "Opening Stripe…" : payoutsButton(readiness)) { connect() }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(!canManage || runner.busy)
             .accessibilityIdentifier("seller-payouts")
         } else {

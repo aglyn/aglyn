@@ -143,7 +143,7 @@ struct FormDetailView: View {
         } label: {
           Label("Design in the Besigner", systemImage: FormsSymbols.besigner)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         .disabled(!role.canEditContent || runner.busy)
         .accessibilityIdentifier("form-edit-besigner")
       }

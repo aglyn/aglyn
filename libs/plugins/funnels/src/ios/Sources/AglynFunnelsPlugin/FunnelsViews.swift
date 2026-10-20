@@ -243,7 +243,7 @@ struct FunnelDetail: View {
           Button { Task { await editor.edit(row) } } label: { Label("Edit", systemImage: "pencil") }
             .buttonStyle(.aglynProminent).disabled(editor.busy).accessibilityIdentifier("funnel-edit")
           Button(role: .destructive) { editor.askDelete(row) } label: { Label("Delete", systemImage: "trash") }
-            .buttonStyle(.bordered).accessibilityIdentifier("funnel-delete")
+            .buttonStyle(.aglynSecondary).accessibilityIdentifier("funnel-delete")
         }
       }
     }

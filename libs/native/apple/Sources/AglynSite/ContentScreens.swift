@@ -415,7 +415,7 @@ private struct EntryForm: View {
           }
         }
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
     } else {
       Button(entry.status == "scheduled" ? "Publish now" : "Publish") {
         if !entry.hasByline {

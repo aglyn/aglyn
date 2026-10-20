@@ -198,7 +198,7 @@ struct SeoTargetKeywords: View {
                   } label: {
                     Text(keyword + (at >= limit ? " (not checked)" : "") + "  ×").font(AglynFont.caption)
                   }
-                  .buttonStyle(.bordered)
+                  .buttonStyle(.aglynSecondary)
                   .disabled(!enabled)
                 }
               }
