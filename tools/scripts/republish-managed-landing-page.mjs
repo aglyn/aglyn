@@ -38,13 +38,19 @@
  *  1. the hero's lede says one price covers both, monthly or yearly, with no
  *     build fee, in place of the two monthly figures. Its second button led
  *     to the prices section; it reads "See what’s included" and leads to the
- *     fair-use list, which takes the `included` anchor;
+ *     fair-use list, which takes the `included` anchor. Its picture was film
+ *     C's poster frame, caption and all; the hero's media slot is the
+ *     component's image (an instance passes it only a picture, and the
+ *     component is not edited here), so it shows `HERO_MOCKUP` instead: a
+ *     small business's site from the org's media library, captioned by
+ *     nothing, which the run refuses if the library tags it a film poster;
  *  2. the prices section ("What it costs", `#cost`) goes, with everything in
  *     it: it stated the price and nothing else. Its two buttons are the
  *     page's own twice over (the form, and every plan in the closing band),
  *     so nothing on the page is left without a way on;
- *  3. the form's section takes the background the prices section had, so the
- *     bands still alternate instead of the How it works band and the form
+ *  3. the form's section takes the background the prices section had, and
+ *     the FAQ's section takes the white the form's had, so the bands still
+ *     alternate instead of the How it works band, the form and the FAQ
  *     running together;
  *  4. the bigger-jobs bullets name each job without a starting price;
  *  5. the fair-use line and the FAQ answer on extra time say we ask first and
@@ -110,7 +116,7 @@ const SCREEN = 'qnuMY13VsS' // /managed
 const ROUTE = '/managed'
 const HERO_COMPONENT = 'T-RdDkvVLW' // Product detail hero
 
-const VERSION_NAME = 'No prices; the film poster rows play their films (AGL-3998)'
+const VERSION_NAME = 'No prices; films where their posters were; a site in the hero; FAQ band (AGL-3998)'
 
 /** A dollar figure, which nothing on the page may state once this has run. */
 const FIGURE = /\$\s?\d/
@@ -130,7 +136,10 @@ const HERO = [
   ],
   ['secondaryCtaLabel', 'See what it costs', 'See what’s included'],
   ['secondaryCtaHref', '#cost', `#${INCLUDED_ANCHOR}`],
+  ['mockup', `media:org:${ORG}/uQc5k6NyKH`, `media:org:${ORG}/DJdz0ISx5R`], // film C's poster → a shop's site
 ]
+/** The hero's picture once this has run: Northwind's storefront, `commerce-storefront.png`. */
+const HERO_MOCKUP = HERO.find(([key]) => key === 'mockup')[2]
 
 const SEO_KEPT =
   'Managed is an Aglyn plan with Site Care: our team builds your site and makes your changes ' +
@@ -145,8 +154,9 @@ const COST = {
   heading: '$74 a month. Or $65 a month, billed yearly.',
 }
 const FAIR_USE_SECTION = 'Fair use'
-/** The form's section, which takes the prices section's background. */
+/** The form's section, which takes the prices section's background; the FAQ's takes the form's. */
 const FORM_SECTION = { section: 'Form', from: 'background.paper', to: 'surface.main' }
+const FAQ_SECTION = { section: 'FAQ', from: 'background.default', to: 'background.paper' }
 
 /** The bigger-jobs bullets: each title, and its bullet's name with it. */
 const BIGGER_JOBS = {
@@ -378,9 +388,17 @@ function oneText(from, to, sectionName, where) {
     }
   }
   hero.props = { ...hero.props, propValues: values }
+  // The hero's new picture is a picture, in the org's library, and no film's poster frame.
+  const [, org, mediaId] = /^media:org:([^/]+)\/(.+)$/.exec(HERO_MOCKUP) ?? []
+  const mockup = await firestore.collection('orgs').doc(org).collection('media').doc(mediaId).get()
+  if (!mockup.exists || mockup.get('deletedAt') || mockup.get('kind') !== 'image') {
+    problems.push(`${HERO_MOCKUP} is not an image in the org's media library`)
+  } else if ((mockup.get('tags') ?? []).includes('poster')) {
+    problems.push(`${HERO_MOCKUP} (${mockup.get('fileName')}) is tagged a film poster`)
+  }
 }
 
-// ---- (2) the prices section goes, (3) the form's section takes its background ------------
+// ---- (2) the prices section goes, (3) the form's and FAQ's sections alternate -----------
 {
   const costs = kids(nodes[ROOT_ID]).filter((node) => node.name === COST.section || node.props?.id === COST.anchor)
   const form = section(FORM_SECTION.section)
@@ -412,14 +430,17 @@ function oneText(from, to, sectionName, where) {
   } else {
     already.push(`the "${COST.section}" section is already gone`)
   }
-  if (form) {
-    const now = form.sx?.bgcolor
-    if (now === FORM_SECTION.to) already.push(`${form.$id} (form section) already has background ${now}`)
-    else if (now !== FORM_SECTION.from) problems.push(`${form.$id} (form section) has background ${now}, expected ${FORM_SECTION.from}`)
+  for (const { section: name, from, to } of [FORM_SECTION, FAQ_SECTION]) {
+    const band = name === FORM_SECTION.section ? form : section(name)
+    if (!band) continue
+    const where = `${name} section`
+    const now = band.sx?.bgcolor
+    if (now === to) already.push(`${band.$id} (${where}) already has background ${now}`)
+    else if (now !== from) problems.push(`${band.$id} (${where}) has background ${now}, expected ${from}`)
     else {
-      form.sx = { ...form.sx, bgcolor: FORM_SECTION.to }
-      intended.add(form.$id)
-      changes.push({ id: form.$id, where: 'form section', field: 'sx.bgcolor', from: now, to: FORM_SECTION.to })
+      band.sx = { ...band.sx, bgcolor: to }
+      intended.add(band.$id)
+      changes.push({ id: band.$id, where, field: 'sx.bgcolor', from: now, to })
     }
   }
 }
