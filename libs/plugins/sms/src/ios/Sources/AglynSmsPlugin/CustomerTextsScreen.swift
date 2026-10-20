@@ -37,7 +37,7 @@ struct CustomerTextsScreen: View {
             "Could not check texts", systemImage: "exclamationmark.triangle",
             message: "Check the connection and try again."
           ) {
-            Button("Try again") { Task { await texts.check() } }.buttonStyle(.borderedProminent)
+            Button("Try again") { Task { await texts.check() } }.buttonStyle(.aglynProminent)
           }
         case .available:
           form(texts)

@@ -53,7 +53,7 @@ struct ComponentIconField: View {
         Text(icon?.id ?? "None chosen")
       }
       Spacer()
-      Button(icon == nil ? "Choose" : "Change", action: onChoose).buttonStyle(.bordered).accessibilityIdentifier("component-icon-choose")
+      Button(icon == nil ? "Choose" : "Change", action: onChoose).buttonStyle(.aglynSecondary).accessibilityIdentifier("component-icon-choose")
       if icon != nil {
         Button("Remove", action: onClear).buttonStyle(.borderless).accessibilityIdentifier("component-icon-clear")
       }

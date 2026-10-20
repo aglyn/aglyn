@@ -25,7 +25,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,6 +72,7 @@ import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
@@ -221,7 +221,7 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
       Text(productQuotaReadout(used, limit, planReady), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("products-quota"))
       if (editor.draft == null && editor.stock == null) {
         editor.done?.let { message ->
-          NoticeBanner(message, StatusTone.SUCCESS, action = { androidx.compose.material3.TextButton(onClick = { editor.done = null }) { Text("Dismiss") } })
+          NoticeBanner(message, StatusTone.SUCCESS, action = { com.aglyn.ui.TextButton(onClick = { editor.done = null }) { Text("Dismiss") } })
         }
       }
     }
@@ -329,7 +329,7 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("product-detail"),
         verticalArrangement = Arrangement.spacedBy(space(2f)),
       ) {
-        notice?.let { (text, tone) -> NoticeBanner(text, tone, action = { androidx.compose.material3.TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
+        notice?.let { (text, tone) -> NoticeBanner(text, tone, action = { com.aglyn.ui.TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
         val archived = status == ProductStatus.ARCHIVED
         fun duplicate() {
           working = true

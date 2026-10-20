@@ -58,7 +58,7 @@ struct CounterBookingsScreen: View {
             Spacer()
             if payment == .payable {
               Button("Take payment") { paying = row }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.aglynProminent)
                 .disabled(collector?.state.isConnected != true)
                 .accessibilityIdentifier("pay-\(row.id)")
             }

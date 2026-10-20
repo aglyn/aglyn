@@ -29,7 +29,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +61,7 @@ import com.aglyn.ui.SettingsDivider
 import com.aglyn.ui.SettingsGroup
 import com.aglyn.ui.SettingsRow
 import com.aglyn.ui.SettingsTrailing
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.colorOfHex
 import com.aglyn.ui.contrastRatio
 import com.aglyn.ui.deriveAccent

@@ -414,10 +414,10 @@ struct NotificationDetail: View {
         if let body = row.body { Text(body).font(AglynFont.body) }
         Divider()
         if row.inviteID != nil, row.orgID != nil {
-          Button("Review the invitation") { navigation.pendingInvite = row }.buttonStyle(.borderedProminent)
+          Button("Review the invitation") { navigation.pendingInvite = row }.buttonStyle(.aglynProminent)
         } else if row.link != nil {
           Button("Open") { openNotification(row, model: model, navigation: navigation) }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .accessibilityIdentifier("notification-open")
         } else {
           Text("Nothing to open for this one.").font(AglynFont.subheadline).foregroundStyle(.secondary)

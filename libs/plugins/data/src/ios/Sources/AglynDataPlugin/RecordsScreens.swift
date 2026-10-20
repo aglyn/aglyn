@@ -465,7 +465,7 @@ struct RecordDetailView: View {
         } label: {
           Label("Edit", systemImage: "pencil")
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(!canWrite)
         .accessibilityIdentifier("record-edit")
       }
