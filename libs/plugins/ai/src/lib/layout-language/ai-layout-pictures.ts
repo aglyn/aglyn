@@ -47,10 +47,10 @@ import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-label
  *    credited in the CREDITS file beside them). They are the platform's own
  *    files, so a visitor's browser asks no other host for them, and a
  *    starter reads better than no picture when there is no library. On a
- *    site start, a slot none of the job's photos fits yet keeps one too,
- *    and with a library the start's late photo pass gives it one of the
- *    job's own photos once every page is built
- *    (`jobs/ai-site-late-photos.ts`).
+ *    site start, which never places a photo its page already shows, a slot
+ *    none of the job's other photos fits yet keeps one too, and the start's
+ *    late photo pass gives it one of the job's own photos once every page
+ *    is built (`jobs/ai-site-late-photos.ts`).
  *
  * Where the library answered and nothing in it fits a slot
  * ({@link AI_LAYOUT_NO_PHOTO}), the slot never takes a starter: the beta.257
@@ -422,9 +422,12 @@ const wordsOf = (text: string): Set<string> =>
  * photo is, so they take none. Among equals the seed picks, so one job
  * always picks the same. `null` for a slot given none. Pure.
  *
- * `besideLast` is the site start's late photo pass (AGL-3988): there the
- * other choice is a starter photo of another business, so a slot every one
- * of the job's photos sits beside takes the photo beside it rather than none.
+ * `repeats` is a site start's (AGL-3988), where a photo shown twice on one
+ * page reads as a defect: `'never'` when its page is built, where a slot no
+ * photo the page does not show yet fits keeps a starter for the start's
+ * late photo pass; `'last'` in that pass, where the other choice is a starter
+ * of another business, so a photo the page does not show comes first, then
+ * one it shows elsewhere, and the photo beside the slot only after that.
  */
 export function aiLayoutJobPhotoPicks(
   slots: readonly AiLayoutPictureSlot[],
@@ -432,7 +435,7 @@ export function aiLayoutJobPhotoPicks(
   jobPhotos: readonly AiLayoutPicturePhoto[],
   placed: ReadonlyArray<AiLayoutPicturePhoto | null | undefined>,
   seed: string,
-  options: { besideLast?: boolean } = {},
+  options: { repeats?: 'never' | 'last' } = {},
 ): Array<AiLayoutPicturePhoto | null> {
   const seen = new Set<string>()
   const pool = jobPhotos.filter((photo) => {
@@ -455,13 +458,14 @@ export function aiLayoutJobPhotoPicks(
     let best: { photo: AiLayoutPicturePhoto; score: number; rank: number } | null = null
     for (const [at, photo] of pool.entries()) {
       const nextTo = beside.has(photo.src)
-      if (nextTo && !options.besideLast) continue
-      const aspect = photo.width / photo.height
       const uses = shown.filter((src) => src === photo.src).length
+      if (nextTo && options.repeats !== 'last') continue
+      if (uses && options.repeats === 'never') continue
+      const aspect = photo.width / photo.height
       const shared = [...wordsOf(photo.alt ?? '')].filter((word) => says.has(word)).length
       const score =
         (nextTo ? -10_000 : 0) -
-        100 * uses +
+        (options.repeats === 'last' ? 1_000 : 100) * uses +
         (slot.role === 'hero' && aspect >= 1.3 ? 20 : 0) -
         10 * Math.abs(Math.log(aspect / (slot.aspect > 0 ? slot.aspect : 1))) +
         4 * shared
@@ -637,9 +641,10 @@ export interface AiLayoutPictureReport {
  * copied — takes one of the photos the job already placed on this site or
  * this page just copied (`jobPhotos`, {@link aiLayoutJobPhotoPicks},
  * AGL-3988), and only where the job has none, a starter photo described by
- * its own words (AGL-3831). On a site start (`onStarters`), a slot none of
- * them fits yet keeps a neutral starter too, and `onStarters` is told of
- * every picture left on one, for the late photo pass. Never throws, and
+ * its own words (AGL-3831). On a site start (`onStarters`), a photo the
+ * page already shows is never placed again, a slot none of the others fits
+ * yet keeps a neutral starter too, and `onStarters` is told of every
+ * picture left on one, for the late photo pass. Never throws, and
  * never leaves a page worse than it came: a picture is decoration, and a
  * job never fails over one.
  */
@@ -664,9 +669,9 @@ export async function aiResolveLayoutPictures(
      * Told the pictures left on a starter where the site has a library
      * (AGL-3988), with the picks the image hosts refused for each: what the
      * site start's late photo pass fills from the job's own photos. Given
-     * only where such a pass follows: a failed slot none of the job's photos
-     * fits yet then keeps a neutral starter for it, rather than lose its
-     * frame.
+     * only where such a pass follows: a failed slot then never takes a photo
+     * the page already shows, and one none of the job's other photos fits
+     * yet keeps a neutral starter for that pass, rather than lose its frame.
      */
     onStarters?: (slots: AiSiteStarterSlot[]) => void
   },
@@ -713,24 +718,33 @@ export async function aiResolveLayoutPictures(
           (photo) => photo.src && photo.width > 0 && photo.height > 0,
         )
       : []
+    // On a site start (`onStarters`) a photo the page already shows is never
+    // placed again here (AGL-3988): the beta.271 Laurel Fork home page opened
+    // on the wedding couple its closing band shows. Such a slot keeps a
+    // starter, and the start's late photo pass fills it.
+    const lateStart = Boolean(input.source && input.onStarters)
     if (own.length) {
-      aiLayoutJobPhotoPicks(slots, unanswered, own, photos, input.seed).forEach((pick, index) => {
+      aiLayoutJobPhotoPicks(slots, unanswered, own, photos, input.seed, lateStart ? { repeats: 'never' } : {}).forEach((pick, index) => {
         if (pick && unanswered[index]) photos[index] = pick
       })
     }
     // A failed slot takes a neutral starter only where the job had no photo
-    // of its own before this page, as #1831 had it, or, on a site start,
-    // where none of them fits it yet: that start's late photo pass gives it
-    // one of the job's own once every page is built (AGL-3988), told of it
-    // by `onStarters`. Anywhere else it keeps the no-photo treatment. With
-    // no library, every starter, as before.
+    // of its own before this page, as #1831 had it. On a site start, where
+    // the job has photos of its own, every failed slot none of them fits yet
+    // keeps one: that start's late photo pass gives it one of the job's own
+    // once every page is built (AGL-3988), told of it by `onStarters`.
+    // Anywhere else it keeps the no-photo treatment. With no library, every
+    // starter, as before.
     const hadOwn = (input.jobPhotos ?? []).some((photo) => photo.src && photo.width > 0 && photo.height > 0)
-    const starters =
-      input.source && hadOwn && !input.onStarters
-        ? []
-        : input.source
-          ? aiLayoutNeutralStarterPhotos(slots, input.seed)
-          : aiLayoutStarterPhotos(slots, input.seed)
+    const starters = !input.source
+      ? aiLayoutStarterPhotos(slots, input.seed)
+      : lateStart && own.length
+        ? aiLayoutNeutralStarterRun(slots.length, input.seed).map((photo, index) =>
+            slots[index]?.people || slots[index]?.product ? null : photo,
+          )
+        : hadOwn && !lateStart
+          ? []
+          : aiLayoutNeutralStarterPhotos(slots, input.seed)
     starters.forEach((photo, index) => {
       if (photo && unanswered[index] && !photos[index]) photos[index] = said(photo)
     })

@@ -159,9 +159,9 @@ function library(refuse: (photo: StockPhoto) => boolean, options: { empty?: bool
   return { provider, ingest, downloads, copies }
 }
 
-/** The site's pages and the covers' records, in memory, as the late pass reads and writes them; `home` as the page step now builds it. */
-function site(lib: ReturnType<typeof library>, home?: NodesMap) {
-  const pages = new Map<string, NodesMap>(LAUREL_FORK_PAGES.map((page) => [page.id, clone(page.id === HOME && home ? home : page.nodes)]))
+/** The site's pages and the covers' records, in memory, as the late pass reads and writes them; `rebuilt`, pages as the page step now builds them. */
+function site(lib: ReturnType<typeof library>, rebuilt: Readonly<Record<string, NodesMap>> = {}) {
+  const pages = new Map<string, NodesMap>(LAUREL_FORK_PAGES.map((page) => [page.id, clone(rebuilt[page.id] ?? page.nodes)]))
   const covers = LAUREL_FORK_COVERS.map((cover) => ({
     order: cover.order,
     values: { title: cover.title, category: cover.category, image: cover.image, image_description: cover.imageDescription } as Record<string, unknown>,
@@ -291,11 +291,11 @@ async function latePass(options: {
   list: AiSiteStarterList | null
   now?: string
   withoutPicks?: boolean
-  /** The home page as the page step now builds it, and the pictures it reports on a starter. */
-  home?: { nodes: NodesMap; slots: AiSiteStarterSlot[] }
+  /** Pages as the page step now builds them, and the pictures each reports on a starter; else production's home page. */
+  rebuilt?: ReadonlyArray<{ screen: string; nodes: NodesMap; slots: AiSiteStarterSlot[] }>
 }) {
   const lib = library(options.refuse)
-  const state = site(lib, options.home?.nodes)
+  const state = site(lib, Object.fromEntries((options.rebuilt ?? []).map((page) => [page.screen, page.nodes])))
   const waits: number[] = []
   /** A picture with no pick of its own to ask again: one its pass ran out of time for, say. */
   const bare = <T extends { refused?: unknown }>(entry: T): T => {
@@ -303,10 +303,10 @@ async function latePass(options: {
     delete copy.refused
     return copy
   }
-  const reported = options.home?.slots ?? HOME_STARTERS
-  const slots = options.withoutPicks ? reported.map(bare) : reported
+  const reported = options.rebuilt ?? [{ screen: HOME, slots: HOME_STARTERS }]
+  const pages = reported.map((page) => ({ screen: page.screen, slots: options.withoutPicks ? page.slots.map(bare) : page.slots }))
   const list = options.list && options.withoutPicks ? { ...options.list, records: options.list.records.map(bare) } : options.list
-  const photos = aiSiteMergePhotos(null, { pages: [{ screen: HOME, slots }], lists: list ? [list] : [] }) as AiSitePhotos
+  const photos = aiSiteMergePhotos(null, { pages, lists: list ? [list] : [] }) as AiSitePhotos
   const result = await aiSiteLatePhotos(
     {
       firestore: {} as never,
@@ -329,6 +329,15 @@ async function latePass(options: {
 
 /** Every image address the published pages show. */
 const pageSrcs = (pages: ReadonlyMap<string, NodesMap>) => [...pages.values()].flatMap((nodes) => aiSitePageImages(nodes).map((image) => image.src))
+/** The photos a page shows more than once, by page: none anywhere is `{}`. */
+const repeatsOf = (pages: ReadonlyMap<string, NodesMap>) =>
+  Object.fromEntries(
+    [...pages.entries()].flatMap(([id, nodes]) => {
+      const srcs = aiSitePageImages(nodes).map((image) => image.src)
+      const twice = [...new Set(srcs.filter((src, index) => srcs.indexOf(src) !== index))]
+      return twice.length ? [[id, twice]] : []
+    }),
+  )
 const imageOf = (nodes: NodesMap | undefined, id: string) =>
   (nodes as unknown as Record<string, { props?: Record<string, unknown> }> | undefined)?.[id]?.props ?? {}
 
@@ -412,15 +421,76 @@ async function homePass(
   return { nodes, reported }
 }
 
-describe('the Laurel Fork home page’s own photos (AGL-3988, beta.271)', () => {
-  it('opens on the wide wedding photo it copied for itself, never the office team, and keeps its about split for the late pass', async () => {
+/** The About page's id, and its eight pictures with the words each was compiled with. */
+const ABOUT = '2V3XE8mq50'
+
+/**
+ * The About page as the compiler wrote it, every picture slot empty, each
+ * with production's words for it as the slot's.
+ */
+function compiledAbout(): NodesMap {
+  const page = LAUREL_FORK_PAGES.find((one) => one.id === ABOUT)
+  const nodes = clone(page?.nodes as NodesMap) as unknown as Record<string, { componentId?: string; props?: Record<string, unknown> }>
+  for (const [id, node] of Object.entries(nodes)) {
+    if (node.componentId !== 'image') continue
+    const props = { ...(node.props ?? {}) }
+    delete props['src']
+    delete props['intrinsicWidth']
+    delete props['intrinsicHeight']
+    delete props['loading']
+    nodes[id] = { ...node, props }
+  }
+  return nodes as unknown as NodesMap
+}
+
+/**
+ * The About page's pictures pass, replayed: built between Packages (23:10:42)
+ * and FAQ (23:12:32), it copied none of its eight pictures (the 23:11:10 beat
+ * logged 20 refusals), and the job then held the six photos Home, Galleries
+ * and Packages had copied. Production filled all eight from those six, so
+ * it showed two of them twice.
+ */
+async function aboutPass(): Promise<{ nodes: NodesMap; reported: AiSiteStarterSlot[] }> {
+  const sections = (LAUREL_FORK_PAGES.find((one) => one.id === ABOUT)?.nodes as unknown as Record<string, { nodes?: string[] }>)[CANVAS_ROOT_ELEMENT_ID]?.nodes ?? []
+  let reported: AiSiteStarterSlot[] = []
+  const nodes = await aiResolveLayoutPictures(compiledAbout(), {
+    rootId: CANVAS_ROOT_ELEMENT_ID,
+    sectionIds: sections,
+    sectionNames: ['Hero: the photographer behind Laurel Fork', 'About: how I work', 'Weddings I have photographed', 'Families I have photographed', 'Call to action'],
+    seed: `${JOB_ID}:${ABOUT}`,
+    jobPhotos: JOB_PHOTOS.slice(0, 6),
+    source: async (slots: readonly AiLayoutPictureSlot[]) => slots.map(() => null),
+    onStarters: (slots) => {
+      reported = slots
+    },
+  })
+  return { nodes, reported }
+}
+
+describe('the Laurel Fork pages’ own pictures passes (AGL-3988, beta.271)', () => {
+  it('never opens Home on a photo the page already shows: its hero and about split keep starters, with their refused picks, for the late pass', async () => {
     const { nodes: after, reported } = await homePass()
-    expect(imageOf(after, HOME_HERO)['src']).toBe(`media:${HOST}/20t9SUxyKJ`)
-    expect(imageOf(after, HOME_HERO)['alt']).toBe('A couple at a wedding')
+    // Production's hero, the wedding couple, is the closing band's photo: not placed twice.
+    expect(repeatsOf(new Map([[HOME, after]]))).toEqual({})
+    for (const id of [HOME_HERO, HOME_ABOUT]) {
+      expect([AI_LAYOUT_STARTER_PHOTOS.hero.src, AI_LAYOUT_STARTER_PHOTOS.desk.src]).toContain(imageOf(after, id)['src'])
+    }
+    expect(imageOf(after, HOME_HERO)['src']).not.toBe(imageOf(after, HOME_ABOUT)['src'])
     expect(imageOf(after, HOME_HERO)['loading']).toBe('eager')
-    // Both of the page's own photos sit beside the about split: it keeps a neutral starter, for the late pass.
-    expect([AI_LAYOUT_STARTER_PHOTOS.hero.src, AI_LAYOUT_STARTER_PHOTOS.desk.src]).toContain(imageOf(after, HOME_ABOUT)['src'])
-    expect(reported).toEqual([expect.objectContaining({ image: HOME_ABOUT, role: 'gallery', refused: HOME_STARTERS[1]?.refused })])
+    expect(reported).toEqual([
+      expect.objectContaining({ image: HOME_HERO, role: 'hero', refused: HOME_STARTERS[0]?.refused }),
+      expect.objectContaining({ image: HOME_ABOUT, role: 'gallery', refused: HOME_STARTERS[1]?.refused }),
+    ])
+  })
+
+  it('fills About with the six photos the job then held, each once, and keeps the other two for the late pass', async () => {
+    const { nodes: after, reported } = await aboutPass()
+    expect(repeatsOf(new Map([[ABOUT, after]]))).toEqual({})
+    const srcs = aiSitePageImages(after).map((image) => image.src)
+    expect(srcs).toHaveLength(8)
+    expect(srcs.filter((src) => JOB_SRCS.has(src))).toHaveLength(6)
+    expect(srcs.filter((src) => STARTER.test(src))).toHaveLength(2)
+    expect(reported).toHaveLength(2)
   })
 
   it('keeps #1831’s rule on a page no late pass follows, with the page’s own photos offered first', async () => {
@@ -455,15 +525,23 @@ describe('the Laurel Fork start, replayed end to end (AGL-3988, beta.271)', () =
   it.each([
     ['while the image hosts still refuse every download', () => true],
     ['once the burst has cleared', () => false],
-  ])('leaves no starter on the home page, its about split or any Gallery collections cover, and shares the home hero, %s', async (_when, refuse) => {
+  ])('leaves no starter on the home page, its about split or any Gallery collections cover, no page showing a photo twice, and shares the home hero, %s', async (_when, refuse) => {
     const { list } = await coversPass()
     const home = await homePass()
-    const { result, state, lib } = await latePass({ refuse, list, home: { nodes: home.nodes, slots: home.reported } })
+    const aboutPage = await aboutPass()
+    const rebuilt = [
+      { screen: HOME, nodes: home.nodes, slots: home.reported },
+      { screen: ABOUT, nodes: aboutPage.nodes, slots: aboutPage.reported },
+    ]
+    const { result, state, lib } = await latePass({ refuse, list, rebuilt })
     expect(result).toMatchObject({ photos: null, left: 0 })
     expect(starters(state)).toEqual({ pages: [], covers: [] })
+    // The job copied ten photos: enough that no page shows one twice (production's About showed two).
+    expect(repeatsOf(state.pages)).toEqual({})
     const hero = imageOf(state.pages.get(HOME), HOME_HERO)
     const about = imageOf(state.pages.get(HOME), HOME_ABOUT)
-    expect(JOB_SRCS.has(String(hero['src'])) || String(hero['src']).startsWith(`media:${HOST}/px`)).toBe(true)
+    // (a) The hero's own first pick, 1846114, refused at 23:08 and copied by Packages at 23:10:42.
+    expect(hero['src']).toBe(`media:${HOST}/Q_imBRl0u7`)
     expect(about['src']).not.toBe(hero['src'])
     expect(String(about['alt'])).not.toMatch(/desk|office|laptop/i)
     // The share image is the home hero, with its size and words.
@@ -474,14 +552,14 @@ describe('the Laurel Fork start, replayed end to end (AGL-3988, beta.271)', () =
     else expect(lib.copies.length).toBeGreaterThan(0)
   })
 
-  it('fills every starter from the one photo a job copied, beside its own only where nothing else is left', async () => {
+  it('fills every starter from the one photo a job copied, a repeat only where nothing else is left', async () => {
     const { list } = await coversPass()
     const lib = library(() => true, { empty: true })
     // A start whose only copy was the home page's family photo.
     const only = JOB_PHOTOS.find((photo) => photo.src.endsWith('/Dno5tXH307')) as AiLayoutPicturePhoto
     const home = clone(LAUREL_FORK_PAGES[0]?.nodes as NodesMap) as unknown as Record<string, { props?: Record<string, unknown> }>
     home['Hg-Yoxi45H'] = { ...home['Hg-Yoxi45H'], props: { ...home['Hg-Yoxi45H']?.props, src: AI_LAYOUT_STARTER_PHOTOS.hero.src, intrinsicWidth: 1600, intrinsicHeight: 1067 } }
-    const state = site(lib, home as unknown as NodesMap)
+    const state = site(lib, { [HOME]: home as unknown as NodesMap })
     const result = await aiSiteLatePhotos(
       {
         firestore: {} as never,
@@ -538,9 +616,8 @@ describe('the Laurel Fork late photo pass, over what production left (AGL-3988, 
     expect(hero['alt']).toBe(JOB_PHOTOS.find((photo) => photo.src === hero['src'])?.alt)
     const about = imageOf(home, HOME_ABOUT)
     expect(JOB_SRCS.has(String(about['src']))).toBe(true)
-    // Never the photo of the picture beside it.
-    const order = aiSitePageImages(home as NodesMap).map((image) => image.src)
-    for (const [index, src] of order.entries()) if (index > 0) expect(src).not.toBe(order[index - 1])
+    // Never a photo the home page already shows.
+    expect(repeatsOf(new Map([[HOME, home as NodesMap]]))).toEqual({})
 
     // All twelve covers on the job's photos, each wedding gallery a wedding or a couple, each family gallery a family.
     const values = state.covers.map((cover) => cover.values)

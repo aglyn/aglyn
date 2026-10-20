@@ -80,15 +80,17 @@ import {
  *    refused in a row say the burst is not over, and nothing more is
  *    downloaded.
  * 2. **Then the job's own photos, everywhere.** A picture still on a starter
- *    takes its own pick where the page does not show it yet, else one of the
- *    photos the job copied, by the matchers its pages and covers already
- *    use: a page's picture by role, shape and words, a hero a wide photo,
- *    the photo beside it only where every one of them is
- *    (`aiLayoutJobPhotoPicks`); a record by its category, then the people
- *    its moment shows, its neighbor's photo only where nothing else is
- *    left, from the end that repeats least (`aiSiteDatasetRecordsFromOwn`).
- *    The other choice is a starter that shows another business. A team's
- *    records take only their own picks, never a photo of something else.
+ *    takes (a) its own pick where the page does not show it yet, else (b)
+ *    one of the photos the job copied that the page does not show, by the
+ *    matchers its pages and covers already use: a page's picture by role,
+ *    shape and words, a hero a wide photo (`aiLayoutJobPhotoPicks`); and
+ *    only where none is left, (c) one the page shows elsewhere, and last
+ *    the photo beside it, since the other choice is a starter that shows
+ *    another business. A record goes by its category, then the people its
+ *    moment shows, its neighbor's photo only where nothing else is left,
+ *    from the end that repeats least (`aiSiteDatasetRecordsFromOwn`). A
+ *    team's records take only their own picks, never a photo of something
+ *    else.
  *
  * The pages' drafts are written in place, only where a picture still holds
  * a starter; the records through the data plugin's writer, only where a
@@ -370,7 +372,7 @@ export async function aiSiteLatePhotos(
       )
       const need = images.map((image) => entries.has(image.imageId) && aiSiteIsStarterSrc(image.src))
       const photos: Array<AiLayoutPicturePhoto | null> = images.map(() => null)
-      // A picture's own pick first, where the page does not show it yet;
+      // (a) A picture's own pick first, where the page does not show it yet;
       // else it is one of the job's photos like any other.
       images.forEach((image, index) => {
         const own = need[index] ? retried.get(`${page.screen}:${image.imageId}`) : undefined
@@ -379,11 +381,11 @@ export async function aiSiteLatePhotos(
         placed[index] = own
         need[index] = false
       })
-      // Then the job's photos, by the matcher the page's own pass used: a
-      // photo beside its own only where every one of them is, since the
-      // other choice is a starter that shows another business.
+      // (b) Then the job's photos, by the matcher the page's own pass used: one
+      // the page does not show first; (c) a repeat only where nothing else is
+      // left, since the other choice is a starter that shows another business.
       if (pool.length) {
-        aiLayoutJobPhotoPicks(slots, need, pool, placed, `${origin}:${page.screen}:late`, { besideLast: true }).forEach((pick, index) => {
+        aiLayoutJobPhotoPicks(slots, need, pool, placed, `${origin}:${page.screen}:late`, { repeats: 'last' }).forEach((pick, index) => {
           if (pick && need[index]) photos[index] = pick
         })
       }
