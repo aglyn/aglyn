@@ -36,6 +36,56 @@ public struct AglynChoiceChip: View {
   }
 }
 
+/// One row of a single choice (an Aglyn AI tier, a plan): a ring that fills when it is the one chosen, its label with
+/// a line under it, and a mark beside it ("Current"). A row that cannot be chosen stays on screen, dimmed, its line
+/// saying why (a prerequisite is shown, never hidden).
+public struct AglynChoiceRow: View {
+  let title: String
+  let detail: String?
+  let badge: (text: String, tone: AglynTone)?
+  let selected: Bool
+  let enabled: Bool
+  let action: () -> Void
+
+  public init(
+    _ title: String, detail: String? = nil, badge: (text: String, tone: AglynTone)? = nil, selected: Bool,
+    enabled: Bool = true, action: @escaping () -> Void
+  ) {
+    self.title = title
+    self.detail = detail
+    self.badge = badge
+    self.selected = selected
+    self.enabled = enabled
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      HStack(alignment: .center, spacing: AglynSpace.oneAndHalf) {
+        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+          .font(AglynFont.body)
+          .foregroundStyle(selected ? AglynColor.tint : AglynColor.secondaryText)
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title).font(AglynFont.body).foregroundStyle(AglynColor.textPrimary)
+          if let detail {
+            Text(detail).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        Spacer(minLength: AglynSpace.one)
+        if let badge { StatusChip(badge.text, tone: badge.tone) }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .opacity(enabled ? 1 : 0.5)
+    }
+    .buttonStyle(.aglynRow)
+    .disabled(!enabled)
+    .accessibilityAddTraits(selected ? .isSelected : [])
+  }
+}
+
 /// Minus, a count, plus. At `minimum` the minus becomes a remove button
 /// when `onRemove` is given, so a line never sits at zero.
 public struct AglynQuantityStepper: View {

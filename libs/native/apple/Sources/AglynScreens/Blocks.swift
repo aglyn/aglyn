@@ -524,6 +524,21 @@ struct FieldInput: View {
             ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
           }
         }
+      case "choice":
+        // One of a few rows, each with a line under it and a mark (the console's tier menu: price, credits, Current);
+        // a row that cannot be picked stays, dimmed, with its reason.
+        VStack(alignment: .leading, spacing: 0) {
+          Text(label).font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+            .padding(.bottom, AglynSpace.half)
+          ForEach(field.choiceRows(in: context)) { choice in
+            AglynChoiceRow(
+              choice.label, detail: choice.detail,
+              badge: choice.badge.map { ($0.text, tone($0.tone)) },
+              selected: text.wrappedValue == choice.value, enabled: choice.enabled
+            ) { text.wrappedValue = choice.value }
+            .accessibilityIdentifier("choice-\(field.key)-\(choice.value)")
+          }
+        }
       case "hours":
         HoursInput(field: field, text: text)
       case "multiselect":

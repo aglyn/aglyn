@@ -1825,7 +1825,7 @@
               "id": "on",
               "label": "Turn on",
               "icon": "power|power_settings_new",
-              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
+              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind] && item.kind != aiAddon",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -1912,7 +1912,7 @@
               "id": "off",
               "label": "Turn off",
               "icon": "poweroff|power_settings_new",
-              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind]",
+              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind] && item.kind != aiAddon",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -1987,6 +1987,175 @@
                 }
               ],
               "success": "{item.label} updated"
+            },
+            {
+              "id": "tier",
+              "label": "{item.label} tier",
+              "icon": "sparkles|auto_awesome",
+              "when": "item.kind == aiAddon && org.manager && data.addons.hasSubscription && data.addons.aiTiers[?item.configured] && !data.addons.catalog[@item.kind].upgradeRequired",
+              "prompt": [
+                {
+                  "key": "tier",
+                  "label": "{item.label} tier",
+                  "kind": "choice",
+                  "initial": "{data.addons.aiTier|'none'}",
+                  "mustChange": true,
+                  "options": [
+                    {
+                      "value": "none",
+                      "label": "No tier",
+                      "detail": "Your plan's included credits only",
+                      "badge": {
+                        "text": "Current",
+                        "when": "!data.addons.aiTier",
+                        "tone": "neutral"
+                      }
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.addons.aiTiers",
+                    "value": "{item.id}",
+                    "label": "{item.label} — ${item.unitUsd}/mo",
+                    "detail": "+{item.credits:number} credits a month",
+                    "disabledDetail": "+{item.credits:number} credits a month (not configured yet)",
+                    "enabled": "item.configured",
+                    "badge": {
+                      "text": "Current",
+                      "when": "item.id == @data.addons.aiTier",
+                      "tone": "info"
+                    }
+                  }
+                }
+              ],
+              "check": {
+                "label": "Preview",
+                "url": "/api/billing/addons",
+                "body": {
+                  "orgId": "{org.id}",
+                  "action": "preview",
+                  "kind": "{item.kind}",
+                  "quantity": {
+                    "$if": "form.tier != none",
+                    "then": 1,
+                    "else": 0
+                  },
+                  "tier": {
+                    "$if": "form.tier != none",
+                    "then": "{form.tier}"
+                  }
+                }
+              },
+              "confirm": [
+                {
+                  "when": "form.tier != none",
+                  "text": "{item.label} {data.addons.aiTiers[id=form.tier].label}? "
+                },
+                {
+                  "when": "form.tier == none",
+                  "text": "{item.label}: 0? "
+                },
+                {
+                  "when": "preview.defersToPeriodEnd && data.addons.aiTier && form.tier != none",
+                  "text": "Nothing is charged and nothing is refunded. You keep {data.addons.aiTiers[id=data.addons.aiTier].label} for the rest of the period you have paid for, and {data.addons.aiTiers[id=form.tier].label} starts on {preview.effectiveAt:date}. From then: "
+                },
+                {
+                  "when": "preview.defersToPeriodEnd && !data.addons.aiTier",
+                  "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
+                },
+                {
+                  "when": "preview.defersToPeriodEnd && data.addons.aiTier && form.tier == none",
+                  "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": "{preview.chargedNowCents:cents/preview.currency} will be charged to your card now, prorated for the rest of this period"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxComplete == false",
+                  "text": ", plus sales tax (Stripe could not finish calculating tax for your billing address, so your invoice may be higher)"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxCents && preview.taxComplete != false",
+                  "text": ", including tax"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": ". Ongoing: "
+                },
+                {
+                  "when": "form.tier == none",
+                  "text": "nothing, this add-on is removed."
+                },
+                {
+                  "when": "form.tier != none",
+                  "text": "${data.addons.aiTiers[id=form.tier].unitUsd}/mo"
+                },
+                {
+                  "when": "form.tier != none && data.addons.interval == year",
+                  "text": " (billed yearly with your plan)"
+                },
+                {
+                  "when": "form.tier != none",
+                  "text": ", adding {data.addons.aiTiers[id=form.tier].credits:number} AI credits a month on top of your plan's."
+                }
+              ],
+              "url": "/api/billing/addons",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set",
+                "kind": "{item.kind}",
+                "quantity": {
+                  "$if": "form.tier != none",
+                  "then": 1,
+                  "else": 0
+                },
+                "tier": {
+                  "$if": "form.tier != none",
+                  "then": "{form.tier}"
+                }
+              },
+              "instead": [
+                {
+                  "when": "response.paymentPending && response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; {item.label} changes once it is paid.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.paymentPending && response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has changed and nothing has been charged."
+                },
+                {
+                  "when": "response.declined",
+                  "title": "Card declined",
+                  "text": "Your saved card was declined, so nothing has changed. Update your payment method under Billing details and try again."
+                },
+                {
+                  "when": "response.paymentPending",
+                  "title": "Payment did not go through",
+                  "text": "The payment did not go through, so nothing has changed. Try again in a moment."
+                },
+                {
+                  "when": "response.scheduleRefreshFailed",
+                  "title": "Purchased, with a catch",
+                  "text": "{item.label} was purchased, but your scheduled plan change did not pick it up. It will be dropped at the end of this billing period. Contact support to keep it."
+                }
+              ],
+              "report": [
+                {
+                  "when": "response.pendingAddonChange.effectiveAt && form.tier != none",
+                  "text": "{item.label} moves to {data.addons.aiTiers[id=form.tier].label} on {response.pendingAddonChange.effectiveAt:date}."
+                },
+                {
+                  "when": "response.pendingAddonChange.effectiveAt && form.tier == none",
+                  "text": "{item.label} ends on {response.pendingAddonChange.effectiveAt:date}."
+                },
+                {
+                  "when": "!response.pendingAddonChange.effectiveAt",
+                  "text": "{item.label} updated"
+                }
+              ]
             }
           ],
           "empty": "No add-ons."

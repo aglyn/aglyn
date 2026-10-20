@@ -67,6 +67,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
+import com.aglyn.ui.ChoiceRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
@@ -1186,6 +1187,19 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
           }, supporting = field.detail(id, context))
         }
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+      "choice" -> {
+        // One of a few rows, each with a line under it and a mark (the console's tier menu: price, credits, Current); a row
+        // that cannot be picked stays, dimmed, with its reason.
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        for (choice in field.choiceRows(context)) {
+          ChoiceRow(
+            choice.label, text == choice.value, { onChange(FieldValue.Text(choice.value)) },
+            Modifier.testTag("choice-${field.key}-${choice.value}"),
+            supporting = choice.detail, enabled = choice.enabled,
+            badge = choice.badge?.let { mark -> { StatusChip(mark.text, tone(mark.tone)) } },
+          )
+        }
       }
       "select", "country" -> {
         val choices = field.choices(context)
