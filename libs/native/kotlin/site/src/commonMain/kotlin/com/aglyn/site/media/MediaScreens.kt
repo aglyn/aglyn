@@ -216,6 +216,7 @@ private class LibraryPick(val index: Int, val pick: (Int) -> Unit)
 /** Grid or list (the console's view toggle). */
 private enum class MediaView { GRID, LIST }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeTokens: List<String>?, initialMediaId: String?, library: LibraryPick?) {
   val coroutines = rememberCoroutineScope()

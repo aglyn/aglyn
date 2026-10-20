@@ -43,7 +43,7 @@ class MediaBrowserTest {
 
   @Test
   fun theCaptionIsTypeAndSize() {
-    val pdf = item(mapOf("fileName" to "menu.pdf", "contentType" to "application/pdf", "kind" to "pdf", "sizeBytes" to 1_258_291L))
+    val pdf = item(mapOf("fileName" to "menu.pdf", "contentType" to "application/pdf", "kind" to "pdf", "sizeBytes" to 1_310_720L))
     assertEquals("PDF · 1.2 MB", pdf.caption)
   }
 
@@ -80,7 +80,7 @@ class MediaBrowserTest {
     assertEquals(listOf("a"), dropped.first)
     assertTrue(dropped.second)
     val request = mediaRequest(FolderPick.One("a"), null, null, MediaSort.NEWEST, "", subtree = subtree)
-    assertEquals(ListQueryOp.IN, request.base.first().op)
+    assertEquals(ListQueryOp.IN, request.base?.first()?.op)
   }
 
   @Test

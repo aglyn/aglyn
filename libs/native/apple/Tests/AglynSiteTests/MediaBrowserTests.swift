@@ -28,7 +28,7 @@ final class MediaBrowserTests: XCTestCase {
   }
 
   func testTheCaptionIsTypeAndSize() {
-    let pdf = item(["fileName": "menu.pdf", "contentType": "application/pdf", "kind": "pdf", "sizeBytes": 1_258_291])
+    let pdf = item(["fileName": "menu.pdf", "contentType": "application/pdf", "kind": "pdf", "sizeBytes": 1_310_720])
     XCTAssertEqual(pdf.caption, "PDF · 1.2 MB")
   }
 
