@@ -59,9 +59,10 @@
  * still alternate. Two deep-dive rows play a product film, placed the way the
  * film band places it and read from a live page that plays it
  * (`lib/marketing-film.mjs`); the third shows a picture. The hero shows a
- * small business's site, never a film's poster frame: its media slot only
- * takes a picture, and a poster carries the film's burned-in caption. Every
- * node gets a new id. Each slot the copy
+ * small business's site live on its own domain, never a film's poster frame
+ * and never a shop's product grid: its media slot only takes a picture, a
+ * poster carries the film's burned-in caption, and a product grid prints a
+ * price under every product. Every node gets a new id. Each slot the copy
  * replaces is found by its section and node names, and its current text is
  * asserted before it changes, so a template that has moved makes the run
  * refuse instead of pouring copy one slot out. After the pour, no text of the
@@ -163,7 +164,9 @@ const INSTANCES = {
       'Managed is an Aglyn plan with Site Care on top. We build your site, you look it over, and ' +
       'from then on you email us what changed (new hours, prices, photos, a new face on the team) ' +
       'and we make the change for you. One price covers both, monthly or yearly, with no build fee.',
-    mockup: 'media:org:jWmGooWE3L/DJdz0ISx5R', // Northwind's storefront, commerce-storefront.png
+    // The Northlight studio's site live on its own domain, a frame of film C with
+    // no caption and no figure: "Northlight studio site, Film C frame".
+    mockup: 'media:org:jWmGooWE3L/dl2ylkIvsu',
     mockupAlt: 'A small business website live on its own domain, built and published with Aglyn',
     primaryCtaLabel: 'Tell us about your business',
     primaryCtaHref: '#start',
