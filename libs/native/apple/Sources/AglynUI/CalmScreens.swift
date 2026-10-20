@@ -186,7 +186,7 @@ public struct AglynRecordMoreMenu: View {
             RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.paper))
           .overlay(
             RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
-              .strokeBorder(AglynColor.divider))
+              .strokeBorder(AglynColor.borderStrong))
           .contentShape(Rectangle())
       } else {
         Label("More actions", systemImage: "ellipsis")
@@ -294,7 +294,7 @@ private struct RecordMoreButtonStyle: ViewModifier {
   let square: Bool
 
   func body(content: Content) -> some View {
-    if square { content.buttonStyle(.plain) } else { content.buttonStyle(.bordered) }
+    if square { content.buttonStyle(.plain) } else { content.buttonStyle(.aglynSecondary) }
   }
 }
 

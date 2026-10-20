@@ -250,7 +250,7 @@ struct AiCreateButton: View {
       if placement == .header {
         button.help(door.label)
       } else {
-        button.buttonStyle(.bordered)
+        button.buttonStyle(.aglynSecondary)
       }
     } else {
       // Holds the read while the door is asked, and draws nothing where it says no.
@@ -434,7 +434,7 @@ struct AiCreateScreen: View {
       Button("Plans and billing") { context.navigate("core.billing.plans") }
         .accessibilityIdentifier("ai-create-billing")
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
   }
 
   // MARK: The add-on's offer

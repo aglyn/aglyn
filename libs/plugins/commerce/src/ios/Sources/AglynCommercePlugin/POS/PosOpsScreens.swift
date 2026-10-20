@@ -448,7 +448,7 @@ struct PinPadSheet: View {
                 Text(key == "back" ? "⌫" : key == "clear" ? "Clear" : key)
                   .font(AglynFont.title2).frame(maxWidth: .infinity, minHeight: 52)
               }
-              .buttonStyle(.bordered)
+              .buttonStyle(.aglynSecondary)
               .disabled(pad.busy || pad.memberUID.isEmpty)
               .accessibilityIdentifier("pin-\(key)")
             }
@@ -588,7 +588,7 @@ private struct PairingCodeSheet: View {
           Text("and works once.")
         }
         .font(AglynFont.caption).foregroundStyle(.secondary)
-        Button("New code") { Task { await model.display.newPairingCode(mode) } }.buttonStyle(.bordered)
+        Button("New code") { Task { await model.display.newPairingCode(mode) } }.buttonStyle(.aglynSecondary)
         Spacer(minLength: 0)
       }
       .padding(AglynSpace.three)

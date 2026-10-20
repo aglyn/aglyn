@@ -95,7 +95,7 @@ struct AiSeoAuditCard: View {
             Text(site.llmsPreview).font(AglynFont.caption).textSelection(.enabled)
           }
           Button("Put in the form") { stageSite(zone: zone, jobID: jobID, values: siteValues, fields: siteFields.map(\.field)) }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(siteFields.isEmpty || siteStaged == jobID)
             .accessibilityIdentifier("ai-seo-stage-site")
           if siteStaged == jobID { AglynNotice("In the SEO form below as unsaved changes. Review them, then press Save.", tone: .success) }

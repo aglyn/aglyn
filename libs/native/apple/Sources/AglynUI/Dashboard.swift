@@ -191,7 +191,7 @@ public struct SiteHeaderCard: View {
     Button(action: onSwitch) {
       Label("Switch site", systemImage: "arrow.left.arrow.right")
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
     .controlSize(.large)
     .help("Switch workspace or site (⌘K)")
     .accessibilityIdentifier("home-switcher")

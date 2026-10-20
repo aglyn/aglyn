@@ -224,9 +224,9 @@ struct SequenceDetail: View {
               if row.status == "draft" || row.status == "paused" {
                 Button("Activate") { confirm = ("Activate this sequence?", "activate") }.buttonStyle(.aglynProminent)
               }
-              if row.status == "active" { Button("Pause") { confirm = ("Pause this sequence?", "pause") }.buttonStyle(.bordered) }
-              if row.status != "archived" { Button("Archive") { confirm = ("Archive this sequence?", "archive") }.buttonStyle(.bordered) }
-              if row.status == "active" { Button("Enroll people") { enrolling = true }.buttonStyle(.bordered).accessibilityIdentifier("sequence-enroll") }
+              if row.status == "active" { Button("Pause") { confirm = ("Pause this sequence?", "pause") }.buttonStyle(.aglynSecondary) }
+              if row.status != "archived" { Button("Archive") { confirm = ("Archive this sequence?", "archive") }.buttonStyle(.aglynSecondary) }
+              if row.status == "active" { Button("Enroll people") { enrolling = true }.buttonStyle(.aglynSecondary).accessibilityIdentifier("sequence-enroll") }
             }
           }
           Section("Steps") {

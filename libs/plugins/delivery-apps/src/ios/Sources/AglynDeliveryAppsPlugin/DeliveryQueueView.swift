@@ -114,7 +114,7 @@ struct DeliveryQueueView: View {
         AglynNotice(error, tone: order.pending == nil ? .error : .warning)
         if order.pending != nil {
           Button("Send again") { Task { await model.act(order, .retry) } }
-            .buttonStyle(.bordered).disabled(busy)
+            .buttonStyle(.aglynSecondary).disabled(busy)
         }
       }
       let steps = deliverySteps(order)

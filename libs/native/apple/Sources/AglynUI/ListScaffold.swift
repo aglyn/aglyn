@@ -169,7 +169,7 @@ public struct AglynFilterMenu<Content: View>: View {
           .fill(active == nil ? AglynColor.paper : AglynColor.accentSoft))
       .overlay(
         RoundedRectangle(cornerRadius: radius, style: .continuous)
-          .strokeBorder(active == nil ? AglynColor.divider : .clear))
+          .strokeBorder(active == nil ? AglynColor.borderStrong : .clear))
       .contentShape(Rectangle())
     }
     .menuStyle(.button)
@@ -541,8 +541,9 @@ public struct AglynHeaderButtonStyle: ButtonStyle {
       .background(
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
           .fill(configuration.isPressed ? AglynColor.hover : AglynColor.paper))
+      // Figma Button Secondary's outline, border/strong (never the platform's bright rim in dark).
       .overlay(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
+        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.borderStrong))
   }
 }
 
@@ -707,7 +708,7 @@ public struct AglynTouchIconButtonStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(filled ? AglynColor.primary : AglynColor.paper))
       .overlay {
-        if !filled { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.divider) }
+        if !filled { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.borderStrong) }
       }
       .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
       .opacity(configuration.isPressed ? 0.8 : 1)
