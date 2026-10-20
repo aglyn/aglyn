@@ -2754,8 +2754,13 @@ when a person chooses it (`jobs/ai-empty-site-sweep.ts`).
   pooled seats, every member's projection, the Firestore tree), the tenant's
   cached pages and names, "Removed an empty site" in the workspace feed with
   no actor, and a `host.deleted` audit row by `system:cron` with the reason
-  `ai-start-empty`. A site in a consent group is kept. Once the site is gone
-  the job gets `siteRemoved: { at, name }` (`siteRemoved: true` on the wire).
+  `ai-start-empty`. A site in a consent group is kept. The erase takes the
+  site's AI jobs with it (`aiJobs` is an org collection the site owns), so
+  once the site is gone the sweep writes the job back as the verdict read
+  it, with `siteRemoved: { at, name }` added (`siteRemoved: true` on the
+  wire): the kind, the answers, `createdAt` and `expiresAt` all survive.
+  Merged alone, `siteRemoved` left a one-field stub that no list showed and
+  nothing expired (AGL-4015).
   An eraser that cannot answer is tried again 15 minutes later, five times.
 - **Coming back.** The site's own address is gone, so the console shows "This
   site doesn't exist anymore". The job stays in the AI jobs drawer, which says
@@ -2766,9 +2771,10 @@ when a person chooses it (`jobs/ai-empty-site-sweep.ts`).
   drawn for such a job, says the same.
 - **Proved by** `jobs/ai-empty-site-sweep.spec.ts` (the production shapes:
   kc-x-carder cancelled 13 s in with its plan pending and 0 credits, a failed
-  start, one started again, one with a layout written), `ai-jobs.spec.ts` (the
-  marker from each write that ends a job), and
-  `ai-empty-site-sweep.emulator.spec.ts` (the real queries and `eraseHost`).
+  start, one started again, one with a layout written, and the job outliving
+  the site whole), `ai-jobs.spec.ts` (the marker from each write that ends a
+  job), and `ai-empty-site-sweep.emulator.spec.ts` (the real queries and
+  `eraseHost`, and the job back on the drawer's newest-first list).
 
 ## Running a guided start locally
 
