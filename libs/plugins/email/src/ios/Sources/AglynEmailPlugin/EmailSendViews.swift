@@ -227,8 +227,8 @@ struct EmailDetail: View {
         if canSend {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack {
-              if send.canSendNow { Button("Send now") { sheet = .sendNow }.buttonStyle(.borderedProminent).accessibilityIdentifier("email-send-now") }
-              if send.canFollowUp { Button("Send to more") { sheet = .followUp }.buttonStyle(.borderedProminent) }
+              if send.canSendNow { Button("Send now") { sheet = .sendNow }.buttonStyle(.aglynProminent).accessibilityIdentifier("email-send-now") }
+              if send.canFollowUp { Button("Send to more") { sheet = .followUp }.buttonStyle(.aglynProminent) }
               if send.canCompose { Button("Edit") { sheet = .edit }.buttonStyle(.bordered).accessibilityIdentifier("email-edit") }
               if send.canCompose { Button("Send a test") { sheet = .test }.buttonStyle(.bordered).accessibilityIdentifier("email-test") }
               if send.canStop { Button("Stop sending", role: .destructive) { sheet = .cancel }.buttonStyle(.bordered) }

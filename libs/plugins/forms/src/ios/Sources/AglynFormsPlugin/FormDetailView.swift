@@ -132,7 +132,7 @@ struct FormDetailView: View {
         } label: {
           Label("Submissions", systemImage: FormsSymbols.submissions)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .accessibilityIdentifier("form-submissions")
         Button {
           guard let api else { return }

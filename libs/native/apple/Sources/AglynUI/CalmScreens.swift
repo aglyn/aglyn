@@ -143,7 +143,7 @@ public struct AglynRecordHeader: View {
                 .frame(minHeight: 24)
               }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .disabled(!primary.enabled || primary.busy)
             .accessibilityIdentifier(primary.id)
           }

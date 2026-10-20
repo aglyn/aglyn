@@ -125,7 +125,7 @@ private struct ProfileSection: View {
         let api = SellerAPI(api: context.api, orgID: orgID)
         runner.run("Profile saved") { try await api.saveProfile(body) }
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(!canManage || !loaded || !valid || fields == seeded || runner.busy)
       .accessibilityIdentifier("seller-save")
     } header: {
@@ -401,7 +401,7 @@ private struct PayoutsSection: View {
             .accessibilityIdentifier("seller-payouts")
         } else {
           Button(runner.busy ? "Opening Stripe…" : payoutsButton(readiness)) { connect() }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .disabled(!canManage || runner.busy)
             .accessibilityIdentifier("seller-payouts")
         }

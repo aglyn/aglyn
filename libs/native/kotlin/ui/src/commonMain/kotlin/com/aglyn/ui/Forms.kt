@@ -15,7 +15,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -159,7 +158,7 @@ fun ActionDialog(
     },
     confirmButton = {
       // Material dialogs act through text buttons at the end; a destructive one is said in the error color, never as "OK".
-      val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+      val tint = if (destructive) MaterialTheme.colorScheme.error else aglynAccentText
       TextButton(
         onClick = {
           confirmed = true

@@ -2,6 +2,7 @@ package com.aglyn.plugins.redirects
 
 import androidx.compose.foundation.layout.Arrangement
 import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.NoticeBanner
@@ -12,7 +13,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -46,6 +45,7 @@ import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 
 private fun matchLabel(kind: String?) = "${kind ?: "exact"} match"

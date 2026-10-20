@@ -1,6 +1,5 @@
 package com.aglyn.webview
 
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -14,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.webview.webview2.NavigationVerdict
 import com.aglyn.webview.webview2.WebView2Listener
 import com.aglyn.webview.webview2.WebView2View

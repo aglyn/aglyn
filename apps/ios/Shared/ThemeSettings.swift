@@ -351,6 +351,7 @@ struct AppThemeModifier: ViewModifier {
     content
       .id("\(key)|\(nonce)")
       .tint(AglynColor.tint)
+      .toggleStyle(AglynToggleStyle())
       .preferredColorScheme(ThemeApplier.scheme(prefs))
   }
 }

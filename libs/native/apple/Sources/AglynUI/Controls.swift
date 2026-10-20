@@ -260,8 +260,8 @@ public struct AglynItemTile: View {
   }
 }
 
-/// A checkbox on every platform (iOS has no checkbox toggle): a ticked square in the tint, the label beside it, the whole
-/// row the target.
+/// A checkbox on every platform (iOS has no checkbox toggle): a ticked square in the accent's fill (the console's
+/// MuiCheckbox, `primary.main`), the label beside it, the whole row the target.
 public struct AglynCheckboxToggleStyle: ToggleStyle {
   public init() {}
 
@@ -272,7 +272,7 @@ public struct AglynCheckboxToggleStyle: ToggleStyle {
       HStack(spacing: 10) {
         Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
           .font(.system(size: 18))
-          .foregroundStyle(configuration.isOn ? AglynColor.tint : AglynColor.secondaryText)
+          .foregroundStyle(configuration.isOn ? AglynColor.primary : AglynColor.secondaryText)
         configuration.label.frame(maxWidth: .infinity, alignment: .leading)
       }
       .contentShape(Rectangle())
@@ -284,4 +284,35 @@ public struct AglynCheckboxToggleStyle: ToggleStyle {
 
 extension ToggleStyle where Self == AglynCheckboxToggleStyle {
   public static var aglynCheckbox: AglynCheckboxToggleStyle { AglynCheckboxToggleStyle() }
+}
+
+/// Every toggle in the accent's FILL, the brand blue #00B0FF, as the console's MuiSwitch draws it (AGL-3990). A scene's
+/// tint is the accent's TEXT shade (#0077AD in light), which a switch's track and a checkbox would otherwise take.
+/// Applied at a scene's root (`aglynAppTheme`, `RootView`); the platform's own toggle draws inside it.
+public struct AglynToggleStyle: ToggleStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    Toggle(configuration)
+      .toggleStyle(.automatic)
+      .tint(AglynColor.primary)
+  }
+}
+
+/// A filled ("prominent") button in the brand blue under white, the console's contained MuiButton (AGL-3990): the
+/// platform's `.borderedProminent`, which fills with the scene's tint (the accent's TEXT shade) unless told otherwise.
+public struct AglynProminentButtonStyle: PrimitiveButtonStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    Button(role: configuration.role, action: configuration.trigger) { configuration.label }
+      .buttonStyle(.aglynProminent)
+      .tint(AglynColor.primary)
+      .foregroundStyle(AglynColor.primaryContrast)
+  }
+}
+
+extension PrimitiveButtonStyle where Self == AglynProminentButtonStyle {
+  /// A filled button in the brand blue under white: `AglynProminentButtonStyle`.
+  public static var aglynProminent: AglynProminentButtonStyle { AglynProminentButtonStyle() }
 }

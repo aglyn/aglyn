@@ -67,7 +67,7 @@ fun RunnerBanners(runner: ActionRunner) {
       message,
       com.aglyn.ui.StatusTone.SUCCESS,
       androidx.compose.ui.Modifier.testTag("runner-notice"),
-      action = { androidx.compose.material3.TextButton(onClick = runner::clear) { androidx.compose.material3.Text("Dismiss") } },
+      action = { com.aglyn.ui.TextButton(onClick = runner::clear) { androidx.compose.material3.Text("Dismiss") } },
     )
   }
 }

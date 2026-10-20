@@ -93,7 +93,7 @@ struct OrdersScreen: View {
       if selecting {
         HStack {
           Button("Mark \(picked.count) fulfilled") { confirmingBulk = true }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .disabled(picked.isEmpty || running)
             .accessibilityIdentifier("orders-bulk-fulfill")
           // Whatever services are connected add what they can do to the ticked orders (buy their labels, say).
