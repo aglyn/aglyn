@@ -368,7 +368,7 @@ struct ListRow: View {
     #if os(iOS)
       .swipeActions(edge: .trailing) {
         ForEach(actions.filter(\.destructive).prefix(1)) { action in
-          Button(role: .destructive) { trigger(action, scope) } label: { Label(action.label, systemImage: action.icon ?? "trash") }
+          Button(role: .destructive) { trigger(action, scope) } label: { Label(ScreenValues.render(action.label, in: scope), systemImage: action.icon ?? "trash") }
         }
       }
     #endif
@@ -672,7 +672,7 @@ struct FormBlock: View {
         HStack(spacing: AglynSpace.one) {
           Spacer(minLength: 0)
           if busy { ProgressView().controlSize(.small) }
-          Button(action.label) {
+          Button(ScreenValues.render(action.label, in: scope)) {
             submit(action, visibleOnly(filled, fields))
           }
           .buttonStyle(.borderedProminent)

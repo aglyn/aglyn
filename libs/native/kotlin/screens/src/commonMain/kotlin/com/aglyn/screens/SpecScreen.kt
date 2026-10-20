@@ -326,14 +326,14 @@ private fun SpecBodyContent(
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {
-          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: action.label) to ScreenValues.render(instead.str("text") ?: "", after)
+          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: ScreenValues.render(action.label, after)) to ScreenValues.render(instead.str("text") ?: "", after)
           // The entry may also open a page the route named (an invoice the bank has to confirm).
           instead.str("open")?.let { key -> (ScreenValues.lookup(key, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         } else {
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
         // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
-        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = action.label to ScreenValues.text(it) } }
+        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = ScreenValues.render(action.label, after) to ScreenValues.text(it) } }
         action.file?.let { file ->
           file.contents(after)?.let { (name, text) ->
             if (exporter == null) show("Saving a file is not available here.", StatusTone.WARNING)
