@@ -18,7 +18,7 @@
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { memberCanSee } from '@aglyn/aglyn/app-utils/organizations'
 import { checkDatasetQuota, checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { defaultScopeForNewResource, newResourceScopeFields } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostScopeToken, newResourceScopeFields } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   registerPluginResourceDraftWriter,
   type PluginDraftCheck,
@@ -62,8 +62,8 @@ import {
  * and asks for the writer by name, so every rule is this plugin's:
  *
  *  - THE DOCUMENT is the one the Data card's create makes: a display name,
- *    the flat `fields` mirror and a typed model, the org's Default sharing
- *    for the site it is made from (`defaultScopeForNewResource`), and the
+ *    the flat `fields` mirror and a typed model, shared with the site it is
+ *    made for and no other (AGL-4003), and the
  *    seeded records, each with the integrity and filter index every record
  *    write carries. Where a record page is wanted the model gains a "Page
  *    address" field that fills from a text field, and every seeded record a
@@ -515,12 +515,18 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
   }
 }
 
-/** The scope a dataset made from this site takes: the org's Default sharing for it. */
-function scopeOf(context: Pick<PluginDraftContext, 'org' | 'hostId'>) {
-  return defaultScopeForNewResource({
-    defaultResourceScope: (context.org as { defaultResourceScope?: 'org' | 'host' } | null)?.defaultResourceScope,
-    hostId: context.hostId,
-  })
+/**
+ * The scope a dataset drafted for a site takes: that site alone (AGL-4003).
+ *
+ * A drafted dataset is the site's own content, made for it by Aglyn AI, so it
+ * is shared with that site and no other, whatever the workspace's Default
+ * sharing says for the datasets a person makes on the Data page. Deleting the
+ * site erases it with its records (`eraseHost`), where a dataset shared with
+ * every site outlived its site: 53 did in one workspace. A member can share it
+ * with more sites on the Data page.
+ */
+function scopeOf(context: Pick<PluginDraftContext, 'hostId'>) {
+  return [hostScopeToken(context.hostId)]
 }
 
 function recordOf(dataset: FirebaseFirestore.DocumentSnapshot): PluginDraftRecord {

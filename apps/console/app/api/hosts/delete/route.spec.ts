@@ -51,6 +51,20 @@ const mockEraseHost = jest.fn(async (..._args: unknown[]) => undefined)
 const mockLogOrgActivity = jest.fn(async (..._args: unknown[]) => undefined)
 const mockMemberHasOrgPermission = jest.fn(async (..._args: unknown[]) => true)
 const mockAuditAdd = jest.fn(async (..._args: unknown[]) => undefined)
+const PREVIEW = {
+  resources: [
+    {
+      pluginId: 'data',
+      preview: {
+        noun: ['dataset', 'datasets'],
+        itemNoun: ['record', 'records'],
+        going: [{ id: 'ds-1', name: 'Gallery collections', items: 12 }],
+        staying: 1,
+      },
+    },
+  ],
+}
+const mockPreviewHostErase = jest.fn(async (..._args: unknown[]) => PREVIEW)
 /** Lazy so the hoisted mock factory never touches a const in its TDZ. */
 const mockHostData = jest.fn()
 /** The owning org's document; a case declares a consent group on it. */
@@ -90,6 +104,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: { FieldValue: { serverTimestamp: () => '__now__' } },
   },
   eraseHost: (...args: unknown[]) => mockEraseHost(...args),
+  previewHostErase: (...args: unknown[]) => mockPreviewHostErase(...args),
   getOrgForHost: async () => ({ orgId: 'org-1', org: mockOrgDoc }),
   resolveOrgMembership: async () => ({ orgId: 'org-1', member: {} }),
   memberHasOrgPermission: (...args: unknown[]) =>
@@ -115,14 +130,24 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
-    body: await request.json().catch(() => ({})),
+    query: Object.fromEntries(new URL(request.url).searchParams),
+    body: request.method === 'GET' ? undefined : await request.json().catch(() => ({})),
     headers: { authorization: request.headers.get('authorization') ?? undefined },
   }),
 }))
 
-const { POST } = require('./route') as {
+const { POST, GET } = require('./route') as {
   POST: (request: Request) => Promise<Response>
+  GET: (request: Request) => Promise<Response>
 }
+
+const preview = () =>
+  GET(
+    new Request('https://app.aglyn.com/api/hosts/delete?hostId=host-1', {
+      method: 'GET',
+      headers: { authorization: 'Bearer tok' },
+    }),
+  )
 
 const post = () =>
   POST(
@@ -376,5 +401,46 @@ describe("a deleted site stops serving from cache (AGL-3386)", () => {
     mockEraseHost.mockRejectedValueOnce(new Error('boom'))
     await post()
     expect(mockDropDeletedSiteCache).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * WHAT GOES WITH THE SITE IS SHOWN BEFORE IT GOES (AGL-4003).
+ *
+ * The Delete site card lists the datasets shared with this site alone, which
+ * the delete erases with their records, before it asks. The list is read
+ * from the same route, behind the same checks as the delete, and reading it
+ * erases nothing.
+ */
+describe('the preview of a site delete (AGL-4003)', () => {
+  it('answers what goes with the site, for the workspace that owns it', async () => {
+    const response = await preview()
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(PREVIEW)
+    expect(mockPreviewHostErase).toHaveBeenCalledWith('org-1', 'host-1')
+    expect(mockEraseHost).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('is refused to a caller who may not delete the site', async () => {
+    mockHostData.mockReturnValue({ ...LIVE_SITE, memberRoles: { 'u-1': 'editor' } })
+    expect((await preview()).status).toBe(403)
+
+    mockHostData.mockReturnValue(LIVE_SITE)
+    mockMemberHasOrgPermission.mockResolvedValue(false)
+    expect((await preview()).status).toBe(403)
+
+    expect(mockPreviewHostErase).not.toHaveBeenCalled()
+  })
+
+  it('asks for the site and a sign-in', async () => {
+    const missing = await GET(new Request('https://app.aglyn.com/api/hosts/delete', { method: 'GET' }))
+    expect(missing.status).toBe(400)
+    const anonymous = await GET(
+      new Request('https://app.aglyn.com/api/hosts/delete?hostId=host-1', { method: 'GET' }),
+    )
+    expect(anonymous.status).toBe(401)
+    expect(mockPreviewHostErase).not.toHaveBeenCalled()
   })
 })

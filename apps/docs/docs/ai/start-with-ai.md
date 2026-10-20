@@ -203,7 +203,10 @@ builds, in this order:
    services, about, social proof and a closing call to action. Photos come from your media
    library or a [stock photo](./stock-photos.md), and every photo gets a description for
    screen readers and search engines. The page with your contact form also shows the
-   phone and email you gave.
+   phone and email you gave. A list a page shows, such as your packages or your
+   questions and answers, is kept as a [dataset](../content-and-data/datasets/overview.md)
+   on plans that include datasets. It is shared with this site only, so you edit it on the
+   **Data** page, and it is deleted with the site if you delete the site.
 6. **A welcome email draft**, if you asked for one.
 7. **Publishing**: see [Published, and found by search engines](#published-and-indexable).
 
