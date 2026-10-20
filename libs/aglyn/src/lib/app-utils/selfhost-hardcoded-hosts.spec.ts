@@ -116,7 +116,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     file: 'libs/plugins/ai/src/lib/site-import/site-import-crawl.ts',
     count: 1,
     reason:
-      "AGL-3983. The page the site-import crawler's user agent names (`AglynBot/1.0 (+…)`), for a site owner who wants to know what read their site. The literal is the `??` default of `SITE_IMPORT_BOT_INFO_URL` and nothing else reads it: a self-host operator points that variable at their own page about their crawler, so their deployment never tells a site it was read by Aglyn. Left as the default so the platform's own deployment needs no variable.",
+      "AGL-3983. The page the site-import crawler's user agent names (`AglynBot/1.0 (+…)`), for a site owner who wants to know what read their site: Aglyn's Bring my site guide on docs.aglyn.com (there is no separate bot page). The literal is the `??` default of `SITE_IMPORT_BOT_INFO_URL` and nothing else reads it: a self-host operator points that variable at their own page about their crawler, so their deployment never tells a site it was read by Aglyn. Left as the default so the platform's own deployment needs no variable.",
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/inbound-mail-domain.ts',
