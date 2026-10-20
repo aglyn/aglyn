@@ -177,6 +177,10 @@ Where a new dataset starts depends on where you create it and on your workspace'
   setting says, because there is no site to limit it to.
 - **Installed from the Marketplace, or created through the REST API** — it starts on
   **All sites** too. Both act for the whole organization, not for one site.
+- **Made by Aglyn AI for a site** — for example the lists a
+  [guided start](../../ai/start-with-ai.md) builds, such as your packages or FAQs — it
+  starts shared with that site alone, whatever the setting says, because it was made
+  for that site. Share it with more sites from its **Sharing** control.
 
 ### Default sharing for new datasets {#default-dataset-sharing}
 
@@ -211,6 +215,10 @@ A few consequences worth knowing:
 - **Deleting is a workspace action.** A dataset shared with more than one site can't be
   deleted from a single site's Data page — narrow its sharing instead, or delete it from
   the workspace Data page.
+- **Deleting a site deletes the datasets shared with it alone.** They go with the site,
+  records and all, and the **Delete site** card lists them before you confirm. A dataset
+  the site shares with other sites stays, and the site is removed from its sharing. See
+  [Deleting a single site](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-a-single-site).
 
 ## Import & export
 
