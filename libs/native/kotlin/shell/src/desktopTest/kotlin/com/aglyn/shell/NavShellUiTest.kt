@@ -131,8 +131,13 @@ class NavShellUiTest {
     assertEquals(1, onAllNodesWithTagCount("rail-divider"))
     val sidebar = onNodeWithTag("nav-sidebar").captureToImage().toPixelMap()
     val ground = sidebar[sidebar.width - 3, sidebar.height / 2]
-    // The theme's neutral ground: a pink wash would pull green well under red and blue.
-    assertTrue(kotlin.math.abs(ground.red - ground.green) < 0.03f && kotlin.math.abs(ground.blue - ground.green) < 0.03f, "sidebar ground $ground")
+    // The Aglyn theme's own surface, in whichever appearance the machine is in (Plain; AGL-4000): a pink wash would be
+    // a few points off it in every channel.
+    val surfaces = listOf(false, true).mapNotNull { com.aglyn.ui.themeSurfaces(com.aglyn.contracts.AppThemeName.AGLYN, it)?.surface }
+    assertTrue(
+      surfaces.any { s -> listOf(s.red - ground.red, s.green - ground.green, s.blue - ground.blue).all { kotlin.math.abs(it) < 0.01f } },
+      "sidebar ground $ground, not one of $surfaces",
+    )
     onNodeWithTag("rail-all").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-pin-o1") > 0 }
   }

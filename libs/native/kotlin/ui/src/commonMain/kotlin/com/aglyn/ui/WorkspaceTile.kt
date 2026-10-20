@@ -84,7 +84,9 @@ fun WorkspaceTile(
   val shape = RoundedCornerShape(radius)
   val shown = (if (isSystemInDarkTheme()) darkLogoUrl else null) ?: logoUrl
   val image = rememberRemoteBitmap(shown)
-  val fill = color ?: LocalAglynPalette.current.tertiary.main
+  // A workspace with no color of its own: the brand slate (#404C5C) in light and dark alike, as Figma's Rail draws it,
+  // never the dark palette's light slate, which glared on the dark rail (AGL-4000).
+  val fill = color ?: AglynTokens.light.tertiary.main
   val letters = initials ?: workspaceInitials(name)
   Box(modifier.size(if (selected || reserveRing) ringBox else size), contentAlignment = Alignment.Center) {
     // Selected: a 2 dp ring clear of the tile (the rail adds its 3 dp bar at the edge).
@@ -111,11 +113,14 @@ fun WorkspaceTile(
       }
     }
     if (badge > 0) {
+      // With a cut-out (the rail's), the ring is 2 dp OUTSIDE a fill of [badgeSize] (Figma Badge: the fill is 14 on the
+      // desktop, 18 on tablets, and the cut-out is extra), so the ring's box is what [badgeOffset] places.
       Box(
-        Modifier.align(Alignment.TopEnd).offset(badgeOffset.x, badgeOffset.y).sizeIn(minWidth = badgeSize, minHeight = badgeSize)
+        Modifier.align(Alignment.TopEnd).offset(badgeOffset.x, badgeOffset.y)
+          .then(if (badgeRing != null) Modifier.clip(CircleShape).background(badgeRing).padding(2.dp) else Modifier)
+          .sizeIn(minWidth = badgeSize, minHeight = badgeSize)
           .clip(CircleShape).background(shell.badge)
-          .then(if (badgeRing != null) Modifier.border(2.dp, badgeRing, CircleShape) else Modifier)
-          .padding(horizontal = if (badgeRing != null) badgeSize * 0.28f else 4.dp),
+          .padding(horizontal = if (badgeRing != null) badgeSize * 0.2f else 4.dp),
         contentAlignment = Alignment.Center,
       ) {
         // Figma Label/Badge: 10 bold on both sizes (the rail's); elsewhere it scales with the badge.

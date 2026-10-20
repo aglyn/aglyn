@@ -158,12 +158,22 @@ internal fun WorkspaceRail(
 /** The rail's one rhythm: 8 between its tiles, captions, dividers and foot buttons (Figma Rail's auto layout). */
 private val RailGap = 8.dp
 
+/**
+ * A one-line text's full line height, as Figma lays it out: Compose's default trims the leading above the first line
+ * and below the last, which made each rail caption 1.5–3.5 dp short and pulled every tile under it up (AGL-4000).
+ */
+private val FullLineBox = androidx.compose.ui.text.style.LineHeightStyle(
+  androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
+)
+
 @Composable
 private fun RailLabel(text: String) {
   val m = com.aglyn.ui.shellMetrics
   Text(
     text.uppercase(),
-    style = MaterialTheme.typography.labelSmall,
+    // The caption's whole line box (Figma: 12 Compact / 16 Touch), never trimmed to the glyphs, so the tiles under it
+    // sit where Figma puts them.
+    style = MaterialTheme.typography.labelSmall.copy(lineHeightStyle = FullLineBox),
     fontSize = m.railLabel,
     lineHeight = m.railLabelLine,
     letterSpacing = m.railLabelTracking,
@@ -244,11 +254,10 @@ private fun RailTile(
     // The selected workspace's 3 dp bar at the rail's edge, beside its ring.
     if (selected) Box(Modifier.align(Alignment.CenterStart).width(3.dp).height(m.selectionBar).clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)).background(shellColors.ring))
     // Every tile keeps its ring's box, so the column keeps Figma's 8 between boxes; the badge sits off the corner as
-    // Figma's Badge does (its 2 cut-out in the rail's ground), drawn unclipped so it is never cut.
-    val badgeAt = when {
-      m.compact -> if (selected) DpOffset(4.dp, (-2).dp) else DpOffset(2.dp, 0.dp)
-      else -> if (selected) DpOffset(0.dp, (-2).dp) else DpOffset((-2).dp, 0.dp)
-    }
+    // Figma's Badge does, drawn unclipped so it is never cut. Measured on Rail 254:20207 / 254:20162, selected or not:
+    // the fill's top is the ring box's top, its right edge 2 past the ring box (Compact) or 2 inside it (Touch); the
+    // 2 dp cut-out around it in the rail's ground is what this offset places.
+    val badgeAt = if (m.compact) DpOffset(4.dp, (-2).dp) else DpOffset(0.dp, (-2).dp)
     WorkspaceTile(
       name, light, dark, color, size = m.tile, selected = selected, badge = unread, cornerRadius = m.tileRadius, badgeSize = m.badge,
       ringBox = m.ringBox, ringRadius = m.ringRadius, initialSize = m.tileInitial, initials = workspaceInitial(name), reserveRing = true,
@@ -337,7 +346,7 @@ private fun AllWorkspacesTile(total: Int, onClick: () -> Unit) {
       ) { Icon(AglynIcons.named("grid_view"), null, Modifier.size(m.allTileIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
       Text(
         total.toString(),
-        style = MaterialTheme.typography.labelMedium,
+        style = MaterialTheme.typography.labelMedium.copy(lineHeightStyle = FullLineBox),
         fontSize = m.allTileTotal,
         lineHeight = if (m.compact) 12.sp else 16.sp,
         fontWeight = if (m.allTileTotalBold) FontWeight.Bold else FontWeight.SemiBold,
