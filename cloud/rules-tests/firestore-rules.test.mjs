@@ -6562,6 +6562,20 @@ describe('account preferences are bounded, pins at five (AGL-3943)', () => {
     await mustAllow('editing another field beside seven pins', setDoc(me(), { firstName: 'Zach' }, { merge: true }))
   })
 
+  it('bounds pinned sites at a hundred in all (AGL-4005)', async () => {
+    const pins = (n) => Array.from({ length: n }, (_, i) => ({ orgId: ORG, hostId: `h${i + 1}` }))
+    await mustAllow('a hundred pinned sites', setDoc(me(), { pinnedHosts: pins(100) }))
+    await mustDeny(
+      'a hundred and first by arrayUnion',
+      setDoc(me(), { pinnedHosts: arrayUnion({ orgId: ORG, hostId: 'h101' }) }, { merge: true }),
+    )
+    await mustAllow(
+      'unpinning one',
+      setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h100' }) }, { merge: true }),
+    )
+    await mustDeny('pinned sites that are not a list', setDoc(me(), { pinnedHosts: { h1: ORG } }, { merge: true }))
+  })
+
   it('caps recent workspaces, starred items, recent items and workspace colors', async () => {
     await mustAllow(
       'eight recent workspaces, fifty stars, thirty recents, one color',

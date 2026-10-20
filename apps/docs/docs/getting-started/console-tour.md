@@ -180,8 +180,9 @@ without opening the editor. When you want to design it, open the
 ## The Sites list {#the-sites-list}
 
 **All Sites** is the front door of a workspace: one card per site, for the workspace
-currently selected in the switcher, in name order. A site you can reach in another
-organization isn't missing — it's behind the workspace switcher.
+currently selected in the switcher, with the sites you pinned first and the rest in name
+order. A site you can reach in another organization isn't missing — it's behind the
+workspace switcher.
 
 Each card carries:
 
@@ -190,6 +191,10 @@ Each card carries:
   address. Both are also listed inside the card, as **Aglyn Domain** and **Custom
   Domain**.
 - A **status pill** (below).
+- A **pin**, beside the pill. Pinned sites lead the list in the order you pinned them,
+  and the site switcher in the top bar lists them first too. You can pin up to five
+  sites in each workspace; pinning a sixth asks which one it replaces. Your pins are
+  yours alone, and they follow you to every device you sign in on.
 - **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
   site's dashboard in the console.
 
@@ -200,7 +205,9 @@ its name, its slug (the `name` in `name.aglyn.app`) or its custom domain: `harbo
 **Filters** narrows the cards by **Custom domain** (Connected or None) and by the day a
 site was **Created** — **is**, **after**, **on or after**, **before** or **on or before**
 a day. Each filter in force shows as a chip above the cards; remove a chip to drop it. A
-filter on the created date lists the cards newest first instead of by name.
+filter on the created date lists the cards newest first instead of by name. While a search
+or a filter is in force, pinned sites don't jump to the top: they sit where the list puts
+them, with their pin showing.
 
 The search and the filters are answered by the query that reads the cards, across every
 site you have in the workspace, not only the cards on screen. The cards come twelve at a

@@ -674,7 +674,14 @@ struct ShellStack: View {
         .phoneTopBar()
         .wideBarHidden()
         .navigationDestination(for: Route.self) { route in
-          PushedScreen(section: section) { RouteView(route: route) }.wideBarHidden()
+          PushedScreen(section: section) {
+            if case .area(let screen, let params) = route {
+              AreaView(screen: screen, params: params, pushed: true)
+            } else {
+              RouteView(route: route)
+            }
+          }
+          .wideBarHidden()
         }
     }
     // A detail a screen opens goes on this stack's path, so a later push (a page in the browser) never drops it.
@@ -804,9 +811,17 @@ struct AreaView: View {
   @Environment(\.aglynWideChrome) private var wide
   let screen: String
   let params: NativeParams
+  /// Pushed on a phone's stack (a Menu row), rather than a section's own first screen.
+  var pushed = false
 
   /// The areas whose screens draw their own section chips.
   private static let selfSectioned: Set<String> = ["crm", "emails", "marketing", "marketplace"]
+
+  /// A section chip: the sidebar's selection on the Mac and iPad; on a phone the pushed area swaps for the section in
+  /// place, so every section stays one tap from its area (AGL-3993).
+  private func choose(_ target: ShellSection) {
+    if pushed || !wide { navigation.swapArea(target) } else { navigation.select(target) }
+  }
 
   var body: some View {
     let row = ShellScope(model: model, navigation: navigation).row(for: ShellSection.opening(screen, params))
@@ -837,7 +852,7 @@ struct AreaView: View {
                   ForEach(sections, id: \.id) { section in
                     let target = ShellSection.opening(section.screen, section.params)
                     AglynChoiceChip(section.label, selected: target == ShellSection.opening(screen, params)) {
-                      navigation.select(target)
+                      choose(target)
                     }
                     .accessibilityIdentifier("area-section-\(section.id)")
                   }
@@ -898,7 +913,7 @@ struct AreaView: View {
           let target = ShellSection.opening(section.screen, section.params)
           return AglynAreaSection(
             id: section.id, label: section.label, selected: target == ShellSection.opening(screen, params)
-          ) { navigation.select(target) }
+          ) { choose(target) }
         } : [])
   }
 
@@ -1196,17 +1211,9 @@ struct PhoneShell: View {
         navigation.showCreate = true
         return
       }
-      // A section with no tab of its own opens in Menu.
+      // A section with no tab of its own opens in Menu, an area with its section chips (AGL-3993).
       guard !tabs.contains(where: { $0.section == section }) else { return }
-      navigation.section = .more
-      switch section {
-      case .settings: navigation.push(.settings)
-      case .notifications: navigation.push(.notifications)
-      case .analytics: navigation.push(.analytics)
-      case .plugin(let screen): navigation.push(.screen(screen, [:]))
-      case .place(let screen, let params): navigation.push(.screen(screen, params))
-      default: break
-      }
+      navigation.openInMenu(section)
     }
   }
 }

@@ -117,6 +117,55 @@ final class ShellTests: XCTestCase {
     }
   }
 
+  /// On a phone, every section of every sectioned row is one chip from the row (AGL-3993): the Menu pushes the area with
+  /// its chips, and each chip swaps it in place, so Components, Layouts, Templates and Content are all at depth 1.
+  func testEverySectionedRowReachesEachSectionFromThePhoneMenu() {
+    var checked = 0
+    for list in NativeNav.manifest.lists {
+      for row in list.groups.flatMap(\.rows) where (row.sections?.count ?? 0) > 1 {
+        let navigation = ShellNavigation()
+        navigation.select(.more)
+        navigation.pushArea(ShellSection.opening(row.screen, row.params))
+        XCTAssertEqual(navigation.paths[.more], [.area(row.screen, row.params ?? [:])], "\(list.id.rawValue).\(row.id)")
+        for section in row.sections ?? [] {
+          navigation.swapArea(ShellSection.opening(section.screen, section.params))
+          XCTAssertEqual(
+            navigation.paths[.more], [.area(section.screen, section.params ?? [:])],
+            "\(list.id.rawValue).\(row.id) section \(section.id) is not one chip from its row")
+          checked += 1
+        }
+        XCTAssertEqual(navigation.section, .more, "a chip never leaves Menu")
+      }
+    }
+    // Pages' five (Components, Layouts, Templates, Content), Orders', Products' and Inbox's, at the least.
+    XCTAssertGreaterThanOrEqual(checked, 14)
+  }
+
+  /// A section a phone has no tab for opens in Menu as an area with its chips, never as its bare screen (AGL-3993).
+  func testASectionWithNoTabOpensInMenuAsAnArea() {
+    let navigation = ShellNavigation()
+    navigation.openInMenu(.plugin("site.content"))
+    XCTAssertEqual(navigation.section, .more)
+    XCTAssertEqual(navigation.paths[.more], [.area("site.content", [:])])
+    navigation.openInMenu(.place("site.setup", ["section": "seo"]))
+    XCTAssertEqual(navigation.paths[.more]?.last, .area("site.setup", ["section": "seo"]))
+    navigation.openInMenu(.analytics)
+    XCTAssertEqual(navigation.paths[.more]?.last, .analytics)
+  }
+
+  /// From a tab's root (a phone's Orders tab), a chip pushes its section once; the tab's own section returns to the root.
+  func testAChipOnATabsRootPushesItsSectionOnceAndComesBack() {
+    let navigation = ShellNavigation()
+    navigation.select(.plugin("commerce.orders"))
+    navigation.swapArea(.plugin("commerce.returns"))
+    XCTAssertEqual(navigation.paths[.plugin("commerce.orders")], [.area("commerce.returns", [:])])
+    navigation.swapArea(.plugin("commerce.reservations"))
+    XCTAssertEqual(navigation.paths[.plugin("commerce.orders")], [.area("commerce.reservations", [:])])
+    navigation.swapArea(.plugin("commerce.orders"))
+    XCTAssertEqual(navigation.paths[.plugin("commerce.orders")], [])
+    XCTAssertEqual(navigation.section, .plugin("commerce.orders"))
+  }
+
   /// Back and Forward walk the sections opened, and a new place drops what was ahead.
   func testHistoryGoesBackAndForward() {
     let navigation = ShellNavigation()

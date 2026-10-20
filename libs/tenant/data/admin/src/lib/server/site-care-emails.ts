@@ -16,7 +16,7 @@
  */
 
 import { inboundMailDomain } from '@aglyn/aglyn/app-utils/inbound-mail-domain'
-import { SITE_CARE_INBOUND_LOCAL_PART } from '@aglyn/aglyn/app-utils/site-care'
+import { siteCareReplyAddress } from '@aglyn/aglyn/app-utils/site-care'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from './email-metering'
 import {
@@ -31,7 +31,8 @@ import {
  * `shared-util-email`), rendered in the WORKSPACE's brand — a white-label
  * agency's client hears from the agency — and sent from the platform's
  * address with a Reply-To that threads the answer onto the same request:
- * `care+<requestId>@<inbound mail domain>`. Metered as platform mail, like
+ * `support+<requestId>@<inbound mail domain>` (AGL-3997), or the support
+ * address for an email about no one request. Metered as platform mail, like
  * the success manager's copy: this is the service the owner pays for, not
  * mail the workspace sent.
  *
@@ -42,8 +43,7 @@ import {
 
 /** The address a request's emails reply to, so the answer joins it. */
 export function siteCareReplyTo(requestId: string | null): string {
-  const local = requestId ? `${SITE_CARE_INBOUND_LOCAL_PART}+${requestId}` : SITE_CARE_INBOUND_LOCAL_PART
-  return `${local}@${inboundMailDomain()}`
+  return siteCareReplyAddress(requestId, inboundMailDomain())
 }
 
 export interface SiteCareEmailInput {

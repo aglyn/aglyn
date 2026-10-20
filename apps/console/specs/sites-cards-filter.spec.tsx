@@ -108,6 +108,20 @@ jest.mock('../hooks/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 
+/** The reader's site pins in the workspace: none unless a case pins some. */
+const mockPins = { pinned: [] as string[], full: false }
+const mockTogglePin = jest.fn()
+const mockReplacePin = jest.fn()
+jest.mock('../hooks/use-pinned-hosts', () => ({
+  usePinnedHosts: (orgId: unknown) => ({
+    pinned: orgId === 'org-1' ? mockPins.pinned : [],
+    full: mockPins.full,
+    ready: true,
+    toggle: mockTogglePin,
+    replace: mockReplacePin,
+  }),
+}))
+
 const mockBranding = {
   branding: { productName: 'Acme', supportUrl: 'https://example.com/support' },
   whiteLabel: false,
@@ -186,6 +200,10 @@ beforeEach(() => {
   mockCalls.length = 0
   mockSetPage.mockReset()
   mockPage.page = 0
+  mockPins.pinned = []
+  mockPins.full = false
+  mockTogglePin.mockReset().mockReturnValue('pinned')
+  mockReplacePin.mockReset()
   mockUseOrgHosts.mockReturnValue({
     hosts: HOSTS,
     ready: true,
@@ -298,5 +316,49 @@ describe('the Sites page keeps its CARDS, filtered and searched by the query (AG
     render(<HostsPage />)
     expect(screen.getByText('These sites could not be loaded.')).toBeTruthy()
     expect(screen.queryByText('No sites match these filters.')).toBeNull()
+  })
+})
+
+describe('the Sites page leads with the sites the reader pinned (AGL-4005)', () => {
+  const titles = () =>
+    screen.getAllByText(/^(Site \d\d|Harbor Bakery)$/).map((el) => el.textContent)
+
+  it('draws the pinned sites first, in pin order, even one the query has not paged to', () => {
+    mockPins.pinned = ['host-14', 'host-3']
+    render(<HostsPage />)
+    expect(titles().slice(0, 4)).toEqual(['Harbor Bakery', 'Site 03', 'Site 01', 'Site 02'])
+    // The query's twelve, plus the pinned site from past its first page.
+    expect(screen.getAllByText('Manage')).toHaveLength(13)
+    const unpin = screen.getByRole('button', { name: 'Unpin Site 03' })
+    expect(unpin.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it("keeps a search's answer as the query gave it", async () => {
+    mockPins.pinned = ['host-3']
+    render(<HostsPage />)
+    fireEvent.change(screen.getByLabelText('Search by name, slug or domain'), {
+      target: { value: 'shop.harbor' },
+    })
+    await waitFor(() => expect(screen.queryByText('Site 03')).toBeNull())
+    expect(titles()).toEqual(['Harbor Bakery'])
+  })
+
+  it('pins a site from its card', () => {
+    render(<HostsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Site 01' }))
+    expect(mockTogglePin).toHaveBeenCalledWith('host-1')
+    expect(screen.queryByText('Pinned is full. Replace one?')).toBeNull()
+  })
+
+  it('asks which of five to replace, never dropping one quietly', async () => {
+    mockPins.pinned = ['host-1', 'host-2', 'host-3', 'host-4', 'host-5']
+    mockPins.full = true
+    mockTogglePin.mockReturnValue('full')
+    render(<HostsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Site 10' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/You can pin up to 5 sites in a workspace/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Replace Site 02' }))
+    expect(mockReplacePin).toHaveBeenCalledWith('host-2', 'host-10')
   })
 })

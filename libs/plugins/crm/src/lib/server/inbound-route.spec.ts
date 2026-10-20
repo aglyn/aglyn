@@ -399,6 +399,29 @@ describe('POST /api/crm/inbound', () => {
     })
   })
 
+  it('never reads or files mail to the support address, so it is no lead or contact (AGL-3997)', async () => {
+    // Every `email.received` event for the inbound domain reaches this route
+    // too: the support mailbox's copy at support@, and replies to a Site Care
+    // request at support+<id>@. Ada is a contact, and still nothing is filed.
+    const support = [
+      ['support@in.aglyn.com'],
+      ['support+AbCdEf0123456789XyZw@in.aglyn.com'],
+      ['help@example.com', 'support@in.aglyn.com'],
+    ]
+    for (const [index, to] of support.entries()) {
+      const id = `em-support-${index}`
+      messages.set(id, received(id, { to }))
+      const response = await deliver(event(id, to))
+      expect(response.status).toBe(202)
+      expect(await response.json()).toEqual({ filed: false, reason: 'no-token' })
+    }
+    expect(reads).toEqual([])
+    expect(rows()).toHaveLength(0)
+    expect(mockOrgActivity).toEqual([])
+    expect(mockChildren(`orgs/${ORG}/contacts`)).toEqual([`orgs/${ORG}/contacts/con-1`])
+    expect(mockChildren(`orgs/${ORG}/leads`)).toEqual([`orgs/${ORG}/leads/${personKey('bob@lead.example')}`])
+  })
+
   it('acknowledges a message the provider no longer has', async () => {
     const response = await deliver(event('em-gone'))
     expect(response.status).toBe(202)
