@@ -2929,6 +2929,18 @@ broken rules named and the parts at fault quoted; one that still breaks one
 ends `needs_input` in the doctrine's sentence (`aiDoctrineNeedsInputMessage`),
 which fails a listing's job and becomes an audit unit's note.
 
+**A length is fitted, not failed (AGL-4016).** A listing, or a batch of fixes,
+whose re-ask still runs a field past its length has those fields cut to it
+(`aiFitSeoText`, the page step's `aiClipAtWord` cut), and the whole check is
+run again on the fitted answer (`aiFitSeoOverrun` in `runtime/seo-fields.ts`).
+It is kept only when that check then passes. A numbered rule broken, any other
+fault left, or an answer cut off at its ceiling still ends `needs_input`, and
+nothing more is asked or spent. MindFullMe's Home listing (2026-10-20) failed
+over a 65-character title that the fast model wrote on both answers. A batch
+used to drop every page's fixes over one long title. The site proposal
+(`propose_site_listing`) is not fitted, because its 300- and 1,000-character
+fields hold sentences that a cut would leave unfinished.
+
 ## The page kind
 
 `page` (AGL-2907) builds one screen from a brief, as an unpublished draft. It
