@@ -1860,7 +1860,11 @@ nothing itself.
   and the machine keeps it on the job as `sitePhotos`, in the write that records
   the pass, as it keeps `siteImport`; it is never on the wire. A page unit of a
   `site` job is built with `AI_STOCK_PHOTO_LATE_PASS_INPUT`, which is what makes
-  the page step pass `onStarters` and report; a page any other job builds keeps
+  the page step pass `onStarters` and report. That page never places a photo it
+  already shows (`aiLayoutJobPhotoPicks` with `repeats: 'never'`): the beta.271
+  Laurel Fork home hero would otherwise have repeated its closing band's
+  couple. Every failed slot no other photo of the job's fits keeps a neutral
+  starter, all of them reported. A page any other job builds keeps
   #1831's rule (a failed slot none of the job's photos fits takes a neutral
   starter only where the job had none before the page, else it is taken
   out). While
@@ -1879,14 +1883,15 @@ nothing itself.
      `AI_SITE_LATE_PHOTOS_REFUSALS_IN_A_ROW` (2) refused downloads say the burst
      is not over: nothing more is downloaded, and the library is still asked for
      the remaining picks. No model, no credits. The pages' heroes go first.
-  2. Every picture still on a starter takes its own pick where the page does not
-     show it yet, else one of the photos the job copied: the built pages'
-     pictures read off their drafts, the records' photos, and what step 1
-     copied. A page's picture through `aiLayoutJobPhotoPicks` (by role, shape and
-     words, a hero a wide photo, never for a product or a portrait) with
-     `besideLast`: the photo beside it scores -10,000, so it wins only where
-     every one of the job's photos is beside it, since the other choice is a
-     starter of another business. Written to its draft with `updateAiDraftNodes`
+  2. Every picture still on a starter takes (a) its own pick where the page does
+     not show it yet, else (b) one of the photos the job copied that the page
+     does not show: the built pages' pictures read off their drafts, the
+     records' photos, and what step 1 copied. A page's picture goes through
+     `aiLayoutJobPhotoPicks` (by role, shape and words, a hero a wide photo,
+     never for a product or a portrait) with `repeats: 'last'`: (c) a photo the
+     page shows elsewhere scores -1,000 a use and the photo beside it -10,000,
+     so a repeat wins only where nothing else is left, since the other choice
+     is a starter of another business. Written to its draft with `updateAiDraftNodes`
      only where the image still holds a starter, with the slot's words where the
      photo brings none. A list's records through `aiSiteDatasetRecordsFromOwn`
      with the job's photos as a pool and `besideLast` (same category, then the
@@ -3183,8 +3188,9 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   frame, the words shared with the slot's, never the photo beside it, never for
   a product or a portrait of the business's people. The page floor takes one
   the same way. On a guided start (`onStarters`, from
-  `AI_STOCK_PHOTO_LATE_PASS_INPUT`), a failed slot none of them fits yet keeps
-  the neutral starter it would have had with none, which the site step's late
+  `AI_STOCK_PHOTO_LATE_PASS_INPUT`), a photo the page already shows is never
+  placed again (`repeats: 'never'`), and a failed slot none of the others fits
+  yet keeps a neutral starter, every such slot rather than two, which the site step's late
   photo pass fills once every page is built (see
   [The `site` kind](#the-site-kind)), and the resolver reports each slot left on
   a starter, with the picks the image hosts refused (`AiLayoutPictureReport`);

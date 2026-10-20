@@ -25,20 +25,21 @@ One start never uses the same photo twice.
 
 When a photo cannot be copied into your library, for example because Pixabay is busy and
 asks to wait, the job waits and tries again. If it still cannot, the space takes another
-photo the same start already copied for your site, on that page or another one, chosen to
-suit the space and never the same one as the picture beside it.
+photo the same job already copied for your site, chosen to suit the space: one the page
+does not show yet where there is one, and never the same one as the picture beside it. On a
+new site, a page never shows a photo twice this way.
 
 A space with no such photo yet holds a starter photo for a moment. Once every page is
 built, and before the site goes live, the start asks Pixabay for that space's own photo
 again, at least a minute after Pixabay asked it to wait. If Pixabay still cannot send it,
-the space takes one of the photos the start copied for any of your pages instead:
+the space takes one of the photos the start copied for your other pages instead, one the
+page does not show yet:
 
 - a page's main picture takes a wide photo;
 - a dataset's record, such as a gallery on a photographer's site, takes a photo of the
   same kind of record, or of the people it is about: a couple for a wedding gallery, a
   family for a family session;
-- a space takes the same photo as the picture beside it only when the start has no other
-  photo for it;
+- a page shows the same photo twice only when the start has no other photo for the space;
 - a record of one of your team only ever takes its own photo, never a photo of something
   else. If Pixabay still cannot send it, the record keeps its starter portrait for you to
   replace.
