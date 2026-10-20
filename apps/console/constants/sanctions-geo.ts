@@ -49,7 +49,6 @@ export const EMBARGOED_COUNTRIES: ReadonlySet<string> = new Set([
   'CU', // Cuba
   'IR', // Iran
   'KP', // North Korea
-  'SY', // Syria
 ])
 
 /**
