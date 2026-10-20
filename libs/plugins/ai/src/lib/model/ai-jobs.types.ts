@@ -22,6 +22,7 @@ import type { AiBuildPlan } from './ai-build-plan'
 import type { AiFreeCreditsLeft } from './ai-site-job'
 import type { AiJobCreditsConfirmation } from './ai-credit-estimate'
 import type { AiSiteImportState } from './ai-site-import'
+import type { AiSitePhotos } from './ai-site-photos'
 import type { AiSiteInspiration } from '../jobs/ai-site-inspiration-signals'
 
 /**
@@ -679,6 +680,15 @@ export interface AiJob {
    * the import step returns; absent on every other kind.
    */
   siteImport?: AiSiteImportState | null
+  /**
+   * A `site` job's pictures left on a starter photo (AGL-3988): each page
+   * picture and dataset record its library could not fill in its own pass,
+   * with the picks the image hosts refused. Written only by the machine's
+   * `recordStep`, from what the site step returns; emptied by its late photo
+   * pass before the site is published. Never on the wire. Absent on every
+   * other kind.
+   */
+  sitePhotos?: AiSitePhotos | null
 }
 
 /** When the AI jobs beat removed a guided start's empty site, and which (AGL-3936). */

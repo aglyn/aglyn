@@ -9,6 +9,43 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.273 — 2026-10-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.272...v1.0.0-beta.273)
+
+### Added
+
+- **legal:** pin Legal v18, Terms §8.9 Importing a Website ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976), [AGL-3974](https://linear.app/aglyn/issue/AGL-3974))
+- **data:** the dataset draft writer revises a seeded record's values ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+### Fixed
+
+- **release:** the site changelog drops a commit's CI-skip directive ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **ai:** an SEO listing a few characters too long is fitted, not failed ([AGL-4016](https://linear.app/aglyn/issue/AGL-4016))
+- **ai:** the empty-site sweep keeps the AI job it marks ([AGL-4015](https://linear.app/aglyn/issue/AGL-4015))
+- **ai:** the guided start's step timeline spans the whole dialog ([AGL-4014](https://linear.app/aglyn/issue/AGL-4014))
+- **ai:** a site start's page never shows a photo twice; the late pass fills it ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **marketing:** the /managed first-run script gives its films caption-free posters ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed republish gives each film player a caption-free poster ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **ai:** a late photo pass fills a site start's starters before it goes live ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** a guided start's publish sets the site's share image from its home hero ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** a site start's page offers its own photos and records each starter it leaves ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+### Documentation
+
+- **ai:** a new site's page never shows a photo twice while it fills its starters ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** regenerate the Assist docs index after merging main ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **pricing:** /managed version MuMb5a8jki, films with caption-free posters ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **ai:** how a guided start fills its starter photos and sets its Social image ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **tenant:** declare AGL-3988's four image markers in the sink inventory ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **release:** v1.0.0-beta.273 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
 ## v1.0.0-beta.272 — 2026-10-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.271...v1.0.0-beta.272)

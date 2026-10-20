@@ -70,7 +70,12 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
-import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_JOB_PHOTOS_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
+import {
+  AI_STOCK_PHOTO_AVOID_INPUT,
+  AI_STOCK_PHOTO_JOB_PHOTOS_INPUT,
+  AI_STOCK_PHOTO_LATE_PASS_INPUT,
+  AI_STOCK_PHOTO_PAGES_INPUT,
+} from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -152,6 +157,8 @@ import {
   type AiJobStepRunner,
 } from './ai-job-text-step'
 import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
+import { aiSiteMergePhotos, aiSitePhotosOwed, type AiSitePhotos } from '../model/ai-site-photos'
+import { AI_SITE_LATE_PHOTOS_MINIMUM_MS, aiSiteLatePhotos } from './ai-site-late-photos'
 import { AI_SITE_INSPIRATION_SIGNALS_INPUT, aiSiteInspirationReleased } from './ai-site-inspiration'
 import { aiSiteInspirationRefusal } from '../model/ai-site-inspiration'
 import {
@@ -326,11 +333,18 @@ export const AI_SITE_UNIT_EMPTY_COPY =
   'Part of this site could not be built. Try the site brief again.'
 
 /**
+ * The passes the late photo pass may add (AGL-3988): the one that hands the
+ * publish to it, its own, and one more where a beat's time ran out on it.
+ * That last one publishes whatever the pictures hold (`latePasses`).
+ */
+export const AI_SITE_LATE_PHOTOS_PASSES = 3
+
+/**
  * The most passes a scaffold's step may take: the largest plan it admits —
  * eight pages of eight sections, its three creations, a blog's first posts
- * (one a pass, the largest part) and a welcome email — with nothing to
- * spare, so a runner that never finishes is still bounded while a real site
- * is not.
+ * (one a pass, the largest part), a welcome email and the late photo pass
+ * (AGL-3988) — with nothing to spare, so a runner that never finishes is
+ * still bounded while a real site is not.
  */
 export const AI_SITE_MAX_PASSES =
   AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) +
@@ -338,7 +352,8 @@ export const AI_SITE_MAX_PASSES =
   AI_SITE_DATASETS_MAX +
   AI_SITE_EVENTS_MAX +
   AI_SITE_POSTS +
-  2
+  2 +
+  AI_SITE_LATE_PHOTOS_PASSES
 
 /**
  * The units a plan implies, in build order: the palette first, because a
@@ -774,6 +789,8 @@ export function aiSiteUnitJob(
     // Which a picture the library fails takes before any starter (AGL-3988).
     const recordPhotos = aiSiteDatasetPlacedPhotoDetails(job.outputs ?? [])
     if (recordPhotos.length) unitInputs[AI_STOCK_PHOTO_JOB_PHOTOS_INPUT] = recordPhotos
+    // And that the site's late photo pass fills what none of them fits yet (AGL-3988).
+    if (job.kind === 'site') unitInputs[AI_STOCK_PHOTO_LATE_PASS_INPUT] = true
   }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
@@ -1116,7 +1133,12 @@ export interface AiJobSiteStepDeps {
   dropCache?: typeof dropPluginSiteCache
   /** The blog's header entry put back once Try again's posts are live (AGL-3747); specs hand in a fake. */
   restoreBlogEntry?: typeof aiRestoreGuidedBlogEntry
+  /** The late photo pass before the publish (AGL-3988); specs hand in a fake. */
+  latePhotos?: typeof aiSiteLatePhotos
 }
+
+/** The photos state a site job holds once its late photo pass is done: nothing left (AGL-3988). */
+const AI_SITE_PHOTOS_SETTLED: AiSitePhotos = { pages: [], lists: [] }
 
 /** A page the scaffold reported built that holds none of its plan's sections. */
 export const AI_SITE_PAGE_NOT_WRITTEN_COPY =
@@ -1259,6 +1281,7 @@ export function createAiJobSiteStep(
   const publishPosts = deps.publishPosts ?? aiPublishSitePosts
   const dropCache = deps.dropCache ?? dropPluginSiteCache
   const restoreBlogEntry = deps.restoreBlogEntry ?? aiRestoreGuidedBlogEntry
+  const latePhotos = deps.latePhotos ?? aiSiteLatePhotos
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -1288,6 +1311,20 @@ export function createAiJobSiteStep(
     const init = starting ? { items: ledger } : {}
     const rows = new Map(ledger.map((row) => [row.slot, row]))
     const next = aiBuildNextUnit(ledgerUnits, ledger)
+    /**
+     * The pictures the start left on a starter (AGL-3988): what the job
+     * holds, with what this pass's unit reported merged in once it ran.
+     */
+    let photos: AiSitePhotos | null = job.sitePhotos ?? null
+    let photosReported = false
+    /**
+     * Whether the publish waits for the late photo pass: a record, or a
+     * picture of a page it puts live, is still on a starter. A page that
+     * failed is not published, so its pictures owe nothing. `pages`: the
+     * pages built so far, the one this pass built among them.
+     */
+    const latePhotosOwed = (pages: readonly AiJobOutput[]) =>
+      Boolean(job.hostId) && aiSitePhotosOwed(photos, pages.map((page) => page.id))
 
     /**
      * A guided start's last pass puts what it built on the site (AGL-3596):
@@ -1431,7 +1468,31 @@ export function createAiJobSiteStep(
           : [],
       )
 
-    if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
+    if (!next) {
+      // Every part is built: the pictures left on a starter take the job's
+      // own photos before the site goes live (AGL-3988), in a pass of their
+      // own, sized to wait out the image hosts' burst.
+      if (latePhotosOwed(builtPages()) && photos && !(await aiJobCancelAsked(context.firestore, job, context.signal))) {
+        const late = await latePhotos({
+          firestore: context.firestore,
+          job,
+          photos,
+          pageIds: builtPages().map((page) => page.id),
+          org: (context.org ?? null) as Readonly<Record<string, unknown>> | null,
+          now: context.now,
+          ...(context.signal ? { signal: context.signal } : {}),
+        })
+        // A pass whose time ran out while it waited hands what is left to the
+        // next, inside the passes the bound gives it: the last one publishes
+        // whatever the pictures hold, so a site is never held back by them.
+        const latePasses = (photos.latePasses ?? 0) + 1
+        if (late.photos && latePasses < AI_SITE_LATE_PHOTOS_PASSES - 1) {
+          return { ...aiUnspentOutcome(model), ...init, continue: true, sitePhotos: { ...late.photos, latePasses } }
+        }
+        return finish({ ...aiUnspentOutcome(model), ...init, sitePhotos: AI_SITE_PHOTOS_SETTLED }, builtPages())
+      }
+      return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
+    }
     const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
     // The look is the scaffold's own pass (AGL-3660), not the theme job's proposal.
     const catalog = unit.kind === 'products' ? runnerFor('products') : undefined
@@ -1463,6 +1524,7 @@ export function createAiJobSiteStep(
       ...init,
       item,
       ...(item.status === 'running' || othersOpen ? { continue: true } : {}),
+      ...(photosReported ? { sitePhotos: photos ?? AI_SITE_PHOTOS_SETTLED } : {}),
     })
     /**
      * A unit that failed or was skipped with nothing else open ends the job
@@ -1471,7 +1533,7 @@ export function createAiJobSiteStep(
      * the one after. So the end is the publish, whatever the last unit came to.
      */
     const closing = async (outcome: AiJobStepOutcome): Promise<AiJobStepOutcome> =>
-      outcome.continue ? outcome : finish(outcome, builtPages())
+      outcome.continue ? outcome : latePhotosOwed(builtPages()) ? { ...outcome, continue: true } : finish(outcome, builtPages())
 
     // A blog's posts and a store's products ask, before their first pass,
     // whether this member may have them here (AGL-3676): a refusal spends
@@ -1553,6 +1615,11 @@ export function createAiJobSiteStep(
       console.error('ai site unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
       return closing(settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } }))
     }
+    // The pictures this unit left on a starter, kept on the job for the late photo pass (AGL-3988).
+    if (outcome.sitePhotos) {
+      photos = aiSiteMergePhotos(photos, outcome.sitePhotos)
+      photosReported = true
+    }
     const spent = aiUnitSpend(outcome)
     const stopped = aiUnitFailure(unit.slot, outcome)
     if (stopped) {
@@ -1610,14 +1677,14 @@ export function createAiJobSiteStep(
     )
     if (done.continue) return done
     rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: degraded ? 'degraded' : 'succeeded' })
-    return finish(
-      done,
-      builtPages(
-        (unit.kind === 'page' && !templates.has(unit.slot)) || unit.kind === 'store'
-          ? outcome.outputs.filter((output) => output.resource === 'screen')
-          : [],
-      ),
+    const live = builtPages(
+      (unit.kind === 'page' && !templates.has(unit.slot)) || unit.kind === 'store'
+        ? outcome.outputs.filter((output) => output.resource === 'screen')
+        : [],
     )
+    // The publish waits a pass for the late photo pass (AGL-3988).
+    if (latePhotosOwed(live)) return { ...done, continue: true }
+    return finish(done, live)
   }
 }
 
@@ -1658,7 +1725,9 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   const ledger = job.items?.length ? job.items : aiSiteInitialLedger(units, outputs)
   const next = aiBuildNextUnit(aiSiteLedgerUnits(units), ledger)
   const unit = next ? units.find((one) => one.slot === next.slot) : undefined
-  if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  // Nothing left to build: the late photo pass, where a picture is still on
+  // a starter (AGL-3988), and the publish in the same pass.
+  if (!unit) return aiSitePhotosOwed(job.sitePhotos) ? Math.max(AI_JOB_PAGE_STEP_MINIMUM_MS, AI_SITE_LATE_PHOTOS_MINIMUM_MS) : AI_JOB_PAGE_STEP_MINIMUM_MS
   if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
   if (unit.kind === 'posts') return AI_SITE_POST_BUDGET.minimumMs
   if (unit.kind === 'dataset') return AI_SITE_DATASET_BUDGET.minimumMs
