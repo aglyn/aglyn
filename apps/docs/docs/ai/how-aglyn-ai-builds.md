@@ -122,7 +122,9 @@ lists each job with where it stands.
    has or something the plan itself creates.
 8. **Data is bound, not typed.** A list you already keep as a dataset, collection
    or product catalog is bound to it rather than typed into the page, so it stays
-   current. A long list your site does not have yet becomes a proposed dataset.
+   current. A long list your site does not have yet becomes a proposed dataset,
+   shared with that site only, so it is deleted with the site if you delete the
+   site. Share it with more sites from its **Sharing** control on the **Data** page.
 9. **Images come from your media library, with alt text.** Images are placed from
    the media library, or left as an empty slot for you to fill, and never linked
    from another website. Every image has alt text or is marked decorative.

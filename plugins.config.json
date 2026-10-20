@@ -2864,6 +2864,20 @@
           "siteField": "hostId",
           "mediaScan": "none",
           "mediaScanReason": "An AI job is the machine's record of one request: the brief, scalar inputs, the step ledger and the ids of the documents it produced. What it produced is a screen, layout, product or other document of the site, and the scan reads that document; scanning the job would report a request as using an asset the page it built uses. Jobs expire on their own (`expiresAt`, 180 days)."
+        },
+        {
+          "name": "aiInsights",
+          "label": "AI insight",
+          "siteField": "hostId",
+          "mediaScan": "none",
+          "mediaScanReason": "An AI insight is the answer to a question about the site's numbers: the question, the days it covers, the insights in words and the tables of figures they came from. It places nothing on a page and names no asset, so scanning it would only ever report nothing. Insights expire on their own (`expiresAt`)."
+        },
+        {
+          "name": "assistExchanges",
+          "label": "Assist conversation",
+          "siteField": "hostId",
+          "mediaScan": "none",
+          "mediaScanReason": "An Assist exchange is one question a member typed and the answer Assist gave, kept as prose. A change Assist made lands on the site's own pages, which the scan reads; scanning the conversation would report an asset as used because someone asked about it. Exchanges expire on their own (`expiresAt`)."
         }
       ],
       "contributes": {
