@@ -116,6 +116,25 @@ describe('EditHintBounce (AGL-1842)', () => {
     ).toBeGreaterThan(0)
   })
 
+  // The native apps' Besigner web view (AGL-4002): the bounce left the
+  // console, and the app handed it to the person's browser beside the editor.
+  it('never bounces inside the native app web view, and spends no window there', async () => {
+    window.sessionStorage.setItem('aglyn:native-app-web-view', '1')
+    try {
+      const getIdTokenResult = jest.fn(signedInUser.getIdTokenResult)
+      mockUser = { ...signedInUser, getIdTokenResult }
+      render(<EditHintBounce navigate={navigate} />)
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(getIdTokenResult).not.toHaveBeenCalled()
+      expect(global.fetch).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
+      expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBeNull()
+    } finally {
+      window.sessionStorage.removeItem('aglyn:native-app-web-view')
+    }
+  })
+
   it.each(['/signup', '/signin'])(
     'never leaves the sign-in door %s, and spends no window there',
     async (path) => {

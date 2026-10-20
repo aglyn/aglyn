@@ -75,6 +75,8 @@ actual fun BesignerWebView(
       is BesignerNavigation.Native -> { left[0] = true; onConsoleLink(next.path) }
       BesignerNavigation.SessionEnded -> error = "Your session ended. Open the Besigner again to keep editing."
       BesignerNavigation.External -> open(android.net.Uri.parse(url))
+      // A script or redirect leaving the console: dropped (AGL-4002).
+      BesignerNavigation.Ignore -> Unit
     }
     return true
   }
@@ -167,8 +169,9 @@ actual fun BesignerWebView(
               // Frames inside the page (the Besigner's canvas, Firebase's auth frame, reCAPTCHA) load where they are.
               if (!request.isForMainFrame) return false
               val url = request.url.toString()
-              // Besigner pages stay here; any other console page is a native screen; another site opens in the browser.
-              return handle(besignerNavigation(url, origin, current[0]), url) { uri ->
+              // Besigner pages stay here; any other console page is a native screen; another site opens in the browser
+              // only from a link the person tapped (a script or redirect leaving the console is dropped, AGL-4002).
+              return handle(besignerNavigation(url, origin, current[0], userActivated = request.hasGesture()), url) { uri ->
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
               }
             }

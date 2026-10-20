@@ -64,10 +64,12 @@ private object Slot {
   const val PUT_USER_AGENT = 22
   // ICoreWebView2NavigationStartingEventArgs
   const val NAV_GET_URI = 3
+  const val NAV_GET_IS_USER_INITIATED = 4
   const val NAV_PUT_CANCEL = 8
   // ICoreWebView2NewWindowRequestedEventArgs
   const val NEW_WINDOW_GET_URI = 3
   const val NEW_WINDOW_PUT_HANDLED = 6
+  const val NEW_WINDOW_GET_IS_USER_INITIATED = 8
   // ICoreWebView2WebMessageReceivedEventArgs
   const val MESSAGE_GET_SOURCE = 3
   const val MESSAGE_TRY_GET_STRING = 5
@@ -131,8 +133,11 @@ enum class NavigationVerdict { ALLOW, CANCEL }
 
 /** The callbacks a view hears; all run on the WebView2 thread. */
 class WebView2Listener(
-  /** A navigation to [uri] is about to start: allow it, or cancel it (the caller routes it elsewhere). */
-  val onNavigation: (uri: String) -> NavigationVerdict,
+  /**
+   * A navigation to [uri] is about to start: allow it, or cancel it (the caller routes it elsewhere). `userInitiated`
+   * says whether a person's click started it, rather than a page script or a redirect.
+   */
+  val onNavigation: (uri: String, userInitiated: Boolean) -> NavigationVerdict,
   /**
    * The page's address changed without a navigation starting: the console's
    * client-side router (history.pushState), which NavigationStarting never sees.
@@ -238,7 +243,8 @@ class WebView2View(
     }
     val navigating = eventHandler(IID_NAVIGATION_STARTING) { args ->
       val uri = args.string(Slot.NAV_GET_URI, "get_Uri").orEmpty()
-      if (listener.onNavigation(uri) == NavigationVerdict.CANCEL) args.call(Slot.NAV_PUT_CANCEL, 1)
+      val userInitiated = runCatching { args.boolean(Slot.NAV_GET_IS_USER_INITIATED, "get_IsUserInitiated") }.getOrDefault(false)
+      if (listener.onNavigation(uri, userInitiated) == NavigationVerdict.CANCEL) args.call(Slot.NAV_PUT_CANCEL, 1)
     }
     view.call(Slot.ADD_NAVIGATION_STARTING, navigating, eventToken()).check("add_NavigationStarting")
     val sourceChanged = eventHandler(IID_SOURCE_CHANGED) { _ ->
@@ -249,7 +255,8 @@ class WebView2View(
     val newWindow = eventHandler(IID_NEW_WINDOW_REQUESTED) { args ->
       args.call(Slot.NEW_WINDOW_PUT_HANDLED, 1)
       val uri = args.string(Slot.NEW_WINDOW_GET_URI, "get_Uri").orEmpty()
-      if (listener.onNavigation(uri) == NavigationVerdict.ALLOW) webview?.call(Slot.NAVIGATE, wide(uri))
+      val userInitiated = runCatching { args.boolean(Slot.NEW_WINDOW_GET_IS_USER_INITIATED, "get_IsUserInitiated") }.getOrDefault(false)
+      if (listener.onNavigation(uri, userInitiated) == NavigationVerdict.ALLOW) webview?.call(Slot.NAVIGATE, wide(uri))
     }
     view.call(Slot.ADD_NEW_WINDOW_REQUESTED, newWindow, eventToken()).check("add_NewWindowRequested")
     if (bridgeScript != null) {

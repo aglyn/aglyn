@@ -39,13 +39,22 @@ sealed interface BesignerNavigation {
   /** The sign-in wall: the session the view was opened with has ended. */
   data object SessionEnded : BesignerNavigation
 
-  /** Another site altogether: the person's browser. */
+  /** Another site altogether, from a link the person clicked: the person's browser. */
   data object External : BesignerNavigation
+
+  /**
+   * Another site, reached by a page script or a redirect nobody clicked (the console's once-a-day editor-hint bounce
+   * to `console.aglyn.app`): dropped, never the browser (AGL-4002).
+   */
+  data object Ignore : BesignerNavigation
 }
 
-/** Decides a navigation to [url] from a Besigner view on [origin] showing the editor at [current] (AGL-3850). */
-fun besignerNavigation(url: String, origin: String, current: String = ""): BesignerNavigation {
-  if (originOf(url) != originOf(origin)) return BesignerNavigation.External
+/**
+ * Decides a navigation to [url] from a Besigner view on [origin] showing the editor at [current] (AGL-3850).
+ * [userActivated] says whether a person clicked a link to it: only then does another site open in the browser.
+ */
+fun besignerNavigation(url: String, origin: String, current: String = "", userActivated: Boolean = false): BesignerNavigation {
+  if (originOf(url) != originOf(origin)) return if (userActivated) BesignerNavigation.External else BesignerNavigation.Ignore
   val path = url.removePrefix(originOf(url) ?: "").ifEmpty { "/" }
   return when (val exit = BesignerEntry.exit(current, path)) {
     BesignerEntry.Exit.Stay -> BesignerNavigation.Stay

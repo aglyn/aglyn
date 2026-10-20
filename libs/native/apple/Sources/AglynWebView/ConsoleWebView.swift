@@ -3,6 +3,7 @@
 
 import AglynCore
 import Observation
+import OSLog
 import SwiftUI
 import WebKit
 
@@ -16,6 +17,8 @@ public final class ConsoleWebViewModel {
   public private(set) var title: String = ""
   public private(set) var canGoBack = false
   public private(set) var loading = true
+  /// The page's address, as the page moves (its client-side route changes included).
+  public private(set) var url: URL?
   @ObservationIgnored weak var webView: WKWebView?
 
   public init() {}
@@ -23,10 +26,17 @@ public final class ConsoleWebViewModel {
   public func goBack() { webView?.goBack() }
   public func reload() { webView?.reload() }
 
+  /// Whether `expression` is true on the page now; false while there is no page or it throws.
+  public func check(_ expression: String) async -> Bool {
+    guard let webView else { return false }
+    return (try? await webView.evaluateJavaScript("Boolean(\(expression))")) as? Bool ?? false
+  }
+
   func sync(_ webView: WKWebView) {
     title = webView.title ?? ""
     canGoBack = webView.canGoBack
     loading = webView.isLoading
+    url = webView.url
   }
 }
 
@@ -101,6 +111,8 @@ public struct ConsoleWebView {
       }
       configuration.userContentController = controller
       configuration.websiteDataStore = .default()
+      // A script never opens a window by itself (macOS allows it by default): a new window needs a person's gesture.
+      configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
       // The console leaves its browser-only chrome out of the app (AGL-3894).
       configuration.applicationNameForUserAgent = BesignerEntry.applicationNameForUserAgent(
         base: configuration.applicationNameForUserAgent, version: BesignerEntry.appVersion,
@@ -116,7 +128,12 @@ public struct ConsoleWebView {
         webView.observe(\.isLoading) { [weak self] view, _ in MainActor.assumeIsolated { self?.parent.model.sync(view) } },
         // `decidePolicyFor` never sees a client-side route change (pushState),
         // which is how the console moves between its pages; the URL does.
-        webView.observe(\.url) { [weak self] view, _ in MainActor.assumeIsolated { self?.urlChanged(view.url) } },
+        webView.observe(\.url) { [weak self] view, _ in
+          MainActor.assumeIsolated {
+            self?.parent.model.sync(view)
+            self?.urlChanged(view.url)
+          }
+        },
       ]
       let store = configuration.websiteDataStore.httpCookieStore
       let cookies = parent.cookies
@@ -129,9 +146,7 @@ public struct ConsoleWebView {
     }
 
     /// The path part of a console URL, with its query.
-    static func consolePath(_ url: URL) -> String {
-      (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?\($0)" } ?? "")
-    }
+    static func consolePath(_ url: URL) -> String { ConsoleNavigationPolicy.consolePath(url) }
 
     private func urlChanged(_ url: URL?) {
       guard let url, let allowsPath = parent.allowsPath,
@@ -145,36 +160,54 @@ public struct ConsoleWebView {
       _ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
       decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
     ) {
-      guard let url = action.request.url else { return decisionHandler(.cancel) }
-      if url.scheme == "about" { return decisionHandler(.allow) }
-      if BridgeProtocol.isTrusted(url.absoluteString, trustedOrigins: parent.trustedOrigins) {
-        if action.targetFrame?.isMainFrame ?? true, let allowsPath = parent.allowsPath {
-          let path = Self.consolePath(url)
-          if !allowsPath(path) {
-            parent.onRefusedPath?(path)
-            return decisionHandler(.cancel)
-          }
-        }
-        return decisionHandler(.allow)
-      }
-      // Off the console: the system browser, never inside the signed-in WebView.
-      if action.targetFrame?.isMainFrame ?? true, ["http", "https", "mailto", "tel"].contains(url.scheme ?? "") {
-        #if os(iOS)
-          UIApplication.shared.open(url)
-        #elseif os(macOS)
-          NSWorkspace.shared.open(url)
-        #endif
-        return decisionHandler(.cancel)
-      }
-      decisionHandler(.allow)
+      let decision = ConsoleNavigationPolicy.decide(
+        action.request.url, trustedOrigins: parent.trustedOrigins, mainFrame: action.targetFrame?.isMainFrame ?? true,
+        linkActivated: action.navigationType == .linkActivated, allowsPath: parent.allowsPath)
+      apply(decision, decisionHandler)
     }
 
-    /// `target=_blank` on the console stays in this WebView.
+    private func apply(
+      _ decision: ConsoleNavigationPolicy.Decision, _ decisionHandler: @MainActor (WKNavigationActionPolicy) -> Void
+    ) {
+      switch decision {
+      case .allow: decisionHandler(.allow)
+      case .handBack(let path):
+        parent.onRefusedPath?(path)
+        decisionHandler(.cancel)
+      case .systemBrowser(let url):
+        Self.openInSystem(url)
+        decisionHandler(.cancel)
+      case .ignore(let url):
+        // A page script or a redirect leaving the console (the console's once-a-day editor-hint bounce to
+        // console.aglyn.app, AGL-4002): never the system browser, which only a person's own click may open.
+        Self.log.info("Ignored a navigation off the console that nobody clicked: \(url.host() ?? "", privacy: .public)")
+        decisionHandler(.cancel)
+      }
+    }
+
+    static func openInSystem(_ url: URL) {
+      #if os(iOS)
+        UIApplication.shared.open(url)
+      #elseif os(macOS)
+        NSWorkspace.shared.open(url)
+      #endif
+    }
+
+    static let log = Logger(subsystem: "com.aglyn.webview", category: "ConsoleWebView")
+
+    /// A new window (`target=_blank`, `window.open`): the console's own pages stay in this WebView, and a page off the
+    /// console goes to the system browser. WebKit asks only after a person's gesture, since the configuration never
+    /// lets a script open a window by itself.
     public func webView(
       _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
       for action: WKNavigationAction, windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-      if action.targetFrame == nil { webView.load(action.request) }
+      guard action.targetFrame == nil else { return nil }
+      switch ConsoleNavigationPolicy.decideNewWindow(action.request.url, trustedOrigins: parent.trustedOrigins) {
+      case .systemBrowser(let url): Self.openInSystem(url)
+      case .allow: webView.load(action.request)
+      case .handBack, .ignore: break
+      }
       return nil
     }
 

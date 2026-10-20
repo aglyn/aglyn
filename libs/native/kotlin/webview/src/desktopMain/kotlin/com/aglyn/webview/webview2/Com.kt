@@ -9,6 +9,7 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import com.sun.jna.WString
+import com.sun.jna.ptr.IntByReference
 import com.sun.jna.ptr.PointerByReference
 import java.util.Collections
 
@@ -60,6 +61,13 @@ internal class ComRef(val pointer: Pointer) {
     val out = PointerByReference()
     call(slot, out).check(name)
     return out.value?.let { text -> text.getWideString(0).also { Ole32.INSTANCE.CoTaskMemFree(text) } }
+  }
+
+  /** Calls a getter that answers a BOOL. */
+  fun boolean(slot: Int, name: String): Boolean {
+    val out = IntByReference()
+    call(slot, out).check(name)
+    return out.value != 0
   }
 
   fun queryInterface(iid: ByteArray): ComRef? {

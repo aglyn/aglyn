@@ -81,6 +81,21 @@ struct NotInAppView: View {
   }
 }
 
+/// The one loading state of the in-app Besigner, from the push until the editor has drawn (AGL-4002): the spinner and
+/// its line centred in the whole area under the screen's head, on the content ground.
+struct BesignerLoadingView: View {
+  var body: some View {
+    VStack(spacing: 12) {
+      ProgressView().controlSize(.large)
+      Text("Opening the Besigner").font(AglynFont.body).foregroundStyle(AglynColor.secondaryText)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(AglynColor.paper)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("besigner-loading")
+  }
+}
+
 /// Where the Besigner web view is, so a navigation inside it can be judged
 /// against the editor it left (AGL-3850).
 @MainActor
@@ -124,42 +139,61 @@ struct BesignerScreen: View {
     case failed(String)
   }
 
+  /// The Besigner's own app bar (its wordmark), which every editor page draws once the editor is mounted: the app's
+  /// loading state steps aside for it then, never for the console's sign-in hand-off page (AGL-4002).
+  static let editorDrawn = "document.getElementById('aglyn-besigner-logo-full') !== null"
+  /// The longest the loading state stays over a page that never draws the editor (the console's own error card).
+  static let revealAfter: Duration = .seconds(12)
+
+  /// Whether the editor shows: until then one native loading state covers the whole area.
+  @State private var shown = false
+
   var body: some View {
-    Group {
-      switch state {
-      case .starting:
-        ProgressView("Opening the Besigner")
-      case .failed(let message):
+    ZStack {
+      if case .ready(let cookies) = state, let config = model.config,
+        let url = BesignerEntry.url(origin: config.consoleOrigin, besignerPath: path)
+      {
+        // The web view has its whole frame from its first layout, under the loading state, so nothing the console
+        // draws while it signs in (its own "One moment" card) shows, at any size.
+        ConsoleWebView(
+          url: url, trustedOrigins: [config.consoleOrigin], cookies: cookies.compactMap(\.cookie),
+          model: webModel,
+          handlers: [
+            "openNative": { params in
+              let link = params["path"]?.stringValue ?? ""
+              guard case .screen(let screen, let screenParams)? = model.registry.resolve(link) else {
+                return ["opened": false]
+              }
+              navigation.push(.screen(screen, screenParams))
+              return ["opened": true]
+            },
+            "close": { _ in
+              leave()
+              return nil
+            },
+          ],
+          info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")],
+          allowsPath: { session.allows($0) },
+          onRefusedPath: { handBack($0) }
+        )
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .ignoresSafeArea(edges: .bottom)
+        .task(id: url) { await revealWhenDrawn() }
+      }
+      if case .failed(let message) = state {
         AglynEmptyState("The Besigner did not open", systemImage: "exclamationmark.triangle", message: message) {
           Button("Try again") { Task { await start() } }
         }
-      case .ready(let cookies):
-        if let config = model.config, let url = BesignerEntry.url(origin: config.consoleOrigin, besignerPath: path) {
-          ConsoleWebView(
-            url: url, trustedOrigins: [config.consoleOrigin], cookies: cookies.compactMap(\.cookie),
-            model: webModel,
-            handlers: [
-              "openNative": { params in
-                let link = params["path"]?.stringValue ?? ""
-                guard case .screen(let screen, let screenParams)? = model.registry.resolve(link) else {
-                  return ["opened": false]
-                }
-                navigation.push(.screen(screen, screenParams))
-                return ["opened": true]
-              },
-              "close": { _ in
-                leave()
-                return nil
-              },
-            ],
-            info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")],
-            allowsPath: { session.allows($0) },
-            onRefusedPath: { handBack($0) }
-          )
-          .ignoresSafeArea(edges: .bottom)
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AglynColor.paper)
+      } else if !shown {
+        BesignerLoadingView()
+          .transition(.opacity)
       }
     }
+    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
     // The screen's own name, never the web page's: the page title carried an
     // unread count and the brand into the Mac window title (AGL-3894).
     .navigationTitle("Besigner")
@@ -172,6 +206,22 @@ struct BesignerScreen: View {
     .aglynScreenTitle("Besigner")
     .aglynPrimaryAction(id: "besigner-done", "Done", systemImage: "checkmark") { leave() }
     .task { await start() }
+  }
+
+  /// Lifts the loading state once the editor has drawn its app bar (the page is on a Besigner path, past the sign-in
+  /// hand-off), or after `revealAfter` whatever the page shows, so it can never hold the screen.
+  private func revealWhenDrawn() async {
+    let clock = ContinuousClock()
+    let started = clock.now
+    while !Task.isCancelled, !shown {
+      let path = webModel.url.map(ConsoleNavigationPolicy.consolePath) ?? ""
+      let onEditor = !path.hasPrefix(BesignerEntry.path) && DeepLinks.isBesignerPath(path)
+      if onEditor, await webModel.check(Self.editorDrawn) { break }
+      if clock.now - started > Self.revealAfter { break }
+      try? await Task.sleep(for: .milliseconds(150))
+    }
+    guard !Task.isCancelled else { return }
+    withAnimation(.easeOut(duration: 0.2)) { shown = true }
   }
 
   /// Back to the screen the Besigner was opened from.
@@ -205,6 +255,7 @@ struct BesignerScreen: View {
 
   private func start() async {
     session.left = false
+    shown = false
     state = .starting
     guard let config = model.config, let auth = model.auth,
       let token = try? await auth.idToken(forceRefresh: false) else {
