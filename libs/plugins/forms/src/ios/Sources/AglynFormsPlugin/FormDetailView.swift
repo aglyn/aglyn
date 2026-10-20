@@ -33,10 +33,10 @@ struct FormDetailView: View {
         AglynEmptyState(
           "Could not load this form", systemImage: "exclamationmark.triangle",
           message: "Check the connection and try again.")
-      } else if model.missing || model.form == nil {
-        AglynEmptyState("This form is gone", systemImage: FormsSymbols.form)
-      } else if let form = model.form {
+      } else if !model.missing, let form = model.form {
         content(form)
+      } else {
+        AglynEmptyState("This form is gone", systemImage: FormsSymbols.form)
       }
     }
     .navigationTitle(titled ? (model.form?.name ?? "Form") : "Forms")
@@ -86,7 +86,7 @@ struct FormDetailView: View {
         if let updatedAt = form.updatedAt { LabeledContent("Updated", value: relativeTime(updatedAt, now: now)) }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("form-detail")
   }

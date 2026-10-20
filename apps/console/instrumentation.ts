@@ -179,6 +179,11 @@ export async function register(): Promise<void> {
         const { consoleMediaIngest } = await import('./utils/server/media-ingest')
         return await consoleMediaIngest.listOwnerPhotos(input)
       },
+      // A picture a site import already brought in (AGL-3976), by its key.
+      findImportedPhoto: async (input) => {
+        const { consoleMediaIngest } = await import('./utils/server/media-ingest')
+        return await consoleMediaIngest.findImportedPhoto(input)
+      },
     },
     { pluginId: 'console' },
   )

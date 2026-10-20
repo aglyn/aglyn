@@ -194,7 +194,7 @@ struct ReportsSection: View {
         LabeledContent("Unassigned", value: "\(tasks.rows.filter { $0.assigneeUID == nil }.count)")
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("crm-reports")
     .task(id: scope.readTokens) {

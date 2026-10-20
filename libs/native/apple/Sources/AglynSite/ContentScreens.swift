@@ -352,7 +352,7 @@ private struct EntryForm: View {
         AglynDetailRow("Entry id", value: entry.id)
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .onChange(of: stored) { _, next in draft = next }
     .accessibilityIdentifier("entry-editor")

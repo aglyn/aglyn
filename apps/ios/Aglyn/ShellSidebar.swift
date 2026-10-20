@@ -639,8 +639,8 @@ struct SidebarList: View {
         switch section {
         case .home: navigation.select(.home)
         case .analytics: navigation.push(.analytics)
-        case .plugin(let screen): navigation.push(.screen(screen, [:]))
-        case .place(let screen, let params): navigation.push(.screen(screen, params))
+        // An area opens with its section chips, as a tab's root shows it (AGL-3993).
+        case .plugin, .place: navigation.pushArea(section)
         default: navigation.select(section)
         }
       } else {

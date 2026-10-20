@@ -5033,6 +5033,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let paymentAcceptedMaxLength: Int
   public let pinnedOrgsField: String
   public let pinnedOrgsMax: Int
+  public let planCardAdvanceMs: Int
+  public let planCardContextMeters: [String: [String]]
+  public let planCardContexts: [String]
+  public let planCardHomeScreen: String
+  public let planCardMeterLabels: [String: String]
+  public let planCardMeterUnits: [String: String]
+  public let planCardMeters: [String]
+  public let planCardScreenContexts: [String: String]
+  public let planCardWarningShare: Double
   public let posCashEventLabels: [String: String]
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
@@ -5334,6 +5343,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
     case pinnedOrgsField = "PINNED_ORGS_FIELD"
     case pinnedOrgsMax = "PINNED_ORGS_MAX"
+    case planCardAdvanceMs = "PLAN_CARD_ADVANCE_MS"
+    case planCardContextMeters = "PLAN_CARD_CONTEXT_METERS"
+    case planCardContexts = "PLAN_CARD_CONTEXTS"
+    case planCardHomeScreen = "PLAN_CARD_HOME_SCREEN"
+    case planCardMeterLabels = "PLAN_CARD_METER_LABELS"
+    case planCardMeterUnits = "PLAN_CARD_METER_UNITS"
+    case planCardMeters = "PLAN_CARD_METERS"
+    case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
+    case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"

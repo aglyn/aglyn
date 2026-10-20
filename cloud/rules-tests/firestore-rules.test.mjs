@@ -6562,6 +6562,20 @@ describe('account preferences are bounded, pins at five (AGL-3943)', () => {
     await mustAllow('editing another field beside seven pins', setDoc(me(), { firstName: 'Zach' }, { merge: true }))
   })
 
+  it('bounds pinned sites at a hundred in all (AGL-4005)', async () => {
+    const pins = (n) => Array.from({ length: n }, (_, i) => ({ orgId: ORG, hostId: `h${i + 1}` }))
+    await mustAllow('a hundred pinned sites', setDoc(me(), { pinnedHosts: pins(100) }))
+    await mustDeny(
+      'a hundred and first by arrayUnion',
+      setDoc(me(), { pinnedHosts: arrayUnion({ orgId: ORG, hostId: 'h101' }) }, { merge: true }),
+    )
+    await mustAllow(
+      'unpinning one',
+      setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h100' }) }, { merge: true }),
+    )
+    await mustDeny('pinned sites that are not a list', setDoc(me(), { pinnedHosts: { h1: ORG } }, { merge: true }))
+  })
+
   it('caps recent workspaces, starred items, recent items and workspace colors', async () => {
     await mustAllow(
       'eight recent workspaces, fifty stars, thirty recents, one color',
@@ -10937,6 +10951,65 @@ describe('a custom sending domain is unwritable and unreadable from any client',
         status: 'verified',
       }),
     )
+  })
+})
+
+/**
+ * A website ownership claim's `status: 'proven'` is what lets a site import
+ * read a website (AGL-3974), so a client that could write it could import,
+ * and clone, any site. Owners and admins read it, because it carries the
+ * token they publish; nobody else does.
+ */
+describe('a website ownership claim is read by managers and written by no client', () => {
+  const DOMAIN = 'bakery.test'
+  const claimPath = (orgId = ORG) => ['orgs', orgId, 'domainOwnershipClaims', DOMAIN]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), ...claimPath()), {
+        domain: DOMAIN,
+        token: 'tok-pending',
+        status: 'pending',
+        createdAt: Date.now(),
+        createdBy: OWNER,
+        emailCode: null,
+      })
+    })
+  })
+
+  it('the owner reads it; an editor, a viewer, an outsider and anon do not', async () => {
+    await assertSucceeds(getDoc(doc(authed(OWNER), ...claimPath())))
+    for (const [label, db] of [
+      ['an editor', authed(EDITOR)],
+      ['a viewer', authed(VIEWER)],
+      ['an outsider', authed(OUTSIDER)],
+      ['an anonymous visitor', anon()],
+    ]) {
+      await mustDeny(`${label} reading orgs/${ORG}/domainOwnershipClaims/${DOMAIN}`, getDoc(doc(db, ...claimPath())))
+    }
+  })
+
+  it('nobody marks a claim proven, plants one or deletes one — owner and staff alike', async () => {
+    for (const [label, db] of [
+      ['the org owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['an outsider', authed(OUTSIDER)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['an anonymous visitor', anon()],
+    ]) {
+      await mustDeny(
+        `${label} marking orgs/${ORG}/domainOwnershipClaims/${DOMAIN} proven`,
+        updateDoc(doc(db, ...claimPath()), { status: 'proven', provenMethod: 'dns' }),
+      )
+      await mustDeny(
+        `${label} planting a proven claim`,
+        setDoc(doc(db, 'orgs', ORG, 'domainOwnershipClaims', 'someone-else.test'), {
+          domain: 'someone-else.test',
+          status: 'proven',
+        }),
+      )
+      await mustDeny(`${label} deleting a claim`, deleteDoc(doc(db, ...claimPath())))
+    }
   })
 })
 

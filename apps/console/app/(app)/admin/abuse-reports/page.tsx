@@ -1927,7 +1927,9 @@ function AdminAbuseReports() {
                             ? 'What Stripe reported'
                             : report.source === 'payment-velocity'
                               ? 'What the payment counters recorded'
-                              : 'What the reporter said'}
+                              : report.source === 'site-import'
+                                ? 'What the site import recorded'
+                                : 'What the reporter said'}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -1960,6 +1962,10 @@ function AdminAbuseReports() {
                       ) : report.source === 'payment-velocity' ? (
                         <Typography variant="body2">
                           {'Filed by the card-testing counters on the site’s payment doors, not a person. There is no reporter to reply to; the site and its shoppers are the subject.'}
+                        </Typography>
+                      ) : report.source === 'site-import' ? (
+                        <Typography variant="body2">
+                          {'Filed by “Bring my site” when a workspace read a website it proved it owns, not by a person. There is no reporter to reply to; the workspace and the site it brought in are the subject.'}
                         </Typography>
                       ) : report.identityVisible ? (
                         <Typography variant="body2">

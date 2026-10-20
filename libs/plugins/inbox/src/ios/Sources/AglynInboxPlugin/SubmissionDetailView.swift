@@ -185,7 +185,7 @@ struct SubmissionDetailView: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("submission-detail")
   }
@@ -236,7 +236,7 @@ struct ReplySheet: View {
             .accessibilityIdentifier("reply-message")
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Reply to \(submission.from)")
       .aglynScreenTitle("Reply to \(submission.from)")
       #if os(iOS)

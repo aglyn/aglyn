@@ -25979,6 +25979,543 @@
         }
       ]
     },
+    "planCardContext": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "cases": [
+        {
+          "args": [
+            "shell.home",
+            true
+          ],
+          "result": "website"
+        },
+        {
+          "args": [
+            "shell.home",
+            false
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "site.media",
+            false
+          ],
+          "result": "media"
+        },
+        {
+          "args": [
+            "site.pages",
+            true
+          ],
+          "result": "website"
+        },
+        {
+          "args": [
+            "core.team",
+            false
+          ],
+          "result": "team"
+        },
+        {
+          "args": [
+            "core.site.users",
+            true
+          ],
+          "result": "team"
+        },
+        {
+          "args": [
+            "site.sites",
+            false
+          ],
+          "result": "sites"
+        },
+        {
+          "args": [
+            "commerce.orders",
+            true
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            true
+          ],
+          "result": null
+        }
+      ]
+    },
+    "planCardMeterOrder": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "media"
+          ],
+          "result": [
+            "storage",
+            "bandwidth",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "email"
+          ],
+          "result": [
+            "emailSends",
+            "bandwidth",
+            "storage",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            null
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "sites"
+          ],
+          "result": [
+            "sites",
+            "bandwidth",
+            "storage",
+            "emailSends"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "ai"
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "website"
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "unknown"
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "pages",
+                "used": 2,
+                "limit": 0
+              },
+              {
+                "meter": "forms",
+                "used": 1,
+                "limit": 2
+              }
+            ],
+            null
+          ],
+          "result": [
+            "forms"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "forms",
+                "used": 1,
+                "limit": 2
+              },
+              {
+                "meter": "storage",
+                "used": 5,
+                "limit": 10
+              },
+              {
+                "meter": "storage",
+                "used": 9,
+                "limit": 10
+              }
+            ],
+            "team"
+          ],
+          "result": [
+            "storage",
+            "forms"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "seats",
+                "used": 2,
+                "limit": 3
+              },
+              {
+                "meter": "pages",
+                "used": 8,
+                "limit": 10
+              },
+              {
+                "meter": "aiCredits",
+                "used": 450,
+                "limit": 500
+              },
+              {
+                "meter": "sites",
+                "used": 1,
+                "limit": 1
+              }
+            ],
+            "team"
+          ],
+          "result": [
+            "seats",
+            "aiCredits",
+            "pages",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [],
+            "media"
+          ],
+          "result": []
+        }
+      ]
+    },
+    "planCardShows": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": 1,
+                "limit": 100
+              }
+            ],
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": 1,
+                "limit": 100
+              }
+            ],
+            false
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": 80,
+                "limit": 100
+              }
+            ],
+            false
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": null,
+                "limit": 100
+              }
+            ],
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 1,
+                "limit": null
+              }
+            ],
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            [],
+            true
+          ],
+          "result": false
+        }
+      ]
+    },
     "planDatasetRecordQuery": {
       "module": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
       "cases": [
@@ -49317,6 +49854,101 @@
             "ad-conversions",
             "domains"
           ]
+        },
+        {
+          "args": [
+            {},
+            {
+              "enabledPlugins": [],
+              "disabledPlugins": []
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "help-desks",
+            "ad-conversions",
+            "domains"
+          ]
+        },
+        {
+          "args": [
+            {},
+            {}
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "help-desks",
+            "ad-conversions",
+            "domains"
+          ]
         }
       ]
     },
@@ -49918,6 +50550,1342 @@
       "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
       "leadingValue": "NATIVE_NAV_MANIFEST",
       "cases": [
+        {
+          "args": [
+            "site",
+            [
+              "mui",
+              "forms",
+              "ai",
+              "theme-presets",
+              "funnels",
+              "bookings",
+              "commerce",
+              "marketplace",
+              "crm",
+              "outreach",
+              "data",
+              "email",
+              "events-calendar",
+              "inbox",
+              "logic",
+              "marketing",
+              "redirects",
+              "workflows",
+              "accounting",
+              "shipping",
+              "tax-engines",
+              "sales-channels",
+              "marketing-platforms",
+              "fonts",
+              "post-purchase",
+              "fulfillment-networks",
+              "marketplaces",
+              "print-on-demand",
+              "inventory-sync",
+              "delivery-apps",
+              "loyalty",
+              "couriers",
+              "lightbox",
+              "review-platforms",
+              "music",
+              "help-desks",
+              "ad-conversions",
+              "domains"
+            ],
+            true
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "top",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "home",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "home",
+                      "apple": "house"
+                    },
+                    "id": "home",
+                    "label": "Home",
+                    "order": 10,
+                    "screen": "shell.home"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-analytics",
+                      "surface": "hostTab"
+                    },
+                    "consoleLabel": "Analytics",
+                    "icon": {
+                      "android": "bar_chart",
+                      "apple": "chart.bar"
+                    },
+                    "id": "overview",
+                    "keywords": [
+                      "analytics",
+                      "traffic",
+                      "visitors"
+                    ],
+                    "label": "Overview",
+                    "order": 20,
+                    "screen": "shell.analytics"
+                  }
+                ]
+              },
+              {
+                "dynamic": "starred",
+                "foldable": true,
+                "id": "starred",
+                "label": "Starred",
+                "rows": []
+              },
+              {
+                "foldable": true,
+                "id": "website",
+                "label": "Website",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-screens",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "description",
+                      "apple": "doc.text"
+                    },
+                    "id": "pages",
+                    "label": "Pages",
+                    "order": 10,
+                    "screen": "site.pages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "nav-tab-screens",
+                          "surface": "hostTab"
+                        },
+                        "id": "pages",
+                        "label": "Pages",
+                        "screen": "site.pages"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-components",
+                          "surface": "hostTab"
+                        },
+                        "id": "components",
+                        "label": "Components",
+                        "screen": "site.components"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-layouts",
+                          "surface": "hostTab"
+                        },
+                        "id": "layouts",
+                        "label": "Layouts",
+                        "screen": "site.layouts"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-templates",
+                          "surface": "hostTab"
+                        },
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "site.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-content",
+                          "surface": "hostTab"
+                        },
+                        "id": "content",
+                        "label": "Content",
+                        "screen": "site.content"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-media",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "photo_library",
+                      "apple": "photo.on.rectangle"
+                    },
+                    "id": "media",
+                    "label": "Media",
+                    "order": 20,
+                    "screen": "site.media"
+                  },
+                  {
+                    "console": {
+                      "id": "/forms",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/content-and-data/forms/overview",
+                    "icon": {
+                      "android": "dynamic_form",
+                      "apple": "list.bullet.rectangle"
+                    },
+                    "id": "forms",
+                    "label": "Forms",
+                    "order": 30,
+                    "pluginId": "forms",
+                    "screen": "forms.list"
+                  },
+                  {
+                    "console": {
+                      "id": "/logic",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/building-sites/bindings/overview",
+                    "icon": {
+                      "android": "functions",
+                      "apple": "function"
+                    },
+                    "id": "logic",
+                    "keywords": [
+                      "functions",
+                      "variables"
+                    ],
+                    "label": "Logic",
+                    "order": 40,
+                    "pluginId": "logic",
+                    "screen": "logic.page"
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "sell",
+                "label": "Sell",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/products/orders",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "icon": {
+                      "android": "shopping_bag",
+                      "apple": "bag"
+                    },
+                    "id": "orders",
+                    "label": "Orders",
+                    "order": 10,
+                    "pluginId": "commerce",
+                    "screen": "commerce.orders",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/products/orders",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "orders",
+                        "label": "Orders",
+                        "screen": "commerce.orders"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/returns",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "returns",
+                        "label": "Returns",
+                        "screen": "commerce.returns"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/reservations",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "reservations",
+                        "label": "Reservations",
+                        "screen": "commerce.reservations"
+                      }
+                    ]
+                  },
+                  {
+                    "actions": [
+                      {
+                        "icon": {
+                          "android": "qr_code_scanner",
+                          "apple": "barcode.viewfinder"
+                        },
+                        "id": "scan",
+                        "label": "Scan stock",
+                        "screen": "commerce.scan"
+                      },
+                      {
+                        "icon": {
+                          "android": "add",
+                          "apple": "plus"
+                        },
+                        "id": "newProduct",
+                        "label": "New product",
+                        "params": {
+                          "new": "1"
+                        },
+                        "screen": "commerce.product"
+                      }
+                    ],
+                    "console": {
+                      "id": "/products",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "icon": {
+                      "android": "sell",
+                      "apple": "tag"
+                    },
+                    "id": "products",
+                    "keywords": [
+                      "catalog",
+                      "stock",
+                      "inventory"
+                    ],
+                    "label": "Products",
+                    "order": 20,
+                    "pluginId": "commerce",
+                    "screen": "commerce.products",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/products/catalog",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "catalog",
+                        "label": "Catalog",
+                        "screen": "commerce.products"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/promotions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "promotions",
+                        "label": "Promotions",
+                        "screen": "commerce.promotions"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/analytics",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "analytics",
+                        "label": "Analytics",
+                        "screen": "commerce.sales"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/bookings",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/commerce-and-bookings/bookings/overview",
+                    "icon": {
+                      "android": "event_available",
+                      "apple": "calendar.badge.clock"
+                    },
+                    "id": "bookings",
+                    "label": "Bookings",
+                    "order": 30,
+                    "pluginId": "bookings",
+                    "screen": "bookings.calendar"
+                  },
+                  {
+                    "console": {
+                      "id": "/events",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/content-and-data/events/overview",
+                    "icon": {
+                      "android": "event",
+                      "apple": "calendar"
+                    },
+                    "id": "events",
+                    "label": "Events",
+                    "order": 40,
+                    "pluginId": "events-calendar",
+                    "screen": "events-calendar.events"
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "customers",
+                "label": "Customers",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/inbox",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/content-and-data/forms/overview",
+                    "icon": {
+                      "android": "inbox",
+                      "apple": "tray"
+                    },
+                    "id": "inbox",
+                    "label": "Inbox",
+                    "order": 10,
+                    "pluginId": "inbox",
+                    "screen": "inbox.submissions",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/inbox/submissions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/forms/overview",
+                        "id": "submissions",
+                        "label": "Submissions",
+                        "screen": "inbox.submissions"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/contacts",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/forms/overview",
+                        "id": "contacts",
+                        "label": "Members & leads",
+                        "screen": "inbox.people"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/campaigns",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/forms/overview",
+                        "id": "campaigns",
+                        "label": "Campaigns",
+                        "pluginId": "marketing",
+                        "screen": "marketing.campaigns"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/crm",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/content-and-data/crm/overview",
+                    "icon": {
+                      "android": "contact_mail",
+                      "apple": "person.text.rectangle"
+                    },
+                    "id": "crm",
+                    "keywords": [
+                      "contacts",
+                      "people",
+                      "deals",
+                      "tasks"
+                    ],
+                    "label": "CRM",
+                    "order": 20,
+                    "pluginId": "crm",
+                    "screen": "crm.contacts",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/crm/contacts",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "contacts",
+                        "label": "Contacts",
+                        "screen": "crm.contacts"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/leads",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "leads",
+                        "label": "Leads",
+                        "screen": "crm.leads"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/companies",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "companies",
+                        "label": "Companies",
+                        "screen": "crm.companies"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/deals",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "deals",
+                        "label": "Deals",
+                        "screen": "crm.deals"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/tasks",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "tasks",
+                        "label": "Tasks",
+                        "screen": "crm.tasks"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/reports",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "reports",
+                        "label": "Reports",
+                        "screen": "crm.reports"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/fields",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "fields",
+                        "label": "Fields",
+                        "screen": "crm.fields"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/settings",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview",
+                        "id": "settings",
+                        "label": "Settings",
+                        "screen": "crm.settings"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/emails",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
+                    "icon": {
+                      "android": "mail",
+                      "apple": "envelope"
+                    },
+                    "id": "emails",
+                    "label": "Emails",
+                    "order": 30,
+                    "pluginId": "email",
+                    "screen": "email.messages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/emails/messages",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "messages",
+                        "label": "Messages",
+                        "screen": "email.messages"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/templates",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "email.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/audiences",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "audiences",
+                        "label": "Audiences",
+                        "screen": "email.audiences"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/topics",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "topics",
+                        "label": "Topics",
+                        "screen": "email.topics"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/sending",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "sending",
+                        "label": "Sending",
+                        "screen": "email.sending"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/suppressions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "suppressions",
+                        "label": "Suppressions",
+                        "screen": "email.suppressions"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/marketing",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
+                    "icon": {
+                      "android": "campaign",
+                      "apple": "megaphone"
+                    },
+                    "id": "marketing",
+                    "label": "Marketing",
+                    "order": 40,
+                    "pluginId": "marketing",
+                    "screen": "marketing.overview",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/marketing/overview",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "overview",
+                        "label": "Overview",
+                        "screen": "marketing.overview"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/campaigns",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "campaigns",
+                        "label": "Campaigns",
+                        "screen": "marketing.campaigns"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/conversions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "conversions",
+                        "label": "Conversions",
+                        "screen": "marketing.conversions"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/overlays",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "overlays",
+                        "label": "Overlays",
+                        "screen": "marketing.overlays"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/experiments",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "experiments",
+                        "label": "A/B testing",
+                        "screen": "marketing.experiments"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "more",
+                "label": "More",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/automation",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/marketing-and-automation/workflows-and-actions/overview",
+                    "icon": {
+                      "android": "bolt",
+                      "apple": "bolt"
+                    },
+                    "id": "automation",
+                    "label": "Automation",
+                    "order": 10,
+                    "pluginId": "workflows",
+                    "screen": "workflows.automation"
+                  },
+                  {
+                    "console": {
+                      "id": "/redirects",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/building-sites/redirects/overview",
+                    "icon": {
+                      "android": "alt_route",
+                      "apple": "arrow.triangle.branch"
+                    },
+                    "id": "redirects",
+                    "label": "Redirects",
+                    "order": 20,
+                    "pluginId": "redirects",
+                    "screen": "redirects.list"
+                  },
+                  {
+                    "console": {
+                      "id": "hostAnalytics/funnels",
+                      "surface": "consoleWidget"
+                    },
+                    "icon": {
+                      "android": "filter_alt",
+                      "apple": "line.3.horizontal.decrease"
+                    },
+                    "id": "funnels",
+                    "label": "Funnels",
+                    "order": 30,
+                    "pluginId": "funnels",
+                    "screen": "funnels.list"
+                  },
+                  {
+                    "console": {
+                      "id": "sms.texts",
+                      "surface": "nativeOnly"
+                    },
+                    "icon": {
+                      "android": "sms",
+                      "apple": "message"
+                    },
+                    "id": "texts",
+                    "keywords": [
+                      "sms"
+                    ],
+                    "label": "Customer texts",
+                    "order": 40,
+                    "pluginId": "commerce",
+                    "screen": "sms.texts"
+                  },
+                  {
+                    "console": {
+                      "id": "consoleTopBar/ai-jobs-indicator",
+                      "surface": "consoleWidget"
+                    },
+                    "icon": {
+                      "android": "auto_awesome",
+                      "apple": "sparkles"
+                    },
+                    "id": "aiJobs",
+                    "label": "AI jobs",
+                    "order": 50,
+                    "pluginId": "ai",
+                    "screen": "ai.jobs"
+                  },
+                  {
+                    "console": {
+                      "id": "/data",
+                      "surface": "hostPluginTab"
+                    },
+                    "docs": "/content-and-data/datasets/overview",
+                    "icon": {
+                      "android": "dataset",
+                      "apple": "tablecells"
+                    },
+                    "id": "data",
+                    "label": "Data",
+                    "order": 60,
+                    "pluginId": "data",
+                    "screen": "data.datasets"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "settings",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "siteSettings",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "settings",
+                      "apple": "gearshape"
+                    },
+                    "id": "siteSettings",
+                    "label": "Site settings",
+                    "order": 10,
+                    "screen": "shell.siteSettings"
+                  }
+                ]
+              }
+            ],
+            "id": "site"
+          }
+        },
+        {
+          "args": [
+            "workspace",
+            [
+              "mui",
+              "forms",
+              "ai",
+              "theme-presets",
+              "funnels",
+              "accounts",
+              "bookings",
+              "commerce",
+              "marketplace",
+              "crm",
+              "outreach",
+              "data",
+              "email",
+              "events-calendar",
+              "inbox",
+              "logic",
+              "marketing",
+              "redirects",
+              "workflows",
+              "accounting",
+              "shipping",
+              "tax-engines",
+              "sales-channels",
+              "marketing-platforms",
+              "fonts",
+              "post-purchase",
+              "fulfillment-networks",
+              "marketplaces",
+              "print-on-demand",
+              "inventory-sync",
+              "delivery-apps",
+              "loyalty",
+              "couriers",
+              "lightbox",
+              "live-chat",
+              "review-platforms",
+              "weglot",
+              "music",
+              "help-desks",
+              "ad-conversions",
+              "domains"
+            ],
+            true
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "top",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "home",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "home",
+                      "apple": "house"
+                    },
+                    "id": "home",
+                    "label": "Home",
+                    "order": 10,
+                    "screen": "shell.home"
+                  }
+                ]
+              },
+              {
+                "dynamic": "starred",
+                "foldable": true,
+                "id": "starred",
+                "label": "Starred",
+                "rows": []
+              },
+              {
+                "foldable": false,
+                "id": "workspace",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-org-sites",
+                      "surface": "orgTab"
+                    },
+                    "docs": "/getting-started/console-tour#the-sites-list",
+                    "icon": {
+                      "android": "public",
+                      "apple": "globe"
+                    },
+                    "id": "sites",
+                    "label": "Sites",
+                    "order": 10,
+                    "screen": "site.sites"
+                  },
+                  {
+                    "console": {
+                      "id": "/crm",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                    "icon": {
+                      "android": "contact_mail",
+                      "apple": "person.text.rectangle"
+                    },
+                    "id": "crm",
+                    "keywords": [
+                      "contacts",
+                      "people",
+                      "deals",
+                      "tasks"
+                    ],
+                    "label": "CRM",
+                    "order": 20,
+                    "pluginId": "crm",
+                    "screen": "crm.contacts",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/crm/contacts",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "contacts",
+                        "label": "Contacts",
+                        "screen": "crm.contacts"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/leads",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "leads",
+                        "label": "Leads",
+                        "screen": "crm.leads"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/companies",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "companies",
+                        "label": "Companies",
+                        "screen": "crm.companies"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/deals",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "deals",
+                        "label": "Deals",
+                        "screen": "crm.deals"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/tasks",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "tasks",
+                        "label": "Tasks",
+                        "screen": "crm.tasks"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/reports",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "reports",
+                        "label": "Reports",
+                        "screen": "crm.reports"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/fields",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "fields",
+                        "label": "Fields",
+                        "screen": "crm.fields"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/settings",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/crm/overview#at-the-organization-level",
+                        "id": "settings",
+                        "label": "Settings",
+                        "screen": "crm.settings"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/inbox",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/content-and-data/forms/overview",
+                    "icon": {
+                      "android": "inbox",
+                      "apple": "tray"
+                    },
+                    "id": "inbox",
+                    "label": "Inbox",
+                    "order": 30,
+                    "pluginId": "inbox",
+                    "screen": "inbox.submissions",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/inbox/submissions",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/forms/overview",
+                        "id": "submissions",
+                        "label": "Submissions",
+                        "screen": "inbox.submissions"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/contacts",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/forms/overview",
+                        "id": "contacts",
+                        "label": "Members & leads",
+                        "screen": "inbox.people"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/campaigns",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/content-and-data/forms/overview",
+                        "id": "campaigns",
+                        "label": "Campaigns",
+                        "pluginId": "marketing",
+                        "screen": "marketing.campaigns"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/emails",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
+                    "icon": {
+                      "android": "mail",
+                      "apple": "envelope"
+                    },
+                    "id": "emails",
+                    "label": "Emails",
+                    "order": 40,
+                    "pluginId": "email",
+                    "screen": "email.messages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/emails/messages",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "messages",
+                        "label": "Messages",
+                        "screen": "email.messages"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/templates",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "email.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/audiences",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "audiences",
+                        "label": "Audiences",
+                        "screen": "email.audiences"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/topics",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "topics",
+                        "label": "Topics",
+                        "screen": "email.topics"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/sending",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "sending",
+                        "label": "Sending",
+                        "screen": "email.sending"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/suppressions",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/email-campaigns/overview",
+                        "id": "suppressions",
+                        "label": "Suppressions",
+                        "screen": "email.suppressions"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/marketing",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
+                    "icon": {
+                      "android": "campaign",
+                      "apple": "megaphone"
+                    },
+                    "id": "marketing",
+                    "label": "Marketing",
+                    "order": 50,
+                    "pluginId": "marketing",
+                    "screen": "marketing.overview",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/marketing/overview",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "overview",
+                        "label": "Overview",
+                        "screen": "marketing.overview"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/campaigns",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "campaigns",
+                        "label": "Campaigns",
+                        "screen": "marketing.campaigns"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/conversions",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "conversions",
+                        "label": "Conversions",
+                        "screen": "marketing.conversions"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/overlays",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "overlays",
+                        "label": "Overlays",
+                        "screen": "marketing.overlays"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketing/experiments",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/marketing-and-automation/marketing-overlays/overview",
+                        "id": "experiments",
+                        "label": "A/B testing",
+                        "screen": "marketing.experiments"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/automation",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/marketing-and-automation/workflows-and-actions/overview",
+                    "icon": {
+                      "android": "bolt",
+                      "apple": "bolt"
+                    },
+                    "id": "automation",
+                    "label": "Automation",
+                    "order": 60,
+                    "params": {
+                      "scope": "org"
+                    },
+                    "pluginId": "workflows",
+                    "screen": "workflows.automation"
+                  },
+                  {
+                    "console": {
+                      "id": "/accounting",
+                      "surface": "orgPluginTab"
+                    },
+                    "icon": {
+                      "android": "account_balance",
+                      "apple": "banknote"
+                    },
+                    "id": "accounting",
+                    "label": "Accounting",
+                    "order": 70,
+                    "pluginId": "accounting",
+                    "screen": "accounting.books"
+                  },
+                  {
+                    "console": {
+                      "id": "/outreach",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/content-and-data/crm/sequences",
+                    "icon": {
+                      "android": "send",
+                      "apple": "paperplane"
+                    },
+                    "id": "sequences",
+                    "label": "Sequences",
+                    "order": 80,
+                    "pluginId": "outreach",
+                    "screen": "outreach.sequences"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-org-media",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "photo_library",
+                      "apple": "photo.on.rectangle"
+                    },
+                    "id": "media",
+                    "label": "Media",
+                    "order": 90,
+                    "screen": "site.media"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-data",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "dataset",
+                      "apple": "tablecells"
+                    },
+                    "id": "data",
+                    "label": "Data",
+                    "order": 100,
+                    "pluginId": "data",
+                    "screen": "data.datasets"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/developers/plugins/overview",
+                    "icon": {
+                      "android": "storefront",
+                      "apple": "storefront"
+                    },
+                    "id": "marketplace",
+                    "label": "Marketplace",
+                    "order": 110,
+                    "pluginId": "marketplace",
+                    "screen": "marketplace.browse",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/marketplace/browse",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/developers/plugins/overview",
+                        "id": "browse",
+                        "label": "Browse All",
+                        "screen": "marketplace.browse"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketplace/installed",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/developers/plugins/overview",
+                        "id": "installed",
+                        "label": "Installed",
+                        "screen": "marketplace.installed"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketplace/licences",
+                          "surface": "orgPluginSection"
+                        },
+                        "docs": "/developers/plugins/overview",
+                        "id": "licences",
+                        "label": "Licenses",
+                        "screen": "marketplace.licenses"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "id": "workspace"
+          }
+        },
         {
           "args": [
             "site",

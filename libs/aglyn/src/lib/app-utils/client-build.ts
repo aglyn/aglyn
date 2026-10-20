@@ -47,7 +47,10 @@ export interface ClientBuildIntake {
   phone: string
   /** The owner's email: the preview is emailed here, and the site may show it. */
   email: string
-  /** Opening hours as the owner says them, e.g. "Mon–Fri 8–5". */
+  /**
+   * Opening hours as the owner says them, e.g. "Mon–Fri 8am–5pm". Said with
+   * am or pm, they also fill the guided start's opening hours (AGL-3995).
+   */
   hours: string
   /** The owner's own words about the business, in one box. */
   ownerWords: string

@@ -17,6 +17,7 @@
 
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
+import { registerPluginDomainSearch } from '@aglyn/aglyn/plugin-manager/plugin-domain-search'
 import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { DOMAINS_OPERATOR_ALERTS } from './server/alert-definitions'
@@ -27,9 +28,11 @@ export const DOMAINS_LIFECYCLE_JOB_ID = 'domains-lifecycle'
 
 /**
  * Domains' console-server registrations (AGL-3962, AGL-3963): the lifecycle
- * sweep, its operator alerts, and the platform events it hears. On the
- * console's server only — the billing webhook and the domain routes that
- * raise these events run there, and the sweep charges cards.
+ * sweep, its operator alerts, the platform events it hears, and core's
+ * domain search (AGL-3958). On the console's server only — the billing
+ * webhook and the domain routes that raise these events run there, the
+ * sweep charges cards, and the one-screen client build that searches is a
+ * staff console route.
  */
 export function registerDomainsConsoleServerDeclarations(): void {
   registerOperatorAlerts(DOMAINS_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
@@ -65,4 +68,13 @@ export function registerDomainsConsoleServerDeclarations(): void {
     { pluginId: BUNDLE_ID },
   )
   registerDomainConnectDeclarations()
+  // `core.domain-search` (AGL-3958): the Get a domain card's own search and
+  // prices, in dollars, loaded with the first search.
+  registerPluginDomainSearch(
+    {
+      search: async (query) =>
+        (await import('./server/core-domain-search')).searchDomainsForCore(query),
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }

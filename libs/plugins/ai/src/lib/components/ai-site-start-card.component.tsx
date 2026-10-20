@@ -21,9 +21,11 @@ import { lockdownRefusalText, parseLockdownRefusal, PLATFORM_BRAND_NAME } from '
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { ConsoleHostFirstRunZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
-import { mdiCreation, mdiPageLayoutHeaderFooter } from '@aglyn/shared-data-mdi'
+import { mdiCreation, mdiPageLayoutHeaderFooter, mdiWebSync } from '@aglyn/shared-data-mdi'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
+import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -123,6 +125,8 @@ import { useAiModelChoice } from './use-ai-model-choice'
 import { aiCreditsBillingHref, aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
 import { clearAiSiteStartAnswers, readAiSiteStartAnswers } from '../model/ai-site-start-handoff'
+import { AiSiteImportStart } from './ai-site-import-start.component'
+import { aiSiteImportOfferOf, type AiSiteImportAvailability } from '../model/ai-site-import-view'
 
 /**
  * The guided start (AGL-2918), on the `hostFirstRun` zone of the page a newly
@@ -250,6 +254,7 @@ function ChoiceCard({
   title,
   description,
   busy = false,
+  blocked = null,
   onChoose,
   children,
 }: {
@@ -260,6 +265,11 @@ function ChoiceCard({
   title: string
   description: string
   busy?: boolean
+  /**
+   * Why the card cannot be chosen here, when the workspace can change that
+   * (AGL-3976): drawn disabled with the reason, never hidden.
+   */
+  blocked?: string | null
   onChoose: () => void
   children?: ReactNode
 }) {
@@ -284,31 +294,33 @@ function ChoiceCard({
         },
       })}
     >
-      <CardActionArea
-        onClick={onChoose}
-        disabled={busy}
-        aria-labelledby={`${id}-title`}
-        aria-describedby={`${id}-description`}
-        aria-busy={busy || undefined}
-        sx={{ height: '100%', p: { xs: 3, sm: 4 } }}
-      >
-        <Stack spacing={2} sx={{ alignItems: 'center', textAlign: 'center' }}>
-          <IconBadge accent={accent}>
-            {busy ? (
-              <CircularProgress size="1em" color={accent} aria-label={`${title}…`} />
-            ) : (
-              <MdiIcon path={icon} data-icon={iconId} aria-hidden />
-            )}
-          </IconBadge>
-          <Typography id={`${id}-title`} variant="h6" component="h2">
-            {title}
-          </Typography>
-          <Typography id={`${id}-description`} variant="body2" color="text.secondary">
-            {description}
-          </Typography>
-          {children}
-        </Stack>
-      </CardActionArea>
+      <BlockedControl blocked={Boolean(blocked)} reason={blocked ?? ''} fullWidth>
+        <CardActionArea
+          onClick={onChoose}
+          disabled={busy}
+          aria-labelledby={`${id}-title`}
+          aria-describedby={`${id}-description`}
+          aria-busy={busy || undefined}
+          sx={{ height: '100%', p: { xs: 3, sm: 4 } }}
+        >
+          <Stack spacing={2} sx={{ alignItems: 'center', textAlign: 'center' }}>
+            <IconBadge accent={accent}>
+              {busy ? (
+                <CircularProgress size="1em" color={accent} aria-label={`${title}…`} />
+              ) : (
+                <MdiIcon path={icon} data-icon={iconId} aria-hidden />
+              )}
+            </IconBadge>
+            <Typography id={`${id}-title`} variant="h6" component="h2">
+              {title}
+            </Typography>
+            <Typography id={`${id}-description`} variant="body2" color="text.secondary">
+              {description}
+            </Typography>
+            {children}
+          </Stack>
+        </CardActionArea>
+      </BlockedControl>
     </Card>
   )
 }
@@ -441,6 +453,10 @@ export function AiSiteStartCard({
   const creating = Boolean(pendingSite) && !pendingSite?.created
   // The funnel (AGL-3898): each step drawn, left and abandoned, and where people struggle.
   const tracker = useAiSiteStartTracking(step, verdict === 'ready')
+  // "Bring my site" (AGL-3976): asked of its own door, absent while its flag
+  // is off, drawn disabled with the reason where the workspace can change it.
+  const [importAvailability, setImportAvailability] = useState<AiSiteImportAvailability>({ state: 'checking' })
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -449,7 +465,8 @@ export function AiSiteStartCard({
       try {
         const response = await authorizedFetch(
           userRef.current,
-          `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1`,
+          // `siteImport=1`: whether "Bring my site" is offered here (AGL-3976), on the same read.
+          `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1&siteImport=1`,
         )
         const payload = response.ok ? await response.json().catch(() => null) : null
         if (active) {
@@ -466,6 +483,7 @@ export function AiSiteStartCard({
             }))
           }
           const shown = response.status !== 404 && response.status !== 403
+          setImportAvailability(aiSiteImportOfferOf(payload?.siteImport))
           setVerdict(shown ? 'ready' : 'hidden')
           // "Create site" shows its own dialog when this one will not draw.
           pendingRef.current?.ready(shown)
@@ -536,8 +554,9 @@ export function AiSiteStartCard({
             hostId: siteId,
             kind: 'site',
             // A client build's intake rides along (AGL-3958): the name and
-            // towns as the inputs the questions leave empty, and how to reach
-            // the business, its hours and the owner's words in the brief.
+            // towns as the inputs the questions leave empty (the towns only
+            // while no address is given, AGL-3995), and how to reach the
+            // business, its hours and the owner's words in the brief.
             brief: [aiSiteStartBrief(asked), clientIntake ? aiSiteStartClientBrief(clientIntake) : '']
               .filter(Boolean)
               .join(' '),
@@ -546,7 +565,7 @@ export function AiSiteStartCard({
             // The sites they like go only while the start asks for them (AGL-3975).
             inputs: {
               ...aiSiteStartInputs(siteInspiration ? asked : { ...asked, inspiration: [] }),
-              ...(clientIntake ? aiSiteStartClientInputs(clientIntake) : {}),
+              ...(clientIntake ? aiSiteStartClientInputs(clientIntake, asked) : {}),
               [AI_JOB_AUTO_CONFIRM_INPUT]: true,
             },
             ...(pickedModel ? { model: pickedModel } : {}),
@@ -654,6 +673,14 @@ export function AiSiteStartCard({
     tracker.finish()
     runStartBlank()
   }, [pendingSite, runStartBlank, tracker])
+
+  const chooseImport = useCallback(() => {
+    if (importAvailability.state !== 'ready') return
+    if (pendingSite && !pendingSite.created && !pendingSite.check()) return
+    trackEvent('site_start_choice', { choice: 'import' })
+    tracker.complete()
+    setImporting(true)
+  }, [importAvailability.state, pendingSite, tracker])
 
   const chooseAi = useCallback(() => {
     if (pendingSite && !pendingSite.created && !pendingSite.check()) return
@@ -794,9 +821,11 @@ export function AiSiteStartCard({
       : `${aiCreditRangeText(estimate)}, of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
     : `${aiCreditRangeText(estimate)}, estimated`
 
-  const choosing = step === 'choose' && !started
-  const reviewing = step === 'review' && !started
-  const asking = step !== 'choose' && !started
+  // The card is drawn wherever the workspace could use it, disabled where it cannot yet.
+  const showsImport = importAvailability.state === 'ready' || importAvailability.state === 'blocked'
+  const choosing = step === 'choose' && !started && !importing
+  const reviewing = step === 'review' && !started && !importing
+  const asking = step !== 'choose' && !started && !importing
   // Each answer's reason not to go forward, shown on a step once Next was refused there.
   const fieldErrors = aiSiteStartFieldErrors(answers, { freeTaste })
   const shownErrors = Object.fromEntries(
@@ -838,7 +867,12 @@ export function AiSiteStartCard({
         : `${PLATFORM_BRAND_NAME} AI plans and writes your pages from these answers, then publishes your site.`,
     },
   }
-  const heading = HEADINGS[step]
+  const heading = importing
+    ? {
+        title: 'Bring my site',
+        lede: `Bring the website you have now into ${PLATFORM_BRAND_NAME}: its pages, words and photos. First, prove it is yours.`,
+      }
+    : HEADINGS[step]
   // Enter in a text answer is Next. A select, a card or a button keeps its own Enter.
   const onStepKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing || !asking || reviewing) return
@@ -911,7 +945,7 @@ export function AiSiteStartCard({
         >
           <Stack spacing={4}>
             <Box sx={{ maxWidth: (t: Theme) => t.spacing(80), width: '100%', mx: 'auto' }}>
-              <StartProgress step={step} compact={compact} onStep={started ? undefined : goBackTo} />
+              {importing ? null : <StartProgress step={step} compact={compact} onStep={started ? undefined : goBackTo} />}
             </Box>
             <Stack spacing={1} sx={{ textAlign: choosing ? 'center' : 'left' }} data-start-area="heading">
               <Typography
@@ -924,7 +958,11 @@ export function AiSiteStartCard({
                 {heading.title}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {choosing ? <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} /> : <StepHelp step={step} />}
+                {choosing ? (
+                  <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} />
+                ) : importing ? null : (
+                  <StepHelp step={step} />
+                )}
                 {heading.lede}
               </Typography>
             </Stack>
@@ -954,40 +992,77 @@ export function AiSiteStartCard({
                 {pendingSite.fields}
               </Stack>
             ) : null}
-            {choosing ? (
-              <Box
-                data-start-area="choose-cards"
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                  gap: 3,
-                }}
-              >
-                <ChoiceCard
-                  accent="secondary"
-                  icon={mdiPageLayoutHeaderFooter.path}
-                  iconId="page-layout-header-footer"
-                  title="Start from the starter site"
-                  description="A ready-made home page with a header, footer and contact form you can edit."
-                  busy={startingStarter}
-                  onChoose={chooseStarter}
-                />
-                <ChoiceCard
-                  accent="primary"
-                  icon={mdiCreation.path}
-                  iconId="creation"
-                  title="Start with AI"
-                  description={`Answer a few questions and ${PLATFORM_BRAND_NAME} AI plans your pages.`}
-                  onChoose={chooseAi}
+            {importing && orgId ? (
+              <AiSiteImportStart
+                orgId={orgId}
+                orgSlug={orgSlug}
+                hostId={hostId}
+                host={host}
+                user={user}
+                pendingSite={pendingSite}
+                onBack={() => setImporting(false)}
+                leave={leave}
+              />
+            ) : choosing ? (
+              <Stack spacing={2}>
+                <Box
+                  data-start-area="choose-cards"
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: showsImport ? { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' } : { xs: '1fr', sm: '1fr 1fr' },
+                    gap: 3,
+                  }}
                 >
-                  <Chip size="small" color="primary" label="Recommended" />
-                  {freeTaste && (
-                    <Typography variant="caption" color="text.secondary">
-                      {`Up to ${AI_SITE_FREE_PAGES.max} pages on the Free plan`}
-                    </Typography>
+                  <ChoiceCard
+                    accent="secondary"
+                    icon={mdiPageLayoutHeaderFooter.path}
+                    iconId="page-layout-header-footer"
+                    title="Start from the starter site"
+                    description="A ready-made home page with a header, footer and contact form you can edit."
+                    busy={startingStarter}
+                    onChoose={chooseStarter}
+                  />
+                  <ChoiceCard
+                    accent="primary"
+                    icon={mdiCreation.path}
+                    iconId="creation"
+                    title="Start with AI"
+                    description={`Answer a few questions and ${PLATFORM_BRAND_NAME} AI plans your pages.`}
+                    onChoose={chooseAi}
+                  >
+                    <Chip size="small" color="primary" label="Recommended" />
+                    {freeTaste && (
+                      <Typography variant="caption" color="text.secondary">
+                        {`Up to ${AI_SITE_FREE_PAGES.max} pages on the Free plan`}
+                      </Typography>
+                    )}
+                  </ChoiceCard>
+                  {showsImport && (
+                    <ChoiceCard
+                      accent="secondary"
+                      icon={mdiWebSync.path}
+                      iconId="web-sync"
+                      title="Bring my site"
+                      description={`Bring the website you have now into ${PLATFORM_BRAND_NAME}: its pages, words and photos, rewritten in your new design.`}
+                      blocked={importAvailability.state === 'blocked' ? importAvailability.message : null}
+                      onChoose={chooseImport}
+                    >
+                      {importAvailability.state === 'blocked' && importAvailability.reason === 'plan' ? (
+                        <Chip size="small" variant="outlined" label="Paid plans" />
+                      ) : null}
+                    </ChoiceCard>
                   )}
-                </ChoiceCard>
-              </Box>
+                </Box>
+                {importAvailability.state === 'blocked' ? (
+                  <PrerequisiteNotice
+                    {...(importAvailability.reason === 'plan' && orgSlug
+                      ? { href: aiCreditsBillingHref(orgSlug), actionLabel: 'Upgrade' }
+                      : {})}
+                  >
+                    {importAvailability.message}
+                  </PrerequisiteNotice>
+                ) : null}
+              </Stack>
             ) : started && orgId ? (
               <Card variant="outlined" sx={{ borderRadius: 2, p: { xs: 2, sm: 3 } }}>
                 <AiJobFollow

@@ -519,8 +519,10 @@ struct FieldInput: View {
       case "toggle":
         Toggle(label, isOn: flag)
       case "select", "country":
-        Picker(label, selection: text) {
-          ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
+        PlainFormRow(label) {
+          Picker(label, selection: text) {
+            ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
+          }
         }
       case "hours":
         HoursInput(field: field, text: text)
@@ -569,18 +571,24 @@ struct FieldInput: View {
       case "media":
         MediaFieldView(field: field, value: $value)
       case "multiline", "lines":
-        TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
-          .lineLimit(3...8)
+        PlainFormRow(label) {
+          TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
+            .lineLimit(3...8)
+        }
       case "password":
-        SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
-          .textContentType(.password)
+        PlainFormRow(label) {
+          SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
+            .textContentType(.password)
+        }
       default:
-        TextField(label, text: text, prompt: Text(field.placeholder ?? label))
-          #if os(iOS)
-            .keyboardType(keyboard)
-            .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
-          #endif
-          .autocorrectionDisabled(field.kind != "text")
+        PlainFormRow(label) {
+          TextField(label, text: text, prompt: Text(field.placeholder ?? label))
+            #if os(iOS)
+              .keyboardType(keyboard)
+              .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
+            #endif
+            .autocorrectionDisabled(field.kind != "text")
+        }
       }
       if field.generate != nil {
         Button("Generate") { text.wrappedValue = field.generatedValue(in: context) ?? "" }
@@ -938,4 +946,29 @@ func rowLine(_ spec: JSONValue?, in scope: JSONValue) -> String? {
     line = nil
   }
   return line.flatMap { $0.isEmpty ? nil : $0 }
+}
+
+/// A field as a form row draws it inside the Mac's own grouped form (`aglynPlainForm`): its label on the leading edge,
+/// the control after it, filling the row; anywhere else the control as it is, which a `Form` labels itself.
+struct PlainFormRow<Control: View>: View {
+  @Environment(\.aglynPlainForm) private var plain
+  let label: String
+  let control: Control
+
+  init(_ label: String, @ViewBuilder control: () -> Control) {
+    self.label = label
+    self.control = control()
+  }
+
+  var body: some View {
+    if plain {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        Text(label).foregroundStyle(AglynColor.textPrimary)
+        Spacer(minLength: 8)
+        control.labelsHidden().textFieldStyle(.roundedBorder).frame(maxWidth: 420, alignment: .trailing)
+      }
+    } else {
+      control
+    }
+  }
 }

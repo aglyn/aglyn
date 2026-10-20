@@ -94,6 +94,8 @@ interface Recorded {
   refunds: string[]
   connects: string[]
   disconnects: string[]
+  /** Preclearance ids the purchase spent, in order. */
+  consumed: string[]
 }
 
 function effectsWith(
@@ -101,6 +103,7 @@ function effectsWith(
   options: {
     charge?: LifecycleEffects['charge']
     connect?: LifecycleEffects['connect']
+    consumePreclearance?: LifecycleEffects['consumePreclearance']
   } = {},
 ): { effects: LifecycleEffects; recorded: Recorded } {
   const recorded: Recorded = {
@@ -110,6 +113,7 @@ function effectsWith(
     refunds: [],
     connects: [],
     disconnects: [],
+    consumed: [],
   }
   let invoice = 0
   const effects: LifecycleEffects = {
@@ -142,6 +146,10 @@ function effectsWith(
     },
     async alert(kind) {
       recorded.alerts.push(kind)
+    },
+    async consumePreclearance(preclearanceId) {
+      recorded.consumed.push(preclearanceId)
+      return options.consumePreclearance ? options.consumePreclearance(preclearanceId) : true
     },
     sleep: async () => undefined,
   }
@@ -179,11 +187,12 @@ beforeEach(() => {
 
 afterEach(() => jest.useRealTimers())
 
-function buy(effects: LifecycleEffects, expected = 1599) {
+function buy(effects: LifecycleEffects, expected = 1599, preclearanceId?: string | null) {
   return purchaseDomain(effects, ACTOR, {
     domain: 'TestBakery.com',
     expectedFirstYearCents: expected,
     contact: CONTACT,
+    ...(preclearanceId === undefined ? {} : { preclearanceId }),
   })
 }
 
@@ -294,6 +303,90 @@ describe('buying a domain (AGL-3962)', () => {
     })
     expect((await buy(taken.effects)).ok).toBe('active')
     expect(await readRegistration('testbakery.com')).toMatchObject({ failure: 'connect-taken' })
+  })
+})
+
+describe('a purchase a staff preclearance stood in for (AGL-3955)', () => {
+  it('spends the preclearance after the hold and before the charge, then buys as usual', async () => {
+    const driver = fakeDriver()
+    const steps: string[] = []
+    const { effects, recorded } = effectsWith(driver, {
+      consumePreclearance: async () => {
+        // The hold is taken and nothing is charged yet.
+        const held = await readRegistration('testbakery.com')
+        steps.push(`consume:${held?.status ?? 'no-hold'}:charges=${recorded.charges.length}`)
+        return true
+      },
+      charge: async (request) => {
+        steps.push('charge')
+        return { ok: true, invoiceId: 'in_1', paidCents: request.amountCents, code: null }
+      },
+    })
+
+    const outcome = await buy(effects, 1599, 'link-1')
+
+    expect(outcome.ok).toBe('active')
+    expect(steps).toEqual(['consume:charging:charges=0', 'charge'])
+    expect(recorded.consumed).toEqual(['link-1'])
+    expect(driver.buy).toHaveBeenCalledTimes(1)
+    const saved = await readRegistration('testbakery.com')
+    expect(saved?.history.map((row) => row.event)).toEqual(
+      expect.arrayContaining(['purchase-started', 'precleared', 'charged']),
+    )
+    expect(saved?.history.find((row) => row.event === 'precleared')?.detail).toBe('link-1')
+  })
+
+  it('refuses as the payment-history gate would when the preclearance will not spend, and never charges', async () => {
+    const driver = fakeDriver()
+    const { effects, recorded } = effectsWith(driver, { consumePreclearance: async () => false })
+
+    const outcome = await buy(effects, 1599, 'link-spent')
+
+    expect(outcome).toMatchObject({
+      ok: 'refused',
+      status: 409,
+      code: 'no-payment-history',
+      error: expect.stringContaining('three days after your workspace’s first plan payment'),
+    })
+    expect(recorded.consumed).toEqual(['link-spent'])
+    expect(recorded.charges).toEqual([])
+    expect(driver.buy).not.toHaveBeenCalled()
+    // The hold is let go as a decline lets it go: the name is free again.
+    expect(await readRegistration('testbakery.com')).toMatchObject({
+      status: 'declined',
+      failure: 'no-payment-history',
+    })
+    const retry = effectsWith(fakeDriver())
+    expect((await buy(retry.effects)).ok).toBe('active')
+  })
+
+  it('treats a preclearance that throws as one that will not spend', async () => {
+    const { effects, recorded } = effectsWith(fakeDriver(), {
+      consumePreclearance: async () => {
+        throw new Error('bundle links unreachable')
+      },
+    })
+    expect(await buy(effects, 1599, 'link-1')).toMatchObject({ ok: 'refused', code: 'no-payment-history' })
+    expect(recorded.charges).toEqual([])
+  })
+
+  it('spends nothing when no preclearance stood in, and nothing before the name is held', async () => {
+    const plain = effectsWith(fakeDriver())
+    expect((await buy(plain.effects)).ok).toBe('active')
+    mockStore.current = new MemoryFirestore()
+    expect((await buy(plain.effects, 1599, null)).ok).toBe('active')
+    expect(plain.recorded.consumed).toEqual([])
+
+    // A name another buyer holds is refused before the preclearance is spent.
+    const second = effectsWith(fakeDriver())
+    expect(await buy(second.effects, 1599, 'link-1')).toMatchObject({ ok: 'refused', code: 'taken' })
+    expect(second.recorded.consumed).toEqual([])
+
+    // So is a price that moved since the search.
+    mockStore.current = new MemoryFirestore()
+    const moved = effectsWith(fakeDriver({ search: async () => yes([{ ...QUOTE, purchaseUsd: 14 }]) }))
+    expect(await buy(moved.effects, 1599, 'link-1')).toMatchObject({ ok: 'refused', code: 'price-changed' })
+    expect(moved.recorded.consumed).toEqual([])
   })
 })
 

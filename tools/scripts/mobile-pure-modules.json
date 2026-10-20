@@ -868,6 +868,10 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "why": "The native plan card's meters (AGL-3992): which usage meters it rotates through, the one each screen leads with, and their order, for both apps. Pure constants and three functions; imports nothing."
     }
   ]
 }

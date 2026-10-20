@@ -185,7 +185,7 @@ struct AnalyticsView: View {
       .padding(.vertical, AglynSpace.two)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .aglynListBackground()
+    .background(AglynColor.page)
     .navigationTitle("Analytics")
     .refreshable { model.refresh() }
     .task(id: "\(hostID ?? ""):\(range):\(model.refreshToken)") {

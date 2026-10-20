@@ -112,6 +112,11 @@ export const PLUGIN_DOCS = {
     title: 'Create images with AI',
     excerpt: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits.',
   },
+  aiImport: {
+    path: '/ai/bring-my-site',
+    title: 'Bring my site',
+    excerpt: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours. Rolling out.',
+  },
   aiInsights: {
     path: '/marketing-and-automation/analytics/insights',
     title: 'Insights',
@@ -578,6 +583,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#draft-versions', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   aiImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#waves', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#cancel-a-new-site', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
   aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
@@ -589,7 +595,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   aiSite: ['#starting-a-new-site-from-a-few-questions', '#on-the-free-plan', '#if-the-plan-does-not-work-out', '#what-a-scaffold-builds', '#what-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
   aiSiteLooks: ['#choose-a-style', '#each-styles-layout', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
-  aiStart: ['#how-do-you-want-to-start', '#the-questions', '#your-business', '#audience', '#style', '#details', '#review', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#business-details', '#a-store-from-the-start', '#a-blog-from-the-start', '#events-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
+  aiStart: ['#how-do-you-want-to-start', '#the-questions', '#your-business', '#audience', '#style', '#sites-you-like', '#details', '#review', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#business-details', '#a-store-from-the-start', '#a-blog-from-the-start', '#events-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
   aiTemplate: ['#the-three-kinds', '#templates-list', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
   aiThemes: ['#describe-a-change', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
@@ -745,6 +751,11 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#make-a-picture': 'Make a picture',
     '#shapes-and-how-many': 'Shapes and how many',
     '#who-can-use-it': 'Who can use it',
+  },
+  aiImport: {
+    '#prove-it-is-yours': 'Prove it is yours',
+    '#waves': 'Waves',
+    '#your-current-website': 'Your current website',
   },
   aiInsights: {
     '#asking-a-question': 'Asking a question',

@@ -84,7 +84,7 @@ struct FieldsSection: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("crm-fields")
     .sheet(isPresented: $creating) { NewFieldSheet(context: context, scope: scope, reference: reference, object: object) }
@@ -257,7 +257,7 @@ struct SettingsSection: View {
         Text("New records without a rule's owner go to these people in turn.")
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .disabled(!scope.canManage)
     .accessibilityIdentifier("crm-settings")

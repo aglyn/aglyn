@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { DecodedIdToken } from 'firebase-admin/auth'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   type ConsentGroupSiteHold,
@@ -27,6 +28,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   memberHasOrgPermission,
+  previewHostErase,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { eraseSiteAndRecord } from '../../../../utils/server/erase-site'
@@ -53,12 +55,121 @@ function consentGroupHoldResponse(hold: ConsentGroupSiteHold): Response {
   )
 }
 
+/** The site and the person a delete or its preview was asked for, once both may go ahead. */
+interface SiteDeleteCaller {
+  decoded: DecodedIdToken
+  hostSnapshot: FirebaseFirestore.DocumentSnapshot
+  owning: Awaited<ReturnType<typeof getOrgForHost>>
+}
+
+/**
+ * Who may delete the site, asked the same way by the delete and by the
+ * preview the Delete site card reads first (AGL-4003): a verified sign-in,
+ * the site admin role, and the organization's `hosts.delete` permission. A
+ * refusal is the response to send; anything else is the caller. Throws what
+ * the token check throws, for the handler's 401.
+ */
+async function siteDeleteCaller(
+  hostId: string,
+  headers: Partial<Record<string, string>>,
+): Promise<Response | SiteDeleteCaller> {
+  const authorization = headers.authorization ?? ''
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+
+  const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  if (!decoded.email_verified && !isImpersonationSession(decoded)) {
+    return emailUnverifiedResponse()
+  }
+  const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  const hostSnapshot = await hostRef.get()
+  if (!hostSnapshot.exists) {
+    return Response.json({ error: 'Unknown site' }, { status: 404 })
+  }
+  // Deleting a site is an admin-level action (mirrors the rules'
+  // host-delete gate: only a site admin, staff aside).
+  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+  if (decoded['staff'] !== true && memberRole !== 'admin') {
+    return Response.json({
+      error: 'Deleting a site requires the site admin role',
+    }, { status: 403 })
+  }
+
+  /*==========================================
+   * AND the ORG permission on top of it (AGL-2444).
+   *
+   * `hosts.delete` is one of eleven permissions a custom role advertises,
+   * and until now it had ZERO consumers anywhere: an owner could build a
+   * role with "Delete sites" unticked, assign it, and the member deleted
+   * sites. The console did not even dim the control, because nothing read
+   * the key. A permission a customer can toggle that changes nothing is
+   * worse than its absence — it implies a control that does not exist.
+   *
+   * It is checked IN ADDITION to the site-admin role above, never instead
+   * of it, because the two answer different questions. The host role says
+   * whether this person runs that site; the org permission says whether
+   * their seat in the organization may destroy sites at all. Replacing the
+   * role check with this one would widen deletion to any org member who
+   * happens to hold the permission — the opposite of the narrowing the
+   * agency guide sells.
+   *
+   * The org is resolved from the HOST rather than from the request, so a
+   * caller cannot name a workspace where their seat is more generous than
+   * it is in the one that actually owns the site.
+   *=========================================*/
+  const owning = await getOrgForHost(hostId)
+  if (decoded['staff'] !== true) {
+    const membership = owning
+      ? await resolveOrgMembership(decoded.uid, owning.orgId)
+      : null
+    if (
+      !membership ||
+      !(await memberHasOrgPermission(
+        membership.orgId,
+        membership.member,
+        'hosts.delete',
+      ))
+    ) {
+      return Response.json({
+        error: 'Your organization role does not allow deleting sites',
+      }, { status: 403 })
+    }
+  }
+  return { decoded, hostSnapshot, owning }
+}
+
+/**
+ * What deleting the site would take with it (AGL-4003), for the Delete site
+ * card to list before it asks: what plugins share with this site alone — the
+ * datasets, each with its record count — and how many shared ones stay.
+ * Reads only; the same people who may delete the site may ask.
+ */
+async function preview(request: Request): Promise<Response> {
+  const { query, headers } = await pluginRequestFromWeb(request)
+  const hostId = String(query?.['hostId'] ?? '')
+  if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  try {
+    const caller = await siteDeleteCaller(hostId, headers as Partial<Record<string, string>>)
+    if (caller instanceof Response) return caller
+    if (!caller.owning) return Response.json({ resources: [] }, { status: 200 })
+    return Response.json(await previewHostErase(caller.owning.orgId, hostId), { status: 200 })
+  } catch (error) {
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error(error)
+    return Response.json({ error: 'Could not read what goes with the site' }, { status: 500 })
+  }
+}
+
 /**
  * Permanently delete a single site (AGL-488). Site-admin only. Unlike an
  * organization deletion there is no hold — a site is deleted immediately
  * (the console gates it behind a type-the-name confirm). `eraseHost` cleans
- * up Storage, the routing index, the org's hosts map, and the Firestore
- * tree so nothing is orphaned.
+ * up Storage, the routing index, the org's hosts map, the Firestore tree,
+ * and the datasets shared with this site alone (AGL-4003), so nothing is
+ * orphaned.
  *
  * A site in a consent group, or in a change to one that is still running,
  * is refused with a 409 (AGL-3320): its opt-outs are read by the other sites
@@ -73,77 +184,16 @@ async function handler(request: Request): Promise<Response> {
   const hostId = String(body?.hostId ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
 
-  const authorization = headers.authorization ?? ''
-  const idToken = authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : undefined
-  if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
-
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    if (!decoded.email_verified && !isImpersonationSession(decoded)) {
-      return emailUnverifiedResponse()
-    }
-    const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return Response.json({ error: 'Unknown site' }, { status: 404 })
-    }
-    // Deleting a site is an admin-level action (mirrors the rules'
-    // host-delete gate: only a site admin, staff aside).
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (decoded['staff'] !== true && memberRole !== 'admin') {
-      return Response.json({
-        error: 'Deleting a site requires the site admin role',
-      }, { status: 403 })
-    }
-
-    /*==========================================
-     * AND the ORG permission on top of it (AGL-2444).
-     *
-     * `hosts.delete` is one of eleven permissions a custom role advertises,
-     * and until now it had ZERO consumers anywhere: an owner could build a
-     * role with "Delete sites" unticked, assign it, and the member deleted
-     * sites. The console did not even dim the control, because nothing read
-     * the key. A permission a customer can toggle that changes nothing is
-     * worse than its absence — it implies a control that does not exist.
-     *
-     * It is checked IN ADDITION to the site-admin role above, never instead
-     * of it, because the two answer different questions. The host role says
-     * whether this person runs that site; the org permission says whether
-     * their seat in the organization may destroy sites at all. Replacing the
-     * role check with this one would widen deletion to any org member who
-     * happens to hold the permission — the opposite of the narrowing the
-     * agency guide sells.
-     *
-     * The org is resolved from the HOST rather than from the request, so a
-     * caller cannot name a workspace where their seat is more generous than
-     * it is in the one that actually owns the site.
-     *=========================================*/
-    if (decoded['staff'] !== true) {
-      const owning = await getOrgForHost(hostId)
-      const membership = owning
-        ? await resolveOrgMembership(decoded.uid, owning.orgId)
-        : null
-      if (
-        !membership ||
-        !(await memberHasOrgPermission(
-          membership.orgId,
-          membership.member,
-          'hosts.delete',
-        ))
-      ) {
-        return Response.json({
-          error: 'Your organization role does not allow deleting sites',
-        }, { status: 403 })
-      }
-    }
+    const caller = await siteDeleteCaller(hostId, headers)
+    if (caller instanceof Response) return caller
+    const { decoded, hostSnapshot } = caller
 
     // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct
     // 423 body; staff bypass is the un-panic invariant. The org doc is
     // fetched deliberately — an org lock never stamps host docs, so a
     // host-only verdict would silently miss it.
-    const owningOrg = (await getOrgForHost(hostId))?.org
+    const owningOrg = caller.owning?.org
     const locked = await lockdownRefusal({
       request,
       staff: decoded['staff'] === true,
@@ -205,4 +255,4 @@ async function handler(request: Request): Promise<Response> {
 }
 
 export const dynamic = 'force-dynamic'
-export { handler as POST }
+export { handler as POST, preview as GET }

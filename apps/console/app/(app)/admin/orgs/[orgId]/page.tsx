@@ -100,7 +100,9 @@ import StaffOrgActions from '../../../../../components/staff-org-actions.compone
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
-import StaffBundleLinkCard from '../../../../../components/staff-bundle-link.component'
+import StaffBundleLinkCard, {
+  useStaffClientBuild,
+} from '../../../../../components/staff-bundle-link.component'
 import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
@@ -321,6 +323,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [isStaff, orgId, user])
+  // A workspace built for a client hands off on its build's intent (AGL-3958),
+  // read once for both the hand-off and the bundle link card (AGL-3995).
+  const clientBuild = useStaffClientBuild(isStaff ? orgId : null)
   // The sites a bundle link's domain can be for (AGL-3955).
   const bundleSites = useMemo(
     () =>
@@ -1273,6 +1278,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       subscriptionLive={isLiveSubscriptionStatus(
                         (org as { billingStatus?: unknown } | null | undefined)?.billingStatus,
                       )}
+                      build={clientBuild}
                     />
                   ),
                 },
@@ -1405,6 +1411,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           orgName={org?.name}
                           org={org as never}
                           sites={bundleSites}
+                          build={clientBuild}
                           onSent={() => setOrgNonce((nonce) => nonce + 1)}
                         />
                         {/* The separate step after the evaluation: ask the

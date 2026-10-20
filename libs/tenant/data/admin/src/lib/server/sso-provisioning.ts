@@ -104,6 +104,15 @@ const PUBLIC_EMAIL_DOMAINS = new Set([
   '126.com',
 ])
 
+/**
+ * Whether `domain` is a consumer mailbox provider's, shared by people who
+ * have nothing to do with each other. A proof of control means nothing there,
+ * so neither SSO nor a domain ownership claim accepts one.
+ */
+export function isPublicEmailDomain(domain: string): boolean {
+  return PUBLIC_EMAIL_DOMAINS.has(String(domain ?? '').trim().toLowerCase())
+}
+
 export function normalizeSsoDomain(input: string): string {
   const raw = String(input ?? '')
     .trim()

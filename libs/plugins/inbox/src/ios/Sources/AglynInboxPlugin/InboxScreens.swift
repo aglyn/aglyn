@@ -50,7 +50,7 @@ struct ListAssignmentSheet: View {
         }
         if let error { Text(error).foregroundStyle(AglynColor.error) }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Add to a marketing list")
       .aglynScreenTitle("Add to a marketing list")
       .toolbar {
@@ -117,7 +117,7 @@ struct PeopleScreen: View {
       }
       .pickerStyle(.segmented)
       .labelsHidden()
-      .frame(maxWidth: 420)
+      .fixedSize()
       .frame(maxWidth: .infinity, alignment: .leading)
       .aglynContentEdges()
       .padding(.top, AglynSpace.two)

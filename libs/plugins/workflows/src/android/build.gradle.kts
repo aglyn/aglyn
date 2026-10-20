@@ -29,3 +29,8 @@ kotlin {
     }
   }
 }
+
+// The production-shapes test reads the documents the native seed writes from libs/native/contracts (AGL-3993).
+tasks.withType<Test>().configureEach {
+  systemProperty("aglyn.contractsDir", file("../../../../native/contracts").absolutePath)
+}

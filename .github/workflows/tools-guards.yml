@@ -1119,6 +1119,11 @@ jobs:
       # restatement is trusted rather than pinned.
       - run: npm run test:resource-uid
 
+      # AGL-3998. How a script places a product film: the film band's own
+      # video node, each binding filled from a live instance, refusing a band
+      # without exactly one video or an instance that leaves a value empty.
+      - run: npm run test:marketing-film
+
       # AGL-2631. The CRM lifecycle backfill's decisions — which facet gets
       # which stage, which contact becomes a historical lead and which is
       # left (erased, already a lead, already worked), what a company's

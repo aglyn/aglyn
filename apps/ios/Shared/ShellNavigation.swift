@@ -11,6 +11,9 @@ import SwiftUI
 enum Route: Hashable {
   /// A plugin screen by id, with its params.
   case screen(String, NativeParams)
+  /// An area pushed on a phone (a Menu row, or a section with no tab of its own): its screen with its section chips,
+  /// as a tab's root shows it (AGL-3993). An app without areas (POS) shows the screen alone.
+  case area(String, NativeParams)
   /// A Besigner page in the app's authenticated web view (the only web content).
   case besigner(String)
   /// A console page the app has no native screen for yet.
@@ -173,6 +176,45 @@ final class ShellNavigation {
 
   func push(_ route: Route) {
     paths[section, default: []].append(route)
+  }
+
+  /// The route that opens a section as a pushed area; nil for the shell's own sections.
+  static func areaRoute(_ target: ShellSection) -> Route? {
+    switch target {
+    case .plugin(let screen): .area(screen, [:])
+    case .place(let screen, let params): .area(screen, params)
+    default: nil
+    }
+  }
+
+  /// Opens an area on the section on screen, pushed with its section chips (a phone's Menu row, or a section with no
+  /// tab of its own), so every section of a sectioned row is one tap from the area (AGL-3993).
+  func pushArea(_ target: ShellSection) {
+    guard let route = Self.areaRoute(target) else { return select(target) }
+    push(route)
+  }
+
+  /// A section chip on a phone: the pushed area swaps for the section chosen, so the stack never deepens; from a tab's
+  /// root the section is pushed, and the tab's own section returns to its root.
+  func swapArea(_ target: ShellSection) {
+    guard let route = Self.areaRoute(target) else { return select(target) }
+    var stack = paths[section] ?? []
+    if case .area? = stack.last { stack.removeLast() }
+    if target != section { stack.append(route) }
+    paths[section] = stack
+  }
+
+  /// A section a phone has no tab for opens in Menu, pushed as an area: an area with its section chips, the shell's own
+  /// pages as they are.
+  func openInMenu(_ target: ShellSection) {
+    section = .more
+    switch target {
+    case .settings: push(.settings)
+    case .notifications: push(.notifications)
+    case .analytics: push(.analytics)
+    case .plugin, .place: pushArea(target)
+    default: break
+    }
   }
 
   /// Opens a plain web page in the in-app browser screen, pushed onto the section on screen: on iPhone over the tab,

@@ -73,8 +73,14 @@ const SOURCE = /\.(ts|tsx|mjs|cjs|js|jsx)$/
  * which is correct, and a production module that somehow only appears under a
  * `specs/` path would be too, which is not. Nothing in the tree is shaped that
  * way today.
+ *
+ * A `fixtures/` folder is test data by the same rule: the recorded pages and
+ * model answers there (the site import's crawled sites, the AI jobs'
+ * recordings, the CRM seed rows) name the hosts of the sites they stand in
+ * for, and only specs, seed scripts and recorders read them; no deployed
+ * module imports one (AGL-3976).
  */
-const NOT_SOURCE = /\.spec\.|\.test\.|\/specs\/|\/e2e\/|-e2e\/|\.generated\.|\.stories\./
+const NOT_SOURCE = /\.spec\.|\.test\.|\/specs\/|\/fixtures\/|\/e2e\/|-e2e\/|\.generated\.|\.stories\./
 
 /** A syntactically real hostname: labels, dots, no trailing separator. */
 const HOSTNAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/

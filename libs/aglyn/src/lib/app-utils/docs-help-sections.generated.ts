@@ -100,6 +100,11 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#shapes-and-how-many': 'Shape: Square 1:1, Landscape 4:3, Portrait 3:4, Wide 16:9 or Tall 9:16.',
     '#who-can-use-it': 'Creating images needs the Generate with AI permission and a plan that includes AI generation — see who can use Aglyn AI.',
   },
+  aiImport: {
+    '#prove-it-is-yours': 'Use one of these three ways. The status at the top shows Verified once one of them works.',
+    '#waves': 'The first wave brings in your main pages: home, then the pages in your menu, then your other top-level pages.',
+    '#your-current-website': 'Under Website address, type the address people use to reach your site today, for example example.com, and choose Next.',
+  },
   aiInsights: {
     '#asking-a-question': 'Choose Ask a question on the Ask AI about these numbers card — on a site\'s dashboard, its Analytics page, and your organization\'s Sites page — or open the Assist panel on one of these pages and choose Ask about your…',
   },
@@ -257,7 +262,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
     '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',
     '#recent-activity': 'The Recent Activity card on a site\'s dashboard lists the latest changes made to the site, newest first — who made each one and what it touched, linked straight to it.',
-    '#the-sites-list': 'All Sites is the front door of a workspace: one card per site, for the workspace currently selected in the switcher, in name order.',
+    '#the-sites-list': 'All Sites is the front door of a workspace: one card per site, for the workspace currently selected in the switcher, with the sites you pinned first and the rest in name order.',
     '#workspace-and-site-overrides': 'One workspace or one site sets the same answers for a single workspace or a single site, rather than for your whole account.',
   },
   contactActivities: {
