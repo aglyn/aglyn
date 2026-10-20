@@ -41,6 +41,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **sites:** deleting a site erases its own datasets, AI insights and Assist chats ([AGL-4003](https://linear.app/aglyn/issue/AGL-4003))
 - **marketing:** the /managed first-run script's hero matches the live page ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
 - **marketing:** the /managed republish puts a live site in the hero, with no prices in it ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
 - **marketing:** the /managed record pours the hero's site and the white FAQ band ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
@@ -75,6 +76,8 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **release:** beta.272 changelog line for #1859 reads cleanly ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **release:** beta.272 changelog carries #1847 #1851 #1853 #1854 #1855 #1856 #1858 #1859 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **pricing:** /managed version IO02sEaW0U, and a picture can state a price ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
 - **pricing:** /managed is no longer a pricing surface ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
 - **site-care:** requests by email arrive at the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
