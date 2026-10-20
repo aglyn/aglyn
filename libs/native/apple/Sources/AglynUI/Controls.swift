@@ -372,9 +372,9 @@ struct AglynButtonMetrics {
 /// A secondary (outlined) button, Figma Button Kind=Secondary: the surface, a 1-point border/strong outline and primary
 /// text, at the control size it is given (Small 28, Medium 36, Large 48; radius 6 on the Mac, 8 and 12 on touch). It
 /// stands in for the platform's `.bordered`, whose glass draws a bright rim in dark mode (Zach, 2026-10-19: "weird
-/// white borders on dark mode on some buttons"). A destructive one says so in the error color. A `selected` one (a pin
-/// that is pinned, a channel that is on) is the console's outlined primary: the accent's text shade, outlined in the
-/// fill, on the same surface (never the soft wash, under which #0077AD falls short of 4.5:1).
+/// white borders on dark mode on some buttons"). A destructive one says so in the error color. A `selected` one (a
+/// notification channel that is on) is the console's outlined primary: the accent's text shade, outlined in the fill,
+/// on the same surface (never the soft wash, under which #0077AD falls short of 4.5:1).
 public struct AglynSecondaryButtonStyle: ButtonStyle {
   let selected: Bool
 

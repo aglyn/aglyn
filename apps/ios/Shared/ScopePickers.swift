@@ -82,6 +82,21 @@ func openPickedWorkspace(_ orgID: String, in workspace: WorkspaceStore?, navigat
   navigation.enterWorkspace()
 }
 
+/// The pin as Figma draws it (the phone picker 21:2, Switcher/Workspace row 15:691): Pin is an outlined (secondary)
+/// button, never the platform's `.bordered` glass with its bright rim in dark mode; Pinned is its label alone, in the
+/// secondary text color.
+private struct PinButtonLook: ViewModifier {
+  let pinned: Bool
+
+  func body(content: Content) -> some View {
+    if pinned {
+      content.buttonStyle(.plain).foregroundStyle(AglynColor.secondaryText)
+    } else {
+      content.buttonStyle(.aglynSecondary)
+    }
+  }
+}
+
 /// One workspace row: its tile, name, role and plan, and the pin.
 private struct WorkspacePickerRow: View {
   /// A phone, where the ⌘1–⌘5 shortcuts are not shown.
@@ -142,7 +157,7 @@ private struct WorkspacePickerRow: View {
         }
         .font(AglynFont.caption)
       }
-      .buttonStyle(.aglynSecondary(selected: pinIndex != nil))
+      .modifier(PinButtonLook(pinned: pinIndex != nil))
       .controlSize(.small)
       .accessibilityLabel(pinIndex != nil ? "Unpin \(org.name)" : "Pin \(org.name)")
       .accessibilityIdentifier("picker-pin-\(org.id)")
