@@ -81,6 +81,67 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  /// The phone's tab bar (AGL-4006): pins per scope, the first-opened default, and where Create goes.
+  func testThePhoneTabBarPinsAsTheConsoleRulesSay() throws {
+    func bars(_ value: Any) -> [TabBarPins] { readTabBars(["tabBars": value]) }
+    func text(_ value: Any) -> String { value as? String ?? "" }
+    for item in cases("tabBarScope") {
+      let host = item.args.count > 1 ? item.args[1] as? String : nil
+      XCTAssertEqual(tabBarScope(orgID: text(item.args[0]), hostID: host), item.result as? String, item.label)
+    }
+    for item in cases("readTabBars") {
+      XCTAssertEqual(readTabBars(profile(item.args[0])), try decode([TabBarPins].self, item.result), item.label)
+    }
+    for item in cases("tabBarAreas") {
+      XCTAssertEqual(tabBarAreas(bars(item.args[0]), scope: text(item.args[1])), strings(item.result), item.label)
+    }
+    for item in cases("pinTabArea") {
+      XCTAssertEqual(
+        pinTabArea(bars(item.args[0]), scope: text(item.args[1]), area: text(item.args[2])),
+        try decode(TabPinResult.self, item.result), item.label)
+    }
+    for item in cases("unpinTabArea") {
+      XCTAssertEqual(
+        unpinTabArea(bars(item.args[0]), scope: text(item.args[1]), area: text(item.args[2])),
+        try decode([TabBarPins].self, item.result), item.label)
+    }
+    for item in cases("moveTabArea") {
+      XCTAssertEqual(
+        moveTabArea(bars(item.args[0]), scope: text(item.args[1]), area: text(item.args[2]), offset: number(item.args[3])),
+        try decode([TabBarPins].self, item.result), item.label)
+    }
+    for item in cases("setTabAreas") {
+      XCTAssertEqual(
+        setTabAreas(bars(item.args[0]), scope: text(item.args[1]), areas: strings(item.args[2])),
+        try decode([TabBarPins].self, item.result), item.label)
+    }
+    for item in cases("autoPinTabArea") {
+      XCTAssertEqual(
+        autoPinTabArea(bars(item.args[0]), scope: text(item.args[1]), area: text(item.args[2])),
+        try decode([TabBarPins].self, item.result), item.label)
+    }
+    for item in cases("tabBarLayout") {
+      XCTAssertEqual(
+        tabBarLayout(strings(item.args[0]), available: strings(item.args[1])), try decode(TabBarLayout.self, item.result),
+        item.label)
+    }
+  }
+
+  /// The phone's Home (AGL-4006): every area as the same tile, More headed Tools, the scope's own places last.
+  func testThePhoneHomeGroupsEveryAreaAsTheConsoleRulesSay() throws {
+    for item in cases("phoneHomeGroups") {
+      let list = try decode(ResolvedNavList.self, item.args[0])
+      let team = item.args[1] is NSNull ? nil : try decode(NativeNavRow.self, item.args[1])
+      XCTAssertEqual(
+        phoneHomeGroups(list, team: team, ownerName: item.args[2] as? String ?? ""),
+        try decode([PhoneHomeGroup].self, item.result), item.label)
+    }
+    for item in cases("isTabPinnable") {
+      let screen = (item.args[0] as? [String: Any])?["screen"] as? String ?? ""
+      XCTAssertEqual(isTabPinnable(screen: screen), item.result as? Bool, item.label)
+    }
+  }
+
   func testTheRailHoldsPinsRecentsAndTheAllTile() throws {
     for item in cases("readRecentOrgs") { XCTAssertEqual(readRecentOrgs(profile(item.args[0])), strings(item.result), item.label) }
     for item in cases("recordRecentOrg") {
