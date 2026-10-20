@@ -316,6 +316,34 @@ the FAQ and the SEO description. It was written by
 `SITE_CARE_ADDON_MONTHLY_USD`, `PLAN_PRICING.starter` and the 2026-10-19
 Decision Log figures; a change to any of them owes this page a new version.
 
+### 2026-10-19 — `/managed` no longer quotes a price (AGL-3998)
+
+`/managed` (screen `qnuMY13VsS`) is no longer a pricing surface. Version
+`W4VceCRSjF`, which replaced `COCDoTk7vn`, states no price, rate or starting
+figure in its body, its FAQ or its SEO description, so a price change owes it
+nothing; `4EvGpOyRjG`, live since, keeps that and only changes the hero's
+picture and the FAQ's background. Prices are published on `/pricing`, and only there. The page says
+what is true without one: one price covers the plan and Site Care, monthly or
+yearly, with no build fee; a bigger job has one flat price agreed before work
+starts; extra time is billed only after a yes.
+`tools/scripts/republish-managed-landing-page.mjs` made the change, and
+`publish-managed-landing-page.mjs` no longer carries a figure. Both refuse a
+page or an SEO description that states a dollar figure, so neither can bring
+one back.
+
+### 2026-10-20 — a picture can state a price too (AGL-3998)
+
+The text check cannot read a picture. `4EvGpOyRjG`'s hero showed Northwind's
+shop grid (`DJdz0ISx5R`, `commerce-storefront.png`), which prints a price
+under each of its twelve products, so `/managed` stated prices again with no
+dollar figure anywhere in its text. Version `IO02sEaW0U`, live since
+2026-10-20 00:22Z, changes only the hero's picture, to the Northlight studio's
+site live on its own domain (`dl2ylkIvsu`, a frame of film C with no caption
+and no figure). The versions so far: `COCDoTk7vn` → `W4VceCRSjF` →
+`4EvGpOyRjG` → `IO02sEaW0U`. Before a picture goes on a page that states no
+price, look at it: a shop, a menu, a checkout or a pricing table in a
+screenshot is a price on the page.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice
