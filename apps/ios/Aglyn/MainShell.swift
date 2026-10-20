@@ -635,8 +635,11 @@ struct AssistSlot: View {
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
     let row = scope.row(for: navigation.section)
-    let title = [navigation.section == .home ? "Home" : row?.label, scope.site?.name ?? scope.org?.name]
-      .compactMap { $0 }.joined(separator: " · ")
+    let place = navigation.section == .home ? "Home" : row?.label
+    let scopeName = scope.site?.name ?? scope.org?.name
+    let title = [place, scopeName].compactMap { $0 }.joined(separator: " · ")
+    // The context chip wears the place's own icon (Figma AI sheet 21:314, AI panel 18:485).
+    let icon = navigation.section == .home ? "house" : (row?.appleIcon ?? "eye")
     let orgSlug = model.workspace?.org?.slug ?? ""
     let site = scope.site
     let route =
@@ -649,7 +652,9 @@ struct AssistSlot: View {
         }
       }
     }
-    .environment(\.aglynSlotParams, ["route": route, "title": title])
+    .environment(
+      \.aglynSlotParams,
+      ["route": route, "title": title, "icon": icon, "place": place ?? "", "scope": scopeName ?? ""])
   }
 
   /// A row's console path within its scope, from the manifest's console reference.
@@ -681,6 +686,7 @@ struct ShellStack: View {
               RouteView(route: route)
             }
           }
+          .phoneAssistOnPushed(route)
           .wideBarHidden()
         }
     }
@@ -1171,16 +1177,27 @@ struct PhoneShell: View {
     }
     .sheet(isPresented: $navigation.showCreate) { CreateNewSheet().environment(model).environment(navigation) }
     .sheet(isPresented: $navigation.showAssist) {
+      // Figma iPhone / Sheet / AI 21:314: the grabber, the title centered, Done in the trailing corner, then the panel.
       NavigationStack {
         AssistSlot()
           .navigationTitle("\(model.brandName) AI")
           #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AglynColor.paper, for: .navigationBar)
           #endif
-          .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { navigation.showAssist = false } } }
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button("Done") { navigation.showAssist = false }
+                .fontWeight(.semibold)
+                .tint(AglynColor.textPrimary)
+                .accessibilityIdentifier("assist-done")
+            }
+          }
       }
       .environment(model).environment(navigation)
       .presentationDetents([.large])
+      .presentationDragIndicator(.visible)
+      .presentationBackground(AglynColor.paper)
     }
     .onChange(of: navigation.section, initial: true) { previous, section in
       // The centre tab is Create new: it opens the sheet and stays on the tab you were on.
@@ -1225,6 +1242,11 @@ struct PhoneTopBar: ViewModifier {
           }
           .tint(AglynColor.secondaryText)
           .accessibilityIdentifier("topbar-bell")
+          // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
+          // 273:20194): after the bell, before your photo.
+          if AssistSlot.available(model) {
+            PhoneAssistButton()
+          }
           Button {
             navigation.showAccount = true
           } label: {
@@ -1244,6 +1266,52 @@ struct PhoneTopBar: ViewModifier {
 extension View {
   /// The phone's top bar, on a tab's first screen.
   func phoneTopBar() -> some View { modifier(PhoneTopBar()) }
+
+  /// Your AI on a phone's pushed screen (Figma Phone/Top bar, Pushed): on the navigation bar's trailing edge, after the
+  /// screen's own actions, so it is one tap away wherever you are.
+  func phoneAssistOnPushed(_ route: Route) -> some View { modifier(PhoneAssistOnPushed(route: route)) }
+}
+
+/// The top bar's AI button: a grey line ✦ like the bell beside it, opening the AI sheet.
+struct PhoneAssistButton: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+
+  var body: some View {
+    Button {
+      navigation.showAssist = true
+    } label: {
+      Label("\(model.brandName) AI", systemImage: "sparkles")
+    }
+    .tint(AglynColor.secondaryText)
+    .accessibilityIdentifier("topbar-ai")
+  }
+}
+
+private struct PhoneAssistOnPushed: ViewModifier {
+  @Environment(AppModel.self) private var model
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+  #endif
+  let route: Route
+
+  /// The in-app browser keeps its own bar (Figma 22:712): its page is not a screen the AI reads.
+  private var shown: Bool {
+    if case .web = route { return false }
+    return AssistSlot.available(model)
+  }
+
+  func body(content: Content) -> some View {
+    #if os(iOS)
+      content.toolbar {
+        if sizeClass == .compact && shown {
+          ToolbarItem(placement: .topBarTrailing) { PhoneAssistButton() }
+        }
+      }
+    #else
+      content
+    #endif
+  }
 }
 
 /// The scope chip: the site (or the whole workspace) the phone stands in; opens the two-step picker.
