@@ -441,22 +441,25 @@ struct FormsAPI {
     }
   }
 
-  /// The version to open in the Besigner: `preferred`, else the published
-  /// one, else a first one minted for a form that has none.
-  func versionToOpen(_ form: FormRow, preferred: String? = nil) async throws -> String {
-    if let preferred { return preferred }
-    if let versionID = form.versionID { return versionID }
+  /// The version the Besigner opens on without minting one, as the console's Design in the Besigner picks it
+  /// (`form-detail-card.tsx`): `preferred`, else the published one, else the newest saved one (AGL-4002).
+  static func existingVersion(_ form: FormRow, preferred: String? = nil, newest: String? = nil) -> String? {
+    preferred ?? form.versionID ?? newest
+  }
+
+  /// The versions-route body for a form's FIRST version. The route seeds it from the form's own stored design
+  /// (`seedFromParent`, as for a component), so the Besigner opens on the form element and its questions, never on
+  /// an empty canvas (AGL-4002).
+  func firstVersionBody(formID: String, versionID: String) -> JSONValue {
+    ["hostId": .string(hostID), "kind": "form", "parentId": .string(formID), "id": .string(versionID), "seedFromParent": true]
+  }
+
+  /// The version to open in the Besigner: an existing one (`existingVersion`), else a first one minted for a form
+  /// that has none, which the form then points at.
+  func versionToOpen(_ form: FormRow, preferred: String? = nil, newest: String? = nil) async throws -> String {
+    if let existing = Self.existingVersion(form, preferred: preferred, newest: newest) { return existing }
     let versionID = newDocumentID()
-    try await api.request(
-      "/api/hosts/versions", method: .post,
-      body: [
-        "hostId": .string(hostID), "kind": "form", "parentId": .string(form.id), "id": .string(versionID),
-        "data": [
-          "formId": .string(form.id), "hostId": .string(hostID), "displayName": "Initial version",
-          "rootId": .string(formCanvasRoot),
-          "nodes": .object([formCanvasRoot: ["$id": .string(formCanvasRoot), "componentId": "div", "nodes": []]]),
-        ],
-      ])
+    try await api.request("/api/hosts/versions", method: .post, body: firstVersionBody(formID: form.id, versionID: versionID))
     try await writer.merge(path(form.id), ["versionId": versionID, "updatedAt": Date()])
     return versionID
   }

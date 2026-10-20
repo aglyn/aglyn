@@ -15,7 +15,35 @@
  * create stamps. `stats` holds the counters the submit route increments; the
  * submission counts agree with the rows `seed/inbox.mjs` writes for the same
  * form ids. A site member reads them under the host catch-all.
+ *
+ * Production-shaped (AGL-4002): every production form carries its design as
+ * `nodes` (msgpack bytes, the console's new-form tree) with `rootId`, and the
+ * opened ones a `versionId` whose version lives at
+ * `hosts/{hostId}/forms/{id}/versions/{versionId}` with the same bytes. One
+ * form in use (`newsletter`) has never been opened, so the app's Design in the
+ * Besigner mints its first version from the form's own design. Only the
+ * emulator seed (it passes `project`) writes them: the review org's recording
+ * (`lib/review-org-seed.mjs`) lands in a live org and re-points ids, which
+ * it cannot do inside opaque bytes, so its forms stay as they were.
  */
+import { encode as msgpack } from '@msgpack/msgpack'
+
+/** The canvas root id (`CANVAS_ROOT_ELEMENT_ID`). */
+const CANVAS_ROOT = '_@_'
+
+/** The tree the console's New form writes (`host-forms-card.component.tsx`), as stored: msgpack bytes. */
+const formNodes = (formId, formName) =>
+  msgpack({
+    [CANVAS_ROOT]: { $id: CANVAS_ROOT, componentId: 'div', nodes: ['formRoot'] },
+    formRoot: {
+      $id: 'formRoot',
+      componentId: 'form',
+      pluginId: 'forms',
+      parentId: CANVAS_ROOT,
+      props: { formId, formName },
+      nodes: [],
+    },
+  })
 
 const key = (text) => String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
@@ -51,7 +79,8 @@ function formListFields({ id, displayName, slug }) {
 
 const field = (fieldName, label, fieldType, extra = {}) => ({ fieldName, label, fieldType, ...extra })
 
-export async function seedForms({ put, uid, hostId, now }) {
+export async function seedForms({ put, uid, hostId, now, project }) {
+  const storedDesigns = Boolean(project)
   const nowMs = now.getTime()
   const day = 24 * 60 * 60 * 1000
   const forms = [
@@ -101,6 +130,7 @@ export async function seedForms({ put, uid, hostId, now }) {
       lead: false,
       stats: { submissions: null, leads: null, views: 37, lastSubmissionAtMs: null },
       createdDaysAgo: 3,
+      unopened: true,
     },
     {
       id: 'feedback-2025',
@@ -117,10 +147,13 @@ export async function seedForms({ put, uid, hostId, now }) {
   ]
   for (const form of forms) {
     const slug = form.id
+    const versionId = storedDesigns && !form.unopened ? `${form.id}-v1` : null
     await put(`hosts/${hostId}/forms/${form.id}`, {
       displayName: form.displayName,
       slug,
       fields: form.fields,
+      ...(storedDesigns ? { rootId: CANVAS_ROOT, nodes: formNodes(form.id, form.displayName) } : {}),
+      ...(versionId ? { versionId } : {}),
       routing: { lead: form.lead },
       ...formListFields({ id: form.id, displayName: form.displayName, slug }),
       retired: form.retired === true,
@@ -131,6 +164,18 @@ export async function seedForms({ put, uid, hostId, now }) {
       updatedAt: new Date(nowMs - Math.min(form.createdDaysAgo, 2) * day),
       createdBy: uid,
     })
+    if (versionId) {
+      await put(`hosts/${hostId}/forms/${form.id}/versions/${versionId}`, {
+        formId: form.id,
+        hostId,
+        displayName: 'Initial version',
+        rootId: CANVAS_ROOT,
+        nodes: formNodes(form.id, form.displayName),
+        createdAt: new Date(nowMs - form.createdDaysAgo * day),
+        createdBy: uid,
+        updatedAt: new Date(nowMs - Math.min(form.createdDaysAgo, 2) * day),
+      })
+    }
   }
   return { forms: forms.length }
 }

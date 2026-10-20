@@ -4,8 +4,10 @@ import com.aglyn.contracts.Contracts
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreFilter
+import com.aglyn.core.jsonBody
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FormsTest {
@@ -51,5 +53,21 @@ class FormsTest {
     assertEquals(4L, form.submissions)
     assertEquals("Email", form.fields.single().label)
     assertEquals("/forms/contact/versions/v1/besigner", formBesignerPath("contact", "v1"))
+  }
+
+  /** The console's version, and a first one seeded on the server from the form's own design (AGL-4002). */
+  @Test
+  fun opensTheConsolesVersionAndSeedsAFirstOneFromTheForm() {
+    val published = FormRow.from(FirestoreDoc("contact", "hosts/h/forms/contact", mapOf("versionId" to "v-live")))
+    val unpublished = FormRow.from(FirestoreDoc("quote", "hosts/h/forms/quote", emptyMap()))
+    assertEquals("v-old", existingFormVersion(published, "v-old", "v-new"))
+    assertEquals("v-live", existingFormVersion(published, newest = "v-new"))
+    assertEquals("v-new", existingFormVersion(unpublished, newest = "v-new"))
+    assertNull(existingFormVersion(unpublished))
+    assertEquals(
+      jsonBody("hostId" to "h", "kind" to "form", "parentId" to "quote", "id" to "v1", "seedFromParent" to true),
+      formFirstVersionBody("h", "quote", "v1"),
+    )
+    assertNull(formFirstVersionBody("h", "quote", "v1")["data"])
   }
 }
