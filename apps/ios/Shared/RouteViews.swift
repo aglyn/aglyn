@@ -26,6 +26,8 @@ struct RouteView: View {
     case .view(let pushed): pushed.view
     case .web(let page): AglynBrowserScreen(page)
     case .searchResults(let query): SearchResultsScreen(initial: query)
+    // The app's shell draws a phone's settings list (ShellStack); nothing else pushes it.
+    case .modeList: EmptyView()
     }
   }
 }
