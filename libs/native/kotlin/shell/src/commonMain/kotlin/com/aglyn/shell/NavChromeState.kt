@@ -116,14 +116,25 @@ internal class NavChromeState(private val device: KeyValueStore) {
 }
 
 /**
- * The accent a workspace lends the app while you are in it (Zach, decision 5, 2026-10-18): a white-label workspace's brand
- * color (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
- * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so the account theme's
- * own accent stays (Aglyn blue unless the person picked one). A color the person picked, or one taken from the logo, only
- * colors the workspace's tile, never the accent and never a surface (AGL-4000).
+ * The accent a workspace lends the app while you are in it (Zach, decision 5, 2026-10-18): none when the person picked
+ * an accent of their own ([pickedAccent] is not "theme"), since theirs wins; else a white-label workspace's brand color
+ * (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
+ * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so
+ * the account theme's own accent stays. The same order as Apple's `ThemeApplier.accent`. A color the person picked for
+ * the workspace, or one taken from its logo, only colors the workspace's tile, never the accent and never a surface
+ * (AGL-4000).
  */
-internal fun workspaceAccent(brandColor: String?, whiteLabel: Boolean, useWorkspaceBrand: Boolean): String? =
-  brandColor?.takeIf { whiteLabel && useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
+internal fun workspaceAccent(brandColor: String?, whiteLabel: Boolean, useWorkspaceBrand: Boolean, pickedAccent: String = "theme"): String? =
+  brandColor?.takeIf { pickedAccent == "theme" && whiteLabel && useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
+
+/**
+ * Whether the sidebar takes a 5% wash of the accent: only when the person picked Tinted, and never on the Aglyn theme,
+ * whose sidebar is always the neutral surface (Apple's `AglynColor.sidebar`: `sidebarTinted` and a theme other than
+ * "aglyn"; an unknown style counts as Tinted and an unknown theme as Aglyn's, as there). Plain is the default (AGL-3990).
+ */
+internal fun sidebarTinted(theme: com.aglyn.contracts.AppThemePrefs): Boolean =
+  theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN &&
+    theme.theme != com.aglyn.contracts.AppThemeName.AGLYN && theme.theme != com.aglyn.contracts.AppThemeName.UNKNOWN
 
 /** A workspace's logo as a URL the image loader reads, light and dark. */
 internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: String): Pair<String?, String?> {

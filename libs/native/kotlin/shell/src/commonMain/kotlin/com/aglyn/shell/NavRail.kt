@@ -127,7 +127,8 @@ internal fun WorkspaceRail(
         AllWorkspacesTile(rail.total.toInt(), actions.all)
       }
     }
-    // The foot (Figma Rail, Staff = Yes): Admin above Create new, then the account, each in a utility box.
+    // The foot (Figma Rail, Staff = Yes): Admin (Figma's bare outline shield, Icon/admin 3:142) above Create new, then the
+    // account, each in a utility box.
     actions.admin?.let { admin ->
       WithTooltip("Admin") {
         Surface(
@@ -136,7 +137,7 @@ internal fun WorkspaceRail(
           color = Color.Transparent,
           contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.size(m.utility).testTag("rail-admin").semantics { contentDescription = "Admin" },
-        ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("admin_panel_settings"), null, Modifier.size(m.utilityIcon)) } }
+        ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("shield"), null, Modifier.size(m.utilityIcon)) } }
       }
     }
     WithTooltip("Create new") {

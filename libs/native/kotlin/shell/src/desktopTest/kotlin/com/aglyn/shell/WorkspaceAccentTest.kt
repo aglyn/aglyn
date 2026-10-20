@@ -31,6 +31,13 @@ class WorkspaceAccentTest {
   }
 
   @Test
+  fun anAccentThePersonPickedWinsOverAWhiteLabelBrand() {
+    // Apple's ThemeApplier.accent: your own accent first, then a white-label brand, then the theme's.
+    assertNull(workspaceAccent("#7A5CF0", whiteLabel = true, useWorkspaceBrand = true, pickedAccent = "#E040FB"))
+    assertEquals("#7A5CF0", workspaceAccent("#7A5CF0", whiteLabel = true, useWorkspaceBrand = true, pickedAccent = "theme"))
+  }
+
+  @Test
   fun aStoredBrandColorWithoutWhiteLabelIsNoAccent() {
     // The console reads brandingProfile.primaryColor only for a white-label workspace (its branding effects).
     assertNull(workspaceAccent("#7A5CF0", whiteLabel = false, useWorkspaceBrand = true))

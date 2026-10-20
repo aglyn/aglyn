@@ -116,7 +116,7 @@ internal fun PhoneShell(
       }
     },
     bottomBar = {
-      NavigationBar(containerColor = shellColors.sidebar, modifier = Modifier.testTag("phone-tabs")) {
+      NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.testTag("phone-tabs")) {
         val colors = NavigationBarItemDefaults.colors(
           indicatorColor = MaterialTheme.colorScheme.primaryContainer,
           selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,

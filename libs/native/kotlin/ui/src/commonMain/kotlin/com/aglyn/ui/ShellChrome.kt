@@ -21,7 +21,10 @@ data class ShellColors(
   /** The workspace rail's ground: the page tinted toward the brand slate. */
   val rail: Color,
   val onRail: Color,
-  /** The sidebar's ground. */
+  /**
+   * The sidebar column's ground: the surface (Plain), or with 5% of the accent blended in when the sidebar is Tinted
+   * on a theme other than Aglyn's ([sidebarGround]). Only the sidebar column wears it.
+   */
   val sidebar: Color,
   /** The title bar above the main area. */
   val titleBar: Color,
@@ -43,7 +46,21 @@ data class ShellColors(
 /** The brand gradient's middle stop (242°, #00B0FF → #7A5CF0 → #E040FB), the only brand color with no palette intent. */
 private val BrandViolet = Color(0xFF7A5CF0)
 
-fun shellColors(scheme: ColorScheme, palette: AglynPalette, surfaces: ThemeSurfaces? = null): ShellColors {
+/**
+ * The sidebar's ground beside the rail, the same rule as Apple's `AglynColor.sidebar`: the surface, with 5% of [accent]
+ * mixed in (sRGB, opaque) when there is one to blend, that is when the sidebar style is Tinted and the theme is not the
+ * console's own (the NavShell decides, [sidebarTinted]). Plain, the default, keeps the neutral surface.
+ */
+fun sidebarGround(surface: Color, accent: Color?): Color = if (accent == null) surface else Color(
+  red = surface.red + (accent.red - surface.red) * SidebarTint,
+  green = surface.green + (accent.green - surface.green) * SidebarTint,
+  blue = surface.blue + (accent.blue - surface.blue) * SidebarTint,
+)
+
+/** How much of the accent a Tinted sidebar takes. */
+const val SidebarTint = 0.05f
+
+fun shellColors(scheme: ColorScheme, palette: AglynPalette, surfaces: ThemeSurfaces? = null, sidebarAccent: Color? = null): ShellColors {
   val dark = scheme.background.luminance() < 0.5f
   val rail = surfaces?.rail ?: lerp(scheme.background, palette.tertiary.main, if (dark) 0.18f else 0.07f)
   // A rail darker than the page it sits on (Ocean's) takes light ink.
@@ -51,7 +68,7 @@ fun shellColors(scheme: ColorScheme, palette: AglynPalette, surfaces: ThemeSurfa
   return ShellColors(
     rail = rail,
     onRail = onRail,
-    sidebar = scheme.surfaceContainerLow,
+    sidebar = sidebarGround(scheme.surfaceContainerLow, sidebarAccent),
     titleBar = surfaces?.titleBar ?: scheme.surfaceContainerLow,
     selected = scheme.primaryContainer,
     onSelected = scheme.onPrimaryContainer,

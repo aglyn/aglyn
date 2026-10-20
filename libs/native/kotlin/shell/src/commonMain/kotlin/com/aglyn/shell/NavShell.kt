@@ -214,7 +214,10 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val accentEntitlements = accentOrg?.let { services.entitlements.state(it).collectAsState().value }
   LaunchedEffect(accentOrg) { accentOrg?.let { services.entitlements.load(it) } }
   val accent = accentOrg?.let { id ->
-    workspaceAccent(workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true, useWorkspaceBrand = prefs.theme.useWorkspaceBrand)
+    workspaceAccent(
+      workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true,
+      useWorkspaceBrand = prefs.theme.useWorkspaceBrand, pickedAccent = prefs.theme.accent,
+    )
   }?.let { com.aglyn.ui.colorOfHex(it) }
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
@@ -332,7 +335,13 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
 
   WorkspaceBrandTheme(services, dark, accent) {
-  val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
+  // The sidebar is Plain (the theme's neutral surface) unless the person picked Tinted, and even then the Aglyn theme's
+  // stays neutral: Tinted blends 5% of the accent in force into it, never a workspace's own color (Apple's
+  // `AglynColor.sidebar`; AGL-4000).
+  val shell = com.aglyn.ui.shellColors(
+    MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current,
+    sidebarAccent = com.aglyn.ui.LocalAccent.current?.fill.takeIf { sidebarTinted(prefs.theme) },
+  )
   CompositionLocalProvider(
     androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
@@ -573,7 +582,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
               if (assist != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
-                Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
+                Column(Modifier.width(380.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("ai-panel")) {
                   Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(assist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
