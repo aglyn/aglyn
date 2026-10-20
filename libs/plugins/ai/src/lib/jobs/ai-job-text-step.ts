@@ -33,6 +33,7 @@ import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 import type { AiSiteImportState } from '../model/ai-site-import'
+import type { AiSitePhotos } from '../model/ai-site-photos'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiOverlayCopyRequested } from '../model/ai-overlay-copy'
 import { runAiOverlayCopy } from './ai-job-overlay-copy'
@@ -166,6 +167,13 @@ export interface AiJobStepOutcome {
    * job document itself.
    */
   siteImport?: AiSiteImportState
+  /**
+   * A `site` job's pictures left on a starter photo after this pass
+   * (AGL-3988), whole: what its late photo pass fills before the site is
+   * published. A page's or a dataset's pass reports its own; the site step
+   * merges them and the machine keeps the result on the job.
+   */
+  sitePhotos?: AiSitePhotos
 }
 
 /** What one `build` pass came to for the unit it ran (AGL-3616). */
