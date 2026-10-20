@@ -14,7 +14,9 @@ import com.aglyn.contracts.MediaSort
 import com.aglyn.contracts.mediaQueryRequest
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
+import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreDoc
+import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
@@ -150,13 +152,27 @@ data class MediaItem(
   /** Where the file is served from: its CDN path on the console origin, else its stored URL. */
   fun src(origin: String): String? = cdnPath?.let { origin.trimEnd('/') + it } ?: url
 
-  /** A thumbnail at [width] pixels (the CDN's own variants), or the file itself. */
+  /**
+   * A thumbnail at [width] pixels (the CDN's own variants), or the file itself. An SVG has no width variants, so it is
+   * asked for as a square transparent PNG (`?icon=png-N`); a film shows its poster only when its document records one
+   * (otherwise the poster URL is a 404 and the tile shows the film's type instead).
+   */
   fun thumbnail(origin: String, width: Int = 320): String? = when {
+    kind == "image" && cdnPath != null && isSvg -> "${origin.trimEnd('/')}$cdnPath?icon=png-${mediaIconSize(width)}"
     kind == "image" && cdnPath != null -> "${origin.trimEnd('/')}$cdnPath?w=$width"
-    kind == "video" && cdnPath != null -> "${origin.trimEnd('/')}$cdnPath?poster=1&w=$width"
+    kind == "video" && cdnPath != null && hasPoster -> "${origin.trimEnd('/')}$cdnPath?poster=1&w=$width"
     kind == "image" -> url
     else -> null
   }
+
+  /** Whether the file is an SVG drawing. */
+  val isSvg: Boolean get() = contentType.lowercase().startsWith("image/svg")
+
+  /** What a tile says the file is, as the console's tile does: its type's short label (`PDF`, `XLSX`, `JPEG`). */
+  val typeLabel: String get() = mediaFileType(contentType).second
+
+  /** The tile's caption: `PDF · 1.2 MB`. */
+  val caption: String get() = "$typeLabel · ${formatBytes(sizeBytes ?: 0)}"
 
   companion object {
     fun from(doc: FirestoreDoc): MediaItem? {
@@ -186,6 +202,130 @@ data class MediaItem(
       )
     }
   }
+}
+
+/** The square PNG sizes the CDN draws an SVG at (`?icon=png-N`). */
+val MEDIA_ICON_SIZES = listOf(16, 32, 48, 72, 96, 128, 144, 152, 192, 256, 384, 512)
+
+/** The smallest icon size at least [pixels] wide (the largest when none is). */
+fun mediaIconSize(pixels: Int): Int = MEDIA_ICON_SIZES.firstOrNull { it >= pixels } ?: MEDIA_ICON_SIZES.last()
+
+/**
+ * What a tile shows for a file it cannot draw a preview of: the console's own map (`mediaFileTypeIcon`), as an icon name
+ * and a short label. It never returns nothing: an unknown type is a document named by its subtype.
+ */
+fun mediaFileType(contentType: String): Pair<String, String> {
+  val value = contentType.substringBefore(';').trim().lowercase()
+  val exact = mapOf(
+    "application/pdf" to ("picture_as_pdf" to "PDF"),
+    "application/zip" to ("folder_zip" to "ZIP"), "application/x-zip-compressed" to ("folder_zip" to "ZIP"),
+    "application/gzip" to ("folder_zip" to "GZIP"), "application/x-tar" to ("folder_zip" to "TAR"),
+    "application/x-7z-compressed" to ("folder_zip" to "7Z"), "application/vnd.rar" to ("folder_zip" to "RAR"),
+    "application/msword" to ("description" to "DOC"),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" to ("description" to "DOCX"),
+    "application/rtf" to ("description" to "RTF"),
+    "application/vnd.ms-excel" to ("table_chart" to "XLS"),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" to ("table_chart" to "XLSX"),
+    "text/csv" to ("table_chart" to "CSV"),
+    "application/vnd.ms-powerpoint" to ("slideshow" to "PPT"),
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation" to ("slideshow" to "PPTX"),
+    "audio/mpeg" to ("audiotrack" to "MP3"), "audio/mp4" to ("audiotrack" to "M4A"), "audio/aac" to ("audiotrack" to "AAC"),
+    "audio/ogg" to ("audiotrack" to "OGG"), "audio/wav" to ("audiotrack" to "WAV"),
+    "text/plain" to ("description" to "TXT"), "text/markdown" to ("description" to "MD"),
+    "application/json" to ("data_object" to "JSON"),
+  )
+  exact[value]?.let { return it }
+  val subtype = value.substringAfter('/', "")
+  val label = if (subtype.isEmpty() || !value.contains('/')) "FILE" else subtype.substringBefore('+').uppercase()
+  val family = listOf("image/" to "image", "video/" to "movie", "audio/" to "audiotrack", "text/" to "description")
+    .firstOrNull { value.startsWith(it.first) }?.second
+  return (family ?: "insert_drive_file") to label
+}
+
+/** A folder and every folder under it, the folder first (`mediaFolderDescendants`). */
+fun mediaFolderSubtree(id: String, folders: List<MediaFolder>): List<String> {
+  val children = folders.filter { it.parentId != null }.groupBy({ it.parentId!! }, { it.id })
+  val out = mutableListOf<String>()
+  val queue = ArrayDeque(listOf(id))
+  val seen = mutableSetOf<String>()
+  while (queue.isNotEmpty()) {
+    val next = queue.removeFirst()
+    if (!seen.add(next)) continue
+    out += next
+    queue.addAll(children[next].orEmpty())
+  }
+  return out
+}
+
+/** Firestore's cap on disjunctions: the product of every `in` and `-any` (`MEDIA_DISJUNCTION_LIMIT`). */
+const val MEDIA_DISJUNCTION_LIMIT = 30
+
+/** Said when Include subfolders gives way to the open folder alone (the console's notice, word for word). */
+const val MEDIA_SUBFOLDERS_DROPPED_NOTICE =
+  "Include subfolders is off for this folder: it has more subfolders than one query can look through, so only the " +
+    "files directly in it are shown."
+
+/**
+ * The folders one view reads: the open folder, and with Include subfolders every folder under it, unless they and the
+ * reader's scope tokens pass Firestore's thirty disjunctions (then only the open folder, and dropped).
+ */
+fun mediaFolderIds(folder: FolderPick, subtree: List<String>, scopeTokens: List<String>?): Pair<List<String>, Boolean> {
+  if (folder !is FolderPick.One) return emptyList<String>() to false
+  val ids = if (subtree.firstOrNull() == folder.id) subtree else listOf(folder.id) + subtree.filter { it != folder.id }
+  if (ids.size > 1 && ids.size * (scopeTokens?.size ?: 1) > MEDIA_DISJUNCTION_LIMIT) return listOf(folder.id) to true
+  return ids to false
+}
+
+/** An arrow key's direction in a grid. */
+enum class MediaGridMove { LEFT, RIGHT, UP, DOWN }
+
+/**
+ * Where an arrow key moves the focus in a grid of [columns] across: left and right step one, up and down a row; null
+ * past an edge. With nothing focused, any arrow focuses the first item.
+ */
+fun <T> mediaGridStep(ids: List<T>, from: T?, columns: Int, move: MediaGridMove): T? {
+  if (ids.isEmpty()) return null
+  val index = from?.let { ids.indexOf(it) }?.takeIf { it >= 0 } ?: return ids.first()
+  val across = columns.coerceAtLeast(1)
+  val next = when (move) {
+    MediaGridMove.LEFT -> index - 1
+    MediaGridMove.RIGHT -> index + 1
+    MediaGridMove.UP -> index - across
+    MediaGridMove.DOWN -> index + across
+  }
+  return ids.getOrNull(next)
+}
+
+/**
+ * Which files a click selects: alone, toggled (Ctrl/⌘-click), or the run from the last one picked (⇧-click), in the
+ * grid's order (the console's `media-selection` rules).
+ */
+fun mediaSelection(current: Set<String>, anchor: String?, clicked: String, toggle: Boolean, range: Boolean, order: List<String>): Set<String> {
+  if (range && anchor != null) {
+    val from = order.indexOf(anchor)
+    val to = order.indexOf(clicked)
+    if (from >= 0 && to >= 0) return current + order.subList(minOf(from, to), maxOf(from, to) + 1)
+  }
+  if (toggle) return if (clicked in current) current - clicked else current + clicked
+  return setOf(clicked)
+}
+
+/** "1 file", "3 files". */
+fun mediaFilesCount(count: Int): String = if (count == 1) "1 file" else "$count files"
+
+/** What a bulk delete says it did, naming the files (the console's `deletedMediaMessage`, AGL-1461). */
+fun mediaDeletedMessage(names: List<String>): String = mediaNamedMessage("Deleted", names, "Nothing was deleted")
+
+/** What a bulk restore says it did (the console's `restoredMediaMessage`). */
+fun mediaRestoredMessage(names: List<String>): String = mediaNamedMessage("Restored", names, "Nothing was restored")
+
+private fun mediaNamedMessage(verb: String, names: List<String>, none: String): String {
+  if (names.isEmpty()) return none
+  if (names.size == 1) return "$verb \"${names[0]}\""
+  val shown = names.take(3).map { "\"$it\"" }
+  val hidden = names.size - shown.size
+  val list = if (hidden > 0) "${shown.joinToString(", ")} and $hidden more" else "${shown.dropLast(1).joinToString(", ")} and ${shown.last()}"
+  return "$verb ${names.size} files: $list"
 }
 
 /** The kind's icon, for a tile with no preview. */
@@ -275,12 +415,17 @@ fun mediaRequest(
   sort: MediaSort,
   search: String,
   filters: MediaFilters = MediaFilters(),
+  subtree: List<String> = emptyList(),
 ): ListQueryRequest {
   val base = buildList {
     when (folder) {
       FolderPick.All -> Unit
       FolderPick.Root -> add(ListQueryFilter(ListQueryOp.EQUAL, "folderId", JsonNull))
-      is FolderPick.One -> add(ListQueryFilter(ListQueryOp.EQUAL, "folderId", JsonPrimitive(folder.id)))
+      is FolderPick.One -> {
+        val ids = mediaFolderIds(folder, subtree, scopeTokens).first
+        if (ids.size > 1) add(ListQueryFilter(ListQueryOp.IN, "folderId", JsonArray(ids.map(::JsonPrimitive))))
+        else add(ListQueryFilter(ListQueryOp.EQUAL, "folderId", JsonPrimitive(folder.id)))
+      }
     }
     if (scopeTokens != null) add(ListQueryFilter(ListQueryOp.ARRAY_CONTAINS_ANY, "visibleTo", JsonArray(scopeTokens.map(::JsonPrimitive))))
   }
@@ -295,8 +440,8 @@ fun mediaRequest(
 }
 
 /** What the console's plan makes of one view: the query, and what it left out and why. */
-fun mediaPlan(folder: FolderPick, scopeTokens: List<String>?, type: String?, sort: MediaSort, search: String, filters: MediaFilters = MediaFilters()): ListQueryPlan =
-  planListQuery(Contracts.mediaListQuery, mediaRequest(folder, scopeTokens, type, sort, search, filters), MediaNameNormalizers)
+fun mediaPlan(folder: FolderPick, scopeTokens: List<String>?, type: String?, sort: MediaSort, search: String, filters: MediaFilters = MediaFilters(), subtree: List<String> = emptyList()): ListQueryPlan =
+  planListQuery(Contracts.mediaListQuery, mediaRequest(folder, scopeTokens, type, sort, search, filters, subtree), MediaNameNormalizers)
 
 fun mediaQuery(
   scope: MediaScope,
@@ -307,7 +452,23 @@ fun mediaQuery(
   search: String,
   startAfter: List<Any?>? = null,
   filters: MediaFilters = MediaFilters(),
-): FirestoreQuery = mediaPlan(folder, scopeTokens, type, sort, search, filters).toFirestoreQuery("${scope.path}/media", MEDIA_PAGE_SIZE, startAfter)
+  subtree: List<String> = emptyList(),
+): FirestoreQuery = mediaPlan(folder, scopeTokens, type, sort, search, filters, subtree).toFirestoreQuery("${scope.path}/media", MEDIA_PAGE_SIZE, startAfter)
+
+/**
+ * How many files one folder holds, as the console's folder card counts them (a count on `folderId`, with the scope clause
+ * for a reader limited to some sites); null when the count cannot be read.
+ */
+suspend fun mediaFolderCount(firestore: FirestoreReader, scope: MediaScope, folderId: String, scopeTokens: List<String>?): Long? =
+  runCatching {
+    firestore.count(
+      FirestoreQuery(
+        "${scope.path}/media",
+        filters = listOf(FirestoreFilter("folderId", FilterOp.EQ, folderId)) +
+          scopeTokens?.let { listOf(FirestoreFilter("visibleTo", FilterOp.ARRAY_CONTAINS_ANY, it)) }.orEmpty(),
+      ),
+    )
+  }.getOrNull()
 
 /**
  * What the plan could not honor, in words: a clause it refused (two array
@@ -354,6 +515,9 @@ class MediaListModel(
     private set
   var search by mutableStateOf("")
     private set
+  /** The open folder and every folder under it, when Include subfolders is on; empty otherwise. */
+  var subtree by mutableStateOf<List<String>>(emptyList())
+    private set
   var rows by mutableStateOf<Load<List<MediaItem>>>(Load.Loading)
     private set
   var hasMore by mutableStateOf(false)
@@ -376,8 +540,10 @@ class MediaListModel(
   }
 
   private fun query(after: List<Any?>? = null): FirestoreQuery {
-    notices = mediaPlanNotices(mediaPlan(folder, scopeTokens, type, sort, search, filters))
-    return mediaQuery(scope, folder, scopeTokens, type, sort, search, after, filters)
+    val dropped = mediaFolderIds(folder, subtree, scopeTokens).second
+    notices = mediaPlanNotices(mediaPlan(folder, scopeTokens, type, sort, search, filters, subtree)) +
+      listOfNotNull(MEDIA_SUBFOLDERS_DROPPED_NOTICE.takeIf { dropped })
+    return mediaQuery(scope, folder, scopeTokens, type, sort, search, after, filters, subtree)
   }
 
   fun open(next: FolderPick) { if (next != folder) { folder = next; reload() } }
@@ -385,6 +551,7 @@ class MediaListModel(
   fun filter(next: MediaFilters) { if (next != filters) { filters = next; reload() } }
   fun order(next: MediaSort) { if (next != sort) { sort = next; reload() } }
   fun type(next: String) { if (next != search) { search = next; reload(debounce = true) } }
+  fun include(next: List<String>) { if (next != subtree) { subtree = next; reload() } }
 
   fun refresh() {
     refreshing = true
@@ -426,8 +593,11 @@ class MediaListModel(
   }
 
   /** Drops a file the person just deleted, without waiting for a reload. */
-  fun drop(id: String) {
-    (rows as? Load.Ready)?.let { rows = Load.Ready(it.value.filterNot { item -> item.id == id }) }
+  fun drop(id: String) = drop(setOf(id))
+
+  /** Drops files the person just deleted or moved out of the view, without waiting for a reload. */
+  fun drop(ids: Set<String>) {
+    (rows as? Load.Ready)?.let { rows = Load.Ready(it.value.filterNot { item -> item.id in ids }) }
   }
 }
 
@@ -510,6 +680,11 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
       ApiMethod.POST,
       body("action" to "update-details", "mediaId" to id, "fileName" to fileName, "alt" to alt, "description" to description, "tags" to tags),
     )
+  }
+
+  /** Sets one file's tags and nothing else (the route keeps its name, alt text and description). */
+  suspend fun setTags(id: String, tags: List<String>) {
+    api.request("/api/media/folders", ApiMethod.POST, body("action" to "update-details", "mediaId" to id, "tags" to tags))
   }
 
   suspend fun setPrivate(id: String, private: Boolean) {

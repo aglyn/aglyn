@@ -24,6 +24,8 @@ kotlin {
     commonMain.dependencies {
       api(project(":native-plugin-host"))
       implementation(project(":native-ui"))
+      // The media browser's system back (up a folder, out of a file's details on a phone).
+      implementation(libs.compose.ui.backhandler)
       implementation(project(":native-contracts"))
     }
     commonTest.dependencies {
