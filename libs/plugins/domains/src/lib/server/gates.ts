@@ -16,6 +16,7 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { checkPurchaseGatePreclearance } from '@aglyn/aglyn/plugin-manager/purchase-gate-preclearance'
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import {
   firebaseAdmin,
@@ -28,6 +29,7 @@ import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admi
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { HOLDING_STATUSES, type DomainRegistrationDoc } from '../model/registration'
 import { db, listRegistrations } from './db'
+import { PURCHASE_REFUSAL_COPY, type PurchaseRefusal } from './purchase-refusals'
 
 /*
  * WHO MAY BUY A DOMAIN, AND WHEN (AGL-3962).
@@ -55,7 +57,9 @@ import { db, listRegistrations } from './db'
  *   - it is under the purchase caps.
  *
  * Staff pass the cool-down and the caps — a comped client's workspace has no
- * payment history of its own — and never the brand check.
+ * payment history of its own — and never the brand check. An owner a staff
+ * member met in person passes the cool-down alone, once, on core's
+ * preclearance (AGL-3955; {@link purchaseClearance}).
  */
 
 export const PAID_HISTORY_MIN_AGE_MS = 72 * 60 * 60 * 1000
@@ -177,59 +181,78 @@ export async function domainsGate(
   }
 }
 
-export type PurchaseRefusal =
-  | 'site-has-domain'
-  | 'site-has-bought-domain'
-  | 'no-payment-history'
-  | 'fraud-hold'
-  | 'lookalike'
-  | 'too-many-recently'
-  | 'too-many-held'
+// The refusals and their copy live in a pure module the purchase sequence
+// shares; re-exported so every caller keeps importing them from here.
+export { PURCHASE_REFUSAL_COPY, type PurchaseRefusal }
 
-export const PURCHASE_REFUSAL_COPY: Record<PurchaseRefusal, string> = {
-  'site-has-domain':
-    'This site already has a domain connected. Disconnect it first to give the site a new one.',
-  'site-has-bought-domain':
-    'This site already has a domain bought for it. Manage it below.',
-  'no-payment-history':
-    'Domains can be bought about three days after your workspace’s first plan payment, once it has cleared. You can connect a domain you already own in the meantime.',
-  'fraud-hold':
-    'Buying is paused for this workspace while a payment review is open. Contact support to finish it.',
-  lookalike:
-    'That name imitates a well-known brand, so it can’t be bought here.',
-  'too-many-recently':
-    'Your workspace has bought several domains this month. Contact support if you need more right away.',
-  'too-many-held': 'Your workspace holds the most domains it can. Contact support to raise the limit.',
-}
+/**
+ * What {@link purchaseClearance} decides: a refusal, or a go-ahead. A
+ * go-ahead carries `preclearanceId` when a staff preclearance stood in for
+ * the payment history, which the purchase then spends.
+ */
+export type PurchaseClearance =
+  | { refusal: PurchaseRefusal; preclearanceId: null }
+  | { refusal: null; preclearanceId: string | null }
 
 /**
  * Whether this actor may buy `domain` for its site now. Never throws: a read
  * that fails refuses, because a purchase is the one place a wrong "yes"
  * costs money that cannot be recovered.
+ *
+ * The 72 h payment history alone may be stood in for, by core's
+ * `core.purchase-gate-preclearance` (AGL-3955): a staff member who met the
+ * owner minted a single-use bundle link for this workspace. It is asked
+ * last, only once every other check has passed, so a lookalike name, a
+ * fraud hold or a cap still refuses with one in hand. Asking does not spend
+ * it: its id comes back with the go-ahead, and the purchase spends it after
+ * the hold and before the charge.
  */
-export async function purchaseRefusal(
+export async function purchaseClearance(
   actor: DomainsActor,
   domain: string,
   nowMs = Date.now(),
-): Promise<PurchaseRefusal | null> {
-  if (lookalikeBrandForHost(domain)) return 'lookalike'
-  if (String(actor.host['cname'] ?? '').trim()) return 'site-has-domain'
+): Promise<PurchaseClearance> {
+  const refuse = (refusal: PurchaseRefusal): PurchaseClearance => ({
+    refusal,
+    preclearanceId: null,
+  })
+  const clear: PurchaseClearance = { refusal: null, preclearanceId: null }
+  if (lookalikeBrandForHost(domain)) return refuse('lookalike')
+  if (String(actor.host['cname'] ?? '').trim()) return refuse('site-has-domain')
   const [forSite, forOrg] = await Promise.all([
     listRegistrations('hostId', actor.hostId),
     listRegistrations('orgId', actor.orgId),
   ])
-  if (forSite.some(holds)) return 'site-has-bought-domain'
-  if (actor.staff) return null
-  if (await isPaymentFraudHeld(db(), actor.orgId).catch(() => true)) return 'fraud-hold'
-  if (forOrg.filter(holds).length >= MAX_HELD_PER_WORKSPACE) return 'too-many-held'
+  if (forSite.some(holds)) return refuse('site-has-bought-domain')
+  if (actor.staff) return clear
+  if (await isPaymentFraudHeld(db(), actor.orgId).catch(() => true)) return refuse('fraud-hold')
+  if (forOrg.filter(holds).length >= MAX_HELD_PER_WORKSPACE) return refuse('too-many-held')
   const recent = forOrg.filter(
     (registration) =>
       nowMs - (registration.createdAtMs ?? 0) < 30 * 24 * 60 * 60 * 1000 &&
       registration.status !== 'declined',
   )
-  if (recent.length >= PURCHASES_PER_30_DAYS) return 'too-many-recently'
-  if (!(await hasClearedPayment(actor.orgId, nowMs))) return 'no-payment-history'
-  return null
+  if (recent.length >= PURCHASES_PER_30_DAYS) return refuse('too-many-recently')
+  if (!(await hasClearedPayment(actor.orgId, nowMs))) {
+    // Core's check fails closed (null on any error); the catch is for a
+    // seam that ever stops promising that.
+    const waiver = await checkPurchaseGatePreclearance({
+      orgId: actor.orgId,
+      gate: 'domain-payment-history',
+    }).catch(() => null)
+    if (!waiver?.preclearanceId) return refuse('no-payment-history')
+    return { refusal: null, preclearanceId: waiver.preclearanceId }
+  }
+  return clear
+}
+
+/** {@link purchaseClearance}'s refusal alone: what the card is told before the click. */
+export async function purchaseRefusal(
+  actor: DomainsActor,
+  domain: string,
+  nowMs = Date.now(),
+): Promise<PurchaseRefusal | null> {
+  return (await purchaseClearance(actor, domain, nowMs)).refusal
 }
 
 function holds(registration: DomainRegistrationDoc): boolean {
