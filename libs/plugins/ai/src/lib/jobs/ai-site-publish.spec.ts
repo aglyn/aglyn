@@ -48,6 +48,8 @@ import {
   aiRestoreGuidedBlogEntry,
   aiSiteUnwrittenBlogHrefs,
   aiSitePublishTakenCopy,
+  aiSiteShareImageOpen,
+  aiSiteSharePhoto,
 } from './ai-site-publish'
 
 const NOW = new Date('2026-10-07T01:30:00.000Z')
@@ -800,5 +802,74 @@ describe('a guided start’s listing goes over the seeded default only (AGL-3979
     await run(true)
     expect(seoOf()['title']).toBe(first['title'])
     expect(seoOf()['description']).toBe(first['description'])
+  })
+})
+
+/*
+ * The beta.271 Laurel Fork start (AGL-3988) shared the office team the site
+ * was created with on every link: nothing set the share image from what the
+ * start built.
+ */
+describe('a guided start’s share image is its home hero’s photo (AGL-3988)', () => {
+  const NAME = 'Laurel Fork Photography'
+  const stored = (nodes: unknown) => Buffer.from(encodeStoredNodes(nodes as never) as Uint8Array)
+  const image = (id: string, parentId: string, src: string, width: number, height: number, alt: string) => ({
+    $id: id,
+    componentId: 'image',
+    parentId,
+    props: { src, intrinsicWidth: width, intrinsicHeight: height, alt },
+    nodes: [],
+  })
+  /** A home page: its hero's photo in its first section, a tall photo below. */
+  const HOME = {
+    '_@_': { $id: '_@_', componentId: 'div', nodes: ['sec-1', 'sec-2'] },
+    'sec-1': { $id: 'sec-1', componentId: 'section', parentId: '_@_', nodes: ['frame-1'] },
+    'frame-1': { $id: 'frame-1', componentId: 'muiBox', parentId: 'sec-1', nodes: ['hero'] },
+    hero: image('hero', 'frame-1', 'media:host-1/couple01', 1280, 720, 'A couple at a wedding'),
+    'sec-2': { $id: 'sec-2', componentId: 'section', parentId: '_@_', nodes: ['tall'] },
+    tall: image('tall', 'sec-2', 'media:host-1/family01', 853, 1280, 'A family in the mountains'),
+  }
+  const seedShared = (seo: Record<string, unknown>, home: unknown = HOME) => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), displayName: NAME, seo })
+    docs.set('hosts/host-1/screens/drft-home/versions/v-home', { layoutId: 'lay-site', aiJobId: 'job-1', nodes: stored(home) })
+  }
+  const seoOf = () => (docs.get('hosts/host-1') as { seo: Record<string, unknown> }).seo
+
+  it('sets it over the starter the site was created with: the hero’s photo, its size and its words, for the whole site', async () => {
+    seedShared(defaultSiteSeo(NAME))
+    expect(aiSiteShareImageOpen(defaultSiteSeo(NAME))).toBe(true)
+    dropCache.mockResolvedValueOnce({ dropped: 0, skipped: 0, complete: false })
+    await publish()
+    expect(seoOf()).toMatchObject({ image: 'media:host-1/couple01', imageWidth: 1280, imageHeight: 720, imageAlt: 'A couple at a wedding' })
+    const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
+    expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
+  })
+
+  it('takes the widest photo the pages show where the home page’s first section shows none', async () => {
+    const noHero = { ...HOME, 'frame-1': { ...HOME['frame-1'], nodes: [] } }
+    seedShared(defaultSiteSeo(NAME), noHero)
+    docs.set('hosts/host-1/screens/drft-book/versions/v-book', {
+      layoutId: 'lay-site',
+      aiJobId: 'job-1',
+      nodes: stored({
+        '_@_': { $id: '_@_', componentId: 'div', nodes: ['sec-1'] },
+        'sec-1': { $id: 'sec-1', componentId: 'section', parentId: '_@_', nodes: ['wide'] },
+        wide: image('wide', 'sec-1', 'media:host-1/aisle01', 1280, 854, 'An aisle at a wedding'),
+      }),
+    })
+    await publish()
+    expect(seoOf()['image']).toBe('media:host-1/aisle01')
+  })
+
+  it('never replaces an image the owner picked, and changes nothing where the pages show no library photo', async () => {
+    seedShared({ ...defaultSiteSeo(NAME), image: 'media:host-1/owner01', imageWidth: 1200, imageHeight: 630, imageAlt: 'Our studio' })
+    await publish()
+    expect(seoOf()).toMatchObject({ image: 'media:host-1/owner01', imageAlt: 'Our studio' })
+    docs.clear()
+    seedShared(defaultSiteSeo(NAME), { '_@_': { $id: '_@_', componentId: 'div', nodes: [] } })
+    await publish()
+    expect(seoOf()['image']).toBe(defaultSiteSeo(NAME)['image'])
+    expect(aiSiteSharePhoto(null, [])).toBeNull()
   })
 })

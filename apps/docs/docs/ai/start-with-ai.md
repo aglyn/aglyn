@@ -253,6 +253,10 @@ A guided start **publishes** the site when it finishes, so it is live at its add
 - each page gets an entry in the header's navigation, and takes its place in **Pages** in
   the order the plan lists it, which the
   [built-in error page](../building-sites/site-protection/error-screens.md)'s links follow too;
+- every picture still showing a starter photo first gets a photo of your own site: the
+  start asks Pixabay again for any photo it could not copy, then uses the photos it copied
+  for your other pages (see [Stock photos in AI sites](./stock-photos.md#where-the-photos-come-from));
+- the site's **Social image** becomes your home page's main photo, unless you chose one;
 - a page that cannot be published stays a draft, and **Building your site** names it with
   the reason, for you to fix in **Edit your pages** and publish;
 - a page that **Couldn't be built**, or stayed a draft, is linked from nowhere on the
