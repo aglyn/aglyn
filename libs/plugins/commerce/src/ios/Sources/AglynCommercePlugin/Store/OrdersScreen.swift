@@ -310,7 +310,8 @@ struct OrdersScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    // The page ground, with the brand's glow under the title in the phone's bold look (AGL-3990).
+    .aglynPhoneGround()
   }
 
   @ViewBuilder

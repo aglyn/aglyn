@@ -128,7 +128,8 @@ public struct AglynListToolbar<Filter: View>: View {
     }
     .padding(.horizontal, touch ? AglynContentInsets.phone : (inset ?? AglynContentInsets.horizontal))
     .padding(.bottom, touch ? 12 : 10)
-    .background(touch ? AglynColor.page : AglynColor.paper)
+    // On touch the row sits on the page ground; in the phone's bold look it lets the ground (and its glow) through.
+    .background(touch ? (AglynThemeRuntime.shared.phoneBold ? Color.clear : AglynColor.page) : AglynColor.paper)
   }
 }
 

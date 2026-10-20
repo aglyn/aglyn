@@ -51,6 +51,8 @@ fun AglynTheme(
   // Every theme, Aglyn's too, takes its accent from its seed through the contract: the Aglyn theme's #00B0FF is the
   // console's primary, a #00B0FF fill under white with #0077AD (light) / #4DC8FF (dark) as its text (AGL-3990).
   val seed = brand ?: customAccent ?: themeAccentSeed(theme)
+  // The brand's own look (the Aglyn theme in the brand blue), which a phone draws bold (PhoneTheme, AGL-3990).
+  val brandLook = isBrandLook(theme, if (brand != null) brand.toHex() else appTheme?.accent?.takeIf { customAccent != null })
   val accent = seed?.let { deriveAccent(it, isDark) }
   val scheme = themedColorScheme(base, surfaces, accent, isDark)
   val palette = themedPalette(basePalette, surfaces, accent)
@@ -62,6 +64,7 @@ fun AglynTheme(
     LocalUiDensity provides uiDensityOf(appTheme?.density ?: AppDensity.COMFORTABLE),
     LocalDensity provides if (textScale == 1f) density else Density(density.density, density.fontScale * textScale),
     LocalAglynDark provides isDark,
+    LocalBrandLook provides brandLook,
   ) {
     MaterialTheme(
       colorScheme = scheme,

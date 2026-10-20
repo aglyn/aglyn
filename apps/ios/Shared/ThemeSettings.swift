@@ -24,12 +24,16 @@ enum ContractThemes {
     palette.brandLabel == true ? brandName : palette.label
   }
 
-  /// A theme's surfaces for the shared tokens.
-  static func spec(_ id: String) -> AglynThemeSpec {
+  /// A theme's surfaces for the shared tokens. `phoneBold` draws the Aglyn theme's bold phone grounds
+  /// (`THEME_PHONE_AGLYN`, AGL-3990) instead of the console's: see `ThemeApplier.phoneBold`.
+  static func spec(_ id: String, phoneBold: Bool = false) -> AglynThemeSpec {
     let palette = themePalette(id)
+    let bold = phoneBold && palette.id == .aglyn
+    let (light, dark) = bold
+      ? (ContractValues.shared.themePhoneAglyn.light, ContractValues.shared.themePhoneAglyn.dark) : (palette.light, palette.dark)
     return AglynThemeSpec(
-      id: palette.id.rawValue, light: surfaces(palette.light, palette), dark: surfaces(palette.dark, palette),
-      accent: palette.accent, alwaysDark: palette.alwaysDark == true)
+      id: palette.id.rawValue, light: surfaces(light, palette), dark: surfaces(dark, palette),
+      accent: palette.accent, alwaysDark: palette.alwaysDark == true, phoneBold: bold)
   }
 
   private static func surfaces(_ colors: ThemeColors, _ palette: ThemePalette) -> AglynSurfaces {
@@ -103,7 +107,8 @@ enum ThemeApplier {
       case .extraLarge: 1.22
       default: 1
       }
-    let spec = ContractThemes.spec(prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue)
+    let id = prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue
+    let spec = ContractThemes.spec(id, phoneBold: phoneBold(theme: id, accent: accent))
     AglynThemeRuntime.shared.apply(
       theme: spec, accent: ContractThemes.accent(accent ?? spec.accent),
       shades: ContractThemes.shades(accent ?? spec.accent), compact: prefs.density == .compact,
@@ -119,6 +124,21 @@ enum ThemeApplier {
   static func accent(_ prefs: AppThemePrefs, workspace: WorkspaceColor, whiteLabel: Bool) -> String? {
     if prefs.accent != "theme" { return prefs.accent }
     return whiteLabel && workspace.source == .brand && workspace.tintsApp ? workspace.color : nil
+  }
+
+  /// Whether this device draws the phone's bold brand look (AGL-3990; Zach, 2026-10-19): a phone (an Aglyn or Aglyn POS
+  /// phone, never an iPad, a Mac or the register), in the Aglyn theme, with the brand blue as its accent. A picked
+  /// accent or a white-label workspace's brand keeps the console's grounds, since the bold grounds are tinted with the
+  /// brand blue.
+  static func phoneBold(theme: String, accent: String?) -> Bool {
+    #if os(iOS)
+      guard UIDevice.current.userInterfaceIdiom == .phone, themePalette(theme).id == .aglyn else { return false }
+      guard let accent else { return true }
+      let raw = accent.lowercased()
+      return (ContractValues.shared.themeRetiredAccents[raw] ?? raw) == ContractValues.shared.themePhoneBoldAccent.lowercased()
+    #else
+      false
+    #endif
   }
 
   /// The color scheme a window takes: Night is dark in both; otherwise the appearance's.

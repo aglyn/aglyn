@@ -634,6 +634,85 @@ export const THEME_PALETTES: readonly ThemePalette[] = [
   },
 ]
 
+/**
+ * The Aglyn theme on a PHONE: the brand's bold surfaces (AGL-3990). Zach chose
+ * the bold look for the phone on 2026-10-19 and kept every other form factor
+ * on the console's neutral scheme ("I don't like this light blue everywhere",
+ * on the desktop): so only an Aglyn or Aglyn POS PHONE, in the Aglyn theme with
+ * the brand blue as its accent, draws these. A tablet, an iPad, a Mac, a
+ * Windows or Mac desktop and the POS register keep `THEME_PALETTES`' Aglyn;
+ * every other theme, a picked accent and a white-label brand look the same on
+ * a phone as anywhere else.
+ *
+ * The values are Figma's Theme mode 223:0, "Aglyn · phone (bold) 10/19", the
+ * explicit mode on every frame of the Native App file's Phone page (2:7). A
+ * sky-tinted ground under white panels in light; navy in dark. The strong
+ * border is the brand blue at 40% over the white surface, flattened. The
+ * statuses are the console's intents, tinted to sit on the sky ground; info's
+ * ink in light is the brand's ink, and in dark it is the accent's dark text
+ * shade (#4DC8FF), never the fill (Zach, 2026-10-19: blue as text on a dark
+ * ground is the console's `primary.dark`).
+ */
+const PHONE_AGLYN_LIGHT: ThemeColors = {
+  canvas: '#edf9ff',
+  surface: '#ffffff',
+  raised: '#ffffff',
+  sunken: '#e6f7ff',
+  rail: '#e0f6ff',
+  hover: '#f2fbff',
+  titlebar: '#f7fdff',
+  borderSubtle: '#dbf4ff',
+  borderStrong: '#66d0ff',
+  textPrimary: '#19202a',
+  textSecondary: '#404c5c',
+  textTertiary: '#5d6d85',
+  successBg: '#e2f2e3',
+  successFg: '#306f33',
+  warningBg: '#ffebd1',
+  warningFg: '#975400',
+  dangerBg: '#fbdddc',
+  dangerFg: '#ba1c18',
+  infoBg: '#ccefff',
+  infoFg: '#07171f',
+  newBg: '#fae0fe',
+  newFg: '#a604c2',
+  scrim: '#0f172152',
+  ...DANGER_LIGHT,
+}
+
+const PHONE_AGLYN_DARK: ThemeColors = {
+  canvas: '#07181f',
+  surface: '#0d2029',
+  raised: '#152b35',
+  sunken: '#1a323d',
+  rail: '#061319',
+  hover: '#213a45',
+  titlebar: '#0a1c24',
+  borderSubtle: '#263f4a',
+  borderStrong: '#395460',
+  textPrimary: '#f2f7fb',
+  textSecondary: '#c1d0d7',
+  textTertiary: '#8ba5b1',
+  successBg: '#1d4433',
+  successFg: '#72c275',
+  warningBg: '#4c432f',
+  warningFg: '#ffab40',
+  dangerBg: '#452228',
+  dangerFg: '#ee7b78',
+  infoBg: '#0a3d54',
+  infoFg: '#4dc8ff',
+  newBg: '#442860',
+  newFg: '#ea7cfc',
+  scrim: '#0000008c',
+  ...DANGER_DARK,
+}
+
+/** The Aglyn theme's grounds on a phone, light and dark (Figma Theme mode 223:0): see `PHONE_AGLYN_LIGHT`. */
+export const THEME_PHONE_AGLYN: ThemeColorsPair = { light: PHONE_AGLYN_LIGHT, dark: PHONE_AGLYN_DARK }
+
+/** The accent the phone's bold look belongs to: the brand blue, the Aglyn theme's own. */
+export const THEME_PHONE_BOLD_ACCENT = AGLYN_ACCENT
+
 // ── Accents ─────────────────────────────────────────────────────────────────
 
 /** The surfaces an accent's text is held to. */

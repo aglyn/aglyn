@@ -41,8 +41,11 @@ struct HomeView: View {
       // Home fills its column at every width, its cards on the content edges (Zach, 2026-10-19: no capped column).
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    // The content's ground is the surface on the Mac and iPad (Figma Home 2:6), the canvas on a phone.
-    .background(wide ? AglynColor.paper : AglynColor.page)
+    // The content's ground is the surface on the Mac and iPad (Figma Home 2:6), the canvas on a phone (with the brand's
+    // glow in the phone's bold look, AGL-3990).
+    .background {
+      if wide { AglynColor.paper.ignoresSafeArea() } else { AglynPhoneGround().ignoresSafeArea() }
+    }
     .navigationTitle("Home")
     .refreshable { model.refresh() }
     .task(id: "\(picked?.id ?? ""):\(model.refreshToken)") {

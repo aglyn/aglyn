@@ -76,13 +76,20 @@ public struct AglynThemeSpec: Sendable {
   public let accent: String
   /// Whether the theme is dark in both appearances (Night).
   public let alwaysDark: Bool
+  /// The phone's bold brand look (AGL-3990): the Aglyn theme, in the brand blue, on a phone. Its surfaces are the
+  /// contract's `THEME_PHONE_AGLYN`, and the shared phone pieces (the header glow, the tab bar's pill and gradient +,
+  /// the Menu's tiles) draw their bold form. Never on an iPad, a Mac or the POS register.
+  public let phoneBold: Bool
 
-  public init(id: String, light: AglynSurfaces, dark: AglynSurfaces, accent: String, alwaysDark: Bool) {
+  public init(
+    id: String, light: AglynSurfaces, dark: AglynSurfaces, accent: String, alwaysDark: Bool, phoneBold: Bool = false
+  ) {
     self.id = id
     self.light = light
     self.dark = dark
     self.accent = accent
     self.alwaysDark = alwaysDark
+    self.phoneBold = phoneBold
   }
 }
 
@@ -154,6 +161,9 @@ public final class AglynThemeRuntime: @unchecked Sendable {
 
   /// Whether the theme is dark in both appearances.
   public var alwaysDark: Bool { lock.withLock { spec.alwaysDark } }
+
+  /// Whether the phone's bold brand look is on (`AglynThemeSpec.phoneBold`).
+  public var phoneBold: Bool { lock.withLock { spec.phoneBold } }
 }
 
 /// Colour arithmetic the shared tokens use to blend two colors.
