@@ -30,6 +30,7 @@ import {
 } from './plan-entitlements'
 import {
   SITE_CARE_EXTRA_TIME_TAX_CODE,
+  SITE_CARE_INBOUND_LOCAL_PART,
   SITE_CARE_LINE_DESCRIPTION_MAX,
   SITE_CARE_MAX_REQUEST_MINUTES,
   allocateSiteCareMinutes,
@@ -52,7 +53,9 @@ import {
   siteCareMonthStatement,
   siteCareOrgMonth,
   siteCarePublishSentence,
+  siteCareReplyAddress,
   siteCareStatementRequest,
+  siteCareSupportAddress,
   type SiteCareStatementRequest,
 } from './site-care'
 
@@ -389,5 +392,32 @@ describe('charge words and publish links', () => {
     }
     expect(siteCarePublishSentence(publish, () => 'Oct 19')).toBe('Published the screen “Home” on Oct 19')
     expect(siteCarePublishSentence(null, () => 'Oct 19')).toBeNull()
+  })
+})
+
+describe('where a change is emailed (AGL-3997)', () => {
+  const saved = process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+  afterEach(() => {
+    if (saved === undefined) delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+    else process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = saved
+  })
+
+  it('is the operator’s support address, and nothing on a deployment that publishes none', () => {
+    process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = ' help@example.com '
+    expect(siteCareSupportAddress()).toBe('help@example.com')
+    process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = '   '
+    expect(siteCareSupportAddress()).toBeNull()
+  })
+
+  it('has no Site Care address of its own: mail arrives at support@ the inbound domain', () => {
+    expect(SITE_CARE_INBOUND_LOCAL_PART).toBe('support')
+  })
+
+  it('replies to the request’s own address, or to the support address about no one request', () => {
+    expect(siteCareReplyAddress('AbCdEf0123456789XyZw', 'in.aglyn.com', 'help@example.com')).toBe(
+      'support+AbCdEf0123456789XyZw@in.aglyn.com',
+    )
+    expect(siteCareReplyAddress(null, 'in.aglyn.com', 'help@example.com')).toBe('help@example.com')
+    expect(siteCareReplyAddress(null, 'in.aglyn.com', null)).toBe('support@in.aglyn.com')
   })
 })
