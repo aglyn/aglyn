@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **release:** the site changelog drops a commit's CI-skip directive ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **ai:** an SEO listing a few characters too long is fitted, not failed ([AGL-4016](https://linear.app/aglyn/issue/AGL-4016))
 - **ai:** the empty-site sweep keeps the AI job it marks ([AGL-4015](https://linear.app/aglyn/issue/AGL-4015))
 - **ai:** the guided start's step timeline spans the whole dialog ([AGL-4014](https://linear.app/aglyn/issue/AGL-4014))
@@ -36,6 +37,14 @@ content on the marketing site and is written separately.
 - **ai:** regenerate the Assist docs index after merging main ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
 - **pricing:** /managed version MuMb5a8jki, films with caption-free posters ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
 - **ai:** how a guided start fills its starter photos and sets its Social image ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **tenant:** declare AGL-3988's four image markers in the sink inventory ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **release:** v1.0.0-beta.273 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
 
 ## v1.0.0-beta.272 — 2026-10-20
 
