@@ -19,6 +19,7 @@ import {
   isSecurityClassLockdownReason,
   normalizeOrgLockdown,
 } from '@aglyn/aglyn/app-utils/lockdown'
+import { consumePurchaseGatePreclearance } from '@aglyn/aglyn/plugin-manager/purchase-gate-preclearance'
 import {
   connectHostCustomDomain,
   disconnectHostCustomDomain,
@@ -35,8 +36,8 @@ import { chargeDomain, refundInvoice } from './stripe'
 /*
  * The lifecycle's effects as the platform performs them (AGL-3962): the
  * deployment's registrar, the workspace's card, core's connect and release,
- * the designed emails and the operator alerts. Specs hand the lifecycle
- * their own.
+ * core's purchase-gate preclearance, the designed emails and the operator
+ * alerts. Specs hand the lifecycle their own.
  */
 
 /** The deployment's registrar, with the built-in drivers offered. */
@@ -102,6 +103,8 @@ export function platformEffects(): LifecycleEffects {
     },
     email: sendDomainEmail,
     alert: raiseDomainAlert,
+    // Fails closed in core: false on any error, and with nothing registered.
+    consumePreclearance: (preclearanceId) => consumePurchaseGatePreclearance(preclearanceId),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }
 }

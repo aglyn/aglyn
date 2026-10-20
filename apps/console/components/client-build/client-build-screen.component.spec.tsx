@@ -33,6 +33,7 @@ let mockCapabilities = { domainSearch: false, text: true, email: true }
 let mockWidgets: Array<{ widgetId: string }> = []
 let mockSite: Record<string, unknown> = { subdomain: 'harbor-plumbing', screens: {} }
 let mockZoneProps: Record<string, unknown> | null = null
+let mockHandoffProps: Record<string, unknown> | null = null
 const mockStarter = jest.fn(async (): Promise<'provisioned' | 'unchanged' | 'failed'> => 'provisioned')
 
 const reply = (status: number, body: unknown) =>
@@ -64,7 +65,10 @@ jest.mock('../../utils/host-first-run', () => ({
 }))
 jest.mock('../org-owner-handoff.component', () => ({
   __esModule: true,
-  default: ({ orgId }: { orgId: string }) => <button type="button">{`Hand off ${orgId}`}</button>,
+  default: (props: { orgId: string }) => {
+    mockHandoffProps = props
+    return <button type="button">{`Hand off ${props.orgId}`}</button>
+  },
 }))
 jest.mock('../plugin-widget-slot.component', () => ({
   __esModule: true,
@@ -163,6 +167,7 @@ beforeEach(() => {
   mockWidgets = []
   mockSite = { subdomain: 'harbor-plumbing', screens: {} }
   mockZoneProps = null
+  mockHandoffProps = null
   try {
     window.sessionStorage.clear()
   } catch {
@@ -395,6 +400,16 @@ describe('the client build screen (AGL-3958)', () => {
       ),
     ).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Hand off org-1' })).toBeTruthy()
+    // The hand-off opens on the record held here (AGL-3995), never a refetch,
+    // with the domain for the site the build made.
+    expect(mockHandoffProps).toMatchObject({
+      build: {
+        hostId: 'host-1',
+        intent: { plan: 'starter', interval: 'month', domain: { name: 'harborplumbing.com' } },
+      },
+      sites: [{ hostId: 'host-1', name: 'Harbor Plumbing' }],
+    })
+    expect(posts('/api/admin/client-build', 'get')).toHaveLength(1)
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Text and email the preview' }))
     })

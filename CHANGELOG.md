@@ -9,12 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
-## v1.0.0-beta.272 — 2026-10-19
+## v1.0.0-beta.272 — 2026-10-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.271...v1.0.0-beta.272)
 
 ### Added
 
+- **console:** pin sites the way workspaces are pinned ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005), [AGL-3762](https://linear.app/aglyn/issue/AGL-3762), [AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **marketing:** the /managed republish shows a site in the hero and separates the FAQ band ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **console:** the Site Care card and Request a change name the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **site-care:** requests arrive at the support address, with no care address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **email:** received mail says when a machine sent it ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **marketing:** a script republishes /managed with no prices, its film poster rows playing the films ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **console:** the bundle link card starts on the client build's bundle too ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **domains:** open Get a domain with the name Billing sends in ?domain= ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** let a staff preclearance stand in for the 72 h payment gate, once ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955))
+- **domains:** answer core.domain-search with the card's own search and prices ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
+- **ai:** a client build's contact details fill the guided start's details ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995), [AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **console:** hand off opens on the client build's bundle ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995), [AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 - **native:** the demo seed carries this month's usage, so meters read real fills ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
 - **apple:** grouped forms fill their column on the Mac, on the content edges ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **apple:** the plan card is a slow carousel of usage meters, the screen's own first ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
@@ -29,6 +41,15 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **marketing:** the /managed first-run script's hero matches the live page ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed republish puts a live site in the hero, with no prices in it ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed record pours the hero's site and the white FAQ band ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed first-run script carries no figures, and places the films ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **ai:** the client note says only what the review's rows do not ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **ai:** a client build's towns are the place only until an address is given ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **native:** a phone's Menu opens a sectioned area with its section chips ([AGL-3993](https://linear.app/aglyn/issue/AGL-3993))
+- **apple:** two more views could never start their read; the Group sweep sees every shape ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **native:** the plan card fills with Figma's bg/surface, not the theme's grey canvas ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
 - **native:** the plan card never cuts its figures, and reads its meters at once ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
 - **apple:** a brand picture that fails to load is tried again ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991))
 - **apple:** the Automation hub's section column sits on the content edge ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
@@ -48,15 +69,26 @@ content on the marketing site and is written separately.
 - **ai:** the site-import crawler names the operator's bot page, from an env var ([AGL-3983](https://linear.app/aglyn/issue/AGL-3983))
 - **ai:** the "Bring my site" card names the configured brand, not a literal ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
 
+### Changed
+
+- **email:** retire the Site Care sender-not-recognized email ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+
 ### Documentation
 
+- **pricing:** /managed version IO02sEaW0U, and a picture can state a price ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **pricing:** /managed is no longer a pricing surface ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+- **site-care:** requests by email arrive at the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **staff-console:** the hand-off and the bundle link card open on the client build's bundle ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **release:** beta.272 changelog carries #1850 and #1852 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **ai:** the Start with AI guide's Sites you like section, marked rolling out ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
 - **ai:** re-shoot the Style step with the new cards ([AGL-3985](https://linear.app/aglyn/issue/AGL-3985))
 - **ai:** the import job's resumable wave read and page names, in AI_JOBS.md ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
 
 <details>
-<summary>Also in this release: 3 test, 2 chore</summary>
+<summary>Also in this release: 4 test, 2 chore, 1 ci</summary>
 
+- **tools:** run the marketing film helper's tests ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **crm:** email capture never files mail to the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
 - **release:** v1.0.0-beta.272 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **native:** production-shaped seed workspace and list tests on both apps ([AGL-3993](https://linear.app/aglyn/issue/AGL-3993))
 - **native:** spell SectionTabs' comment the American way, drop unused tab imports ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))

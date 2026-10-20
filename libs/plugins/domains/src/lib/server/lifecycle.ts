@@ -33,6 +33,7 @@ import {
   updateRegistration,
 } from './db'
 import type { DomainsActor } from './gates'
+import { PURCHASE_REFUSAL_COPY } from './purchase-refusals'
 import type { RegistrantContact, RegistrarDriver } from './registrar'
 import { offerFor } from './search'
 import type { DomainChargeResult } from './stripe'
@@ -126,6 +127,12 @@ export interface LifecycleEffects {
     merge: Record<string, string>,
   ): Promise<void>
   alert(kind: DomainAlertKind, registration: DomainRegistrationDoc, detail: string): Promise<void>
+  /**
+   * Core's `consumePurchaseGatePreclearance` (AGL-3955): spends the staff
+   * preclearance that stood in for the payment history. True exactly once
+   * per id; false (never a throw) for one spent, expired or unknown.
+   */
+  consumePreclearance(preclearanceId: string): Promise<boolean>
   /** Waits between polls of a fresh order; a spec passes a no-op. */
   sleep(ms: number): Promise<void>
 }
@@ -150,6 +157,7 @@ export type PurchaseOutcome =
         | 'registration-failed'
         | 'registrar-unavailable'
         | 'no-product'
+        | 'no-payment-history'
       error: string
       /** For `price-changed`: what it costs now. */
       firstYearCents?: number
@@ -215,6 +223,8 @@ const REFUSAL_COPY = {
   'registrar-unavailable':
     'The registrar didn’t answer just now. Nothing was charged. Try again in a minute.',
   'no-product': 'Buying domains isn’t set up on this deployment yet.',
+  // A preclearance that would not spend leaves the gate it stood in for.
+  'no-payment-history': PURCHASE_REFUSAL_COPY['no-payment-history'],
 } as const
 
 function refused(
@@ -227,7 +237,7 @@ function refused(
 
 /**
  * Buys `domain` for the actor's site. The caller has run the gate and
- * `purchaseRefusal`; this is everything after them, in the order that never
+ * `purchaseClearance`; this is everything after them, in the order that never
  * leaves money taken for a name not held.
  */
 export async function purchaseDomain(
@@ -237,6 +247,11 @@ export async function purchaseDomain(
     domain: string
     expectedFirstYearCents: number
     contact: RegistrantContact
+    /**
+     * The staff preclearance `purchaseClearance` found standing in for the
+     * 72 h payment history (AGL-3955), spent below; absent otherwise.
+     */
+    preclearanceId?: string | null
   },
 ): Promise<PurchaseOutcome> {
   const domain = input.domain.trim().toLowerCase()
@@ -310,6 +325,28 @@ export async function purchaseDomain(
     return registration
   })
   if (!held) return refused('taken', 409)
+
+  // The preclearance, when one stood in for the payment history: spent now,
+  // with the name held and nothing charged, so one waiver buys one name and
+  // a second purchase racing on the same waiver is refused before its card
+  // is touched. A waiver that will not spend is no waiver: the gate refuses
+  // as it would have, and the hold is let go as a decline lets it go.
+  if (input.preclearanceId) {
+    const spent = await effects.consumePreclearance(input.preclearanceId).catch(() => false)
+    if (spent !== true) {
+      await updateRegistration(
+        domain,
+        { status: 'declined', failure: 'no-payment-history' },
+        { event: 'preclearance-refused' },
+      )
+      return refused('no-payment-history', 409)
+    }
+    // Which waiver bought the name, for staff reading its history. The waiver
+    // is spent either way, so a failed note never costs the purchase.
+    await updateRegistration(domain, {}, { event: 'precleared', detail: input.preclearanceId }).catch(
+      () => null,
+    )
+  }
 
   // The charge.
   if (offer.firstYearCents > 0) {
