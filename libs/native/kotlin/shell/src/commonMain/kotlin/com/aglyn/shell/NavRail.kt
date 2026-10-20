@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +60,7 @@ import com.aglyn.core.PinAnswer
 import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.WithTooltip
+import com.aglyn.ui.fastTooltip
 import com.aglyn.ui.WorkspaceTile
 import com.aglyn.ui.readableOn
 import com.aglyn.ui.shellColors
@@ -99,6 +101,9 @@ internal fun WorkspaceRail(
   val m = com.aglyn.ui.shellMetrics
   val rail = railWorkspaces(workspace.orgs.map { it.id }, prefs.pinned, prefs.recentOrgs)
   val byId = workspace.orgs.associateBy { it.id }
+  // Every rail target names itself fast on hover (Zach, 2026-10-20), one bubble for the whole column.
+  val tips = com.aglyn.ui.rememberFastTooltipState()
+  androidx.compose.runtime.CompositionLocalProvider(LocalRailTooltips provides tips) {
   Column(
     // PINNED starts the rail at the gap between its sections (17, Figma Rail 12:338); the brand's mark is the Home tab.
     modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).padding(top = 17.dp, bottom = m.railFoot).testTag("workspace-rail"),
@@ -130,30 +135,37 @@ internal fun WorkspaceRail(
     // The foot (Figma Rail, Staff = Yes): Admin (Figma's bare outline shield, Icon/admin 3:142) above Create new, then the
     // account, each in a utility box.
     actions.admin?.let { admin ->
-      WithTooltip("Admin") {
-        Surface(
-          onClick = admin,
-          shape = RoundedCornerShape(m.utilityRadius),
-          color = Color.Transparent,
-          contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(m.utility).testTag("rail-admin").semantics { contentDescription = "Admin" },
-        ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("shield"), null, Modifier.size(m.utilityIcon)) } }
-      }
-    }
-    WithTooltip("Create new") {
       Surface(
-        onClick = actions.create,
+        onClick = admin,
         shape = RoundedCornerShape(m.utilityRadius),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        modifier = Modifier.size(m.utility).testTag("rail-create").semantics { contentDescription = "Create new" },
-      ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("add"), null, Modifier.size(m.utilityIcon)) } }
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(m.utility).railTooltip("Admin").testTag("rail-admin").semantics { contentDescription = "Admin" },
+      ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("shield"), null, Modifier.size(m.utilityIcon)) } }
     }
+    Surface(
+      onClick = actions.create,
+      shape = RoundedCornerShape(m.utilityRadius),
+      color = MaterialTheme.colorScheme.primary,
+      contentColor = MaterialTheme.colorScheme.onPrimary,
+      modifier = Modifier.size(m.utility).railTooltip("Create new").testTag("rail-create").semantics { contentDescription = "Create new" },
+    ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("add"), null, Modifier.size(m.utilityIcon)) } }
     Box(Modifier.size(m.utility), contentAlignment = Alignment.Center) {
-      AccountAvatar(user, size = m.avatar.value.toInt(), onClick = actions.account, modifier = Modifier.testTag("rail-account"))
+      AccountAvatar(user, size = m.avatar.value.toInt(), onClick = actions.account, modifier = Modifier.testTag("rail-account"), tooltip = tips)
+      // The bubble is a popup placed in window coordinates beside its target; it sits here only so it adds no gap.
+      com.aglyn.ui.FastTooltipHost(tips)
     }
   }
+  }
 }
+
+/** The rail's one name bubble, for the targets inside it. */
+private val LocalRailTooltips = androidx.compose.runtime.staticCompositionLocalOf<com.aglyn.ui.FastTooltipState?> { null }
+
+/** This rail target's name in the rail's bubble (hover only; touch has its long-press menu header). */
+@Composable
+private fun Modifier.railTooltip(label: String, hint: String? = null): Modifier =
+  LocalRailTooltips.current?.let { this.then(Modifier.fastTooltip(it, label, hint)) } ?: this
 
 /** The rail's one rhythm: 8 between its tiles, captions, dividers and foot buttons (Figma Rail's auto layout). */
 private val RailGap = 8.dp
@@ -263,11 +275,12 @@ private fun RailTile(
       ringBox = m.ringBox, ringRadius = m.ringRadius, initialSize = m.tileInitial, initials = workspaceInitial(name), reserveRing = true,
       badgeRing = shellColors.rail, badgeOffset = badgeAt,
     )
-    // The tile's press target over it: the ring's box, its ripple clipped to the ring's corners.
-    WithTooltip(if (index in 0..4) "$name  ${shortcutLabel(index + 1)}" else name) {
-      Box(
+    // The tile's press target over it: the ring's box, its ripple clipped to the ring's corners. Hovering it names the
+    // workspace in full at once (a pin carries its shortcut as the hint).
+    Box(
         Modifier
           .size(m.ringBox)
+          .railTooltip(name, if (index in 0..4 && LocalShowShortcuts.current) shortcutLabel(index + 1) else null)
           .clip(RoundedCornerShape(m.ringRadius))
           .pointerInput(orgId) {
             awaitPointerEventScope {
@@ -288,8 +301,16 @@ private fun RailTile(
           }
           .testTag("rail-tile-$orgId"),
       )
-    }
+    // A long press (touch) or right-click opens the menu, headed by the workspace's full name.
     DropdownMenu(menu, onDismissRequest = { menu = false }) {
+      Text(
+        name,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 2,
+        modifier = Modifier.padding(horizontal = if (m.compact) 16.dp else 12.dp, vertical = 8.dp).widthIn(max = 280.dp).testTag("rail-menu-name"),
+      )
+      HorizontalDivider()
       if (pinned) {
         MenuRow("Unpin", "keep_off") { menu = false; services.accountPrefs.unpin(orgId) }
         if (index > 0) MenuRow("Move up", "arrow_upward") { menu = false; services.accountPrefs.movePin(orgId, -1) }
@@ -333,28 +354,26 @@ internal fun MenuRow(label: String, icon: String?, trailing: String? = null, ena
 private fun AllWorkspacesTile(total: Int, onClick: () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
   val shape = RoundedCornerShape(m.tileRadius)
-  WithTooltip("All workspaces") {
-    Column(
-      Modifier.width(m.ringBox).height(m.allTileHeight).clip(RoundedCornerShape(m.ringRadius)).combinedClickableCompat(onClick).testTag("rail-all")
-        .semantics { contentDescription = "All workspaces, $total" },
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(m.allTileGap, Alignment.CenterVertically),
-    ) {
-      Box(
-        Modifier.size(m.tile).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
-        contentAlignment = Alignment.Center,
-      ) { Icon(AglynIcons.named("grid_view"), null, Modifier.size(m.allTileIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-      Text(
-        total.toString(),
-        style = MaterialTheme.typography.labelMedium.copy(lineHeightStyle = FullLineBox),
-        fontSize = m.allTileTotal,
-        lineHeight = if (m.compact) 12.sp else 16.sp,
-        fontWeight = if (m.allTileTotalBold) FontWeight.Bold else FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        modifier = Modifier.testTag("rail-all-total"),
-      )
-    }
+  Column(
+    Modifier.width(m.ringBox).height(m.allTileHeight).railTooltip("All workspaces").clip(RoundedCornerShape(m.ringRadius)).combinedClickableCompat(onClick).testTag("rail-all")
+      .semantics { contentDescription = "All workspaces, $total" },
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(m.allTileGap, Alignment.CenterVertically),
+  ) {
+    Box(
+      Modifier.size(m.tile).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+      contentAlignment = Alignment.Center,
+    ) { Icon(AglynIcons.named("grid_view"), null, Modifier.size(m.allTileIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Text(
+      total.toString(),
+      style = MaterialTheme.typography.labelMedium.copy(lineHeightStyle = FullLineBox),
+      fontSize = m.allTileTotal,
+      lineHeight = if (m.compact) 12.sp else 16.sp,
+      fontWeight = if (m.allTileTotalBold) FontWeight.Bold else FontWeight.SemiBold,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+      modifier = Modifier.testTag("rail-all-total"),
+    )
   }
 }
 
@@ -363,7 +382,7 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit) = this.combine
 
 /** The person's photo (their initials until the profile has one): opens the account menu. */
 @Composable
-internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, modifier: Modifier = Modifier, tooltip: com.aglyn.ui.FastTooltipState? = null) {
   val fill = MaterialTheme.colorScheme.tertiary
   val name = user?.displayName?.takeIf { it.isNotBlank() } ?: user?.email ?: "?"
   val content: @Composable () -> Unit = {
@@ -373,6 +392,9 @@ internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, m
   }
   if (onClick == null) {
     Box(modifier) { content() }
+  } else if (tooltip != null) {
+    // On the rail: the person's own name in the rail's bubble, so a second signed-in account is told apart at a glance.
+    Surface(onClick = onClick, shape = CircleShape, modifier = modifier.fastTooltip(tooltip, name).semantics { contentDescription = "Your account" }) { content() }
   } else {
     WithTooltip("Your account") {
       Surface(onClick = onClick, shape = CircleShape, modifier = modifier.semantics { contentDescription = "Your account" }) { content() }

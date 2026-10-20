@@ -13,6 +13,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.rightClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
@@ -114,6 +118,32 @@ class NavShellUiTest {
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-mark") > 0 }
     assertEquals(0, onAllNodesWithTagCount("home-tab-brand-mark"))
+  }
+
+  @Test
+  fun hoveringARailTargetNamesItFastAndTheBubbleFollowsThePointer() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // Zach, 2026-10-20: "it is really hard to tell which org is which just from the two letters". A hover names the
+    // tile in full after 150 ms; moving straight on to the next target names it at once; a right-click (a long press on
+    // touch) opens the menu headed by the full name.
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-tile-o1") > 0 }
+    mainClock.autoAdvance = false
+    onNodeWithTag("rail-tile-o1").performMouseInput { moveTo(center) }
+    mainClock.advanceTimeBy(80)
+    assertEquals(0, onAllNodesWithTag("fast-tooltip-label").fetchSemanticsNodes().size, "no bubble before 150 ms")
+    mainClock.advanceTimeBy(120)
+    onNodeWithTag("fast-tooltip-label").assertTextEquals("Acme")
+    onNodeWithTag("rail-all").performMouseInput { moveTo(center) }
+    mainClock.advanceTimeByFrame()
+    onNodeWithTag("fast-tooltip-label").assertTextEquals("All workspaces")
+    onNodeWithTag("rail-create").performMouseInput { moveTo(center) }
+    mainClock.advanceTimeByFrame()
+    onNodeWithTag("fast-tooltip-label").assertTextEquals("Create new")
+    mainClock.autoAdvance = true
+    onNodeWithTag("rail-tile-o1").performMouseInput { rightClick(center) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-menu-name") > 0 }
+    onNodeWithTag("rail-menu-name").assertTextEquals("Acme")
   }
 
   @Test
