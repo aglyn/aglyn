@@ -942,11 +942,11 @@ struct AreaHeaderActions: View {
   let entries: [AglynScreenToolbarEntry]
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Breadcrumbs(row: row).hidden()
+    VStack(alignment: .leading, spacing: AglynHeadMetrics.gap) {
+      Breadcrumbs(row: row).hidden().frame(minHeight: AglynHeadMetrics.crumbs, alignment: .leading)
       // On the title row, centered on it (Figma Mac Sites 13:3: the primary's center on the title's, its right edge on
-      // E). The title, hidden and of no width, gives the row the head's own height, so the buttons center on the same
-      // line as the title at every window size, never on the crumbs-and-title block's bottom.
+      // E). The row has the head's measures (`AglynHeadMetrics`), so the buttons center on the same line as the title
+      // at every window size and never reach the toolbar under the head.
       HStack(alignment: .center, spacing: 8) {
         Text(row.label).font(.system(size: 22, weight: .semibold)).lineLimit(1).hidden().frame(width: 0)
           .accessibilityHidden(true)
@@ -962,9 +962,10 @@ struct AreaHeaderActions: View {
           AglynPrimaryHeaderButton.blockable(primary)
         }
       }
+      .frame(minHeight: AglynHeadMetrics.titleRow)
     }
     .padding(.horizontal, AglynContentInsets.horizontal)
-    .padding(.top, 20)
+    .padding(.top, AglynHeadMetrics.top)
     .frame(maxWidth: .infinity, alignment: .topLeading)
   }
 }

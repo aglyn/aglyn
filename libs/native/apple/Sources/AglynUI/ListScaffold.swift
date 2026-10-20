@@ -56,17 +56,39 @@ private struct AglynSearchableModifier: ViewModifier {
     self.filter = filter
   }
 
+  /// A list+detail screen took the toolbar into its list column (`AglynListDetailColumns`).
+  @State private var inColumn = false
+
   func body(content: Content) -> some View {
     if wide {
-      content.safeAreaInset(edge: .top, spacing: 0) {
-        AglynListToolbar(text: $text, prompt: prompt, onSubmit: onSubmit) { filter }
-      }
+      let bar = AglynListToolbar(text: $text, prompt: prompt, onSubmit: onSubmit) { filter }
+      // The search belongs to the list (Zach 10/20: "The search bar for the list should only be in the list not
+      // expanding both the list and detail view"): a list+detail screen draws it atop its list column, and only a
+      // screen without one draws it across the content.
+      content
+        .environment(\.aglynListColumnToolbar, AnyView(bar))
+        .onPreferenceChange(AglynListToolbarPlacedKey.self) { inColumn = $0 }
+        .safeAreaInset(edge: .top, spacing: 0) {
+          if !inColumn { bar }
+        }
     } else {
       content
         .searchable(text: $text, prompt: prompt)
         .onSubmit(of: .search) { onSubmit?() }
     }
   }
+}
+
+extension EnvironmentValues {
+  /// A screen's list toolbar (`aglynSearchable`) waiting for its list column: `AglynListDetailColumns` draws it atop the
+  /// list column on the Mac and iPad; nil elsewhere.
+  @Entry public var aglynListColumnToolbar: AnyView? = nil
+}
+
+/// Set by `AglynListDetailColumns` when it drew the screen's list toolbar in its list column.
+public struct AglynListToolbarPlacedKey: PreferenceKey {
+  public static let defaultValue = false
+  public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
 /// A list's toolbar (Figma List toolbar): its search field, then its one Filter control. On a phone (a screen that heads
@@ -127,7 +149,8 @@ public struct AglynListToolbar<Filter: View>: View {
       filter.environment(\.aglynTouchToolbar, touch)
     }
     .padding(.horizontal, touch ? AglynContentInsets.phone : (inset ?? AglynContentInsets.horizontal))
-    .padding(.bottom, touch ? 12 : 10)
+    // Figma 13:3: 16 between the toolbar and the list's first row on the Mac and iPad.
+    .padding(.bottom, touch ? 12 : AglynHeadMetrics.gap)
     .background(touch ? AglynColor.page : AglynColor.paper)
   }
 }
@@ -242,8 +265,8 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      crumbs
+    VStack(alignment: .leading, spacing: AglynHeadMetrics.gap) {
+      crumbs.frame(minHeight: AglynHeadMetrics.crumbs, alignment: .leading)
       HStack(alignment: .center, spacing: 10) {
         Text(title)
           .font(.system(size: 22, weight: .semibold))
@@ -252,13 +275,26 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
           .accessibilityAddTraits(.isHeader)
         accessory
       }
+      // The title row is as tall as its filled button, so the button never reaches past it (Zach 10/20: the button
+      // touched the search row under it).
+      .frame(minHeight: AglynHeadMetrics.titleRow)
     }
     .padding(.horizontal, AglynContentInsets.horizontal)
-    .padding(.top, 20)
-    .padding(.bottom, 12)
+    .padding(.top, AglynHeadMetrics.top)
+    .padding(.bottom, AglynHeadMetrics.gap)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(AglynColor.paper)
   }
+}
+
+/// A content head's measures on the Mac and iPad (Figma Mac Sites 13:3 and iPad 13:1880): 24 above the breadcrumbs (16
+/// tall), 16 between them and the title row, the title row as tall as the filled Medium button (36) with the button
+/// centered on it, and 16 between the title row and the list toolbar, as between the toolbar and the list.
+public enum AglynHeadMetrics {
+  public static let top: CGFloat = 24
+  public static let crumbs: CGFloat = 16
+  public static let gap: CGFloat = 16
+  public static let titleRow: CGFloat = 36
 }
 
 extension AglynPrimaryHeaderButton {
