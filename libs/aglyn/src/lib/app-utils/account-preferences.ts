@@ -166,6 +166,10 @@ export interface AppThemePrefs {
   density: AppDensity
   /** `system` follows Dynamic Type or the font scale; the rest are the Mac and Windows sizes. */
   textSize: AppTextSize
+  /**
+   * `plain` keeps the sidebar on the theme's surface; `tinted` lays the THEME's accent over it at 5%, on a theme other
+   * than Aglyn only (Aglyn's sidebar is always neutral). A workspace's color never tints it: that is its rail tile's.
+   */
   sidebarStyle: AppSidebarStyle
   /** The app icon's id: `aglyn`, or one of the alternates the apps ship. */
   appIcon: string
@@ -180,7 +184,7 @@ export const DEFAULT_APP_THEME: AppThemePrefs = {
   accent: 'theme',
   density: 'comfortable',
   textSize: 'system',
-  sidebarStyle: 'tinted',
+  sidebarStyle: 'plain',
   appIcon: 'aglyn',
   useWorkspaceBrand: true,
 }

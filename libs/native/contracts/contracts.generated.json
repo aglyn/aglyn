@@ -1725,7 +1725,7 @@
     "appIcon": "aglyn",
     "appearance": "system",
     "density": "comfortable",
-    "sidebarStyle": "tinted",
+    "sidebarStyle": "plain",
     "textSize": "system",
     "theme": "aglyn",
     "useWorkspaceBrand": true
