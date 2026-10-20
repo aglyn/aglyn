@@ -55,7 +55,12 @@ data class AccountPreferences(
   val syncedTheme: AppThemePrefs = Contracts.defaultAppTheme,
   /** This device's own theme, when "Apply to this device only" is on. */
   val deviceTheme: AppThemePrefs? = null,
+  /** The phone's tab bar per site and per workspace (AGL-4006). */
+  val tabBars: List<com.aglyn.contracts.TabBarPins> = emptyList(),
 ) {
+  /** One site's or the whole workspace's pinned areas, in the person's order. */
+  fun tabAreas(scope: String): List<String> = com.aglyn.contracts.tabBarAreas(tabBars, scope)
+
   val pinned: List<String> get() = com.aglyn.contracts.effectivePinnedOrgs(stored)
   val overCap: Boolean get() = pinnedOrgsOverCap(stored)
 
@@ -111,6 +116,7 @@ class AccountPreferencesStore(
           workspaceColors = readWorkspaceColors(data),
           syncedTheme = readAppTheme(data),
           deviceTheme = readDeviceTheme(forUid),
+          tabBars = com.aglyn.contracts.readTabBars(data),
         )
       }
       .launchIn(scope)
@@ -181,6 +187,47 @@ class AccountPreferencesStore(
     if (first != null && accountItemKey(first) == accountItemKey(item) && first.label == item.label) return
     val next = recordRecent(state.value.recents, item, now())
     write(mapOf(Contracts.recentsField to next.map { it.toPlain() })) { it.copy(recents = next) }
+  }
+
+  // ── The phone's tab bar (AGL-4006) ──
+
+  private fun writeTabBars(next: List<com.aglyn.contracts.TabBarPins>) {
+    if (next == state.value.tabBars) return
+    val plain = next.map { mapOf("scope" to it.scope, "areas" to it.areas, "chosen" to it.chosen) }
+    write(mapOf(Contracts.tabBarsField to plain)) { it.copy(tabBars = next) }
+  }
+
+  /** Pins an area to a scope's tab bar (long-press a tile, Add to tab bar); FULL with four there already. */
+  fun pinTab(area: String, scope: String): PinAnswer {
+    val result = com.aglyn.contracts.pinTabArea(state.value.tabBars, scope, area)
+    return when (result.outcome) {
+      com.aglyn.contracts.TabPinOutcome.PINNED -> { writeTabBars(result.tabBars); PinAnswer.PINNED }
+      com.aglyn.contracts.TabPinOutcome.FULL -> PinAnswer.FULL
+      else -> PinAnswer.ALREADY
+    }
+  }
+
+  fun unpinTab(area: String, scope: String) = writeTabBars(com.aglyn.contracts.unpinTabArea(state.value.tabBars, scope, area))
+
+  fun moveTab(area: String, scope: String, offset: Int) =
+    writeTabBars(com.aglyn.contracts.moveTabArea(state.value.tabBars, scope, area, offset))
+
+  /** The Tab bar sheet's answer: these areas, in this order. */
+  fun setTabs(areas: List<String>, scope: String) = writeTabBars(com.aglyn.contracts.setTabAreas(state.value.tabBars, scope, areas))
+
+  /**
+   * The default before anyone pins: an opened area takes a free spot and stays. Not before the document arrived, so a
+   * launch never writes over pins it has not read yet.
+   */
+  fun openedArea(area: String, scope: String) {
+    if (!state.value.loaded) return
+    writeTabBars(com.aglyn.contracts.autoPinTabArea(state.value.tabBars, scope, area))
+  }
+
+  /** Forgets one scope's tab bar, as if nothing had been pinned or opened there (a debug launch's fresh start). */
+  fun forgetTabBar(scope: String) {
+    if (!state.value.loaded) return
+    writeTabBars(state.value.tabBars.filter { it.scope != scope })
   }
 
   /** Picks a color for a workspace (`#RRGGBB`), or clears the pick with null. */

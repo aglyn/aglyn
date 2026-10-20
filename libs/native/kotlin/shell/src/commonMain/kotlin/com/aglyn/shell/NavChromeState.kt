@@ -53,6 +53,10 @@ internal class NavChromeState(private val device: KeyValueStore) {
   var accountMenu by mutableStateOf(false)
   var workspaceMenu by mutableStateOf(false)
   var createMenu by mutableStateOf(false)
+  /** The phone's area switcher: every area as tiles, from an area's title ▾ (AGL-4006). */
+  var areaSwitcher by mutableStateOf(false)
+  /** The phone's Tab bar sheet: the pinned areas to remove, reorder and add (AGL-4006). */
+  var tabBarSheet by mutableStateOf(false)
   /** The workspace waiting on "Pinned is full. Replace one?". */
   var pinFullFor by mutableStateOf<String?>(null)
   /** The workspace whose color picker is open. */
