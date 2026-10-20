@@ -24,6 +24,7 @@ import {
   previousSiteCareMonthKey,
   siteCareMonthKey,
   siteCareMonthLabel,
+  siteCareSupportAddress,
   type SiteCareMonthStatement,
 } from '@aglyn/aglyn/app-utils/site-care'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -60,6 +61,7 @@ export function SiteCareBillingCard({ orgId }: SiteCareBillingCardProps) {
   const [data, setData] = useState<Statement | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const supportEmail = siteCareSupportAddress()
 
   useEffect(() => {
     let active = true
@@ -147,7 +149,10 @@ export function SiteCareBillingCard({ orgId }: SiteCareBillingCardProps) {
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  {'No requests this month. Email a change to us, or use Request a change on your site’s dashboard.'}
+                  {supportEmail
+                    ? `No requests this month. Email a change to ${supportEmail} from the address you sign in with, ` +
+                      'or use Request a change on your site’s dashboard.'
+                    : 'No requests this month. Use Request a change on your site’s dashboard.'}
                 </Typography>
               )}
               {data && data.history.length ? (

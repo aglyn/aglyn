@@ -363,6 +363,9 @@ at any step: staff take none of a workspace's seats.
    handoff**, and pick the bundle: the plan, its add-ons (Site Care is on to start;
    every add-on the plan sells is offered, such as Aglyn AI, the Event Calendar and
    extra sites), **Yearly** or **Monthly**, and an optional coupon code and note.
+   For a workspace made with **Build for a client**, the dialog opens on what the
+   build recorded: its plan, Site Care, monthly billing, and the domain from its
+   Domain step. Change any of it before you send.
    **Hand off and propose** sends one invitation and records the proposal together,
    so a refused invitation leaves no proposal behind. The client's email carries a
    link to Billing with the bundle chosen; when they accept, they land on Billing,
@@ -408,7 +411,10 @@ yet finished. Only staff can open it.
    or **Continue without photos**. See
    [Photos from a phone](../content-and-data/media/overview.md#photo-link).
 4. **Build with AI.** **Open the guided start** opens Aglyn AI's guided start on its
-   review, already filled in from the details. Check it with the owner, then plan
+   review, already filled in from the details: the phone, email, towns served and
+   hours appear as its own answers. Hours given with am or pm, such as Mon–Fri
+   8am–5pm, fill its opening hours; any other wording reaches the AI as written,
+   and you can set the hours on the review. Check it with the owner, then plan
    the site; it builds and publishes the site in a few minutes. When the workspace
    cannot run the guided start, the step says what it needs, with a link to the
    organization's staff page where AI can be added to the comp, and **Use the
@@ -440,7 +446,11 @@ The **Bundle checkout link** card on an organization's page, and the header of t
 billing interval and coupon already chosen. **Copy bundle link** copies it; **QR**
 shows it as a QR code for the owner to scan with their phone. Each press makes a new
 link for that one workspace, which works for 24 hours and is recorded in the
-[Audit Log](#audit-log) as a bundle checkout link made by you.
+[Audit Log](#audit-log) as a bundle checkout link made by you. For a workspace made
+with **Build for a client**, the card starts on the same bundle as the **Hand off**
+dialog, so the QR you show matches what the hand-off proposes. When the owner already
+has a domain, the card says so under the domain fields: connect it with them on the
+site's **Custom Domain** page, since the link carries no domain to buy.
 
 - **Coupons are applied, never created here.** Make the code on the staff Coupons page
   first, then type it in. An expired or unknown code is left off on the owner's page

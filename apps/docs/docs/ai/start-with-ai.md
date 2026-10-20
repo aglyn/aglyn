@@ -109,6 +109,28 @@ to the style.
 
 ![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of an example home page of that kind and a line about the look](/img/ai/start-with-ai-style.png)
 
+### Sites you like {#sites-you-like}
+
+**Sites you like** (rolling out, not yet available) is an optional block under the style
+cards. Type the address of a website whose look you like, such as `https://example.com`,
+in **Site 1**. A paid plan can name up to three sites. On the Free plan, **Site 2** and
+**Site 3** are shown but cannot be used, with the reason and an **Upgrade** link.
+
+Aglyn AI takes only how those sites are laid out and styled: the order of their sections,
+their spacing and header, their colors, the mood of their type, their buttons, cards and
+corners, and their motion. It never takes their words, photos or logos, and it uses
+Aglyn's own themes and font pairings, so your site stays your own.
+
+- The first site's section order leads your home page.
+- With more than one site, each choice follows what most of them share, and the first site
+  decides a tie.
+- A **Brand color** you pick under **More details** wins over the sites' colors.
+- On a paid plan, Aglyn AI also matches the features those sites offer, like booking, a
+  store or a blog, with Aglyn's own parts, when your kind of site can have them.
+- Only each site's home page is read, once, while your pages are planned.
+
+The **Review** step lists them under **Sites you like**, by site name.
+
 ## Details {#details}
 
 - **Business phone** and **Business email** come first. Both are optional. When you give

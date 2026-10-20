@@ -22,6 +22,7 @@ import {
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
+import { mdiPin } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
@@ -33,7 +34,13 @@ import {
   MenuItem,
   Typography,
 } from '@mui/material'
-import { doc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  documentId,
+  query as firestoreQuery,
+  where,
+} from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { type MouseEvent, useMemo, useState } from 'react'
 import {
@@ -47,7 +54,9 @@ import { useHostId, useHostSubdomain } from '../components/host-id-provider'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { siteListStaysPut } from '../utils/collaborator-navigation'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import { usePinnedHosts } from '../hooks/use-pinned-hosts'
 import CreateHostDialog from './create-host-dialog.component'
 import HostIcon from './host-icon.component'
 import SwitcherSearchField from './switcher-search-field.component'
@@ -62,6 +71,11 @@ import SwitcherSearchField from './switcher-search-field.component'
  * typing, so a member of hundreds of sites neither loads them all nor fails to
  * find one outside the loaded window. The current site is read directly so the
  * trigger always labels correctly during a cold load.
+ *
+ * The sites the reader pinned in this workspace (`usePinnedHosts`) lead the
+ * menu in the order they were pinned, as they lead the Sites list; their own
+ * rows are read beside the window, so a pin the window does not hold still
+ * leads. Under a search they lead the matches.
  */
 export function HostSwitcherNavComponent() {
   const hostId = useHostId()
@@ -119,12 +133,28 @@ export function HostSwitcherNavComponent() {
     { idField: '$id' },
   )
 
+  // The reader's site pins and their rows, read only while the menu is open.
+  const open = Boolean(anchorEl)
+  const { pinned: pinnedIds } = usePinnedHosts(orgId, open)
+  const pinnedKey = pinnedIds.join(',')
+  const { data: pinnedRows } = useFirestoreCollection<any>(
+    () =>
+      uid && open && pinnedIds.length
+        ? firestoreQuery(
+            collection(firestore, 'users', uid, 'hostMemberships'),
+            where(documentId(), 'in', pinnedIds),
+          )
+        : null,
+    [firestore, uid, open, pinnedKey],
+    { idField: '$id' },
+  )
+
   const close = () => {
     setAnchorEl(null)
     setQuery('')
   }
 
-  // Pin the open site to the top of the idle window.
+  // Pinned sites first, then the open site, then the rest of the window.
   const sites = useMemo(() => {
     const list = [...(hits ?? [])]
     if (
@@ -134,8 +164,20 @@ export function HostSwitcherNavComponent() {
     ) {
       list.unshift(currentDoc)
     }
-    return list
-  }, [hits, hasQuery, currentDoc])
+    if (!pinnedIds.length) return list
+    if (!hasQuery) {
+      for (const row of pinnedRows) {
+        if (row.orgId === orgId && !list.some((site: any) => site.$id === row.$id)) {
+          list.push(row)
+        }
+      }
+    }
+    const rank = (site: any) => {
+      const index = pinnedIds.indexOf(site.$id)
+      return index === -1 ? pinnedIds.length : index
+    }
+    return list.sort((a: any, b: any) => rank(a) - rank(b))
+  }, [hits, hasQuery, currentDoc, pinnedIds, pinnedRows, orgId])
 
   const goToHost = (site: { $id: string; subdomain?: string }) => {
     close()
@@ -229,6 +271,7 @@ export function HostSwitcherNavComponent() {
           ) : (
             sites.map((site: any) => {
               const isCurrent = site.$id === hostId
+              const isPinned = pinnedIds.includes(site.$id)
               return (
                 <MenuItem
                   key={site.$id}
@@ -249,6 +292,14 @@ export function HostSwitcherNavComponent() {
                       secondary: { noWrap: true, variant: 'caption' },
                     }}
                   />
+                  {isPinned ? (
+                    <MdiIcon
+                      aria-label="Pinned"
+                      path={mdiPin.path}
+                      fontSize="small"
+                      color="action"
+                    />
+                  ) : null}
                   {isCurrent ? (
                     <MdiIcon
                       path={ICON_VARIANT_SYMBOL_CONFIRMED.path}

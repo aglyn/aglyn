@@ -54,7 +54,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * SITE CARE, THE OWNER'S SIDE (AGL-3959).
  *
  * `POST` opens a request from the console's "Request a change" — the same
- * tagged ticket an email to the Site Care address opens. Any member of the
+ * tagged ticket a member's email to the support address opens. Any member of the
  * workspace may ask; the workspace must have Site Care, and the button says
  * so before the click.
  *

@@ -17,6 +17,7 @@
 
 'use client'
 
+import { siteCareSupportAddress } from '@aglyn/aglyn/app-utils/site-care'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { AppLink, Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
@@ -40,7 +41,7 @@ export interface SiteCareRequestButtonProps {
 
 /**
  * "Request a change" on a site's dashboard (AGL-3959): opens the same tagged
- * Site Care request an email to the Site Care address does. On a workspace
+ * Site Care request a member's email to the support address does. On a workspace
  * without Site Care the button stays, disabled with the reason, beside a
  * link to Billing where it is added — never hidden. Nothing renders until
  * the answer arrives, so nobody sees a refusal flash.
@@ -56,6 +57,7 @@ export function SiteCareRequestButton({ hostId }: SiteCareRequestButtonProps) {
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
+  const supportEmail = siteCareSupportAddress()
 
   const uid = (user as { uid?: string } | null | undefined)?.uid
   useEffect(() => {
@@ -162,7 +164,10 @@ export function SiteCareRequestButton({ hostId }: SiteCareRequestButtonProps) {
             <Stack spacing={2.5}>
               <Typography variant="body2" color="text.secondary">
                 {'Tell us what to change, in your own words. Small changes to what your site already has ' +
-                  'are part of Site Care. You can also email the change to us any time.'}
+                  'are part of Site Care.' +
+                  (supportEmail
+                    ? ` You can also email the change to ${supportEmail} any time, from the address you sign in with.`
+                    : '')}
               </Typography>
               <TextField
                 label="What should change?"

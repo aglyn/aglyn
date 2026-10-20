@@ -25,6 +25,10 @@
  * statement on demand. Each is its own key so staff can redesign one
  * without the rest. The merge tokens are what
  * `@aglyn/tenant-data-admin/server/site-care-emails` fills.
+ *
+ * None answers a sender the intake does not recognize. Site Care mail
+ * arrives at the support address (AGL-3997), so such a message is ordinary
+ * support mail and the support inbox answers it.
  *=========================================*/
 
 import type {
@@ -39,7 +43,6 @@ export const SITE_CARE_APPROVAL_EMAIL_KEY = 'site-care-approval-confirmation'
 export const SITE_CARE_CHARGE_REVERSED_EMAIL_KEY = 'site-care-charge-reversed'
 export const SITE_CARE_STATEMENT_EMAIL_KEY = 'site-care-statement'
 export const SITE_CARE_QUOTE_EMAIL_KEY = 'site-care-quote'
-export const SITE_CARE_UNKNOWN_SENDER_EMAIL_KEY = 'site-care-unknown-sender'
 
 const SOURCE = 'libs/tenant/data/admin/src/lib/server/site-care-emails.ts'
 
@@ -325,31 +328,6 @@ export const SITE_CARE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
       },
     ],
     footerReason: FOOTER,
-    source: SOURCE,
-  },
-  {
-    key: SITE_CARE_UNKNOWN_SENDER_EMAIL_KEY,
-    name: 'Site Care: sender not recognized',
-    description:
-      'Sent to someone who emailed the Site Care address from an address no Site Care workspace has as a member.',
-    deliveredBy: 'resend',
-    defaultSubject: 'We could not match your email to an account',
-    mergeTokens: [
-      {
-        name: 'sender.email',
-        description: 'The address the message came from',
-        sample: 'someone@example.com',
-      },
-    ],
-    defaultBody: [
-      { block: 'text', text: 'We could not match your email to an account', variant: 'heading' },
-      {
-        block: 'text',
-        text: 'We got your message from {{sender.email}}, but no workspace with Site Care has that address as a member. Please send it again from the email address you sign in to {{brand.productName}} with.',
-        variant: 'body',
-      },
-    ],
-    footerReason: 'You’re receiving this because you emailed {{brand.productName}} Site Care.',
     source: SOURCE,
   },
 ]

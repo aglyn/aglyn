@@ -4548,7 +4548,9 @@ service cloud.firestore {
       // `pinnedOrgs` is five at most, the console included (Zach,
       // 2026-10-18). A list pinned before the cap may only SHRINK, so a
       // person with seven pins can still unpin one, and the console's
-      // "Keep which 5?" answer (a list of five) lands.
+      // "Keep which 5?" answer (a list of five) lands. `pinnedHosts` (AGL-4005,
+      // the sites pinned, five a workspace in the console) is bounded at 100 in
+      // all, the account-wide bound `pinHost` keeps.
       function prefsBefore() {
         return resource == null ? {} : resource.data;
       }
@@ -4594,6 +4596,7 @@ service cloud.firestore {
       }
       function accountPrefsValid() {
         return pinnedOrgsValid() &&
+          prefListWithin('pinnedHosts', 100) &&
           prefListWithin('recentOrgs', 8) &&
           prefListWithin('starred', 50) &&
           prefListWithin('recents', 30) &&
