@@ -1849,7 +1849,81 @@ nothing itself.
   member makes it. Refused at confirmation, before a credit is spent.
 - **The pass bound.** A scaffold's unit is a whole page, so the default bound an
   audit keeps would cut a real site short: the kind registers its own through
-  `registerAiJobStepPasses`, sized to the largest plan the rules admit.
+  `registerAiJobStepPasses`, sized to the largest plan the rules admit, with
+  `AI_SITE_LATE_PHOTOS_PASSES` (3) more for the late photo pass below.
+- **The late photo pass, before the publish (AGL-3988).** A page's or a dataset's
+  pass that leaves a picture on a starter photo reports it (`sitePhotos` on its
+  outcome: the page's draft and image, or the dataset and the record's place,
+  with the slot's own words, role and shape, and the picks the library's image
+  hosts refused, each with the search that found them and when). The site step
+  merges what each unit reports (`aiSiteMergePhotos`, `model/ai-site-photos.ts`)
+  and the machine keeps it on the job as `sitePhotos`, in the write that records
+  the pass, as it keeps `siteImport`; it is never on the wire. A page unit of a
+  `site` job is built with `AI_STOCK_PHOTO_LATE_PASS_INPUT`, which is what makes
+  the page step pass `onStarters` and report; a page any other job builds keeps
+  #1831's rule (a failed slot none of the job's photos fits takes a neutral
+  starter only where the job had none before the page, else it is taken
+  out). While
+  a record, or a picture of a page that was built, is on a starter
+  (`aiSitePhotosOwed` with the built pages' ids: a failed page is never
+  published, so its pictures owe nothing), the pass that settles the last unit
+  does not publish: it asks for one more pass, and that pass
+  (`aiSiteLatePhotos`, `jobs/ai-site-late-photos.ts`) runs before `finish`:
+  1. It waits until `AI_SITE_LATE_PHOTOS_WAIT_MS` (60 s) after the newest refusal,
+     then asks each picture's refused picks for again, in order, from the search
+     that found them (`aiStockKeptRequest`: the request's own words and size, so
+     the provider's canonical form, and its 24-hour cache key, are the same): a
+     pick the site's library holds by then (a later page copied it) is reused,
+     any other is downloaded and stored with `aiStockIngestRequest`, the page
+     pass's own record of a copy, inside `AI_SITE_LATE_PHOTOS_COPY_MS` (30 s).
+     `AI_SITE_LATE_PHOTOS_REFUSALS_IN_A_ROW` (2) refused downloads say the burst
+     is not over: nothing more is downloaded, and the library is still asked for
+     the remaining picks. No model, no credits. The pages' heroes go first.
+  2. Every picture still on a starter takes its own pick where the page does not
+     show it yet, else one of the photos the job copied: the built pages'
+     pictures read off their drafts, the records' photos, and what step 1
+     copied. A page's picture through `aiLayoutJobPhotoPicks` (by role, shape and
+     words, a hero a wide photo, never for a product or a portrait) with
+     `besideLast`: the photo beside it scores -10,000, so it wins only where
+     every one of the job's photos is beside it, since the other choice is a
+     starter of another business. Written to its draft with `updateAiDraftNodes`
+     only where the image still holds a starter, with the slot's words where the
+     photo brings none. A list's records through `aiSiteDatasetRecordsFromOwn`
+     with the job's photos as a pool and `besideLast` (same category, then the
+     people the record's moment shows, then any photo apart from its
+     neighbors', then any, from the end that repeats least), written through the
+     data plugin's `reviseRecords` (the resource-draft writer's optional record
+     revision, held to the same member rules as its write, each record only
+     where it still holds the starter it was written with, and a revision that
+     names none of the list's fields skipped). The record's description field
+     takes the photo's words, or is emptied where it brings none. A team's
+     records take only their own picks.
+  3. The job's `sitePhotos` is emptied and the site is published in the same
+     pass. A pass whose signal ended while it waited or copied hands
+     `sitePhotos` back for the next pass, counted in `sitePhotos.latePasses`;
+     the last pass `AI_SITE_LATE_PHOTOS_PASSES` gives (the hand-off, then two
+     late passes) publishes whatever the pictures hold, so the pass bound is
+     never what ends a start. A job that copied no photo at all keeps its
+     starters.
+  The pass needs `AI_SITE_LATE_PHOTOS_MINIMUM_MS`: the wait, the copies and
+  `AI_SITE_LATE_PHOTOS_WRITES_MS` (20 s, assumed) for the drafts, the records
+  and the publish after them, 110,000 ms (`aiSiteJobRunMinimumMs`), well inside
+  the 276,000 ms a beat can give a step. The beta.271 Laurel Fork Photography
+  start (job yZUqIPmjIZ, 2026-10-19) published its home hero and all twelve
+  "Gallery collections" covers on the office team and the desk, and shared the
+  office team as its link image: pixabay.com's Cloudflare refused 22 cover
+  downloads in the beat that built the datasets, before the job had copied any
+  photo, and 11 on the home page, the first page built. Eight of the 30
+  refused picks were in the site's library by the time its email was written,
+  copied by later pages.
+  `ai-site-late-photos-agl3988.spec.ts` replays it from production's pages,
+  records and logs (`fixtures/ai-site-late-photos-laurel-fork.ts`).
+- **The share image (AGL-3988).** The publish sets the site's Social image
+  (`seo.image`, with its size and alt) where it has none or still the starter the
+  site was created with (`aiSiteShareImageOpen`): the home page's hero, the first
+  library photo of its first section (on Try again, the home page already live
+  at `/`), else the widest photo the published pages show (`aiSiteSharePhoto`),
+  and announces the whole site. An image the owner picked is never replaced.
 - **Shared with the page job.** A page job builds its plan's creations through the
   same pieces (AGL-3031): `aiCreationUnit` makes a creation a unit, `aiRunJobUnit`
   runs one delegated pass and reports whether the unit is built, and
@@ -3102,13 +3176,22 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   library, a slot the source could not answer (the library down, out of time,
   or its pick not copied) takes one of the photos the same job already placed
   on the site (`jobPhotos`: the other pages' pictures read off their drafts by
-  `aiStockPlacedPhotos`, and the datasets' records' photos the site step hands
-  each page as `stockPhotoJobPhotos`), picked by `aiLayoutJobPhotoPicks`: one
+  `aiStockPlacedPhotos`, the datasets' records' photos the site step hands
+  each page as `stockPhotoJobPhotos`, and the photos this page just copied for
+  its other slots), picked by `aiLayoutJobPhotoPicks`: one
   the page does not show yet, a wide one for a hero, the shape nearest the
   frame, the words shared with the slot's, never the photo beside it, never for
   a product or a portrait of the business's people. The page floor takes one
-  the same way. A neutral starter only where the job has none; a slot the
-  library answered with nothing fitting is still taken out (AGL-3831). A
+  the same way. On a guided start (`onStarters`, from
+  `AI_STOCK_PHOTO_LATE_PASS_INPUT`), a failed slot none of them fits yet keeps
+  the neutral starter it would have had with none, which the site step's late
+  photo pass fills once every page is built (see
+  [The `site` kind](#the-site-kind)), and the resolver reports each slot left on
+  a starter, with the picks the image hosts refused (`AiLayoutPictureReport`);
+  on any other job it keeps #1831's rule: a neutral starter only where the job
+  had no photo of its own before this page (`jobPhotos` empty), else it is
+  taken out. A slot the library answered with nothing fitting is still taken
+  out (AGL-3831). A
   dataset's covers do the same within their list
   (`aiSiteDatasetRecordsFromOwn`: same category, then a photo of the record's
   moment's people, filled from whichever end repeats least), and take neutral
@@ -3915,6 +3998,10 @@ this table to the figures the code computes.
   from, and less on a slower one. Its 10 s is `AI_SEO_AUDIT_READS_MS`, the
   declared assumption for an audit's read of up to 150 published pages before
   its first pass asks.
+- **A scaffold's late photo pass needs its wait.** Once every unit is built, a
+  scaffold that left a picture on a starter needs `AI_SITE_LATE_PHOTOS_MINIMUM_MS`
+  (60 s wait + 30 s copies + 20 s writes = 110,000 ms) for the pass that fills it
+  and publishes (AGL-3988); one that left none, a page pass's time as before.
 - **A page or a scaffold pass needs its unit's time.** The table's `page` row is
   a section pass; a page job's pass that builds a creation needs the creation's
   row, and a scaffold's pass the row of the step its unit is handed to — a
