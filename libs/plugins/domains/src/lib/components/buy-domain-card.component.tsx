@@ -41,7 +41,8 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
-import { HOLDING_STATUSES } from '../model/registration'
+import { HOLDING_STATUSES, type DomainRegistrationView } from '../model/registration'
+import { isOfferedName } from '../model/search-candidates'
 import { BoughtDomainPanel } from './bought-domain-panel.component'
 import {
   DomainsRequestError,
@@ -63,12 +64,29 @@ import { PurchaseDialog } from './purchase-dialog.component'
  * Every reason the site cannot buy right now is said BEFORE the click
  * (AGL-3853): the plan, the billing permission, a domain already connected,
  * a payment not yet cleared. A deployment that sells no names draws nothing.
+ *
+ * `?domain=<name>` arrives with the owner from Billing, where a staff-made
+ * bundle link named the name they chose together (AGL-3955): the box opens
+ * with it and searches it once, so its price is in front of them.
  */
 
 /** Results shown before "Show more". */
 const FIRST_RESULTS = 6
 /** While a name is registering or connecting, the card re-reads this often. */
 const POLL_MS = 5000
+/** The address's name for a domain to open the search with. */
+export const PREFILL_DOMAIN_PARAM = 'domain'
+
+/**
+ * The `?domain=` the page was opened with, when it is a name this card can
+ * sell; '' for anything else, which is ignored rather than searched.
+ */
+export function prefillDomainFrom(search: string): string {
+  const value = String(new URLSearchParams(search).get(PREFILL_DOMAIN_PARAM) ?? '')
+    .trim()
+    .toLowerCase()
+  return isOfferedName(value) ? value : ''
+}
 
 export type BuyDomainCardProps = ConsoleHostDomainZoneProps & ConsoleWidgetEntitlementProps
 
@@ -84,6 +102,13 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
   const [showAll, setShowAll] = useState(false)
   const [buying, setBuying] = useState<DomainOfferView | null>(null)
   const latestQuery = useRef('')
+  // Read from the location in an effect rather than `useSearchParams`, which
+  // would ask every page this zone sits on for a Suspense boundary.
+  const [prefill, setPrefill] = useState('')
+  const prefilled = useRef(false)
+  useEffect(() => {
+    setPrefill(prefillDomainFrom(window.location.search))
+  }, [])
 
   const orgSlug = typeof org?.['slug'] === 'string' ? (org['slug'] as string) : ''
   const billingHref = orgSlug ? `/${orgSlug}/billing` : null
@@ -117,6 +142,15 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
     const timer = setInterval(() => void refresh(), POLL_MS)
     return () => clearInterval(timer)
   }, [settling, refresh])
+
+  // `?domain=`: once the card knows it shows the search box, open it with
+  // the name. Setting the query is the search, once; nothing else re-runs it.
+  const showsSearch = Boolean(state?.configured && !state.registrations.some(managedHere))
+  useEffect(() => {
+    if (prefilled.current || !prefill || !showsSearch) return
+    prefilled.current = true
+    setQuery(prefill)
+  }, [prefill, showsSearch])
 
   // Search as they type, the last query winning.
   useEffect(() => {
@@ -172,9 +206,7 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
   }
   if (!state || !state.configured) return null
 
-  const holding = state.registrations.filter((registration) =>
-    HOLDING_STATUSES.includes(registration.status) || registration.status === 'expired',
-  )
+  const holding = state.registrations.filter(managedHere)
   if (holding.length) {
     return (
       <CardDisplay header="Your domain" help={help} contentGutterX contentGutterY>
@@ -331,6 +363,11 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
       />
     </CardDisplay>
   )
+}
+
+/** A name the card manages instead of offering another: held, or lapsed. */
+function managedHere(registration: DomainRegistrationView): boolean {
+  return HOLDING_STATUSES.includes(registration.status) || registration.status === 'expired'
 }
 
 /** "$15.99 a year", or the first year and the renewal when they differ. */

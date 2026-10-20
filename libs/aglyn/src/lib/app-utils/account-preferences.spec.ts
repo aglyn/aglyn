@@ -18,18 +18,25 @@
 import {
   effectivePinnedOrgs,
   keepPinnedOrgs,
+  pinHost,
   pinOrg,
+  PINNED_HOSTS_MAX,
   railWorkspaces,
   workspaceInitial,
   readAppTheme,
   recordRecent,
+  readPinnedHosts,
   recordRecentOrg,
+  replacePinnedHost,
   replacePinnedOrg,
   resolveWorkspaceColor,
   RECENTS_MAX,
   STARRED_MAX,
   toggleStarred,
+  unpinHost,
+  workspacePinnedHosts,
   type AccountItemRef,
+  type PinnedHost,
 } from './account-preferences'
 
 /**
@@ -55,6 +62,67 @@ describe('pins: five everywhere (Zach, 2026-10-18)', () => {
 
   it('replaces one pin in its place', () => {
     expect(replacePinnedOrg(ids(5), 'o2', 'o9')).toEqual(['o1', 'o9', 'o3', 'o4', 'o5'])
+  })
+})
+
+describe('site pins: five a workspace, like workspace pins (AGL-4005)', () => {
+  const pins = (orgId: string, n: number, from = 1): PinnedHost[] =>
+    Array.from({ length: n }, (_, i) => ({ orgId, hostId: `${orgId}-h${from + i}` }))
+
+  it('reads only well-formed pins, once each', () => {
+    expect(
+      readPinnedHosts({
+        pinnedHosts: [
+          { orgId: 'o1', hostId: 'h1' },
+          { orgId: 'o1', hostId: 'h1' },
+          { orgId: '', hostId: 'h2' },
+          'h3',
+          { orgId: 'o2', hostId: 'h4', extra: true },
+        ],
+      }),
+    ).toEqual([
+      { orgId: 'o1', hostId: 'h1' },
+      { orgId: 'o2', hostId: 'h4' },
+    ])
+    expect(readPinnedHosts({ pinnedHosts: 'h1' })).toEqual([])
+    expect(readPinnedHosts(undefined)).toEqual([])
+  })
+
+  it("counts each workspace's pins on their own", () => {
+    const stored = [...pins('o1', 5), ...pins('o2', 2)]
+    expect(workspacePinnedHosts(stored, 'o2')).toEqual(['o2-h1', 'o2-h2'])
+    expect(pinHost(stored, { orgId: 'o2', hostId: 'o2-h3' })).toEqual({
+      pinnedHosts: [...stored, { orgId: 'o2', hostId: 'o2-h3' }],
+      outcome: 'pinned',
+    })
+    expect(pinHost(stored, { orgId: 'o1', hostId: 'o1-h6' })).toEqual({
+      pinnedHosts: stored,
+      outcome: 'full',
+    })
+    expect(pinHost(stored, { orgId: 'o1', hostId: 'o1-h2' }).outcome).toBe('alreadyPinned')
+  })
+
+  it('makes room past the account bound only from other workspaces', () => {
+    const stored = [...pins('o1', 1), ...pins('o9', 99)]
+    const { pinnedHosts, outcome } = pinHost(stored, { orgId: 'o9', hostId: 'o9-h100' })
+    expect(outcome).toBe('full')
+    expect(pinnedHosts).toEqual(stored)
+    const next = pinHost([...pins('o1', 2), ...pins('o9', 98, 10)], { orgId: 'o2', hostId: 'x' })
+    expect(next.pinnedHosts).toHaveLength(PINNED_HOSTS_MAX)
+    expect(next.pinnedHosts[0]).toEqual({ orgId: 'o1', hostId: 'o1-h2' })
+    expect(next.pinnedHosts.at(-1)).toEqual({ orgId: 'o2', hostId: 'x' })
+  })
+
+  it('unpins one and replaces one in its place', () => {
+    const stored = [...pins('o1', 2), ...pins('o2', 1)]
+    expect(unpinHost(stored, 'o1-h1')).toEqual([...pins('o1', 1, 2), ...pins('o2', 1)])
+    expect(replacePinnedHost(stored, 'o1-h1', { orgId: 'o1', hostId: 'o1-h9' })).toEqual([
+      { orgId: 'o1', hostId: 'o1-h9' },
+      { orgId: 'o1', hostId: 'o1-h2' },
+      { orgId: 'o2', hostId: 'o2-h1' },
+    ])
+    // Another workspace's pin is never the one replaced.
+    expect(replacePinnedHost(stored, 'o2-h1', { orgId: 'o1', hostId: 'o1-h9' })).toEqual(stored)
   })
 })
 

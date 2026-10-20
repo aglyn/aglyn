@@ -24,6 +24,7 @@
  * | field | shape | cap |
  * | -- | -- | -- |
  * | `pinnedOrgs` | workspace ids, in the order the person keeps them | 5 |
+ * | `pinnedHosts` | {@link PinnedHost}s, in the order they were pinned | 5 a workspace, 100 in all |
  * | `recentOrgs` | workspace ids, most recently opened first | 8 |
  * | `starred` | {@link StarredItem}s, in the order they were starred | 50 |
  * | `recents` | {@link RecentItem}s, most recently opened first | 30 |
@@ -314,6 +315,125 @@ export function movePinnedOrg(pinned: readonly string[], orgId: string, offset: 
   next[from] = next[to]
   next[to] = orgId
   return next
+}
+
+// ── Site pins ───────────────────────────────────────────────────────────────
+
+/** `users/{uid}` field holding the sites the person pinned, each with its workspace (AGL-4005). */
+export const PINNED_HOSTS_FIELD = 'pinnedHosts'
+
+/** The most sites a person may pin in one workspace: five, as for workspaces. */
+export const PINNED_HOSTS_PER_WORKSPACE = 5
+
+/**
+ * The most site pins the account keeps across every workspace, the bound the
+ * Firestore rules hold. Nobody meets it by pinning: it takes twenty
+ * workspaces with five each. Past it, the oldest pins of OTHER workspaces
+ * give way (see {@link pinHost}).
+ */
+export const PINNED_HOSTS_MAX = 100
+
+/**
+ * One pinned site and the workspace it belongs to. The workspace rides with
+ * the pin so a surface that holds only one workspace's sites (the site
+ * switcher's window) can tell its own pins apart without reading every site.
+ */
+export interface PinnedHost {
+  orgId: string
+  hostId: string
+}
+
+function pinnedHostList(value: unknown): PinnedHost[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const pins: PinnedHost[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const { orgId, hostId } = entry as Record<string, unknown>
+    if (typeof orgId !== 'string' || !orgId) continue
+    if (typeof hostId !== 'string' || !hostId || seen.has(hostId)) continue
+    seen.add(hostId)
+    pins.push({ orgId, hostId })
+  }
+  return pins
+}
+
+/**
+ * Every site pin the person stored, in the order pinned, without repeats.
+ * Anything that is not a `{ orgId, hostId }` reads as no pin, so a stray
+ * value can never take the sites list down.
+ */
+export function readPinnedHosts(profile: unknown): PinnedHost[] {
+  return pinnedHostList(field(profile, PINNED_HOSTS_FIELD))
+}
+
+/** One workspace's pinned site ids, in the order pinned, at most five. */
+export function workspacePinnedHosts(stored: readonly PinnedHost[], orgId: string): string[] {
+  return pinnedHostList(stored)
+    .filter((pin) => pin.orgId === orgId)
+    .map((pin) => pin.hostId)
+    .slice(0, PINNED_HOSTS_PER_WORKSPACE)
+}
+
+export interface PinHostResult {
+  /** Every stored pin after the request: unchanged unless `outcome` is `pinned`. */
+  pinnedHosts: PinnedHost[]
+  outcome: PinOrgOutcome
+}
+
+/**
+ * Pins a site at the end of its workspace's pins, or says that workspace
+ * already has five. As with workspaces, a full list is never made room in
+ * quietly: the caller asks "Pinned is full. Replace one?" and calls
+ * {@link replacePinnedHost} with the answer. Only the account-wide bound
+ * ({@link PINNED_HOSTS_MAX}) makes room, and only from other workspaces.
+ */
+export function pinHost(stored: readonly PinnedHost[], pin: PinnedHost): PinHostResult {
+  const current = pinnedHostList(stored)
+  if (!pin.orgId || !pin.hostId) return { pinnedHosts: current, outcome: 'alreadyPinned' }
+  const inWorkspace = workspacePinnedHosts(current, pin.orgId)
+  if (inWorkspace.includes(pin.hostId)) return { pinnedHosts: current, outcome: 'alreadyPinned' }
+  if (inWorkspace.length >= PINNED_HOSTS_PER_WORKSPACE) {
+    return { pinnedHosts: current, outcome: 'full' }
+  }
+  // A site pinned under the workspace it has since moved out of moves with it.
+  const next = [
+    ...current.filter((entry) => entry.hostId !== pin.hostId),
+    { orgId: pin.orgId, hostId: pin.hostId },
+  ]
+  while (next.length > PINNED_HOSTS_MAX) {
+    const oldest = next.findIndex((entry) => entry.orgId !== pin.orgId)
+    if (oldest === -1) break
+    next.splice(oldest, 1)
+  }
+  return { pinnedHosts: next, outcome: 'pinned' }
+}
+
+/** The stored pins without one site. */
+export function unpinHost(stored: readonly PinnedHost[], hostId: string): PinnedHost[] {
+  return pinnedHostList(stored).filter((entry) => entry.hostId !== hostId)
+}
+
+/**
+ * The stored pins with `pin` in the place `replacing` held in the same
+ * workspace: the answer to "Pinned is full. Replace one?". Unchanged when
+ * `replacing` is not one of that workspace's pins or `pin` already is.
+ */
+export function replacePinnedHost(
+  stored: readonly PinnedHost[],
+  replacing: string,
+  pin: PinnedHost,
+): PinnedHost[] {
+  const current = pinnedHostList(stored)
+  const inWorkspace = workspacePinnedHosts(current, pin.orgId)
+  if (!pin.hostId || inWorkspace.includes(pin.hostId) || !inWorkspace.includes(replacing)) {
+    return current
+  }
+  return current
+    .filter((entry) => entry.hostId !== pin.hostId)
+    .map((entry) =>
+      entry.hostId === replacing ? { orgId: pin.orgId, hostId: pin.hostId } : entry,
+    )
 }
 
 // ── Recent workspaces and the rail ──────────────────────────────────────────

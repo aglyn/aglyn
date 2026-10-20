@@ -292,6 +292,30 @@ class NavShellUiTest {
     onNodeWithTag("picker-whole-workspace").assertIsDisplayed()
   }
 
+  /**
+   * On a phone, Menu › Website › Pages opens with its section tabs, and each tab swaps the area in place: Components,
+   * Layouts, Templates and Content are one tap from Pages, never a screen deeper (AGL-3993).
+   */
+  @Test
+  fun aPhonesMenuReachesEverySectionOfPages() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-menu") > 0 }
+    onNodeWithTag("tab-menu").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-menu") > 0 }
+    onNodeWithTag("nav-group-website").performClick()
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
+    onNodeWithTag("section-tabs").assertIsDisplayed()
+    for (section in listOf("components", "layouts", "templates", "content", "pages")) {
+      onNodeWithTag("section-$section").performClick()
+      waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.$section") }
+      assertTrue(navigator.stack.isEmpty(), "site.$section is one tap from Pages, not pushed")
+      onNodeWithTag("section-tabs").assertIsDisplayed()
+    }
+  }
+
   @Test
   fun theCreateMenuListsTheManifestsItemsForTheScope() = runComposeUiTest {
     setContent { AglynShell(testServices(userDoc = emptyMap())) }

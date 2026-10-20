@@ -232,11 +232,12 @@ email or a second site still need a plan upgrade. See
 **How to ask for a change.** Open the site in the console and press **Request a
 change** at the top of its dashboard, then say what to change. Any member of the
 workspace can ask. You can also email **support@aglyn.com** or reply to any message
-from us, and say which site and what to change; send photos as attachments. We email
-you when we have the request, with the day it will be done, and again when it is done,
-with what changed and the time it took. If a request will go past the month's time, or
-is a project, we reply first with the extra time it needs or a flat quote, and start
-once you say yes.
+from us, and say which site and what to change; send photos as attachments. Write from
+the email address you sign in with: that is how a message becomes your workspace's
+Site Care request. We email you when we have the request, with the day it will be
+done, and again when it is done, with what changed and the time it took. If a request
+will go past the month's time, or is a project, we reply first with the extra time it
+needs or a flat quote, and start once you say yes.
 
 - **Fair use.** About an hour a month is a guide, not a meter that cuts you off
   mid-change. Time past it is extra time, billed only for a request you said yes to;

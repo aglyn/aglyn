@@ -16,10 +16,12 @@
  */
 
 import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
+import { weeklyHoursFromText, weeklyHoursToText } from '@aglyn/shared-ui-jsx/utils/weekly-hours'
 import {
   AI_SITE_DETAIL_KEYS,
   AI_SITE_NO_DETAILS,
   aiSiteDetailProblem,
+  aiSiteDetailsOf,
   type AiSiteDetailKey,
   type AiSiteDetails,
 } from './ai-site-details'
@@ -464,17 +466,68 @@ function bounded(value: string, max: number): string {
   return (space > max / 2 ? cut.slice(0, space) : cut).trim()
 }
 
+/** A time with am or pm: "9am", "5:30 pm", "12 a.m.". */
+const TWELVE_HOUR_TIME = /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?(?![a-z])/gi
+
+/**
+ * The hours an owner gave, in the shape the Details step's hours picker
+ * writes (`Tu-Sa 09:00-17:00`, one set of days a line), so the plan reads
+ * them as it reads hours picked there. A time with am or pm is the time it
+ * names, "to" joins a range as a dash does, and days with their hours may be
+ * set apart by a comma, a semicolon or a line. Whatever still does not read
+ * as hours — "8–5", "Sat by appointment" — is left out rather than guessed at.
+ */
+function clientBuildHours(hours: string): string {
+  const lines = hours
+    .replace(TWELVE_HOUR_TIME, (time, hour: string, minutes: string | undefined, half: string) => {
+      const h = Number(hour)
+      if (h < 1 || h > 12) return time
+      const clock = (h % 12) + (half.toLowerCase() === 'p' ? 12 : 0)
+      return `${String(clock).padStart(2, '0')}:${minutes ?? '00'}`
+    })
+    .replace(/\s+to\s+/gi, '-')
+    .replace(/(\d{1,2}:\d{2})\s*,\s*/g, '$1\n')
+    .replace(/;/g, '\n')
+  const week = weeklyHoursFromText(lines).hours
+  return week.some((day) => day.length) ? weeklyHoursToText(week) : ''
+}
+
+/**
+ * The towns an intake serves, one a line, as the Details step's "Areas you
+ * serve" holds them: "Austin, Round Rock and Pflugerville" is three.
+ */
+function clientBuildServiceArea(towns: string): string {
+  return towns
+    .split(/\r?\n|[,;]|\s+(?:and|&)\s+/i)
+    .map((town) => town.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
 /**
  * The questions' answers for a site staff are building for a client: what
- * the business does is the kind of site, and every other answer keeps its
- * default, which the review shows to change. The rest of the intake is not an
- * answer to these questions; it reaches the job through
- * {@link aiSiteStartClientInputs} and {@link aiSiteStartClientBrief}.
+ * the business does is the kind of site, and the details the intake holds
+ * fill the Details step's own fields (AGL-3979, AGL-3995): the phone, the
+ * email, the towns as the areas it serves and the hours, each held to that
+ * detail's own rule, so one the Details step would refuse is left empty
+ * there. Every other answer keeps its default, which the review shows to
+ * change. The intake, a refused detail included, also reaches the job
+ * through {@link aiSiteStartClientInputs} and {@link aiSiteStartClientBrief}.
  */
 export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): AiSiteStartAnswers {
+  const details = aiSiteDetailsOf({
+    phone: intake.phone,
+    email: intake.email,
+    serviceArea: clientBuildServiceArea(intake.towns),
+    hours: clientBuildHours(intake.hours),
+  })
   return {
     ...AI_SITE_START_ANSWERS,
     siteType: bounded(intake.whatTheyDo, AI_SITE_INPUT_MAX_CHARS),
+    phone: details.phone,
+    email: details.email,
+    serviceArea: details.serviceArea,
+    hours: details.hours,
   }
 }
 
@@ -482,13 +535,23 @@ export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): Ai
  * The per-site inputs the intake fills, which the guided start's own
  * questions leave empty: the business's name for the header and footer, and
  * the towns it serves as its place.
+ *
+ * The towns are the place only while no address is given. The Entity reads
+ * `city` as the address's own locality wherever there is a street or a
+ * postal code (`aiSiteEntity`), so once the answers carry either, `city` is
+ * the city the Details step was given with that address, never the towns
+ * (AGL-3995). The intake asks no address, so today that is the Details step's
+ * own, typed on the review; the towns still reach the site as the areas it
+ * serves.
  */
 export function aiSiteStartClientInputs(
   intake: ClientBuildIntake,
+  answers?: Pick<AiSiteStartAnswers, 'street' | 'postalCode' | 'city'> | null,
 ): Pick<AiSiteJobInputs, 'businessName' | 'city'> {
+  const addressed = Boolean(answers?.street.trim() || answers?.postalCode.trim())
   return {
     businessName: bounded(intake.businessName, AI_SITE_INPUT_MAX_CHARS),
-    city: bounded(intake.towns, AI_SITE_INPUT_MAX_CHARS),
+    city: bounded(addressed ? (answers?.city ?? '') : intake.towns, AI_SITE_INPUT_MAX_CHARS),
   }
 }
 
@@ -518,25 +581,15 @@ export function aiSiteStartClientBrief(intake: ClientBuildIntake): string {
 }
 
 /**
- * What the review says the client build adds, so staff see the intake is
- * used without it being asked again: "Also from the client's details:
- * Harbor Plumbing, serving Austin, its phone, email and hours, and the
- * owner's own words."
+ * What the review says the client build adds beyond its own rows, so staff
+ * see the intake is used without it being asked again: the business's name
+ * and the owner's own words, which no row shows. The phone, email, towns and
+ * hours are the review's Details rows already (AGL-3995), so the note does
+ * not say them twice: "Also from the client's details: Harbor Plumbing and
+ * the owner's own words."
  */
 export function aiSiteStartClientNote(intake: ClientBuildIntake): string {
-  const name = intake.businessName.trim()
-  const towns = intake.towns.trim()
-  const reach = [
-    intake.phone.trim() ? 'phone' : '',
-    intake.email.trim() ? 'email' : '',
-    intake.hours.trim() ? 'hours' : '',
-  ].filter(Boolean)
-  const parts = [
-    name && towns ? `${name}, serving ${towns}` : name || (towns ? `serving ${towns}` : ''),
-    reach.length ? `its ${reach.length > 1 ? `${reach.slice(0, -1).join(', ')} and ${reach[reach.length - 1]}` : reach[0]}` : '',
-    intake.ownerWords.trim() ? "the owner's own words" : '',
-  ].filter(Boolean)
+  const parts = [intake.businessName.trim(), intake.ownerWords.trim() ? "the owner's own words" : ''].filter(Boolean)
   if (!parts.length) return 'Built from the client’s details.'
-  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}` : parts[0]
-  return `Also from the client’s details: ${list}.`
+  return `Also from the client’s details: ${parts.join(' and ')}.`
 }

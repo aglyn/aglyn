@@ -58,6 +58,7 @@ import StaffMediaLibraryCard from '../../../../../components/staff-media-library
 import { PhotoLinkDialogOnOpen } from '../../../../../components/media/photo-link-dialog.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
+import { useStaffClientBuild } from '../../../../../components/staff-bundle-link.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
 import StaffSiteTransfer from '../../../../../components/staff-site-transfer.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
@@ -98,6 +99,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
   )
   // The site names its organization; the URL no longer does (AGL-3378).
   const orgId = String(host?.orgId ?? '')
+  // A workspace built for a client hands off on its build's intent (AGL-3958).
+  const clientBuild = useStaffClientBuild(orgId || null)
 
   /*
    * The organization and its owner, as the Sites list reads them: one row of
@@ -484,6 +487,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                                       name: site?.displayName ?? site?.subdomain ?? hostId,
                                     },
                                   ]}
+                                  build={clientBuild}
                                   onSent={() => setSiteNonce((nonce) => nonce + 1)}
                                 />
                               ) : null}
