@@ -102,7 +102,7 @@ struct OrderAnnotationSections: View {
         HStack {
           ForEach(RestockAnswerChoice.allCases) { choice in
             Button(choice.label) { Task { await answer(choice, check) } }
-              .buttonStyle(.bordered)
+              .buttonStyle(.aglynSecondary)
               .disabled(busy)
               .accessibilityIdentifier("order-restock-\(choice.rawValue)")
           }

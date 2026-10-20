@@ -396,7 +396,7 @@ public struct AglynWeeklyHoursEditor: View {
             let window = windows[index]
             HStack(spacing: AglynSpace.half) {
               Button("\(aglynMinutesLabel(window.start)) – \(aglynMinutesLabel(window.end))") { onEdit(index) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aglynSecondary)
                 .accessibilityIdentifier("hours-\(day)-\(index)")
               Button {
                 onRemove(index)
