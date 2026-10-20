@@ -306,7 +306,7 @@ public struct AglynProminentButtonStyle: PrimitiveButtonStyle {
 
   public func makeBody(configuration: Configuration) -> some View {
     Button(role: configuration.role, action: configuration.trigger) { configuration.label }
-      .buttonStyle(.aglynProminent)
+      .buttonStyle(.borderedProminent)
       .tint(AglynColor.primary)
       .foregroundStyle(AglynColor.primaryContrast)
   }
@@ -315,16 +315,21 @@ public struct AglynProminentButtonStyle: PrimitiveButtonStyle {
 /// A secondary (outlined) button, Figma Button Kind=Secondary: the surface, a 1-point border/strong outline and primary
 /// text, at the control size it is given (Small 28, Medium 36, Large 48; radius 6 on the Mac, 8 and 12 on touch). It
 /// stands in for the platform's `.bordered`, whose glass draws a bright rim in dark mode (Zach, 2026-10-19: "weird
-/// white borders on dark mode on some buttons"). A destructive one says so in the error color.
+/// white borders on dark mode on some buttons"). A destructive one says so in the error color. A `selected` one (a pin
+/// that is pinned, a channel that is on) is the console's outlined primary: the accent's text shade, outlined in the
+/// fill, on the same surface (never the soft wash, under which #0077AD falls short of 4.5:1).
 public struct AglynSecondaryButtonStyle: ButtonStyle {
-  public init() {}
+  let selected: Bool
+
+  public init(selected: Bool = false) { self.selected = selected }
 
   public func makeBody(configuration: Configuration) -> some View {
-    SecondaryBody(configuration: configuration)
+    SecondaryBody(configuration: configuration, selected: selected)
   }
 
   private struct SecondaryBody: View {
     let configuration: Configuration
+    let selected: Bool
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var enabled
     @State private var hovered = false
@@ -342,17 +347,23 @@ public struct AglynSecondaryButtonStyle: ButtonStyle {
       }
     }
 
+    private var fill: Color {
+      if configuration.isPressed { return AglynColor.sunken }
+      return hovered && enabled ? AglynColor.hover : AglynColor.paper
+    }
+
     var body: some View {
       let m = metrics
       let shape = RoundedRectangle(cornerRadius: m.radius, style: .continuous)
       configuration.label
         .font(.system(size: m.font, weight: .semibold))
-        .foregroundStyle(configuration.role == .destructive ? AglynColor.error : AglynColor.textPrimary)
+        .foregroundStyle(
+          configuration.role == .destructive ? AglynColor.error : selected ? AglynColor.tint : AglynColor.textPrimary)
         .lineLimit(1)
         .padding(.horizontal, m.padding)
         .frame(minHeight: m.height)
-        .background(shape.fill(configuration.isPressed ? AglynColor.sunken : hovered && enabled ? AglynColor.hover : AglynColor.paper))
-        .overlay(shape.strokeBorder(AglynColor.borderStrong, lineWidth: 1))
+        .background(shape.fill(fill))
+        .overlay(shape.strokeBorder(selected ? AglynColor.primary : AglynColor.borderStrong, lineWidth: 1))
         .contentShape(shape)
         .opacity(enabled ? 1 : 0.5)
         .onHover { hovered = $0 }
@@ -363,6 +374,8 @@ public struct AglynSecondaryButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == AglynSecondaryButtonStyle {
   /// A secondary (outlined) button: `AglynSecondaryButtonStyle`.
   public static var aglynSecondary: AglynSecondaryButtonStyle { AglynSecondaryButtonStyle() }
+  /// A secondary button that shows it is on: `AglynSecondaryButtonStyle(selected:)`.
+  public static func aglynSecondary(selected: Bool) -> AglynSecondaryButtonStyle { AglynSecondaryButtonStyle(selected: selected) }
 }
 
 extension PrimitiveButtonStyle where Self == AglynProminentButtonStyle {

@@ -177,8 +177,7 @@ struct NotificationSettingsView: View {
       Label(channel.label, systemImage: isOn ? "checkmark" : "xmark")
     }
     .toggleStyle(.button)
-    .buttonStyle(.bordered)
-    .tint(isOn ? AglynColor.tint : .secondary)
+    .buttonStyle(.aglynSecondary(selected: isOn))
     .font(AglynFont.caption)
     .accessibilityLabel("\(channel.label) for \(catalog.entry(owner)?.label ?? catalog.categories.first { $0.id == owner }?.label ?? owner)")
     .accessibilityValue(isOn ? "On" : "Off")

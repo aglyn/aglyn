@@ -142,9 +142,8 @@ private struct WorkspacePickerRow: View {
         }
         .font(AglynFont.caption)
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary(selected: pinIndex != nil))
       .controlSize(.small)
-      .tint(pinIndex != nil ? AglynColor.tint : AglynColor.secondaryText)
       .accessibilityLabel(pinIndex != nil ? "Unpin \(org.name)" : "Pin \(org.name)")
       .accessibilityIdentifier("picker-pin-\(org.id)")
     }
