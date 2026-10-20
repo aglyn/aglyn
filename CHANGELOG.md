@@ -15,7 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
-- **console:** pin sites the way workspaces are pinned (AGL-4005) [skip ci] ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005), [AGL-3762](https://linear.app/aglyn/issue/AGL-3762), [AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **console:** pin sites the way workspaces are pinned ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005), [AGL-3762](https://linear.app/aglyn/issue/AGL-3762), [AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
 - **marketing:** the /managed republish shows a site in the hero and separates the FAQ band ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
 - **console:** the Site Care card and Request a change name the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
 - **site-care:** requests arrive at the support address, with no care address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
