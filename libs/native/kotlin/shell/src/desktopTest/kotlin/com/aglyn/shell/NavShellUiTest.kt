@@ -68,6 +68,46 @@ class NavShellUiTest {
   }
 
   @Test
+  fun aGroupThePersonOpenedStaysOpenWhileTheyNavigate() = runComposeUiTest {
+    // Zach, 2026-10-20: "we need to remember the expanded state, if we navigate it collapses the others". The test
+    // site's only foldable group is Website (Sell and Customers need plugins this registry does not load), so this walks
+    // the rule on it: opening a place opens its group, leaving keeps it open, a fold sticks, and nothing else folds it.
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-group-website") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("nav-site-pages"))
+    // Opened from elsewhere (search, Recents), Pages opens Website.
+    runOnIdle { navigator.select(NavKeys.of("site.pages")) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-media") > 0 }
+    // Leaving for Overview keeps Website open (it used to fold as soon as it no longer held the screen).
+    onNodeWithTag("nav-site-overview").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top != NavKeys.of("site.pages") }
+    waitForIdle()
+    onNodeWithTag("nav-site-media").assertIsDisplayed()
+    // Folded by the person while on Pages, it stays folded as they move on.
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
+    onNodeWithTag("nav-group-website").performClick()
+    waitForIdle()
+    assertEquals(0, onAllNodesWithTagCount("nav-site-media"))
+    onNodeWithTag("nav-site-home").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top != NavKeys.of("site.pages") }
+    waitForIdle()
+    assertEquals(0, onAllNodesWithTagCount("nav-site-media"))
+    // Opening one of its places again opens it.
+    runOnIdle { navigator.select(NavKeys.of("site.media")) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-media") > 0 }
+  }
+
+  @Test
+  fun theRememberedGroupStatesReadTheOlderOneOpenGroupForm() {
+    assertEquals(mapOf("site.website" to true, "site.starred" to false), parseGroupStates("site.website,site.starred.folded"))
+    val states = mapOf("site.website" to true, "site.sell" to false, "workspace.more" to true)
+    assertEquals(states, parseGroupStates(formatGroupStates(states)))
+  }
+
+  @Test
   fun siteSettingsIsAModeWithItsOwnListAndAWayBack() = runComposeUiTest {
     val navigator = ShellNavigator()
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }

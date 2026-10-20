@@ -552,6 +552,9 @@ internal fun NavGroupsList(
   Box(Modifier.fillMaxWidth().onGloballyPositioned { origin = it }) {
     SelectionPillLayer(pill, dense, reduce)
     CompositionLocalProvider(LocalSelectionPill provides pill, LocalPillOrigin provides origin) {
+      // Opening a destination opens its own group if the person had folded it, and leaves every other group as it is.
+      val currentGroup = groups.firstOrNull { g -> g.foldable && g.dynamic != "starred" && g.rows.any { selectedKey in it.keys } }?.id
+      androidx.compose.runtime.LaunchedEffect(listId, selectedKey, currentGroup) { currentGroup?.let { chrome.reveal(listId, it) } }
       Column(Modifier.fillMaxWidth()) {
         // The workspace's header has a hairline under it (Figma Sidebar, Scope = Workspace).
         if (dense && listId == com.aglyn.contracts.NativeNavListId.WORKSPACE && query.isEmpty()) NavDivider(Modifier.padding(vertical = 1.dp))
