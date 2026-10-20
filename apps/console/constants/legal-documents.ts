@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v17'
+export const LEGAL_DOCUMENT_VERSION = 'v18'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -905,6 +905,44 @@ export interface LegalDocumentManifestEntry {
  * `c2e6ef…`, privacy 28594 bytes / `d3d51f…`) byte for byte across the same
  * three requests.
  *
+ * v18 (2026-10-19): importing a website, "Bring my site" (AGL-3976,
+ * AGL-3974).
+ *
+ *   - Terms §8.9 (new), Importing a Website: a website may be imported only
+ *     by someone who owns it and its content or is authorized to copy and
+ *     publish that content, and proving control of its domain (a DNS record,
+ *     a home-page tag or an emailed code; `domain-ownership.ts`) is not proof
+ *     of rights in the content. Starting an import authorizes Aglyn to read
+ *     the site as AglynBot, honoring robots.txt and only that domain's pages
+ *     (`libs/plugins/ai/src/lib/site-import`), to copy its text and images
+ *     into the Organization and its media library, and to use the text as AI
+ *     Input, with AI credits under §4.11. What is imported, and the AI Output
+ *     made from it, is Customer Content under §§8.1–8.7, and nothing an
+ *     import creates is published until a person publishes it. Aglyn may
+ *     refuse, pause or stop an import (for example for abuse, a failed or
+ *     expired proof, or a rights complaint) and act under §§8.5, 9 and 13.2.
+ *   - Privacy, Subprocessors, AUP, DMCA, DPA, Cookie Policy, EULA and
+ *     Marketplace Publisher Agreement are unchanged: the read runs on
+ *     Aglyn's own servers, and every provider the import uses is already
+ *     listed.
+ *
+ * "Last updated" stays October 19, 2026, which v17 already set the same
+ * Central day, so no `/legal` index card moved (the Terms keep "Effective
+ * date: August 5, 2026"). Published from the console's Publish now at 20:07
+ * Central on October 19, 2026. The wording, and publishing it with
+ * re-acceptance, were approved on 2026-10-19 (Central); the record is
+ * `Platform Docs/Legal/Proposed/2026-10-20-site-import/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through
+ * the Docs API, the page was published, the live page confirmed serving the
+ * new text, and only then were the terms captured: 60730 bytes
+ * (`d12523…`), identical across two requests and a cache-busting query in
+ * two rounds, and differing from the `v17` capture by the two lines of §8.9
+ * alone; archived in `Acceptance-Snapshots/v18` beside an unchanged copy of
+ * the privacy policy. The Privacy Policy did not change, so it was the
+ * control: the live privacy page reproduced its `v17` pin (31383 bytes /
+ * `4209f2…`) byte for byte before and after publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -964,8 +1002,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'b77ce88836cb6e89949f0071db3c3d77a464e19f3c9c70dbfa0bac99e99507e4',
-    bytes: 58794,
+      'd1252340bb0d258b2405c2341b0504ef0d33c9fa11b27e051eb0b4a47821b9bc',
+    bytes: 60730,
   },
   {
     key: 'privacy',
