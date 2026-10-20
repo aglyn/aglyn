@@ -35,19 +35,22 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import usePinnedOrgs from '../hooks/use-pinned-orgs'
 import useOrgScope from '../hooks/use-org-scope'
+import { PINNED_HOSTS_PER_WORKSPACE } from '@aglyn/aglyn/app-utils/account-preferences'
 import { PINNED_ORGS_MAX } from '../utils/workspace-list'
 
-/** A pinned workspace as a dialog names it. */
+/** A pinned workspace, or a pinned site, as a dialog names it. */
 export interface PinnedOrgEntry {
   id: string
   name: string
 }
 
 export interface PinnedFullDialogProps {
-  /** The workspace the reader tried to pin, or null when the dialog is closed. */
+  /** The workspace or site the reader tried to pin, or null when the dialog is closed. */
   pinning: PinnedOrgEntry | null
   /** The five pins, in the reader's order. */
   pins: readonly PinnedOrgEntry[]
+  /** What is pinned: workspaces (the default), or one workspace's sites. */
+  kind?: 'workspace' | 'site'
   onReplace: (replacing: string) => void
   onClose: () => void
 }
@@ -55,18 +58,29 @@ export interface PinnedFullDialogProps {
 /**
  * "Pinned is full. Replace one?" (AGL-3943). Pins are capped at five
  * everywhere (Zach, 2026-10-18), and a sixth is never made room for quietly:
- * the reader picks the pin it takes the place of, or keeps the five.
+ * the reader picks the pin it takes the place of, or keeps the five. Site
+ * pins ask the same question, five to a workspace.
  */
-export function PinnedFullDialog({ pinning, pins, onReplace, onClose }: PinnedFullDialogProps) {
+export function PinnedFullDialog({
+  pinning,
+  pins,
+  kind = 'workspace',
+  onReplace,
+  onClose,
+}: PinnedFullDialogProps) {
+  const site = kind === 'site'
   return (
     <Dialog open={Boolean(pinning)} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>{'Pinned is full. Replace one?'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="body2" color="text.secondary">
-          {`You can pin up to ${PINNED_ORGS_MAX} workspaces. Pick the one ` +
-            `${pinning?.name ?? 'this workspace'} takes the place of.`}
+          {(site
+            ? `You can pin up to ${PINNED_HOSTS_PER_WORKSPACE} sites in a workspace. `
+            : `You can pin up to ${PINNED_ORGS_MAX} workspaces. `) +
+            `Pick the one ${pinning?.name ?? (site ? 'this site' : 'this workspace')} ` +
+            'takes the place of.'}
         </Typography>
-        <List dense disablePadding aria-label="Pinned workspaces">
+        <List dense disablePadding aria-label={site ? 'Pinned sites' : 'Pinned workspaces'}>
           {pins.map((pin) => (
             <ListItem
               key={pin.id}

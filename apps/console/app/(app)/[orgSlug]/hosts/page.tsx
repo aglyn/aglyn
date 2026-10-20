@@ -25,6 +25,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
+import { mdiPin, mdiPinOutline } from '@aglyn/shared-data-mdi'
 import {
   hostDisplayDomain,
   hostPlatformDomain,
@@ -44,7 +45,7 @@ const hostAddress = (
     cname: typeof host.cname === 'string' ? host.cname : undefined,
     subdomain: typeof host.subdomain === 'string' ? host.subdomain : undefined,
   }
-import { Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { Container, GridItems, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import ListFilterToolbar from '@aglyn/shared-ui-jsx/components/list-filter-toolbar.component'
@@ -52,7 +53,15 @@ import ListQueryNotices, {
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { Alert, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
+import {
+  Alert,
+  Button,
+  Chip,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material'
 import { collection, type Firestore } from 'firebase/firestore'
 import { Suspense, useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -67,6 +76,10 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import PlatformMarketingConsentPrompt from '../../../../components/marketing-consent-prompt.component'
 import OrgDashboardWidgets from '../../../../components/org-dashboard-widgets.component'
 import OrgUpgradeProposalCard from '../../../../components/org-upgrade-proposal-card.component'
+import {
+  PinnedFullDialog,
+  type PinnedOrgEntry,
+} from '../../../../components/pinned-orgs-dialogs.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -93,6 +106,7 @@ import {
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { usePendingInvites } from '../../../../hooks/use-pending-invites'
+import { usePinnedHosts } from '../../../../hooks/use-pinned-hosts'
 
 /**
  * One labelled address on a site card. The address is one unbroken piece: it
@@ -150,11 +164,16 @@ interface SiteCardProps {
   orgSlug: string
   /** The org's resolved brand, which names the platform domain row. */
   productName: string
+  /** The reader pinned this site. */
+  pinned: boolean
+  /** Five sites are pinned in this workspace, so pinning a sixth asks which to replace. */
+  pinsFull: boolean
+  onTogglePin: () => void
 }
 
-/** One site's card: its name and address, its status pill, Visit and Manage. */
+/** One site's card: its name and address, its status pill and pin, Visit and Manage. */
 function SiteCard(props: SiteCardProps) {
-  const { host, orgSlug, productName } = props
+  const { host, orgSlug, productName, pinned, pinsFull, onTogglePin } = props
   return (
     <CardDisplay
       contentGutterX
@@ -170,20 +189,47 @@ function SiteCard(props: SiteCardProps) {
         // The Live/Draft pill sits in the header's ACTION slot
         // (top-right) rather than above the domain rows: inline in
         // the content it shared a line with the first
-        // `HostInfoItem` label and read as part of it.
+        // `HostInfoItem` label and read as part of it. The pin sits beside
+        // it: a pinned site leads the list, as a pinned workspace leads the
+        // workspace chooser.
         action: (() => {
           const status = describeHostStatus(host as never)
+          const name = host?.displayName ?? host?.subdomain ?? host.$id
           return (
-            <Tooltip title={status.detail}>
-              <Chip
-                size="small"
-                label={status.label}
-                color={status.color}
-                variant={
-                  status.color === 'default' ? 'outlined' : 'filled'
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+              <Tooltip title={status.detail}>
+                <Chip
+                  size="small"
+                  label={status.label}
+                  color={status.color}
+                  variant={
+                    status.color === 'default' ? 'outlined' : 'filled'
+                  }
+                />
+              </Tooltip>
+              <Tooltip
+                title={
+                  pinned
+                    ? 'Unpin'
+                    : pinsFull
+                      ? 'Pinned is full: pick one to replace'
+                      : 'Pin to top'
                 }
-              />
-            </Tooltip>
+              >
+                <IconButton
+                  size="small"
+                  aria-label={`${pinned ? 'Unpin' : 'Pin'} ${name}`}
+                  aria-pressed={pinned}
+                  color={pinned ? 'primary' : 'default'}
+                  onClick={onTogglePin}
+                >
+                  <MdiIcon
+                    path={pinned ? mdiPin.path : mdiPinOutline.path}
+                    fontSize="small"
+                  />
+                </IconButton>
+              </Tooltip>
+            </Stack>
           )
         })(),
         avatar: (
@@ -302,6 +348,12 @@ interface SitesCardsProps {
  * whose presence is the query's answer (a probe row past the page), not a
  * guess from the count on screen. A row whose host the page could not read
  * has nothing to draw and is left out.
+ *
+ * The sites the reader pinned (`usePinnedHosts`, five a workspace) lead the
+ * unfiltered list in the order they were pinned, drawn from the host
+ * documents the page holds, so a pin on a site the query has not paged to
+ * yet still leads. A search or a filter is the query's answer and keeps the
+ * query's order; its pinned sites show their pin where they fall.
  */
 function SitesCards(props: SitesCardsProps) {
   const { firestore, uid, orgId, hosts, orgSlug, productName } = props
@@ -345,6 +397,29 @@ function SitesCards(props: SitesCardsProps) {
   )
   const loading = listed.status === 'loading'
   const filtering = clauses.length > 0 || searchWords.length > 0
+  const {
+    pinned: pinnedIds,
+    full: pinsFull,
+    toggle: togglePin,
+    replace: replacePin,
+  } = usePinnedHosts(orgId)
+  // A sixth pin asks which of the five it replaces.
+  const [pinning, setPinning] = useState<PinnedOrgEntry | null>(null)
+  const cards = useMemo(() => {
+    if (filtering || !shown.length) return shown
+    const lead = pinnedIds.flatMap((id) => {
+      const host = hostsById.get(id)
+      return host ? [host] : []
+    })
+    const leading = new Set(lead.map((host) => host.$id))
+    return [...lead, ...shown.filter((host) => !leading.has(host.$id))]
+  }, [filtering, shown, pinnedIds, hostsById])
+  const siteName = (id: string) => {
+    const host = hostsById.get(id)
+    return host
+      ? (host.displayName ?? host.subdomain ?? id)
+      : 'A site you can no longer open'
+  }
 
   return (
     <Stack spacing={2}>
@@ -386,13 +461,24 @@ function SitesCards(props: SitesCardsProps) {
         // Site tiles, all one shape, read left to right. Rows are the point.
         masonry={false}
         spacing={3}
-        items={shown.map((host) => ({
+        items={cards.map((host) => ({
           size: {
             xs: 12,
             md: 4,
           },
           children: (
-            <SiteCard host={host} orgSlug={orgSlug} productName={productName} />
+            <SiteCard
+              host={host}
+              orgSlug={orgSlug}
+              productName={productName}
+              pinned={pinnedIds.includes(host.$id)}
+              pinsFull={pinsFull}
+              onTogglePin={() => {
+                if (togglePin(host.$id) === 'full') {
+                  setPinning({ id: host.$id, name: siteName(host.$id) })
+                }
+              }}
+            />
           ),
         }))}
       />
@@ -407,6 +493,16 @@ function SitesCards(props: SitesCardsProps) {
           </Button>
         </Stack>
       ) : null}
+      <PinnedFullDialog
+        kind="site"
+        pinning={pinning}
+        pins={pinnedIds.map((id) => ({ id, name: siteName(id) }))}
+        onReplace={(replacing) => {
+          if (pinning) replacePin(replacing, pinning.id)
+          setPinning(null)
+        }}
+        onClose={() => setPinning(null)}
+      />
     </Stack>
   )
 }

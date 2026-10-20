@@ -55,7 +55,7 @@ import {
   type MailProviderSendResult,
   type MailSendingDomain,
 } from './mail-provider'
-import type { ReceivedEmail, ReceivedEmailSource } from './received-email'
+import { isAutoSubmittedMail, type ReceivedEmail, type ReceivedEmailSource } from './received-email'
 
 /** The slug stored on every delivery record this provider produces. */
 export const RESEND_PROVIDER_ID = 'resend'
@@ -710,6 +710,7 @@ export function normalizeResendReceivedEmail(
     text: text(record['text']),
     html: text(record['html']),
     receivedAtMs: Number.isFinite(created) && created > 0 ? created : nowMs,
+    autoSubmitted: isAutoSubmittedMail((name) => header(headers, name)),
   }
 }
 

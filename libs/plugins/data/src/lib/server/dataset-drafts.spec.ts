@@ -331,14 +331,14 @@ describe('reading what a caller sends', () => {
 })
 
 describe('the dataset writer', () => {
-  it('writes the dataset with its model, the org’s sharing for the site, and its seeded records', async () => {
+  it('writes the dataset with its model, shared with its site alone, and its seeded records', async () => {
     const written = await writer.write(request())
     expect(written).toMatchObject({ ok: true, replayed: false, id: 'job-1-d0', name: 'Menu', versionId: null })
     expect(written.ok && (written.facts as { records: number }).records).toBe(3)
     expect(dataset()).toMatchObject({
       displayName: 'Menu',
       fields: ['dish', 'description', 'category', 'vegetarian', 'allergens', 'slug'],
-      visibleTo: ['org'],
+      visibleTo: ['host:host-1'],
       createdAt: NOW,
       createdBy: 'uid-1',
     })
@@ -353,8 +353,10 @@ describe('the dataset writer', () => {
     expect(rows[0]).toHaveProperty('filterValues')
   })
 
-  it('shares the dataset with this site alone where the org’s Default sharing says so', async () => {
-    await writer.write(request({ org: { ...STARTER, defaultResourceScope: 'host' } }))
+  it('shares the dataset with this site alone whatever the org’s Default sharing says (AGL-4003)', async () => {
+    // A drafted dataset is the site's own content, so deleting the site erases
+    // it; shared with every site, 53 outlived their sites in one workspace.
+    await writer.write(request({ org: { ...STARTER, defaultResourceScope: 'org' } }))
     expect(dataset()['visibleTo']).toEqual(['host:host-1'])
   })
 

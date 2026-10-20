@@ -19,7 +19,9 @@
 /**
  * Publishes `/managed` on aglyn.com: the landing page for the Managed offer
  * (a plan plus Site Care, one price), its form, and the campaign both are
- * filed under (AGL-3960).
+ * filed under (AGL-3960). It refuses once `/managed` is routed, so the live
+ * page changes through `republish-managed-landing-page.mjs` (AGL-3998), and
+ * this script is kept in step with what that publishes.
  *
  *   node tools/scripts/publish-managed-landing-page.mjs           dry run
  *   node tools/scripts/publish-managed-landing-page.mjs --write   publish
@@ -51,23 +53,30 @@
  * landing page skeleton built to the `/product/*` standard: the Product
  * detail hero, the Capabilities band, the How it works band and the Marketing
  * CTA (all reusable components, so they stay in step with every other page
- * that uses them), three deep-dive rows with images, a fair-use list, a
- * prices section, the form and an FAQ. Every node gets a new id. Each slot the
- * copy replaces is found by its section and node names, and its current text
- * is asserted before it changes, so a template that has moved makes the run
+ * that uses them), three deep-dive rows, a fair-use list, the form and an
+ * FAQ. The template's plans section is dropped, with everything in it; the
+ * form's section takes its background and the FAQ's takes white, so the bands
+ * still alternate. Two deep-dive rows play a product film, placed the way the
+ * film band places it and read from a live page that plays it
+ * (`lib/marketing-film.mjs`); the third shows a picture. The hero shows a
+ * small business's site live on its own domain, never a film's poster frame
+ * and never a shop's product grid: its media slot only takes a picture, a
+ * poster carries the film's burned-in caption, and a product grid prints a
+ * price under every product. Every node gets a new id. Each slot the copy
+ * replaces is found by its section and node names, and its current text is
+ * asserted before it changes, so a template that has moved makes the run
  * refuse instead of pouring copy one slot out. After the pour, no text of the
  * template may survive anywhere on the page except what `KEPT_TEXT` names.
  *
- * ## The figures
+ * ## No prices
  *
- * Site Care is `SITE_CARE_ADDON_MONTHLY_USD` ($49, $588 a year on a yearly
- * plan) and Starter is `PLAN_PRICING.starter` ($25, $16 a month billed
- * yearly), from `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, restated
- * here because a plain script cannot import the TypeScript module; Managed
- * Starter is their sum. Extra time ($79 per started hour) and the project
- * starting points ($249 / $749 / $349) are the 2026-10-19 entry of
- * `docs/DECISION_LOG.md`. `docs/PRICING_SURFACES.md` lists this page, so a
- * change to any of them owes it a republish.
+ * The page states no price, rate or starting figure: prices are published on
+ * `/pricing`, and only there (AGL-3998). Where a sentence would need a figure
+ * it says what is true without one: one price covers the plan and Site Care,
+ * monthly or yearly, with no build fee; a bigger job has one flat price agreed
+ * before work starts; extra time is billed only after a yes. The run refuses
+ * if any text it pours, or the SEO description, states a dollar figure, so a
+ * first run on another deployment cannot bring one back.
  *
  * ## Lead routing
  *
@@ -103,6 +112,7 @@ import {
 } from '@mdi/js'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldPath, FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { readFilmVideo } from './lib/marketing-film.mjs'
 import { nameSearchKey, nameSearchTokens, displayNameSearchFields } from './lib/name-search-tokens.mjs'
 import { createResourceUid } from './lib/resource-uid.mjs'
 import { formListFields } from './lib/site-form-list-fields.mjs'
@@ -111,20 +121,11 @@ const HOST = 'DXnRbPH4CQ' // aglyn-marketing
 const ORG = 'jWmGooWE3L' // Aglyn's own org
 const TEMPLATE_SCREEN = '8NLz1g5vxG' // /next-client-site
 const LANDING_PAGES_GROUP = 'VyIXiRVhaz'
-const PRICING_SCREEN = 'v0clP6xQl-'
 const ROUTE = 'managed'
 const PUBLIC_VISIBILITY = 2
 
-const SITE_CARE_MONTHLY_USD = 49
-const SITE_CARE_YEARLY_USD = SITE_CARE_MONTHLY_USD * 12
-const STARTER_MONTHLY_USD = 25
-const STARTER_YEARLY_PER_MONTH_USD = 16
-const MANAGED_MONTHLY_USD = STARTER_MONTHLY_USD + SITE_CARE_MONTHLY_USD
-const MANAGED_YEARLY_PER_MONTH_USD = STARTER_YEARLY_PER_MONTH_USD + SITE_CARE_MONTHLY_USD
-const EXTRA_HOUR_USD = 79
-const LANDING_PAGE_FROM_USD = 249
-const REDESIGN_FROM_USD = 749
-const BRAND_FROM_USD = 349
+/** A dollar figure, which nothing on the page may state. */
+const FIGURE = /\$\s?\d/
 
 const CAMPAIGN = {
   name: 'Managed · Events and door to door',
@@ -146,9 +147,8 @@ const SCREEN = {
   seo: {
     title: 'Managed websites: built and kept current for you | Aglyn',
     description:
-      `Managed is an Aglyn plan with Site Care: our team builds your site and makes your changes ` +
-      `every month, within 2 business days. $${MANAGED_MONTHLY_USD} a month, or ` +
-      `$${MANAGED_YEARLY_PER_MONTH_USD} a month billed yearly.`,
+      'Managed is an Aglyn plan with Site Care: our team builds your site and makes your changes ' +
+      'every month, within 2 business days. One price covers both, with no build fee.',
   },
   versionName: 'Managed landing page (AGL-3960)',
 }
@@ -163,14 +163,15 @@ const INSTANCES = {
     lede:
       'Managed is an Aglyn plan with Site Care on top. We build your site, you look it over, and ' +
       'from then on you email us what changed (new hours, prices, photos, a new face on the team) ' +
-      `and we make the change for you. One price: $${MANAGED_MONTHLY_USD} a month, or ` +
-      `$${MANAGED_YEARLY_PER_MONTH_USD} a month billed yearly.`,
-    mockup: 'media:org:jWmGooWE3L/uQc5k6NyKH',
+      'and we make the change for you. One price covers both, monthly or yearly, with no build fee.',
+    // The Northlight studio's site live on its own domain, a frame of film C with
+    // no caption and no figure: "Northlight studio site, Film C frame".
+    mockup: 'media:org:jWmGooWE3L/dl2ylkIvsu',
     mockupAlt: 'A small business website live on its own domain, built and published with Aglyn',
     primaryCtaLabel: 'Tell us about your business',
     primaryCtaHref: '#start',
-    secondaryCtaLabel: 'See what it costs',
-    secondaryCtaHref: '#cost',
+    secondaryCtaLabel: 'See what’s included',
+    secondaryCtaHref: '#included',
   },
   'Capabilities band': {
     eyebrow: 'WHAT WE DO EACH MONTH',
@@ -218,8 +219,10 @@ const INSTANCES = {
 }
 
 /**
- * A deep-dive row: eyebrow, heading, lede, three bullets and an image. `was`
- * is the template heading this section must still carry before it is poured.
+ * A deep-dive row: eyebrow, heading, lede, three bullets, and an image or a
+ * film. `was` is the template heading this section must still carry before it
+ * is poured. A film is named by its poster frame and the live page that plays
+ * it in the film band.
  */
 const DEEP_DIVES = [
   {
@@ -245,7 +248,7 @@ const DEEP_DIVES = [
         'You already have a business to run. One email to us replaces an evening with a website builder.',
       ],
     ],
-    image: ['media:org:jWmGooWE3L/v2sbemHaD1', 'A bakery website live on its own domain, built with Aglyn'],
+    film: { poster: 'media:org:jWmGooWE3L/v2sbemHaD1', from: '24LtzlsGi4' }, // film A, from /product/ai
   },
   {
     section: 'Deep-dive · finish it',
@@ -276,18 +279,19 @@ const DEEP_DIVES = [
       'Site Care keeps the site you have up to date. Anything that adds to it, like a new page, a ' +
       'redesign or brand work, is a project with one price agreed up front, never a running meter.',
     bullets: [
-      [`Landing pages from $${LANDING_PAGE_FROM_USD}`, 'A new page for an offer, a service or an event, in your site’s style.'],
-      [`Redesigns from $${REDESIGN_FROM_USD}`, 'A new look for one page or the whole site, built on the content you already have.'],
-      [`Logo or brand kit from $${BRAND_FROM_USD}`, 'A logo, colors and fonts for your business, applied across your site.'],
+      ['Landing pages', 'A new page for an offer, a service or an event, in your site’s style.'],
+      ['Redesigns', 'A new look for one page or the whole site, built on the content you already have.'],
+      ['Logo or brand kit', 'A logo, colors and fonts for your business, applied across your site.'],
     ],
-    image: ['media:org:jWmGooWE3L/opiiHe6jgz', 'An outfitter’s website with a shop, live on its own domain'],
+    film: { poster: 'media:org:jWmGooWE3L/opiiHe6jgz', from: 'o1Q1hKCS-O' }, // film D, from /product/besigner
   },
 ]
 
-/** The "Nothing else moves" list, poured as the fair-use section. */
+/** The "Nothing else moves" list, poured as the fair-use section; the hero's `#included`. */
 const FAIR_USE = {
   section: 'Nothing else moves',
   rename: 'Fair use',
+  anchor: 'included',
   was: 'Everything you run today stays where it is.',
   badge: 'Fair use',
   heading: 'About an hour of changes a month, included.',
@@ -296,7 +300,7 @@ const FAIR_USE = {
     ['About an hour a month', 'Small changes up to about an hour of our work each month. Unused time doesn’t roll over.'],
     [
       'Extra time only with your yes',
-      `If a month needs more, we ask first. Extra time is $${EXTRA_HOUR_USD} for each started hour, and only once you’ve said yes.`,
+      'If a month needs more, we ask first. Extra time is billed only once you’ve said yes.',
     ],
     [
       'Plan limits still apply',
@@ -305,20 +309,11 @@ const FAIR_USE = {
   ],
 }
 
-/** The plans section, poured as "what it costs"; `#cost` is its anchor. */
-const COST = {
-  section: 'Plans',
-  rename: 'What it costs',
-  anchor: 'cost',
-  was: 'One client is one site.',
-  badge: 'One price',
-  heading: `$${MANAGED_MONTHLY_USD} a month. Or $${MANAGED_YEARLY_PER_MONTH_USD} a month, billed yearly.`,
-  lede:
-    'That’s Managed Starter: Aglyn’s Starter plan and Site Care together, for one site on your own ' +
-    'domain. Already on a paid Aglyn plan? Add Site Care to any of them for ' +
-    `$${SITE_CARE_MONTHLY_USD} a month, or $${SITE_CARE_YEARLY_USD} a year on yearly billing. No build fee.`,
-  primaryCta: ['Tell us about your business', '#start'],
-}
+/**
+ * The template's plans section, which is dropped with everything in it: it
+ * would only state a price. The form's section takes its background.
+ */
+const PLANS = { section: 'Plans', was: 'One client is one site.' }
 
 const FORM_SECTION = {
   section: 'Form',
@@ -353,13 +348,12 @@ const FAQ = [
   ],
   [
     'What if a month needs more than an hour?',
-    `We ask before going past it. Extra time is $${EXTRA_HOUR_USD} for each started hour, billed with ` +
-      'your next invoice, and only once you’ve said yes. Unused time doesn’t roll over.',
+    'We ask before going past it. Extra time is billed with your next invoice, and only once you’ve ' +
+      'said yes. Unused time doesn’t roll over.',
   ],
   [
     'How are bigger jobs priced?',
-    'With one flat price agreed before any work starts: landing pages from ' +
-      `$${LANDING_PAGE_FROM_USD}, redesigns from $${REDESIGN_FROM_USD}, a logo or brand kit from $${BRAND_FROM_USD}.`,
+    'With one flat price for the whole job, agreed before any work starts.',
   ],
   [
     'Can I still edit the site myself?',
@@ -367,8 +361,7 @@ const FAQ = [
   ],
   [
     'Already on a paid Aglyn plan?',
-    `Add Site Care to any paid plan for $${SITE_CARE_MONTHLY_USD} a month, or $${SITE_CARE_YEARLY_USD} a ` +
-      'year on yearly billing. It covers every site in your workspace.',
+    'Add Site Care to any paid plan, on monthly or yearly billing. It covers every site in your workspace.',
   ],
   [
     'What happens if I stop?',
@@ -385,7 +378,7 @@ const STATEMENT = {
 }
 
 /** Template text that legitimately survives the pour. */
-const KEPT_TEXT = new Set(['Frequently asked questions', 'See every plan', 'No obligation'])
+const KEPT_TEXT = new Set(['Frequently asked questions', 'No obligation'])
 
 const WRITE = process.argv.includes('--write')
 
@@ -585,8 +578,26 @@ for (const dive of DEEP_DIVES) {
   const list = one(sec, 'Bullets', dive.section)
   if (list) pourBullets(list, dive.bullets, dive.section)
   const image = one(sec, 'Deep-dive image', dive.section)
-  if (image) image.props = { ...image.props, src: dive.image[0], alt: dive.image[1] }
+  if (image && dive.film) {
+    const film = await readFilmVideo({ firestore, hostId: HOST, screenId: dive.film.from, poster: dive.film.poster })
+    if ('problem' in film) problems.push(`${dive.section}: ${film.problem}`)
+    else {
+      // The picture's place and look in the row; the band clips its player the same way.
+      nodes[image.$id] = {
+        $id: image.$id,
+        type: image.type,
+        name: 'Deep-dive video',
+        parentId: image.parentId,
+        pluginId: image.pluginId,
+        componentId: 'video',
+        props: film.props,
+        sx: { ...image.sx, overflow: 'hidden' },
+      }
+    }
+  } else if (image) image.props = { ...image.props, src: dive.image[0], alt: dive.image[1] }
   sec.name = dive.rename
+  // Its accessible name is its heading, as the fair-use and form sections' are.
+  sec.props = { ...sec.props, ariaLabel: dive.heading }
   changes.push(`${dive.rename}: ${dive.heading}`)
 }
 
@@ -609,28 +620,21 @@ function pourHeader(sec, copy, where) {
     const items = one(sec, 'Items', FAIR_USE.section)
     if (items) pourBullets(items, FAIR_USE.items, FAIR_USE.section)
     sec.name = FAIR_USE.rename
-    sec.props = { ...sec.props, ariaLabel: FAIR_USE.heading }
+    sec.props = { ...sec.props, id: FAIR_USE.anchor, ariaLabel: FAIR_USE.heading }
     changes.push(`${FAIR_USE.rename}: ${FAIR_USE.heading}`)
   }
 }
 
-// ---- what it costs --------------------------------------------------------
+// ---- the plans section goes ------------------------------------------------
 {
-  const sec = section(COST.section)
-  const header = sec && pourHeader(sec, COST, COST.section)
-  if (header) {
-    const [primary, secondary, ...extra] = kids(one(header, 'CTAs', COST.section))
-    if (!primary || !secondary || extra.length) problems.push(`${COST.section}: expected two CTA buttons`)
-    else if (secondary.props?.screenId !== PRICING_SCREEN) {
-      problems.push(`${COST.section}: the second CTA does not link the pricing page`)
-    } else {
-      const [label, href] = COST.primaryCta
-      primary.props = { ...primary.props, children: label, href }
-      primary.name = label
-    }
-    sec.name = COST.rename
-    sec.props = { ...sec.props, id: COST.anchor, ariaLabel: 'What it costs' }
-    changes.push(`${COST.rename} (#${COST.anchor}): ${COST.heading}`)
+  const sec = section(PLANS.section)
+  const header = sec && one(sec, 'Section header', PLANS.section)
+  const form = section(FORM_SECTION.section)
+  if (assertText(header && one(header, 'Heading', PLANS.section), PLANS.was, PLANS.section) && form) {
+    for (const node of [sec, ...descendants(sec)]) delete nodes[node.$id]
+    root.nodes = root.nodes.filter((id) => id !== sec.$id)
+    form.sx = { ...form.sx, bgcolor: sec.sx?.bgcolor }
+    changes.push(`${PLANS.section}: dropped; ${FORM_SECTION.section} takes its background ${sec.sx?.bgcolor}`)
   }
 }
 
@@ -727,6 +731,8 @@ let formNodeId = null
 // ---- FAQ -----------------------------------------------------------------
 {
   const sec = section('FAQ')
+  // White, so it does not sit on a grey close to the form's above it.
+  if (sec) sec.sx = { ...sec.sx, bgcolor: 'background.paper' }
   const list = sec && one(sec, 'Questions', 'FAQ')
   const items = kids(list)
   if (!items.length) problems.push('FAQ: no questions in the template')
@@ -777,6 +783,16 @@ for (const node of Object.values(nodes)) {
     }
   }
 }
+// No price anywhere on the page or in its SEO description.
+for (const node of Object.values(nodes)) {
+  const texts = [node.name, ...Object.values(node.props ?? {}), ...Object.values(node.props?.propValues ?? {})]
+  for (const text of texts) {
+    if (typeof text === 'string' && FIGURE.test(text)) {
+      problems.push(`node ${node.$id} (${node.name ?? node.componentId}) states a figure: "${text.slice(0, 60)}"`)
+    }
+  }
+}
+if (FIGURE.test(SCREEN.seo.description)) problems.push('the SEO description states a figure')
 // Every node reachable from the root, and nothing else.
 const reachable = new Set([ROOT, ...descendants(root).map((n) => n.$id)])
 for (const id of Object.keys(nodes)) if (!reachable.has(id)) problems.push(`node ${id} is not reachable`)

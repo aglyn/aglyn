@@ -9218,13 +9218,6 @@
             "editable": true
           },
           {
-            "key": "site-care-unknown-sender",
-            "name": "Site Care: sender not recognized",
-            "description": "Sent to someone who emailed the Site Care address from an address no Site Care workspace has as a member.",
-            "deliveredBy": "resend",
-            "editable": true
-          },
-          {
             "key": "site-care-project-acceptance",
             "name": "Site Care project: quote accepted",
             "description": "Sent to the workspace owner the moment staff record their yes to a flat project quote, and again, marked corrected, when the record is corrected. It is the written record of the scope and price they accepted, sent before anything is invoiced.",
@@ -14897,28 +14890,6 @@
               "name": "quote.scope",
               "description": "What the price covers",
               "sample": "A new landing page for the holiday sale, with a sign-up form."
-            },
-            {
-              "name": "brand.productName",
-              "description": "The sender's product name — the org's own on white-label",
-              "sample": "Aglyn"
-            },
-            {
-              "name": "brand.fromName",
-              "description": "Sender display name the mail is delivered under",
-              "sample": "Aglyn"
-            },
-            {
-              "name": "brand.supportUrl",
-              "description": "Where the recipient should go for help",
-              "sample": "https://app.aglyn.com/support"
-            }
-          ],
-          "site-care-unknown-sender": [
-            {
-              "name": "sender.email",
-              "description": "The address the message came from",
-              "sample": "someone@example.com"
             },
             {
               "name": "brand.productName",
