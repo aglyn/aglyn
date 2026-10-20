@@ -122,6 +122,9 @@
     "core.site.security": {
       "data": { "site": { "approvedMediaHosts": ["images.unsplash.com"], "approvedFontHosts": ["fonts.gstatic.com"], "approvedFormActions": [], "approvedFrameHosts": ["www.youtube.com"], "approvedConnectHosts": [] } }
     },
+    "core.site.delete": {
+      "data": { "erase": { "resources": [{ "pluginId": "data", "preview": { "noun": ["dataset", "datasets"], "itemNoun": ["record", "records"], "going": [{ "id": "ds-menu", "name": "Menu", "items": 12 }, { "id": "ds-leads", "name": "Leads", "items": 1 }], "staying": 1 } }] } }
+    },
     "core.staff.overview": {
       "staff": true,
       "data": { "overview": { "orgs": 1284, "payingOrgs": 212, "compedOrgs": 9, "hosts": 1730, "mrrUsd": 9420, "rollupMonth": "2026-10",
