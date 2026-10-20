@@ -25,11 +25,14 @@ import {
   BUNDLE_COUPON_MAX,
   bundleAddonLabel,
   fitBundleAddonsToPlan,
+  normalizeBundleCoupon,
+  parseBundleAddons,
   planSellsAddon,
   TOGGLE_ADDON_KIND_LIST,
   type AddonKind,
   type BundleAddons,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
+import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { UPGRADE_PROPOSAL_PLANS } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import {
@@ -75,6 +78,21 @@ export function bundleDraftBody(draft: BundleDraft): {
     addons: fitBundleAddonsToPlan(draft.addons, draft.plan).addons,
     interval: draft.interval,
     ...(coupon ? { coupon } : {}),
+  }
+}
+
+/**
+ * The draft a build for a client left for its hand-off (AGL-3958): the plan,
+ * add-ons, cadence and coupon it agreed with the owner, so the dialog opens on
+ * those rather than on the event default. Add-ons the plan does not sell are
+ * left off, as the picker would; a coupon that is not a code is left empty.
+ */
+export function bundleDraftFromClientBuildIntent(intent: ClientBuildIntent): BundleDraft {
+  return {
+    plan: intent.plan,
+    addons: fitBundleAddonsToPlan(parseBundleAddons(intent.addons).addons, intent.plan).addons,
+    interval: intent.interval,
+    coupon: normalizeBundleCoupon(intent.coupon) ?? '',
   }
 }
 

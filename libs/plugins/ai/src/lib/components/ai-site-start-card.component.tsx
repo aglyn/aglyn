@@ -554,8 +554,9 @@ export function AiSiteStartCard({
             hostId: siteId,
             kind: 'site',
             // A client build's intake rides along (AGL-3958): the name and
-            // towns as the inputs the questions leave empty, and how to reach
-            // the business, its hours and the owner's words in the brief.
+            // towns as the inputs the questions leave empty (the towns only
+            // while no address is given, AGL-3995), and how to reach the
+            // business, its hours and the owner's words in the brief.
             brief: [aiSiteStartBrief(asked), clientIntake ? aiSiteStartClientBrief(clientIntake) : '']
               .filter(Boolean)
               .join(' '),
@@ -564,7 +565,7 @@ export function AiSiteStartCard({
             // The sites they like go only while the start asks for them (AGL-3975).
             inputs: {
               ...aiSiteStartInputs(siteInspiration ? asked : { ...asked, inspiration: [] }),
-              ...(clientIntake ? aiSiteStartClientInputs(clientIntake) : {}),
+              ...(clientIntake ? aiSiteStartClientInputs(clientIntake, asked) : {}),
               [AI_JOB_AUTO_CONFIRM_INPUT]: true,
             },
             ...(pickedModel ? { model: pickedModel } : {}),

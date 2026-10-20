@@ -96,7 +96,8 @@ struct GlanceWidget: View {
   @State private var model = GlanceModel()
 
   var body: some View {
-    Group {
+    // A stack, not a Group: until the plan is read nothing is drawn, and the task still needs a view to start it on.
+    VStack(spacing: 0) {
       if let access = model.access, !access.carried {
         AglynCard("At a glance", systemImage: "square.grid.2x2") {
           Text("Included from \(access.plan ?? "a higher plan").").foregroundStyle(.secondary)
