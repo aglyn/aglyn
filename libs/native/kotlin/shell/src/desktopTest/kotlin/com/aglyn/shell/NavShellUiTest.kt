@@ -3,7 +3,10 @@ package com.aglyn.shell
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -111,6 +114,40 @@ class NavShellUiTest {
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-mark") > 0 }
     assertEquals(0, onAllNodesWithTagCount("home-tab-brand-mark"))
+  }
+
+  @Test
+  fun everyAccountsRailHasRecentAndAllAndAWorkspacesColorIsItsTileOnly() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // Zach, 2026-10-19 (AGL-4000): a one-workspace account still gets Recent (the workspace in use, recorded once the
+    // preferences load) and All workspaces with its total, which opens the picker where pins are edited; and a picked
+    // color is the tile's only, never a wash over the sidebar ("this looks green").
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = mapOf("workspaceColors" to mapOf("o1" to "#E040FB"))), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-label-recent") > 0 }
+    onNodeWithTag("rail-tile-o1").assertExists()
+    onNodeWithTag("rail-all-total", useUnmergedTree = true).assertTextContains("1")
+    assertEquals(0, onAllNodesWithTagCount("rail-label-pinned"))
+    assertEquals(1, onAllNodesWithTagCount("rail-divider"))
+    val sidebar = onNodeWithTag("nav-sidebar").captureToImage().toPixelMap()
+    val ground = sidebar[sidebar.width - 3, sidebar.height / 2]
+    // The theme's neutral ground: a pink wash would pull green well under red and blue.
+    assertTrue(kotlin.math.abs(ground.red - ground.green) < 0.03f && kotlin.math.abs(ground.blue - ground.green) < 0.03f, "sidebar ground $ground")
+    onNodeWithTag("rail-all").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-pin-o1") > 0 }
+  }
+
+  @Test
+  fun theHomeTabIsThePlainMarkEvenWhenSelected() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // Figma Titlebar/Home tab 117:16049: no plate and no border in any state (AGL-4000); the tab row's ground shows
+    // through to the mark's edge.
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-mark") > 0 }
+    val tab = onAllNodes(androidx.compose.ui.test.hasContentDescription("Home:", substring = true)).onFirst().captureToImage().toPixelMap()
+    // The tab's corner and its top-middle are the same ground (a plate's border would draw a line there).
+    assertEquals(tab[0, 0], tab[tab.width / 2, 0])
+    assertEquals(tab[0, 0], tab[0, tab.height / 2])
   }
 
   @Test

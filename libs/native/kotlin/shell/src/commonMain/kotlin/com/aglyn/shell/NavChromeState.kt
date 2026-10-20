@@ -120,7 +120,7 @@ internal class NavChromeState(private val device: KeyValueStore) {
  * color (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
  * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so the account theme's
  * own accent stays (Aglyn blue unless the person picked one). A color the person picked, or one taken from the logo, only
- * colors the rail tile and the light sidebar wash, never the accent.
+ * colors the workspace's tile, never the accent and never a surface (AGL-4000).
  */
 internal fun workspaceAccent(brandColor: String?, whiteLabel: Boolean, useWorkspaceBrand: Boolean): String? =
   brandColor?.takeIf { whiteLabel && useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
@@ -132,8 +132,9 @@ internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: Strin
 }
 
 /**
- * A workspace's color as the rail draws it and the app is tinted with: the person's pick, else its brand color, else a
- * color taken from its logo (Zach, 2026-10-18), and whether it tints the app.
+ * A workspace's color as its tile draws it (the rail, the pickers, the menus): the person's pick, else its brand color,
+ * else a color taken from its logo (Zach, 2026-10-18), and the contract's `tintsApp`. It colors the tile only; no surface
+ * wears a wash of it (AGL-4000).
  */
 @Composable
 internal fun rememberWorkspaceColor(

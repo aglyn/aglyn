@@ -206,7 +206,7 @@ private fun WorkspaceRow(
     detail = orgDetail(org, workspace),
     selected = org.id == workspace.org?.id,
     tag = "picker-org-${org.id}",
-    leading = { WorkspaceTile(org.name, light, dark, color, size = 36.dp) },
+    leading = { WorkspaceTile(org.name, light, dark, color, size = 36.dp, initials = com.aglyn.contracts.workspaceInitial(org.name)) },
     trailing = {
       TextButton(
         onClick = { if (isPinned) services.accountPrefs.unpin(org.id) else if (services.accountPrefs.pin(org.id) == PinAnswer.FULL) onPinFull(org.id) },

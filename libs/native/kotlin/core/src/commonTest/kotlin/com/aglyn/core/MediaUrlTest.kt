@@ -33,4 +33,16 @@ class MediaUrlTest {
     assertNull(mediaPreviewUrl("a bowl on a shelf", "https://console.test", null))
     assertNull(mediaPreviewUrl("media:not a ref", "https://console.test", null))
   }
+
+  @Test
+  fun anSvgIsReadAsTheCdnsPngOfIt() {
+    // A logo the decoders cannot read (an SVG) is asked of the CDN as a transparent PNG at least as wide as it was shown.
+    assertEquals("http://10.0.2.2:4410/api/media/cdn/org:o1/logo?icon=png-192", mediaRasterUrl("http://10.0.2.2:4410/api/media/cdn/org:o1/logo?w=160"))
+    assertEquals("https://c.test/api/media/cdn/h/m?v=3&icon=png-96", mediaRasterUrl("https://c.test/api/media/cdn/h/m?w=96&v=3"))
+    assertEquals("https://c.test/api/media/cdn/h/m?icon=png-192", mediaRasterUrl("https://c.test/api/media/cdn/h/m"))
+    assertEquals("https://c.test/api/media/cdn/h/m?icon=png-512", mediaRasterUrl("https://c.test/api/media/cdn/h/m?w=2000"))
+    // Off the CDN, or already a representation: nothing to ask for.
+    assertNull(mediaRasterUrl("https://example.com/logo.svg"))
+    assertNull(mediaRasterUrl("https://c.test/api/media/cdn/h/m?icon=png-32"))
+  }
 }

@@ -7,7 +7,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
@@ -78,9 +77,6 @@ val LocalShellColors = staticCompositionLocalOf { shellColors(AglynLightColorSch
 /** The shell's colors in effect. */
 val shellColors: ShellColors
   @Composable @ReadOnlyComposable get() = LocalShellColors.current
-
-/** A workspace color as the light tint the app wears while that workspace is on screen. */
-fun workspaceTint(color: Color, over: Color, dark: Boolean): Color = color.copy(alpha = if (dark) 0.16f else 0.08f).compositeOver(over)
 
 /** Text that reads on [background]: the theme's own dark or light ink, whichever contrasts more. */
 @Composable
@@ -171,6 +167,21 @@ data class ShellMetrics(
   /** The workspace header's logo and its radius (Figma Sidebar, Scope = Workspace: 20 r5 Compact, 28 r8 Touch). */
   val workspaceLogo: androidx.compose.ui.unit.Dp = 20.dp,
   val workspaceLogoRadius: androidx.compose.ui.unit.Dp = 5.dp,
+  /**
+   * The rail's captions' line height and tracking, the hairline between its sections, the All workspaces tile (its box's
+   * height, the gap to its total, the total's size and weight), the foot buttons' icon and the rail's foot padding (Figma
+   * Rail 12:338: Compact 97:14728, Touch 12:295).
+   */
+  val railLabelLine: androidx.compose.ui.unit.TextUnit = 12.sp,
+  val railLabelTracking: androidx.compose.ui.unit.TextUnit = 0.36.sp,
+  val railDivider: androidx.compose.ui.unit.Dp = 24.dp,
+  val allTileHeight: androidx.compose.ui.unit.Dp = 66.dp,
+  val allTileGap: androidx.compose.ui.unit.Dp = 3.dp,
+  val allTileTotal: androidx.compose.ui.unit.TextUnit = 10.sp,
+  val allTileTotalBold: Boolean = true,
+  val allTileIcon: androidx.compose.ui.unit.Dp = 16.dp,
+  val utilityIcon: androidx.compose.ui.unit.Dp = 16.dp,
+  val railFoot: androidx.compose.ui.unit.Dp = 12.dp,
 )
 
 val CompactShellMetrics = ShellMetrics(
@@ -182,12 +193,14 @@ val CompactShellMetrics = ShellMetrics(
 )
 
 val TouchShellMetrics = ShellMetrics(
-  compact = false, railWidth = 64.dp, tile = 40.dp, tileRadius = 10.dp, badge = 18.dp, railLabel = 10.sp, tileGap = 8.dp, utility = 36.dp,
+  compact = false, railWidth = 64.dp, tile = 40.dp, tileRadius = 10.dp, badge = 18.dp, railLabel = 11.sp, tileGap = 8.dp, utility = 36.dp,
   sidebarWidth = 248.dp, row = 36.dp, rowText = 15.sp, rowIcon = 18.dp, pillRadius = 8.dp, rowInset = 8.dp, headerLogo = 20.dp,
   headerLogoRadius = 6.dp, titleBar = 56.dp, controlRadius = 8.dp, cardRadius = 12.dp, sheetRadius = 16.dp, barButton = 40.dp, barIcon = 20.dp,
-  ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 22.dp, utilityRadius = 10.dp, avatar = 32.dp, groupHeader = 28.dp, tileInitial = 16.sp,
+  ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 24.dp, utilityRadius = 8.dp, avatar = 32.dp, groupHeader = 28.dp, tileInitial = 17.sp,
   sidebarPad = 12.dp, rowPad = 10.dp, rowGap = 10.dp, groupIndent = 12.dp, groupChevron = 14.dp, dividerPad = 6.dp, siteTitleText = 16.sp, modeTitleText = 18.sp,
   workspaceLogo = 28.dp, workspaceLogoRadius = 8.dp,
+  railLabelLine = 16.sp, railLabelTracking = 0.6.sp, railDivider = 28.dp, allTileGap = 4.dp, allTileTotal = 12.sp, allTileTotalBold = false,
+  allTileIcon = 18.dp, utilityIcon = 20.dp, railFoot = 16.dp,
 )
 
 val LocalShellMetrics = staticCompositionLocalOf { TouchShellMetrics }
