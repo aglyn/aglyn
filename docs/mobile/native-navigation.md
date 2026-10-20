@@ -180,6 +180,7 @@ their area. The final review should look at both placements.
 | field | shape | cap | written by |
 | -- | -- | -- | -- |
 | `pinnedOrgs` | workspace ids, in the person's order | 5; a longer list may only shrink | console chooser, app rail and switcher |
+| `pinnedHosts` | `PinnedHost[]`: `orgId`, `hostId`, in the order pinned | 5 a workspace in the console; 100 in all | console Sites list (the site switcher lists them first) |
 | `recentOrgs` | workspace ids, newest first | 8 | app, on opening a workspace |
 | `starred` | `StarredItem[]`: `kind`, `id`, `orgId`, `hostId?`, `label`, `screen`, `params?`, `color?`, `starredAtMs` | 50 | app ☆ |
 | `recents` | `RecentItem[]`: the same reference, plus `openedAtMs` | 30 | app, on opening a screen or record |
