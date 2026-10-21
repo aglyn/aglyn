@@ -70,7 +70,6 @@
  */
 import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import { getApp } from 'firebase-admin/app'
-import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
@@ -500,7 +499,12 @@ const workspaceProbe = memoizeWithTtl<{
     if (docs.length === 0) return { accounts: [], ms: Date.now() - startedAt }
     const verified = new Set<string>()
     for (let index = 0; index < docs.length; index += 100) {
-      const { users } = await getAuth(app).getUsers(
+      // Through the wrapped admin app, never a raw `getAuth` handle
+      // (token-revocation-coverage).
+      const { users } = await firebaseAdmin
+        .app()
+        .auth()
+        .getUsers(
         docs.slice(index, index + 100).map((doc) => ({ uid: doc.id })),
       )
       for (const user of users) if (user.emailVerified) verified.add(user.uid)

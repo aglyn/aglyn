@@ -101,11 +101,6 @@ jest.mock('firebase-admin/app', () => ({
   getApp: () => ({}),
 }))
 
-jest.mock('firebase-admin/auth', () => ({
-  __esModule: true,
-  getAuth: () => ({ getUsers: (ids: { uid: string }[]) => mockGetUsers(ids) }),
-}))
-
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   getFirestore: () => ({
@@ -192,7 +187,12 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  firebaseAdmin: {},
+  // AGL-4021: the workspace check asks Auth which accounts are verified.
+  firebaseAdmin: {
+    app: () => ({
+      auth: () => ({ getUsers: (ids: { uid: string }[]) => mockGetUsers(ids) }),
+    }),
+  },
   RATE_LIMIT_COLLECTION: 'rateLimits',
   SIGNUP_REFUSAL_DOC_PREFIX: 'signupRefused_',
   SIGNUP_SERVED_DOC_PREFIX: 'signupServed_',
