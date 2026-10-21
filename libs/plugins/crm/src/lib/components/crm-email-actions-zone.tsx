@@ -21,38 +21,23 @@ import {
   type ConsoleWidgetSlotRenderer,
   useConsoleWidgetSlot,
 } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { useCrmScope, type CrmOrgDoc } from '../hooks/use-crm-scope'
+import {
+  CRM_RECORD_EMAIL_ACTIONS_ZONE,
+  type CrmRecordEmailActionsZoneProps,
+} from './crm-email-actions-zone-token'
 
-/**
- * Another way to write to the person, drawn before **Send email** by
- * whichever plugin keeps a conversation with them (AGL-4020).
- *
- * The CRM's one-to-one composer starts a NEW message from the site's sending
- * address. A person who answered a sequence email is in a thread another
- * plugin keeps, in a member's own mailbox, and the answer belongs in that
- * thread from that mailbox — which only that plugin can send. So the record
- * header hosts this zone ahead of its own button and hands it the person; a
- * plugin with a thread to answer draws its control here, and where none has
- * one the header shows Send email alone.
+/*
+ * The `crmRecordEmailActions` zone a contact's and a lead's header host
+ * before Send email (AGL-4020). The token and its props live in
+ * `./crm-email-actions-zone-token`, which the plugin's register module
+ * declares without loading this component.
  */
-export type CrmEmailActionsRecordKind = 'contact' | 'lead'
-
-export interface CrmRecordEmailActionsZoneProps {
-  /** The site the page is under, or the record's capturing site; `null` at the organization level for a record no site captured. */
-  hostId: string | null
-  /** The organization the record belongs to; `undefined` while it resolves. */
-  orgId: string | undefined
-  kind: CrmEmailActionsRecordKind
-  recordId: string
-  /** The record's name as the page shows it. */
-  name: string
-  /** The record's address, `null` for one that has none. */
-  email: string | null
-}
-
-export const CRM_RECORD_EMAIL_ACTIONS_ZONE =
-  definePluginZone<CrmRecordEmailActionsZoneProps>('crmRecordEmailActions')
+export {
+  CRM_RECORD_EMAIL_ACTIONS_ZONE,
+  type CrmEmailActionsRecordKind,
+  type CrmRecordEmailActionsZoneProps,
+} from './crm-email-actions-zone-token'
 
 type CrmRecordEmailActionsZoneInput = Omit<CrmRecordEmailActionsZoneProps, 'orgId'> & { org?: CrmOrgDoc }
 
