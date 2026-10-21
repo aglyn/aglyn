@@ -66,6 +66,8 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { withExportTempCleanup } from './lib/xcode-export-temp.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const TEAM_ID = 'R3B7G75SWA'
 const OUT = process.env.AGLYN_RELEASE_DIR || '/private/tmp/aglyn-release'
@@ -226,17 +228,21 @@ function iosUpload(archive) {
 </plist>
 `,
   )
+  // The export leaves a ~300 MB XcodeDistPipeline.~~~* staging folder in the
+  // temp folder; the cleanup removes the one this export made.
   withLock('/private/tmp/aglyn-xcodebuild.lock', () =>
-    run('xcodebuild', [
-      '-exportArchive',
-      '-archivePath',
-      archive,
-      '-exportOptionsPlist',
-      options,
-      '-exportPath',
-      exportPath,
-      '-allowProvisioningUpdates',
-    ]),
+    withExportTempCleanup(() =>
+      run('xcodebuild', [
+        '-exportArchive',
+        '-archivePath',
+        archive,
+        '-exportOptionsPlist',
+        options,
+        '-exportPath',
+        exportPath,
+        '-allowProvisioningUpdates',
+      ]),
+    ),
   )
   console.log(
     `\nUploaded ${basename(archive)} to App Store Connect; it shows in TestFlight once processed.`,

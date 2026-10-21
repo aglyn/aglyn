@@ -525,6 +525,13 @@ jobs:
       # A Playwright upgrade that moves that list fails here. Pure node.
       - run: npm run test:chrome-executable
 
+      # test:xcode-export-temp  native-release.mjs's export cleanup: removes
+      # the ~300 MB XcodeDistPipeline.~~~* staging folder its own
+      # `xcodebuild -exportArchive` made (forty had piled up), and keeps any
+      # that was there before, which may be a running Organizer export. Pure
+      # node.
+      - run: npm run test:xcode-export-temp
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
