@@ -169,7 +169,6 @@ import { readAttributeFieldValue } from '../utils/attribute-field-value'
 import { besignerDocsUrl } from '../utils/docs-help'
 import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import { numericTextValue } from '../utils/numeric-text-value'
-import ElementInfoDetails from './element-info-details.component'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import useRepeatSources from '../hooks/use-repeat-sources'
 import {
@@ -2999,13 +2998,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     Delete Element
                   </Button>
                 </FormControl>
-                {/* What this element IS: the component's own
-                    description and the node's ids, in two collapsed
-                    accordions. They were a tab of their own, which cost every
-                    reader a third of the panel's header for reference detail
-                    most of them never open. Last, and closed, so they cost
-                    nothing until wanted. */}
-                <ElementInfoDetails node={node} />
+                {/* The element's description and ids follow, full width,
+                    from the panel that holds this form — see
+                    `ElementPropsFormWithExtras`. */}
               </>
             )}
           </FormRenderer>

@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useMergeRefs } from '@aglyn/shared-ui-jsx'
@@ -25,7 +24,9 @@ import { _isFnT } from '@aglyn/shared-util-tools'
 import {
   DragEndEvent,
   DragMoveEvent,
+  DragOverEvent,
   DragStartEvent,
+  type UniqueIdentifier,
   useDndMonitor,
 } from '@dnd-kit/core'
 import { getEventCoordinates } from '@dnd-kit/utilities'
@@ -43,6 +44,7 @@ import {
 } from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
+import { resolveTargetRegion } from './dnd/drop-targeting'
 import type { AsidePanelComponentProps } from './aside-panel.component'
 import { WorkspacePanelDragContext } from './workspace-panel.component'
 import ViewportZoomControls from './viewport-zoom-controls'
@@ -205,46 +207,58 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
     // Null-safe: surfaces render without a snackbar provider in tests.
     const { enqueueSnackbar } = useSnackbar() ?? {}
 
+    /**
+     * The target last resolved, so a region can hold on against hand tremor
+     * on the same target and start fresh on a new one.
+     */
+    const lastOverId = useRef<UniqueIdentifier | null>(null)
+    const trackDropTarget = ({ over }: DragMoveEvent | DragOverEvent) => {
+      const previous =
+        over && over.id === lastOverId.current ? Besigner.dnd.dropRegion : null
+      lastOverId.current = over?.id ?? null
+      // Both viewport-relative: target rects and client coordinates. A
+      // keyboard drag has no pointer of its own; it keeps reading the last
+      // place the pointer was, as it always has.
+      Besigner.dnd.setDropRegion(
+        resolveTargetRegion(over, pointer.current, previous),
+      )
+      Besigner.dnd.setDropNode(over?.data.current?.node)
+    }
+
     useDndMonitor({
       onDragMove(event: DragMoveEvent): void {
-        let region: Besigner.DropRegion = null
-        // A keyboard drag has no pointer of its own; it keeps reading the
-        // last place the pointer was, as it always has.
-        const at = pointer.current
-        if (event.over && at) {
-          // Both viewport-relative: dnd-kit rects and client coordinates.
-          const overNode = event.over.data.current?.node
-          region = Besigner.determineDropRegion(
-            event.over.rect,
-            at.x,
-            at.y,
-            // Leaves (self-closing / text-editable) never offer a CHILDREN
-            // region — the center reads as a sibling insert, matching where
-            // the drop actually lands (see dnd-manager onDragEnd).
-            overNode ? canvas.nodeAcceptsChildren(overNode) : true,
-          )
-          event.over.data.current.region = region
-        }
-        Besigner.dnd.setDropRegion(region)
-        Besigner.dnd.setDropNode(event.over?.data.current.node)
-
+        trackDropTarget(event)
         event.activatorEvent.stopPropagation()
       },
+      // The target can change without the pointer moving — the hierarchy
+      // scrolls, or a target re-measures — and the move that follows would
+      // be the first to notice.
+      onDragOver: trackDropTarget,
       onDragStart({ active, activatorEvent }: DragStartEvent) {
+        lastOverId.current = null
         // The gesture that started the drag is the freshest position there
         // is — a touch hold may not have moved since it went down.
         const start = getEventCoordinates(activatorEvent)
         if (start) pointer.current = start
         const node = active?.data.current.node
+        // A fresh drag starts from nothing: a target left over from an
+        // earlier drag would mark this one's ancestors as dropped-on before
+        // the pointer has gone anywhere.
+        Besigner.dnd.clearDndStatus()
         Besigner.dnd.setDragNode(node)
         setDragging(active?.data.current?.type === Besigner.DragType.PRESET)
       },
       onDragCancel() {
         setDragging(false)
+        // Escape, or a sensor giving up: nothing lands, and nothing may stay
+        // marked as in flight or as the target.
+        lastOverId.current = null
+        Besigner.dnd.clearDndStatus()
       },
       onDragEnd(e: DragEndEvent) {
         e.activatorEvent.stopPropagation()
         setDragging(false)
+        lastOverId.current = null
         // Below `md` the palette's drawer overlays the canvas; after a drop
         // from it the canvas is what the author wants to see.
         if (
@@ -255,9 +269,17 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
           setLeftToggled(false)
           setRightToggled(false)
         }
-        // Compute before completing the drag — onDragEnd clears dnd state.
-        const rejection = Besigner.dnd.describeDropRejection()
-        Besigner.dnd.onDragEnd()
+        let rejection: string | null
+        try {
+          // Compute before completing the drag — onDragEnd clears dnd state.
+          rejection = Besigner.dnd.describeDropRejection()
+          Besigner.dnd.onDragEnd()
+        } finally {
+          // However the drop went, the drag is over. A throw above used to
+          // skip the clear and leave the grey wash on whatever was dragged
+          // and dropped on until the next drag.
+          Besigner.dnd.clearDndStatus()
+        }
         if (rejection) {
           enqueueSnackbar?.(rejection, { variant: 'warning', persist: false })
         }
