@@ -73,7 +73,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'outreach',
     apiPrefixes: ["outreach"],
     register: {"console":"registerOutreachConsole"},
-    contributes: {"console":{"slots":["transferResources"],"shell":true,"orgRoutes":["/outreach"]}},
+    contributes: {"console":{"slots":["crmRecordEmailActions","transferResources"],"shell":true,"orgRoutes":["/outreach"]}},
     load: () => import('@aglyn/plugins-outreach'),
   },
   {

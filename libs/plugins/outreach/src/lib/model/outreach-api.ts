@@ -27,6 +27,7 @@
 
 import type { OutreachComposeError } from '../engine/compose'
 import type { OutreachGatewayStanding } from '../engine/mail-gateway'
+import type { OutreachManualReplyRefusalCode } from '../engine/manual-reply'
 import type { OutreachValidationIssue } from '../engine/sequence-validation'
 import type { OutreachComplianceIssue } from './compliance-settings'
 import type {
@@ -34,8 +35,11 @@ import type {
   OutreachComplianceSettingsDocument,
   OutreachDoNotContactDomainEntry,
   OutreachEnrollment,
+  OutreachInboundMessage,
+  OutreachMailbox,
   OutreachSequence,
   OutreachStepOverrideSource,
+  OutreachStepRecord,
 } from './outreach.types'
 import type { OutreachSequenceDraft, OutreachSequenceIssue } from './sequence-draft'
 
@@ -76,6 +80,12 @@ export type OutreachRouteRefusalReason =
   | 'invalid-override'
   /** The step to begin enrolling at is not one the sequence has (AGL-3228). */
   | 'invalid-start-step'
+  /** An answer to a person who wrote back cannot go now: a list, their state, the mailbox (AGL-4020). */
+  | 'reply-refused'
+  /** The enrollment kept nothing the person wrote, and the mailbox held none either (AGL-4020). */
+  | 'nothing-to-answer'
+  /** An answer to them is already being sent (AGL-4020). */
+  | 'reply-in-flight'
 
 /** A refusal, in the one shape every route answers with. */
 export interface OutreachRouteRefusal {
@@ -330,6 +340,65 @@ export interface OutreachEnrollmentActionResponse {
   enrollment: OutreachEnrollment
   /** Other open enrollments of the same address a do-not-contact stopped. */
   stoppedOthers: number
+}
+
+/*==========================================
+ * ANSWERING A PERSON WHO WROTE BACK (AGL-4020)
+ *==========================================*/
+
+/** `POST outreach/enrollments/thread` — what the reply composer opens with. */
+export interface OutreachEnrollmentThreadRequest {
+  orgId: string
+  enrollmentId: string
+}
+
+/** Where an answer would go, from what, under what subject. */
+export interface OutreachReplyDraft {
+  /** The provider id of the message it answers: the newest the person wrote. */
+  answerId: string
+  to: string
+  subject: string
+  from: { address: string; name: string; provider: OutreachMailbox['provider'] }
+}
+
+export interface OutreachEnrollmentThreadResponse {
+  ok: true
+  /** The enrollment as stored, with anything the mailbox read added to it. */
+  enrollment: OutreachEnrollment
+  /** What the person wrote, oldest first. */
+  inboundMessages: OutreachInboundMessage[]
+  /** `null` when they wrote nothing that could be read. */
+  draft: OutreachReplyDraft | null
+  /** Why an answer cannot go now, in a sentence; `null` when it can. */
+  refusal: { code: OutreachManualReplyRefusalCode; message: string } | null
+  /** Whether the mailbox was read for messages the enrollment had not kept. */
+  readMailbox: boolean
+}
+
+/** `POST outreach/enrollments/reply` — sends a member's answer in the thread. */
+export interface OutreachEnrollmentReplyRequest {
+  orgId: string
+  enrollmentId: string
+  /** What the member wrote: plain text. */
+  body: string
+  /** The message it answers, by its provider id; the newest the person wrote when omitted. */
+  answerId?: string
+  /**
+   * A key the composer mints once per answer, which becomes the answer's
+   * `Message-ID`: a retry of the same answer is recognised, never sent twice.
+   */
+  replyKey?: string
+}
+
+export interface OutreachEnrollmentReplyResponse {
+  ok: true
+  enrollment: OutreachEnrollment
+  /** The `manual_reply` record the answer was kept as. */
+  record: OutreachStepRecord
+  sentTo: string
+  subject: string
+  /** The same answer had already been sent: nothing went out again. */
+  alreadySent: boolean
 }
 
 /*==========================================

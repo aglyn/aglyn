@@ -74,6 +74,14 @@ export const OUTREACH_API_ROUTES = {
   /** `POST` — the mail gateway in front of one enrolled person's domain (AGL-3332). */
   enrollmentsGateway: 'outreach/enrollments/gateway',
   /**
+   * `POST` — what the person wrote back and where an answer would go
+   * (AGL-4020): the reply composer's opening read, which reads the mailbox
+   * for a reply synced before replies were kept.
+   */
+  enrollmentsThread: 'outreach/enrollments/thread',
+  /** `POST` — sends a member's answer in the person's thread, from the enrollment's mailbox (AGL-4020). */
+  enrollmentsReply: 'outreach/enrollments/reply',
+  /**
    * `GET ?orgId` — the domains on the organization's do-not-contact list
    * (AGL-3244); `POST` — add one, or take one off.
    */
