@@ -58,6 +58,26 @@ import {
 } from '../../utils/instance-leaf-hit'
 import { pickPlacementPart } from '../../utils/placement-part-pick'
 import { findLeafTextElement } from '../../utils/in-place-edit-surface'
+import { holdKeyboardForEdit } from '../../utils/touch-keyboard'
+import { DropSurface } from './drop-surface'
+
+/** A pointer position, from a mouse event or a touch. */
+type ClientPoint = { clientX: number; clientY: number }
+
+/** A finger's position and the event time it was read at. */
+type TapPoint = { x: number; y: number; at: number }
+
+/** The furthest a finger may slide and still be tapping, in px. */
+const TAP_SLOP_PX = 10
+/** The longest a press may last and still be a tap, in ms; longer is a hold. */
+const TAP_MAX_MS = 300
+/** How soon the second tap of a double-tap must follow the first, in ms. */
+const DOUBLE_TAP_WITHIN_MS = 350
+/** How far from the first tap the second may land, in px. */
+const DOUBLE_TAP_SLOP_PX = 24
+
+const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.hypot(a.x - b.x, a.y - b.y)
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
   children: JSX.Element
@@ -81,6 +101,7 @@ export const DraggableDroppable = observer(
       idSuffix,
     } = props
     const id = useId(node?.$id)
+    const ref = useRef<HTMLElement>(null)
 
     const draggable = useDraggable({
       id: `${id}:${type}${idSuffix || ''}`,
@@ -90,7 +111,15 @@ export const DraggableDroppable = observer(
 
     const droppable = useDroppable({
       id: `${id}:${type}${idSuffix || ''}`,
-      data: { type, node, accept },
+      data: {
+        type,
+        node,
+        accept,
+        surface: DropSurface.CANVAS,
+        // Measured live by the drop marker: dnd-kit's cached rect cannot
+        // follow the canvas scrolling from inside its shadow root.
+        getElement: () => ref.current,
+      },
       disabled: disableDropping,
     })
 
@@ -145,8 +174,6 @@ export const DraggableDroppable = observer(
         : {}),
     }
 
-    const ref = useRef<HTMLElement>(null)
-
     // Instance-internals double-click (AGL-1304) needs the component
     // definitions (hit-test) and the host's media picker (image props).
     // Read through a ref so the listener effect below keeps its `[node]`
@@ -184,6 +211,12 @@ export const DraggableDroppable = observer(
        * press that selects an element must not also pick it up.
        */
       let selectedAtPress = false
+      /** Where and when the finger on this element came down. */
+      let pressStart: TapPoint | null = null
+      /** The last quick, still tap on this element, waiting for its pair. */
+      let lastTap: TapPoint | null = null
+      /** When a double-tap opened an editor here, by event time. */
+      let editOpenedByTapAt = -Infinity
       if (el) {
         el.addEventListener('mouseover', handleMouseOver)
         el.addEventListener('pointerover', handleMouseOver)
@@ -192,6 +225,7 @@ export const DraggableDroppable = observer(
         el.addEventListener('dblclick', handleDoubleClick)
         el.addEventListener('contextmenu', handleContextMenu)
         el.addEventListener('touchstart', handleTouchStart)
+        el.addEventListener('touchend', handleTouchEnd)
 
         return () => {
           el.removeEventListener('mouseover', handleMouseOver)
@@ -201,6 +235,7 @@ export const DraggableDroppable = observer(
           el.removeEventListener('dblclick', handleDoubleClick)
           el.removeEventListener('contextmenu', handleContextMenu)
           el.removeEventListener('touchstart', handleTouchStart)
+          el.removeEventListener('touchend', handleTouchEnd)
         }
       }
       /**
@@ -220,12 +255,78 @@ export const DraggableDroppable = observer(
        * cannot claim the same touch.
        */
       function handleTouchStart(e: TouchEvent) {
+        const touch = e.touches.length === 1 ? e.touches[0] : undefined
+        pressStart = touch
+          ? { x: touch.clientX, y: touch.clientY, at: e.timeStamp }
+          : null
         const selected = selectedAtPress
         selectedAtPress = false
         if (!selected || isInlineEditWithin(el) || Besigner.pick.isPicking()) {
           return
         }
         listenersRef.current?.onTouchStart?.({ nativeEvent: e } as any)
+      }
+      /**
+       * Double-tap a text element to edit it in place on a touch screen.
+       *
+       * A mouse gets there by `dblclick`, and on a touch screen that event is
+       * the browser's to give. Chrome on Android turns two taps into one; on
+       * a phone the in-place editor, and the B / I / U toolbar that comes
+       * with it, did not open. So the two taps are counted here, by rules
+       * that are this canvas's own rather than each browser's, and the same
+       * open runs.
+       *
+       * Opening this way also puts the keyboard up (`holdKeyboardForEdit`),
+       * which iOS only allows while the tap is still being handled — and the
+       * `preventDefault` keeps Safari from zooming on the second tap, or
+       * sending the `dblclick` Chrome would have sent after it.
+       *
+       * Two taps make a double-tap when each is quick and still, and the
+       * second lands near the first soon after it. A hold is a drag, a slide
+       * is a scroll, and neither counts.
+       */
+      function handleTouchEnd(e: TouchEvent) {
+        const start = pressStart
+        pressStart = null
+        const touch = e.changedTouches[0]
+        if (
+          !start ||
+          !touch ||
+          e.touches.length > 0 ||
+          // Inside an open edit, a double-tap selects a word.
+          isInlineEditWithin(el) ||
+          Besigner.pick.isPicking()
+        ) {
+          lastTap = null
+          return
+        }
+        const tap = { x: touch.clientX, y: touch.clientY, at: e.timeStamp }
+        if (
+          distance(tap, start) > TAP_SLOP_PX ||
+          tap.at - start.at > TAP_MAX_MS
+        ) {
+          lastTap = null
+          return
+        }
+        const first = lastTap
+        lastTap = tap
+        if (
+          !first ||
+          tap.at - first.at > DOUBLE_TAP_WITHIN_MS ||
+          distance(tap, first) > DOUBLE_TAP_SLOP_PX
+        ) {
+          return
+        }
+        lastTap = null
+        if (!openEditAt({ clientX: tap.x, clientY: tap.y })) return
+        e.preventDefault()
+        e.stopPropagation()
+        editOpenedByTapAt = e.timeStamp
+        // A prop-fed image opens the media picker instead, which wants no
+        // keyboard.
+        if (inlineTextEdit.node || inlineMarkdownEdit.node) {
+          holdKeyboardForEdit(tap)
+        }
       }
       /**
        * Right-click opens this element's ⋮ menu (AGL-1405).
@@ -348,6 +449,24 @@ export const DraggableDroppable = observer(
         pickPlacementPart(node.$id, key ?? '')
       }
       function handleDoubleClick(e: Event) {
+        // The `dblclick` a browser may still send for two taps that already
+        // opened an editor (see handleTouchEnd): consumed, not run twice.
+        if (e.timeStamp - editOpenedByTapAt < DOUBLE_TAP_WITHIN_MS * 2) {
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
+        if (!openEditAt(e as globalThis.MouseEvent)) return
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      /**
+       * Opens this element's in-place editor for a double-click or a
+       * double-tap at `point`, and says whether one opened — which is also
+       * whether the gesture is spent here or goes on to an ancestor.
+       */
+      function openEditAt(point: ClientPoint): boolean {
+        if (!el) return false
         // Prop-fed instance internals (AGL-1304): the rendered preview sits
         // under `pointer-events: none`, so the double-click lands HERE, on
         // the instance — hit-test the preview geometrically, map the grafted
@@ -359,24 +478,20 @@ export const DraggableDroppable = observer(
           node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID &&
           Besigner.dnd.canDragNode(node)
         ) {
-          if (handleInstanceDoubleClick(e as globalThis.MouseEvent)) {
-            e.preventDefault()
-            e.stopPropagation()
-          }
-          return
+          return handleInstanceDoubleClick(point)
         }
         // Locked nodes (layout chrome in the screen besigner) stay read-only —
         // same gate the drag system uses — and while the interaction builder
         // is picking a target, a double-click is two picks, never an edit.
-        if (!Besigner.dnd.canDragNode(node) || Besigner.pick.isPicking()) return
+        if (!Besigner.dnd.canDragNode(node) || Besigner.pick.isPicking()) {
+          return false
+        }
         // Inline text editing for components that declare textEditable.
         const flag = node?.componentSchema?.flags?.textEditable
         const editable =
           typeof flag === 'number' && (flag & FEATURE_FLAG.ENABLED) !== 0
         if (editable) {
-          e.preventDefault()
-          e.stopPropagation()
-          const root = e.currentTarget as Element
+          const root = el
           // The node's own `<aglyn-text>` whenever it renders one, and the
           // root only as a fallback (AGL-2556). In-place editing EMPTIES
           // whatever it is given, so handing it a composite's root deletes
@@ -399,7 +514,7 @@ export const DraggableDroppable = observer(
             // re-measure on scroll instead of drifting (AGL-1644).
             element,
           )
-          return
+          return true
         }
         // In-place markdown editing (AGL-1624): a component whose schema
         // declares a MARKDOWN attribute — the Markdown element's `content` is
@@ -412,10 +527,8 @@ export const DraggableDroppable = observer(
         // double-click-to-zoom. That is the same guarantee the textEditable
         // branch above has always relied on, not a new mechanism.
         const markdownAttribute = findMarkdownAttributeName(node)
-        if (!markdownAttribute) return
-        e.preventDefault()
-        e.stopPropagation()
-        const markdownElement = e.currentTarget as Element
+        if (!markdownAttribute) return false
+        const markdownElement = el
         const markdownRect = markdownElement.getBoundingClientRect()
         const stored = (node.props as Record<string, unknown> | undefined)?.[
           markdownAttribute
@@ -438,9 +551,10 @@ export const DraggableDroppable = observer(
           typeof stored === 'string' ? stored : '',
           markdownElement,
         )
+        return true
       }
       /** True when the double-click resolved to a prop edit it opened. */
-      function handleInstanceDoubleClick(pointer: globalThis.MouseEvent) {
+      function handleInstanceDoubleClick(pointer: ClientPoint) {
         const { definitions, onPickMedia } = instanceEditRef.current
         const refId = (node?.props as { refId?: string } | undefined)?.refId
         const definition = refId ? definitions?.[refId] : undefined
