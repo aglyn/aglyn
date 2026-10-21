@@ -932,12 +932,20 @@ Your answer:
 - **Is kept with the person.** Their page's **Activity** lists it as
   **Answered in the thread**, with your words and who sent it, and their CRM
   record's timeline lists it as an email from the mailbox.
+- **Carries tracked links, on a sequence that
+  [counts link clicks](#sequence-sending-settings).** The links you write
+  become the same short links the sequence's emails carry, on your
+  [link domain](#link-domains) when you've set one up. A click on one shows
+  on the person's **Activity** as *From an answer in the thread*. The message
+  you're answering, quoted beneath yours, is left as they wrote it. On a
+  sequence that doesn't count clicks, your links go out as you wrote them.
 - **Leaves the sequence where it is.** A replied enrollment stays **Replied**.
   One still running after an out-of-office keeps its next step, and that step
   answers in the same thread.
 - **Isn't one of the sequence's emails.** It doesn't count against the
   mailbox's [daily cap](#daily-cap), doesn't count toward the bounce rate that
-  [pauses a mailbox](#auto-pause), and isn't in the sequence's results. The
+  [pauses a mailbox](#auto-pause), and isn't in the sequence's results —
+  nor are clicks on its links, which count for the person alone. The
   mailbox's card counts them on their own, as **Answers to replies today**.
 
 The rules for cold emails — the [allowed countries](#allowed-countries) and

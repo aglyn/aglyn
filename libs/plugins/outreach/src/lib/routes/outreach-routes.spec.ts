@@ -2401,7 +2401,19 @@ describe('outreach/enrollments/thread and outreach/enrollments/reply (AGL-4020)'
   const replyDeps = (): OutreachReplyDeps => ({
     openMailbox: async () => ({ ok: true, client: gmail, credential: {} as never }),
     consumeRateLimit: async () => ({ allowed: !limited }),
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      `${trackingOrigin ?? 'https://console.example.com/api/outreach/l'}/${linkId}`,
+    clickLinkOrigin: async () => 'https://links.example.com',
   })
+  /** The sequence the enrollment runs through, tracking link clicks or not (AGL-4022). */
+  const sequenceTracking = (trackClicks: boolean) =>
+    docs.set(org('outreachSequences/seq-1'), {
+      ...draft(),
+      status: 'active',
+      settings: { ...draft().settings, trackClicks },
+      createdAtMs: AT - 3 * 86_400_000,
+      updatedAtMs: AT - 3 * 86_400_000,
+    })
   const thread = () => createOutreachEnrollmentThreadRoute(deps(), replyDeps())
   const reply = () => createOutreachEnrollmentReplyRoute(deps(), replyDeps())
   const stored = () => docs.get(org(`outreachEnrollments/${ENROLLMENT}`)) as Data
@@ -2633,6 +2645,50 @@ describe('outreach/enrollments/thread and outreach/enrollments/reply (AGL-4020)'
 
     seed({ status: 'active', stopReason: null, stoppedAtMs: null, syncedMessageIds: [], gmailThreadIds: ['th-empty'], gmailThreadId: 'th-empty' })
     expect((await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi' })).body.reason).toBe('nothing-to-answer')
+  })
+
+  it('sends the links in the answer as tracked short links on a sequence that counts clicks — never the quoted ones (AGL-4022)', async () => {
+    seed()
+    sequenceTracking(true)
+    theirReply({ text: 'Sounds good. Our site is https://their-site.example.org — what would it cost?' })
+    const read = await post(thread(), REP, { enrollmentId: ENROLLMENT })
+    expect(read.body.draft).toMatchObject({ tracksLinks: true })
+    const { status, body } = await post(reply(), REP, {
+      enrollmentId: ENROLLMENT,
+      body: 'Pick a time: https://calendar.example.com/book/zach.',
+      replyKey: 'reply-key-0003',
+    })
+    expect(status).toBe(200)
+    const sentBody = gmail.sent[0].body.replace(/=\r\n/g, '')
+    expect(sentBody).not.toContain('https://calendar.example.com/book/zach')
+    expect(sentBody).toMatch(/Pick a time: https:\/\/links\.example\.com\/[A-Za-z0-9]{10}\./)
+    // Their words, quoted, are theirs: never rewritten.
+    expect(sentBody).toContain('> Sounds good. Our site is https://their-site.example.org')
+    const links = [...docs.entries()].filter(([key]) => key.startsWith('outreachLinks/'))
+    expect(links).toHaveLength(1)
+    expect(links[0][1]).toMatchObject({
+      v: 1,
+      orgId: ORG,
+      enrollmentId: ENROLLMENT,
+      stepIndex: 1,
+      linkIndex: 0,
+      url: 'https://calendar.example.com/book/zach',
+      answerKey: 'reply-key-0003',
+    })
+    expect(sentBody).toContain(`https://links.example.com/${links[0][0].slice('outreachLinks/'.length)}`)
+    expect(body.record).toMatchObject({ kind: 'manual_reply', links: ['https://calendar.example.com/book/zach'], replyKey: 'reply-key-0003' })
+    expect(body.record.body).toMatch(/^Pick a time: https:\/\/links\.example\.com\//)
+  })
+
+  it('sends the links as written on a sequence that does not count clicks', async () => {
+    seed()
+    sequenceTracking(false)
+    theirReply()
+    expect((await post(thread(), REP, { enrollmentId: ENROLLMENT })).body.draft).toMatchObject({ tracksLinks: false })
+    const { body } = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Pick a time: https://calendar.example.com/book/zach' })
+    expect(gmail.sent[0].body).toContain('Pick a time: https://calendar.example.com/book/zach')
+    expect([...docs.keys()].some((key) => key.startsWith('outreachLinks/'))).toBe(false)
+    expect(body.record).not.toHaveProperty('links')
   })
 
   it('hands the claim back when the send fails, so the answer can be sent again', async () => {

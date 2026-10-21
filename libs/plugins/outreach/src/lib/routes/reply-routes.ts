@@ -19,6 +19,7 @@ import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { randomUUID } from 'node:crypto'
 import {
   composeOutreachManualReply,
+  type OutreachManualReply,
   mergeOutreachInboundMessages,
   outreachEnrollmentHasInbound,
   outreachInboundMessagesOf,
@@ -40,12 +41,14 @@ import type {
   OutreachEnrollmentThreadResponse,
   OutreachReplyDraft,
 } from '../model/outreach-api'
-import type {
-  OutreachEnrollment,
-  OutreachInboundMessage,
-  OutreachMailbox,
-  OutreachStepRecord,
+import {
+  OUTREACH_COLLECTIONS,
+  type OutreachEnrollment,
+  type OutreachInboundMessage,
+  type OutreachMailbox,
+  type OutreachStepRecord,
 } from '../model/outreach.types'
+import { newOutreachLinkId, outreachStoredLink, type OutreachStoredLink } from '../runtime/click-link'
 import { fileOutreachEmail } from '../runtime/timeline'
 import { outreachUnsubscribeMailbox } from '../runtime/unsubscribe-link'
 import {
@@ -57,6 +60,7 @@ import {
   outreachOrgCollection,
   readStoredOutreachEnrollment,
   readStoredOutreachMailbox,
+  readStoredOutreachSequence,
 } from '../storage/outreach-records'
 import type { OutreachMailClient } from '../transport/mail-client'
 import { GmailTransportError, googleFailureAnswer, isReconnectRequired } from '../transport/gmail-errors'
@@ -106,6 +110,15 @@ import {
  * the enrollment's `lastSentAtMs` moves, which keeps the thread watched for
  * what the person writes next.
  *
+ * ## Its links, on a sequence that tracks them
+ *
+ * The links in the member's words go out as the short links a step's do
+ * (AGL-4022), on the mailbox domain's link host: minted with the answer's
+ * reply key, stored before the send, and kept on the `manual_reply` record.
+ * A click on one is the person's — on their enrollment and their record —
+ * and never the sequence's. A link that cannot be stored goes out as
+ * written: an answer whose links work beats one held for a counter.
+ *
  * ## Once
  *
  * The composer mints a key per answer, which becomes its `Message-ID`. The
@@ -134,6 +147,10 @@ export interface OutreachReplyDeps {
   /** Opens a mailbox's client from its sealed grant. */
   openMailbox(mailboxId: string): Promise<OpenedOutreachMailbox>
   consumeRateLimit(key: string, options: { limit: number; windowMs: number }): Promise<{ allowed: boolean }>
+  /** The short tracking link for a stored link's id, or `null` when none can be made (AGL-4022). */
+  clickLinkUrl(linkId: string, trackingOrigin?: string | null): string | null
+  /** The click-tracking origin for mail sent as `senderAddress`, or `null` for the console's. */
+  clickLinkOrigin?(input: { orgId: string; senderAddress: string }): Promise<string | null>
 }
 
 type Firestore = FirebaseFirestore.Firestore
@@ -141,21 +158,28 @@ type Firestore = FirebaseFirestore.Firestore
 interface Loaded {
   enrollment: OutreachEnrollment
   mailbox: OutreachMailbox | null
+  /** The sequence tracks link clicks, so an answer's links go out as short links (AGL-4022). */
+  tracksLinks: boolean
 }
 
-/** The enrollment, and the mailbox an answer goes from: its own, else its sequence's. */
+/** The enrollment, its sequence's click setting, and the mailbox an answer goes from: its own, else its sequence's. */
 async function loadEnrollment(firestore: Firestore, orgId: string, enrollmentId: string): Promise<Loaded | null> {
   const snapshot = await outreachOrgCollection(firestore, orgId, 'enrollments').doc(enrollmentId).get()
   const enrollment = readStoredOutreachEnrollment(enrollmentId, snapshot.exists ? snapshot.data() : undefined)
   if (!enrollment) return null
-  let mailboxId = enrollment.mailboxId
-  if (!mailboxId && enrollment.sequenceId) {
-    const sequence = await outreachOrgCollection(firestore, orgId, 'sequences').doc(enrollment.sequenceId).get()
-    mailboxId = String(sequence.exists ? (sequence.get('mailboxId') ?? '') : '')
-  }
-  if (!mailboxId) return { enrollment, mailbox: null }
+  const stored = enrollment.sequenceId
+    ? await outreachOrgCollection(firestore, orgId, 'sequences').doc(enrollment.sequenceId).get()
+    : null
+  const sequence = stored ? readStoredOutreachSequence(stored.id, stored.exists ? stored.data() : undefined) : null
+  const tracksLinks = sequence?.settings.trackClicks === true
+  const mailboxId = enrollment.mailboxId || sequence?.mailboxId || ''
+  if (!mailboxId) return { enrollment, mailbox: null, tracksLinks }
   const box = await mailboxRef(firestore, orgId, mailboxId).get()
-  return { enrollment, mailbox: readStoredOutreachMailbox(mailboxId, box.exists ? box.data() : undefined) }
+  return {
+    enrollment,
+    mailbox: readStoredOutreachMailbox(mailboxId, box.exists ? box.data() : undefined),
+    tracksLinks,
+  }
 }
 
 /** The member is the mailbox's own, or an organization owner or admin. */
@@ -311,11 +335,16 @@ async function refusalFor(
 }
 
 /** Where an answer to the newest message would go, from what, under what subject. */
-function draftFor(enrollment: OutreachEnrollment, mailbox: OutreachMailbox | null): OutreachReplyDraft | null {
+function draftFor(
+  enrollment: OutreachEnrollment,
+  mailbox: OutreachMailbox | null,
+  tracksLinks: boolean,
+): OutreachReplyDraft | null {
   const answering = outreachMessageToAnswer(enrollment.inboundMessages)
   if (!answering || !mailbox) return null
   return {
     answerId: answering.id,
+    tracksLinks,
     to: answering.replyTo ?? answering.from,
     subject: outreachReplySubject(answering, enrollment.threadSubject),
     // A mailbox connected before Microsoft ones existed names no provider: it is Google's.
@@ -350,7 +379,7 @@ export function createOutreachEnrollmentThreadRoute(
     const read = await withInbound(deps, replyDeps, caller, loaded)
     if (read.ok === false) return read.response
     const { enrollment, readMailbox } = read
-    const draft = draftFor(enrollment, loaded.mailbox)
+    const draft = draftFor(enrollment, loaded.mailbox, loaded.tracksLinks)
     const refusal = draft ? await refusalFor(firestore, caller, enrollment, loaded.mailbox, draft.to) : null
     return outreachOk({
       ok: true,
@@ -466,6 +495,16 @@ export function createOutreachEnrollmentReplyRoute(
       })
 
     const nowMs = deps.now()
+    const sending = await withTrackedLinks(firestore, replyDeps, {
+      orgId: caller.orgId,
+      loaded,
+      answering,
+      body: body['body'],
+      replyKey,
+      senderAddress: sender.address,
+      untracked: reply,
+      nowMs,
+    })
     const opened = await replyDeps.openMailbox(mailbox.id)
     if (opened.ok === false) {
       await release()
@@ -486,7 +525,7 @@ export function createOutreachEnrollmentReplyRoute(
     }
     let sent: Awaited<ReturnType<typeof sendOutreachReply>>
     try {
-      sent = await sendOutreachReply(opened.client, reply, sender, {
+      sent = await sendOutreachReply(opened.client, sending, sender, {
         messageIdLocalPart: replyKey,
         messageIdDomain: domain,
       })
@@ -521,13 +560,14 @@ export function createOutreachEnrollmentReplyRoute(
       byUid: caller.uid,
       from: sender.address,
       to: reply.to,
-      body: reply.body,
+      body: sending.body,
       replyKey,
       gmailMessageId: sent.gmailMessageId,
       gmailThreadId: sent.threadId,
       messageId: sent.messageId,
       subject: sent.subject,
       ...(reply.inReplyTo ? { inReplyTo: reply.inReplyTo } : {}),
+      ...(sending.trackedLinks.length ? { links: sending.trackedLinks } : {}),
     }
     const enrollment = await firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref)
@@ -562,7 +602,7 @@ export function createOutreachEnrollmentReplyRoute(
       to: reply.to,
       messageId: sent.messageId,
       inReplyTo: reply.inReplyTo,
-      body: reply.body,
+      body: sending.body,
       atMs,
       byUid: caller.uid,
       byName: mailbox.connectedByUid === caller.uid ? mailbox.displayName || null : null,
@@ -575,6 +615,76 @@ export function createOutreachEnrollmentReplyRoute(
       subject: sent.subject,
       alreadySent: false,
     } satisfies OutreachEnrollmentReplyResponse)
+  }
+}
+
+/**
+ * The answer as it goes out (AGL-4022): on a sequence that tracks link
+ * clicks, written again with its links minted as short links on the mailbox
+ * domain's link host, each stored before the send and named by the answer's
+ * reply key; otherwise — or when the links cannot be stored — exactly as
+ * the member wrote it.
+ */
+async function withTrackedLinks(
+  firestore: Firestore,
+  replyDeps: OutreachReplyDeps,
+  input: {
+    orgId: string
+    loaded: Loaded
+    answering: OutreachInboundMessage
+    body: unknown
+    replyKey: string
+    senderAddress: string
+    untracked: OutreachManualReply
+    nowMs: number
+  },
+): Promise<OutreachManualReply> {
+  const { loaded, nowMs } = input
+  if (!loaded.tracksLinks) return input.untracked
+  let origin: string | null = null
+  if (replyDeps.clickLinkOrigin) {
+    origin = await replyDeps
+      .clickLinkOrigin({ orgId: input.orgId, senderAddress: input.senderAddress })
+      .catch((error: unknown) => {
+        console.warn('[outreach] the click-tracking host could not be read; an answer’s links use the app address', error)
+        return null
+      })
+  }
+  const minted: Array<{ id: string; doc: OutreachStoredLink }> = []
+  const tracked = composeOutreachManualReply({
+    enrollment: loaded.enrollment,
+    answering: input.answering,
+    body: input.body,
+    timeZone: loaded.mailbox?.timezone,
+    rewriteLink: (link) => {
+      const doc = outreachStoredLink(
+        {
+          orgId: input.orgId,
+          enrollmentId: loaded.enrollment.id,
+          stepIndex: loaded.enrollment.stepIndex,
+          linkIndex: link.index,
+          url: link.url,
+          answerKey: input.replyKey,
+        },
+        nowMs,
+      )
+      const id = newOutreachLinkId()
+      const url = doc ? replyDeps.clickLinkUrl(id, origin) : null
+      if (!doc || !url) return null
+      minted.push({ id, doc })
+      return url
+    },
+  }).reply
+  if (!tracked || !minted.length) return input.untracked
+  try {
+    const batch = firestore.batch()
+    for (const link of minted) batch.create(firestore.collection(OUTREACH_COLLECTIONS.links).doc(link.id), link.doc)
+    await batch.commit()
+    return tracked
+  } catch (error) {
+    // A link that resolves nowhere is worse than one as written.
+    console.error('[outreach] an answer’s short links could not be stored; it carries its links as written', error)
+    return input.untracked
   }
 }
 

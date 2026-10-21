@@ -266,3 +266,49 @@ export async function createSignUpWorkspace(
     return { slug: null, error: null }
   }
 }
+
+/**
+ * The personal workspace name for an account whose door collected none
+ * (AGL-1942): display name, else the email local part, exactly as
+ * `ensureOrgForUser` derives it server-side, so the two cannot disagree.
+ */
+export function personalWorkspaceName(account: {
+  displayName?: string | null
+  email?: string | null
+}): string {
+  return (
+    account.displayName?.trim() || account.email?.split('@')[0]?.trim() || ''
+  )
+}
+
+/** How long after sign-up the console still provisions a missing workspace. */
+export const SIGN_UP_WORKSPACE_BACKSTOP_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Should the console create this account's first workspace itself
+ * (AGL-4021)?
+ *
+ * Every sign-up door is meant to leave a verified account inside a workspace.
+ * When a door dies on the way (a phone Google redirect that was pushed away
+ * before `/api/orgs/create`, three of them on 2026-10-20/21), the account
+ * reaches the console with no workspace and no held name, and the chooser
+ * offered only "Create your first site". This is the backstop for that: a
+ * verified account, young enough that no workspace can only mean a door
+ * failed, gets the personal workspace its door would have made.
+ *
+ * Young on purpose. An older account with no workspaces has left or been
+ * removed from the ones it had, and handing it a new one is a decision it
+ * did not make.
+ */
+export function needsBackstopWorkspace(
+  account: {
+    emailVerified: boolean
+    metadata: { creationTime?: string }
+  },
+  nowMs = Date.now(),
+): boolean {
+  if (!account.emailVerified) return false
+  const createdMs = Date.parse(account.metadata.creationTime ?? '')
+  if (!Number.isFinite(createdMs)) return false
+  return nowMs - createdMs < SIGN_UP_WORKSPACE_BACKSTOP_MS
+}
