@@ -674,6 +674,12 @@ export interface OutreachClickHistoryEntry {
   human: boolean
   /** Why it was read as a scanner's; `null` for a person's. */
   machineReason: OutreachClickMachineReason | null
+  /**
+   * The link was in a member's answer in the thread (AGL-4022), not in one
+   * of the sequence's emails; `stepIndex` is then the step the enrollment
+   * was on. Absent on a step's link.
+   */
+  answer?: true
 }
 
 /** One member's act on the enrollment. */

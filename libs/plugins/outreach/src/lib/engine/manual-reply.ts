@@ -43,6 +43,10 @@
  * beneath. No footer and no `List-Unsubscribe`: the person wrote first, and
  * this is the answer a person would type in their own mail client.
  *
+ * On a sequence that tracks link clicks, the links in the member's words go
+ * out as the same short links a step's do (AGL-4022), through the caller's
+ * minter — never the links in the quoted message, which are theirs.
+ *
  * ## What still refuses
  *
  * {@link outreachManualReplyRefusal}: an address or a domain on the
@@ -64,6 +68,7 @@ import {
   type OutreachInboundMessage,
   type OutreachMailbox,
 } from '../model/outreach.types'
+import { rewriteOutreachBodyLinks } from './click-tracking'
 import { outreachMessageIdHeader } from './compose'
 import { outreachEmailDomain } from './do-not-contact-domain'
 import { classifyOutreachMessage, type OutreachMessageContext } from './thread-classification'
@@ -237,8 +242,13 @@ export interface OutreachManualReply {
   subject: string
   /** The whole text sent: the member's words, then the quote. */
   text: string
-  /** The member's words alone, bounded, as the records keep them. */
+  /** The member's words alone, as sent — tracked links in place — bounded, as the records keep them. */
   body: string
+  /**
+   * The destinations the minter rewrote, in the order a short link's
+   * `linkIndex` names them (AGL-4022). Empty when nothing was rewritten.
+   */
+  trackedLinks: string[]
   /** The provider thread it is filed into; `null` lets the provider thread it by its headers. */
   threadId: string | null
   /** The answered message's `Message-ID`; `null` when it carried none. */
@@ -260,6 +270,12 @@ export function composeOutreachManualReply(input: {
   body: unknown
   /** The mailbox's zone, for the quote's time. */
   timeZone: string | null | undefined
+  /**
+   * Mints the short link for the link at `index` in the member's words, or
+   * `null` to leave it as written (AGL-4022). Absent — a sequence that does
+   * not track clicks — sends every link as written.
+   */
+  rewriteLink?: ((link: { url: string; index: number }) => string | null) | null
 }): OutreachManualReplyCompose {
   const words = String(input.body ?? '')
     .replace(/\r\n?/g, '\n')
@@ -279,12 +295,14 @@ export function composeOutreachManualReply(input: {
   if (!to) {
     return { reply: null, error: { code: 'invalid_recipient', message: 'Their message names no address to answer.' } }
   }
+  const rewritten = input.rewriteLink ? rewriteOutreachBodyLinks(words, input.rewriteLink) : { text: words, links: [] }
   return {
     reply: {
       to,
       subject: outreachReplySubject(input.answering, input.enrollment.threadSubject),
-      text: `${words}\n\n${outreachReplyQuote(input.answering, input.timeZone)}`,
-      body: words.slice(0, OUTREACH_MANUAL_REPLY_STORED_MAX),
+      text: `${rewritten.text}\n\n${outreachReplyQuote(input.answering, input.timeZone)}`,
+      body: rewritten.text.slice(0, OUTREACH_MANUAL_REPLY_STORED_MAX),
+      trackedLinks: rewritten.links,
       threadId: input.answering.threadId,
       inReplyTo: input.answering.messageId,
       references: outreachReplyReferences(input.enrollment.messageIds ?? [], input.answering),

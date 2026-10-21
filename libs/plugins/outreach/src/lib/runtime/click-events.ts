@@ -68,6 +68,14 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
  * 4. **The link rollup** — "which of our links did they follow?", one
  *    document holding a bounded map, keyed and capped by the campaign
  *    rollup's own rules so a link means the same thing in both reports.
+ *
+ * A link in a member's ANSWER to a person who wrote back (AGL-4022) is the
+ * person's click and not the sequence's: it is written to the enrollment and
+ * its history — marked as the answer's — and to their record, but never to
+ * the sequence's counters or its link rollup, which report only what the
+ * sequence's own steps sent. The route still stamps the person's campaign
+ * touch: what they book or fill in next came from the sequence's
+ * conversation either way.
  */
 
 /** What one recorded click turned out to be. */
@@ -88,6 +96,21 @@ export function outreachStepSentAtMs(enrollment: OutreachEnrollment, stepIndex: 
     }
   }
   return null
+}
+
+/**
+ * When the email that carried a link was sent: the member's answer it was in
+ * (AGL-4022), else the step's email; `null` when it cannot be found.
+ */
+export function outreachLinkSentAtMs(
+  enrollment: OutreachEnrollment,
+  target: Pick<OutreachClickTarget, 'stepIndex' | 'answerKey'>,
+): number | null {
+  if (!target.answerKey) return outreachStepSentAtMs(enrollment, target.stepIndex)
+  const answer = (enrollment.stepRecords ?? []).find(
+    (record) => record?.kind === 'manual_reply' && record.replyKey === target.answerKey,
+  )
+  return typeof answer?.atMs === 'number' && Number.isFinite(answer.atMs) ? answer.atMs : null
 }
 
 /**
@@ -131,7 +154,7 @@ export async function recordOutreachClick(
     if (!enrollment) {
       return { human: false, machineReason: null, first: false, enrollment: null } as OutreachClickOutcome
     }
-    const sent = outreachStepSentAtMs(enrollment, stepIndex)
+    const sent = outreachLinkSentAtMs(enrollment, input.target)
     const judgement = judgeOutreachClick({
       method: input.method,
       userAgent: input.userAgent,
@@ -198,6 +221,7 @@ export async function recordOutreachClick(
           stepIndex,
           human: judgement.human,
           machineReason: judgement.machineReason,
+          answer: Boolean(input.target.answerKey),
         }),
       )
     }
@@ -206,14 +230,20 @@ export async function recordOutreachClick(
 
   if (!outcome.enrollment) return outcome
 
+  // An answer's link is the person's, never the sequence's (AGL-4022).
+  const fromAnswer = Boolean(input.target.answerKey)
   await Promise.all([
-    bumpSequenceStats(firestore, outcome, {
-      orgId,
-      sequenceId: outcome.enrollment.sequenceId,
-      nowMs,
-    }),
-    outcome.human ? bumpLinkRollup(firestore, { orgId, sequenceId: outcome.enrollment.sequenceId, url }) : null,
-    outcome.first ? fileFirstClick(deps, { orgId, enrollment: outcome.enrollment, url, nowMs }) : null,
+    fromAnswer
+      ? null
+      : bumpSequenceStats(firestore, outcome, {
+          orgId,
+          sequenceId: outcome.enrollment.sequenceId,
+          nowMs,
+        }),
+    outcome.human && !fromAnswer
+      ? bumpLinkRollup(firestore, { orgId, sequenceId: outcome.enrollment.sequenceId, url })
+      : null,
+    outcome.first ? fileFirstClick(deps, { orgId, enrollment: outcome.enrollment, url, nowMs, fromAnswer }) : null,
   ])
   return outcome
 }
@@ -326,7 +356,7 @@ function campaignRollupField(key: string): string {
  */
 async function fileFirstClick(
   deps: Pick<OutreachRuntimeDeps, 'timeline'>,
-  input: { orgId: string; enrollment: OutreachEnrollment; url: string; nowMs: number },
+  input: { orgId: string; enrollment: OutreachEnrollment; url: string; nowMs: number; fromAnswer?: boolean },
 ): Promise<void> {
   const writer = deps.timeline()
   if (!writer) return
@@ -338,7 +368,7 @@ async function fileFirstClick(
       sourcePluginId: OUTREACH_PLUGIN_ID,
       kind: 'note',
       atMs: input.nowMs,
-      body: `Followed a link in a sequence email: ${sendLinkKey(input.url) ?? input.url}`,
+      body: `${input.fromAnswer ? 'Followed a link in an answer to their reply' : 'Followed a link in a sequence email'}: ${sendLinkKey(input.url) ?? input.url}`,
       byUid: '',
       byName: null,
     })

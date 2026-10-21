@@ -175,6 +175,28 @@ describe('the answer', () => {
     )
   })
 
+  it('rewrites the links in the member’s words through the minter, never the quoted message’s (AGL-4022)', () => {
+    const minted: Array<{ url: string; index: number }> = []
+    const { reply } = composeOutreachManualReply({
+      enrollment,
+      answering: kept({ body: 'See https://their.example.com/page first.' }),
+      body: 'Book here: https://calendar.example.com/a, or here: https://calendar.example.com/b.',
+      timeZone: null,
+      rewriteLink: (link) => {
+        minted.push(link)
+        return link.index === 0 ? 'https://links.example.org/AAAAAAAAAA' : null
+      },
+    })
+    expect(minted).toEqual([
+      { url: 'https://calendar.example.com/a', index: 0 },
+      { url: 'https://calendar.example.com/b', index: 1 },
+    ])
+    expect(reply?.trackedLinks).toEqual(['https://calendar.example.com/a'])
+    expect(reply?.body).toBe('Book here: https://links.example.org/AAAAAAAAAA, or here: https://calendar.example.com/b.')
+    expect(reply?.text).toContain('> See https://their.example.com/page first.')
+    expect(composeOutreachManualReply({ enrollment, answering: kept(), body: 'https://x.example.com', timeZone: null }).reply?.trackedLinks).toEqual([])
+  })
+
   it('goes to the Reply-To they asked for, and keeps a long chain’s first id and its latest', () => {
     const many = Array.from({ length: 30 }, (_, index) => `<id-${index}@rep.example.org>`)
     const { reply } = composeOutreachManualReply({

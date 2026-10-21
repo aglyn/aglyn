@@ -42,7 +42,8 @@
  *   opt-out the enrollment kept, with their words. The one that stopped the
  *   sequence carries the stop, in place of a second entry saying it.
  * - **Each answer a member sent** in the thread (AGL-4020), with their
- *   words and who sent it — never counted as one of the sequence's sends.
+ *   words and who sent it — never counted as one of the sequence's sends —
+ *   and a click on one of its links says it came from the answer (AGL-4022).
  *
  * Client-safe and free of React: the view renders these entries, and the
  * spec reads them.
@@ -314,6 +315,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
           byWhom(record.byUid, memberName),
           record.from ? `From ${record.from}` : null,
           record.subject ? `Subject: ${record.subject}` : null,
+          record.links?.length ? plural(record.links.length, 'tracked link', 'tracked links') : null,
         ].filter((fact): fact is string => Boolean(fact)),
         gmailThreadId: record.gmailThreadId ?? null,
         tone: 'default',
@@ -364,6 +366,9 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
   })
 
   // ── Clicks ──────────────────────────────────────────────────────────────
+  // Where the link was: a step's email, or a member's answer (AGL-4022).
+  const clickSource = (row: { stepIndex: number; answer?: true }) =>
+    row.answer ? 'From an answer in the thread' : `From ${outreachStepName(steps, row.stepIndex)}`
   for (const row of history) {
     if (row.kind !== 'click') continue
     entries.push(
@@ -374,7 +379,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
             atMs: row.atMs,
             title: 'Clicked a link',
             url: row.url,
-            facts: [`From ${outreachStepName(steps, row.stepIndex)}`],
+            facts: [clickSource(row)],
             tone: 'success',
           }
         : {
@@ -384,7 +389,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
             title: 'A scanner followed a link — not counted',
             url: row.url,
             facts: [
-              `From ${outreachStepName(steps, row.stepIndex)}`,
+              clickSource(row),
               row.machineReason ? `Read as a scanner: ${OUTREACH_MACHINE_REASON_LABELS[row.machineReason]}` : null,
             ].filter((fact): fact is string => Boolean(fact)),
             tone: 'default',
