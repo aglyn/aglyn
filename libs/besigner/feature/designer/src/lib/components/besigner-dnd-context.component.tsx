@@ -21,15 +21,17 @@ import {
   KeyboardSensor,
   MeasuringStrategy,
   PointerSensor,
-  pointerWithin,
   TouchSensor,
+  useDndContext,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
 import { getEventCoordinates } from '@dnd-kit/utilities'
 import type { BackendFactory } from 'dnd-core'
+import { useEffect } from 'react'
 import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
+import { besignerCollisionDetection } from './dnd/drop-targeting'
 
 export const snapDraggingToCursor: Modifier = ({
   activatorEvent,
@@ -82,6 +84,38 @@ const POINTER_ACTIVATION = { distance: 6 }
  */
 const TOUCH_ACTIVATION = { delay: 250, tolerance: 8 }
 
+/**
+ * Re-measures every drop target when anything scrolls mid-drag.
+ *
+ * dnd-kit keeps its rectangles in step with scrolling only for the scroll
+ * containers it finds by walking up from each target, and that walk stops at
+ * a shadow root. The canvas lives in one, so scrolling the canvas during a
+ * drag — by hand, or near an edge — left every canvas target where it had
+ * been, and drops resolved against elements that had scrolled away.
+ */
+function RemeasureOnScroll() {
+  const { active, measureDroppableContainers } = useDndContext()
+  const dragging = Boolean(active)
+  useEffect(() => {
+    if (!dragging) return
+    let frame = 0
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measureDroppableContainers([])
+      })
+    }
+    const options = { capture: true, passive: true }
+    document.addEventListener('scroll', onScroll, options)
+    return () => {
+      document.removeEventListener('scroll', onScroll, options)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [dragging, measureDroppableContainers])
+  return null
+}
+
 export interface BesignerDndContextProps<BackendContext, BackendOptions> {
   children?: JSX.Children
   backend?: BackendFactory
@@ -116,13 +150,14 @@ export function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
       <DndContext
         sensors={sensors}
         modifiers={[snapDraggingToCursor]}
-        collisionDetection={pointerWithin}
+        collisionDetection={besignerCollisionDetection}
         measuring={{
           droppable: {
             strategy: MeasuringStrategy.Always,
           },
         }}
       >
+        <RemeasureOnScroll />
         {children}
       </DndContext>
     </DndProvider>
