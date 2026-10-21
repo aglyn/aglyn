@@ -103,6 +103,19 @@ export interface UsageAlertEmailInput {
   subject: string
   /** Plain-text body. Already includes the console link. */
   text: string
+  /**
+   * The designed email's own parts (AGL-4019), as `sendOrgMemberNotice`
+   * takes them: what happened and what to do, without the link (`text`
+   * when absent); the facts as "Label: value" lines; where the reader acts
+   * and the button's words for it; and a sentence for the caption after
+   * who the email is for. The `workspace-notice` body is drawn from these
+   * alone, so a send without them is a heading over nothing.
+   */
+  lead?: string
+  details?: string
+  url?: string
+  urlLabel?: string
+  note?: string
   /** Resend tag / log label, e.g. `usage-alert` or `usage-budget`. */
   context: string
 }
@@ -280,11 +293,23 @@ export async function emailOrgAdmins(
     // is sent nothing (AGL-3418) — its people cannot act on the notice.
     const { brand, suspended } = await orgBrand(input.firestore, input.orgId)
     if (suspended) return { sent: false, reason: 'no-recipient' }
+    const workspaceName = brand.orgName || 'this workspace'
     const content = await renderSystemEmailContent(
       'workspace-notice',
       {
         'notice.subject': input.subject,
         'notice.body': input.text,
+        'notice.lead': input.lead?.trim() || input.text,
+        'notice.details': input.details?.trim() ?? '',
+        // A button needs both its link and its words, or it is left out.
+        'notice.url': input.url && input.urlLabel ? input.url : '',
+        'notice.action': input.url && input.urlLabel ? input.urlLabel : '',
+        'notice.reason': [
+          `You are getting this because you are an owner or admin of ${workspaceName}.`,
+          input.note?.trim() ?? '',
+        ]
+          .filter(Boolean)
+          .join(' '),
         'org.name': brand.orgName ?? '',
       },
       brand,

@@ -156,6 +156,11 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   // One create at a time: a second click while one is in flight answers the
   // same request rather than racing it for the same address.
   const inFlight = useRef<Promise<CreateOutcome> | null>(null)
+  // A create this dialog began. The site it makes is counted in the
+  // workspace's sites as soon as it exists, often before the response, and on
+  // a one-site plan that count must not turn the dialog into the limit notice
+  // and unmount the start that is about to begin its job on it (AGL-4017).
+  const [madeHere, setMadeHere] = useState(false)
   const address = useSiteAddress({ autoFocus: true })
   const orgSlug = currentOrg?.slug ?? null
 
@@ -170,7 +175,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   const blocked: 'role' | 'limit' | null =
     permissionsLoaded && !can('hosts.create')
       ? 'role'
-      : quota && !quota.allowed
+      : quota && !quota.allowed && !madeHere
         ? 'limit'
         : null
 
@@ -216,6 +221,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   const requestCreate = useCallback(
     (start?: 'starter'): Promise<CreateOutcome> => {
       if (inFlight.current) return inFlight.current
+      setMadeHere(true)
       const request = (async (): Promise<CreateOutcome> => {
         try {
           const response = await authorizedFetch(userRef.current, '/api/hosts/create', {
@@ -271,6 +277,10 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
         }
       })()
       inFlight.current = request
+      void request.then((outcome) => {
+        // Nothing was made, so a workspace at its limit is told so again.
+        if ('error' in outcome) setMadeHere(false)
+      })
       void request.finally(() => {
         inFlight.current = null
       })

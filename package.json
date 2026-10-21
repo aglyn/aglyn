@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.273",
+  "version": "1.0.0-beta.274",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -104,6 +104,7 @@
     "test:emulated-env": "node --test tools/scripts/lib/emulated-env.test.mjs",
     "test:ai-guided-start-local": "node --test tools/scripts/lib/ai-jobs-beat-pump.test.mjs tools/e2e/lib/ai-guided-start-report.test.mjs",
     "test:chrome-executable": "node --test tools/e2e/lib/chrome-executable.test.mjs",
+    "test:xcode-export-temp": "node --test tools/scripts/lib/xcode-export-temp.test.mjs",
     "test:core-namespace-pin": "node --test tools/scripts/lib/core-namespace-pin.test.mjs",
     "test:browser-shim-aliases": "node --test tools/scripts/lib/browser-shim-aliases.test.mjs",
     "test:chunk-attribution": "node --test tools/scripts/lib/chunk-attribution.test.mjs",

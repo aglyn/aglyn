@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.274 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.273...v1.0.0-beta.274)
+
+### Fixed
+
+- **email:** usage, budget and SSO-lapse emails draw their own parts (AGL-4019) ([AGL-4019](https://linear.app/aglyn/issue/AGL-4019), [AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **native-release:** remove the Xcode export staging folder after each upload
+- **console:** a Free first site's own create no longer trips the one-site limit ([AGL-4017](https://linear.app/aglyn/issue/AGL-4017))
+
 ## v1.0.0-beta.273 — 2026-10-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.272...v1.0.0-beta.273)
