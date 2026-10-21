@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.275 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/b537dd527...v1.0.0-beta.275)
+
+### Added
+
+- **outreach:** reply in thread from the enrollment's own mailbox (AGL-4020) ([AGL-4020](https://linear.app/aglyn/issue/AGL-4020))
+
+### Fixed
+
+- **crm:** keep the email actions zone token out of the eager bundle (AGL-4020) ([AGL-4020](https://linear.app/aglyn/issue/AGL-4020))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **linear:** raise the citation ceiling to AGL-4020, read off Linear ([AGL-4020](https://linear.app/aglyn/issue/AGL-4020))
+
+</details>
+
 ## v1.0.0-beta.274 — 2026-10-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.273...v1.0.0-beta.274)
