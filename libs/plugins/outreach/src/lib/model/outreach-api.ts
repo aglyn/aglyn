@@ -356,6 +356,8 @@ export interface OutreachEnrollmentThreadRequest {
 export interface OutreachReplyDraft {
   /** The provider id of the message it answers: the newest the person wrote. */
   answerId: string
+  /** The sequence tracks link clicks: the answer's links go out as short links (AGL-4022). */
+  tracksLinks: boolean
   to: string
   subject: string
   from: { address: string; name: string; provider: OutreachMailbox['provider'] }

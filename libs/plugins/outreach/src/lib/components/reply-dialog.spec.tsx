@@ -68,6 +68,7 @@ const answer = (overrides: Partial<OutreachEnrollmentThreadResponse> = {}): Outr
   inboundMessages: [theirReply()],
   draft: {
     answerId: 'in-1',
+    tracksLinks: false,
     to: 'pat@prospect.example.com',
     subject: 'Re: Your restoration sites',
     from: { address: 'zach@rep.example.org', name: 'Zach Rep', provider: 'microsoft' },
@@ -155,6 +156,12 @@ describe('the composer', () => {
     })
     expect(onSent).toHaveBeenCalled()
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Answer sent to pat@prospect.example.com.', { variant: 'success' })
+  })
+
+  it('says the links go out tracked on a sequence that counts clicks (AGL-4022)', async () => {
+    api.readEnrollmentThread.mockResolvedValue(answer({ draft: { ...answer().draft!, tracksLinks: true } }))
+    open()
+    expect(await screen.findByText(/Links you write go out as tracked short links/)).toBeTruthy()
   })
 
   it('says why an answer cannot go before anything is typed, and offers no Send', async () => {

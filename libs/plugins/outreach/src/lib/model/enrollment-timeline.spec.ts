@@ -348,6 +348,20 @@ describe('the timeline: what the person wrote, and the answers sent (AGL-4020)',
     expect(entries.filter((entry) => entry.kind === 'sent')).toHaveLength(1)
   })
 
+  it('says a click came from an answer, and how many tracked links the answer carried (AGL-4022)', () => {
+    const entries = build({
+      enrollment: enrollment({
+        stepRecords: [
+          ...(enrollment().stepRecords ?? []),
+          { stepIndex: 1, stepId: '', kind: 'manual_reply', atMs: T + 60 * MIN, byUid: 'uid-zach', body: 'Book: https://links.example.org/AAAAAAAAAA', links: ['https://calendar.example.com/book'] },
+        ],
+      }),
+      history: [click('c-1', T + 90 * MIN, { stepIndex: 1, answer: true })],
+    })
+    expect(entries.find((entry) => entry.kind === 'click')?.facts).toEqual(['From an answer in the thread'])
+    expect(entries.find((entry) => entry.kind === 'answered')?.facts).toContain('1 tracked link')
+  })
+
   it('names an automatic answer without stopping anything, and keeps the stop line for a reply it never kept', () => {
     const auto = build({
       enrollment: enrollment({ inboundMessages: [inbound({ kind: 'auto_reply', subject: 'Out of office', body: 'Back Monday.' })] }),

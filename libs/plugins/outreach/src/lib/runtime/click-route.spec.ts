@@ -608,6 +608,14 @@ describe('the short link id and document', () => {
     expect(readOutreachStoredLink(null)).toBeNull()
   })
 
+  it('keeps an answer’s reply key, and refuses one the composer would never mint (AGL-4022)', () => {
+    const doc = outreachStoredLink({ ...STORED, answerKey: 'reply-key-0001' }, SENT_AT)
+    expect(doc).toMatchObject({ answerKey: 'reply-key-0001' })
+    expect(readOutreachStoredLink(doc)).toMatchObject({ answerKey: 'reply-key-0001' })
+    expect(outreachStoredLink({ ...STORED, answerKey: 'no' }, SENT_AT)).toBeNull()
+    expect(readOutreachStoredLink({ v: 1, ...STORED, answerKey: '../x' })).not.toHaveProperty('answerKey')
+  })
+
   it('keeps a test link’s mark, and reads it back only as the boolean it wrote (AGL-3325)', () => {
     const doc = outreachStoredLink({ ...STORED, enrollmentId: OUTREACH_TEST_LINK_ENROLLMENT, test: true }, 5)
     expect(doc).toMatchObject({ test: true, enrollmentId: 'test' })
@@ -659,6 +667,37 @@ describe('the short link route', () => {
     await callShort(shortVisit(LINK_ID))
     expect(touches).toHaveLength(1)
     expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toMatchObject({ uniqueClicks: 1, machineClicks: 1 })
+  })
+
+  it('credits a click on a link in a member’s answer to the person, never to the sequence (AGL-4022)', async () => {
+    const ANSWERED_AT = SENT_AT + 60 * 60 * 1000
+    docs.set(ENROLLMENT_PATH, {
+      ...(docs.get(ENROLLMENT_PATH) as Data),
+      status: 'replied',
+      stepRecords: [
+        { stepIndex: 0, stepId: 's1', kind: 'email', atMs: SENT_AT },
+        { stepIndex: 1, stepId: '', kind: 'manual_reply', atMs: ANSWERED_AT, replyKey: 'reply-key-0001', links: [TARGET] },
+      ],
+    })
+    docs.set(LINK_PATH, { v: 1, ...STORED, stepIndex: 1, answerKey: 'reply-key-0001', createdAtMs: ANSWERED_AT })
+    // Seconds after the ANSWER went: a scanner's, however long ago the step was sent.
+    clock = ANSWERED_AT + 5_000
+    expect((await callShort(shortVisit(LINK_ID))).headers.get('Location')).toBe(TARGET)
+    clock = ANSWERED_AT + 60 * 60 * 1000
+    await callShort(shortVisit(LINK_ID))
+    const enrollment = docs.get(ENROLLMENT_PATH) as Data
+    expect(enrollment['engagement']).toMatchObject({ clicks: 1, machineClicks: 1 })
+    expect(enrollment['clicked']).toBe(true)
+    const rows = [...docs.entries()].filter(([key]) => key.startsWith(`${ENROLLMENT_PATH}/history/`)).map(([, row]) => row)
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: 'click', human: false, machineReason: 'too_soon', answer: true }),
+      expect.objectContaining({ kind: 'click', human: true, stepIndex: 1, answer: true }),
+    ])
+    // Nothing on the sequence's own figures or its link table.
+    expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toEqual({ sent: 3, people: 3, clickTracked: true })
+    expect([...docs.keys()].some((key) => key.startsWith(`${SEQUENCE_PATH}/reports`))).toBe(false)
+    // On their record, worded as the answer's.
+    expect(filed.at(-1)?.body).toBe('Followed a link in an answer to their reply: https://aglyn.com/pricing')
   })
 
   it('follows nothing an id does not name: no open redirect', async () => {

@@ -50,7 +50,8 @@ import type { OutreachApi } from './use-outreach-api'
  * replies were kept — and says where the answer goes: from the enrollment's
  * own mailbox, to the person, `Re:` their subject. The member writes plain
  * text; Send puts it in the same thread in both mailboxes, with their message
- * quoted beneath. Whatever still refuses — the do-not-contact list, a paused
+ * quoted beneath — and, on a sequence that tracks clicks, the links they
+ * wrote as the same short links a step's carry (AGL-4022). Whatever still refuses — the do-not-contact list, a paused
  * or disconnected mailbox — is said before anything is typed, and Send waits.
  *
  * The answer's key is minted once per open: sending again after a lost
@@ -292,7 +293,9 @@ export function OutreachReplyDialog(props: OutreachReplyDialogProps) {
                 slotProps={{ htmlInput: { maxLength: OUTREACH_MANUAL_REPLY_BODY_MAX } }}
               />
               <DialogContentText variant="body2">
-                {`Sent as plain text from ${draft.from.address}, in the same thread, with their message quoted beneath. The sequence stays where it is.`}
+                {`Sent as plain text from ${draft.from.address}, in the same thread, with their message quoted beneath.${
+                  draft.tracksLinks ? ' Links you write go out as tracked short links, as in the sequence’s emails.' : ''
+                } The sequence stays where it is.`}
               </DialogContentText>
             </>
           ) : null}
