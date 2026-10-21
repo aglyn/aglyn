@@ -42,7 +42,14 @@ import {
 import * as Besigner from '@aglyn/besigner'
 import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useCallback, useContext, useMemo, useRef } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
 import CanvasRevealContext, {
   CanvasMutedClassesContext,
@@ -66,6 +73,8 @@ import {
 import { stripMutedClasses } from '../utils/muted-classes'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
+import { REPEAT_NODE_ID_PREFIX } from '@aglyn/aglyn/app-utils/expand-repeatables'
+import { useRepeatCopyPointer } from '../hooks/use-repeat-copy-pointer'
 
 /**
  * The plain `Leaf`, drawing a node the way the published page composes it: its
@@ -501,6 +510,19 @@ export const NodeLeaf = observer(
      */
     const repeatPreview = useRepeatPreview(node)
     const repeatCopies = useRepeatCopies(node, repeatPreview)
+    // State, not a ref: the box comes and goes with the copies, and the
+    // pointer listeners have to follow it.
+    const [repeatCopiesBox, setRepeatCopiesBox] = useState<HTMLElement | null>(
+      null,
+    )
+    useRepeatCopyPointer(repeatCopiesBox)
+    // Only a leaf drawing copies reads the hover, so only those re-render as
+    // the pointer moves; the id is CSS-safe or ignored.
+    const hovered = repeatCopies.length
+      ? Besigner.focus.getHovered()?.$id
+      : undefined
+    const hoveredInRepeat =
+      hovered && /^[\w-]+$/.test(hovered) ? hovered : undefined
     const firstRecord = useMemo(
       () =>
         // No record to draw (AGL-3496): the template shows as written, and
@@ -782,14 +804,44 @@ export const NodeLeaf = observer(
             children
           )}
           {repeatCopies.length ? (
-            // Inert and click-through like the component and form previews
-            // below, and for the same reason: a copy is a picture of the
-            // template, not a document. Selecting one would offer an author
-            // an element no save can reach.
+            // Inert, like the component and form previews below: a copy is a
+            // picture of the template, not a document, so no element inside
+            // it is ever selected — an author would be offered something no
+            // save can reach.
+            //
+            // But NOT click-through. A click on "Sam Rivera" means the
+            // element Sam is a copy of, and `useRepeatCopyPointer` selects
+            // it; click-through, it fell to whatever lay beneath (the parent
+            // Stack), which is not what anyone pointing at Sam meant.
             <Box
-              sx={{ pointerEvents: 'none' }}
+              ref={setRepeatCopiesBox}
               data-aglyn-repeat-preview=""
               aria-hidden
+              sx={(theme) => ({
+                // The copies wear a dimmed GREY, so they never read as the
+                // element itself: the repeatable — the real one, drawing the
+                // first record — keeps the canvas's own hover and selection
+                // colours, and every copy of it is the quiet picture beside
+                // it. A neutral from the theme's own grey scale, which no
+                // site restyles, rather than an accent from either palette.
+                '& > *': {
+                  outline: `1px dashed ${alpha(theme.palette.grey[500], 0.5)}`,
+                  outlineOffset: -1,
+                },
+                // Pointing at a repeated element — the real one, or any of
+                // its copies, which hover it for you — firms its copies' grey
+                // up, still well under the real one's hover colour, so the
+                // whole repeat reads as one thing with one element to edit.
+                ...(hoveredInRepeat
+                  ? {
+                      [`& [data-aglyn^="leaf:${REPEAT_NODE_ID_PREFIX}"][data-aglyn$="__${hoveredInRepeat}"]`]:
+                        {
+                          outline: `1px solid ${alpha(theme.palette.grey[600], 0.75)}`,
+                          outlineOffset: -1,
+                        },
+                    }
+                  : {}),
+              })}
             >
               <RendererComponents.Provider value={INERT_RENDERER as any}>
                 {repeatCopies.map((copy) => (

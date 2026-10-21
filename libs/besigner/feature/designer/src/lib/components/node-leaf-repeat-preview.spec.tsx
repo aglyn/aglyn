@@ -30,9 +30,11 @@ import {
   type RepeatableDataset,
 } from '@aglyn/aglyn/app-utils/expand-repeatables'
 import { Leaf } from '@aglyn/aglyn-node-renderer'
-import { render } from '@testing-library/react'
+import * as Besigner from '@aglyn/besigner'
+import { fireEvent, render } from '@testing-library/react'
 
 import NodeLeaf from './node-leaf'
+import { repeatTemplateIdOf } from '../hooks/use-repeat-copy-pointer'
 import {
   RepeatRowsContext,
   type RepeatRowsSource,
@@ -304,5 +306,44 @@ describe('the repeat badge is editor-only (AGL-3111)', () => {
     )
     expect(badge(baseElement)).toBeNull()
     expect(copies(baseElement)).toBeNull()
+  })
+})
+
+/**
+ * A click on one of the copies means the element that copy draws — the one an
+ * author edits to change every copy. It used to pass straight through the
+ * copies and select whatever lay beneath: the parent Stack.
+ */
+describe('a click on a copy', () => {
+  let canvasJson: jest.SpyInstance
+  let getNode: jest.SpyInstance
+  afterEach(() => {
+    canvasJson?.mockRestore()
+    getNode?.mockRestore()
+    Besigner.focus.clearSelection()
+  })
+
+  const graceIn = (root: HTMLElement) =>
+    Array.from(copies(root)?.querySelectorAll('*') ?? []).find(
+      (el) => el.textContent === 'Grace' && el.children.length === 0,
+    ) as HTMLElement
+
+  it('selects the element the copy draws, not the copy or what lies beneath', () => {
+    const nodes = listNodes({ repeatDataset: 'Team' })
+    canvasJson = withCanvas(nodes)
+    getNode = jest
+      .spyOn(Aglyn.canvas, 'getNode')
+      .mockImplementation((id: any) => nodes[id])
+    const { baseElement } = renderList(answered(READY()), nodes)
+    fireEvent.pointerDown(graceIn(baseElement))
+    expect(Besigner.focus.getLastSelected()?.$id).toBe('row')
+  })
+})
+
+describe('repeatTemplateIdOf', () => {
+  it('names the original under any number of repeat prefixes', () => {
+    expect(repeatTemplateIdOf('rep__list__1__row')).toBe('row')
+    expect(repeatTemplateIdOf('rep__outer__2__rep__list__0__row')).toBe('row')
+    expect(repeatTemplateIdOf('row')).toBe('row')
   })
 })
