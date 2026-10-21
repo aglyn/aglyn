@@ -24,6 +24,7 @@ import { outreachEmailDomain } from '../engine/do-not-contact-domain'
 import { outreachStoppedEntry } from '../engine/enrollment-activity'
 import type { OutreachEnrollmentEvent } from '../engine/enrollment-state'
 import { isOutreachGatewayBlock, outreachGatewayBlockDetail } from '../engine/gateway-block'
+import { mergeOutreachInboundMessages, outreachInboundMessagesOf } from '../engine/manual-reply'
 import { effectiveOutreachWindow, postponeOutreachForAutoReply } from '../engine/schedule'
 import {
   decideOutreachThread,
@@ -73,6 +74,9 @@ import { outreachUnsubscribeMailbox } from './unsubscribe-link'
  * - a REPLY stops the enrollment, files the message on the contact's
  *   timeline (once per `Message-ID`, under the capture address's own id for
  *   it) and gives the rep the task "Reply from <name>";
+ * - every message the person wrote — a reply, an automatic answer, an
+ *   opt-out — is kept on the enrollment, its sender, time, threading ids
+ *   and trimmed text, for the console to show and answer (AGL-4020);
  * - an OUT-OF-OFFICE postpones the next step a working week from the reply;
  * - an OPT-OUT — a reply asking to be left alone, or a message to the
  *   `+unsubscribe` address the `mailto:` names — puts the address on the
@@ -449,6 +453,15 @@ async function applyMessages(
   })
   const freshIds = decision.classifications.map((classification) => classification.messageId).filter(Boolean)
   if (!freshIds.length) return
+  // What they wrote, kept on the enrollment so the console can show it and
+  // answer it in the thread (AGL-4020) — every message of theirs among
+  // these, so a thread read whole also keeps a reply synced before they
+  // were kept.
+  const inbound = outreachInboundMessagesOf(messages, {
+    selfAddresses: context.selfAddresses,
+    unsubscribeAddress: context.unsubscribeAddress,
+    threadSubject: enrollment.threadSubject,
+  })
   const decidedBy: OutreachMessageClassification | null = decision.decidedBy
   const decidingMessage = decidedBy ? messages.find((message) => message.id === decidedBy.messageId) ?? null : null
   const lastSentMessageId = enrollment.messageIds[enrollment.messageIds.length - 1] ?? null
@@ -628,6 +641,7 @@ async function applyMessages(
       const extra: Record<string, unknown> = {
         syncedMessageIds: [...(current.syncedMessageIds ?? []), ...freshIds].slice(-ENROLLMENT_HANDLED_MAX),
       }
+      if (inbound.length) extra['inboundMessages'] = mergeOutreachInboundMessages(current.inboundMessages, inbound)
       const waiting = current.status === 'active' || current.status === 'paused'
       if (postponedTo !== null && waiting && current.nextDueAtMs !== null && postponedTo > current.nextDueAtMs) {
         extra['nextDueAtMs'] = postponedTo

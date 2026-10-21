@@ -32,6 +32,7 @@ import {
 import type {
   OutreachEnrollment,
   OutreachEnrollmentHistoryEntry,
+  OutreachInboundMessage,
   OutreachSequenceStep,
 } from './outreach.types'
 
@@ -275,6 +276,103 @@ describe('the timeline: what happened, newest first', () => {
   })
 })
 
+const inbound = (fields: Partial<OutreachInboundMessage> = {}): OutreachInboundMessage => ({
+  id: 'in-1',
+  threadId: 'thread-1',
+  messageId: '<reply-1@example.com>',
+  references: ['<step-1@rep.example.org>'],
+  from: 'keith@example.com',
+  fromName: 'Keith Example',
+  replyTo: null,
+  subject: 'Re: Hi Keith',
+  atMs: T + 40 * MIN,
+  kind: 'reply',
+  body: 'Sounds good — can you send pricing?',
+  ...fields,
+})
+
+describe('the timeline: what the person wrote, and the answers sent (AGL-4020)', () => {
+  it('shows the reply that stopped the sequence with their words, as ONE entry carrying the stop', () => {
+    const entries = build({
+      enrollment: enrollment({
+        status: 'replied',
+        stopReason: 'reply',
+        stoppedAtMs: T + 40 * MIN,
+        nextDueAtMs: null,
+        inboundMessages: [inbound()],
+      }),
+    })
+    expect(entries.map((entry) => entry.kind)).toEqual(['replied', 'sent', 'enrolled'])
+    expect(entries[0]).toMatchObject({
+      title: 'Reply from Keith Example',
+      detail: 'Sounds good — can you send pricing?',
+      facts: ['From keith@example.com', 'Subject: Re: Hi Keith', 'The sequence stopped for them'],
+      gmailThreadId: 'thread-1',
+      tone: 'info',
+    })
+  })
+
+  it('lists a member’s answer with their words and who sent it, and a later reply on its own', () => {
+    const entries = build({
+      enrollment: enrollment({
+        status: 'replied',
+        stopReason: 'reply',
+        stoppedAtMs: T + 40 * MIN,
+        nextDueAtMs: null,
+        inboundMessages: [inbound(), inbound({ id: 'in-2', atMs: T + 90 * MIN, body: 'Perfect, thank you.' })],
+        stepRecords: [
+          ...(enrollment().stepRecords ?? []),
+          {
+            stepIndex: 1,
+            stepId: '',
+            kind: 'manual_reply',
+            atMs: T + 60 * MIN,
+            byUid: 'uid-zach',
+            from: 'zach@rep.example.org',
+            to: 'keith@example.com',
+            body: 'Here it is: $49 a month.',
+            subject: 'Re: Hi Keith',
+            gmailThreadId: 'thread-1',
+          },
+        ],
+      }),
+    })
+    expect(entries.map((entry) => entry.kind)).toEqual(['replied', 'answered', 'replied', 'sent', 'enrolled'])
+    expect(entries[0]).toMatchObject({ detail: 'Perfect, thank you.', facts: ['From keith@example.com', 'Subject: Re: Hi Keith'] })
+    expect(entries[1]).toMatchObject({
+      title: 'Answered in the thread',
+      detail: 'Here it is: $49 a month.',
+      facts: ['By Zach', 'From zach@rep.example.org', 'Subject: Re: Hi Keith'],
+    })
+    // The answer is no send of the sequence's.
+    expect(entries.filter((entry) => entry.kind === 'sent')).toHaveLength(1)
+  })
+
+  it('names an automatic answer without stopping anything, and keeps the stop line for a reply it never kept', () => {
+    const auto = build({
+      enrollment: enrollment({ inboundMessages: [inbound({ kind: 'auto_reply', subject: 'Out of office', body: 'Back Monday.' })] }),
+    })
+    expect(auto[0]).toMatchObject({ kind: 'auto-reply', title: 'Automatic reply from Keith Example', detail: 'Back Monday.' })
+    const unkept = build({
+      enrollment: enrollment({ status: 'replied', stopReason: 'reply', stoppedAtMs: T + 40 * MIN, nextDueAtMs: null }),
+    })
+    expect(unkept[0]).toMatchObject({ kind: 'replied', title: 'Replied' })
+  })
+
+  it('finishes on the last step the sequence ran, not on an answer sent after it', () => {
+    const entries = build({
+      enrollment: enrollment({
+        status: 'finished',
+        stepRecords: [
+          ...(enrollment().stepRecords ?? []),
+          { stepIndex: 3, stepId: '', kind: 'manual_reply', atMs: T + 500 * MIN, byUid: 'uid-zach', body: 'One more thing.' },
+        ],
+      }),
+    })
+    expect(entries.find((entry) => entry.kind === 'finished')?.atMs).toBe(T)
+  })
+})
+
 describe('the timeline: an enrollment that began at a later step (AGL-3228)', () => {
   const began = (overrides: Partial<OutreachEnrollment> = {}) =>
     enrollment({
@@ -342,8 +440,29 @@ describe('the five figures', () => {
       opens: 0,
       machineOpens: 0,
       replies: 1,
+      answers: 0,
       anything: true,
     })
+  })
+
+  it('counts every reply they wrote and every answer sent, never an answer as one of the sequence’s sends (AGL-4020)', () => {
+    const figures = outreachEnrollmentFigures(
+      enrollment({
+        status: 'replied',
+        stopReason: 'reply',
+        stoppedAtMs: T + 40 * MIN,
+        inboundMessages: [
+          inbound({ id: 'in-1', atMs: T + 40 * MIN }),
+          inbound({ id: 'in-2', atMs: T + 90 * MIN }),
+          inbound({ id: 'in-3', atMs: T + 95 * MIN, kind: 'auto_reply' }),
+        ],
+        stepRecords: [
+          ...(enrollment().stepRecords ?? []),
+          { stepIndex: 1, stepId: '', kind: 'manual_reply', atMs: T + 60 * MIN, byUid: 'uid-zach', body: 'Thanks!' },
+        ],
+      }),
+    )
+    expect(figures).toMatchObject({ emailsSent: 1, replies: 2, answers: 1, anything: true })
   })
 
   it('counts opens and machine opens apart (AGL-3395)', () => {

@@ -38,6 +38,11 @@
  * - **The enrollment**, with who enrolled them, and each curated step.
  * - **The steps it skipped** (AGL-3228), when it began past the first: one
  *   entry naming them, never a "sent" — nothing of ours went out for them.
+ * - **What the person wrote** (AGL-4020): each reply, automatic answer and
+ *   opt-out the enrollment kept, with their words. The one that stopped the
+ *   sequence carries the stop, in place of a second entry saying it.
+ * - **Each answer a member sent** in the thread (AGL-4020), with their
+ *   words and who sent it — never counted as one of the sequence's sends.
  *
  * Client-safe and free of React: the view renders these entries, and the
  * spec reads them.
@@ -58,6 +63,7 @@ import {
   type OutreachEnrollment,
   type OutreachEnrollmentHistoryEntry,
   type OutreachHistoryAction,
+  type OutreachInboundMessage,
   type OutreachSequenceStep,
   type OutreachStepRecord,
 } from './outreach.types'
@@ -79,6 +85,8 @@ export type OutreachTimelineKind =
   | 'stopped'
   | 'do-not-contact'
   | 'replied'
+  | 'auto-reply'
+  | 'answered'
   | 'bounced'
   | 'opted-out'
   | 'held'
@@ -178,6 +186,8 @@ const ACTION_KINDS: Record<OutreachHistoryAction, OutreachTimelineKind> = {
 const TIE_ORDER: Record<OutreachTimelineKind, number> = {
   finished: 0,
   replied: 1,
+  'auto-reply': 4,
+  answered: 5,
   bounced: 1,
   'opted-out': 1,
   failed: 1,
@@ -206,6 +216,27 @@ const byWhom = (uid: string | null | undefined, memberName: (uid: string) => str
 /** The step records that are emails, in the order they went. */
 function emailRecords(enrollment: OutreachEnrollment): OutreachStepRecord[] {
   return (enrollment.stepRecords ?? []).filter((record) => record?.kind === 'email')
+}
+
+/** Who wrote a message, as the timeline names them: their name, else their address. */
+const senderOf = (message: Pick<OutreachInboundMessage, 'fromName' | 'from'>) => message.fromName || message.from
+
+/** The entry for one message the person wrote (AGL-4020). */
+function inboundEntry(message: OutreachInboundMessage, index: number, stopped: boolean): OutreachTimelineEntry {
+  const facts = [
+    message.fromName ? `From ${message.from}` : null,
+    message.subject ? `Subject: ${message.subject}` : null,
+    stopped ? 'The sequence stopped for them' : null,
+  ].filter((fact): fact is string => Boolean(fact))
+  const base = { key: `inbound-${index}`, atMs: message.atMs, detail: message.body || null, facts, gmailThreadId: message.threadId }
+  switch (message.kind) {
+    case 'auto_reply':
+      return { ...base, kind: 'auto-reply', title: `Automatic reply from ${senderOf(message)}`, tone: 'default' }
+    case 'opt_out':
+      return { ...base, kind: 'opted-out', title: `${senderOf(message)} asked not to be emailed`, tone: 'warning' }
+    default:
+      return { ...base, kind: 'replied', title: `Reply from ${senderOf(message)}`, tone: 'info' }
+  }
 }
 
 /**
@@ -271,6 +302,24 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
   let previousThread: string | null = null
   ;(enrollment.stepRecords ?? []).forEach((record, index) => {
     if (!record || typeof record.atMs !== 'number') return
+    // A member's answer in the thread (AGL-4020): their words, never a step.
+    if (record.kind === 'manual_reply') {
+      entries.push({
+        key: `answered-${index}`,
+        kind: 'answered',
+        atMs: record.atMs,
+        title: 'Answered in the thread',
+        detail: record.body || null,
+        facts: [
+          byWhom(record.byUid, memberName),
+          record.from ? `From ${record.from}` : null,
+          record.subject ? `Subject: ${record.subject}` : null,
+        ].filter((fact): fact is string => Boolean(fact)),
+        gmailThreadId: record.gmailThreadId ?? null,
+        tone: 'default',
+      })
+      return
+    }
     if (record.kind === 'task') {
       const step = steps.find((entry) => entry.id === record.stepId) ?? steps[record.stepIndex]
       entries.push({
@@ -475,12 +524,24 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
     })
   }
 
-  // ── The current stop, from the enrollment ───────────────────────────────
+  // ── What the person wrote (AGL-4020) ────────────────────────────────────
   const stoppedAtMs = enrollment.stoppedAtMs
-  const alreadySaid =
+  // The message that stopped the sequence carries the stop, so the person's
+  // words and what they did to the sequence read as one entry.
+  const stoppedByMessage =
     stoppedAtMs !== null &&
-    (actionTimes.has(stoppedAtMs) ||
-      (enrollment.stopReason === 'gateway_blocked_here' && hold?.heldAtMs === stoppedAtMs))
+    (enrollment.stopReason === 'reply' || enrollment.stopReason === 'opt_out_reply') &&
+    (enrollment.inboundMessages ?? []).some((message) => message.atMs === stoppedAtMs)
+  ;(enrollment.inboundMessages ?? []).forEach((message, index) => {
+    entries.push(inboundEntry(message, index, stoppedByMessage && message.atMs === stoppedAtMs))
+  })
+
+  // ── The current stop, from the enrollment ───────────────────────────────
+  const alreadySaid =
+    stoppedByMessage ||
+    (stoppedAtMs !== null &&
+      (actionTimes.has(stoppedAtMs) ||
+        (enrollment.stopReason === 'gateway_blocked_here' && hold?.heldAtMs === stoppedAtMs)))
   if (stoppedAtMs && !alreadySaid && enrollment.status !== 'active' && enrollment.status !== 'finished') {
     const stop = currentStop(enrollment, memberName, gatewayName)
     if (stop) entries.push({ key: 'stop', atMs: stoppedAtMs, ...stop })
@@ -488,7 +549,8 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
 
   // ── Finished ────────────────────────────────────────────────────────────
   if (enrollment.status === 'finished') {
-    const last = (enrollment.stepRecords ?? []).at(-1)
+    // The last step the sequence ran: a member's answer after it is no step.
+    const last = (enrollment.stepRecords ?? []).filter((record) => record?.kind !== 'manual_reply').at(-1)
     entries.push({
       key: 'finished',
       kind: 'finished',
@@ -563,6 +625,8 @@ export interface OutreachEnrollmentFigures {
   opens: number
   machineOpens: number
   replies: number
+  /** Answers members sent them in the thread (AGL-4020), never counted in `emailsSent`. */
+  answers: number
   /** Whether anything has happened to them beyond being enrolled. */
   anything: boolean
 }
@@ -571,10 +635,13 @@ export function outreachEnrollmentFigures(enrollment: OutreachEnrollment): Outre
   const clicks = outreachClickSummary(enrollment.engagement)
   const engagement = readOutreachEngagement(enrollment.engagement)
   const emailsSent = emailRecords(enrollment).length
-  const replies =
+  const stoppedByReply =
     enrollment.status === 'replied' || enrollment.stopReason === 'reply' || enrollment.stopReason === 'opt_out_reply'
-      ? 1
-      : 0
+  // Every reply they wrote that the enrollment kept (AGL-4020); one for a
+  // reply that stopped it before replies were kept.
+  const kept = (enrollment.inboundMessages ?? []).filter((message) => message.kind !== 'auto_reply').length
+  const replies = Math.max(kept, stoppedByReply ? 1 : 0)
+  const answers = (enrollment.stepRecords ?? []).filter((record) => record?.kind === 'manual_reply').length
   return {
     emailsSent,
     clicks: clicks.clicks,
@@ -586,6 +653,7 @@ export function outreachEnrollmentFigures(enrollment: OutreachEnrollment): Outre
     opens: engagement.opens,
     machineOpens: engagement.machineOpens,
     replies,
+    answers,
     anything:
       emailsSent > 0 ||
       (enrollment.stepRecords ?? []).length > 0 ||
@@ -593,6 +661,7 @@ export function outreachEnrollmentFigures(enrollment: OutreachEnrollment): Outre
       clicks.machineClicks > 0 ||
       engagement.opens > 0 ||
       engagement.machineOpens > 0 ||
+      Boolean(enrollment.inboundMessages?.length) ||
       enrollment.stoppedAtMs !== null,
   }
 }
