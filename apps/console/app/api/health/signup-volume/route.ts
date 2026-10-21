@@ -70,6 +70,7 @@
  */
 import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import { getApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
@@ -96,14 +97,18 @@ import {
   SIGNUP_LANDING_GRACE_MINUTES,
   SIGNUP_LANDING_WINDOW_HOURS,
   SIGNUP_REFUSAL_WINDOW_MINUTES,
+  SIGNUP_WORKSPACE_WINDOW_HOURS,
   signupDroughtHealth,
   signupLandingHealth,
+  signupWorkspaceHealth,
   ORG_LANDED_AT_PATH,
   signupRefusalsHealth,
   signupsHealth,
   type SignupDroughtCheck,
   type SignupLandingCheck,
   type SignupLandingOrg,
+  type SignupWorkspaceAccount,
+  type SignupWorkspaceCheck,
   type SignupRefusalMarker,
   type SignupRefusalsCheck,
   type SignupAttemptMarker,
@@ -442,16 +447,108 @@ const landingProbe = memoizeWithTtl<{
   }
 })
 
+/**
+ * The new accounts of the last 36 hours, whether each is verified and has
+ * accepted the Terms, and whether it has a workspace (AGL-4021), for
+ * `signupWorkspace`. Accounts come from
+ * `users/{uid}.acquisition`, which every sign-up door writes (and the
+ * legal-acceptance and hosts/create backstops write when a door died first),
+ * so an account with no org is still found here. Membership is the
+ * `users/{uid}/orgs` mirror and acceptance is `users/{uid}/legalAcceptances`,
+ * one single-document read each.
+ */
+/**
+ * The first account `signupWorkspace` grades (AGL-4021). The three phone
+ * sign-ups that door stranded on 2026-10-20/21 are a known incident, tracked
+ * on AGL-4021 with their rescue held for a decision; grading them would hold
+ * the check red for a day and a half over a door that is already fixed. Moot
+ * once the window has moved past it.
+ */
+const SIGNUP_WORKSPACE_GRADED_SINCE_MS = Date.parse('2026-10-21T23:00:00Z')
+
+const workspaceProbe = memoizeWithTtl<{
+  accounts: SignupWorkspaceAccount[] | null
+  ms: number
+}>(PROBE_TTL_MS, async () => {
+  const startedAt = Date.now()
+  try {
+    void firebaseAdmin
+    const app = getApp()
+    const db = getFirestore(app)
+    const now = Date.now()
+    const snapshot = await db
+      .collection('users')
+      .where(
+        'acquisition.accountCreatedAt',
+        '>',
+        Math.max(
+          now - SIGNUP_WORKSPACE_WINDOW_HOURS * 3_600_000,
+          SIGNUP_WORKSPACE_GRADED_SINCE_MS,
+        ),
+      )
+      .where(
+        'acquisition.accountCreatedAt',
+        '<=',
+        now - SIGNUP_LANDING_GRACE_MINUTES * 60_000,
+      )
+      .limit(LANDING_ORG_READ_LIMIT)
+      .get()
+    const docs = snapshot.docs as Array<{
+      id: string
+      get: (field: string) => unknown
+    }>
+    if (docs.length === 0) return { accounts: [], ms: Date.now() - startedAt }
+    const verified = new Set<string>()
+    for (let index = 0; index < docs.length; index += 100) {
+      const { users } = await getAuth(app).getUsers(
+        docs.slice(index, index + 100).map((doc) => ({ uid: doc.id })),
+      )
+      for (const user of users) if (user.emailVerified) verified.add(user.uid)
+    }
+    const accounts = await Promise.all(
+      docs.map(async (doc): Promise<SignupWorkspaceAccount> => {
+        const acquisition = doc.get('acquisition') as {
+          door?: unknown
+          accountCreatedAt?: unknown
+        } | null
+        const isVerified = verified.has(doc.id)
+        const account = db.collection('users').doc(doc.id)
+        const [memberships, acceptances] = isVerified
+          ? await Promise.all([
+              account.collection('orgs').limit(1).get(),
+              account.collection('legalAcceptances').limit(1).get(),
+            ])
+          : [null, null]
+        return {
+          door: typeof acquisition?.door === 'string' ? acquisition.door : null,
+          createdAtMs:
+            typeof acquisition?.accountCreatedAt === 'number'
+              ? acquisition.accountCreatedAt
+              : null,
+          verified: isVerified,
+          accepted: acceptances ? !acceptances.empty : false,
+          hasWorkspace: memberships ? !memberships.empty : false,
+        }
+      }),
+    )
+    return { accounts, ms: Date.now() - startedAt }
+  } catch {
+    // Null is degraded by contract (`accounts-unavailable`).
+    return { accounts: null, ms: Date.now() - startedAt }
+  }
+})
+
 export async function GET(): Promise<Response> {
   // Every probe in parallel — each memoizes independently, so a warm one
   // costs nothing and the endpoint's worst case stays one round trip.
-  const [orgCreations, signupRefusals, served, attempts, landing] =
+  const [orgCreations, signupRefusals, served, attempts, landing, workspaces] =
     await Promise.all([
       orgCreationsProbe(),
       refusalsProbe(),
       servedProbe(),
       attemptsProbe(),
       landingProbe(),
+      workspaceProbe(),
     ])
   const signupVolume: SignupsCheck = signupsHealth(
     orgCreations.count,
@@ -473,7 +570,19 @@ export async function GET(): Promise<Response> {
     landing.orgs,
     landing.ms,
   )
-  const checks = { signupVolume, signupRefusals, signupDrought, signupLanding }
+  // Did every new verified account get a workspace at all (AGL-4021)? The
+  // landing check above grades orgs, so an account with none never reaches it.
+  const signupWorkspace: SignupWorkspaceCheck = signupWorkspaceHealth(
+    workspaces.accounts,
+    workspaces.ms,
+  )
+  const checks = {
+    signupVolume,
+    signupRefusals,
+    signupDrought,
+    signupLanding,
+    signupWorkspace,
+  }
   const status = healthStatus(checks)
   return recordHealthResponse(
     Response.json(
