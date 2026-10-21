@@ -85,7 +85,17 @@ let mockNotifications: Array<{
   level?: string
   options?: { skipEmail?: boolean }
 }>
-let mockEmails: Array<{ orgId: string; subject: string; text: string }>
+let mockEmails: Array<{
+  orgId: string
+  subject: string
+  text: string
+  /** The designed email's own parts (AGL-4019). */
+  lead?: string
+  details?: string
+  url?: string
+  urlLabel?: string
+  note?: string
+}>
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -285,11 +295,21 @@ jest.mock('../app/api/_lib/usage-alert-email', () => ({
     orgId: string
     subject: string
     text: string
+    lead?: string
+    details?: string
+    url?: string
+    urlLabel?: string
+    note?: string
   }) => {
     mockEmails.push({
       orgId: input.orgId,
       subject: input.subject,
       text: input.text,
+      lead: input.lead,
+      details: input.details,
+      url: input.url,
+      urlLabel: input.urlLabel,
+      note: input.note,
     })
     return { sent: true }
   },
@@ -600,6 +620,18 @@ describe('the four steps — 75, 80, 90, 100 — each once (AGL-3431)', () => {
     expect(pageNotices()[0].title).toContain('above 80%')
     // A step on the way is informational; the limit itself is amber (AGL-3437).
     expect(pageNotices()[0].level).toBe('info')
+    // The email draws its own parts (AGL-4019): sent with its subject and
+    // body alone, it arrived as a heading over an empty panel and a button
+    // with no words.
+    const email = pageEmails()[0]
+    expect(email.lead).toBe(pageNotices()[0].body)
+    expect(email.lead).not.toContain('https://')
+    expect(email.details?.split('\n')).toEqual(
+      expect.arrayContaining(['Limit: Pages on a site', 'Used: 5 of 6 (83%)']),
+    )
+    expect(email.url).toMatch(/^https:\/\/app\.aglyn\.com\//)
+    expect(email.urlLabel).toBe('See usage in Billing')
+    expect(email.note).toContain('once each')
 
     atPages(6)
     await run(DAY_THREE)

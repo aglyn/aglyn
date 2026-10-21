@@ -195,6 +195,34 @@ describe('the usage-alert fan-out', () => {
     ])
   })
 
+  // AGL-4019: the `workspace-notice` email is drawn from its designed parts,
+  // and a send that passed only a subject and body arrived as a heading over
+  // an empty panel and a button with no words.
+  it('mails the notice with its lead, details and a labelled button', async () => {
+    const store = nested(
+      seedOrg([{ id: 'm1', role: 'owner', email: 'owner@example.com' }]),
+    )
+    await emailOrgAdmins({
+      firestore: store as any,
+      orgId: ORG,
+      subject: 'You’re above 80% of your pages on a site quota',
+      text: 'Body\n\nSee your usage and billing: https://app.aglyn.com/acme/billing/usage',
+      lead: 'Your site Shop has 5 of the 6 pages your plan includes per site.',
+      details: 'Limit: Pages on a site\nUsed: 5 of 6 (83%)',
+      url: 'https://app.aglyn.com/acme/billing/usage',
+      urlLabel: 'See usage in Billing',
+      note: 'Usage alerts go out at 75%, 80%, 90% and 100% of a limit.',
+      context: 'usage-alert',
+    })
+    const html = String(mockSent[0]['html'] ?? '')
+    expect(html).toContain('Your site Shop has 5 of the 6 pages')
+    expect(html).toContain('5 of 6 (83%)')
+    expect(html).toContain('See usage in Billing')
+    expect(html).toContain('href="https://app.aglyn.com/acme/billing/usage"')
+    expect(html).toContain('You are getting this because you are an owner or admin of')
+    expect(html).not.toContain('{{')
+  })
+
   it('drops a suppressed admin and keeps the rest', async () => {
     const store = nested(
       seedOrg([
