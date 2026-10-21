@@ -56,6 +56,11 @@ const mockServedGet = jest.fn()
 const mockAttemptGet = jest.fn()
 /** AGL-3725 orgs in the landing window. */
 const mockLandingGet = jest.fn()
+/** AGL-4021 new accounts in the workspace window, and their two sub-reads. */
+const mockWorkspaceGet = jest.fn()
+const mockAccountSubGet = jest.fn()
+const mockGetUsers = jest.fn()
+const workspaceQueries: { bounds: { field: string; op: string; ms: number }[]; limit: number }[] = []
 const landingQueries: {
   collection: string
   bounds: { field: string; op: string; ms: number }[]
@@ -96,15 +101,37 @@ jest.mock('firebase-admin/app', () => ({
   getApp: () => ({}),
 }))
 
+jest.mock('firebase-admin/auth', () => ({
+  __esModule: true,
+  getAuth: () => ({ getUsers: (ids: { uid: string }[]) => mockGetUsers(ids) }),
+}))
+
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   getFirestore: () => ({
     collection: (collection: string) => ({
+      // AGL-4021: `users/{uid}/orgs` and `users/{uid}/legalAcceptances`.
+      doc: (id: string) => ({
+        collection: (sub: string) => ({
+          limit: () => ({ get: () => mockAccountSubGet(id, sub) }),
+        }),
+      }),
       where: (field: string, op: string, cutoff: { ms: number } | number) => ({
         // AGL-3725: the landing read is the only one with a SECOND range edge.
         where: (field2: string, op2: string, cutoff2: { ms: number }) => ({
           limit: (max: number) => ({
             get: () => {
+              // AGL-4021: the account read ranges on plain milliseconds.
+              if (collection === 'users') {
+                workspaceQueries.push({
+                  bounds: [
+                    { field, op, ms: cutoff as number },
+                    { field: field2, op: op2, ms: cutoff2 as unknown as number },
+                  ],
+                  limit: max,
+                })
+                return mockWorkspaceGet()
+              }
               landingQueries.push({
                 collection,
                 bounds: [
@@ -266,6 +293,12 @@ beforeEach(() => {
   mockLandingGet.mockReset()
   mockLandingGet.mockImplementation(orgsWithSites(1, 1))
   landingQueries.length = 0
+  // No new accounts by default, so the AGL-4021 workspace check stays green.
+  mockWorkspaceGet.mockReset()
+  mockWorkspaceGet.mockResolvedValue({ docs: [] })
+  mockAccountSubGet.mockReset()
+  mockGetUsers.mockReset()
+  workspaceQueries.length = 0
   queries.length = 0
   refusalQueries.length = 0
   servedQueries.length = 0
@@ -753,6 +786,7 @@ describe('AGL-2583 · the old /api/health/signups path still answers', () => {
       'signupLanding',
       'signupRefusals',
       'signupVolume',
+      'signupWorkspace',
     ])
     expect(response.headers.get('Cache-Control')).toContain('no-store')
   })
@@ -967,5 +1001,103 @@ describe('AGL-3725 · signupLanding: a workspace that never reached a site', () 
     })
     // The provider's message never reaches the public body.
     expect(JSON.stringify(body)).not.toContain('aglyn-main')
+  })
+})
+
+describe('AGL-4021 · signupWorkspace: a verified account that never got a workspace', () => {
+  /*
+   * signupLanding grades orgs, so an account with none is invisible to it.
+   * Three phone Google sign-ups on 2026-10-20/21 got no workspace at all and
+   * every check stayed green.
+   */
+  const now = Date.now()
+  const accountsOf = (
+    ...rows: { uid: string; door: string; minutesAgo: number; workspace: boolean; accepted?: boolean; verified?: boolean }[]
+  ) => {
+    mockWorkspaceGet.mockResolvedValue({
+      docs: rows.map((row) => ({
+        id: row.uid,
+        get: (field: string) =>
+          field === 'acquisition'
+            ? { door: row.door, accountCreatedAt: now - row.minutesAgo * 60_000 }
+            : undefined,
+      })),
+    })
+    mockGetUsers.mockImplementation(async (ids: { uid: string }[]) => ({
+      users: ids.map(({ uid }) => ({
+        uid,
+        emailVerified: rows.find((row) => row.uid === uid)?.verified !== false,
+      })),
+    }))
+    mockAccountSubGet.mockImplementation(async (uid: string, sub: string) => {
+      const row = rows.find((candidate) => candidate.uid === uid)
+      const present = sub === 'orgs' ? row?.workspace : row?.accepted !== false
+      return { empty: !present }
+    })
+  }
+
+  it('goes red when the two newest accounts through one door have no workspace', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    accountsOf(
+      { uid: 'a', door: 'signup-google', minutesAgo: 40, workspace: true },
+      { uid: 'b', door: 'signup-google-redirect', minutesAgo: 60, workspace: false },
+      { uid: 'c', door: 'signup-password', minutesAgo: 90, workspace: true },
+      { uid: 'd', door: 'signup-google-redirect', minutesAgo: 120, workspace: false },
+    )
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(503)
+    expect(body.checks.signupWorkspace).toMatchObject({
+      ok: false,
+      code: 'signups-without-workspace',
+      workspacelessAccounts: 2,
+      workspacelessStreak: 2,
+      gradedInWindow: 4,
+      windowHours: 36,
+    })
+    // Counts only: the public body never names an account or a door.
+    expect(JSON.stringify(body)).not.toMatch(/signup-google-redirect|"[abcd]"/)
+  })
+
+  it('stays green for a Google account that walked away from the consent bounce', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    accountsOf(
+      { uid: 'a', door: 'signup-google', minutesAgo: 40, workspace: false, accepted: false },
+      { uid: 'b', door: 'signup-google', minutesAgo: 60, workspace: false, accepted: false },
+    )
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.checks.signupWorkspace).toMatchObject({ ok: true, gradedInWindow: 0 })
+  })
+
+  it('reads accounts between thirty-six hours and thirty minutes old, bounded', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    const before = Date.now()
+    await (await freshRoute()).GET()
+    expect(workspaceQueries).toHaveLength(1)
+    const [query] = workspaceQueries
+    expect(query.limit).toBe(200)
+    expect(query.bounds[0]).toMatchObject({ field: 'acquisition.accountCreatedAt', op: '>' })
+    expect(query.bounds[1]).toMatchObject({ field: 'acquisition.accountCreatedAt', op: '<=' })
+    // Never further back than thirty-six hours. (The graded-since floor can
+    // only move it forward.)
+    expect(query.bounds[0].ms).toBeGreaterThanOrEqual(before - 36 * 3_600_000 - 1_000)
+    expect(before - 30 * 60_000 - query.bounds[1].ms).toBeLessThan(5_000)
+  })
+
+  it('is degraded, never calm, when the account read fails', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockWorkspaceGet.mockRejectedValue(new Error('unavailable'))
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(503)
+    expect(body.checks.signupWorkspace).toMatchObject({
+      ok: false,
+      code: 'accounts-unavailable',
+    })
   })
 })

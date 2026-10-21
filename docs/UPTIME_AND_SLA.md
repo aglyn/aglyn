@@ -2878,6 +2878,28 @@ Backtest, 2026-09-07 → 2026-10-17 (105 orgs, five-minute steps): the count
 rule was red for 1,125 minutes, 435 of them false. The streak rule was red
 only on 10/11 (AGL-3724). A streak of three missed AGL-3724 altogether.
 
+**A fifth, `signupWorkspace` (AGL-4021, 2026-10-21), asks whether the
+account got a workspace at all.** `signupLanding` grades orgs, so an account
+whose door died before `/api/orgs/create` leaves nothing for it to see. On
+2026-10-20/21 the phone Google redirect handler was cut off mid-landing, and
+three people got a verified account, an acceptance on record and no workspace.
+Every check stayed green, and the activation sweep found it a day later.
+
+It reads accounts by `users/{uid}.acquisition.accountCreatedAt`, from
+thirty-six hours to thirty minutes ago, and grades only the ones that are
+verified and have accepted the Terms. An unverified password account waits
+for verification by design (AGL-2590). A Google account bounced from /signin
+that never accepted the Terms agreed to nothing (AGL-1497). The streak is
+taken **per sign-up door**: it reds (`code: signups-without-workspace`) when
+the two newest graded accounts through any one door both have no workspace
+(the `users/{uid}/orgs` mirror). The three failures sat among healthy popup
+and password sign-ups, so a streak over everyone would have kept resetting.
+Phone sign-ups were 12 h and 5 h apart, so twelve hours would never have held
+two of them; hence thirty-six. Run over production on 10/21, it reads streak 3
+for `signup-google-redirect` and 0–1 for every other door. The three known
+accounts are excluded by a graded-since floor (2026-10-21 23:00Z), because
+their rescue is a held decision and the door is fixed.
+
 **Since 2026-10-18 it reads whether the owner reached the console, not
 whether they made a site.** The streak rule went red at 15:37Z because the two
 newest people had no site, and both had simply left. One left nine seconds

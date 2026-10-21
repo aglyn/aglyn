@@ -59,6 +59,7 @@ import {
   APP_CHECK_GRADED_SERVICE,
   APP_CHECK_MIN_REQUESTS,
   APP_CHECK_MIN_ALLOW_RATE,
+  signupWorkspaceHealth,
 } from './health-report'
 
 const OK = { ok: true, ms: 12 }
@@ -2499,6 +2500,89 @@ describe('signupLandingHealth (AGL-3725)', () => {
       strandedPeople: 0,
       strandedStreak: 0,
       orgsInWindow: 0,
+    })
+  })
+})
+
+describe('signupWorkspaceHealth (AGL-4021)', () => {
+  const account = (
+    door: string,
+    minutesAgo: number,
+    hasWorkspace: boolean,
+    extra: Partial<{ verified: boolean; accepted: boolean }> = {},
+  ) => ({
+    door,
+    createdAtMs: 10_000_000 - minutesAgo * 60_000,
+    verified: true,
+    accepted: true,
+    hasWorkspace,
+    ...extra,
+  })
+
+  it('is green when every graded account has a workspace', () => {
+    expect(
+      signupWorkspaceHealth(
+        [account('signup-google', 1, true), account('signup-password', 2, true)],
+        5,
+      ),
+    ).toMatchObject({ ok: true, workspacelessAccounts: 0, gradedInWindow: 2 })
+  })
+
+  it('reds when one door strands its two newest accounts, among healthy doors', () => {
+    // The 10/20-21 shape: the redirect door failed while popup and password
+    // sign-ups between its failures were fine.
+    const check = signupWorkspaceHealth(
+      [
+        account('signup-google', 10, true),
+        account('signup-google-redirect', 20, false),
+        account('signup-password', 30, true),
+        account('signup-google-redirect', 40, false),
+        account('signup-google-redirect', 300, true),
+      ],
+      5,
+    )
+    expect(check).toMatchObject({
+      ok: false,
+      code: 'signups-without-workspace',
+      workspacelessStreak: 2,
+      workspacelessAccounts: 2,
+    })
+  })
+
+  it("is green when the door's newest account recovered", () => {
+    const check = signupWorkspaceHealth(
+      [
+        account('signup-google-redirect', 10, true),
+        account('signup-google-redirect', 20, false),
+        account('signup-google-redirect', 30, false),
+      ],
+      5,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.workspacelessStreak).toBe(0)
+  })
+
+  it('does not grade unverified or unconsented accounts', () => {
+    // Unverified password accounts wait for verification (AGL-2590), and a
+    // Google account bounced from /signin that never consented has no
+    // workspace by design (AGL-1497).
+    const check = signupWorkspaceHealth(
+      [
+        account('signup-password', 10, false, { verified: false }),
+        account('signup-password', 20, false, { verified: false }),
+        account('signup-google', 30, false, { accepted: false }),
+        account('signup-google', 40, false, { accepted: false }),
+      ],
+      5,
+    )
+    expect(check).toMatchObject({ ok: true, gradedInWindow: 0 })
+  })
+
+  it('is degraded, never calm, when the read failed', () => {
+    expect(signupWorkspaceHealth(null, 5)).toMatchObject({
+      ok: false,
+      code: 'accounts-unavailable',
+      workspacelessAccounts: null,
     })
   })
 })
