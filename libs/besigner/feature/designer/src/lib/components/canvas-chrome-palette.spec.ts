@@ -166,8 +166,12 @@ describe('canvas chrome stays on the slate (AGL-1194)', () => {
     // contrastText OF THIS background is a pairing, so it holds in both
     // schemes without measuring a screenshot.
     const source = read('node-quick-actions.tsx')
-    expect(source).toContain("backgroundColor: 'tertiary.main'")
-    expect(source).toContain("color: 'tertiary.contrastText'")
+    // Both halves from the light scheme's slate, in either console scheme:
+    // the strip floats over the site, whose colours do not follow the
+    // console into dark mode, so neither does the strip.
+    expect(source).toContain('colorSchemes?.light?.palette?.tertiary')
+    expect(source).toContain('backgroundColor: light?.main')
+    expect(source).toContain('color: light?.contrastText')
     // ...and the buttons on it must not be contained in the same colour,
     // which would make them invisible against their own strip.
     expect(source).not.toMatch(/variant=\{'contained'\}\s+color=\{'tertiary'\}/)
@@ -228,9 +232,11 @@ describe('the chrome ink is paired with the chrome surface, in both schemes', ()
   // pairing; these numbers just confirm the pairing is legible.
   const SCHEMES = [
     { name: 'light', bg: '#404C5C', ink: '#FFFFFF' },
-    // contrastText is #000000DE — the alpha rides over the slate, so the
-    // worst case for contrast is the opaque black underneath it.
-    { name: 'dark', bg: '#7C8CA3', ink: '#000000' },
+    // The dark console no longer repaints the strip. Its own slate pair,
+    // #7C8CA3 under #000000DE, measured AA on paper and still read as a pale
+    // chip with black type over the light page being edited; the strip now
+    // keeps the light scheme's pair in both.
+    { name: 'dark', bg: '#404C5C', ink: '#FFFFFF' },
   ]
 
   for (const { name, bg, ink } of SCHEMES) {
@@ -247,9 +253,11 @@ describe('the chrome ink is paired with the chrome surface, in both schemes', ()
     // `tertiary` is what stops that recurring at the next rotation.
     const source = read('node-quick-actions.tsx')
     const entries = new Set(
-      [...source.matchAll(/'(primary|secondary|tertiary)\.[a-zA-Z]+'/g)].map(
-        (match) => match[1],
-      ),
+      [
+        ...source.matchAll(
+          /(?:'|palette\?\.)(primary|secondary|tertiary)\b(?:\.[a-zA-Z]+')?/g,
+        ),
+      ].map((match) => match[1]),
     )
     expect([...entries]).toEqual(['tertiary'])
   })

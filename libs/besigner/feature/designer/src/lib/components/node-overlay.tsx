@@ -66,28 +66,45 @@ const outerModifiers = [
   },
 ]
 
-const innerModifiers = [
-  {
-    name: 'flip',
-    enabled: true,
-    options: {
-      altBoundary: true,
-      rootBoundary: 'viewport',
-      padding: 0,
+/** The canvas's scrolling, clipping container: what the author can see of it. */
+const CANVAS_VIEWPORT_ID = 'aglyn:viewport-canvas'
+
+/**
+ * Where the label chip and the action strip may be flipped and pushed to stay
+ * in view: inside the CANVAS, measured in page coordinates.
+ *
+ * They were kept inside the browser's viewport, and on a phone that is the
+ * VISUAL viewport — the part a pinch-zoom leaves on screen, 195px wide at 2×.
+ * A strip under an element near that edge was shoved sideways to fit, 56px
+ * off the element it belongs to, and only once something made the overlay
+ * update; before that it sat centred. So it was off-centre "sometimes", and
+ * stayed wherever the last update had put it as the author panned.
+ *
+ * The canvas is the right box anyway: it is what the author is looking at,
+ * zoom does not change it, and a strip pushed inside it never ends up over a
+ * side panel.
+ */
+function innerModifiersWithin(canvas: Element | null) {
+  const boundary = canvas ?? 'clippingParents'
+  return [
+    {
+      name: 'flip',
+      enabled: true,
+      options: { boundary, rootBoundary: 'document', padding: 0 },
     },
-  },
-  {
-    name: 'preventOverflow',
-    enabled: true,
-    options: {
-      altAxis: true,
-      altBoundary: true,
-      tether: true,
-      rootBoundary: 'viewport',
-      padding: 0,
+    {
+      name: 'preventOverflow',
+      enabled: true,
+      options: {
+        boundary,
+        rootBoundary: 'document',
+        altAxis: true,
+        tether: true,
+        padding: 0,
+      },
     },
-  },
-]
+  ]
+}
 
 const DEFAULT_RECT = {
   top: 0,
@@ -173,6 +190,16 @@ const NodeOverlay = observer(
     const [geometry, setGeometry] =
       useState<ElementFragmentRects>(DEFAULT_GEOMETRY)
     const { union: rect, fragments, first } = geometry
+    // Found once the overlay is in the document; memoised so the popper is
+    // not rebuilt on every geometry commit.
+    const [canvasViewport, setCanvasViewport] = useState<Element | null>(null)
+    useIsomorphicLayoutEffect(() => {
+      setCanvasViewport(document.getElementById(CANVAS_VIEWPORT_ID))
+    }, [])
+    const innerModifiers = useMemo(
+      () => innerModifiersWithin(canvasViewport),
+      [canvasViewport],
+    )
 
     useIsomorphicLayoutEffect(() => {
       const el = elementRef?.current
@@ -215,11 +242,20 @@ const NodeOverlay = observer(
       // body) shifts getBoundingClientRect() values without triggering a
       // resize — capture-phase listener catches them all.
       window.addEventListener('scroll', update, { passive: true, capture: true })
+      // A pinch-zoom, a pan of the zoomed view and the on-screen keyboard
+      // move the VISUAL viewport, which fires neither of the above. Where a
+      // browser reports element rects against it (Safari), the overlay has
+      // to re-read them or it is left where the last pan put it.
+      const visual = window.visualViewport
+      visual?.addEventListener('resize', update, { passive: true })
+      visual?.addEventListener('scroll', update, { passive: true })
 
       return () => {
         ro?.disconnect()
         window.removeEventListener('resize', update)
         window.removeEventListener('scroll', update, { capture: true })
+        visual?.removeEventListener('resize', update)
+        visual?.removeEventListener('scroll', update)
       }
       // Node?.index changes when the node is reordered among siblings (e.g.
       // "shift up"/"shift down"). Reordering moves the same DOM element to a
