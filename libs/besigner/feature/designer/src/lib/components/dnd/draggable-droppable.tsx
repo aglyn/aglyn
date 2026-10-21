@@ -59,6 +59,7 @@ import {
 import { pickPlacementPart } from '../../utils/placement-part-pick'
 import { findLeafTextElement } from '../../utils/in-place-edit-surface'
 import { holdKeyboardForEdit } from '../../utils/touch-keyboard'
+import { repeatOriginalAt } from '../../utils/repeat-copy'
 import { DropSurface } from './drop-surface'
 
 /** A pointer position, from a mouse event or a touch. */
@@ -349,8 +350,10 @@ export const DraggableDroppable = observer(
         }
         e.preventDefault()
         e.stopPropagation()
-        Besigner.focus.setSelectedNode(node)
-        requestCanvasContextMenu(node?.$id)
+        // On a repeat copy, the menu is the element the copy draws.
+        const target = repeatOriginalAt(e.target) ?? node
+        Besigner.focus.setSelectedNode(target)
+        requestCanvasContextMenu(target?.$id)
       }
       function handleMouseOver(e: Event) {
         // Same stand-down, same reason to consume it: a hover repaint while
@@ -362,7 +365,7 @@ export const DraggableDroppable = observer(
         }
         e.preventDefault()
         e.stopPropagation()
-        Besigner.focus.setHoveredNode(node)
+        Besigner.focus.setHoveredNode(repeatOriginalAt(e.target) ?? node)
       }
       function handleMouseDown(e: Event) {
         // Stand down while an edit is open in this leaf OR ANY LEAF INSIDE
@@ -393,25 +396,32 @@ export const DraggableDroppable = observer(
         }
         e.preventDefault()
         e.stopPropagation()
+        // A press on one of this element's repeat copies (Sam, Jordan) means
+        // the element that copy draws, not this one around it — see
+        // `repeatOriginalAt`.
+        const original = repeatOriginalAt(e.target)
+        const target = original ?? node
         // Element-picker capture (AGL-574): while the interaction builder is
         // picking, this click resolves the target and exits pick mode —
         // never the normal select/navigate, so the designer's selection and
         // the open interaction stay put.
         if (Besigner.pick.isPicking()) {
-          Besigner.pick.handlePickClick(node.$id)
+          Besigner.pick.handlePickClick(target.$id)
           return
         }
         // Canvas multi-selection modifiers (AGL-12), mirroring the
         // hierarchy panel: Shift ranges, Cmd/Ctrl toggles.
         const pointer = e as globalThis.MouseEvent
         if (pointer.shiftKey) {
-          Besigner.focus.rangeSelectNode(node)
+          Besigner.focus.rangeSelectNode(target)
         } else {
           Besigner.focus.handleNodeSelection(
-            node,
+            target,
             pointer.metaKey || pointer.ctrlKey,
           )
-          if (!pointer.metaKey && !pointer.ctrlKey) pickPartUnder(pointer)
+          if (!original && !pointer.metaKey && !pointer.ctrlKey) {
+            pickPartUnder(pointer)
+          }
         }
       }
       /**

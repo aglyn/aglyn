@@ -34,7 +34,7 @@ import * as Besigner from '@aglyn/besigner'
 import { fireEvent, render } from '@testing-library/react'
 
 import NodeLeaf from './node-leaf'
-import { repeatTemplateIdOf } from '../hooks/use-repeat-copy-pointer'
+import { repeatTemplateIdOf } from '../utils/repeat-copy'
 import {
   RepeatRowsContext,
   type RepeatRowsSource,
@@ -139,8 +139,16 @@ beforeAll(() => {
 })
 afterAll(() => unregister())
 
-const copies = (root: HTMLElement) =>
-  root.querySelector('[data-aglyn-repeat-preview]')
+/**
+ * The copies, drawn as siblings of the real children (no wrapper, so they sit
+ * in the parent's own layout), each root marked as a copy.
+ */
+const copies = (root: HTMLElement) => {
+  const roots = Array.from(root.querySelectorAll('[data-aglyn-repeat-copy]'))
+  return roots.length
+    ? { roots, textContent: roots.map((el) => el.textContent).join('') }
+    : null
+}
 const badge = (root: HTMLElement) =>
   root.querySelector('[data-aglyn-repeat-badge]')
 
@@ -196,10 +204,7 @@ describe('the canvas preview is bounded exactly as the runtime is', () => {
     expect(badge(baseElement)?.textContent).toContain(
       `${REPEAT_MAX_RECORDS} records`,
     )
-    expect(
-      copies(baseElement)?.querySelectorAll('[data-aglyn^="leaf:rep__"]')
-        .length,
-    ).toBe(REPEAT_MAX_RECORDS - 1)
+    expect(copies(baseElement)?.roots).toHaveLength(REPEAT_MAX_RECORDS - 1)
   })
 
   it('draws the template once when nothing has answered', () => {
@@ -324,9 +329,7 @@ describe('a click on a copy', () => {
   })
 
   const graceIn = (root: HTMLElement) =>
-    Array.from(copies(root)?.querySelectorAll('*') ?? []).find(
-      (el) => el.textContent === 'Grace' && el.children.length === 0,
-    ) as HTMLElement
+    copies(root)?.roots.find((el) => el.textContent === 'Grace') as HTMLElement
 
   it('selects the element the copy draws, not the copy or what lies beneath', () => {
     const nodes = listNodes({ repeatDataset: 'Team' })
@@ -337,6 +340,27 @@ describe('a click on a copy', () => {
     const { baseElement } = renderList(answered(READY()), nodes)
     fireEvent.pointerDown(graceIn(baseElement))
     expect(Besigner.focus.getLastSelected()?.$id).toBe('row')
+  })
+})
+
+describe('the copies sit in the layout the live page gives them', () => {
+  let canvasJson: jest.SpyInstance
+  afterEach(() => canvasJson?.mockRestore())
+
+  it('draws each copy as a sibling of the real child, hidden from assistive technology', () => {
+    const nodes = listNodes({ repeatDataset: 'Team' })
+    canvasJson = withCanvas(nodes)
+    const { baseElement } = renderList(answered(READY()), nodes)
+    const found = copies(baseElement)
+    expect(found?.roots).toHaveLength(2)
+    const real = Array.from(baseElement.querySelectorAll('[data-aglyn]')).find(
+      (el) => el.getAttribute('data-aglyn') === 'leaf:row',
+    )
+    for (const copy of found?.roots ?? []) {
+      // Same parent as the real child: one layout, the page's.
+      expect(copy.parentElement).toBe(real?.parentElement)
+      expect(copy.getAttribute('aria-hidden')).toBe('true')
+    }
   })
 })
 

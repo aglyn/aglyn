@@ -40,7 +40,7 @@ import {
   Trunk,
 } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { alpha, Box } from '@mui/material'
+import { alpha, Box, useTheme } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import {
   forwardRef,
@@ -48,7 +48,6 @@ import {
   useContext,
   useMemo,
   useRef,
-  useState,
 } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
 import CanvasRevealContext, {
@@ -73,8 +72,7 @@ import {
 import { stripMutedClasses } from '../utils/muted-classes'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
-import { REPEAT_NODE_ID_PREFIX } from '@aglyn/aglyn/app-utils/expand-repeatables'
-import { useRepeatCopyPointer } from '../hooks/use-repeat-copy-pointer'
+import { REPEAT_COPY_ATTR } from '../utils/repeat-copy'
 
 /**
  * The plain `Leaf`, drawing a node the way the published page composes it: its
@@ -210,6 +208,32 @@ const REPEAT_INK = '#FFFFFF'
  * (AGL-3496), held literally for the same reason as {@link REPEAT_ACCENT}.
  */
 const REPEAT_EMPTY_ACCENT = '#B45309'
+
+/**
+ * A repeat copy's root as the canvas draws it: hidden from assistive
+ * technology, since it repeats what the real element already says, and
+ * stamped so {@link repeatCopyCss} can outline it.
+ */
+function asRepeatCopy(copy: any) {
+  return {
+    ...copy,
+    props: { ...copy.props, 'aria-hidden': true, [REPEAT_COPY_ATTR]: '' },
+  }
+}
+
+/**
+ * The copies' outline: dashed `rest` grey, and dashed `hover` grey on the
+ * copies of the element being pointed at — the real one or a copy of it.
+ */
+function repeatCopyCss(rest: string, hover: string, hovered?: string) {
+  const copy = `[${REPEAT_COPY_ATTR}]`
+  return (
+    `${copy}{outline:1px dashed ${rest};outline-offset:-1px}` +
+    (hovered
+      ? `${copy}[data-aglyn$="__${hovered}"]{outline-color:${hover}}`
+      : '')
+  )
+}
 
 /** What the badge says: what is repeated, and how many copies the page gets. */
 function repeatBadgeText({
@@ -510,12 +534,7 @@ export const NodeLeaf = observer(
      */
     const repeatPreview = useRepeatPreview(node)
     const repeatCopies = useRepeatCopies(node, repeatPreview)
-    // State, not a ref: the box comes and goes with the copies, and the
-    // pointer listeners have to follow it.
-    const [repeatCopiesBox, setRepeatCopiesBox] = useState<HTMLElement | null>(
-      null,
-    )
-    useRepeatCopyPointer(repeatCopiesBox)
+    const theme = useTheme()
     // Only a leaf drawing copies reads the hover, so only those re-render as
     // the pointer moves; the id is CSS-safe or ignored.
     const hovered = repeatCopies.length
@@ -804,51 +823,36 @@ export const NodeLeaf = observer(
             children
           )}
           {repeatCopies.length ? (
-            // Inert, like the component and form previews below: a copy is a
-            // picture of the template, not a document, so no element inside
-            // it is ever selected — an author would be offered something no
-            // save can reach.
+            // The copies are drawn as the live page draws them: siblings of
+            // the real children, in this element's own layout. They used to
+            // sit in a wrapper box, which took one share of the parent's
+            // spacing for all of them, so Sam and Jordan stacked tight under
+            // a gap that only Avery got.
             //
-            // But NOT click-through. A click on "Sam Rivera" means the
-            // element Sam is a copy of, and `useRepeatCopyPointer` selects
-            // it; click-through, it fell to whatever lay beneath (the parent
-            // Stack), which is not what anyone pointing at Sam meant.
-            <Box
-              ref={setRepeatCopiesBox}
-              data-aglyn-repeat-preview=""
-              aria-hidden
-              sx={(theme) => ({
-                // The copies wear a dimmed GREY, so they never read as the
-                // element itself: the repeatable — the real one, drawing the
-                // first record — keeps the canvas's own hover and selection
-                // colours, and every copy of it is the quiet picture beside
-                // it. A neutral from the theme's own grey scale, which no
-                // site restyles, rather than an accent from either palette.
-                '& > *': {
-                  outline: `1px dashed ${alpha(theme.palette.grey[500], 0.5)}`,
-                  outlineOffset: -1,
-                },
-                // Pointing at a repeated element — the real one, or any of
-                // its copies, which hover it for you — firms its copies' grey
-                // up, still well under the real one's hover colour, so the
-                // whole repeat reads as one thing with one element to edit.
-                ...(hoveredInRepeat
-                  ? {
-                      [`& [data-aglyn^="leaf:${REPEAT_NODE_ID_PREFIX}"][data-aglyn$="__${hoveredInRepeat}"]`]:
-                        {
-                          outline: `1px solid ${alpha(theme.palette.grey[600], 0.75)}`,
-                          outlineOffset: -1,
-                        },
-                    }
-                  : {}),
-              })}
-            >
+            // Inert, like the component and form previews below: a copy is a
+            // picture of the template, not a document, so nothing in it is
+            // ever selected. A click on one goes to the element it draws —
+            // this leaf's own handlers redirect it (`repeatOriginalAt`).
+            <>
+              {/* Their outline, as CSS rather than as a wrapper: a dimmed,
+                  dashed GREY, so a copy never reads as the element — the
+                  real one keeps the canvas's hover and selection colours.
+                  Dashed when hovered too, only darker; solid is the
+                  selection's alone. MUI's Stack spacing skips <style>
+                  children, so this costs the layout nothing. */}
+              <style>
+                {repeatCopyCss(
+                  alpha(theme.palette.grey[500], 0.6),
+                  alpha(theme.palette.grey[800], 0.9),
+                  hoveredInRepeat,
+                )}
+              </style>
               <RendererComponents.Provider value={INERT_RENDERER as any}>
                 {repeatCopies.map((copy) => (
-                  <Stem key={copy.$id} node={copy} />
+                  <Stem key={copy.$id} node={asRepeatCopy(copy)} />
                 ))}
               </RendererComponents.Provider>
-            </Box>
+            </>
           ) : null}
           {repeatPreview ? (
             <RepeatBadge
