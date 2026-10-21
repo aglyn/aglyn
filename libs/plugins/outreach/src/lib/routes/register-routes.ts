@@ -35,6 +35,11 @@ import {
 import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
 import { createOutreachLinkDomainsRoute, type OutreachLinkDomainRouteDeps } from './link-domain-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
+import {
+  createOutreachEnrollmentReplyRoute,
+  createOutreachEnrollmentThreadRoute,
+  type OutreachReplyDeps,
+} from './reply-routes'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes } from './sequence-routes'
 import { createOutreachSettingsRoute } from './settings-routes'
@@ -136,6 +141,18 @@ export function defaultOutreachStepTestDeps(): OutreachStepTestDeps {
   }
 }
 
+/**
+ * The answer's reach (AGL-4020): the enrollment's mailbox through the same
+ * door every send uses, and the platform's rate limit.
+ */
+export function defaultOutreachReplyDeps(): OutreachReplyDeps {
+  return {
+    openMailbox: (mailboxId) => openOutreachMailboxClient(firebaseAdmin.app().firestore(), { mailboxId }),
+    consumeRateLimit: async (key, options) =>
+      (await import('@aglyn/tenant-data-admin/server/rate-limit-store')).consumeRateLimit(key, options),
+  }
+}
+
 export function registerOutreachRoutes(
   deps: OutreachEnrollRouteDeps = defaultOutreachRouteDeps(),
 ): void {
@@ -157,6 +174,16 @@ export function registerOutreachRoutes(
   registerPluginApiRoute(
     OUTREACH_API_ROUTES.enrollmentsGateway,
     { web: createOutreachEnrollmentGatewayRoute(deps) },
+    orgSubject,
+  )
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.enrollmentsThread,
+    { web: createOutreachEnrollmentThreadRoute(deps, defaultOutreachReplyDeps()) },
+    orgSubject,
+  )
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.enrollmentsReply,
+    { web: createOutreachEnrollmentReplyRoute(deps, defaultOutreachReplyDeps()) },
     orgSubject,
   )
   registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)

@@ -38,6 +38,17 @@ const OutreachConsolePage = lazy(
   () => import('./components/outreach-console-page'),
 )
 
+/** Code-split: loads with a CRM record's header, where the CRM hosts its zone. */
+const OutreachRecordReplyButton = lazy(
+  () => import('./components/record-reply-button'),
+)
+
+/**
+ * The CRM's record-header zone for another way to write to the person
+ * (AGL-4020), restated by id: a plugin never imports another plugin.
+ */
+const OUTREACH_RECORD_EMAIL_ACTIONS_SLOT = 'crmRecordEmailActions'
+
 /**
  * The console half of this plugin (AGL-2974), named in `plugins.config.json`
  * as `console`. Console and console API only, like the CRM: a sequence has no
@@ -66,6 +77,10 @@ const OutreachConsolePage = lazy(
  * answered by the route with the refusal that applies, and the words for the
  * entitlement one are this extension's own: the shell's derived sentence
  * calls a feature no plan carries "a paid add-on", which this is not.
+ *
+ * ONE WIDGET ELSEWHERE (AGL-4020): "Reply in thread from <mailbox>" in a CRM
+ * contact's or lead's header, before its Send email, for a person who wrote
+ * back to a sequence — behind the same gates as the tab.
  */
 export function registerOutreachConsole(): void {
   registerPluginPermissions(OUTREACH_PERMISSIONS)
@@ -100,6 +115,14 @@ export function registerOutreachConsole(): void {
           docsTopic: 'sequences',
         },
         Component: OutreachConsolePage,
+      },
+    ],
+    widgets: [
+      {
+        slot: OUTREACH_RECORD_EMAIL_ACTIONS_SLOT,
+        widgetId: 'outreach-record-reply',
+        title: 'Reply in thread',
+        Component: OutreachRecordReplyButton,
       },
     ],
   })

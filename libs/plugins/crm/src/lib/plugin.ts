@@ -31,6 +31,7 @@ import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
 import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
+import { CRM_RECORD_EMAIL_ACTIONS_ZONE } from './components/crm-email-actions-zone'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
@@ -93,6 +94,18 @@ export function registerCrmConsole(): void {
       layout: 'bare',
       description:
         'In a record’s header and beside the one-to-one composer. A widget here offers the site’s bookable services and the link a visitor books one at; it is handed the site, the record and, from the composer, a way to insert the chosen link. It writes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: CRM_RECORD_EMAIL_ACTIONS_ZONE,
+      label: 'Email a CRM record in its own thread',
+      surface: 'console',
+      // One control in a contact's or a lead's header, before Send email.
+      layout: 'bare',
+      description:
+        'In a contact’s and a lead’s header, before Send email. A widget here offers another way to write to the person — answering them in a thread another plugin keeps with them, from that plugin’s own mailbox; it is handed the site, the organization, the record and its address, and sends through its own route. It never writes the record.',
     },
     { pluginId: BUNDLE_ID },
   )
