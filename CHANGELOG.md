@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.276 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.275...v1.0.0-beta.276)
+
+### Added
+
+- **outreach:** an answer's links go out as tracked short links (AGL-4022) ([AGL-4022](https://linear.app/aglyn/issue/AGL-4022))
+
 ## v1.0.0-beta.275 — 2026-10-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/b537dd527...v1.0.0-beta.275)
