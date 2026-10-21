@@ -883,6 +883,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   screens: {
     '#basic-details-card': 'The Basic Details card is the page\'s record: its Page ID, Display name and Description, and when it was created, published and last updated.',
+    '#name-and-description-card': 'The page\'s Display name is what it is called across the console: the Pages list, the page switcher and search.',
     '#page-detail': 'View details opens one page\'s settings without opening its design: its basic details, publishing, who can see it, what links to it, its SEO, versions, traffic and recent activity.',
     '#raw-json': 'The Raw JSON card shows the page document exactly as it is stored — a read-only view for developers checking what a page holds.',
     '#slug': 'A page\'s Slug is the path it is served at — / for the home page, about for /about — up to 60 characters.',

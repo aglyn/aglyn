@@ -353,7 +353,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                 <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
               }
             >
-              {'Open Besigner'}
+              {'Edit in Besigner'}
             </Button>
             <RowActionsMenu
               label={template?.displayName ?? templateId}

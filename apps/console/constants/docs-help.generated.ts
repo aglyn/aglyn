@@ -1108,7 +1108,7 @@ export const DOCS_HELP_ANCHORS = {
   salesTaxReturn: ['#tax-return-page', '#choosing-the-period', '#rows-that-need-attention', '#which-rows', '#rows-that-are-excluded-rather-than-flagged', '#where-this-deployment-files', '#tax-filing-precedence', '#tax-filing-secrecy', '#the-figures', '#period-bounds', '#taxable-purchases', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#plugin-sales', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#what-a-reviewer-checks', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
-  screens: ['#screens--routing', '#slug', '#the-pages-list', '#page-detail', '#basic-details-card', '#used-by', '#raw-json', '#page-groups', '#what-a-move-does-to-a-url', '#what-counts-against-your-screen-allowance', '#duplicate-a-screen', '#error--maintenance-screens', '#related'],
+  screens: ['#screens--routing', '#slug', '#the-pages-list', '#page-detail', '#basic-details-card', '#name-and-description-card', '#used-by', '#raw-json', '#page-groups', '#what-a-move-does-to-a-url', '#what-counts-against-your-screen-allowance', '#duplicate-a-screen', '#error--maintenance-screens', '#related'],
   screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#console-host', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#maintenance-scripts', '#dataset-filter-terms', '#honest-limits', '#related'],
@@ -1783,6 +1783,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   screens: {
     '#basic-details-card': 'Basic Details',
+    '#name-and-description-card': 'Name & description',
     '#page-detail': 'A page\'s detail view',
     '#raw-json': 'Raw JSON',
     '#slug': 'Slug',

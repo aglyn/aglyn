@@ -105,7 +105,20 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       ))}
     </div>
   ),
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  // The header's action slot too: the Name & description card's only save
+  // lives there.
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      {HeaderProps?.action}
+      {children}
+    </div>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
@@ -232,7 +245,8 @@ const editTitleAndSave = () => {
   fireEvent.change(screen.getByLabelText('Title'), {
     target: { value: 'Pricing and plans' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Save SEO' }))
+  // One Save SEO, drawn in the header and at the foot of its card.
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save SEO' })[0])
 }
 const typePasswordAndSave = () => {
   fireEvent.change(screen.getByLabelText('Page password'), {
@@ -245,11 +259,10 @@ const chooseVisibility = (option: string) => {
   fireEvent.click(screen.getByRole('option', { name: option }))
 }
 const renameAndSave = () => {
-  fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
   fireEvent.change(screen.getByLabelText('Display name'), {
     target: { value: 'Plans' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save details' }))
 }
 
 describe('the SEO card announces a published screen (AGL-2934)', () => {
