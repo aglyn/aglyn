@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn-node-renderer'
 // Deep, not the designer barrel: Preview renders no besigner.
 import { useMediaAssetFactsOverlay } from '@aglyn/besigner-ui/hooks/use-media-asset-facts-overlay'
+import { usePreviewRepeats } from '@aglyn/besigner-ui/hooks/use-preview-repeats'
 import {
   getGoogleFontsUrl,
   SiteSchemeThemesContext,
@@ -71,7 +72,6 @@ import {
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
 import { BesignerRepeatRowsProvider } from './besigner-repeat-rows-provider.component'
-import { usePreviewRepeats } from './use-preview-repeats'
 import { useDeclareDocumentSubject } from './document-subject'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }

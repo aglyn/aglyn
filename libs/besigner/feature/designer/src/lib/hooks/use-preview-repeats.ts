@@ -14,8 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-'use client'
-
 import * as Aglyn from '@aglyn/aglyn'
 import type { RepeatableDataset } from '@aglyn/aglyn/app-utils/expand-repeatables'
 // By path: which sources exist is editor business, kept out of every barrel.
@@ -24,7 +22,7 @@ import {
   RepeatRowsContext,
   type RepeatRowsRequest,
   repeatRowsKey,
-} from '@aglyn/besigner-ui/contexts/repeat-rows-context'
+} from '../contexts/repeat-rows-context'
 import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
 
 const subscribeToNothing = () => () => undefined
