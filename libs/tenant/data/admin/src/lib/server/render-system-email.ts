@@ -339,7 +339,15 @@ export function renderLoadedSystemEmail(
   merge: Record<string, string> = {},
   options: SystemEmailBrandOptions = {},
 ): RenderedSystemEmail | null {
-  const merged = { ...PLATFORM_BRAND_MERGE_TOKENS, ...merge }
+  // Every token the catalog declares for this email starts out empty
+  // (AGL-4019). One the send never supplied otherwise stayed a literal
+  // `{{…}}` through the render, so the block made of it was drawn and only
+  // blanked afterwards: an empty details panel and a button with no words,
+  // where the renderer's rules would have left both out.
+  const declared = Object.fromEntries(
+    loaded.definition.mergeTokens.map((token) => [token.name, '']),
+  )
+  const merged = { ...declared, ...PLATFORM_BRAND_MERGE_TOKENS, ...merge }
   const blocks = drawsPlatformBlocks(loaded, merged, options)
   const nodes = (
     blocks
