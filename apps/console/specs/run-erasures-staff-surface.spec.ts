@@ -139,7 +139,7 @@ jest.mock('../app/api/_lib/render-system-email', () => ({
 
 // The person queue has its own spec; here it is empty, so the workspace
 // queue is what the surface shows.
-jest.mock('../utils/server/run-person-erasures', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/run-person-erasures', () => ({
   __esModule: true,
   runPersonErasures: async () => ({ erased: [], failed: [], scanned: 0 }),
   countPendingPersonErasures: async () => ({ pending: 0, truncated: false, maxPerRun: 25 }),

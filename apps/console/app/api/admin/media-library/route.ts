@@ -32,12 +32,12 @@ import {
   readStaffListQuery,
   STAFF_LIST_DEFAULT_PAGE,
   STAFF_LIST_MAX_PAGE,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import {
   recordStaffMediaView,
   staffMediaPageQuery,
   staffMediaRowFrom,
-} from '../../../../utils/server/staff-media-library'
+} from '@aglyn/tenant-data-admin/server/console/staff-media-library'
 
 /**
  * One page of a media library, for the staff organization and site pages —

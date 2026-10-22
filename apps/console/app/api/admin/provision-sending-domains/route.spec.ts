@@ -54,7 +54,7 @@ jest.mock('../../../../utils/server/provision-sending-domain', () => ({
   readSendingDomainCapacity: async () => ({ held: 50, capacity: 50, remaining: 0, low: true }),
 }))
 
-jest.mock('../../../../utils/server/raise-operator-alert', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/raise-operator-alert', () => ({
   __esModule: true,
   raiseConsoleOperatorAlert: async (type: string, options: Record<string, any> = {}) => {
     mockAlerts.push({ type, options })

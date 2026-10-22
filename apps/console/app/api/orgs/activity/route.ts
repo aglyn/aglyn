@@ -30,12 +30,12 @@ import {
   planActivityQuery,
   readOrgWideActivity,
   withResolvedActors,
-} from '../../../../utils/server/actor-activity'
+} from '@aglyn/tenant-data-admin/server/console/actor-activity'
 import {
   auditLogSearchWords,
   readAuditLogFilters,
   readAuditLogSort,
-} from '../../../../utils/server/audit-log-filter'
+} from '@aglyn/tenant-data-admin/server/console/audit-log-filter'
 import {
   ACTIVITY_LIST_QUERY,
   ORG_ACTIVITY_FILTER_FIELDS,
@@ -45,8 +45,8 @@ import {
   activityTargetBase,
   splitWhereClause,
 } from '@aglyn/aglyn/app-utils/console/activity-list-query'
-import { withActivityLabels } from '../../../../utils/server/activity-row-labels'
-import { applyListQuery } from '../../../../utils/server/list-filter'
+import { withActivityLabels } from '@aglyn/tenant-data-admin/server/console/activity-row-labels'
+import { applyListQuery } from '@aglyn/tenant-data-admin/server/console/list-filter'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of

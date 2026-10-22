@@ -32,7 +32,7 @@ import {
   readStaffListQuery,
   STAFF_LIST_DEFAULT_PAGE,
   STAFF_LIST_MAX_PAGE,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**
  * Firestore's `in` takes at most thirty values; an organization with more

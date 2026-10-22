@@ -113,6 +113,57 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: async () => ({ member: mockMember }),
 }))
 
+// The moved server routines import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
+  get firebaseAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
+  },
+  get emailUnverifiedResponse() {
+    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
+  },
+  get isImpersonationSession() {
+    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/rate-limit-store', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/rate-limit-store'),
+  get consumeRateLimit() {
+    return jest.requireMock('@aglyn/tenant-data-admin').consumeRateLimit
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/release-flags', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/release-flags'),
+  get filterEnabledPluginsByReleaseFlags() {
+    return jest.requireMock('@aglyn/tenant-data-admin').filterEnabledPluginsByReleaseFlags
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
+  get getHostDocAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').getHostDocAdmin
+  },
+  get getOrgDoc() {
+    return jest.requireMock('@aglyn/tenant-data-admin').getOrgDoc
+  },
+  get memberHasOrgPermission() {
+    return jest.requireMock('@aglyn/tenant-data-admin').memberHasOrgPermission
+  },
+  get memberHasPermissionOnHost() {
+    return jest.requireMock('@aglyn/tenant-data-admin').memberHasPermissionOnHost
+  },
+  get resolveOrgMembership() {
+    return jest.requireMock('@aglyn/tenant-data-admin').resolveOrgMembership
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/lockdown'),
+  get lockdownRefusal() {
+    return jest.requireMock('@aglyn/tenant-data-admin').lockdownRefusal
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({
   __esModule: true,
   addAdminAudit: (...args: unknown[]) => mockAudit(...args),

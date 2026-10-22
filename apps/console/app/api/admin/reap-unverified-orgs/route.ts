@@ -94,9 +94,9 @@ import {
   planUnverifiedOrgReap,
   UNVERIFIED_ORG_GRACE_MS,
   type UnverifiedOrgFacts,
-} from '../../../../utils/server/reap-unverified-orgs'
+} from '@aglyn/tenant-data-admin/server/console/reap-unverified-orgs'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
-import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
+import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
 
 export const dynamic = 'force-dynamic'
 

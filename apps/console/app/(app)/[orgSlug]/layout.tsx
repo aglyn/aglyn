@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import { segmentTitle } from '../../page-title'
 import DeploymentCapabilitiesProvider from '../../../components/deployment-capabilities-provider.component'
 import OrgGuard from '../../../components/org-guard.component'
-import { platformPaymentsConfigured } from '../../../utils/server/payments-platform'
+import { platformPaymentsConfigured } from '@aglyn/tenant-data-admin/server/console/payments-platform'
 
 // Fallback title for the org area (AGL-1059) — the slug is the only org
 // identity available without a read, and every real page below overrides it

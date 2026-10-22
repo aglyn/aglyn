@@ -52,7 +52,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { MAIL_GATEWAY_LEDGER_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/mail-gateway-ledger-list-query'
-import { readStaffListQuery, runStaffListQuery } from '../../../../../utils/server/staff-list-query'
+import { readStaffListQuery, runStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 

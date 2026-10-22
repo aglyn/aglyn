@@ -38,7 +38,7 @@
  * next writer re-opening it.
  */
 
-import { mediaCdnPathUpdate } from './media-scope'
+import { mediaCdnPathUpdate } from '@aglyn/tenant-data-admin/server/console/media-scope'
 
 const CDN_SCOPE = 'org:testOrg'
 const MEDIA_ID = 'mediaAbc'

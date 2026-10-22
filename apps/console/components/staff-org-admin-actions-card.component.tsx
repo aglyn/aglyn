@@ -25,7 +25,7 @@ import { Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo } from 'react'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
-import { staffActivityLinks } from '../utils/activity-details'
+import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
 import ActivityTable from './activity-table.component'
 import { type StaffPerson, staffPersonLabel } from './staff-org-summary-card.component'
 

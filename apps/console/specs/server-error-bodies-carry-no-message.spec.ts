@@ -121,7 +121,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: () => true,
 }))
 
-jest.mock('../utils/server/media-scope', () =>
+jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () =>
   mockOpenModule({
     resolveMediaScope: async () => ({
       scope: {

@@ -118,10 +118,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useAuth: () => auth,
   }
 })
-// `useOrgPlans` lives in the lib and reads `useFirestore` from this module
-// directly, so the stable instance above is handed to it here as well.
+// `useOrgPlans` and the moved console hooks live in the lib and read these from
+// this module directly, so the stable instances above are handed to them here.
 jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
   useFirestore: () => jest.requireMock('@aglyn/tenant-feature-instance').useFirestore(),
+  useUser: () => jest.requireMock('@aglyn/tenant-feature-instance').useUser(),
+  useAuth: () => jest.requireMock('@aglyn/tenant-feature-instance').useAuth(),
 }))
 
 let mockParams: Record<string, string> = { orgSlug: 'client-1' }

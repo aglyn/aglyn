@@ -36,7 +36,7 @@
  * gate, the job, the ledger and the lease are the row engine's.
  */
 
-// lockdown-423: via apps/console/utils/server/transfer-gate.ts
+// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
 
 import {
   transferExportFileName,
@@ -67,7 +67,7 @@ import {
   transferErrorResponse,
   transferGate,
   transferRefusal,
-} from '../../../../utils/server/transfer-gate'
+} from '@aglyn/tenant-data-admin/server/console/transfer-gate'
 
 /** How long one request writes before it answers. */
 const APPLY_BUDGET_MS = 45_000

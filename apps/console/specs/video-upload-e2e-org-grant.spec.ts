@@ -94,7 +94,7 @@ import { UPLOAD_TYPES } from '@aglyn/aglyn/app-utils/console/media-upload-limits
 import {
   videoUploadPausedRefusal,
   videoUploadsOpenForOrg,
-} from '../utils/server/video-uploads'
+} from '@aglyn/tenant-data-admin/server/console/video-uploads'
 
 /** The same module instance the resolver above caches in. */
 const { __resetReleaseFlagCaches } = jest.requireActual(

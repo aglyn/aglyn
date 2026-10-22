@@ -44,7 +44,7 @@
  * allowed case by one field: their role, or one key in their overrides.
  */
 import { resolveOrgPermissions } from '@aglyn/aglyn'
-import { ACTOR_ACTIVITY_MAX_PAGE } from '../utils/server/actor-activity'
+import { ACTOR_ACTIVITY_MAX_PAGE } from '@aglyn/tenant-data-admin/server/console/actor-activity'
 
 const mockVerifyIdToken = jest.fn()
 const mockGetUsers = jest.fn()
@@ -141,6 +141,30 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         }
       ).resolveOrgPermissions(subject as never)[permission as never],
     ),
+}))
+
+// The moved server routines import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
+  get firebaseAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
+  },
+  get emailUnverifiedResponse() {
+    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
+  },
+  get isImpersonationSession() {
+    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
+  get resolveOrgMembership() {
+    return jest.requireMock('@aglyn/tenant-data-admin').resolveOrgMembership
+  },
+  get memberHasOrgPermission() {
+    return jest.requireMock('@aglyn/tenant-data-admin').memberHasOrgPermission
+  },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({

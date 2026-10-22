@@ -242,8 +242,8 @@ string.
 | The campaign `409`, and `preview` reporting which identity is in use | `libs/plugins/marketing/src/lib/server/campaign-send.ts` |
 | Request / list / verify / release, with the records in the response | `apps/console/app/api/email/sending-domains/route.ts` |
 | Client-deny rules for the subcollection, with a rules test | `cloud/firebase-firestore.rules` |
-| The provider seam that issues the key, plus a `resend` driver and a `none` | `apps/console/utils/server/sending-domain-provider.ts` |
-| The join from that driver to the record | `apps/console/utils/server/issue-sending-domain.ts` |
+| The provider seam that issues the key, plus a `resend` driver and a `none` | `libs/tenant/data/admin/src/lib/server/console/sending-domain-provider.ts` |
+| The join from that driver to the record | `libs/tenant/data/admin/src/lib/server/console/issue-sending-domain.ts` |
 | The credential's isolation from the tenant runtime, asserted by a tree sweep | `apps/console/specs/sending-domain-credential-isolation.spec.ts` |
 
 ---

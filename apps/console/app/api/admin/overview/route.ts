@@ -30,7 +30,7 @@ import {
   resolveEffectivePlan,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
-import { classifyOrgRevenueState } from '../../../../utils/server/revenue-report'
+import { classifyOrgRevenueState } from '@aglyn/tenant-data-admin/server/console/revenue-report'
 import {
   emailUnverifiedResponse,
   countUsersAcrossPools,

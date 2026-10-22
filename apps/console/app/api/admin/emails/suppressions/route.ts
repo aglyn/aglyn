@@ -33,7 +33,7 @@ import { SUPPRESSION_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/email-sup
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**

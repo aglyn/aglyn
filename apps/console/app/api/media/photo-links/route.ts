@@ -30,7 +30,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { resolveMediaScope } from '../../../../utils/server/media-scope'
+import { resolveMediaScope } from '@aglyn/tenant-data-admin/server/console/media-scope'
 
 /**
  * A SITE'S PHOTO LINKS, FOR ITS MEMBERS (AGL-3957).
@@ -71,7 +71,7 @@ async function handler(request: Request): Promise<Response> {
     }
     const hostId = String(body?.['hostId'] ?? '')
     if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
-    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
+    // lockdown-423: via libs/tenant/data/admin/src/lib/server/console/media-scope.ts — the scope
     // resolver runs the verdict on the org/host docs it already reads and
     // hands the 423 refusal back as `error.response`, so a locked workspace
     // neither lists nor mints a link.

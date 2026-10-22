@@ -121,7 +121,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 const mockDropDeletedSiteCache = jest.fn(async (..._args: unknown[]) => true)
-jest.mock('../../../../utils/server/tenant-revalidate', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
   __esModule: true,
   dropDeletedSiteCache: (...args: unknown[]) => mockDropDeletedSiteCache(...args),
 }))

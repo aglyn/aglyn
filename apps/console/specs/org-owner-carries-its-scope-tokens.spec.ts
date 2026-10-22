@@ -24,7 +24,7 @@ import { projectMemberScopeTokens } from '@aglyn/aglyn/app-utils/organizations'
 import { ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   planMemberScopeTokens,
-} from '../utils/server/backfill-scope'
+} from '@aglyn/tenant-data-admin/server/console/backfill-scope'
 
 /**
  * A brand-new organization is not born drifted (AGL-1038).

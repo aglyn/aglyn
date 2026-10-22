@@ -46,7 +46,7 @@ import {
   planMemberScopeTokens,
   planScopeStamp,
   SCOPED_COLLECTIONS,
-} from '../../../../utils/server/backfill-scope'
+} from '@aglyn/tenant-data-admin/server/console/backfill-scope'
 
 const EMULATED =
   Boolean(process.env.FIRESTORE_EMULATOR_HOST) &&

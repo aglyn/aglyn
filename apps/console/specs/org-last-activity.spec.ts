@@ -73,7 +73,7 @@ import {
   orgActivityIsStale,
   stampOrgLastActivity,
   type OrgActivityStore,
-} from '../utils/server/org-last-activity'
+} from '@aglyn/tenant-data-admin/server/console/org-last-activity'
 
 const MIN = 60_000
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')

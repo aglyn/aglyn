@@ -50,7 +50,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
-import { MOVE_BUDGET_MS, moveAssetsWithinBudget } from '../../utils/server/media-move'
+import { MOVE_BUDGET_MS, moveAssetsWithinBudget } from '@aglyn/tenant-data-admin/server/console/media-move'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 

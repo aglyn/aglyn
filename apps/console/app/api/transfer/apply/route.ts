@@ -28,11 +28,11 @@
  * `TransferApplyResponse`.
  */
 
-// lockdown-423: via apps/console/utils/server/transfer-gate.ts
+// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
 
 import type { TransferApplyResponse, TransferWarningClass } from '@aglyn/aglyn/data-transfer'
 import { applyTransferJob } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { auditTransfer, transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
+import { auditTransfer, transferErrorResponse, transferGate } from '@aglyn/tenant-data-admin/server/console/transfer-gate'
 
 /** How long one request writes before it answers with its progress. */
 const APPLY_BUDGET_MS = 45_000

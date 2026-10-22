@@ -68,8 +68,8 @@ import {
 import {
   auditLogSearchWords,
   readAuditLogFilters,
-} from '../../../../utils/server/audit-log-filter'
-import { applyListQuery } from '../../../../utils/server/list-filter'
+} from '@aglyn/tenant-data-admin/server/console/audit-log-filter'
+import { applyListQuery } from '@aglyn/tenant-data-admin/server/console/list-filter'
 
 // `author` (AGL-2334) is assignable per site like every other host role —
 // a capability the rules enforce but no door writes is not a feature.

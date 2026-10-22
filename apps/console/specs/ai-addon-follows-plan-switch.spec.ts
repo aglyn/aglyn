@@ -34,7 +34,7 @@
  * Pure: `buildTargetItems` reads env-resolved price ids and nothing else.
  */
 
-import { buildTargetItems } from '../utils/server/billing-schedule'
+import { buildTargetItems } from '@aglyn/tenant-data-admin/server/console/billing-schedule'
 
 const PRICE_ENV: Record<string, string> = {
   STRIPE_PRICE_STARTER: 'price_starter',

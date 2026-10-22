@@ -29,7 +29,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import {
   describeOrgPlan,
   isEnterpriseOrg,
@@ -44,7 +44,7 @@ import {
   asksAboutSuspension,
   settleLapsedSuspensions,
   suspensionInForce,
-} from '../../../../utils/server/suspended-flag'
+} from '@aglyn/tenant-data-admin/server/console/suspended-flag'
 
 /**
  * Staff organization list (AGL-878). The page used to read `collection('orgs')`

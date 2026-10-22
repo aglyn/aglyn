@@ -35,7 +35,7 @@ import { describeStaffAudit } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, {
   type ActivityDetails,
 } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '../../../../utils/activity-details'
+import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
 import {
   type ListFilterClause,
   type ListFilterOption,

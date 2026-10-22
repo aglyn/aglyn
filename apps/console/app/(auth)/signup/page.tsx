@@ -99,7 +99,7 @@ import {
   consumeMarketingOptIn,
   markMarketingOptIn,
   postPlatformMarketingConsent,
-} from '../../../utils/marketing-opt-in'
+} from '@aglyn/tenant-data-admin/server/console/marketing-opt-in'
 import {
   createSignUpWorkspace,
   personalWorkspaceName,

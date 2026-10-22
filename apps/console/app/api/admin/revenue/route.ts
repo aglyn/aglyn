@@ -26,7 +26,7 @@ import {
   readRevenueSources,
   type RevenueAttributionRow,
 } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
-import { taxPeriodRange } from '../../../../utils/server/tx-return'
+import { taxPeriodRange } from '@aglyn/tenant-data-admin/server/console/tx-return'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import {
   contractedSummary,
@@ -37,7 +37,7 @@ import {
   type ContractedOrgInput,
   type PlatformRevenueRowInput,
   type RevenueReport,
-} from '../../../../utils/server/revenue-report'
+} from '@aglyn/tenant-data-admin/server/console/revenue-report'
 
 /**
  * Staff revenue reporting on both bases at once (AGL-2486).

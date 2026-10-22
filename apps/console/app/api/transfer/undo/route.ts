@@ -29,7 +29,7 @@
  * answer: `TransferUndoPlanResponse` or `TransferUndoApplyResponse`.
  */
 
-// lockdown-423: via apps/console/utils/server/transfer-gate.ts
+// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
 
 import type {
   TransferUndoApplyResponse,
@@ -42,7 +42,7 @@ import {
   transferErrorResponse,
   transferGate,
   transferRefusal,
-} from '../../../../utils/server/transfer-gate'
+} from '@aglyn/tenant-data-admin/server/console/transfer-gate'
 
 /** How long one request reverts before it answers with its progress. */
 const UNDO_BUDGET_MS = 45_000

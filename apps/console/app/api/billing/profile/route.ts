@@ -39,7 +39,7 @@ import {
 } from '../../_lib/stripe-payment-method'
 import { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import { cardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
-import { platformPaymentsConfigured } from '../../../../utils/server/payments-platform'
+import { platformPaymentsConfigured } from '@aglyn/tenant-data-admin/server/console/payments-platform'
 import { stripeAddressDivergence } from '@aglyn/aglyn/app-utils/console/stripe-address-divergence'
 import { taxIdTypeLabel } from '@aglyn/aglyn/app-utils/console/stripe-tax-id-types'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'

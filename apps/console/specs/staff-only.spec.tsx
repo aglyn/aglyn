@@ -45,6 +45,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   return { useUser: () => userResult, __state: state }
 })
 
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
+
 /**
  * `notFound()` is the refusal now (AGL-847). It works by throwing, so the
  * spec has to both observe the call and absorb the throw — a bare render

@@ -106,7 +106,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-jest.mock('../utils/server/media-scope', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
   __esModule: true,
   resolveMediaScope: async () => ({
     scope: {

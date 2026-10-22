@@ -101,7 +101,7 @@ const CHOKEPOINTS: Chokepoint[] = [
   },
   {
     feature: 'uploads',
-    file: 'apps/console/utils/server/media-scope.ts',
+    file: 'libs/tenant/data/admin/src/lib/server/console/media-scope.ts',
     wiring: ['featureLockdownRefusal({', 'feature,'],
     why: 'the one resolver every media mutation passes through composes the gate',
   },
@@ -298,7 +298,7 @@ describe('AGL-1510 · every launch feature is wired at its declared chokepoint',
   it('the uploads gate never touches tenant media serving (AGL-1515 lane)', () => {
     // Upload enforcement is console-side by design; the CDN delivery path
     // serves EXISTING assets and belongs to the media-serving work.
-    const source = read('apps/console/utils/server/media-scope.ts')
+    const source = read('libs/tenant/data/admin/src/lib/server/console/media-scope.ts')
     expect(source).not.toContain('serve-media-cdn')
   })
 })

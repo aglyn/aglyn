@@ -21,8 +21,8 @@ import {
   TAX_FINDING_SORT_COLUMNS,
   type TaxFindingListRow,
 } from '../tax-findings-list'
-import { answerStaffCompleteList, type StaffCompleteListPage } from './staff-complete-list'
-import type { StaffListQueryRequest } from './staff-list-query'
+import { answerStaffCompleteList, type StaffCompleteListPage } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
+import type { StaffListQueryRequest } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /** Why nothing is applied over a period the read cap cut short. */
 const INCOMPLETE =

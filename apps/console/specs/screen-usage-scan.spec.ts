@@ -36,7 +36,7 @@ import {
   scanScreenUsage,
   type CollectionCandidate,
   type UsageCandidate,
-} from '../utils/server/scan-artifact-usage'
+} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
 
 const linkNode = (value: unknown) => ({
   root: { componentId: 'button', props: { screenId: value } },

@@ -18,7 +18,7 @@
 import {
   scanLayoutUsage,
   screenIdsUsingLayoutDeep,
-} from '../utils/server/scan-artifact-usage'
+} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
 
 /**
  * Publishing a layout has to drop the cache of every screen rendered inside it

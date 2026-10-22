@@ -66,7 +66,7 @@ import {
   subscriptionItemsAsPhaseItems,
   writePhaseItems,
   type PhaseItem,
-} from '../../../../utils/server/billing-schedule'
+} from '@aglyn/tenant-data-admin/server/console/billing-schedule'
 import {
   capacityReductionRefusal,
   includedCapacity,
@@ -78,7 +78,7 @@ import {
   immediateChargeParams,
   pendingChargeResponse,
   readImmediateCharge,
-} from '../../../../utils/server/immediate-charge'
+} from '@aglyn/tenant-data-admin/server/console/immediate-charge'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked

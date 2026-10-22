@@ -33,7 +33,7 @@ import {
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**

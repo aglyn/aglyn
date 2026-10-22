@@ -37,7 +37,7 @@ import {
   staffMediaRowFrom,
   staffMediaSrc,
   staffMediaStoragePath,
-} from '../../../../../utils/server/staff-media-library'
+} from '@aglyn/tenant-data-admin/server/console/staff-media-library'
 import {
   HOSTS_PER_SCAN,
   type MediaScanHost,

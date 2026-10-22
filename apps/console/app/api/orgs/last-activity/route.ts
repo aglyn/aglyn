@@ -25,7 +25,7 @@ import {
 import {
   stampOrgLastActivity,
   type OrgActivityStore,
-} from '../../../../utils/server/org-last-activity'
+} from '@aglyn/tenant-data-admin/server/console/org-last-activity'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — writes one server-clock timestamp the platform keeps

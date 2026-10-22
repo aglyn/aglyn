@@ -51,7 +51,7 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '../utils/activity-details'
+import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import {

@@ -59,7 +59,7 @@ jest.mock('../utils/server/page-security-hold', () => ({
   applyPendingSecurityHolds: (firestore: unknown) => mockApplyHolds(firestore),
 }))
 
-jest.mock('../utils/server/tenant-revalidate', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
   __esModule: true,
   revalidateEntireHost: (firestore: unknown, hostId: string) => mockRevalidate(firestore, hostId),
 }))

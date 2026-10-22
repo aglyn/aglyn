@@ -25,7 +25,7 @@ import {
   lockdownRefusal,
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
-import { provisionStarterSite } from '../../../../utils/server/provision-host'
+import { provisionStarterSite } from '@aglyn/tenant-data-admin/server/console/provision-host'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**

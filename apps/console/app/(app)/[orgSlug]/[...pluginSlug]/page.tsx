@@ -62,11 +62,11 @@ import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
 } from '@aglyn/aglyn/app-utils/console/extension-permission'
-import { resolveOrgMount } from '../../../../utils/org-mount'
+import { resolveOrgMount } from '@aglyn/aglyn/app-utils/console/org-mount'
 import {
   orgPluginScopedNotice,
   resolveOrgPluginReach,
-} from '../../../../utils/org-plugin-surfaces'
+} from '@aglyn/aglyn/app-utils/console/org-plugin-surfaces'
 import {
   hubLandingHref,
   hubRedirectTarget,

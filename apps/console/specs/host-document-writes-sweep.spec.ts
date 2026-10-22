@@ -36,6 +36,13 @@ import { join, relative, sep } from 'node:path'
 
 const REPO = join(__dirname, '..', '..', '..')
 const CONSOLE = join(REPO, 'apps', 'console')
+// The console's helpers that moved into libs are still console code, and the
+// door holds for them as it did in the app.
+const CONSOLE_IN_LIBS = [
+  join(REPO, 'libs', 'aglyn', 'src', 'lib', 'app-utils', 'console'),
+  join(REPO, 'libs', 'tenant', 'feature', 'instance', 'src', 'lib', 'hooks', 'console'),
+  join(REPO, 'libs', 'tenant', 'data', 'admin', 'src', 'lib', 'server', 'console'),
+]
 const PLUGINS = join(REPO, 'libs', 'plugins')
 
 const posix = (path: string) => relative(REPO, path).split(sep).join('/')
@@ -104,7 +111,7 @@ describe('the sweep can see a host-document write', () => {
 })
 
 describe('console: every host-document write goes through the door', () => {
-  const files = sourcesUnder(CONSOLE).map((path) => ({
+  const files = [CONSOLE, ...CONSOLE_IN_LIBS].flatMap(sourcesUnder).map((path) => ({
     path: posix(path),
     source: readFileSync(path, 'utf8'),
   }))
@@ -153,6 +160,7 @@ describe('console: every host-document write goes through the door', () => {
         ({ path }) =>
           !path.startsWith('apps/console/app/api/') &&
           !path.startsWith('apps/console/utils/server/') &&
+          !path.startsWith('libs/tenant/data/admin/src/lib/server/console/') &&
           !(path in EXEMPT),
       )
       .filter(({ source }) => writesHostDocument(source))

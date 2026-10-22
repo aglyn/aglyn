@@ -26,7 +26,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { homeScreenId } from '../../../../utils/staff-site-links'
+import { homeScreenId } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 
 const PAGE_SIZE = 200
 

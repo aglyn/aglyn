@@ -83,7 +83,7 @@ jest.mock('../utils/cron-beat', () => ({
   recordCronBeat: (id: string) => mockBeat(id),
 }))
 
-jest.mock('../utils/server/tenant-revalidate', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
   __esModule: true,
   postTenantRevalidate: (options: unknown) => mockPost(options),
   // The routing map as addresses, the shape the real helper reads.

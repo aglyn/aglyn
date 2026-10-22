@@ -198,7 +198,7 @@ export interface EgressHost {
 
 /**
  * Data-protection supervisory authorities, rendered as links in the member
- * lodging-a-complaint disclosure (`apps/console/utils/server/member-state-exposure.ts`).
+ * lodging-a-complaint disclosure (`libs/tenant/data/admin/src/lib/server/console/member-state-exposure.ts`).
  *
  * Thirty hosts from one file, all the same shape: GDPR Art. 77 gives a data
  * subject the right to complain to their own authority, so the console prints

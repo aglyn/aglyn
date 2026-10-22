@@ -57,9 +57,10 @@ describe('planScreenRouteWrite', () => {
 
 describe('the routing writes share the plan', () => {
   const read = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8')
+  const readRepo = (path: string) => readFileSync(join(__dirname, '..', '..', '..', path), 'utf8')
 
   it('is what the console publishing helpers stage', () => {
-    expect(read('constants/screen-publishing.ts')).toContain('planScreenRouteWrite(state, entries, published)')
+    expect(readRepo('libs/aglyn/src/lib/app-utils/console/screen-publishing.ts')).toContain('planScreenRouteWrite(state, entries, published)')
   })
 
   it('is what the native pages route stages, under the publishing roles', () => {

@@ -35,16 +35,16 @@ import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
-} from '../../../../utils/storage-overage'
-import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
-import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
-import { scheduleMediaDeliveryCopies } from '../../../../utils/server/media-delivery-copies'
-import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+} from '@aglyn/tenant-data-admin/server/console/storage-overage'
+import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+import { resolveUploadSite } from '@aglyn/tenant-data-admin/server/console/media-upload-site'
+import { scheduleMediaDeliveryCopies } from '@aglyn/tenant-data-admin/server/console/media-delivery-copies'
+import { videoUploadFields } from '@aglyn/tenant-data-admin/server/console/media-video-fields'
 import {
   embeddedMetadataAtIngress,
   storageObjectReader,
-} from '../../../../utils/server/media-embedded'
-import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
+} from '@aglyn/tenant-data-admin/server/console/media-embedded'
+import { videoUploadPausedRefusal } from '@aglyn/tenant-data-admin/server/console/video-uploads'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -59,7 +59,7 @@ import {
   folderStoragePath,
   mediaCdnPathUpdate,
   resolveMediaScope,
-} from '../../../../utils/server/media-scope'
+} from '@aglyn/tenant-data-admin/server/console/media-scope'
 import { createHash, randomUUID } from 'crypto'
 
 import {
@@ -133,7 +133,7 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
+    // lockdown-423: via libs/tenant/data/admin/src/lib/server/console/media-scope.ts — the scope
     // resolver runs the verdict on the org/host docs it already reads and
     // hands the 423 refusal back as `error.response`. This is an INGRESS
     // route, so it also passes the UPLOADS feature gate (AGL-1510).

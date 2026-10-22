@@ -48,7 +48,7 @@ import {
   asksAboutSuspension,
   settleLapsedSuspensions,
   suspensionInForce,
-} from '../utils/server/suspended-flag'
+} from '@aglyn/tenant-data-admin/server/console/suspended-flag'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 const INDEX_FILE = JSON.parse(

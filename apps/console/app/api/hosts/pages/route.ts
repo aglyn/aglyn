@@ -46,7 +46,7 @@ import {
   planScreenRouteWrite,
   type ScreenRouteState,
 } from '@aglyn/aglyn/app-utils/console/screen-route-plan'
-import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
+import { announceLivePaths } from '@aglyn/tenant-data-admin/server/console/announce-live-paths'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /*

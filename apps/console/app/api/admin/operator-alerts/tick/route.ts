@@ -28,7 +28,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized, isCronDryRun } from '../../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../../utils/cron-beat'
-import { runOperatorAlertsTick } from '../../../../../utils/server/operator-alerts-tick'
+import { runOperatorAlertsTick } from '@aglyn/tenant-data-admin/server/console/operator-alerts-tick'
 
 /** The beat id `/api/health/crons` reads. */
 export const OPERATOR_ALERTS_JOB_ID = 'operator-alerts'

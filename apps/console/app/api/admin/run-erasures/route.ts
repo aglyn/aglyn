@@ -37,7 +37,7 @@ import { teardownSendingDomain } from '../../../../utils/server/provision-sendin
 import {
   countPendingPersonErasures,
   runPersonErasures,
-} from '../../../../utils/server/run-person-erasures'
+} from '@aglyn/tenant-data-admin/server/console/run-person-erasures'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   ERASURE_LIST_QUERY,
@@ -48,7 +48,7 @@ import {
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion

@@ -38,7 +38,7 @@ import {
   primarySupportSurface,
   supportLandingRoute,
   supportSurfaceRoute,
-} from '../utils/support-surfaces'
+} from '@aglyn/aglyn/app-utils/console/support-surfaces'
 
 const ORG = 'acme'
 

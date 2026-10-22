@@ -31,7 +31,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/transfer-host'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
+import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 
 /** The shortest reason the audit row will carry. */
 const MIN_REASON = 8

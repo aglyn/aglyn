@@ -130,7 +130,7 @@ import { quarantineLogLines } from '@aglyn/aglyn/app-utils/console/quarantine-lo
 import {
   scheduleMediaDeliveryCopies,
   takeDownAssetDeliveryCopies,
-} from '../../../../utils/server/media-delivery-copies'
+} from '@aglyn/tenant-data-admin/server/console/media-delivery-copies'
 import { FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
@@ -141,8 +141,8 @@ import {
   denyListRow,
   type QuarantineRecord,
 } from '@aglyn/aglyn/app-utils/console/media-quarantine-list-query'
-import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
-import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
+import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
+import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 

@@ -143,9 +143,9 @@ import {
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
-import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
-import { SUSPENDED_FIELD, suspensionInForce } from '../../../../utils/server/suspended-flag'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { SUSPENDED_FIELD, suspensionInForce } from '@aglyn/tenant-data-admin/server/console/suspended-flag'
 
 export const dynamic = 'force-dynamic'
 

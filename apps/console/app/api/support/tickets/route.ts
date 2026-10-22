@@ -41,7 +41,7 @@ import { SUPPORT_TICKET_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/suppor
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
 // "contact support", and a locked member doing so is the happy path.

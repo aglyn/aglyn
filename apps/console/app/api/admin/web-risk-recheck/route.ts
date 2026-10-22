@@ -40,7 +40,7 @@ import { recheckLivePageLinks } from '@aglyn/tenant-data-admin/server/link-reput
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { applyPendingSecurityHolds } from '../../../../utils/server/page-security-hold'
-import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
+import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 
 /** The beat id `/api/health/crons` reads. */
 export const WEB_RISK_RECHECK_JOB_ID = 'web-risk-recheck'

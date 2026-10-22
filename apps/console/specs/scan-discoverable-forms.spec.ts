@@ -34,7 +34,7 @@ import {
   collidingClaims,
   legacyMatchFor,
   scanDiscoverableForms,
-} from '../utils/server/scan-discoverable-forms'
+} from '@aglyn/tenant-data-admin/server/console/scan-discoverable-forms'
 
 const formNodes = (formName: string, extra: Record<string, any> = {}) => ({
   'form-1': {

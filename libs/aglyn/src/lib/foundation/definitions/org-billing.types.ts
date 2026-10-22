@@ -858,7 +858,7 @@ export type OrgCollaboratorAllocations = Record<string, number>
  * ceiling, so the rules deny it to every client and only
  * `/api/billing/storage-overage` (Admin SDK, `billing.manage`) writes it.
  *
- * @see apps/console/utils/storage-overage.ts for the model and what still
+ * @see libs/tenant/data/admin/src/lib/server/console/storage-overage.ts for the model and what still
  * hard-bands.
  */
 export interface OrgStorageOverage {

@@ -124,6 +124,42 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Object.fromEntries(uids.filter(Boolean).map((uid) => [uid, { uid, email: `${uid}@example.com`, displayName: null }])),
 }))
 
+// The moved server routines import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
+  get firebaseAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
+  },
+  get emailUnverifiedResponse() {
+    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
+  },
+  get isImpersonationSession() {
+    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/media-signing', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/media-signing'),
+  get mintMediaSignature() {
+    return jest.requireMock('@aglyn/tenant-data-admin').mintMediaSignature
+  },
+  get mediaSignatureQuery() {
+    return jest.requireMock('@aglyn/tenant-data-admin').mediaSignatureQuery
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/media-storage-path', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/media-storage-path'),
+  get mediaStoragePathInScope() {
+    return jest.requireMock('@aglyn/tenant-data-admin').mediaStoragePathInScope
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/resolve-people', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/resolve-people'),
+  get resolveUidsToPeople() {
+    return jest.requireMock('@aglyn/tenant-data-admin').resolveUidsToPeople
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin/server/admin-audit', () => ({
   __esModule: true,
   recordAdminAudit: async (entry: Record<string, unknown>) => {
