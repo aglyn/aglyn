@@ -283,7 +283,9 @@ async function provisionSignUpOrg(
 ): Promise<string | null> {
   const name = orgName.trim()
   if (!name) return null
-  const { slug } = await createSignUpWorkspace(credential.user, name)
+  const { slug } = await createSignUpWorkspace(credential.user, name, {
+    derived: true,
+  })
   if (!slug) return null
   /*
    * Activation (AGL-1561). The workspace auto-provisioned at signup is a

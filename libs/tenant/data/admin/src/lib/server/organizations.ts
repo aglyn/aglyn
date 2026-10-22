@@ -100,7 +100,6 @@ import {
   orgMemberListFields,
   orgMemberSearchTokens,
 } from './org-member-list-fields'
-import { sendOwnerHandoffEmails } from './owner-handoff-emails'
 import { isStaffAccount } from './staff-seat'
 import { updateExisting } from './update-existing'
 import { attachWorkspaceDomain } from './workspace-domains'
@@ -2850,7 +2849,11 @@ export async function acceptOwnerHandoff(
     { type: 'member', id: uid, name: email },
   )
   // Both sides hear it from the platform (AGL-4023), by email, whichever
-  // way the handoff completed.
+  // way the handoff completed. Loaded here rather than at the top: the
+  // email renderer's consent module imports this file, and a static import
+  // closed that cycle, so a module reading these exports mid-load saw them
+  // uninitialized.
+  const { sendOwnerHandoffEmails } = await import('./owner-handoff-emails')
   await sendOwnerHandoffEmails({
     orgId,
     newOwner: { email, displayName: displayName ?? null },
