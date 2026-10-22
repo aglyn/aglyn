@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.max
 import kotlin.math.min
 
-/** A workspace's initials: the first letter of its first two words ("Elevated Concepts" → EC), or its first letter. */
+/** A workspace's initials: the first letter of its first two words ("Northwind Coffee" → NC), or its first letter. */
 fun workspaceInitials(name: String): String {
   val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() && it.first().isLetterOrDigit() }
   return when {

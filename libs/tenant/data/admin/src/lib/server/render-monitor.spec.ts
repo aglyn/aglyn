@@ -361,9 +361,9 @@ describe('runRenderMonitor (AGL-3568)', () => {
 
 describe('real pages, rendered fresh (AGL-3571)', () => {
   it('spells a site so no cache holds it — the literals the canary and the tenant resolver spec pin', () => {
-    expect(freshHostSpelling('ready-to-roll.aglyn.app', 0, 'aglyn.app')).toBe('ready-to-roll.aglyn.app')
-    expect(freshHostSpelling('ready-to-roll.aglyn.app', 5, 'aglyn.app')).toBe('ReAdy-to-roll.aglyn.app')
-    expect(freshHostSpelling('ready-to-roll.aglyn.app', 2 ** 19 + 1, 'aglyn.app')).toBe('Ready-to-roll.aglyn.app.')
+    expect(freshHostSpelling('acme-builders.aglyn.app', 0, 'aglyn.app')).toBe('acme-builders.aglyn.app')
+    expect(freshHostSpelling('acme-builders.aglyn.app', 5, 'aglyn.app')).toBe('AcMe-builders.aglyn.app')
+    expect(freshHostSpelling('acme-builders.aglyn.app', 2 ** 20 + 1, 'aglyn.app')).toBe('Acme-builders.aglyn.app.')
     expect(freshHostSpelling('aglyn.com', 3, 'aglyn.app')).toBe('cname--AGlyn.com')
     expect(freshHostSpelling('aglyn.com', 256 + 3, 'aglyn.app')).toBe('cname--AGlyn.com')
   })
@@ -381,12 +381,11 @@ describe('real pages, rendered fresh (AGL-3571)', () => {
     ])
   })
 
-  it("renders Aglyn's client pages on Aglyn's own console only", () => {
+  it("renders Aglyn's own fallback pages on Aglyn's own console only", () => {
     const platform = resolveRenderMonitorPages({ VERCEL_PROJECT_ID: PLATFORM_CONSOLE_VERCEL_PROJECT_ID })
     expect(platform.renderOrigin).toBe(PLATFORM_RENDER_ORIGIN)
     expect(platform.pages.map((page) => [page.host, page.paths])).toEqual([
-      ['ready-to-roll.aglyn.app', ['/']],
-      ['edr-construction.aglyn.app', ['/', '/services', '/contact']],
+      ['aglyn.com', ['/', '/press', '/blog', '/contact']],
     ])
     // Any other install — another Vercel project or none — renders none of them.
     expect(resolveRenderMonitorPages({ VERCEL_PROJECT_ID: 'prj_someone_else' }).pages).toEqual([])
@@ -408,26 +407,26 @@ describe('real pages, rendered fresh (AGL-3571)', () => {
     // A site whose pages are rendered is watched whole.
     expect(
       resolveRenderMonitorTargets({ VERCEL_PROJECT_ID: PLATFORM_CONSOLE_VERCEL_PROJECT_ID, NEXT_PUBLIC_TENANT_DOMAIN: 'aglyn.app' }),
-    ).toEqual(['https://demo.aglyn.app', 'https://ready-to-roll.aglyn.app', 'https://edr-construction.aglyn.app'])
+    ).toEqual(['https://demo.aglyn.app', 'https://aglyn.com'])
   })
 
   it('renders one page per five-minute slot, in turn across every watched site (AGL-3928)', () => {
     const shop = { origin: 'https://shop.aglyn.app', host: 'shop.aglyn.app', paths: ['/'] }
-    const edr = { origin: 'https://edr-construction.aglyn.app', host: 'edr-construction.aglyn.app', paths: ['/', '/services', '/contact'] }
-    const turns = [0, 1, 2, 3, 4, 5].map((slot) => renderMonitorPageTurn([shop, edr], slot))
+    const cafe = { origin: 'https://northwind-coffee.aglyn.app', host: 'northwind-coffee.aglyn.app', paths: ['/', '/services', '/contact'] }
+    const turns = [0, 1, 2, 3, 4, 5].map((slot) => renderMonitorPageTurn([shop, cafe], slot))
     expect(turns.map((turn) => `${turn?.site.host}${turn?.path}`)).toEqual([
       'shop.aglyn.app/',
-      'edr-construction.aglyn.app/',
-      'edr-construction.aglyn.app/services',
-      'edr-construction.aglyn.app/contact',
+      'northwind-coffee.aglyn.app/',
+      'northwind-coffee.aglyn.app/services',
+      'northwind-coffee.aglyn.app/contact',
       'shop.aglyn.app/',
-      'edr-construction.aglyn.app/',
+      'northwind-coffee.aglyn.app/',
     ])
     expect(renderMonitorPageTurn([], 3)).toBeNull()
-    const url = new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, { site: edr, path: '/services' }, 7))
+    const url = new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, { site: cafe, path: '/services' }, 7))
     expect(url.origin).toBe(PLATFORM_RENDER_ORIGIN)
     expect(url.pathname).toBe('/services')
-    expect(url.searchParams.get('tenantHost')).toBe(freshHostSpelling('edr-construction.aglyn.app', 7))
+    expect(url.searchParams.get('tenantHost')).toBe(freshHostSpelling('northwind-coffee.aglyn.app', 7))
   })
 
   const env = {

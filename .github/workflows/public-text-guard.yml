@@ -1,0 +1,78 @@
+name: Public text guard
+
+# Pull request titles and bodies, issue text, comments and reviews are as
+# public as a commit, and GitHub keeps every earlier revision of them in the
+# edit history. The file guard (`check-personal-identifiers`) cannot see any
+# of it, so this pipes each piece of text through the same guard's `--stdin`
+# mode: the owner's personal identifiers, and the client identifiers on the
+# private list (business, people, workspace, site host, phone, ids), matched
+# by digest. A hit fails this check and names the field and line, never the
+# text; the fix is to edit the text, and the earlier revision then has to be
+# deleted from the edit history by the repository owner.
+#
+# SECURITY: every value from the event payload reaches the shell through
+# `env:`, never `${{ }}` inside `run:`, so a title or comment can never be
+# executed as script. The job needs no secrets and only reads the repository.
+#
+# `pull_request` checks out the PR's merge commit, so a PR that changes the
+# guard is checked by its own guard. The comment and issue events check out
+# the default branch.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  issues:
+    types: [opened, edited]
+
+# One run per piece of text: an edit supersedes the scan of the version it
+# replaced, and two different comments never cancel each other.
+concurrency:
+  group: >-
+    public-text-${{ github.event_name }}-${{ github.event.comment.id ||
+    github.event.review.id || github.event.pull_request.number ||
+    github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: no personal or client identifiers in public text
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Cone mode: root files (.nvmrc) come along with the directory.
+          sparse-checkout: tools/scripts
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # No install: the guard is node builtins and files in tools/scripts.
+      - name: Scan the event's text
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+        run: |
+          set -uo pipefail
+          status=0
+          for field in PR_TITLE PR_BODY ISSUE_TITLE ISSUE_BODY COMMENT_BODY REVIEW_BODY; do
+            text="${!field}"
+            [ -n "$text" ] || continue
+            printf '%s\n' "$text" |
+              node tools/scripts/check-personal-identifiers.mjs --stdin --label "$field" || status=1
+          done
+          exit "$status"

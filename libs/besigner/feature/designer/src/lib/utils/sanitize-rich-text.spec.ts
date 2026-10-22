@@ -51,8 +51,8 @@ describe('sanitizeRichText', () => {
     )
     expect(sanitizeRichText('<a href="javascript:alert(1)">x</a>')).toBe('x')
     // A text link keeps its href, as a call link does (AGL-3388).
-    expect(sanitizeRichText('<a href="sms:+15128430942">Text us</a>')).toBe(
-      '<a href="sms:+15128430942" rel="noopener noreferrer">Text us</a>',
+    expect(sanitizeRichText('<a href="sms:+15550100199">Text us</a>')).toBe(
+      '<a href="sms:+15550100199" rel="noopener noreferrer">Text us</a>',
     )
   })
 

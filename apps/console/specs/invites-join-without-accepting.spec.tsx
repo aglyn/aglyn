@@ -57,7 +57,7 @@ jest.mock('../hooks/use-invite-response', () => ({
 
 const HANDOFF: PendingInvite = {
   $id: 'inv-handoff',
-  orgId: 'org-edr',
+  orgId: 'org-acme',
   orgName: 'Acme Builders',
   orgSlug: 'acme-builders',
   role: 'owner',
