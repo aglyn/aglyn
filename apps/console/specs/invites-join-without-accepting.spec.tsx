@@ -97,9 +97,9 @@ describe('an invitation is joined without pressing Accept', () => {
       </InviteAutoAcceptProvider>,
     )
     await waitFor(() => expect(mockRespond).toHaveBeenCalledTimes(2))
-    expect(mockRespond).toHaveBeenCalledWith(HANDOFF, 'accept', { navigate: true })
+    expect(mockRespond).toHaveBeenCalledWith(HANDOFF, 'accept', { navigate: true, quiet: true })
     // Working on EDR's page: Other Co is joined without leaving it.
-    expect(mockRespond).toHaveBeenCalledWith(SITE_EDITOR, 'accept', { navigate: false })
+    expect(mockRespond).toHaveBeenCalledWith(SITE_EDITOR, 'accept', { navigate: false, quiet: true })
     await waitFor(() =>
       expect(screen.getByTestId('inv-handoff').textContent).toBe(
         'true|joined|edr-construction,other-co',
@@ -115,7 +115,7 @@ describe('an invitation is joined without pressing Accept', () => {
     expect(mockRespond).toHaveBeenCalledTimes(2)
   })
 
-  it('leaves a refused invitation pending, marked for answering by hand', async () => {
+  it('leaves a refused invitation pending and quiet: its sender is told, not the invitee', async () => {
     mockInvites = [HANDOFF]
     mockRespond.mockResolvedValue(false)
     render(

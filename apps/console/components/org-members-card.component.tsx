@@ -1062,6 +1062,14 @@ export function OrgMembersCard() {
                   size="small"
                 />
                 <Typography variant="body2">{invite.email}</Typography>
+                {/* A join the workspace refused after the invitation went out
+                    (AGL-4023): shown to the people who can fix it, never to
+                    the invitee, who joins on their next visit once it is. */}
+                {invite.joinBlocked?.reason ? (
+                  <Tooltip title={String(invite.joinBlocked.reason)}>
+                    <Chip size="small" color="warning" label={"Can't join yet"} />
+                  </Tooltip>
+                ) : null}
                 <Button
                   size="small"
                   sx={{ ml: 'auto' }}

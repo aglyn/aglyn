@@ -25,7 +25,7 @@ import { useOrgScope } from '../hooks/use-org-scope'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
 import { usePendingInvites } from '../hooks/use-pending-invites'
 import { collaboratorRedirect } from '../utils/collaborator-navigation'
-import WorkspaceInvitation from './workspace-invitation.component'
+import WorkspaceAccessPending from './workspace-access-pending.component'
 
 function GuardSpinner({ label }: { label?: string }) {
   return (
@@ -132,10 +132,11 @@ export function OrgGuard({ children }: { children?: ReactNode }) {
       return <GuardSpinner label={`Opening ${invite?.orgName ?? 'the workspace'}…`} />
     }
     if (invite) {
-      // Answered by hand when the join was refused, or in a session that
-      // never joins on its own (staff impersonation).
+      // A join that could not finish (its sender has been told), or a
+      // session that never joins on its own (staff impersonation): a calm
+      // wait, never a refusal or a question for the invitee.
       return autoJoin === false || statusOf(invite.$id) === 'failed' ? (
-        <WorkspaceInvitation invite={invite} />
+        <WorkspaceAccessPending invite={invite} />
       ) : (
         <GuardSpinner label={`Joining ${invite.orgName ?? 'the workspace'}…`} />
       )

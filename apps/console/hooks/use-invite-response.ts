@@ -48,9 +48,9 @@ export function useInviteResponse() {
     async (
       invite: PendingInvite,
       answer: InviteAnswer,
-      options: { navigate?: boolean } = {},
+      options: { navigate?: boolean; quiet?: boolean } = {},
     ): Promise<boolean> => {
-      const { navigate = true } = options
+      const { navigate = true, quiet = false } = options
       setBusyId(invite.$id)
       try {
         const response = await authorizedFetch(user, '/api/orgs/invites', {
@@ -64,6 +64,9 @@ export function useInviteResponse() {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // The automatic join (AGL-4023) never shows the invitee a refusal:
+          // the server has told whoever sent the invitation.
+          if (quiet) return false
           enqueueSnackbar(
             payload?.error ??
               (answer === 'accept'
@@ -108,6 +111,7 @@ export function useInviteResponse() {
         await refresh()
         return true
       } catch {
+        if (quiet) return false
         enqueueSnackbar('Could not reach the server — try again', {
           variant: 'warning',
         })

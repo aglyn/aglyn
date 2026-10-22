@@ -9323,7 +9323,7 @@
             },
             {
               "name": "signInUrl",
-              "description": "Console URL to sign in and accept",
+              "description": "Console URL to sign in and join",
               "sample": "https://app.aglyn.com"
             },
             {
@@ -9350,12 +9350,12 @@
             },
             {
               "name": "handoff.previousOwner",
-              "description": "What happens to the current owner once the handoff is accepted",
+              "description": "What happens to the current owner once the handoff takes effect",
               "sample": "The current owner stays on as an admin."
             },
             {
               "name": "signInUrl",
-              "description": "Console URL to sign in and accept",
+              "description": "Console URL to sign in and join",
               "sample": "https://app.aglyn.com"
             },
             {
@@ -9382,7 +9382,7 @@
             },
             {
               "name": "handoff.previousOwner",
-              "description": "What happens to the current owner once the handoff is accepted",
+              "description": "What happens to the current owner once the handoff takes effect",
               "sample": "The current owner stays on as an admin."
             },
             {
@@ -9402,7 +9402,7 @@
             },
             {
               "name": "billingUrl",
-              "description": "Billing page with the bundle preselected; signing in with this address shows the invitation to accept first",
+              "description": "Billing page with the bundle preselected; signing in with this address joins the workspace first",
               "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
             },
             {

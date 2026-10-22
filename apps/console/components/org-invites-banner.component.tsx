@@ -68,13 +68,11 @@ export function OrgInvitesBanner({ placement = 'inline' }: OrgInvitesBannerProps
   const { invites: pending } = usePendingInvites()
   const { review, claimInline, inlineClaims } = useInviteReview()
   const { respond, busyId } = useInviteResponse()
-  // An invitation being joined on its own (AGL-4023) is not asked about; one
-  // the server refused is, so it can be answered by hand.
-  const { statusOf } = useInviteAutoAccept()
-  const invites = pending.filter((invite) => {
-    const status = statusOf(invite.$id)
-    return status !== 'joining' && status !== 'joined'
-  })
+  // Invitations take effect on their own (AGL-4023), so nobody is asked to
+  // accept one. The banner is left only where nothing joins automatically: a
+  // staff impersonation session, which sees what the account holder has.
+  const { enabled: autoJoin } = useInviteAutoAccept()
+  const invites = autoJoin === false ? pending : []
 
   useEffect(
     () => (placement === 'inline' ? claimInline() : undefined),
