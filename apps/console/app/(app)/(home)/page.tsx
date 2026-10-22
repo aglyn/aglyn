@@ -62,7 +62,7 @@ import PlatformMarketingConsentPrompt from '../../../components/marketing-consen
 import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
-import { useOrgPlans } from '../../../hooks/use-org-plans'
+import { useOrgPlans } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
 import { useOrgScope } from '../../../hooks/use-org-scope'
 import { usePinnedOrgs } from '../../../hooks/use-pinned-orgs'
 import {
@@ -76,6 +76,8 @@ import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-inte
 import {
   claimPendingSignUpWorkspace,
   createSignUpWorkspace,
+  needsBackstopWorkspace,
+  personalWorkspaceName,
 } from '../../../utils/signup-workspace'
 import {
   holdSignUpLanding,
@@ -413,6 +415,9 @@ function OrgJump() {
     // The remembered plan decides where the new workspace LANDS, and it is
     // read once and destructively — starting before it answers would drop it.
     if (storedIntent === undefined) return
+    // A pending invite is why a zero-workspace account is here; the backstop
+    // below must not hand it a workspace of its own before it can see that.
+    if (invitesLoading) return
     if (provisionedForRef.current === uid) return
     // The editor-hint bounce is already leaving (AGL-3690). The claim clears
     // the held name, so starting it now would lose the name with the page.
@@ -432,12 +437,21 @@ function OrgJump() {
     holdSignUpLanding(PROVISION_HOLD_KEY, PROVISION_HOLD_MAX_MS)
     void (async () => {
       const pending = await claimPendingSignUpWorkspace(firestore, user)
-      if (!pending) {
+      // No held name: the backstop (AGL-4021). A door that should have made
+      // the workspace died on the way, so a young verified account with no
+      // workspace and no invite gets the personal one that door would have
+      // created, instead of an empty chooser.
+      const name =
+        pending?.name ??
+        (invites.length === 0 && needsBackstopWorkspace(user)
+          ? personalWorkspaceName(user)
+          : '')
+      if (!name) {
         releaseSignUpLanding(PROVISION_HOLD_KEY)
         if (active) setProvisionSettled(true)
         return
       }
-      const { slug, error } = await createSignUpWorkspace(user, pending.name)
+      const { slug, error } = await createSignUpWorkspace(user, name)
       if (!slug) releaseSignUpLanding(PROVISION_HOLD_KEY)
       if (slug) {
         // Activation (AGL-1561), counted where the workspace is actually
@@ -462,13 +476,24 @@ function OrgJump() {
       if (!active) return
       // Best-effort no longer means silent (AGL-1523). The name was typed
       // into the sign-up form; say what happened to it and offer it back.
-      if (pending.nameWasTyped) {
+      if (pending?.nameWasTyped) {
         setSignupOrgFailure({ name: pending.name, error })
       }
       setProvisionSettled(true)
     })()
     return () => void (active = false)
-  }, [confirmed, enterOrg, firestore, loading, orgs.length, storedIntent, uid, user])
+  }, [
+    confirmed,
+    enterOrg,
+    firestore,
+    invites.length,
+    invitesLoading,
+    loading,
+    orgs.length,
+    storedIntent,
+    uid,
+    user,
+  ])
   /**
    * Hold the zero-workspace surfaces until the account has answered.
    *

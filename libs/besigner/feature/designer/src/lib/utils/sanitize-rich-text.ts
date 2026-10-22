@@ -181,3 +181,15 @@ export function richTextToPlain(html: string): string {
   walk(template.content)
   return parts.join('').replace(/\n+$/, '')
 }
+
+/**
+ * Plain text as the markup that renders it, newlines included.
+ *
+ * Named for what it does rather than `escapeHtml`, which it is not: the
+ * `<br>` is a CONVERSION, and a reader who takes this for the escaper will
+ * eventually reach for it somewhere a line break must stay literal. The
+ * escaping half is the shared one.
+ */
+export function textToHtml(text: string): string {
+  return escapeHtml(text).replace(/\n/g, '<br>')
+}

@@ -63,7 +63,7 @@ import {
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import { useConsoleSlotPlugins } from '../../hooks/use-console-plugins'
-import useThemeLibrary from '../../hooks/use-theme-library'
+import useThemeLibrary from '@aglyn/tenant-feature-instance/hooks/use-theme-library'
 import { useEnabledPluginIds } from '../console-plugins-gate.component'
 import ThemePreview from './theme-preview.component'
 

@@ -19,14 +19,13 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
   FEATURE_FLAG,
+  REUSABLE_INSTANCE_PROP_HTML_KEY,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   RICH_TEXT_COMMANDS,
 } from '@aglyn/aglyn'
 import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-// Subpath, not the library index — see the note there.
-import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
-import { Box, Button, IconButton, Paper } from '@mui/material'
+import { Box, Button, IconButton, Paper, useTheme } from '@mui/material'
 import type { Theme } from '@mui/material/styles'
 import type { SystemStyleObject } from '@mui/system'
 import isEqual from 'lodash-es/isEqual.js'
@@ -43,15 +42,21 @@ import {
 import { clampToViewport, useAnchoredRect } from '../hooks/use-anchored-rect'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
+  addCaretStops,
   beginInPlaceEdit,
   type InPlaceEditSurface,
   selectionOf,
+  withoutCaretStops,
 } from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
-import { richTextCommandGroups } from '../utils/rich-text-commands'
+import {
+  RICH_COMMANDS,
+  richTextCommandGroups,
+} from '../utils/rich-text-commands'
 import {
   richTextToPlain,
   sanitizeRichText,
+  textToHtml,
 } from '../utils/sanitize-rich-text'
 import {
   createTokenPillElement,
@@ -67,56 +72,38 @@ import {
 } from '../utils/token-segments'
 import { InsertTokenMenu } from './insert-token-menu.component'
 import {
+  paintTokenPills,
   TokenPillPopover,
   tokenPillContainerSx,
 } from './token-pill.component'
 
+/** The stamp `Leaf` puts on every element it renders. */
+const LEAF_STAMP_SELECTOR = '[data-aglyn^="leaf:"]'
+
 /**
- * The formatting tools, each tagged with the group that has to be allowed
- * for it to appear (AGL-2557).
- *
- * The toolbar used to render this list whole, which is why rich text could
- * only ever be offered by a component that could hold all of it — a
- * `<button>` cannot hold a list, so Accordion Summary and Button were left
- * with no formatting at all rather than with the half that is safe in them.
+ * Puts the caret at whichever end of `editable` is nearer a press beside it:
+ * the start for a press before its first line, the end otherwise.
  */
-const RICH_COMMANDS: Array<{
-  command: string
-  label: string
-  title: string
-  group: Aglyn.RICH_TEXT_COMMANDS
-}> = [
-  {
-    command: 'bold',
-    label: 'B',
-    title: 'Bold',
-    group: RICH_TEXT_COMMANDS.EMPHASIS,
-  },
-  {
-    command: 'italic',
-    label: 'I',
-    title: 'Italic',
-    group: RICH_TEXT_COMMANDS.EMPHASIS,
-  },
-  {
-    command: 'underline',
-    label: 'U',
-    title: 'Underline',
-    group: RICH_TEXT_COMMANDS.EMPHASIS,
-  },
-  {
-    command: 'insertUnorderedList',
-    label: '•',
-    title: 'Bulleted list',
-    group: RICH_TEXT_COMMANDS.LIST,
-  },
-  {
-    command: 'insertOrderedList',
-    label: '1.',
-    title: 'Numbered list',
-    group: RICH_TEXT_COMMANDS.LIST,
-  },
-]
+function placeCaretAtNearEnd(
+  editable: HTMLElement,
+  press: { clientX: number; clientY: number },
+): void {
+  const lines = Array.from(editable.getClientRects())
+  const first = lines[0]
+  const atStart = Boolean(
+    first &&
+      (press.clientY < first.top ||
+        (press.clientY <= first.bottom && press.clientX < first.left)),
+  )
+  editable.focus()
+  const selection = selectionOf(editable)
+  if (!selection) return
+  const range = editable.ownerDocument.createRange()
+  range.selectNodeContents(editable)
+  range.collapse(atStart)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
 
 /** Stands in while no edit is open, so the anchor hook can run every render. */
 const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 }
@@ -141,17 +128,6 @@ const BOXED_SURFACE_SX = {
   boxShadow: 4,
 }
 
-/**
- * Plain text as the markup that renders it, newlines included.
- *
- * Named for what it does rather than `escapeHtml`, which it is not: the
- * `<br>` is a CONVERSION, and a reader who takes this for the escaper will
- * eventually reach for it somewhere a line break must stay literal. The
- * escaping half is the shared one.
- */
-function textToHtml(text: string): string {
-  return escapeHtml(text).replace(/\n/g, '<br>')
-}
 
 /**
  * Fixed-position overlay that edits a node's text in place, opened by
@@ -259,20 +235,28 @@ export const InlineTextEditorComponent = observer(
       useInsertTokenOptions(node)
     const labelContextRef = useRef(labelContext)
     labelContextRef.current = labelContext
+    // The CONSOLE theme, read here in the console's document: pills drawn in
+    // the canvas are painted with it — see `paintTokenPills`.
+    const theme = useTheme()
+    const themeRef = useRef(theme)
+    themeRef.current = theme
 
-    // A prop edit is always the plain surface: prop values substitute into
-    // the definition as strings (see buildPropTokens), so there is no
-    // per-instance html channel for the rich toolbar to write.
-    const rich =
-      !propTarget &&
-      ((node?.componentSchema?.flags?.richTextEditable ??
-        FEATURE_FLAG.DISABLED) &
-        FEATURE_FLAG.ENABLED) !==
+    // A prop edit is formatted when every element the prop fills draws
+    // markup (decided where the edit opens): its markup rides the instance's
+    // own `propHtml`, as a node's rides `html`.
+    const rich = propTarget
+      ? Boolean(propTarget.rich)
+      : ((node?.componentSchema?.flags?.richTextEditable ??
+          FEATURE_FLAG.DISABLED) &
+          FEATURE_FLAG.ENABLED) !==
         0
 
     // What THIS component's schema allows (AGL-2557); a schema that names
-    // nothing allows everything, which is what leaves Typography alone.
-    const commandGroups = richTextCommandGroups(node?.componentSchema)
+    // nothing allows everything, which is what leaves Typography alone. For a
+    // prop edit that is the schema of the element the prop fills.
+    const commandGroups = richTextCommandGroups(
+      propTarget ? propTarget.schema : node?.componentSchema,
+    )
     /**
      * The surface may hold phrasing content only.
      *
@@ -317,15 +301,18 @@ export const InlineTextEditorComponent = observer(
       const resolve = (token: string) =>
         resolveTokenLabel(token, labelContextRef.current)
 
+      const markup = propTarget ? propTarget.initialHtml : props?.html
       const build = (target: HTMLElement) => {
         if (rich) {
           const initial =
-            typeof props?.html === 'string' && props.html
-              ? (props.html as string)
+            typeof markup === 'string' && markup
+              ? markup
               : textToHtml(text)
           target.innerHTML = initial
           // Raw {{tokens}} in the stored markup become pills (AGL-586).
           materializeTokenPillsInElement(target, resolve)
+          paintTokenPills(target, themeRef.current)
+          addCaretStops(target)
           return
         }
         // Plain mode: text nodes + pills, then the browser owns the DOM.
@@ -343,6 +330,8 @@ export const InlineTextEditorComponent = observer(
             target.appendChild(target.ownerDocument.createTextNode(segment.value))
           }
         }
+        paintTokenPills(target, themeRef.current)
+        addCaretStops(target)
       }
 
       // The element itself, whenever there is one to edit.
@@ -446,6 +435,10 @@ export const InlineTextEditorComponent = observer(
         // UpdateNodeProps REPLACES the props object — spread the existing
         // props so variant/component/etc. survive the text edit.
         const surface = activeEditable()
+        // The surface read once, as the plain reading and — for formatted
+        // text — the markup beside it.
+        let plain: string | undefined
+        let markup: string | undefined
         if (rich && surface) {
           // Pills serialize back to raw tokens BEFORE sanitizing (the
           // sanitizer strips attributes, and pill labels must never
@@ -456,9 +449,55 @@ export const InlineTextEditorComponent = observer(
           // but a PASTE can still carry one in, and the renderer would strip
           // it — so the commit strips it first and what is stored is what
           // the page will draw.
-          const sanitized = sanitizeRichText(clone.innerHTML, { phrasingOnly })
-          const plain = richTextToPlain(sanitized)
-          const hasMarkup = /<[a-z]/i.test(sanitized)
+          const sanitized = withoutCaretStops(
+            sanitizeRichText(clone.innerHTML, { phrasingOnly }),
+          )
+          plain = richTextToPlain(sanitized)
+          if (/<[a-z]/i.test(sanitized)) markup = sanitized
+        } else if (surface) {
+          plain = withoutCaretStops(
+            serializeTokenSegments(readTokenSegmentsFromDom(surface)),
+          )
+          // An emptied contentEditable leaves a stray <br> behind.
+          if (plain === '\n') plain = ''
+        }
+        const target = inlineTextEdit.propTarget
+        if (plain !== undefined && target) {
+          // Instance prop override (AGL-1304): the edit rides the
+          // INSTANCE's nested propValues, never the grafted leaf (which
+          // is not a canvas node). An emptied value REMOVES the key —
+          // the graft treats '' as unset anyway, and a cleared override
+          // must read as clean, exactly like the style-override layer.
+          // Formatting rides `propHtml` beside it, and goes with it.
+          const values = {
+            ...(current.props?.[
+              REUSABLE_INSTANCE_PROP_VALUES_KEY
+            ] as Record<string, unknown> | undefined),
+          }
+          const formatted = {
+            ...(current.props?.[
+              REUSABLE_INSTANCE_PROP_HTML_KEY
+            ] as Record<string, unknown> | undefined),
+          }
+          if (plain === '') delete values[target.propName]
+          else values[target.propName] = plain
+          if (plain !== '' && markup) formatted[target.propName] = markup
+          else delete formatted[target.propName]
+          const nextProps: Record<string, unknown> = {
+            ...current.props,
+            [REUSABLE_INSTANCE_PROP_VALUES_KEY]: values,
+            [REUSABLE_INSTANCE_PROP_HTML_KEY]: formatted,
+          }
+          // The LAST override cleared: drop the container too, so the
+          // stored instance is byte-identical to one never overridden.
+          if (!Object.keys(values).length) {
+            delete nextProps[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+          }
+          if (!Object.keys(formatted).length) {
+            delete nextProps[REUSABLE_INSTANCE_PROP_HTML_KEY]
+          }
+          nextWrite = toJS(nextProps) as Record<string, unknown>
+        } else if (plain !== undefined && rich) {
           const nextProps: Record<string, unknown> = {
             ...toJS(current.props),
             children: plain,
@@ -470,44 +509,13 @@ export const InlineTextEditorComponent = observer(
           // `isEqual`, and there the empty key is a difference. Writing it
           // onto a node that never had one is what put SAVE on the header
           // of a screen nobody had touched.
-          if (hasMarkup) nextProps['html'] = sanitized
+          if (markup) nextProps['html'] = markup
           else delete nextProps['html']
           nextWrite = nextProps
-        } else if (surface) {
-          let value = serializeTokenSegments(
-            readTokenSegmentsFromDom(surface),
-          )
-          // An emptied contentEditable leaves a stray <br> behind.
-          if (value === '\n') value = ''
-          const target = inlineTextEdit.propTarget
-          if (target) {
-            // Instance prop override (AGL-1304): the edit rides the
-            // INSTANCE's nested propValues, never the grafted leaf (which
-            // is not a canvas node). An emptied value REMOVES the key —
-            // the graft treats '' as unset anyway, and a cleared override
-            // must read as clean, exactly like the style-override layer.
-            const values = {
-              ...(current.props?.[
-                REUSABLE_INSTANCE_PROP_VALUES_KEY
-              ] as Record<string, unknown> | undefined),
-            }
-            if (value === '') delete values[target.propName]
-            else values[target.propName] = value
-            const nextProps = {
-              ...current.props,
-              [REUSABLE_INSTANCE_PROP_VALUES_KEY]: values,
-            }
-            // The LAST override cleared: drop the container too, so the
-            // stored instance is byte-identical to one never overridden.
-            if (!Object.keys(values).length) {
-              delete nextProps[REUSABLE_INSTANCE_PROP_VALUES_KEY]
-            }
-            nextWrite = toJS(nextProps) as Record<string, unknown>
-          } else {
-            nextWrite = {
-              ...toJS(current.props),
-              children: value,
-            }
+        } else if (plain !== undefined) {
+          nextWrite = {
+            ...toJS(current.props),
+            children: plain,
           }
         }
       }
@@ -641,6 +649,23 @@ export const InlineTextEditorComponent = observer(
         // one must not overrule it with a guess.
         if (host && target === host) return
         if (isInsideTheEditor(target)) return
+        // A press on the element being edited, beside the text: the text is
+        // an inline run as wide as its words (a lone token is a few
+        // characters), and the rest of the line is the element around it.
+        // That is where an author clicks to put the caret after a token, and
+        // it used to read as a click away and close the edit.
+        const live = inPlaceRef.current?.element
+        const leaf = live?.closest(LEAF_STAMP_SELECTOR)
+        if (
+          live &&
+          leaf &&
+          target instanceof Element &&
+          target.closest(LEAF_STAMP_SELECTOR) === leaf
+        ) {
+          event.preventDefault()
+          placeCaretAtNearEnd(live, event as PointerEvent)
+          return
+        }
         commitRef.current()
       }
 
@@ -677,6 +702,14 @@ export const InlineTextEditorComponent = observer(
       (event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Escape') {
           event.preventDefault()
+          // An open menu closes first, as Escape does everywhere else; the
+          // edit it was opened from stays.
+          if (menuOpenRef.current) {
+            setInsertMenu(null)
+            setPillMenu(null)
+            menuOpenRef.current = false
+            return
+          }
           cancel()
         } else if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault()
@@ -695,6 +728,14 @@ export const InlineTextEditorComponent = observer(
       (event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Escape') {
           event.preventDefault()
+          // An open menu closes first, as Escape does everywhere else; the
+          // edit it was opened from stays.
+          if (menuOpenRef.current) {
+            setInsertMenu(null)
+            setPillMenu(null)
+            menuOpenRef.current = false
+            return
+          }
           cancel()
         } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault()
@@ -824,6 +865,8 @@ export const InlineTextEditorComponent = observer(
           }
         }
         savedRangeRef.current = null
+        paintTokenPills(editable, themeRef.current)
+        addCaretStops(editable)
         editable.focus()
         // Caret lands just after the pill, ready to keep typing.
         const selection = selectionOf(editable)

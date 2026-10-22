@@ -1108,7 +1108,7 @@ export const DOCS_HELP_ANCHORS = {
   salesTaxReturn: ['#tax-return-page', '#choosing-the-period', '#rows-that-need-attention', '#which-rows', '#rows-that-are-excluded-rather-than-flagged', '#where-this-deployment-files', '#tax-filing-precedence', '#tax-filing-secrecy', '#the-figures', '#period-bounds', '#taxable-purchases', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#plugin-sales', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#what-a-reviewer-checks', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
-  screens: ['#screens--routing', '#slug', '#the-pages-list', '#page-detail', '#basic-details-card', '#used-by', '#raw-json', '#page-groups', '#what-a-move-does-to-a-url', '#what-counts-against-your-screen-allowance', '#duplicate-a-screen', '#error--maintenance-screens', '#related'],
+  screens: ['#screens--routing', '#slug', '#the-pages-list', '#page-detail', '#basic-details-card', '#name-and-description-card', '#used-by', '#raw-json', '#page-groups', '#what-a-move-does-to-a-url', '#what-counts-against-your-screen-allowance', '#duplicate-a-screen', '#error--maintenance-screens', '#related'],
   screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#console-host', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#maintenance-scripts', '#dataset-filter-terms', '#honest-limits', '#related'],
@@ -1141,7 +1141,7 @@ export const DOCS_HELP_ANCHORS = {
   team: ['#team-page', '#team-roles', '#organizations', '#three-kinds-of-user', '#site-roles', '#site-collaborators', '#collaborator-ai-access', '#what-a-site-collaborator-sees', '#site-membership', '#visitor-record-ceiling', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#templates-list', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
   termReference: ['#platform--accounts', '#aglyn', '#aglyn-ai', '#aglyn-assist', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#page', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage', '#credit-ai-credit', '#allotment'],
-  textEditing: ['#edit-inline', '#committing', '#inline-toolbar', '#rich-text', '#the-text-attribute', '#text-field-read-only', '#remove-formatting', '#line-breaks', '#bindings-in-text', '#limits', '#wrapped-outlines', '#related'],
+  textEditing: ['#edit-inline', '#committing', '#inline-toolbar', '#rich-text', '#the-text-attribute', '#text-field-formatting', '#remove-formatting', '#line-breaks', '#bindings-in-text', '#limits', '#wrapped-outlines', '#related'],
   themeAssist: ['#describe-a-change', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],
   themeStyles: ['#why-a-name-beats-a-number', '#text-style-sets-everything-at-once', '#what-your-theme-offers', '#colors-spacing-and-shadows', '#checking-a-page-you-already-built'],
@@ -1783,6 +1783,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   screens: {
     '#basic-details-card': 'Basic Details',
+    '#name-and-description-card': 'Name & description',
     '#page-detail': 'A page\'s detail view',
     '#raw-json': 'Raw JSON',
     '#slug': 'Slug',
@@ -1952,7 +1953,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#where-a-template-came-from': 'Where a template came from',
   },
   textEditing: {
-    '#text-field-read-only': 'When the Text field is read-only',
+    '#text-field-formatting': 'Formatting in the Text field',
     '#the-text-attribute': 'The Text attribute',
   },
   transferHub: {

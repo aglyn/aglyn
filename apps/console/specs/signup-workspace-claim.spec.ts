@@ -56,7 +56,10 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 import {
   claimPendingSignUpWorkspace,
   createSignUpWorkspace,
+  needsBackstopWorkspace,
+  personalWorkspaceName,
   rememberPendingSignUpWorkspace,
+  SIGN_UP_WORKSPACE_BACKSTOP_MS,
 } from '../utils/signup-workspace'
 
 /** The account document, as the transaction would find it. */
@@ -241,5 +244,42 @@ describe('AGL-2590 · creating the workspace', () => {
       slug: null,
       error: null,
     })
+  })
+})
+
+describe('the zero-workspace backstop (AGL-4021)', () => {
+  const now = Date.parse('2026-10-21T22:00:00Z')
+  const account = (createdMsAgo: number, emailVerified = true) => ({
+    emailVerified,
+    metadata: { creationTime: new Date(now - createdMsAgo).toUTCString() },
+  })
+
+  it('provisions for a young verified account whose sign-up door died', () => {
+    expect(needsBackstopWorkspace(account(60 * 60 * 1000), now)).toBe(true)
+  })
+
+  it('never provisions for an unverified account, which waits for verification', () => {
+    expect(needsBackstopWorkspace(account(60_000, false), now)).toBe(false)
+  })
+
+  it('leaves an older account with no workspaces alone: it left them', () => {
+    expect(
+      needsBackstopWorkspace(account(SIGN_UP_WORKSPACE_BACKSTOP_MS + 60_000), now),
+    ).toBe(false)
+  })
+
+  it('refuses an account whose creation time cannot be read', () => {
+    expect(
+      needsBackstopWorkspace({ emailVerified: true, metadata: {} }, now),
+    ).toBe(false)
+  })
+
+  it('names the workspace as the sign-up door would have', () => {
+    expect(personalWorkspaceName({ displayName: ' Ashik Ali ', email: 'a@x.io' })).toBe(
+      'Ashik Ali',
+    )
+    expect(personalWorkspaceName({ displayName: null, email: 'sanduc396@gmail.com' })).toBe(
+      'sanduc396',
+    )
   })
 })

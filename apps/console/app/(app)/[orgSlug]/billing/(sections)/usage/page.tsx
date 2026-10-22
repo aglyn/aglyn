@@ -39,7 +39,7 @@ import PluginWidgetSlot, {
 } from '../../../../../../components/plugin-widget-slot.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
-import useConfirmedDoc from '../../../../../../hooks/use-confirmed-doc'
+import useConfirmedDoc from '@aglyn/tenant-feature-instance/hooks/use-confirmed-doc'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../../../hooks/use-org-hosts'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'

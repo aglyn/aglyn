@@ -88,7 +88,7 @@ jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignOut: (...args: unknown[]) => mockMarkSignOut(...args),
 }))
 
-jest.mock('../utils/is-mobile-browser', () => ({
+jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   __esModule: true,
   default: () => false,
 }))

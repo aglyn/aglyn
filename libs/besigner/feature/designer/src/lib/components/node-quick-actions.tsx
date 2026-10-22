@@ -32,6 +32,7 @@ import {
   Divider,
   Stack,
   type StackProps,
+  type Theme,
   Tooltip as MuiTooltip,
   TooltipProps,
   Typography,
@@ -75,6 +76,26 @@ const ActionButton = styled(MuiButton)(({ theme }) => ({
     fontSize: theme.typography.pxToRem(20),
   },
 }))
+
+/**
+ * The strip's slate and ink: the LIGHT scheme's, whichever scheme the
+ * console is in.
+ *
+ * The strip floats over the site being edited, and the site's colours do not
+ * change when the console goes dark — so the strip should not either. Read
+ * from the scheme in force, the dark console's slate is a pale grey
+ * (`#7C8CA3`) whose contrast ink is black: a light, low chip over a light
+ * page, with black type the author had to squint at. The light scheme's pair
+ * is the dark slate with white ink the strip was designed as.
+ */
+function canvasChromeSurface(theme: Theme) {
+  const light = (theme as any).colorSchemes?.light?.palette?.tertiary
+  const current = (theme as any).palette?.tertiary
+  return {
+    backgroundColor: light?.main ?? current?.main,
+    color: light?.contrastText ?? current?.contrastText,
+  }
+}
 
 const LabelAction = forwardRef<any, LabelActionProps>((props, ref) => {
   const { children, ButtonProps, icon, SrOnlyProps, ...rest } = props
@@ -150,7 +171,7 @@ export const NodeQuickActions = observer(
             <Divider orientation="vertical" variant="fullWidth" flexItem sx={{ opacity: 0.5 }} />
           }
           {...rest}
-          sx={[{
+          sx={[(theme) => ({
             justifyContent: "flex-start",
             alignItems: "center",
             fontSize: 12,
@@ -159,22 +180,24 @@ export const NodeQuickActions = observer(
             letterSpacing: 0.25,
 
             // pointerEvents: 'none',
-            marginLeft: '-2px',
+            // The label chip hangs from the outline's top-left corner and
+            // lines up with its outer edge. The action strip is centred
+            // under the element, where the same 2px only pulled it off
+            // centre.
+            marginLeft: variant === 'actions' ? 0 : '-2px',
 
             marginBottom: '1px',
             // One slate surface for the whole floating control (AGL-1194).
             // The strip was `primary.light` while the buttons on it were
             // `tertiary` — two chrome hues on one control, and an ink colour
-            // paired with a background it no longer sat on. Ink is now the
-            // contrastText OF THIS background, so it follows the scheme
-            // instead of being picked once against the old one.
-            backgroundColor: 'tertiary.main',
-            color: 'tertiary.contrastText',
+            // paired with a background it no longer sat on. Ink is the
+            // contrastText OF THIS background, read from the same scheme.
+            ...canvasChromeSurface(theme),
             px: 0.5,
             pl: 0.5,
             pr: 0.25,
             py: 0.35
-          }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
+          }), ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
           <Stack
             direction="column"
             sx={{

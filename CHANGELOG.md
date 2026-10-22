@@ -9,6 +9,44 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.278 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.277...v1.0.0-beta.278)
+
+### Fixed
+
+- **besigner:** rich text everywhere text is edited, and repeats that explain themselves ([AGL-1304](https://linear.app/aglyn/issue/AGL-1304))
+
+### Changed
+
+- **console:** six site-data hooks join tenant-feature-instance
+- **console:** six generic hooks and helpers leave the app for their libs
+
+## v1.0.0-beta.277 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.276...v1.0.0-beta.277)
+
+### Added
+
+- **console:** edit a page's name and description in place; Edit in Besigner; Preview
+- **besigner:** click a part of a shared layout to edit it in a new tab, or restyle it here
+
+### Fixed
+
+- **besigner:** repeat copies sit in the parent's own layout; hover keeps them dashed
+- **preview:** repeated items fill in from their dataset, as on the live page ([AGL-3496](https://linear.app/aglyn/issue/AGL-3496))
+- **besigner:** a click on a repeated copy selects the element it repeats; copies outlined in grey
+- **besigner:** "Start hidden until an interaction shows it" wraps in the element menu
+- **besigner:** the Attributes info sections span the panel; Interactions shares its edges
+- **besigner:** canvas labels stay dark in dark mode, and the action strip centres on phones
+- **besigner:** double-tap text on a phone opens it for editing, with the keyboard
+- **besigner:** the drop marker shows exactly where a drag will land
+- **console:** the Besigner page reads its theme via useTheme; the page-view layout spec knows the Name & description card
+
+### Changed
+
+- **besigner:** the repeat expansion Preview uses lives in the designer lib
+
 ## v1.0.0-beta.276 — 2026-10-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.275...v1.0.0-beta.276)
@@ -16,6 +54,10 @@ content on the marketing site and is written separately.
 ### Added
 
 - **outreach:** an answer's links go out as tracked short links (AGL-4022) ([AGL-4022](https://linear.app/aglyn/issue/AGL-4022))
+
+### Fixed
+
+- **signup:** a phone Google sign-up always lands in its workspace (AGL-4021) ([AGL-4021](https://linear.app/aglyn/issue/AGL-4021))
 
 ## v1.0.0-beta.275 — 2026-10-21
 
