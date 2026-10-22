@@ -38,7 +38,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { previousMonth } from '../../../../utils/billing-month'
+import { previousMonth } from '@aglyn/aglyn/app-utils/console/billing-month'
 
 /** Previous calendar month as YYYY-MM (the rollup key). */
 function monthBefore(month: string): string {

@@ -46,7 +46,7 @@ import SignUp from '../app/(auth)/signup/page'
 import {
   isSignUpLandingHeld,
   releaseSignUpLanding,
-} from '../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 
 const mockPopup = jest.fn()
 const mockRedirect = jest.fn()
@@ -241,7 +241,7 @@ jest.mock('../utils/legal-consent', () => ({
   markLegalConsent: jest.fn(),
   postLegalAcceptance: jest.fn(async () => undefined),
 }))
-jest.mock('../utils/interactive-signin', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
 }))
 jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
@@ -251,10 +251,10 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
 jest.mock('../utils/auth-delegation', () => ({
   authSignInHost: () => 'app.aglyn.com',
 }))
-jest.mock('../utils/oauth-providers', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
   createGoogleOAuthProvider: () => ({}),
 }))
-jest.mock('../utils/onboarding-plan-intent', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/onboarding-plan-intent', () => ({
   rememberOnboardingPlanIntent: (...args: unknown[]) => mockRemember(...args),
 }))
 jest.mock('../utils/signup-workspace', () => ({
@@ -262,7 +262,7 @@ jest.mock('../utils/signup-workspace', () => ({
   rememberPendingSignUpWorkspace: (...args: unknown[]) =>
     mockRememberWorkspace(...args),
 }))
-jest.mock('../utils/popup-loading-guard', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))

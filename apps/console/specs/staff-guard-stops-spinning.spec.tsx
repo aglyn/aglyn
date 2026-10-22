@@ -60,7 +60,7 @@ import {
   __resetSessionReauth,
   dismissSessionReauth,
   requestSessionReauth,
-} from '../utils/session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 import { StaffGuard } from '../components/staff-guard.component'
 
 const INSIDE = 'staff-console-body'

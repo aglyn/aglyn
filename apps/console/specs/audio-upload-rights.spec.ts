@@ -36,7 +36,7 @@ import {
   AUDIO_RIGHTS_STATEMENT,
   audioRightsRefusal,
   audioRightsVerdict,
-} from '../utils/media-audio-rights'
+} from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import {
   AUDIO_TYPES,
   isAllowedUploadType,
@@ -46,7 +46,7 @@ import {
   requiresFileUploadEntitlement,
   signedUploadMaxBytes,
   uploadAcceptForPickerKind,
-} from '../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import { mediaFileTypeIcon } from '../utils/media-file-icon'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')

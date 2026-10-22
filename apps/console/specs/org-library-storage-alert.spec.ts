@@ -41,7 +41,7 @@ import {
   planMetersInfraOverage,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { formatStorageMb } from '../utils/usage-alert-notice'
+import { formatStorageMb } from '@aglyn/aglyn/app-utils/console/usage-alert-notice'
 
 const CRON_SECRET = 'test-cron-secret'
 const MB = 1024 * 1024

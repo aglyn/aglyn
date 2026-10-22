@@ -140,13 +140,13 @@ jest.mock('firebase/firestore', () => ({
 
 // Mocked BENEATH the helper rather than in place of it. The shortfall wording
 // stays real, because what the author reads is part of what is asserted.
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: (options: Record<string, unknown>) => mockRevalidateLivePages(options),
   revalidateLivePages: (options: Record<string, unknown>) =>
     mockRevalidateLivePages(options),
   describeRevalidateShortfall: jest.requireActual(
-    '../utils/revalidate-live-pages',
+    '@aglyn/aglyn/app-utils/console/revalidate-live-pages',
   ).describeRevalidateShortfall,
 }))
 

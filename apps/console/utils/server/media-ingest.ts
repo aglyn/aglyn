@@ -38,7 +38,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
-import { directUploadMaxBytes, normalizeUploadContentType } from '../media-upload-limits'
+import { directUploadMaxBytes, normalizeUploadContentType } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import { mediaStorageGate, scopeBillsStorageOverage } from '../storage-overage'
 import { embeddedMetadataAtIngress } from './media-embedded'
 import { resolveOrgMediaBand } from './media-storage-band'

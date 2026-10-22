@@ -21,7 +21,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { USAGE_METER_WARNING_PCT } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
-import { formatStorageMb } from '../../utils/usage-alert-notice'
+import { formatStorageMb } from '@aglyn/aglyn/app-utils/console/usage-alert-notice'
 import {
   formatMediaBytes,
   mediaFilesLabel,

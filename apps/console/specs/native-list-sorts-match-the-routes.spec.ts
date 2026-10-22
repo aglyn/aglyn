@@ -17,9 +17,9 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { USER_LIST_COLUMN_SORTS, USER_LIST_DEFAULT_SORT } from '../utils/list-filters'
-import { ORG_LIST_COLUMN_SORTS } from '../utils/org-list-query'
-import { STAFF_SITE_LIST_COLUMN_SORTS, STAFF_SITE_LIST_SORT } from '../utils/staff-site-list-query'
+import { USER_LIST_COLUMN_SORTS, USER_LIST_DEFAULT_SORT } from '@aglyn/aglyn/app-utils/console/list-filters'
+import { ORG_LIST_COLUMN_SORTS } from '@aglyn/aglyn/app-utils/console/org-list-query'
+import { STAFF_SITE_LIST_COLUMN_SORTS, STAFF_SITE_LIST_SORT } from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
 
 /**
  * The staff apps' header sorts for the Workspaces, Sites and People lists (AGL-3667): a `route` column asks the route

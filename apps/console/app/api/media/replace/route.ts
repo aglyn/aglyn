@@ -63,7 +63,7 @@ import {
   signedUploadMaxBytes,
   storageContentHash,
   UPLOAD_TYPES_MESSAGE,
-} from '../../../../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import {
   embeddedMetadataAtIngress,
@@ -74,7 +74,7 @@ import {
   AUDIO_RIGHTS_FIELD,
   audioRightsRefusal,
   audioRightsVerdict,
-} from '../../../../utils/media-audio-rights'
+} from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import {
   removeAssetDeliveryCopies,
   scheduleMediaDeliveryCopies,

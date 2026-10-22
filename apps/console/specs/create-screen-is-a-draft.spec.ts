@@ -62,7 +62,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import createScreenDraft from '../utils/create-screen-draft'
+import createScreenDraft from '@aglyn/aglyn/app-utils/console/create-screen-draft'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 
@@ -79,7 +79,7 @@ const readRepo = (rel: string) =>
 const SCREENS_PAGE =
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'
 const RESOURCES_ROUTE = 'apps/console/app/api/hosts/resources/route.ts'
-const HELPER = 'apps/console/utils/create-screen-draft.ts'
+const HELPER = 'libs/aglyn/src/lib/app-utils/console/create-screen-draft.ts'
 
 /**
  * Every field `/api/hosts/resources` will accept on a screen create. Anything

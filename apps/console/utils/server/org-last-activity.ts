@@ -20,7 +20,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   ORG_LAST_ACTIVITY_INTERVAL_MS,
   ORG_LAST_ACTIVITY_PATH,
-} from '../org-list-query'
+} from '@aglyn/aglyn/app-utils/console/org-list-query'
 
 /** A Firestore Timestamp, a Date or epoch millis, as millis; null for anything else. */
 export function activityMillis(value: unknown): number | null {

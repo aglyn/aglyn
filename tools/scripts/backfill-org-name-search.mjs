@@ -23,7 +23,7 @@
  * The staff Organizations list and the Margin & utilization scan filter and
  * search on their Firestore query: Organization "contains" and the search by
  * `array-contains` on `nameTokens`, Organization "is" by equality on
- * `nameLower` (`apps/console/utils/org-list-query.ts`). Both writers of an
+ * `nameLower` (`libs/aglyn/src/lib/app-utils/console/org-list-query.ts`). Both writers of an
  * organization's name stamp all three keys — `createOrganization` in
  * `libs/tenant/data/admin/src/lib/server/organizations.ts` and the rename in
  * `apps/console/app/api/orgs/settings/route.ts` — and the rules deny the keys

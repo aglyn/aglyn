@@ -28,7 +28,7 @@ import {
   pinOrg,
   readPinnedOrgs,
   replacePinnedOrg,
-} from '../utils/workspace-list'
+} from '@aglyn/aglyn/app-utils/console/workspace-list'
 import useFirestoreDoc from './use-firestore-doc'
 
 /** What a pin click did. `full` asks "Pinned is full. Replace one?". */

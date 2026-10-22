@@ -21,7 +21,7 @@ import {
   MEDIA_POSTER_MAX_BYTES,
 } from '@aglyn/tenant-data-admin'
 
-import { VIDEO_TYPES } from '../media-upload-limits'
+import { VIDEO_TYPES } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 
 /**
  * The video half of a media document, decided once for both upload routes

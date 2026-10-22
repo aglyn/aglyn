@@ -67,7 +67,7 @@ import {
   staffSiteLiveUrl,
 } from '../../../../../components/staff-site-row-actions.component'
 import { homeScreenId, staffSitePreviewHref } from '../../../../../utils/staff-site-links'
-import { staffLeavingNoticeLabel } from '../../../../../utils/staff-leaving-notice'
+import { staffLeavingNoticeLabel } from '@aglyn/aglyn/app-utils/console/staff-leaving-notice'
 
 /**
  * The published-site apex, from the ONE shared source (AGL-2195).

@@ -27,7 +27,7 @@ import {
   EMAIL_DELIVERIES_COLLECTION,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { emailDeliveriesSort } from '../../../../utils/email-deliveries-list-query'
+import { emailDeliveriesSort } from '@aglyn/aglyn/app-utils/console/email-deliveries-list-query'
 import {
   readStaffListQuery,
   STAFF_LIST_DEFAULT_PAGE,

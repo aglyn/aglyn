@@ -17,7 +17,7 @@
 
 import { buildRoute, Route } from '../constants/route-links'
 import { billingHrefFor } from './billing-entry'
-import { resolveOrgEntry } from './org-entry'
+import { resolveOrgEntry } from '@aglyn/aglyn/app-utils/console/org-entry'
 import { resolveSupportEntry, supportHrefFor } from './support-entry'
 
 /**

@@ -27,7 +27,7 @@ import {
   staffMediaScopeBase,
   staffMediaScopeFrom,
   staffMediaSort,
-} from '../../../../utils/staff-media-library'
+} from '@aglyn/aglyn/app-utils/console/staff-media-library'
 import {
   readStaffListQuery,
   STAFF_LIST_DEFAULT_PAGE,

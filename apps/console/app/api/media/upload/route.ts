@@ -63,12 +63,12 @@ import {
   normalizeUploadContentType,
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
-} from '../../../../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import {
   AUDIO_RIGHTS_FIELD,
   audioRightsRefusal,
   audioRightsVerdict,
-} from '../../../../utils/media-audio-rights'
+} from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the

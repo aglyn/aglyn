@@ -72,12 +72,12 @@ import {
   showDesktopNotification,
   stripUnreadBadge,
   unreadBadge,
-} from '../utils/notification-alerts'
+} from '@aglyn/aglyn/app-utils/console/notification-alerts'
 import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
-} from '../utils/notification-links'
-import { isNearScrollEnd, isNotificationRead } from '../utils/notification-feed'
+} from '@aglyn/aglyn/app-utils/console/notification-links'
+import { isNearScrollEnd, isNotificationRead } from '@aglyn/aglyn/app-utils/console/notification-feed'
 
 /**
  * App-bar notifications dropdown (AGL-260): unread badge, an Inbox (unread)

@@ -41,7 +41,7 @@
 
 import type { ReactNode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
-import type { RevenuePayload } from '../utils/revenue-view'
+import type { RevenuePayload } from '@aglyn/aglyn/app-utils/console/revenue-view'
 
 jest.mock('@aglyn/shared-data-enums', () => ({
   __esModule: true,

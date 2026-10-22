@@ -30,7 +30,7 @@ import {
   invoiceAnswers,
   readInvoiceQueryParams,
   stripeInvoiceSearchQuery,
-} from '../../../../utils/billing-invoice-query'
+} from '@aglyn/aglyn/app-utils/console/billing-invoice-query'
 
 // lockdown-423: exempt — a billing-locked org must be able to SEE what it owes to pay it;
 // part of the recovery surface AGL-1501 keeps sessions alive for.

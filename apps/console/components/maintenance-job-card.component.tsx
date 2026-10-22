@@ -57,7 +57,7 @@ import { docsHelp } from '../constants/docs-links'
 import {
   MAINTENANCE_REASON_MIN,
   type MaintenanceJobDescriptor,
-} from '../utils/maintenance-jobs'
+} from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
 
 /** A result worth reading, reduced to lines. Shapes differ per job. */
 function summarize(payload: Record<string, unknown>): string[] {

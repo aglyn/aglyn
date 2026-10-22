@@ -65,7 +65,7 @@ import { useIsStaff } from '../../../../hooks/use-is-staff'
 import {
   ORG_MARGIN_FILTER_FIELDS,
   ORG_MARGIN_FILTER_HEADERS,
-} from '../../../../utils/org-list-query'
+} from '@aglyn/aglyn/app-utils/console/org-list-query'
 import {
   MARGIN_SCOPE_NOTE,
   UTILIZATION_BAND_LABELS,

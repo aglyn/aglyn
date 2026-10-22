@@ -72,7 +72,7 @@ import {
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
-import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
+import { consumeOnboardingPlanIntent } from '@aglyn/aglyn/app-utils/console/onboarding-plan-intent'
 import {
   claimPendingSignUpWorkspace,
   createSignUpWorkspace,
@@ -83,7 +83,7 @@ import {
   holdSignUpLanding,
   isLeavingConsole,
   releaseSignUpLanding,
-} from '../../../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
 import { currentConsoleLandingHref } from '../../../utils/console-landing'
 import { createFirstSiteWorkspace } from '../../../utils/first-site-workspace'
@@ -94,7 +94,7 @@ import {
   WORKSPACE_FILTER_HEADERS,
   WORKSPACE_FILTER_OPTIONS,
   type WorkspaceRow,
-} from '../../../utils/workspace-list'
+} from '@aglyn/aglyn/app-utils/console/workspace-list'
 
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */

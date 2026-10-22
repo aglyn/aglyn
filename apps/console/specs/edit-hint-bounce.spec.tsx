@@ -55,7 +55,7 @@ import {
   isLeavingConsole,
   releaseSignUpLanding,
   resetLeavingConsoleForTests,
-} from '../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 
 let mockUser: unknown
 

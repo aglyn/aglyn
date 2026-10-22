@@ -40,7 +40,7 @@ import {
   type StaffMediaRow,
   staffMediaSizeLabel,
   staffMediaTypeLabel,
-} from '../utils/staff-media-library'
+} from '@aglyn/aglyn/app-utils/console/staff-media-library'
 
 export interface StaffMediaAssetDialogProps {
   /** The library: `orgId=…` or `hostId=…`, as the card asked for it. */

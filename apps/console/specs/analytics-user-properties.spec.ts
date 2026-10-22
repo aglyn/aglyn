@@ -28,7 +28,7 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { buildOrgUserProperties } from '../utils/analytics-user-properties'
+import { buildOrgUserProperties } from '@aglyn/aglyn/app-utils/console/analytics-user-properties'
 
 describe('buildOrgUserProperties (AGL-1852)', () => {
   it('reports the active org membership: plan tier and role', () => {

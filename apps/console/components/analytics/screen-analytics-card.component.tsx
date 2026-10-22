@@ -29,7 +29,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import {
   readAnalyticsDays,
   recentDayIds,
-} from '../../utils/analytics-day-cache'
+} from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'

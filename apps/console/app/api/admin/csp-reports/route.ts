@@ -39,7 +39,7 @@
  *               computed from. `rows`: the table, one page of it, on the
  *               staff list wire (`readStaffListQuery`) — every Filters clause
  *               and the search on the Firestore query beneath the window
- *               (`utils/csp-report-list-query.ts`), paged by cursor.
+ *               (`@aglyn/aglyn/app-utils/console/csp-report-list-query`), paged by cursor.
  *
  * The window read is a single-field range on `day` — served by the
  * automatic index, no composite needed (the `/api/health/rate-limits`
@@ -62,7 +62,7 @@ import {
   type CspListRow,
   cspWindowBase,
   isCspQuerySort,
-} from '../../../../utils/csp-report-list-query'
+} from '@aglyn/aglyn/app-utils/console/csp-report-list-query'
 // From the leaf, as `staff-list-query.ts` does.
 import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
 import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'

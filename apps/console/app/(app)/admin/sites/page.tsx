@@ -61,7 +61,7 @@ import {
   STAFF_SITE_LIST_FILTER_OPTIONS,
   STAFF_SITE_LIST_QUERY,
   STAFF_SITE_LIST_SORT,
-} from '../../../../utils/staff-site-list-query'
+} from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
 
 /**
  * The filterable fields that get a column of their own. The rest of

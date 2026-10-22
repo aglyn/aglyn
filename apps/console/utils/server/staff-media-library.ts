@@ -31,7 +31,7 @@ import {
   type StaffMediaScope,
   staffMediaCdnScope,
   staffMediaScopeBase,
-} from '../staff-media-library'
+} from '@aglyn/aglyn/app-utils/console/staff-media-library'
 import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*

@@ -82,13 +82,13 @@ jest.mock('firebase/firestore', () => ({
     mockUpdateDoc(ref, data),
 }))
 
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: (options: Record<string, unknown>) => mockRevalidateLivePages(options),
   revalidateLivePages: (options: Record<string, unknown>) =>
     mockRevalidateLivePages(options),
   describeRevalidateShortfall: jest.requireActual(
-    '../utils/revalidate-live-pages',
+    '@aglyn/aglyn/app-utils/console/revalidate-live-pages',
   ).describeRevalidateShortfall,
 }))
 

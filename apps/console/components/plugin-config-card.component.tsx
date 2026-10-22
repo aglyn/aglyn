@@ -53,7 +53,7 @@ import {
   type DocsHelpTopicKey,
 } from '../constants/docs-help.generated'
 import { docsHelp } from '../constants/docs-links'
-import { revalidateLivePages } from '../utils/revalidate-live-pages'
+import { revalidateLivePages } from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 
 /**
  * Generic per-plugin settings form (AGL-428), at either scope.

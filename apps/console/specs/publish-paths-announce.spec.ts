@@ -46,7 +46,7 @@ const mockRevalidateLivePages = jest.fn<
   Promise<null>,
   [{ hostId?: string; paths?: string[] }]
 >(async () => null)
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: (...args: unknown[]) => (mockRevalidateLivePages as any)(...args),
   revalidateLivePages: (...args: unknown[]) =>
@@ -525,7 +525,7 @@ const BESIGNER =
 const VIEW =
   'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx'
 const SCREENS_LIST = 'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'
-const HELPER = 'apps/console/utils/revalidate-live-pages.ts'
+const HELPER = 'libs/aglyn/src/lib/app-utils/console/revalidate-live-pages.ts'
 const ROUTE = 'apps/console/app/api/screens/revalidate/route.ts'
 
 /**

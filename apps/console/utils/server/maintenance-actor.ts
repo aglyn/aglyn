@@ -42,7 +42,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../app/api/_lib/invalid-id-token-response'
 import { isCronAuthorized } from '../cron-auth'
-import type { MaintenanceJobDescriptor } from '../maintenance-jobs'
+import type { MaintenanceJobDescriptor } from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export interface MaintenanceActor {

@@ -26,7 +26,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { isAuthFailure } from '../utils/auth-failure'
+import { isAuthFailure } from '@aglyn/aglyn/app-utils/console/auth-failure'
 
 /**
  * Every host role, as a value (AGL-1145).
@@ -93,7 +93,7 @@ export interface HostResolution {
    * `useAuthRecovery`, which re-runs resolution by itself when the session
    * comes back. A network fault deliberately gets neither — nothing tells
    * the page a connection returned, so its manual retry stays the honest
-   * recovery. See `utils/auth-failure.ts` for the discriminator.
+   * recovery. See `@aglyn/aglyn/app-utils/console/auth-failure` for the discriminator.
    */
   authError: boolean
   /**

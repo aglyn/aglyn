@@ -184,7 +184,7 @@ jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) 
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))
-jest.mock('../utils/fetch-seat-counts', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))
@@ -332,7 +332,7 @@ const invoiceCalls = () =>
     String(call[0] ?? '').includes('/api/billing/invoices'),
   )
 
-import { subscriptionPeriodNotice } from '../utils/subscription-period-notice'
+import { subscriptionPeriodNotice } from '@aglyn/aglyn/app-utils/console/subscription-period-notice'
 
 describe('THE FLICKER: no ledger paints before the permission read lands', () => {
   beforeEach(() => {

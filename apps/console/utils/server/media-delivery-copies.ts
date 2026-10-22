@@ -23,7 +23,7 @@ import {
   syncMediaDeliveryCopies,
 } from '@aglyn/tenant-data-admin'
 import { after } from 'next/server'
-import { isVideoUploadType } from '../media-upload-limits'
+import { isVideoUploadType } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 
 /**
  * The console routes' half of the delivery copies (AGL-2824): where a video

@@ -67,8 +67,8 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import { POST } from '../app/api/orgs/last-activity/route'
 import { orgActivityBeatDue } from '../hooks/use-org-last-activity'
-import { accountLastActiveAt } from '../utils/list-filters'
-import { ORG_LAST_ACTIVITY_INTERVAL_MS } from '../utils/org-list-query'
+import { accountLastActiveAt } from '@aglyn/aglyn/app-utils/console/list-filters'
+import { ORG_LAST_ACTIVITY_INTERVAL_MS } from '@aglyn/aglyn/app-utils/console/org-list-query'
 import {
   orgActivityIsStale,
   stampOrgLastActivity,

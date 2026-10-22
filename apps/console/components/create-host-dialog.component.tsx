@@ -46,7 +46,7 @@ import { useOrgScope } from '../hooks/use-org-scope'
 import { firstTouchField } from '../utils/account-acquisition'
 import { currentConsoleLandingHref } from '../utils/console-landing'
 import hardNavigate from '../utils/hard-navigate'
-import { requestStarterSite } from '../utils/host-first-run'
+import { requestStarterSite } from '@aglyn/aglyn/app-utils/console/host-first-run'
 import {
   SITE_START_LIVE_VALUE,
   SITE_START_PARAM,

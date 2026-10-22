@@ -100,7 +100,7 @@ import {
   COUPON_FILTER_FIELDS,
   COUPON_SEARCH_PATHS,
   couponListRow,
-} from '../utils/coupon-list-query'
+} from '@aglyn/aglyn/app-utils/console/coupon-list-query'
 import { answerStaffCompleteList } from '../utils/server/staff-complete-list'
 import { readStaffListQuery } from '../utils/server/staff-list-query'
 

@@ -623,7 +623,7 @@ screen.
 ### 5a. The house rule, and where email genuinely differs
 
 The platform rule is that **capacity is enforced at the reduction, never at
-use** — `apps/console/utils/over-limit.ts` is the one comparison, and
+use** — `libs/aglyn/src/lib/app-utils/console/over-limit.ts` is the one comparison, and
 `apps/console/utils/server/capacity-in-use.ts` states the principle: re-checking
 at use time "would mean ejecting a teammate or locking a dataset".
 

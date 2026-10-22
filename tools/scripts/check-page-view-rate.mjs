@@ -52,7 +52,7 @@ import { TENANT_PAGE_ENTRY, measurePageWeight } from './lib/tenant-page-weight.m
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BUDGET_PATH = join(REPO_ROOT, 'tools', 'tenant-page-budget.json')
-const METERED_PATH = join(REPO_ROOT, 'apps', 'console', 'utils', 'usage-metering.ts')
+const METERED_PATH = join(REPO_ROOT, 'libs', 'aglyn', 'src', 'lib', 'app-utils', 'console', 'usage-metering.ts')
 const COGS_PATH = join(
   REPO_ROOT,
   'libs',

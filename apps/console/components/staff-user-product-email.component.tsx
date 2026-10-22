@@ -22,7 +22,7 @@ import { AppLink } from '@aglyn/shared-ui-jsx'
 import type { PlatformMarketingReach } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
 import { Chip, Stack, Typography } from '@mui/material'
 import { buildRoute, Route } from '../constants/route-links'
-import { formatStaffTimestamp } from '../utils/staff-timestamps'
+import { formatStaffTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /** What `/api/admin/users/detail` answers under `marketing` (AGL-3292). */
 export interface StaffUserMarketing {

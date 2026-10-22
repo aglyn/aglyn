@@ -33,7 +33,7 @@ import {
   hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
-} from '../utils/plugin-hub-sections'
+} from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
 
 /** An org on the Free plan: nothing under `features` is granted. */
 const FREE_ORG = { $id: 'org-1', features: {} }

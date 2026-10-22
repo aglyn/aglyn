@@ -821,7 +821,7 @@ stops and offers Resume; pages every undo conflict into the preview; and
 throws every refusal as a `TransferRequestError` with the route's `code`.
 Its `export` reads the file's bytes (keeping a byte-order mark) and refuses
 one holding fewer rows than `X-Aglyn-Export-Rows` promised; its `savePrefs`
-is the surface's `saveTransferPrefs` (`apps/console/utils/transfer-prefs-store.ts`),
+is the surface's `saveTransferPrefs` (`libs/aglyn/src/lib/app-utils/console/transfer-prefs-store.ts`),
 which merges over the stored document and writes it back normalized.
 
 ## Site packages

@@ -23,7 +23,7 @@ import {
 import { listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
-import type { StaffCompleteListColumns } from '../staff-complete-list-sort'
+import type { StaffCompleteListColumns } from '@aglyn/aglyn/app-utils/console/staff-complete-list-sort'
 import type { StaffListQueryPage, StaffListQueryRequest } from './staff-list-query'
 
 /*
@@ -48,7 +48,7 @@ import type { StaffListQueryPage, StaffListQueryRequest } from './staff-list-que
  *
  * A header sort (AGL-3680, strategy 4s) is answered like a clause: over
  * every row that matched, BEFORE the page is cut, by the column's value
- * getter (`utils/staff-complete-list-sort.ts`). A read that is not the
+ * getter (`@aglyn/aglyn/app-utils/console/staff-complete-list-sort`). A read that is not the
  * whole source cannot do that honestly, so the caller says so with
  * `unsortable` and the asked order is refused with a notice, not applied to
  * part of the rows.

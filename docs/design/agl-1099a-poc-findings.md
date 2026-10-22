@@ -217,7 +217,7 @@ The console calls exactly that, today, in **six** places:
 - `apps/console/app/(auth)/signup/page.tsx:256`
 - `apps/console/app/(auth)/sso/page.tsx:146`
 - `apps/console/components/session-reauth-dialog.component.tsx:205`
-- `apps/console/utils/passkeys.ts:133`
+- `libs/aglyn/src/lib/app-utils/console/passkeys.ts:133`
 - `libs/shared/util/fbclient/src/lib/controllers/app-controller.ts:422`
 
 Any one of them reached on a custom console domain silently re-persists a refresh

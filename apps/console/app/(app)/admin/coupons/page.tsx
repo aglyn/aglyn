@@ -78,7 +78,7 @@ import {
   type CouponListRow,
   type CouponRow,
   couponFullUse,
-} from '../../../../utils/coupon-list-query'
+} from '@aglyn/aglyn/app-utils/console/coupon-list-query'
 
 /** The picked fields, which the panel shows as selects. */
 const COUPON_SELECT_FIELDS = Object.keys(COUPON_FILTER_OPTIONS)

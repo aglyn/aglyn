@@ -17,7 +17,7 @@
 
 import { isOrgWideMember, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
-import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
+import { bandwidthGbFromPageViews } from '@aglyn/aglyn/app-utils/console/usage-metering'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,

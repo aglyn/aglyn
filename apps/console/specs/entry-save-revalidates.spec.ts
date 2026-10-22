@@ -184,7 +184,7 @@ const readRepo = (relative: string) =>
 const SCOPE = 'components/content/content-scope.context.tsx'
 const DETAIL = 'components/content/entry-detail-page.component.tsx'
 const ROUTE = 'app/api/screens/revalidate/route.ts'
-const HELPER = 'utils/revalidate-live-pages.ts'
+const HELPER = '../../libs/aglyn/src/lib/app-utils/console/revalidate-live-pages.ts'
 /**
  * Where the route's collection scope lives since the tenant's scheduled-entry
  * beat started asking the same question (AGL-3340).

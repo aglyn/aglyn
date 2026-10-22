@@ -25,7 +25,7 @@
  * as a bug in eight lines of string handling.
  */
 
-import { parseHandoffFragment } from '../utils/handoff-fragment'
+import { parseHandoffFragment } from '@aglyn/aglyn/app-utils/console/handoff-fragment'
 
 describe('parseHandoffFragment', () => {
   it('splits on the FIRST dot, so a dotted secret survives', () => {

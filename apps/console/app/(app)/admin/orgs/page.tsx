@@ -65,7 +65,7 @@ import {
   ORG_LIST_FILTER_HEADERS,
   ORG_LIST_QUERY,
   ORG_SUSPENDED_FILTER_OPTIONS,
-} from '../../../../utils/org-list-query'
+} from '@aglyn/aglyn/app-utils/console/org-list-query'
 import {
   ListTable,
   listActionsColumn,
@@ -96,7 +96,7 @@ import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
-} from '../../../../utils/staff-timestamps'
+} from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -565,7 +565,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
       {
         /*
          * When any member last used the console in this organization
-         * (`lastActivityAt`, `utils/org-list-query.ts`). Sorted by the
+         * (`lastActivityAt`, `@aglyn/aglyn/app-utils/console/org-list-query`). Sorted by the
          * route's query over every organization, like Created.
          */
         field: 'lastActivityAt',

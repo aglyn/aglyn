@@ -785,7 +785,7 @@ sits under the existing `screenAnalytics` entitlement or gets its own is §8 Q5.
 
 `apps/console/utils/server/capacity-in-use.ts` states it: **the enforcement
 point is the reduction, not the use.** Re-checking at use time *"would mean
-ejecting a teammate or locking a dataset."* `apps/console/utils/over-limit.ts`
+ejecting a teammate or locking a dataset."* `libs/aglyn/src/lib/app-utils/console/over-limit.ts`
 is the one comparison, with `OVER_LIMIT_KINDS` — `sites`, `seats`, `datasets` —
 and `CapacityAddonKind` names the add-on kinds the gate covers.
 

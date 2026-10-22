@@ -74,11 +74,11 @@ import type { Ga4SendResult } from '@aglyn/tenant-data-admin'
 import {
   BILLING_LOCK_GRACE_DAYS,
   shouldAutoLockOrgForBilling,
-} from '../utils/billing-auto-lock'
+} from '@aglyn/aglyn/app-utils/console/billing-auto-lock'
 import {
   LIVE_MODE_DUNNING_SCHEDULE,
   TEST_MODE_DUNNING_SCHEDULE,
-} from '../utils/stripe-dunning-schedule'
+} from '@aglyn/aglyn/app-utils/console/stripe-dunning-schedule'
 
 /** Env without a trace of the developer's own Stripe config (`nx test` leaks the root env). */
 const CLEAN_ENV = (() => {

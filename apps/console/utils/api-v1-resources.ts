@@ -87,8 +87,8 @@ import {
   UPLOAD_TYPES_MESSAGE,
   VIDEO_UPLOADS_PAUSED_CODE,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
-} from './media-upload-limits'
-import { AUDIO_RIGHTS_FIELD, audioRightsVerdict } from './media-audio-rights'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
+import { AUDIO_RIGHTS_FIELD, audioRightsVerdict } from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import {
   isSvgUploadType,
   sanitizeSvgBuffer,

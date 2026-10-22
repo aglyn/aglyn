@@ -26,7 +26,7 @@ import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import MediaFieldSection from './media-field-section.component'
 import { FAVICON_HINT } from '../constants/media-size-hints'
-import { saveMirroredHostFields } from '../utils/resync-host-memberships'
+import { saveMirroredHostFields } from '@aglyn/aglyn/app-utils/console/resync-host-memberships'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface FaviconCardProps {

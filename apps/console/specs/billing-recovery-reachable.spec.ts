@@ -220,7 +220,7 @@ describe('the org-agnostic entry point Stripe can link to', () => {
       // three cases (AGL-3265). A sweep that kept naming only the wrapper
       // would have gone on passing while the predicate it exists to forbid
       // sat one import away.
-      'apps/console/utils/org-entry.ts',
+      'libs/aglyn/src/lib/app-utils/console/org-entry.ts',
     ]) {
       const source = read(path)
       // Prose about the deadlock is expected and welcome; a predicate is not.

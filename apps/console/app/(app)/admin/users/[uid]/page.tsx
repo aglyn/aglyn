@@ -71,16 +71,16 @@ import StaffUserAuditTable from '../../../../../components/staff-user-audit-tabl
 import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
-import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
+import { legalAcceptanceDocumentHref } from '@aglyn/aglyn/app-utils/console/legal-document-link'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
-} from '../../../../../utils/staff-timestamps'
+} from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
-import { IDENTITY_SOURCE_LABEL } from '../../../../../utils/staff-identity-source'
+import { IDENTITY_SOURCE_LABEL } from '@aglyn/aglyn/app-utils/console/staff-identity-source'
 import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
 import StaffUserAdAudience from '../../../../../components/staff-user-ad-audience.component'
 

@@ -17,7 +17,7 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { TaxReturnSectionTable } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
-import { taxRegistrationSetupHint } from './tax-jurisdictions'
+import { taxRegistrationSetupHint } from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
 import {
   centsToDollars,
   taxReturnAttention,

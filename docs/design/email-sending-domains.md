@@ -73,7 +73,7 @@ verification the first org's DNS satisfies. See "Issuing the key" below.
 
 Issued by one function, `sendingDnsRecords`, which is also what the verifier
 compares against — so what a surface prints and what we accept cannot drift.
-`apps/console/utils/tenant-dns.ts` carries the same invariant for site domains
+`libs/aglyn/src/lib/app-utils/console/tenant-dns.ts` carries the same invariant for site domains
 and documents the three separate issues that came from breaking it.
 
 | Record | Host | Value | Required |

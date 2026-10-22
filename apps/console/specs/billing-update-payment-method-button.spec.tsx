@@ -126,7 +126,7 @@ jest.mock('../utils/browser-stripe', () => ({
   getBrowserStripe: () => Promise.resolve({}),
   browserStripeConfigured: () => true,
 }))
-jest.mock('../utils/fetch-seat-counts', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

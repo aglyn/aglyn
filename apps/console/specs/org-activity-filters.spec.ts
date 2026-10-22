@@ -139,7 +139,7 @@ import {
   ORG_ACTIVITY_FILTER_FIELDS,
   ORG_ACTIVITY_QUERY,
   activityActorBase,
-} from '../utils/activity-list-query'
+} from '@aglyn/aglyn/app-utils/console/activity-list-query'
 
 const doc = (
   id: string,

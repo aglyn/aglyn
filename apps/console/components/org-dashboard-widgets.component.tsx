@@ -21,7 +21,7 @@ import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { Box } from '@mui/material'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgReach } from '../hooks/use-org-reach'
-import { resolveOrgCrmAccess } from '../utils/org-crm-access'
+import { resolveOrgCrmAccess } from '@aglyn/aglyn/app-utils/console/org-crm-access'
 import PluginWidgetSlot, {
   useSlotWidgets,
   WIDGET_ZONE_BLOCK,

@@ -72,7 +72,7 @@ import {
   playNotificationChime,
   requestDesktopNotifications,
   showDesktopNotification,
-} from '../../../../../../utils/notification-alerts'
+} from '@aglyn/aglyn/app-utils/console/notification-alerts'
 
 /**
  * How the settings field is written: REPLACED whole, never merged.

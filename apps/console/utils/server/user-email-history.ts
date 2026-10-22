@@ -25,7 +25,7 @@ import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppr
 // From the leaf: `./list-filter` re-exports it beside a barrel import that
 // reaches the render cache, which a spec of this module would then load.
 import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
-import { EMAIL_HISTORY_QUERY, type EmailHistoryCursor } from '../email-history-list-query'
+import { EMAIL_HISTORY_QUERY, type EmailHistoryCursor } from '@aglyn/aglyn/app-utils/console/email-history-list-query'
 import {
   planStaffListQuery,
   type StaffListQueryPage,

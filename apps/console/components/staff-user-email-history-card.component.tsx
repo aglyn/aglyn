@@ -50,7 +50,7 @@ import {
   EMAIL_HISTORY_QUERY,
   EMAIL_HISTORY_SELECT_FIELDS,
   EMAIL_HISTORY_SORT,
-} from '../utils/email-history-list-query'
+} from '@aglyn/aglyn/app-utils/console/email-history-list-query'
 import StaffEmailMessageDialog from './staff-email-message-dialog.component'
 
 /** One message, as the staff detail route returns it. */

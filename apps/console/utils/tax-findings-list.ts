@@ -19,7 +19,7 @@ import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   type StaffCompleteListColumns,
   staffCompleteListSorts,
-} from './staff-complete-list-sort'
+} from '@aglyn/aglyn/app-utils/console/staff-complete-list-sort'
 import {
   taxReturnFindingGroups,
   type TaxReturnFindingRow,
@@ -96,7 +96,7 @@ export const TAX_FINDING_SEARCH_PATHS: readonly string[] = ['invoiceId', 'orgId'
 /*
  * THE HEADER SORTS (AGL-3680, strategy 4s): every column, ordered by the
  * route over the period's complete read and then paged
- * (`utils/staff-complete-list-sort.ts`). A period the read cap cut short is
+ * (`@aglyn/aglyn/app-utils/console/staff-complete-list-sort`). A period the read cap cut short is
  * not sorted — an order over part of it would put rows first that are not —
  * and says so (`serveTaxFindings`). With none asked, blocking findings first.
  */

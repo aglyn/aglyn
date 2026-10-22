@@ -27,7 +27,7 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { currentMonth } from '../../utils/billing-month'
+import { currentMonth } from '@aglyn/aglyn/app-utils/console/billing-month'
 
 /**
  * Historical usage, read straight off the monthly rollups (AGL-1530).

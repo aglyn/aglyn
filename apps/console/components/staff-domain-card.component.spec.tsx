@@ -143,7 +143,7 @@ describe('the staff card reports the live verdict, not just the name', () => {
   })
 
   it('says the SAME words the customer is reading (AGL-2011)', async () => {
-    // The whole point of sharing `utils/domain-status.ts` rather than writing
+    // The whole point of sharing `@aglyn/aglyn/app-utils/console/domain-status` rather than writing
     // a second vocabulary. Reword either surface independently and this fails.
     serveStatus({ ...SERVING, state: 'dns-misconfigured' })
     const staff = render(<StaffDomainCard hostId="host-1" host={host()} />)

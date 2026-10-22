@@ -163,7 +163,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 import { GET as listGET } from '../app/api/admin/media-library/route'
 import { GET as assetGET } from '../app/api/admin/media-library/asset/route'
 import { adminAuditKind } from '@aglyn/aglyn/app-utils/admin-audit-index'
-import { STAFF_MEDIA_COLUMN_SORTS } from '../utils/staff-media-library'
+import { STAFF_MEDIA_COLUMN_SORTS } from '@aglyn/aglyn/app-utils/console/staff-media-library'
 
 const call = (handler: (request: Request) => Promise<Response>, path: string, params: Record<string, string>) => {
   const url = new URL(`https://console.test${path}`)

@@ -18,7 +18,7 @@
 import type { HostUid, ScreenUid } from '@aglyn/aglyn'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import type { PublishAnnouncer } from './screen-publishing'
 
 /** A saved change to a screen whose address stayed where it was. */

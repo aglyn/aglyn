@@ -19,7 +19,7 @@
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
+import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
 
 /** The routing fields a stored notification link needs to be rewritten. */
 export interface HostIndexEntry {

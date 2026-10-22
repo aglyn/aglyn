@@ -54,7 +54,7 @@ const contactSorts = (createdLabel: string): ListQuerySort[] => [
  * SITE MEMBERS — `hosts/{hostId}/siteMembers`, newest first.
  *
  * The same fields and index shapes as the console's Site users list
- * (`apps/console/utils/site-account-query.ts`), so the composites are one
+ * (`libs/aglyn/src/lib/app-utils/console/site-account-query.ts`), so the composites are one
  * set. The search reads `searchTokens` — the start of any word of the
  * display name or of the address — which both writers of a member stamp
  * (`memberSearchTokens`, the commerce plugin's register and account routes)

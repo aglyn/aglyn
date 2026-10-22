@@ -77,13 +77,13 @@ import {
 import useFormsPublishBlock from '../hooks/use-forms-publish-block'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import rewriteStoredBindingTokens, {
   storedBindingTokenNeeds,
-} from '../utils/rewrite-stored-binding-tokens'
+} from '@aglyn/aglyn/app-utils/console/rewrite-stored-binding-tokens'
 import resolveComponentDefinition, {
   isComponentDefinitionRefusal,
-} from '../utils/component-definition-write'
+} from '@aglyn/aglyn/app-utils/console/component-definition-write'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'

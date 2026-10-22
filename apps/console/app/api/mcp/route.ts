@@ -34,8 +34,8 @@ import {
   MCP_PROTOCOL_VERSION,
   type JsonRpcMessage,
   type JsonRpcResponse,
-} from '../../../utils/mcp-protocol'
-import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
+} from '@aglyn/aglyn/app-utils/console/mcp-protocol'
+import { buildMcpTools, buildToolRequest } from '@aglyn/aglyn/app-utils/console/mcp-tools'
 
 /**
  * THE MCP ENDPOINT (AGL-3091).

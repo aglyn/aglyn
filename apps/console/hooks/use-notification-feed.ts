@@ -41,7 +41,7 @@ import {
   mergeFeedEntries,
   shouldLoadMore,
   type FeedEntry,
-} from '../utils/notification-feed'
+} from '@aglyn/aglyn/app-utils/console/notification-feed'
 
 /** Rows per page of the bell's inbox and archive. */
 export const NOTIFICATION_FEED_PAGE_SIZE = 20

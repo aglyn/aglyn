@@ -418,7 +418,7 @@ jest.mock('../constants/screen-publishing', () => ({
   syncScreenRouteEntries: jest.fn().mockResolvedValue(undefined),
   unpublishScreenRoute: jest.fn().mockResolvedValue(undefined),
 }))
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: jest.fn().mockResolvedValue(null),
   revalidateLivePages: jest.fn().mockResolvedValue(null),

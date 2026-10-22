@@ -117,11 +117,11 @@ import StaffOrgUsageTable, {
 import StaffOrgSummaryCard, {
   type StaffPerson,
 } from '../../../../../components/staff-org-summary-card.component'
-import { fetchAllPages } from '../../../../../utils/fetch-all-pages'
+import { fetchAllPages } from '@aglyn/aglyn/app-utils/console/fetch-all-pages'
 import {
   staffBillingCustomerChipLabel,
   staffBillingHistoryEmptyState,
-} from '../../../../../utils/stripe-mode-notice'
+} from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'

@@ -23,7 +23,7 @@ import {
   USER_AUDIT_LIST_QUERY,
   type UserAuditRow,
   userAuditKindBase,
-} from '../admin-audit-list-query'
+} from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
 // From the leaf: `./list-filter` re-exports it beside a barrel import that
 // reaches the render cache, which a spec of this module would then load.
 import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'

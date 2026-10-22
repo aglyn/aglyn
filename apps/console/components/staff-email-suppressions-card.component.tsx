@@ -60,7 +60,7 @@ import {
   SUPPRESSION_REASON_LABELS,
   SUPPRESSION_SEARCH_HINT,
   SUPPRESSION_SELECT_FIELDS,
-} from '../utils/email-suppression-filters'
+} from '@aglyn/aglyn/app-utils/console/email-suppression-filters'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 interface PlatformSuppression {
@@ -137,7 +137,7 @@ export default function StaffEmailSuppressionsCard() {
    * the list's cursor, so each page the footer turns is a page of the
    * narrowed list. Any combination stands together; what one query cannot
    * hold is named above the list and not applied. See
-   * `utils/email-suppression-filters.ts`.
+   * `@aglyn/aglyn/app-utils/console/email-suppression-filters`.
    */
   const gridFilter = useListGridFilter({ selectFields: SUPPRESSION_SELECT_FIELDS })
 

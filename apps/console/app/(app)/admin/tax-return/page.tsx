@@ -111,7 +111,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import { DEFAULT_FIRST_TAXABLE_PERIOD } from '../../../../utils/tax-filing-config'
-import { taxRegistrationSetupHint } from '../../../../utils/tax-jurisdictions'
+import { taxRegistrationSetupHint } from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
 import {
   centsToDollars,
   defaultTaxReturnPeriod,

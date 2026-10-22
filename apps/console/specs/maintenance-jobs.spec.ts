@@ -34,7 +34,7 @@ import {
   findMaintenanceJob,
   refuseStaffRun,
   type MaintenanceJobDescriptor,
-} from '../utils/maintenance-jobs'
+} from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
 
 const REASON = 'clearing the backlog by hand'
 

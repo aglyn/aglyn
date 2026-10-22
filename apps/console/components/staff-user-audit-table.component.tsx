@@ -46,7 +46,7 @@ import {
   USER_AUDIT_LIST_HEADERS,
   USER_AUDIT_LIST_SELECT_FIELDS,
   type UserAuditRow,
-} from '../utils/admin-audit-list-query'
+} from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
 import ActivityTable from './activity-table.component'
 import { staffActivityLinks } from '../utils/activity-details'
 

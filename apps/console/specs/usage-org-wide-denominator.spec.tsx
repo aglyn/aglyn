@@ -54,7 +54,7 @@ import {
   estimateMonthlyUsageCost,
   orgBandwidthGb,
   pageViewsFromBandwidthGb,
-} from '../utils/usage-metering'
+} from '@aglyn/aglyn/app-utils/console/usage-metering'
 import { resolveOrgEntitlements } from '@aglyn/aglyn'
 
 /**
@@ -94,7 +94,7 @@ const mockFetchSeatCounts = jest.fn(async () => ({
   managerSeats: 2,
   collaboratorSeats: 0,
 }))
-jest.mock('../utils/fetch-seat-counts', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
   __esModule: true,
   default: (...args: unknown[]) => mockFetchSeatCounts(...(args as [])),
 }))

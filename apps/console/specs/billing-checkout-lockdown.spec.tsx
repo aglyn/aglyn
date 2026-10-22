@@ -172,7 +172,7 @@ jest.mock('../hooks/use-release-flags', () => ({
   // whole flag set; an empty, ready set keeps every plugin widget out.
   useReleaseFlags: () => ({ ready: true, isStaff: false, flags: {} }),
 }))
-jest.mock('../utils/fetch-seat-counts', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

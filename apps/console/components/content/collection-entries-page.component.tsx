@@ -152,7 +152,7 @@ import {
 import {
   ENTRY_LIST_FILTER_FIELDS,
   ENTRY_LIST_FILTER_HEADERS,
-} from '../../utils/list-filters'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
 
 /**
  * Entries tab id (AGL-2486); `?tab=entries` deep links land here. The value

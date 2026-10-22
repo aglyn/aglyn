@@ -29,7 +29,7 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { reportDeniedRead } from '../utils/session-health'
+import { reportDeniedRead } from '@aglyn/aglyn/app-utils/console/session-health'
 
 /**
  * Every host role, as a value (AGL-1145).

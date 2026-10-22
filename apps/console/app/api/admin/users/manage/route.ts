@@ -40,7 +40,7 @@ import {
   isValidDeviceId,
   revokeDeviceSession,
 } from '../../../_lib/device-registry'
-import { STAFF_ROLES } from '../../../../../utils/list-filters'
+import { STAFF_ROLES } from '@aglyn/aglyn/app-utils/console/list-filters'
 import {
   originFromHeaders,
   sendAuthPasswordResetEmail,

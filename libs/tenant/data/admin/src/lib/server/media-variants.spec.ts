@@ -348,7 +348,7 @@ describe('generateStoredMediaVariants fetches the bytes and generates (AGL-1476)
   })
 
   it('admits every image the DAM accepts — the two ceilings agree', () => {
-    // `IMAGE_MAX_BYTES` in apps/console/utils/media-upload-limits.ts. If that
+    // `IMAGE_MAX_BYTES` in libs/aglyn/src/lib/app-utils/console/media-upload-limits.ts. If that
     // is raised without raising this, large images silently stop getting
     // variants, which is exactly the bug this issue is about.
     expect(MEDIA_VARIANT_SOURCE_MAX_BYTES).toBe(15 * 1024 * 1024)

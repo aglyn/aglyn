@@ -281,7 +281,7 @@ jest.mock('../utils/server/media-scope', () => ({
 
 import { MEDIA_VARIANT_SOURCE_MAX_BYTES } from '@aglyn/tenant-data-admin'
 import { PATCH } from '../app/api/media/upload-url/route'
-import { signedUploadMaxBytes } from '../utils/media-upload-limits'
+import { signedUploadMaxBytes } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 
 /**
  * A 1200x630 gradient PNG — the shape of the assets that failed in production.

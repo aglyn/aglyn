@@ -36,7 +36,7 @@ import StaffEmailMessageDialog from './staff-email-message-dialog.component'
 import {
   EMAIL_DELIVERIES_COLUMN_SORTS,
   EMAIL_DELIVERIES_SORT,
-} from '../utils/email-deliveries-list-query'
+} from '@aglyn/aglyn/app-utils/console/email-deliveries-list-query'
 import type { StaffEmailDeliveryRow } from './staff-user-email-history-card.component'
 
 /**

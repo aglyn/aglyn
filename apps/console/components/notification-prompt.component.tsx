@@ -34,7 +34,7 @@ import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
 import {
   desktopNotificationPermission,
   requestDesktopNotifications,
-} from '../utils/notification-alerts'
+} from '@aglyn/aglyn/app-utils/console/notification-alerts'
 
 const DISMISSED_KEY = 'aglyn:notification-prompt-dismissed'
 /** Long enough to land after the app has settled, not on top of first paint. */

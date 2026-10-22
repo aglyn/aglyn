@@ -34,7 +34,7 @@ import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { readAnalyticsDays, recentDayIds } from '../../utils/analytics-day-cache'
+import { readAnalyticsDays, recentDayIds } from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
 
 /**
  * One help for the card in every state it draws (AGL-3707) — the loading and

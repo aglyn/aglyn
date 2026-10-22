@@ -31,7 +31,7 @@ import { staffSitePreviewHref } from '../utils/staff-site-links'
 import {
   STAFF_SITE_CONTENT_LISTS,
   type StaffSiteContentTab,
-} from '../utils/staff-site-content-list-query'
+} from '@aglyn/aglyn/app-utils/console/staff-site-content-list-query'
 import {
   chipsColumn,
   nameColumn,

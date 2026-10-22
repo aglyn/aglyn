@@ -61,7 +61,7 @@ import { guidedStartOffered } from '../utils/server/guided-start-offered'
 type EntitlementsModule = typeof Entitlements
 const ENTITLEMENTS_MODULE = ['@aglyn/aglyn', 'plugin-manager', 'plugin-entitlements'].join('/')
 import { NEW_SITE_ENABLED_PLUGINS } from '../utils/server/provision-host'
-import { hostIsBlankSite, requestStarterSite, requestStarterSiteOutcome } from '../utils/host-first-run'
+import { hostIsBlankSite, requestStarterSite, requestStarterSiteOutcome } from '@aglyn/aglyn/app-utils/console/host-first-run'
 
 const OWNER = { role: 'owner' } as const
 const ask = (patch: Partial<Parameters<typeof guidedStartOffered>[0]> = {}) =>

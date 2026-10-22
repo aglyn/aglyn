@@ -28,8 +28,8 @@ import {
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { applyListQuery } from './list-filter'
-import { ACTIVITY_LIST_QUERY, activityActorBase } from '../activity-list-query'
-import { mirroredOrgCopies, mirrorId } from '../activity-mirror'
+import { ACTIVITY_LIST_QUERY, activityActorBase } from '@aglyn/aglyn/app-utils/console/activity-list-query'
+import { mirroredOrgCopies, mirrorId } from '@aglyn/aglyn/app-utils/console/activity-mirror'
 
 /**
  * One person's activity, wherever it happened — and one organization's,

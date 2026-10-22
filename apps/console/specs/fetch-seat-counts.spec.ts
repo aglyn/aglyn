@@ -33,7 +33,7 @@
  * this returns a number it did not actually receive.
  */
 
-import { fetchSeatCounts } from '../utils/fetch-seat-counts'
+import { fetchSeatCounts } from '@aglyn/aglyn/app-utils/console/fetch-seat-counts'
 
 const user = { getIdToken: async () => 'tok' }
 

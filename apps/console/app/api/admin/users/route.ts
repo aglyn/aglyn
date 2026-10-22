@@ -44,7 +44,7 @@ import {
   userListSort,
   USER_LIST_FILTER_FIELDS,
   USER_LIST_SORT_VALUES,
-} from '../../../../utils/list-filters'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
 
 /**
  * How many accounts a filtered request may read. Past it the directory is

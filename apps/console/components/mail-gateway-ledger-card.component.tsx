@@ -48,7 +48,7 @@ import {
   MAIL_GATEWAY_LEDGER_FILTER_HEADERS,
   MAIL_GATEWAY_LEDGER_LIST_QUERY,
   MAIL_GATEWAY_LEDGER_LIST_SORT,
-} from '../utils/mail-gateway-ledger-list-query'
+} from '@aglyn/aglyn/app-utils/console/mail-gateway-ledger-list-query'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 /**
