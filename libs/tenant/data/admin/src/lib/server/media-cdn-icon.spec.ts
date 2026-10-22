@@ -34,7 +34,7 @@ import { STORAGE_READ_BODY_LISTENER_BUDGET } from './storage-read-stream'
  * the version, and degraded to the original for anything it cannot draw.
  */
 
-const STABLE = '/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA'
+const STABLE = '/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa'
 const CACHE = {
   stable: 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
   immutable: 'public, max-age=31536000, immutable',

@@ -230,7 +230,7 @@ final class WorkspaceStoreTests: XCTestCase {
     let store = WorkspaceStore(uid: tenantUID, reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
     store.start()
     XCTAssertEqual(reader.queries[0].0.path, "users/\(tenantUID)/orgs")
-    let names = ["Juniper Street Co.", "EDR Construction", "Ready To Roll", "Elevated Concepts", "Test Org", "Aglyn LLC"]
+    let names = ["Juniper Street Co.", "Eastwood Plumbing", "Northwind Coffee", "Ember Studio", "Test Org", "Aglyn LLC"]
     reader.emit("users/\(tenantUID)/orgs", names.enumerated().map { FirestoreDocument(id: "o\($0.offset)", data: ["orgName": $0.element]) })
     XCTAssertEqual(Set(store.orgs.map(\.name)), Set(names))
     XCTAssertFalse(store.hasMoreOrgs)

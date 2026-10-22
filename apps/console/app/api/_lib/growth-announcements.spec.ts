@@ -50,7 +50,7 @@ const SITE = {
   hostId: 'host-1',
   displayName: 'Paperlink',
   subdomain: 'paperlink',
-  orgSlug: 'dongare',
+  orgSlug: 'northwind',
   createdBy: 'owner@example.com',
 }
 
@@ -102,8 +102,8 @@ describe('AGL-3491 · announceNewSite', () => {
 describe('AGL-3491 · announceNewWorkspace', () => {
   const WORKSPACE = {
     orgId: 'org-1',
-    name: 'Dongare Enterprises',
-    slug: 'dongare',
+    name: 'Northwind Coffee',
+    slug: 'northwind',
     owner: { uid: 'u-1', email: 'owner@example.com', displayName: null },
     origin: 'https://app.aglyn.com',
   }
@@ -114,13 +114,13 @@ describe('AGL-3491 · announceNewWorkspace', () => {
     expect(mockNotifyStaff).toHaveBeenCalledWith(
       {
         type: 'staff.orgCreated',
-        title: 'New workspace: Dongare Enterprises',
-        body: 'owner@example.com created Dongare Enterprises (/dongare). No acquisition record.',
+        title: 'New workspace: Northwind Coffee',
+        body: 'owner@example.com created Northwind Coffee (/northwind). No acquisition record.',
         link: '/admin/orgs/org-1',
       },
       {
         emailDetails: expect.arrayContaining([
-          { label: 'Workspace', value: 'Dongare Enterprises (/dongare)' },
+          { label: 'Workspace', value: 'Northwind Coffee (/northwind)' },
           { label: 'Owner', value: 'owner@example.com' },
           { label: 'How they found us', value: 'No acquisition record' },
           { label: 'Workspace id', value: 'org-1' },

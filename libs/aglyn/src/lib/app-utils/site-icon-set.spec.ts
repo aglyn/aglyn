@@ -38,7 +38,7 @@ import {
  * each is addressed, and which links and manifest entries describe them.
  */
 
-const SRC = '/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA'
+const SRC = '/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa'
 
 describe('the derived sizes', () => {
   it('are the sizes the issue names, for every surface', () => {

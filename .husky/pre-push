@@ -2,7 +2,8 @@
 # `main` as a red (AGL-2837): the brand-literal, color, contact-address,
 # personal-identifier and NEXT_PUBLIC guards over the pushed files, test
 # wiring, the generated Next tsconfigs, the page-view rate, specs that still
-# assert copy the push changed, and Linear ids above the checked-in ceiling.
+# assert copy the push changed, Linear ids above the checked-in ceiling, and
+# personal or client identifiers in the pushed commit messages.
 # Tests, lint and the workspace typecheck stay in CI.
 #
 # git hands the refs being pushed to this hook on stdin, and the script reads

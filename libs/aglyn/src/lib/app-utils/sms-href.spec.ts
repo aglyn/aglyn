@@ -23,7 +23,7 @@ import { EXTERNAL_HREF_PATTERN, SAFE_HREF_PATTERN } from './screen-link-value'
  * because the href allow-list knew `tel:` and not `sms:` (AGL-3388).
  */
 describe('an sms: href (AGL-3388)', () => {
-  const SMS = 'sms:+15128430942'
+  const SMS = 'sms:+15550100199'
 
   it('survives the href allow-list a linking element renders through', () => {
     expect(SAFE_HREF_PATTERN.test(SMS)).toBe(true)
@@ -33,7 +33,7 @@ describe('an sms: href (AGL-3388)', () => {
 
   it('leaves the site, as tel: does', () => {
     expect(EXTERNAL_HREF_PATTERN.test(SMS)).toBe(true)
-    expect(EXTERNAL_HREF_PATTERN.test('tel:+15128430942')).toBe(true)
+    expect(EXTERNAL_HREF_PATTERN.test('tel:+15550100199')).toBe(true)
   })
 
   it('keeps refusing the schemes that execute', () => {
