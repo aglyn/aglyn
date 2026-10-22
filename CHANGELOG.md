@@ -39,6 +39,7 @@ content on the marketing site and is written separately.
 
 ### Tests
 
+- **admin:** import the onboarding deep link statically in the bundle-links spec ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
 - **privacy:** replace real client names and ids in fixtures, comments and docs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **email:** two host-email specs expect addresses as text, not mailto links ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **handoff:** neutral fixtures in the handoff and invite specs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
