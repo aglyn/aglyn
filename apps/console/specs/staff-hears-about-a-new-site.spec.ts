@@ -51,7 +51,7 @@ function mockSubcollection(path: string): unknown {
   }
 }
 
-const ORG = { $id: 'org-1', slug: 'dongare', name: 'Dongare Enterprises', plan: 'free' }
+const ORG = { $id: 'org-1', slug: 'northwind', name: 'Northwind Coffee', plan: 'free' }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -135,7 +135,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
       host: 'app.aglyn.com',
     },
   }),
-  resolveIdpDisplayName: () => 'Dongare Enterprises',
+  resolveIdpDisplayName: () => 'Northwind Coffee',
   checkQuota: () => ({ allowed: true, limit: 1 }),
   createResourceUid: () => 'host-new',
   isBlockedSubdomain: () => false,
@@ -186,9 +186,9 @@ describe('AGL-3491 · /api/hosts/create announces what it creates', () => {
     expect(mockAnnounceNewWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({
         orgId: 'org-1',
-        name: 'Dongare Enterprises',
-        slug: 'dongare',
-        owner: { uid: 'u-new', email: 'owner@example.com', displayName: 'Dongare Enterprises' },
+        name: 'Northwind Coffee',
+        slug: 'northwind',
+        owner: { uid: 'u-new', email: 'owner@example.com', displayName: 'Northwind Coffee' },
         origin: 'https://app.aglyn.com',
         // Which door made the workspace, for the staff email (AGL-3897).
         via: 'first-site',
@@ -198,7 +198,7 @@ describe('AGL-3491 · /api/hosts/create announces what it creates', () => {
       hostId: 'host-new',
       displayName: 'Paperlink',
       subdomain: 'paperlink',
-      orgSlug: 'dongare',
+      orgSlug: 'northwind',
       createdBy: 'owner@example.com',
       // How it was started, for the staff email (AGL-3897).
       start: 'starter',

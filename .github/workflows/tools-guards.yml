@@ -789,6 +789,20 @@ jobs:
 
       - run: npm run check:personal-identifiers
 
+      # The same two classes in this pull request's commit MESSAGES. A message
+      # is as public as a file and, once merged, can never be reworded here,
+      # so the PR is the last place it can be caught. The range is the PR's own
+      # commits against the base branch as it stands now (fetch-depth 0 above
+      # brings every branch), so a commit another PR already landed is never
+      # charged to this one. Prints a sha and a line number, never the text.
+      # Values reach the shell through env, never `${{ }}` inside `run:`.
+      - name: personal identifiers in the pull request's commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tools/scripts/check-personal-identifiers.mjs --commits "origin/${BASE_REF}..${HEAD_SHA}"
+
       # AGL-1956. On 2026-08-24 Aglyn accepted marketplace-facilitator status
       # and published ToS §10.7, which tells every merchant that on a
       # storefront sale the tax "is collected into Aglyn's processor account,

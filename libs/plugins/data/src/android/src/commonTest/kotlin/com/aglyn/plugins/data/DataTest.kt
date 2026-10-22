@@ -104,8 +104,8 @@ class DataTest {
   @Test
   fun anImageFieldTakesWhatTheLibraryMints() {
     for (value in listOf(
-      "media:host-1/m-1", "media:org:fiL5LrShn9/abc123", "media:org:fiL5LrShn9:host-1/abc123",
-      "media:org:fiL5LrShn9/abc123@f00d", "media:host-1/m-1@f00d", "/api/media/cdn/org:fiL5LrShn9/abc123",
+      "media:host-1/m-1", "media:org:pK8vTz3Rq1/abc123", "media:org:pK8vTz3Rq1:host-1/abc123",
+      "media:org:pK8vTz3Rq1/abc123@f00d", "media:host-1/m-1@f00d", "/api/media/cdn/org:pK8vTz3Rq1/abc123",
       "https://images.example.com/a.jpg",
     )) assertTrue(isDatasetImageValue(value), value)
     for (value in listOf(

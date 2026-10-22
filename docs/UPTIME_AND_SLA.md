@@ -462,7 +462,9 @@ for most of that day, because five more were created after it was written:
 
 **Marketing site and Published sites watch real pages (AGL-3580).** Marketing site reads
 `https://app.aglyn.com/api/health/pages?site=aglyn.com`, Published sites
-`https://app.aglyn.com/api/health/pages?site=ready-to-roll.aglyn.app,edr-construction.aglyn.app`.
+`https://app.aglyn.com/api/health/pages?site=<client host>,<client host>` with the two
+client sites the render monitor's `RENDER_MONITOR_PAGES` names (the monitor's own
+configuration holds the hosts; this public document does not).
 Until 2026-10-05 they read `/api/health/render/{marketing,site}` on the tenant, which build a
 node tree in a route handler and never draw a page; both stayed at 100% through the two
 outages that day in which every fresh page hung. The pages door publishes the render
@@ -921,11 +923,12 @@ by AGL-3564). Nothing alerted:
    the site no cache holds (the `[host]` segment is in the ISR key and
    `normalizeHostAlias` resolves every case/trailing-dot spelling to one
    site), with the Deployment Protection bypass (`AGLYN_VERCEL_BYPASS`, else
-   Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`). On Aglyn's console it
-   draws `ready-to-roll.aglyn.app/` and EDR Construction's `/`, `/services`,
-   `/contact` — the production canary's pages (RELEASING.md, "The production
-   canary") — and watches those two sites; elsewhere `RENDER_MONITOR_PAGES` +
-   `RENDER_MONITOR_RENDER_ORIGIN`.
+   Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`). On Aglyn's console
+   `RENDER_MONITOR_PAGES` names one client site's home page and another's
+   `/`, `/services`, `/contact` — the production canary's pages
+   (RELEASING.md, "The production canary") — and it watches those two sites
+   (Aglyn's own `aglyn.com` pages when the variable is unset); elsewhere
+   `RENDER_MONITOR_PAGES` + `RENDER_MONITOR_RENDER_ORIGIN`.
 2. **The render canaries run the document** — `/api/health/render/site` and
    `/api/health/render/marketing` now carry a `document` check beside
    `render`: they call the real site layout (an async Server Component is a

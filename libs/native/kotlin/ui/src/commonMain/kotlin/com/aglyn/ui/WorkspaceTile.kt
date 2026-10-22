@@ -31,7 +31,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** A workspace's initials: the first letter of its first two words ("Juniper Street Co." → JS), or its first letter. */
+/** A workspace's initials: the first letter of its first two words ("Northwind Coffee" → NC), or its first letter. */
 fun workspaceInitials(name: String): String {
   val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() && it.first().isLetterOrDigit() }
   return when {
