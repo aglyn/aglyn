@@ -16,12 +16,19 @@ content on the marketing site and is written separately.
 ### Added
 
 - **handoff:** a completed handoff emails the new owner and the previous owner (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **billing:** staff pick the Aglyn AI tier a bundle link carries, and POS registers show on every plan ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
 
 ### Fixed
 
 - **admin:** lazy-load the hand-off emails to break an import cycle ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **email:** platform mail replies to the support mailbox; addresses stay text ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **signup:** retry a derived sign-up workspace address under a suffix on 409 ([AGL-4024](https://linear.app/aglyn/issue/AGL-4024))
+- **console:** the Aglyn AI switch lines up with the other add-on switches ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+
+### Documentation
+
+- **billing:** the bundle link's Aglyn AI tier, and POS registers on the staff bundle ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **console:** name the Figma frames of the bundle link card and the tier field ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
 
 ### Tests
 
