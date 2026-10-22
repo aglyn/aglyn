@@ -25,6 +25,7 @@ content on the marketing site and is written separately.
 
 ### Tests
 
+- **email:** two host-email specs expect addresses as text, not mailto links ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **handoff:** neutral fixtures in the handoff and invite specs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 
 ## v1.0.0-beta.279 — 2026-10-22
