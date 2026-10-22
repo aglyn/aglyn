@@ -17,6 +17,10 @@ content on the marketing site and is written separately.
 
 - **handoff:** a completed handoff emails the new owner and the previous owner (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 
+### Fixed
+
+- **admin:** lazy-load the hand-off emails to break an import cycle ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
 ### Tests
 
 - **handoff:** neutral fixtures in the handoff and invite specs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
