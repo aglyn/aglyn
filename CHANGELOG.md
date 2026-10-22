@@ -17,6 +17,10 @@ content on the marketing site and is written separately.
 
 - **handoff:** a completed handoff emails the new owner and the previous owner (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 
+### Tests
+
+- **handoff:** neutral fixtures in the handoff and invite specs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
 ## v1.0.0-beta.279 — 2026-10-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.278...v1.0.0-beta.279)
