@@ -1087,6 +1087,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#ai-usage': 'AI usage per member',
     '#help-a-teammate-who-is-locked-out': 'Help a teammate who is locked out',
     '#invite-someone': 'Invite someone',
+    '#joining-from-an-invite': 'Joining from an invite',
     '#member-access': 'Role and site access',
     '#member-activity': 'One member\'s activity',
     '#member-changes': 'Changes to this member',
