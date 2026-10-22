@@ -131,7 +131,7 @@ import {
 import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
 import PageHoldChips from '../../../../../../components/page-holds/page-hold-chips.component'
@@ -149,12 +149,12 @@ import {
   ceilingedWindow,
   hostArtifactQuery,
 } from '../../../../../../utils/host-artifact-queries'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useCollectionTemplates from '@aglyn/console-ui/hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '@aglyn/console-ui/hooks/use-host-role'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {

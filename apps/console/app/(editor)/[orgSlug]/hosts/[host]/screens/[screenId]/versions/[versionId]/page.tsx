@@ -16,7 +16,7 @@
  */
 
 import { permanentRedirect } from 'next/navigation'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostSubdomain } from '../../../../../../../../../components/host-id-provider'
 
 // Bare version path redirects to the read-only view (was the versions

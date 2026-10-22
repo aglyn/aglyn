@@ -53,7 +53,7 @@ import {
   TABLE_PAGE_SIZE_OPTIONS,
 } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useCallback, useMemo, useState } from 'react'
-import { displayWindow } from '@aglyn/aglyn/app-utils/console/display-window'
+import { displayWindow } from '@aglyn/console-ui/display-window'
 
 /** The walk's width — a transport detail, deliberately unlike any page size. */
 const FETCH_WIDTH = 200

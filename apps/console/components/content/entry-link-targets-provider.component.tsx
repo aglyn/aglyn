@@ -37,8 +37,8 @@ import {
 import { useMemo, type ReactNode } from 'react'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
-import { collectionTemplatesOf } from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+} from '@aglyn/console-ui/hooks/use-screen-link-routes'
+import { collectionTemplatesOf } from '@aglyn/console-ui/hooks/use-collection-templates'
 import LinkTargetSearchProvider from '../link-target-search-provider.component'
 import { useContentScope } from './content-scope.context'
 

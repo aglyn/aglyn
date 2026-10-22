@@ -23,7 +23,7 @@ import { useHost } from '../hooks/use-host'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { SITE_LOGO_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { SITE_LOGO_HINT } from '@aglyn/console-ui/media-size-hints'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface LogoCardProps {

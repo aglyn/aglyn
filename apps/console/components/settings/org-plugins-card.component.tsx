@@ -19,7 +19,7 @@
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Typography } from '@mui/material'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { docsHelp } from '../../constants/docs-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 

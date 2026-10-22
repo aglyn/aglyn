@@ -18,7 +18,7 @@
 
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useIsStaff } from '@aglyn/console-ui/hooks/use-is-staff'
 
 /**
  * Renders its children only for a staff-claim holder (AGL-760).

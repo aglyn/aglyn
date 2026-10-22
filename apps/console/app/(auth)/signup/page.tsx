@@ -81,7 +81,7 @@ import { AuthConsentCheckbox } from '../../../components/auth-legal-consent.comp
 import { AuthMarketingOptIn } from '../../../components/auth-marketing-opt-in.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
-import useGoogleRedirectResult from '@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result'
+import useGoogleRedirectResult from '@aglyn/console-ui/hooks/use-google-redirect-result'
 import { LEGAL_DOCUMENT_VERSION } from '../../../constants/legal-documents'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import {
@@ -93,7 +93,7 @@ import {
   postLegalAcceptance,
 } from '../../../utils/legal-consent'
 import hardNavigate from '../../../utils/hard-navigate'
-import { markInteractiveSignIn } from '@aglyn/aglyn/app-utils/console/interactive-signin'
+import { markInteractiveSignIn } from '@aglyn/console-ui/interactive-signin'
 import {
   clearMarketingOptIn,
   consumeMarketingOptIn,
@@ -108,16 +108,16 @@ import {
 import { rememberOnboardingPlanIntent } from '@aglyn/aglyn/app-utils/console/onboarding-plan-intent'
 import { rememberSignUpCampaign } from '@aglyn/aglyn/app-utils/console/signup-campaign'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
-import { consumeConsentBounce } from '@aglyn/aglyn/app-utils/console/consent-bounce'
+import { consumeConsentBounce } from '@aglyn/console-ui/consent-bounce'
 import {
   holdSignUpLanding,
   isRedirectLandingInFlight,
   releaseSignUpLanding,
-} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
+} from '@aglyn/console-ui/sign-up-landing-hold'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { createGoogleOAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
-import { aimAuthAtPool } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
-import guardPopupLoading from '@aglyn/aglyn/app-utils/console/popup-loading-guard'
+import { createGoogleOAuthProvider } from '@aglyn/console-ui/oauth-providers'
+import { aimAuthAtPool } from '@aglyn/console-ui/pooled-custom-token'
+import guardPopupLoading from '@aglyn/console-ui/popup-loading-guard'
 import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
 // Chooser forced on (AGL-1415): signing UP is the worst place to silently

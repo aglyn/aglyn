@@ -184,7 +184,7 @@ jest.mock('../../hooks/use-current-org', () => ({
   useCurrentOrg: () => mockCurrentOrg,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({
   __esModule: true,
   default: () => mockOrgHosts,
   useOrgHosts: () => mockOrgHosts,
@@ -234,7 +234,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
 }))
 
 // jsdom has no decoder; the probe's own no-decoder answer, without its timers.
-jest.mock('@aglyn/aglyn/app-utils/console/video-probe', () => ({
+jest.mock('@aglyn/console-ui/video-probe', () => ({
   __esModule: true,
   probeVideoFile: async () => ({ reason: 'no browser video decoder available' }),
 }))

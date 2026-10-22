@@ -181,7 +181,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   }),
   useOrgSlug: () => 'acme',
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({
   useOrgHosts: () => ({ hosts: [] }),
 }))
 

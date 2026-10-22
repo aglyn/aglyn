@@ -130,7 +130,7 @@ import revalidateLivePages, {
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import { buildScreenSeoUpdate } from '@aglyn/aglyn/app-utils/console/screen-seo'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import DocumentPresenceLive from '../../../../../../../../../../components/document-presence-live.component'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
@@ -160,13 +160,13 @@ import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
 } from '@aglyn/aglyn/app-utils/console/collection-templates'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useCollectionTemplates from '@aglyn/console-ui/hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import { usePlanFeatureLock } from '../../../../../../../../../../hooks/use-plan-feature-lock'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-activity-logger'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '@aglyn/console-ui/hooks/use-host-role'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const whiteSpace = '--'

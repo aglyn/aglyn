@@ -23,7 +23,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffOperatorAlertsCard from '../../../../components/staff-operator-alerts-card.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /**

@@ -71,7 +71,7 @@ import type { ReactNode } from 'react'
  * ------------------------------------------------------------------ */
 
 const mockUseOrgHosts = jest.fn()
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({
   __esModule: true,
   useOrgHosts: (...args: unknown[]) => mockUseOrgHosts(...args),
   default: (...args: unknown[]) => mockUseOrgHosts(...args),
@@ -96,7 +96,7 @@ jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: { createHosts: true }, can: () => true, loaded: true }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 

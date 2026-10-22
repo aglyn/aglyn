@@ -40,7 +40,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import useStaffListQuery from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   CLAIM_AGE_SORT,
   CLAIM_COLUMN_SORTS,

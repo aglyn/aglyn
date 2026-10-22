@@ -39,7 +39,7 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { Chip, Stack } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useMemo, useState } from 'react'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   ADMIN_AUDIT_SORT,
   USER_AUDIT_LIST_FIELDS,
@@ -48,7 +48,7 @@ import {
   type UserAuditRow,
 } from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
 import ActivityTable from './activity-table.component'
-import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
+import { staffActivityLinks } from '@aglyn/console-ui/activity-details'
 
 /** One audit row in the shared words (AGL-3660): never a code or a path. */
 const describe = (row: UserAuditRow) => describeStaffAudit(row, row.names ?? {})

@@ -199,7 +199,7 @@ jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 // `useHostOrgId` into `getDoc`, so feeding it there would put a Firestore
 // read behind every case to no purpose. The symptom was
 // `(0, _useHostOrgId.default) is not a function`.
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-host-role', () => ({
   __esModule: true,
   default: () => ({ hostRole: 'owner', canPublish: true, loaded: true }),
 }))
@@ -207,7 +207,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'business' } }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-collection-templates', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-collection-templates', () => ({
   __esModule: true,
   default: () => ({
     templateScreenIds: new Set<string>(),

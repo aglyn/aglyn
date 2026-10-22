@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { lockLogLines, resendLogLines } from '@aglyn/aglyn/app-utils/console/lockdown-log-lines'
-import { quarantineLogLines } from '@aglyn/aglyn/app-utils/console/quarantine-log-lines'
+import { lockLogLines, resendLogLines } from '@aglyn/console-ui/lockdown-log-lines'
+import { quarantineLogLines } from '@aglyn/console-ui/quarantine-log-lines'
 
 /**
  * The lines under "Actions taken in this session" (AGL-1571), which the lockdown and disabled-files pages and the

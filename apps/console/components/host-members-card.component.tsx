@@ -64,7 +64,7 @@ import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-quer
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
   HOST_MEMBER_FILTER_FIELDS,

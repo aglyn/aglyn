@@ -168,7 +168,7 @@ jest.mock('../hooks/use-delegate-workspace-signin', () => ({
   __esModule: true,
   default: () => 'off',
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-google-redirect-result', () => ({
   __esModule: true,
   default: (
     _event: unknown,
@@ -190,7 +190,7 @@ jest.mock('../utils/legal-consent', () => ({
   postLegalAcceptance: jest.fn(async () => true),
   sendToConsentGate: () => mockSendToGate(),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('@aglyn/console-ui/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))
@@ -201,18 +201,18 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
 jest.mock('../utils/auth-delegation', () => ({
   authSignInHost: () => 'app.aglyn.com',
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
+jest.mock('@aglyn/console-ui/oauth-providers', () => ({
   createGoogleOAuthProvider: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
+jest.mock('@aglyn/console-ui/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
+jest.mock('@aglyn/console-ui/passkeys', () => ({
   describePasskeySignInFailure: () => null,
   signInWithPasskey: jest.fn(),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-passkeys-supported', () => ({
   usePasskeysSupported: () => false,
 }))
 jest.mock('../utils/hard-navigate', () => ({

@@ -39,12 +39,12 @@ import FeatureGate from '../../../../components/feature-gate.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import PluginHubRail from '../../../../components/plugin-hub-rail.component'
 import { resolveDocsHelpTarget } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useConsoleRoutePlugins } from '../../../../hooks/use-console-plugins'
 import { useFilledZones } from '../../../../hooks/use-filled-zones'
 import useCurrentOrg from '../../../../hooks/use-current-org'
-import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
+import useOrgHosts from '@aglyn/console-ui/hooks/use-org-hosts'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { useOrgReach } from '../../../../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -62,17 +62,17 @@ import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
 } from '@aglyn/aglyn/app-utils/console/extension-permission'
-import { resolveOrgMount } from '@aglyn/aglyn/app-utils/console/org-mount'
+import { resolveOrgMount } from '@aglyn/console-ui/org-mount'
 import {
   orgPluginScopedNotice,
   resolveOrgPluginReach,
-} from '@aglyn/aglyn/app-utils/console/org-plugin-surfaces'
+} from '@aglyn/console-ui/org-plugin-surfaces'
 import {
   hubLandingHref,
   hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
-} from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
+} from '@aglyn/console-ui/plugin-hub-sections'
 
 /** `children` behind `flag`, or plain when the surface declares no flag. */
 function wrapInGate(

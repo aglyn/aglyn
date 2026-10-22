@@ -104,7 +104,7 @@ const SIGN_IN_DOORS = [
     emits: 2,
   },
   {
-    file: 'libs/tenant/feature/instance/src/lib/hooks/console/use-google-redirect-result.tsx',
+    file: 'libs/console/ui/src/lib/hooks/use-google-redirect-result.tsx',
     what: 'the mobile Google redirect door',
     methods: ['google_redirect'],
     emits: 1,
@@ -204,13 +204,13 @@ describe('every sign-in door reports a login (AGL-2587)', () => {
       // Not doors: the shared helpers the doors above are built out of, the
       // server routes that mint credentials for them, and the middleware.
       'apps/console/middleware.ts',
-      'libs/aglyn/src/lib/app-utils/console/pooled-custom-token.ts',
+      'libs/console/ui/src/lib/pooled-custom-token.ts',
       'apps/console/utils/auth-delegation.ts',
-      'libs/aglyn/src/lib/app-utils/console/interactive-signin.ts',
-      'libs/aglyn/src/lib/app-utils/console/signin-bounce.ts',
+      'libs/console/ui/src/lib/interactive-signin.ts',
+      'libs/console/ui/src/lib/signin-bounce.ts',
       'apps/console/utils/legal-consent.ts',
-      'libs/aglyn/src/lib/app-utils/console/popup-loading-guard.ts',
-      'libs/aglyn/src/lib/app-utils/console/passkeys.ts',
+      'libs/console/ui/src/lib/popup-loading-guard.ts',
+      'libs/console/ui/src/lib/passkeys.ts',
       'apps/console/hooks/use-presence.ts',
       'apps/console/hooks/use-session-cookie.tsx',
       'apps/console/hooks/use-delegate-workspace-signin.tsx',

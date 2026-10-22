@@ -23,14 +23,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 const mockSetAlertPrefs = jest.fn()
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-notification-prefs', () => ({
   __esModule: true,
   default: () => [{ sound: false, desktop: false, tabBadge: true }, mockSetAlertPrefs],
 }))
 
 let mockPermission: string
 let mockRequestResult: string
-jest.mock('@aglyn/aglyn/app-utils/console/notification-alerts', () => ({
+jest.mock('@aglyn/console-ui/notification-alerts', () => ({
   desktopNotificationPermission: () => mockPermission,
   requestDesktopNotifications: () => Promise.resolve(mockRequestResult),
 }))

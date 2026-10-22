@@ -51,7 +51,7 @@
  */
 
 import { reportFirestoreSessionHeal } from '@aglyn/tenant-feature-instance'
-import { getSessionReauth, subscribeSessionReauth } from '@aglyn/aglyn/app-utils/console/session-reauth'
+import { getSessionReauth, subscribeSessionReauth } from '@aglyn/console-ui/session-reauth'
 
 /**
  * Watch the re-auth store and broadcast a heal when a fault is resolved.

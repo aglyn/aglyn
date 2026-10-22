@@ -95,7 +95,7 @@ import {
   FLAG_FIELDS,
   QUOTA_FIELDS,
   RELEASE_FLAG_FIELDS,
-} from '@aglyn/aglyn/app-utils/console/org-override-fields'
+} from '@aglyn/console-ui/org-override-fields'
 
 export { FLAG_FIELDS, QUOTA_FIELDS, RELEASE_FLAG_FIELDS }
 

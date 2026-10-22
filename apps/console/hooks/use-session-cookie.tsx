@@ -26,9 +26,9 @@ import {
   clearInteractiveSignIn,
   consumeInteractiveSignIn,
   consumeInteractiveSignOut,
-} from '@aglyn/aglyn/app-utils/console/interactive-signin'
+} from '@aglyn/console-ui/interactive-signin'
 import clearServiceWorkerCaches from '@aglyn/shared-util-dom/clear-service-worker-caches'
-import { mintSession } from '@aglyn/aglyn/app-utils/console/session-mint'
+import { mintSession } from '@aglyn/console-ui/session-mint'
 
 // Lives in a module of its own so the auth layout can share it without this
 // hook's imports (AGL-3843); re-exported for the hand-off pages.
@@ -36,11 +36,11 @@ export { mintSession }
 import {
   adoptRestoredPool,
   signInWithPooledCustomToken,
-} from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+} from '@aglyn/console-ui/pooled-custom-token'
 import {
   captureReauthIdentity,
   requestSessionReauth,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '@aglyn/console-ui/session-reauth'
 
 /** A live local user, as much of one as these two paths read. */
 type SessionUser = Parameters<typeof mintSession>[0] & {

@@ -33,7 +33,7 @@ import { docsHelp } from '../constants/docs-links'
 import {
   ENTITY_LOGO_HINT,
   PERSON_IMAGE_HINT,
-} from '@aglyn/aglyn/app-utils/console/media-size-hints'
+} from '@aglyn/console-ui/media-size-hints'
 import MediaFieldSection from './media-field-section.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 

@@ -52,7 +52,7 @@ import {
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
 import { readCookie, requestIsHttps } from '../read-cookie'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import {
   hostnameOf,
   isWorkspaceDomainHost,

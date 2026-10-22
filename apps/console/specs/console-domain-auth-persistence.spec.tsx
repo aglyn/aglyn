@@ -142,12 +142,12 @@ jest.mock('@aglyn/aglyn/app-utils/console/analytics-user-properties', () => ({
   __esModule: true,
   buildOrgUserProperties: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/page-view-params', () => ({
+jest.mock('@aglyn/console-ui/page-view-params', () => ({
   __esModule: true,
   buildPageViewParams: () => ({}),
   consumePendingPageViewParams: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/analytics-default-params', () => ({
+jest.mock('@aglyn/console-ui/analytics-default-params', () => ({
   __esModule: true,
   setAnalyticsDefaultParams: jest.fn(),
 }))

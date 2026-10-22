@@ -24,8 +24,8 @@ import { fbClientAppOptions, useAuth, useSigninCheck } from '@aglyn/tenant-featu
 import { Button, CircularProgress, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import AuthFormComponent from '../../../components/auth-form.component'
-import { endConsoleSession } from '@aglyn/aglyn/app-utils/console/end-console-session'
-import { nativeHandoffAuthOrigin } from '@aglyn/aglyn/app-utils/console/native-handoff-origin'
+import { endConsoleSession } from '@aglyn/console-ui/end-console-session'
+import { nativeHandoffAuthOrigin } from '@aglyn/console-ui/native-handoff-origin'
 
 /**
  * `/auth/native` — the console page the native apps open to sign in through

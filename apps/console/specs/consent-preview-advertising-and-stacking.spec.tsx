@@ -124,7 +124,7 @@ jest.mock('@aglyn/aglyn/app-utils/console/firestore-one-shot-retry', () => ({
   default: (fn: () => unknown) => Promise.resolve(fn()),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/preview-state', () => ({
+jest.mock('@aglyn/console-ui/preview-state', () => ({
   __esModule: true,
   previewStateKey: () => 'k',
   readPreviewState: () => ({ nodes: {}, theme: undefined }),

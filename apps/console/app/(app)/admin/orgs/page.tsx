@@ -90,13 +90,13 @@ import { usePluginListColumns } from '../../../../components/plugin-list-columns
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
-} from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+} from '@aglyn/console-ui/staff-timestamps'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant

@@ -51,7 +51,7 @@ import {
   invoiceQueryString,
   planInvoiceQuery,
 } from '@aglyn/aglyn/app-utils/console/billing-invoice-query'
-import { stripeOtherModeInvoiceNotice } from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
+import { stripeOtherModeInvoiceNotice } from '@aglyn/console-ui/stripe-mode-notice'
 
 /** One invoice as `/api/billing/invoices` serializes it. */
 interface InvoiceRow {

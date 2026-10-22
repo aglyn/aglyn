@@ -25,7 +25,7 @@ import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import MediaFieldSection from './media-field-section.component'
-import { FAVICON_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { FAVICON_HINT } from '@aglyn/console-ui/media-size-hints'
 import { saveMirroredHostFields } from '@aglyn/aglyn/app-utils/console/resync-host-memberships'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 

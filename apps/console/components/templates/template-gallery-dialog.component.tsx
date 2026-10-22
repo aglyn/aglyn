@@ -61,7 +61,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
 import { useRouter } from 'next/navigation'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import {
@@ -86,7 +86,7 @@ import {
   ARTIFACT_NAME_SEARCH,
   TEMPLATE_LIST_BASE,
 } from '../../utils/artifact-list-queries'
-import useStarterPages from '@aglyn/tenant-feature-instance/hooks/console/use-starter-pages'
+import useStarterPages from '@aglyn/console-ui/hooks/use-starter-pages'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
 import {
   LIBRARY_TEMPLATE_SOURCE_TYPES,

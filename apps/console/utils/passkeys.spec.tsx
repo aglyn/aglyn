@@ -20,7 +20,7 @@ import { join } from 'path'
 import { render, screen } from '@testing-library/react'
 import { AuthAppErrorCodes, AuthErrorIgnore } from '@aglyn/shared-data-enums'
 import AuthErrorAlertComponent from '../components/auth-error-alert.component'
-import * as passkeysModule from '@aglyn/aglyn/app-utils/console/passkeys'
+import * as passkeysModule from '@aglyn/console-ui/passkeys'
 
 /**
  * AGL-1417 — the passkey button that did nothing.

@@ -17,7 +17,7 @@
 
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { Route } from '@aglyn/console-ui/route-links'
 
 /**
  * Every {@link Route} must resolve to a real App Router page (AGL-685).

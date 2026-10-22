@@ -35,7 +35,7 @@ import { describeStaffAudit } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, {
   type ActivityDetails,
 } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
+import { staffActivityLinks } from '@aglyn/console-ui/activity-details'
 import {
   type ListFilterClause,
   type ListFilterOption,
@@ -67,7 +67,7 @@ import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,

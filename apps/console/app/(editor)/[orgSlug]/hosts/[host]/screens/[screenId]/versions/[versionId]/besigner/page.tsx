@@ -171,11 +171,11 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   previewWindowName,
   writePreviewState,
-} from '@aglyn/aglyn/app-utils/console/preview-state'
+} from '@aglyn/console-ui/preview-state'
 import {
   buildRoute,
   Route,
-} from '@aglyn/aglyn/app-utils/console/route-links'
+} from '@aglyn/console-ui/route-links'
 import {
   useHostId,
   useHostSubdomain,
@@ -198,18 +198,18 @@ import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
 } from '@aglyn/aglyn/app-utils/console/collection-templates'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useCollectionTemplates from '@aglyn/console-ui/hooks/use-collection-templates'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
+} from '@aglyn/console-ui/hooks/use-screen-link-routes'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useHostComponentDefinitions from '@aglyn/tenant-feature-instance/hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
-import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
+import useHostRole from '@aglyn/console-ui/hooks/use-host-role'
+import useFormsPublishBlock from '@aglyn/console-ui/hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 

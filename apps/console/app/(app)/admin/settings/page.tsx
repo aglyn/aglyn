@@ -25,7 +25,7 @@ import StaffOnly from '../../../../components/staff-only.component'
 import StaffFirstPartyHostsCard from '../../../../components/staff-first-party-hosts-card.component'
 import StaffFreeWorkspaceCapCard from '../../../../components/staff-free-workspace-cap-card.component'
 import StaffTaxFilingCard from '../../../../components/staff-tax-filing-card.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /**

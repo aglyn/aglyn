@@ -51,7 +51,7 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
+import { staffActivityLinks } from '@aglyn/console-ui/activity-details'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
@@ -64,7 +64,7 @@ import {
   SUBJECT_ACTIVITY_QUERY,
   SUBJECT_ACTIVITY_SORTS,
 } from '@aglyn/aglyn/app-utils/console/activity-list-query'
-import { formatStaffTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+import { formatStaffTimestamp } from '@aglyn/console-ui/staff-timestamps'
 
 /*
  * What the log's Filters panel and search box offer (AGL-3317, AGL-3321):

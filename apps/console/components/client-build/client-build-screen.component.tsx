@@ -58,10 +58,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useHost } from '../../hooks/use-host'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useIsStaff } from '@aglyn/console-ui/hooks/use-is-staff'
 import { useOrgScope } from '../../hooks/use-org-scope'
 import { requestStarterSiteOutcome } from '@aglyn/aglyn/app-utils/console/host-first-run'
 import {

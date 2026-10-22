@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 
 export type SetupSectionId =
   | 'details'

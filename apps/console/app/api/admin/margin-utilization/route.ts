@@ -38,7 +38,7 @@ import {
   runStaffListQuery,
 } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import { ORG_MARGIN_QUERY } from '@aglyn/aglyn/app-utils/console/org-list-query'
-import { marginFleetView } from '@aglyn/aglyn/app-utils/console/margin-fleet-view'
+import { marginFleetView } from '@aglyn/console-ui/margin-fleet-view'
 
 /**
  * REALISED BAND UTILIZATION, PER ORGANIZATION.

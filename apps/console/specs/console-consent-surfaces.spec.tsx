@@ -128,7 +128,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: null, ready: true }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({ useIsStaff: () => false }))
+jest.mock('@aglyn/console-ui/hooks/use-is-staff', () => ({ useIsStaff: () => false }))
 jest.mock('../hooks/use-org-reach', () => ({
   useOrgReach: () => ({ orgWide: false, ready: true }),
 }))

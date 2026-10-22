@@ -52,7 +52,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isConsoleRouteSegment } from '@aglyn/aglyn/app-utils/console/console-routes'
+import { isConsoleRouteSegment } from '@aglyn/console-ui/console-routes'
 import { config } from '../middleware'
 
 /** `libs/shared/ui/json-editor/src/lib/components/monaco-editor.tsx`. */

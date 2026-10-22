@@ -45,10 +45,10 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import SiteCareRequestPanel from '../../../../components/site-care/site-care-request-panel.component'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { docsHelp } from '../../../../constants/docs-links'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   SUPPORT_TICKET_FILTER_FIELDS,
   SUPPORT_TICKET_FILTER_HEADERS,

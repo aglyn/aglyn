@@ -31,7 +31,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { OrgScopeProvider, useOrgScope } from '../hooks/use-org-scope'
-import { MAX_RETRIES, retryDelayMs } from '@aglyn/tenant-feature-instance/hooks/console/use-host-resolution'
+import { MAX_RETRIES, retryDelayMs } from '@aglyn/console-ui/hooks/use-host-resolution'
 
 /** Every listen opened, in order; tests drive delivery/failure explicitly. */
 const mockListeners: Array<{

@@ -41,7 +41,7 @@
 import { render, screen } from '@testing-library/react'
 
 let mockIsStaff: boolean | null = null
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => mockIsStaff,
 }))
@@ -60,7 +60,7 @@ import {
   __resetSessionReauth,
   dismissSessionReauth,
   requestSessionReauth,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '@aglyn/console-ui/session-reauth'
 import { StaffGuard } from '../components/staff-guard.component'
 
 const INSIDE = 'staff-console-body'

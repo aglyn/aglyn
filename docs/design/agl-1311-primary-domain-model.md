@@ -163,7 +163,7 @@ a small argument, but it points the same way as every other one.
 ### 2.2 AGL-1327 (ALIAS-first apex instructions) — consistent, and already committed
 
 AGL-1327 is In Review, but its code has **already landed on main** as
-`1c7ec09c1`. `libs/aglyn/src/lib/app-utils/console/tenant-dns.ts` now leads a bare apex with
+`1c7ec09c1`. `libs/console/ui/src/lib/tenant-dns.ts` now leads a bare apex with
 `ALIAS → sites.aglyn.app`, keeps `A → 216.198.79.1` as an explicitly-labelled
 fallback, and `apps/docs/docs/building-sites/custom-domains/connect-a-domain.md`
 quotes it.
@@ -392,7 +392,7 @@ who created only the primary record continues to be served exactly as today, and
 the twin's absence is indistinguishable from the present state.
 
 If the instructions change, the change is *additive copy* — "optionally add this
-second record for `www`" — in `libs/aglyn/src/lib/app-utils/console/tenant-dns.ts` (which both the
+second record for `www`" — in `libs/console/ui/src/lib/tenant-dns.ts` (which both the
 card and the docs read, per AGL-1275's single-source fix) plus the three docs
 pages that quote it verbatim, including the existing `:::tip Want both www and the
 apex?` block in `connect-a-domain.md`, which would be replaced rather than deleted.

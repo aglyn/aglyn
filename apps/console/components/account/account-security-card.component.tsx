@@ -37,7 +37,7 @@ import CardDisplayFormTemplate from '../card-display-form-template'
 import PasskeysCard from '../passkeys-card.component'
 import RecentSignInsCard from '../recent-sign-ins-card.component'
 import { docsHelp } from '../../constants/docs-links'
-import useAccountSignInMethods from '@aglyn/tenant-feature-instance/hooks/console/use-account-sign-in-methods'
+import useAccountSignInMethods from '@aglyn/console-ui/hooks/use-account-sign-in-methods'
 
 const securitySchema: FormSchema = {
   id: 'security',

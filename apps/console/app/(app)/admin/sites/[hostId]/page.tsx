@@ -45,7 +45,7 @@ import StaffOnly from '../../../../../components/staff-only.component'
 import { SuperStaffOnly } from '../../../../../components/staff-super-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 import HostActivityTable from '../../../../../components/host-activity-table.component'
@@ -66,8 +66,8 @@ import {
   type StaffSiteRow,
   staffSiteLiveUrl,
 } from '../../../../../components/staff-site-row-actions.component'
-import { homeScreenId, staffSitePreviewHref } from '@aglyn/aglyn/app-utils/console/staff-site-links'
-import { staffLeavingNoticeLabel } from '@aglyn/aglyn/app-utils/console/staff-leaving-notice'
+import { homeScreenId, staffSitePreviewHref } from '@aglyn/console-ui/staff-site-links'
+import { staffLeavingNoticeLabel } from '@aglyn/console-ui/staff-leaving-notice'
 
 /**
  * The published-site apex, from the ONE shared source (AGL-2195).

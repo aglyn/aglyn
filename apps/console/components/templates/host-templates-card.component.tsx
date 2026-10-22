@@ -84,7 +84,7 @@ import ListTable, {
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostSubdomain } from '../host-id-provider'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -112,7 +112,7 @@ import { releaseDefaultHomeRoot } from '@aglyn/aglyn/app-utils/console/screen-pu
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
-import useStarterPages from '@aglyn/tenant-feature-instance/hooks/console/use-starter-pages'
+import useStarterPages from '@aglyn/console-ui/hooks/use-starter-pages'
 import {
   TEMPLATE_SOURCE_OPTIONS,
   templateSourceBadge,

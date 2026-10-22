@@ -92,7 +92,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
+jest.mock('@aglyn/console-ui/passkeys', () => ({
   registerPasskey: jest.fn(),
   removePasskey: (...args: unknown[]) => {
     mockRemoveCalls.push(args)
@@ -101,7 +101,7 @@ jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
   },
   PasskeyRequestError: class extends Error {},
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-passkeys-supported', () => ({
   usePasskeysSupported: () => true,
 }))
 

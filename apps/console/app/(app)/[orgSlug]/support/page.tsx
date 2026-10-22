@@ -23,7 +23,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import useSupportApi from '../../../../hooks/use-support-api'
 import { useOrgSlug } from '../../../../hooks/use-org-scope'
-import { supportLandingRoute } from '@aglyn/aglyn/app-utils/console/support-surfaces'
+import { supportLandingRoute } from '@aglyn/console-ui/support-surfaces'
 
 /**
  * Support, the umbrella (AGL-1158).

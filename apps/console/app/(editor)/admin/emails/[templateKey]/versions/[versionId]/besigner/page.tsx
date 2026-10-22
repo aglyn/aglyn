@@ -65,10 +65,10 @@ import { usePlatformMarketingHostId } from '../../../../../../../../components/p
 import ReusableComponentsProvider from '../../../../../../../../components/reusable-components-provider.component'
 import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import useFirestoreDoc from '../../../../../../../../hooks/use-firestore-doc'
 import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useIsStaff } from '@aglyn/console-ui/hooks/use-is-staff'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>

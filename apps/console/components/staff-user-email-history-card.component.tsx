@@ -42,7 +42,7 @@ import { Alert, Chip, Stack, Typography } from '@mui/material'
 import { type GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   EMAIL_HISTORY_COLUMN_SORTS,
   EMAIL_HISTORY_FIELDS,

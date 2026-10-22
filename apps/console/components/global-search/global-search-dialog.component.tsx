@@ -33,7 +33,7 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { buildRoute } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute } from '@aglyn/console-ui/route-links'
 import { useHostId, useHostReady, useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'

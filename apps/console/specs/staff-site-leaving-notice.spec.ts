@@ -26,7 +26,7 @@
 
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { staffLeavingNoticeLabel } from '@aglyn/aglyn/app-utils/console/staff-leaving-notice'
+import { staffLeavingNoticeLabel } from '@aglyn/console-ui/staff-leaving-notice'
 
 describe('the leaving-notice line on the staff site page', () => {
   it('names the end of the window while it is on', () => {

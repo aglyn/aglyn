@@ -358,7 +358,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration',
   __esModule: true,
   default: () => undefined,
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-collection-templates', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-collection-templates', () => ({
   __esModule: true,
   default: () => ({
     templateScreenIds: new Set<string>(),
@@ -400,12 +400,12 @@ jest.mock('../hooks/use-current-org', () => {
   const useCurrentOrg = () => currentOrg
   return { __esModule: true, useCurrentOrg, default: useCurrentOrg }
 })
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-host-role', () => ({
   __esModule: true,
   default: () => ({ hostRole: 'owner', canPublish: true, loaded: true }),
 }))
 jest.mock('../constants/app-setup', () => ({}))
-jest.mock('@aglyn/aglyn/app-utils/console/preview-state', () => ({
+jest.mock('@aglyn/console-ui/preview-state', () => ({
   previewWindowName: () => 'preview',
   writePreviewState: () => undefined,
 }))
@@ -419,7 +419,7 @@ jest.mock('@aglyn/aglyn/app-utils/console/collection-templates', () => ({
   collectionTemplatePublishMessage: () => '',
   collectionTemplateRoutesSummary: () => '',
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
+jest.mock('@aglyn/console-ui/route-links', () => ({
   buildRoute: () => '/x',
   Route: {
     SCREEN_DETAILS: 'screen-details',

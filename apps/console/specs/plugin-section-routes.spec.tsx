@@ -139,7 +139,7 @@ jest.mock('../hooks/use-current-org', () => ({
  * viewer's org member document, which these specs stub nothing for — and what
  * they are about is the gate in front of a surface, not who may publish on it.
  */
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-host-role', () => ({
   __esModule: true,
   default: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
   useHostRole: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),

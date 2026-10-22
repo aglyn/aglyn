@@ -30,7 +30,7 @@ import {
   runStaffListQuery,
 } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import { STAFF_SITE_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
-import { homeScreenId } from '@aglyn/aglyn/app-utils/console/staff-site-links'
+import { homeScreenId } from '@aglyn/console-ui/staff-site-links'
 import {
   LAPSED_SUSPENSIONS_NOTICE,
   asksAboutSuspension,

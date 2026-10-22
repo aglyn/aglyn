@@ -28,7 +28,7 @@ import {
   auditLogCsv,
   auditLogRow,
   type AuditLogRow,
-} from '@aglyn/aglyn/app-utils/console/admin-audit-view'
+} from '@aglyn/console-ui/admin-audit-view'
 import { readStaffListQuery, runStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**

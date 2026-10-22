@@ -97,7 +97,7 @@ These rules matter:
 - `AGLYN_TENANT_HOST_CNAME` and `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME` are
   **two variables**, both in the template, adjacent — **set both, to the same
   value**. The prefixed one is what the console displays and verifies in the
-  custom-domain wizard (`libs/aglyn/src/lib/app-utils/console/tenant-dns.ts`, default
+  custom-domain wizard (`libs/console/ui/src/lib/tenant-dns.ts`, default
   `sites.aglyn.app`); the unprefixed one is what the tenant middleware matches
   the incoming `Host` against, mapped through the `env` block of
   `apps/tenant/next.config.js` and therefore fixed at image-build time — so it

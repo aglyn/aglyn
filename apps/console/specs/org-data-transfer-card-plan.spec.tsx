@@ -73,7 +73,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: mockOrg, orgId: 'org-1', ready: true, entitlementsFromCache: false }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ loaded: true, can: (permission: string) => mockManages && permission === 'data.manage' }),

@@ -23,7 +23,7 @@
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
-import { resolveNavSection, urlNamesOrg } from '@aglyn/tenant-feature-instance/hooks/console/nav-section'
+import { resolveNavSection, urlNamesOrg } from '@aglyn/console-ui/hooks/nav-section'
 
 const mockEnsure = jest.fn(async (_ids: readonly string[], _surfaces: readonly string[]) => {
   const { registerConsoleExtension } = jest.requireActual('@aglyn/aglyn/plugin-manager/feature-plugins')

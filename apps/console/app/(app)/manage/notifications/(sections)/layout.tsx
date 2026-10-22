@@ -29,7 +29,7 @@ import {
   NOTIFICATION_SECTIONS,
   type NotificationSection,
 } from '../../../../../constants/notification-sections'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 
 /**

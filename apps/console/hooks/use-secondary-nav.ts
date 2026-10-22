@@ -24,15 +24,15 @@ import {
   useHostReady,
   useIsHostAdmin,
 } from '../components/host-id-provider'
-import adminNavTabItems from '@aglyn/aglyn/app-utils/console/admin-nav-tabs'
-import hostNavTabItems from '@aglyn/aglyn/app-utils/console/host-nav-tabs'
-import manageNavTabItems from '@aglyn/aglyn/app-utils/console/manage-nav-tabs'
+import adminNavTabItems from '@aglyn/console-ui/admin-nav-tabs'
+import hostNavTabItems from '@aglyn/console-ui/host-nav-tabs'
+import manageNavTabItems from '@aglyn/console-ui/manage-nav-tabs'
 import {
   STAFF_PLUGIN_IDS,
   staffPluginsSettled,
   subscribeStaffPluginsSettled,
 } from '../constants/staff-plugins'
-import useIsStaff from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import useIsStaff from '@aglyn/console-ui/hooks/use-is-staff'
 import useOrgNavTabItems from './use-org-nav-tabs'
 import { useOrgReach } from './use-org-reach'
 import { useOrgScope } from './use-org-scope'

@@ -38,7 +38,7 @@
 
 // The section parser reads no configuration, so a static import is as fresh
 // as a reload; only the workspace domain has to load under the test's env.
-import * as NavSectionModule from '@aglyn/tenant-feature-instance/hooks/console/nav-section'
+import * as NavSectionModule from '@aglyn/console-ui/hooks/nav-section'
 
 type WorkspaceDomain = typeof import('../constants/workspace-domain')
 type NavSection = typeof NavSectionModule

@@ -25,9 +25,9 @@ import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-act
 import { Stack, Tab, Tabs } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import type { PreviewKind } from '@aglyn/aglyn/app-utils/console/preview-state'
+import type { PreviewKind } from '@aglyn/console-ui/preview-state'
 import { buildScreenLiveUrl } from '../constants/tenant-links'
-import { staffSitePreviewHref } from '@aglyn/aglyn/app-utils/console/staff-site-links'
+import { staffSitePreviewHref } from '@aglyn/console-ui/staff-site-links'
 import {
   STAFF_SITE_CONTENT_LISTS,
   type StaffSiteContentTab,

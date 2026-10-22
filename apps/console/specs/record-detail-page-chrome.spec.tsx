@@ -87,7 +87,7 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
   useCurrentOrg: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-host-role', () => ({
   __esModule: true,
   default: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
   useHostRole: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),

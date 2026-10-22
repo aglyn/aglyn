@@ -14,6 +14,12 @@
       "@aglyn/cli": [
         "../../libs/cli/src/index.ts"
       ],
+      "@aglyn/console-ui": [
+        "../../libs/console/ui/src/index.ts"
+      ],
+      "@aglyn/console-ui/*": [
+        "../../libs/console/ui/src/lib/*"
+      ],
       "@aglyn/aglyn/server": [
         "../../libs/aglyn/src/server.ts"
       ],

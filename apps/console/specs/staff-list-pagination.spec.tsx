@@ -28,7 +28,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { useStaffListPagination } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-pagination'
+import { useStaffListPagination } from '@aglyn/console-ui/hooks/use-staff-list-pagination'
 
 interface Row {
   id: string

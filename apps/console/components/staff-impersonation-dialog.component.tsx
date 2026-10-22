@@ -29,7 +29,7 @@ import {
 } from '@mui/material'
 import { type Auth } from 'firebase/auth'
 import { IMPERSONATION_MIN_REASON_LENGTH } from '@aglyn/aglyn/app-utils/console/impersonation-reason'
-import { signInWithPooledCustomToken } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+import { signInWithPooledCustomToken } from '@aglyn/console-ui/pooled-custom-token'
 import { useCallback, useState, type ReactNode } from 'react'
 
 export { IMPERSONATION_MIN_REASON_LENGTH }

@@ -27,7 +27,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import OrgDefaultSharingCard from '../../../../components/media/org-default-sharing-card.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import { checkEntitlement, planLabelGrantingFeature } from '@aglyn/aglyn'

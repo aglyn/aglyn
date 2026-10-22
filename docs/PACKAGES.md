@@ -90,6 +90,12 @@ lists.
 | `besigner-core` | `@aglyn/besigner` | `libs/besigner/core` | `scope:besigner` `type:data` `type:feature` | yes — the logic, for a build-your-own-UI consumer | `.`, `./*` |
 | `besigner-feature-designer` | `@aglyn/besigner-ui` | `libs/besigner/feature/designer` | `scope:besigner-ui` `type:feature` | yes — the editor as it ships | `.`, `./*` |
 
+### Console
+
+| project | npm name | root | tags | consumer | entry points |
+| -- | -- | -- | -- | -- | -- |
+| `console-ui` | `@aglyn/console-ui` | `libs/console/ui` | `scope:console` `type:feature` | no — held `private`; the console app's own UI layer: its React hooks, the browser side of signing in and holding a session, and what its screens show (nav tabs, sections, routes and links, notices, views). `@aglyn/aglyn` holds the platform's logic and none of its UI (Zach, 10/22) | `.`, `./*` |
+
 ### Tenant runtime
 
 | project | npm name | root | tags | consumer | entry points |

@@ -340,7 +340,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-confirmed-doc', () => ({
   __esModule: true,
   default: () => ({ data: undefined }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false, ready: true }),
 }))
@@ -396,7 +396,7 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
   RetentionFunnelDialog: () => null,
 }))
 
-import { subscriptionPeriodNotice } from '@aglyn/aglyn/app-utils/console/subscription-period-notice'
+import { subscriptionPeriodNotice } from '@aglyn/console-ui/subscription-period-notice'
 import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 import BillingSectionsLayout from '../app/(app)/[orgSlug]/billing/(sections)/layout'
 import BillingInvoicesPage from '../app/(app)/[orgSlug]/billing/(sections)/invoices/page'

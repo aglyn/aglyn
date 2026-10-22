@@ -63,7 +63,7 @@ import StaffUserEmailHistoryCard, {
 } from '../../../../../components/staff-user-email-history-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
@@ -71,16 +71,16 @@ import StaffUserAuditTable from '../../../../../components/staff-user-audit-tabl
 import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
-import { legalAcceptanceDocumentHref } from '@aglyn/aglyn/app-utils/console/legal-document-link'
+import { legalAcceptanceDocumentHref } from '@aglyn/console-ui/legal-document-link'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
-} from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+} from '@aglyn/console-ui/staff-timestamps'
 import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
-import { IDENTITY_SOURCE_LABEL } from '@aglyn/aglyn/app-utils/console/staff-identity-source'
+import { IDENTITY_SOURCE_LABEL } from '@aglyn/console-ui/staff-identity-source'
 import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
 import StaffUserAdAudience from '../../../../../components/staff-user-ad-audience.component'
 

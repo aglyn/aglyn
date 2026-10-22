@@ -196,7 +196,7 @@ jest.mock('../hooks/use-org-permissions', () => ({
     loaded: true,
   }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))

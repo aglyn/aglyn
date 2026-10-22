@@ -45,7 +45,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-resolution', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-host-resolution', () => ({
   useHostResolution: () => mockResolution,
 }))
 

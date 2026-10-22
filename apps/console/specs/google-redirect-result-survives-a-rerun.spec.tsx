@@ -60,8 +60,8 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () 
   },
 }))
 
-import useGoogleRedirectResult from '@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result'
-import { isRedirectLandingInFlight as isGoogleRedirectLandingInFlight } from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
+import useGoogleRedirectResult from '@aglyn/console-ui/hooks/use-google-redirect-result'
+import { isRedirectLandingInFlight as isGoogleRedirectLandingInFlight } from '@aglyn/console-ui/sign-up-landing-hold'
 
 const credential = (): UserCredential =>
   ({ user: { uid: 'new-phone-account' } }) as unknown as UserCredential

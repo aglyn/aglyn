@@ -26,7 +26,7 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { reachableSitesSettled } from '@aglyn/aglyn/app-utils/console/collaborator-navigation'
+import { reachableSitesSettled } from '@aglyn/console-ui/collaborator-navigation'
 import { useOrgScope } from './use-org-scope'
 
 /**

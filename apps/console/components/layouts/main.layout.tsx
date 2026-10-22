@@ -46,7 +46,7 @@ import {
 import { Fragment } from 'react'
 import AppBarMenubarComponent from './app-bar-menubar.component'
 import GlobalSearchTriggerComponent from '../global-search/global-search-trigger.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import useBranding from '../../hooks/use-branding'
 import { onlyInScheme } from '@aglyn/shared-ui-theme/util/scheme-visibility'
 import { useOrgSlug } from '../../hooks/use-org-scope'

@@ -46,7 +46,7 @@ import SystemEmailTestDrawer from '../../../../components/system-email-test-draw
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { openSystemEmailVersion } from '../../../../utils/open-system-email-version'

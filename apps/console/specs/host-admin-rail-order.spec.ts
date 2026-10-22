@@ -35,7 +35,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { Route } from '@aglyn/console-ui/route-links'
 
 const LAYOUT = join(
   __dirname,

@@ -54,7 +54,7 @@ import type {
   BillingProfile,
   BillingProfileLoadState,
   BillingProfileState,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+} from '@aglyn/console-ui/hooks/use-billing-profile'
 import { STRIPE_TAX_ID_TYPES } from '@aglyn/aglyn/app-utils/console/stripe-tax-id-types.generated'
 
 const LOADED: BillingProfileState = {

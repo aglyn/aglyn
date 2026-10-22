@@ -31,7 +31,7 @@ import {
 import { useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
 import BillingCardFormComponent from './billing-card-form.component'
-import type { BillingPaymentMethod, BillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import type { BillingPaymentMethod, BillingProfile } from '@aglyn/console-ui/hooks/use-billing-profile'
 
 export interface BillingPaymentMethodsCardProps {
   profile: BillingProfile

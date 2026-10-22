@@ -30,11 +30,11 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
-import useNotificationAlertPrefs from '@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs'
+import useNotificationAlertPrefs from '@aglyn/console-ui/hooks/use-notification-prefs'
 import {
   desktopNotificationPermission,
   requestDesktopNotifications,
-} from '@aglyn/aglyn/app-utils/console/notification-alerts'
+} from '@aglyn/console-ui/notification-alerts'
 
 const DISMISSED_KEY = 'aglyn:notification-prompt-dismissed'
 /** Long enough to land after the app has settled, not on top of first paint. */

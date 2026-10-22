@@ -39,7 +39,7 @@ import HostTemplatesCard, {
   type TemplateQuotaReadout,
 } from '../../../../../../components/templates/host-templates-card.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import useOrgScope, { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 

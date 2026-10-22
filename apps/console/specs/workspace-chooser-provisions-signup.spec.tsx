@@ -35,7 +35,7 @@
 
 import { act, render, screen } from '@testing-library/react'
 import React from 'react'
-import * as signUpLandingHoldModule from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
+import * as signUpLandingHoldModule from '@aglyn/console-ui/sign-up-landing-hold'
 
 const mockReplace = jest.fn()
 const mockNavigate = jest.fn()
@@ -55,7 +55,7 @@ let mockScope: {
 
 // The reader's workspace pins (AGL-3762) are a read of their own account
 // document; none of these assertions is about them.
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
   default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
@@ -81,7 +81,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
   useOrgSlug: () => '',
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 jest.mock('firebase/firestore', () => ({

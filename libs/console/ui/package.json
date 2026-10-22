@@ -1,0 +1,45 @@
+{
+  "name": "@aglyn/console-ui",
+  "version": "1.0.0-beta.278",
+  "private": true,
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/console/ui"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@aglyn/aglyn": "1.0.0-beta.278",
+    "@aglyn/shared-data-enums": "1.0.0-beta.278",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.278",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.278",
+    "@aglyn/shared-util-http": "1.0.0-beta.278",
+    "@aglyn/shared-util-next": "1.0.0-beta.278",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.278",
+    "@simplewebauthn/browser": "14.0.0",
+    "@swc/helpers": "0.5.23"
+  },
+  "peerDependencies": {
+    "firebase": "^13.0.0",
+    "react": "^19.2.8"
+  },
+  "sideEffects": false,
+  "description": "The Aglyn console's own UI layer: its React hooks, the browser side of signing in, and what its screens show (nav tabs, routes and links, notices and views)."
+}

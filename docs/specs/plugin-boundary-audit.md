@@ -56,7 +56,7 @@ the two completed precedents never had to take.
 Each of these is quoted rather than asserted, because the whole audit rests on
 them.
 
-**The direction.** `libs/aglyn/src/lib/app-utils/console/host-nav-tabs.ts` is now, in its
+**The direction.** `libs/console/ui/src/lib/host-nav-tabs.ts` is now, in its
 static-tab section, largely a record of departures:
 
 ```

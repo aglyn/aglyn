@@ -41,8 +41,8 @@
  * Asserted on the NUMBER and on the field read, never on the prose.
  */
 
-import { prorationQuote } from '@aglyn/aglyn/app-utils/console/proration-quote'
-import * as taxExplanationModule from '@aglyn/aglyn/app-utils/console/tax-explanation'
+import { prorationQuote } from '@aglyn/console-ui/proration-quote'
+import * as taxExplanationModule from '@aglyn/console-ui/tax-explanation'
 
 /**
  * The AGL-535 fixture, reused deliberately: the switch costs $30.00 and the

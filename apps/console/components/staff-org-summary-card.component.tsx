@@ -30,8 +30,8 @@ import {
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
-import { formatStaffActivity } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
+import { formatStaffActivity } from '@aglyn/console-ui/staff-timestamps'
 
 /**
  * A person resolved server-side by `/api/admin/org-detail` (AGL-938) —

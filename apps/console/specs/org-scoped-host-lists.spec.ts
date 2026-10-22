@@ -60,7 +60,7 @@ const CONSOLE_ROOT = join(REPO_ROOT, 'apps/console')
 const SOURCE = /\.tsx?$/
 const IS_SPEC = /\.(?:spec|test)\.tsx?$/
 /** The hook's own module names it constantly; it is the definition, not a call. */
-const HOOK_MODULE = 'libs/tenant/feature/instance/src/lib/hooks/console/use-org-hosts.ts'
+const HOOK_MODULE = 'libs/console/ui/src/lib/hooks/use-org-hosts.ts'
 
 interface Call {
   file: string

@@ -46,11 +46,11 @@ import {
   isEnterpriseOrg,
   resolveEffectivePlan,
 } from '@aglyn/aglyn'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgRows } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
-import { usePinnedOrgs } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs'
+import { usePinnedOrgs } from '@aglyn/console-ui/hooks/use-pinned-orgs'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
 import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'

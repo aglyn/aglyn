@@ -68,7 +68,7 @@ import {
   type PreviewStateIds,
   previewStateKey,
   readPreviewState,
-} from '@aglyn/aglyn/app-utils/console/preview-state'
+} from '@aglyn/console-ui/preview-state'
 import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
 import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
 import { BesignerRepeatRowsProvider } from './besigner-repeat-rows-provider.component'

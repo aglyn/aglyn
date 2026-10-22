@@ -102,12 +102,12 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   buildRoute,
   Route,
-} from '@aglyn/aglyn/app-utils/console/route-links'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
-import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
+} from '@aglyn/console-ui/route-links'
+import useCollectionTemplates from '@aglyn/console-ui/hooks/use-collection-templates'
+import useOpenPreview from '@aglyn/console-ui/hooks/use-open-preview'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
+} from '@aglyn/console-ui/hooks/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
@@ -119,9 +119,9 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '@aglyn/console-ui/hooks/use-host-role'
 import useComponentEditorSurface from '../../../../../../../../../../hooks/use-component-editor-surface'
-import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
+import useFormsPublishBlock from '@aglyn/console-ui/hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 

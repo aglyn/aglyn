@@ -50,7 +50,7 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { activityRowText, describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
+import { staffActivityLinks } from '@aglyn/console-ui/activity-details'
 import { listPluginActivityActions, listPluginActivityFilters } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
@@ -67,7 +67,7 @@ import {
   ACTIVITY_LIST_FILTER_FIELDS,
   ACTIVITY_LIST_FILTER_HEADERS,
 } from '@aglyn/aglyn/app-utils/console/list-filters'
-import { formatWireTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+import { formatWireTimestamp } from '@aglyn/console-ui/staff-timestamps'
 
 /** The organization's own activity log — the card's default surface. */
 const ORG_ACTIVITY_HELP = docsHelp('inviteTeammates', {

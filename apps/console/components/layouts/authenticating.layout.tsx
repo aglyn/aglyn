@@ -28,11 +28,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 import {
   isSignUpLandingHeld,
-} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
-import { useSignUpLandingHeld } from '@aglyn/tenant-feature-instance/hooks/console/use-sign-up-landing-held'
+} from '@aglyn/console-ui/sign-up-landing-hold'
+import { useSignUpLandingHeld } from '@aglyn/console-ui/hooks/use-sign-up-landing-held'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { emailGateWouldRefuse } from '@aglyn/aglyn/app-utils/console/email-verification-gate'
-import { mintSession } from '@aglyn/aglyn/app-utils/console/session-mint'
+import { mintSession } from '@aglyn/console-ui/session-mint'
 import { VisitorConsentPill } from '../visitor-consent.component'
 
 export interface AuthenticatingLayoutProps

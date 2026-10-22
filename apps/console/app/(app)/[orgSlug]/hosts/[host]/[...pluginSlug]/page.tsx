@@ -42,7 +42,7 @@ import AuthenticatedLayout from '../../../../../../components/layouts/authentica
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import PluginHubRail from '../../../../../../components/plugin-hub-rail.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { resolveDocsHelpTopic } from '../../../../../../constants/docs-links'
 import {
   useHostId,
@@ -63,11 +63,11 @@ import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
 } from '@aglyn/aglyn/app-utils/console/extension-permission'
-import { hubRedirectTarget, resolveHubSections } from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
+import { hubRedirectTarget, resolveHubSections } from '@aglyn/console-ui/plugin-hub-sections'
 import { useConsoleRoutePlugins } from '../../../../../../hooks/use-console-plugins'
 import { useFilledZones } from '../../../../../../hooks/use-filled-zones'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '@aglyn/console-ui/hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { useReleaseFlags } from '../../../../../../hooks/use-release-flags'
 

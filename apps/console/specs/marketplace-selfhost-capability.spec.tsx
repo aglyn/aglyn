@@ -38,7 +38,7 @@ import {
 } from '@aglyn/aglyn'
 import { RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/release-flags'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
-import { releaseFlagForNavTab } from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
+import { releaseFlagForNavTab } from '@aglyn/console-ui/plugin-hub-sections'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { platformPaymentsConfigured } from '@aglyn/tenant-data-admin/server/console/payments-platform'

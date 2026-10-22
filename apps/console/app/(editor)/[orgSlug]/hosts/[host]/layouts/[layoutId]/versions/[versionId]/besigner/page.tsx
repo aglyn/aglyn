@@ -96,19 +96,19 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   buildRoute,
   Route,
-} from '@aglyn/aglyn/app-utils/console/route-links'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
-import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
+} from '@aglyn/console-ui/route-links'
+import useCollectionTemplates from '@aglyn/console-ui/hooks/use-collection-templates'
+import useOpenPreview from '@aglyn/console-ui/hooks/use-open-preview'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
+} from '@aglyn/console-ui/hooks/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
-import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
+import useFormsPublishBlock from '@aglyn/console-ui/hooks/use-forms-publish-block'
 import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'

@@ -22,7 +22,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Stack, TextField } from '@mui/material'
 import { useEffect, useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
-import type { BillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import type { BillingProfile } from '@aglyn/console-ui/hooks/use-billing-profile'
 
 export interface BillingEmailCardProps {
   profile: BillingProfile

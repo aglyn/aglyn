@@ -46,8 +46,8 @@ import type {
   PackagePreviewInput,
 } from '@aglyn/aglyn-transfer-ui'
 import { type ComponentType, createElement } from 'react'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
-import { type PreviewKind, writePreviewState } from '@aglyn/aglyn/app-utils/console/preview-state'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
+import { type PreviewKind, writePreviewState } from '@aglyn/console-ui/preview-state'
 
 type Doc = Record<string, unknown>
 

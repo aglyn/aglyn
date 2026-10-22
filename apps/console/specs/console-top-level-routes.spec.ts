@@ -22,7 +22,7 @@ import {
   CONSOLE_TOP_LEVEL_SEGMENTS,
   isConsoleRouteSegment,
   NOT_FOUND_ROUTE,
-} from '@aglyn/aglyn/app-utils/console/console-routes'
+} from '@aglyn/console-ui/console-routes'
 
 /**
  * The middleware answers 404 for a first path segment this set does not name

@@ -24,7 +24,7 @@ import { useCallback, useState } from 'react'
 import {
   PASSWORD_GENERATOR_ALPHABET,
   PASSWORD_GENERATOR_LENGTH,
-} from '@aglyn/aglyn/app-utils/console/password-generator'
+} from '@aglyn/console-ui/password-generator'
 
 function generatePassword(length = PASSWORD_GENERATOR_LENGTH): string {
   const values = new Uint32Array(length)

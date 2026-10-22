@@ -22,7 +22,7 @@ import {
   inheritedMediaAlt,
 } from '@aglyn/aglyn/app-utils/media-metadata'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
-import { SOCIAL_IMAGE_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { SOCIAL_IMAGE_HINT } from '@aglyn/console-ui/media-size-hints'
 import { useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import type { ScreenSocialImageDraft } from '@aglyn/aglyn/app-utils/console/screen-seo'

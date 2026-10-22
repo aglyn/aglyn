@@ -38,7 +38,7 @@ import {
   __resetSessionReauth,
   dismissSessionReauth,
   getSessionReauth,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '@aglyn/console-ui/session-reauth'
 
 const mockUser: { data: unknown } = { data: undefined }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -52,7 +52,7 @@ jest.mock('@aglyn/aglyn/app-utils/console/probe-public-read', () => ({
   probePublicRead: (...args: unknown[]) => mockProbe(...args),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('@aglyn/console-ui/interactive-signin', () => ({
   markInteractiveSignOut: jest.fn(),
 }))
 

@@ -37,7 +37,7 @@ import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.compon
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
-import { useStaffRole } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useStaffRole } from '@aglyn/console-ui/hooks/use-is-staff'
 import {
   checkRefundAuthority,
   describeRefundAllowance,

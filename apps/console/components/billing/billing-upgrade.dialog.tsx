@@ -35,7 +35,7 @@ import type { BundleAddons } from '@aglyn/aglyn/app-utils/bundle-intent'
 import type { AiTierId } from '@aglyn/aglyn'
 import BillingPlanQuoteComponent from './billing-plan-quote.component'
 import BillingTaxIdCardComponent from './billing-tax-id-card.component'
-import type { BillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import type { BillingProfile } from '@aglyn/console-ui/hooks/use-billing-profile'
 
 export interface BillingUpgradeDialogProps {
   /** The plan being bought; null closes the dialog. */

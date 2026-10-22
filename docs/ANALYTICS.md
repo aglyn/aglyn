@@ -302,7 +302,7 @@ a tenant site pointed at our own property.
 
 | Event              | Call site                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sign_up`          | `apps/console/app/(auth)/signup/page.tsx` (password + Google popup + the `?consent=required` bounce); `libs/tenant/feature/instance/src/lib/hooks/console/use-google-redirect-result.tsx` (mobile redirect)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `sign_up`          | `apps/console/app/(auth)/signup/page.tsx` (password + Google popup + the `?consent=required` bounce); `libs/console/ui/src/lib/hooks/use-google-redirect-result.tsx` (mobile redirect)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `login`            | `apps/console/app/(auth)/signin/page.tsx` (password, Google popup, passkey); `use-google-redirect-result.tsx` (mobile redirect); `apps/console/app/(auth)/sso/page.tsx` (`method: 'sso'`, both the desktop popup and the mobile redirect return — AGL-1562)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `select_content`   | `libs/aglyn/src/lib/app-utils/analytics-link-clicks.ts`, installed by `apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx` (AGL-1562)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `click`            | the same listener                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -1249,7 +1249,7 @@ why the code half landed ahead of the GA-side filter.
 `apps/console/components/layouts/firebase-app.layout.tsx` sets
 `traffic_type: 'internal'` through Firebase's **`setDefaultEventParameters`**,
 and the choice of API is the load-bearing part. Since AGL-2087 the write goes
-via the single owner `libs/aglyn/src/lib/app-utils/console/analytics-default-params.ts`, because
+via the single owner `libs/console/ui/src/lib/analytics-default-params.ts`, because
 `page_title` needed the same API from a different effect and two raw callers
 race each other at boot — see §11. GA4's internal-traffic filter
 matches per EVENT, and the events that would otherwise leak are precisely the
@@ -1887,7 +1887,7 @@ set of rows, and because the count correlates with engagement, the most active
 users fragmented the most.
 
 The console now passes `page_title` explicitly on its `page_view`, stripped by
-`stripUnreadBadge` in `libs/aglyn/src/lib/app-utils/console/notification-alerts.ts` — the exact
+`stripUnreadBadge` in `libs/console/ui/src/lib/notification-alerts.ts` — the exact
 inverse of the `unreadBadge` that writes it, living beside it so the writer and
 the reporter cannot drift on the `\d+\+?` shape (the badge caps at `(99+)`, and
 a pattern without the `\+?` would leave it on exactly the busiest accounts).
@@ -1931,7 +1931,7 @@ matching them, our own browsing rejoins the launch metrics, and a data filter is
 not retroactive. That is a worse failure than the fragmentation being fixed,
 which is why AGL-2060 stopped where it did.
 
-So there is exactly one owner: `libs/aglyn/src/lib/app-utils/console/analytics-default-params.ts`
+So there is exactly one owner: `libs/console/ui/src/lib/analytics-default-params.ts`
 keeps the composed set and re-sends **all** of it on every update. Each concern
 patches only its own keys and cannot express "drop everyone else's", and the
 bare-assignment branch is handed the full object, which is what it wants. The
@@ -2288,7 +2288,7 @@ is the join it exists for.
 
 Wired on all four doors: the password and Google-popup doors in
 `apps/console/app/(auth)/signup/page.tsx`, and the mobile **redirect** door —
-the majority door — inside `libs/tenant/feature/instance/src/lib/hooks/console/use-google-redirect-result.tsx`,
+the majority door — inside `libs/console/ui/src/lib/hooks/use-google-redirect-result.tsx`,
 which has to be handed the params because the page carrying the marketing URL
 is gone by the time the redirect lands. `login` never carries them: a
 returning user's session was not produced by today's campaign, and stamping

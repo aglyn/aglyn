@@ -45,7 +45,7 @@ import {
   reportSuccessfulRead,
   SESSION_STALE_WINDOW_MS,
 } from '@aglyn/aglyn/app-utils/console/session-health'
-import { __resetSessionReauth } from '@aglyn/aglyn/app-utils/console/session-reauth'
+import { __resetSessionReauth } from '@aglyn/console-ui/session-reauth'
 
 const mockUser: { data: unknown } = { data: undefined }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -72,7 +72,7 @@ jest.mock('firebase/auth', () => ({
   signOut: jest.fn(() => Promise.resolve()),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('@aglyn/console-ui/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))
@@ -82,11 +82,11 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   default: () => false,
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
+jest.mock('@aglyn/console-ui/passkeys', () => ({
   signInWithPasskey: jest.fn(),
   describePasskeySignInFailure: (error: unknown) => error,
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-passkeys-supported', () => ({
   usePasskeysSupported: () => false,
 }))
 

@@ -44,20 +44,20 @@ import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import {
   markInteractiveSignIn,
   markInteractiveSignOut,
-} from '@aglyn/aglyn/app-utils/console/interactive-signin'
+} from '@aglyn/console-ui/interactive-signin'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { createAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
+import { createAuthProvider } from '@aglyn/console-ui/oauth-providers'
 import {
   describePasskeySignInFailure,
   signInWithPasskey,
-} from '@aglyn/aglyn/app-utils/console/passkeys'
-import { usePasskeysSupported } from '@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported'
+} from '@aglyn/console-ui/passkeys'
+import { usePasskeysSupported } from '@aglyn/console-ui/hooks/use-passkeys-supported'
 import {
   reauthRefusal,
   reauthRefusalText,
   standDownRefusedReauth,
-} from '@aglyn/aglyn/app-utils/console/reauth-identity-guard'
-import { clearSignInBounces } from '@aglyn/aglyn/app-utils/console/signin-bounce'
+} from '@aglyn/console-ui/reauth-identity-guard'
+import { clearSignInBounces } from '@aglyn/console-ui/signin-bounce'
 import {
   clearSessionReauth,
   dismissSessionReauth,
@@ -66,7 +66,7 @@ import {
   reopenSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '@aglyn/console-ui/session-reauth'
 
 /**
  * "Sign in again to verify your device" (AGL-664).

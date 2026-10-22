@@ -30,7 +30,7 @@ import { useEffect, useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
 import { COMPACT_FIELD_WIDTH } from '../../constants/shared'
 import { COUNTRY_OPTIONS, countryOption, type CountryOption } from '../../utils/country-options'
-import type { BillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import type { BillingProfile } from '@aglyn/console-ui/hooks/use-billing-profile'
 
 export interface BillingAddressCardProps {
   profile: BillingProfile

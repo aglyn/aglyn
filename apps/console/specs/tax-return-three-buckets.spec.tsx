@@ -99,7 +99,7 @@ jest.mock('../components/staff-only.component', () => ({
   __esModule: true,
   default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
 }))
@@ -107,7 +107,7 @@ jest.mock('../constants/docs-links', () => ({
   __esModule: true,
   docsHelp: () => undefined,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
+jest.mock('@aglyn/console-ui/route-links', () => ({
   __esModule: true,
   buildRoute: () => '/admin',
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_TAX_RETURN: 'ADMIN_TAX_RETURN' },

@@ -18,7 +18,7 @@
 
 import { pluginOrgPermissionKeys } from '@aglyn/aglyn'
 import { useMemo } from 'react'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '@aglyn/console-ui/hooks/use-host-role'
 import useOrgPermissions from './use-org-permissions'
 
 export interface PermissionsOnHost {

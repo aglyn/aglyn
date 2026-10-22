@@ -40,7 +40,7 @@ import {
   taxIdTypeLabel,
   type TaxIdTypeOption,
 } from '@aglyn/aglyn/app-utils/console/stripe-tax-id-types'
-import type { BillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import type { BillingProfile } from '@aglyn/console-ui/hooks/use-billing-profile'
 
 export interface BillingTaxIdCardProps {
   profile: BillingProfile

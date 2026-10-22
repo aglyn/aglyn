@@ -37,8 +37,8 @@ import {
   registerPasskey,
   removePasskey,
   PasskeyRequestError,
-} from '@aglyn/aglyn/app-utils/console/passkeys'
-import { usePasskeysSupported } from '@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported'
+} from '@aglyn/console-ui/passkeys'
+import { usePasskeysSupported } from '@aglyn/console-ui/hooks/use-passkeys-supported'
 
 interface PasskeyRow {
   id: string

@@ -160,7 +160,7 @@ import useOrgPermissions, {
 import { OrgScopeProvider } from '../hooks/use-org-scope'
 import { resolveExtensionPermission } from '@aglyn/aglyn/app-utils/console/extension-permission'
 import { resolveOrgCrmAccess } from '@aglyn/aglyn/app-utils/console/org-crm-access'
-import { orgPluginNavTabItems } from '@aglyn/aglyn/app-utils/console/org-plugin-surfaces'
+import { orgPluginNavTabItems } from '@aglyn/console-ui/org-plugin-surfaces'
 
 /**
  * A surface shaped like Sequences: a plugin-declared permission only owners

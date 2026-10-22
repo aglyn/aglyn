@@ -98,7 +98,7 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../../components/plugin-widget-slot.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import {

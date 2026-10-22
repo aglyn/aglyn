@@ -35,7 +35,7 @@ import {
   readDashboardWidgetPrefs,
   setDashboardWidgetHidden,
   type DashboardWidgetPrefs,
-} from '@aglyn/aglyn/app-utils/console/dashboard-widgets'
+} from '@aglyn/console-ui/dashboard-widgets'
 
 /**
  * The user-document field holding every workspace's dashboard arrangement,

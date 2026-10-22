@@ -76,7 +76,7 @@ import BesignerWordmark from '../../../../../../../../../../components/layouts/b
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../../../constants/console-plugin-loader'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 

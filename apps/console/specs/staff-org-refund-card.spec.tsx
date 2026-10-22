@@ -51,7 +51,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: any) => <div>{children}</div>,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-is-staff', () => ({
   __esModule: true,
   useStaffRole: () => mockRole,
 }))

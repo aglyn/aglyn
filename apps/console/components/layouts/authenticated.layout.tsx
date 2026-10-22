@@ -29,8 +29,8 @@ import {
   requestSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
-import { recordSignInBounce } from '@aglyn/aglyn/app-utils/console/signin-bounce'
+} from '@aglyn/console-ui/session-reauth'
+import { recordSignInBounce } from '@aglyn/console-ui/signin-bounce'
 import ImpersonationBanner from '../impersonation-banner.component'
 import SessionHealthBanner from '../session-health-banner.component'
 import SessionReauthDialog from '../session-reauth-dialog.component'

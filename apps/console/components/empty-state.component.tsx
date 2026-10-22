@@ -26,7 +26,7 @@ import {
   reopenSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '@aglyn/console-ui/session-reauth'
 
 export type EmptyStateProps = Omit<
   ReadGatedEmptyStateProps,

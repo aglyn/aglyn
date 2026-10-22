@@ -40,7 +40,7 @@ const CONSOLE = join(REPO, 'apps', 'console')
 // door holds for them as it did in the app.
 const CONSOLE_IN_LIBS = [
   join(REPO, 'libs', 'aglyn', 'src', 'lib', 'app-utils', 'console'),
-  join(REPO, 'libs', 'tenant', 'feature', 'instance', 'src', 'lib', 'hooks', 'console'),
+  join(REPO, 'libs', 'console', 'ui', 'src'),
   join(REPO, 'libs', 'tenant', 'data', 'admin', 'src', 'lib', 'server', 'console'),
 ]
 const PLUGINS = join(REPO, 'libs', 'plugins')

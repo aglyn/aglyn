@@ -37,7 +37,7 @@ import {
   NOTIFICATION_FILTER_OPTIONS,
   NOTIFICATION_SORTS,
 } from '@aglyn/aglyn/app-utils/console/notification-filters'
-import type { NotificationWorkspace } from '@aglyn/aglyn/app-utils/console/notification-links'
+import type { NotificationWorkspace } from '@aglyn/console-ui/notification-links'
 import {
   NotificationLevelIcon,
   notificationLevelRowClass,

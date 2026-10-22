@@ -30,7 +30,7 @@
  */
 
 import { AI_TIERS } from '@aglyn/aglyn'
-import { carriedAiAddonSentence } from '@aglyn/aglyn/app-utils/console/proration-quote'
+import { carriedAiAddonSentence } from '@aglyn/console-ui/proration-quote'
 
 const PRO_WITH_AI = {
   plan: 'pro',

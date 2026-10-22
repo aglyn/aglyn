@@ -56,22 +56,22 @@ import {
   readAnalyticsDefaultParams,
   resetAnalyticsDefaultParams,
   setAnalyticsDefaultParams,
-} from '@aglyn/aglyn/app-utils/console/analytics-default-params'
-import { buildConsolePageTitle } from '@aglyn/aglyn/app-utils/console/page-view-params'
-import { unreadBadge } from '@aglyn/aglyn/app-utils/console/notification-alerts'
+} from '@aglyn/console-ui/analytics-default-params'
+import { buildConsolePageTitle } from '@aglyn/console-ui/page-view-params'
+import { unreadBadge } from '@aglyn/console-ui/notification-alerts'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
 } from '../utils/internal-traffic'
 
 const CONSOLE_ROOT = resolve(__dirname, '..')
-/** The repository root, and the core lib's app utilities the owners moved to. */
+/** The repository root, and the console UI lib the owners moved to. */
 const REPO_ROOT = resolve(__dirname, '../../..')
-const CORE_APP_UTILS = 'libs/aglyn/src/lib/app-utils/console'
+const CONSOLE_UI = 'libs/console/ui/src/lib'
 
-/** Files under the console and the core's app utilities that match `args`. */
+/** Files under the console and the console UI lib that match `args`. */
 const grepOwners = (args: string[]): string[] =>
-  ['apps/console', CORE_APP_UTILS].flatMap((root) =>
+  ['apps/console', CONSOLE_UI].flatMap((root) =>
     execFileSync('grep', ['-rl', ...GREP_SCOPE, ...args, root], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
@@ -242,7 +242,7 @@ describe('the single owner is structurally the only one (AGL-2087)', () => {
       )
       .sort()
 
-    expect(callers).toEqual([`${CORE_APP_UTILS}/analytics-default-params.ts`])
+    expect(callers).toEqual([`${CONSOLE_UI}/analytics-default-params.ts`])
   })
 
   it('the layout writes both keys, each through the owner', () => {
@@ -266,7 +266,7 @@ describe('the single owner is structurally the only one (AGL-2087)', () => {
     // A second regex somewhere else is how the capped `(99+)` form survives
     // a fix that looked complete.
     const builder = readFileSync(
-      resolve(REPO_ROOT, CORE_APP_UTILS, 'page-view-params.ts'),
+      resolve(REPO_ROOT, CONSOLE_UI, 'page-view-params.ts'),
       'utf8',
     )
     expect(builder).toContain('stripUnreadBadge')
@@ -276,6 +276,6 @@ describe('the single owner is structurally the only one (AGL-2087)', () => {
       .filter((file) => !file.includes('node_modules'))
 
     // Exactly one definition, next to the `unreadBadge` that writes it.
-    expect(restated).toEqual([`${CORE_APP_UTILS}/notification-alerts.ts`])
+    expect(restated).toEqual([`${CONSOLE_UI}/notification-alerts.ts`])
   })
 })

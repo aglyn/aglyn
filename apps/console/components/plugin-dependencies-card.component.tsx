@@ -32,7 +32,7 @@ import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, List, ListItem, ListItemText, Stack, Typography } from '@mui/material'
 import { useMemo } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 
 /** The site the card is answering for, when it is answering for one. */

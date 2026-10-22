@@ -39,7 +39,7 @@ import {
   isSignUpLandingHeld,
   releaseSignUpLanding,
   SIGN_UP_LANDING_HOLD_MAX_MS,
-} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
+} from '@aglyn/console-ui/sign-up-landing-hold'
 
 const mockPush = jest.fn()
 const mockPushContinued = jest.fn()

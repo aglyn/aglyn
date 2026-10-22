@@ -20,7 +20,7 @@ import { Alert, Button } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
-import { markInteractiveSignOut } from '@aglyn/aglyn/app-utils/console/interactive-signin'
+import { markInteractiveSignOut } from '@aglyn/console-ui/interactive-signin'
 
 /**
  * Impersonation banner (AGL-246): pinned warning whenever the session was

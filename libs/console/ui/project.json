@@ -1,0 +1,44 @@
+{
+  "name": "console-ui",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/console/ui/src",
+  "projectType": "library",
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:feature",
+    "scope:console",
+    "type:feature"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/console/ui",
+        "main": "libs/console/ui/src/index.ts",
+        "tsConfig": "libs/console/ui/tsconfig.lib.json",
+        "assets": [
+          "libs/console/ui/*.md"
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/console/ui"
+      ],
+      "options": {
+        "jestConfig": "libs/console/ui/jest.config.ts"
+      }
+    }
+  }
+}

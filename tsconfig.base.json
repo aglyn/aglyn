@@ -35,6 +35,8 @@
     "paths": {
       "@aglyn/aglyn": ["./libs/aglyn/src/index.ts"],
       "@aglyn/cli": ["./libs/cli/src/index.ts"],
+      "@aglyn/console-ui": ["./libs/console/ui/src/index.ts"],
+      "@aglyn/console-ui/*": ["./libs/console/ui/src/lib/*"],
       "@aglyn/aglyn/server": ["./libs/aglyn/src/server.ts"],
       "@aglyn/aglyn-markdown-editor": [
         "./libs/aglyn-markdown-editor/src/index.ts"

@@ -41,20 +41,20 @@ import { getDocsBounded, STALE_READ_NOTICE } from '@aglyn/tenant-feature-instanc
 import NotificationsTable from '../../../../../components/notifications-table.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../../../../constants/shared'
-import useHostIndexEntries from '@aglyn/tenant-feature-instance/hooks/console/use-host-index-entries'
+import useHostIndexEntries from '@aglyn/console-ui/hooks/use-host-index-entries'
 import {
   markAllNotificationsReadFor,
   markNotificationRead,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-notification-feed'
+} from '@aglyn/console-ui/hooks/use-notification-feed'
 import { isNotificationRead } from '@aglyn/aglyn/app-utils/console/notification-feed'
-import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
-import { useInviteReview } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+import useOrgHosts from '@aglyn/console-ui/hooks/use-org-hosts'
+import { useInviteReview } from '@aglyn/console-ui/hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
   resolveNotificationWorkspace,
-} from '@aglyn/aglyn/app-utils/console/notification-links'
+} from '@aglyn/console-ui/notification-links'
 import {
   NOTIFICATION_FILTER_FIELDS,
   NOTIFICATION_FILTER_HEADERS,

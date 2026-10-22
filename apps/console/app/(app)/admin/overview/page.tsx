@@ -42,11 +42,11 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffChurnReportCard from '../../../../components/staff-churn-report-card.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useIsStaff } from '@aglyn/console-ui/hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /** A card row that opens the organization: hover tint and a visible keyboard focus ring. */

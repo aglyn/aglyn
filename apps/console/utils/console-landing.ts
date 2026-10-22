@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { isConsoleRouteSegment } from '@aglyn/aglyn/app-utils/console/console-routes'
+import { isConsoleRouteSegment } from '@aglyn/console-ui/console-routes'
 import {
   CONSOLE_HOSTNAME,
   hostnameOf,

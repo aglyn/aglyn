@@ -51,7 +51,7 @@ import {
   AVATAR_COLOURS,
   avatarColourFor,
 } from '../components/member-avatar.component'
-import { signInWithPooledCustomToken } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+import { signInWithPooledCustomToken } from '@aglyn/console-ui/pooled-custom-token'
 import {
   type Database,
   connectDatabaseEmulator,

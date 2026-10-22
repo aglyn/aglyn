@@ -45,20 +45,20 @@ import PluginWidgetSlot from './plugin-widget-slot.component'
 import {
   domainChipFor,
   type DomainStatus,
-} from '@aglyn/aglyn/app-utils/console/domain-status'
+} from '@aglyn/console-ui/domain-status'
 import {
   CNAME_TARGET,
   dnsInstructionsIntro,
   dnsInstructionsFor,
   formatDnsInstruction,
-} from '@aglyn/aglyn/app-utils/console/tenant-dns'
+} from '@aglyn/console-ui/tenant-dns'
 
 export interface CustomDomainCardProps {
   hostId: string
 }
 
 /*
- * `DomainStatus` and the chip vocabulary moved to `@aglyn/aglyn/app-utils/console/domain-status`
+ * `DomainStatus` and the chip vocabulary moved to `@aglyn/console-ui/domain-status`
  * (AGL-2011) so the staff host page renders the SAME words for the same
  * verdict. Moved, not reworded — the customer-facing copy below is unchanged.
  */
@@ -162,7 +162,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   }, [refreshStatus])
   // Which records to offer for the name typed so far, and in which order —
   // ALIAS leads for a bare apex, CNAME for everything else (AGL-1327). The
-  // derivation lives in `@aglyn/aglyn/app-utils/console/tenant-dns` beside the values the verify
+  // derivation lives in `@aglyn/console-ui/tenant-dns` beside the values the verify
   // route reads, so the card cannot drift from what the route accepts.
   const records = dnsInstructionsFor(domain)
   const [checking, setChecking] = useState(false)

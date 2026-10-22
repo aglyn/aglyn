@@ -122,13 +122,13 @@ jest.mock('../hooks/use-org-scope', () => {
   }
 })
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => {
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => {
   const hosts = [{ $id: 'host-1', name: 'Acme Marketing', subdomain: 'acme' }]
   const value = { hosts, ready: true, error: false, retry: () => undefined }
   return { __esModule: true, default: () => value, useOrgHosts: () => value }
 })
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-is-staff', () => ({
   __esModule: true,
   default: () => mockIsStaff,
   useIsStaff: () => mockIsStaff,
@@ -397,7 +397,7 @@ jest.mock('../components/notifications-table.component', () => ({
   default: () => <div>{'notifications table'}</div>,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-index-entries', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-host-index-entries', () => ({
   __esModule: true,
   default: () => new Map(),
 }))

@@ -65,24 +65,24 @@ import AuthFormComponent from '../../../components/auth-form.component'
 import { AuthLegalNotice } from '../../../components/auth-legal-consent.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
-import useGoogleRedirectResult from '@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result'
+import useGoogleRedirectResult from '@aglyn/console-ui/hooks/use-google-redirect-result'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
 import { authSignInHost } from '../../../utils/auth-delegation'
-import { markConsentBounce } from '@aglyn/aglyn/app-utils/console/consent-bounce'
+import { markConsentBounce } from '@aglyn/console-ui/consent-bounce'
 import { isNewAccount, sendToConsentGate } from '../../../utils/legal-consent'
 import {
   markInteractiveSignIn,
   markInteractiveSignOut,
-} from '@aglyn/aglyn/app-utils/console/interactive-signin'
+} from '@aglyn/console-ui/interactive-signin'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { createGoogleOAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
-import { aimAuthAtPool } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+import { createGoogleOAuthProvider } from '@aglyn/console-ui/oauth-providers'
+import { aimAuthAtPool } from '@aglyn/console-ui/pooled-custom-token'
 import {
   describePasskeySignInFailure,
   signInWithPasskey,
-} from '@aglyn/aglyn/app-utils/console/passkeys'
-import { usePasskeysSupported } from '@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported'
-import guardPopupLoading from '@aglyn/aglyn/app-utils/console/popup-loading-guard'
+} from '@aglyn/console-ui/passkeys'
+import { usePasskeysSupported } from '@aglyn/console-ui/hooks/use-passkeys-supported'
+import guardPopupLoading from '@aglyn/console-ui/popup-loading-guard'
 
 // Built through the shared factory so the account chooser is forced on
 // (AGL-1415) — a bare provider signs straight in as whatever account the

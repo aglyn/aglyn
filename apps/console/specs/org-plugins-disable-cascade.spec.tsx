@@ -54,7 +54,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // authorized requests against a double that is signed out.
   useUser: () => ({ data: { uid: 'user-1', getIdToken: async () => 'token' } }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-org-hosts', () => ({
   useOrgHosts: () => ({ hosts: [] }),
 }))
 jest.mock('../hooks/use-branding', () => ({

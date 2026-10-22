@@ -16,7 +16,7 @@
  */
 
 import { redirect } from 'next/navigation'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 
 // The org home (/[orgSlug]) has no page of its own — land on the org's
 // sites list (AGL-621).

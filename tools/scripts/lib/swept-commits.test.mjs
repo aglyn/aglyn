@@ -68,7 +68,7 @@ const INCIDENT_TWO = [
     'test(console): pin every staff action to the pool the person signs in to (AGL-1993)',
     {
       added: [
-        'libs/aglyn/src/lib/app-utils/console/pooled-custom-token.ts',
+        'libs/console/ui/src/lib/pooled-custom-token.ts',
         'apps/console/specs/sso-custom-token-stays-in-pool.spec.tsx',
       ],
     },
@@ -78,7 +78,7 @@ const INCIDENT_TWO = [
     'fix(console): a cache module git called binary becomes readable (AGL-1890)',
     {
       deleted: [
-        'libs/aglyn/src/lib/app-utils/console/pooled-custom-token.ts',
+        'libs/console/ui/src/lib/pooled-custom-token.ts',
         'apps/console/specs/sso-custom-token-stays-in-pool.spec.tsx',
       ],
     },

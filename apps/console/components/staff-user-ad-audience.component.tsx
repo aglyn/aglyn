@@ -24,7 +24,7 @@ import {
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
-import { formatStaffTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+import { formatStaffTimestamp } from '@aglyn/console-ui/staff-timestamps'
 
 /**
  * The account-holder ad audiences on the staff user page (AGL-3780).

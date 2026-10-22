@@ -5,7 +5,7 @@
   "apps/console/components/reusable-components-provider.component.tsx": 1,
   "apps/console/components/staff-email-message-dialog.component.tsx": 1,
   "apps/console/components/user-menu.component.tsx": 1,
-  "libs/aglyn/src/lib/app-utils/console/not-found-refusal.ts": 2,
+  "libs/console/ui/src/lib/not-found-refusal.ts": 2,
   "libs/aglyn/src/lib/app-utils/console/sanctions-geo.ts": 2,
   "apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx": 5,
   "apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx": 5,

@@ -27,7 +27,7 @@ import {
   domainChipFor,
   staffDomainNoteFor,
   type DomainStatus,
-} from '@aglyn/aglyn/app-utils/console/domain-status'
+} from '@aglyn/console-ui/domain-status'
 import { SuperStaffOnly } from './staff-super-only.component'
 
 export interface StaffDomainCardProps {
@@ -59,7 +59,7 @@ export interface StaffDomainCardProps {
  * left standing on the side that answers the phone.
  *
  * The chip vocabulary is SHARED with the customer's card rather than
- * re-written here (`@aglyn/aglyn/app-utils/console/domain-status`), so a support conversation is two
+ * re-written here (`@aglyn/console-ui/domain-status`), so a support conversation is two
  * people reading the same sentence. What is added beside it is the half the
  * customer's card does not show:
  *

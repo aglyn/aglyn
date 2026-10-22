@@ -25,7 +25,7 @@ import { Box, Button, Stack, Typography } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@aglyn/tenant-feature-instance'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useIsStaff } from '@aglyn/console-ui/hooks/use-is-staff'
 
 interface PlatformLockdownNotice {
   locked: boolean

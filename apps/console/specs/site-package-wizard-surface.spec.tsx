@@ -25,7 +25,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import SiteBackupCard from '../components/site-backup-card.component'
-import { readPreviewState } from '@aglyn/aglyn/app-utils/console/preview-state'
+import { readPreviewState } from '@aglyn/console-ui/preview-state'
 import { createSitePackageHttpClient, SitePackageRequestError } from '../utils/site-package-http-client'
 import {
   packagePreviewTree,

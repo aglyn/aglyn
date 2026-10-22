@@ -16,7 +16,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
-import { useInviteReview } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+import { useInviteReview } from '@aglyn/console-ui/hooks/use-pending-invites'
 import OrgInvitesBanner from './org-invites-banner.component'
 import PendingInvitesProvider from './pending-invites-provider.component'
 

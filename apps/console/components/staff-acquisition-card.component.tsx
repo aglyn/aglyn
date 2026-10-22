@@ -32,8 +32,8 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Chip, Divider, Stack, Typography } from '@mui/material'
 import { useEffect, useState, type ReactNode } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
-import type { StaffAcquisitionView } from '@aglyn/aglyn/app-utils/console/staff-acquisition'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
+import type { StaffAcquisitionView } from '@aglyn/console-ui/staff-acquisition'
 
 /**
  * WHERE AN ACCOUNT CAME FROM, on the staff user and organization pages

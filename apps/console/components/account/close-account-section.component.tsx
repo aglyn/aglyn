@@ -21,7 +21,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { Stack } from '@mui/material'
 import CloseAccountCard from '../close-account-card.component'
 import DataExportCard from '../data-export-card.component'
-import useAccountSignInMethods from '@aglyn/tenant-feature-instance/hooks/console/use-account-sign-in-methods'
+import useAccountSignInMethods from '@aglyn/console-ui/hooks/use-account-sign-in-methods'
 
 /**
  * Take your data with you, then close the account (AGL-1140, AGL-1974).

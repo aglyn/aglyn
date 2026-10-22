@@ -25,7 +25,7 @@ import { useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import ReportIssueDialog from '../../../../components/report-issue-dialog.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /**

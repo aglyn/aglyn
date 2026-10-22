@@ -86,10 +86,10 @@ import ServerConfigCard from '../../../../components/server-config-card.componen
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useIsStaff } from '@aglyn/console-ui/hooks/use-is-staff'
+import { useStaffListQuery } from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   CSP_COLUMN_SORTS,
   CSP_FILTER_FIELDS,

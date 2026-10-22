@@ -126,7 +126,7 @@ import {
   rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { quarantineLogLines } from '@aglyn/aglyn/app-utils/console/quarantine-log-lines'
+import { quarantineLogLines } from '@aglyn/console-ui/quarantine-log-lines'
 import {
   scheduleMediaDeliveryCopies,
   takeDownAssetDeliveryCopies,
@@ -938,7 +938,7 @@ async function handler(request: Request): Promise<Response> {
 
 /**
  * A disable or release answers with the line the page keeps under "Actions taken in this session" (`logLines`), so
- * the staff apps keep the same one (`@aglyn/aglyn/app-utils/console/quarantine-log-lines`, which the page builds it with too).
+ * the staff apps keep the same one (`@aglyn/console-ui/quarantine-log-lines`, which the page builds it with too).
  */
 async function post(request: Request): Promise<Response> {
   const body = (await request.clone().json().catch(() => null)) as Record<string, unknown> | null

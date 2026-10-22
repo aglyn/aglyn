@@ -50,7 +50,7 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import useStaffListQuery from '@aglyn/console-ui/hooks/use-staff-list-query'
 import {
   SUPPRESSION_COLUMN_SORTS,
   SUPPRESSION_FILTER_FIELDS,

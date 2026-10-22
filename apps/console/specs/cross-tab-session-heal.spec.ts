@@ -69,7 +69,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter', () =
   },
 }))
 
-import { useCrossTabSessionHeal } from '@aglyn/tenant-feature-instance/hooks/console/use-cross-tab-session-heal'
+import { useCrossTabSessionHeal } from '@aglyn/console-ui/hooks/use-cross-tab-session-heal'
 
 const emit = (uid: string | null) => mockEmit?.(uid ? { uid } : null)
 

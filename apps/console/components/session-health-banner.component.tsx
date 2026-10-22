@@ -36,7 +36,7 @@ import {
   clearSessionReauth,
   getSessionReauth,
   requestSessionReauth,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '@aglyn/console-ui/session-reauth'
 
 /**
  * The stale-session watcher (AGL-1063, AGL-1143, AGL-2486).

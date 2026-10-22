@@ -22,7 +22,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '@aglyn/console-ui/route-links'
 import { useHostSubdomain } from './host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 

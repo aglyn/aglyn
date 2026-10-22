@@ -50,7 +50,7 @@ let mockRole: string | null = null
 // Only the claim hook is doubled — the component under test is real, and so
 // is MUI's disabled handling. Mocking the component's own module would make
 // every case below a test of the mock.
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('@aglyn/console-ui/hooks/use-is-staff', () => ({
   __esModule: true,
   useStaffRole: () => mockRole,
   useIsStaff: () => mockRole !== null,
