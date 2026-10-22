@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.279 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.278...v1.0.0-beta.279)
+
+### Added
+
+- **invites:** invitations take effect on their own, no Accept step (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **legal:** pin Legal v19, Syria leaves Terms §3.6 and the console geo-block
+
+### Fixed
+
+- **auth:** signing in keeps the page's query string ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **invites:** a refused join is told to its sender, never the invitee ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **ci:** beta.279's three reds: Syria spec, staff screens, Linear ceiling ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **invites:** the access-pending card links its help ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+### Changed
+
+- **console:** the app→libs sweep slices 3–5 (#1896, #1897, #1898) landed on `main` and were reverted by #1899, so nothing from them ships in this release ([AGL-52](https://linear.app/aglyn/issue/AGL-52))
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.278 — 2026-10-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.277...v1.0.0-beta.278)
