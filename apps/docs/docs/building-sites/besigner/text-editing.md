@@ -20,9 +20,12 @@ type, exactly as visitors will see it.
   stray keystroke cannot wipe a heading you meant to add a word to.
 - Type. The surrounding layout moves in real time: a heading that grows to two lines
   pushes the paragraph below it down as it happens.
-- The **selection outline and its shading step aside** while you type, so you are
-  looking at your text on the page rather than at editor chrome. It comes back when
-  you finish.
+- The **selection outline stays** while you type, so you can always see which
+  element you are in. Its shading and its label step aside, so the text looks
+  exactly as it will on the page.
+- Click anywhere on the element to move the cursor, including the blank part of a
+  line after the last word or a data token. Double-click selects a word, as it does
+  in any text box.
 
 A **Markdown** element is different — double-clicking one opens the full document
 editor instead. See [Long documents in markdown](long-form-markdown.md).
@@ -59,9 +62,15 @@ A small toolbar floats above the text you are editing: **Bold**, **Italic**,
 
 ## Rich text {#rich-text}
 
-Rich text is **opt-in per element** — today that means **Typography**. Everywhere
-else, text is plain, which is deliberate: a button label or a link caption has no
-business carrying paragraphs.
+Rich text is **opt-in per element**: **Typography**, **Inline text**, and the labels
+of **Button**, **Link** and **Accordion** headers. A label takes bold, italic and
+underline but no lists or links, because a button cannot hold a paragraph.
+Everywhere else, text is plain.
+
+Text inside a placed **component** takes formatting too, when the component's
+author made it a property and every element that property fills is one of the
+elements above. Double-click it on the canvas and the same toolbar opens; the
+formatting is saved on this placement only, like the words.
 
 Where it is available you can use bold, italic, underline, links, and bulleted or
 numbered lists. That is the whole list, and it is enforced rather than merely
@@ -86,20 +95,21 @@ The **Text** field in the right-hand panel and double-clicking on the canvas edi
 **the same value**. Use whichever suits: the panel is often quicker for a short
 label you are setting alongside other attributes.
 
-### When the Text field is read-only {#text-field-read-only}
+### Formatting in the Text field {#text-field-formatting}
 
-Once an element carries **formatted** text, the **Text** field goes read-only and
-says so:
+On an element that takes rich text, the **Text** field shows your text **with its
+formatting** — bold reads as bold, links as links. Click into it and the same
+toolbar as on the canvas appears above it: **Bold**, **Italic**, **Underline**, the
+lists and **Insert link**, with `{}` **Insert data** at the end of the field. What
+you type is saved as you go, like every other attribute, and the canvas follows.
 
-> This text is formatted — double-click the element on the canvas to edit it. Remove
-> formatting to edit it here.
+![The Attributes panel's Text field showing formatted text — an italic and a bold word — with the formatting toolbar above it and Remove formatting at the top](/img/besigner/text-field-formatting.png)
 
-![The Attributes panel showing a read-only Text field explaining that the text is formatted, with a Remove formatting button above it](/img/besigner/text-field-read-only.png)
+A placed component's text property that takes formatting gets the same field.
 
-This is not the field being awkward. A plain text box can only show you the words,
-so anything you typed into it would have to throw the bold, the links and the lists
-away silently to save. Rather than do that behind your back, the field shows you the
-text, stays out of the way, and points you at the two things you can actually do.
+The field is read-only in one case only: text that was formatted on an element
+whose component has since stopped taking rich text. It says so, and **Remove
+formatting** makes it editable again.
 
 ### Remove formatting {#remove-formatting}
 
@@ -109,9 +119,9 @@ says and nothing more:
 - **Kept** — every word, and every line break.
 - **Lost** — bold, italic, underline, links, and list structure.
 
-The element goes on saying the same thing in the same shape, and the **Text** field
-becomes editable again. It is **one undo step**, so if you press it by mistake,
-undo brings the formatting straight back.
+The element goes on saying the same thing in the same shape, as plain text. It is
+**one undo step**, so if you press it by mistake, undo brings the formatting
+straight back.
 
 ## Line breaks {#line-breaks}
 

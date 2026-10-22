@@ -74,6 +74,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
 }))
+
+// The site-data hooks moved into the lib read these modules directly, so the
+// fakes above are handed to them here as well.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  useFirestore: () => jest.requireMock('@aglyn/tenant-feature-instance').useFirestore(),
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-firestore-collection', () => {
+  const useFirestoreCollection = (...args: unknown[]) =>
+    jest.requireMock('@aglyn/tenant-feature-instance').useFirestoreCollection(...args)
+  return { __esModule: true, default: useFirestoreCollection, useFirestoreCollection }
+})
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))

@@ -72,7 +72,9 @@ import {
   reusablePropTakesSeveral,
   evaluateReusablePropRule,
   REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_HTML_KEY,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
+  listPropFedTextNodeIds,
   ScreenLinkContext,
   screenLinkTargetOptions,
   subscribeKnownPluginInstalls,
@@ -139,8 +141,13 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import MuiMenuItem from '@mui/material/MenuItem'
-import { Grid } from '@mui/material'
+import { alpha, Grid, useTheme } from '@mui/material'
+import { reaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
+import {
+  attributeFocusRequest,
+  clearAttributeFocusRequest,
+} from '../utils/attribute-focus-request'
 import * as Besigner from '@aglyn/besigner'
 import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { BindingPickerContext } from '../contexts/binding-picker-context'
@@ -149,6 +156,12 @@ import {
   TokenTextField,
   TOKEN_TEXT_FIELD_COMPONENT,
 } from './token-text-field.component'
+import {
+  RICH_TEXT_FIELD_COMPONENT,
+  RichTextField,
+  type RichTextFieldSpec,
+} from './rich-text-field.component'
+import { richTextCommandGroups } from '../utils/rich-text-commands'
 import {
   MarkdownAttributeField,
   MARKDOWN_ATTRIBUTE_FIELD_COMPONENT,
@@ -228,16 +241,35 @@ const AutoSaveOnChange = memo(function AutoSaveOnChange({
  * Whether a node's text is FORMATTED — it carries a `html` prop the renderer
  * draws in preference to `children` (AGL-2486).
  *
- * An instance is excluded: its text rides `propValues`, not a `html` prop of
- * its own, so the question does not arise there.
+ * An instance's text rides its props instead: formatted when any of them has
+ * markup in `propHtml` beside its value.
  */
 export function isFormattedText(
   node: Aglyn.NodeSchema<any> | undefined | null,
 ): boolean {
   if (!node) return false
-  if (node.componentId === REUSABLE_INSTANCE_COMPONENT_ID) return false
+  if (node.componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
+    return Object.keys(instanceFormattedProps(node.props)).length > 0
+  }
   const html = (node.props as { html?: unknown } | undefined)?.html
   return typeof html === 'string' && html.length > 0
+}
+
+/** An instance's formatted props, as their non-empty markup by prop name. */
+export function instanceFormattedProps(
+  props: unknown,
+): Record<string, string> {
+  const stored = (props as Record<string, unknown> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_HTML_KEY
+  ]
+  const formatted: Record<string, string> = {}
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    return formatted
+  }
+  for (const [name, markup] of Object.entries(stored)) {
+    if (typeof markup === 'string' && markup) formatted[name] = markup
+  }
+  return formatted
 }
 
 /**
@@ -254,6 +286,8 @@ export function withoutFormatting(
 ): Record<string, unknown> {
   const next = { ...(props ?? {}) }
   delete next['html']
+  // An instance's props keep their words in `propValues` the same way.
+  delete next[REUSABLE_INSTANCE_PROP_HTML_KEY]
   return next
 }
 
@@ -384,6 +418,9 @@ export const elementPropsComponentMapper = {
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,
+  // Formatted text, edited with its formatting (AGL-2486); the resolver
+  // rewrites a text field to it where the element takes markup.
+  [RICH_TEXT_FIELD_COMPONENT]: RichTextField,
   // Screen picker + external-URL escape hatch for `Link`-typed component
   // props (AGL-1335), which were plain text boxes storing a raw path.
   [SCREEN_LINK_FIELD_COMPONENT]: ScreenLinkField,
@@ -986,6 +1023,12 @@ export interface AttributeFieldResolveContext {
   ancestorDatasetId?: string
   /** Whether the edited element's text is formatted markup. */
   hasFormattedText?: boolean
+  /**
+   * The text fields that edit formatted text, by field name: the element's
+   * own `children` where its component takes markup, and each instance prop
+   * every element it fills takes markup in.
+   */
+  richTextFields?: Readonly<Record<string, RichTextFieldSpec>>
   insertOptions?: unknown
   tokenLabelContext?: unknown
   /**
@@ -1017,6 +1060,7 @@ export function resolveAttributeField<T extends Record<string, any>>(
     nodeOptions = [],
     ancestorDatasetId,
     hasFormattedText,
+    richTextFields,
     insertOptions,
     tokenLabelContext,
   } = context
@@ -1157,10 +1201,37 @@ export function resolveAttributeField<T extends Record<string, any>>(
       type: field.component === FieldComponentType.DATE_PICKER ? 'date' : 'time',
     }
   }
-  // Formatted text is owned by the canvas (AGL-2486). Shown, with
-  // the reason, rather than silently editable into a prop the
-  // renderer ignores.
-  if (field.name === 'children' && hasFormattedText) {
+  // Formatted text, where the element takes it, is edited WITH its
+  // formatting (AGL-2486) — the same tools as the canvas editor, and both
+  // halves written together.
+  const rich = richTextFields?.[field.name]
+  if (
+    rich &&
+    !(field as any).isReadOnly &&
+    (field.component === FieldComponentType.TEXT_FIELD ||
+      field.component === FieldComponentType.TEXTAREA ||
+      field.component === TOKEN_TEXT_FIELD_COMPONENT)
+  ) {
+    return {
+      ...field,
+      component: RICH_TEXT_FIELD_COMPONENT,
+      markupName: rich.markupName,
+      richCommands: rich.commands,
+      tokenOptions: insertOptions,
+      tokenLabelContext,
+    }
+  }
+  // Markup on an element that cannot take it any more — its component
+  // stopped declaring rich text. Shown, with the reason, rather than
+  // silently editable into a prop the renderer ignores.
+  const formattedProp =
+    field.name.startsWith(`${REUSABLE_INSTANCE_PROP_VALUES_KEY}.`) &&
+    Boolean(
+      instanceFormattedProps(values)[
+        field.name.slice(REUSABLE_INSTANCE_PROP_VALUES_KEY.length + 1)
+      ],
+    )
+  if ((field.name === 'children' && hasFormattedText) || formattedProp) {
     return {
       ...field,
       component: TOKEN_TEXT_FIELD_COMPONENT,
@@ -2097,16 +2168,57 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
      * so typing here changes a prop nothing renders. The field appears to do
      * nothing, which is the worst of the three possible behaviours.
      *
-     * The alternative considered and rejected was letting a plain edit
-     * silently clear `html`. Its failure mode is typing one character and
-     * losing every link in the paragraph, with no sign until the damage is
-     * done. Merging plain text back into markup was rejected too: mapping
-     * arbitrary text onto a marked-up tree has no correct answer once the
-     * edit is structural. So the canvas owns formatted text, this field
-     * shows it read-only and says why, and dropping the formatting is an
-     * explicit, undoable act — see {@link handleRemoveFormatting}.
+     * Letting a plain edit silently clear `html` was rejected: typing one
+     * character would lose every link in the paragraph, with no sign until
+     * the damage was done. Merging plain text back into markup was rejected
+     * too: mapping arbitrary text onto a marked-up tree has no correct answer
+     * once the edit is structural. So the field edits the MARKUP itself — a
+     * rich field with the canvas editor's tools — wherever the element takes
+     * it (`richTextFields`), and is read-only only for markup on an element
+     * that no longer does. Dropping the formatting stays an explicit,
+     * undoable act — see {@link handleRemoveFormatting}.
      */
     const hasFormattedText = isFormattedText(node)
+
+    /**
+     * The text fields that edit formatted text (AGL-2486), by field name.
+     *
+     * An element's own Text where its component takes markup. An instance's
+     * text prop where EVERY element the prop fills takes markup — the graft
+     * hands the prop's markup to each of them — with the formatting the
+     * first one allows, as the canvas editor decides it.
+     */
+    const richTextFields = useMemo(() => {
+      const fields: Record<string, RichTextFieldSpec> = {}
+      const takesMarkup = (componentSchema: Aglyn.ComponentSchema<any> | undefined) =>
+        ((componentSchema?.flags?.richTextEditable ?? FEATURE_FLAG.DISABLED) &
+          FEATURE_FLAG.ENABLED) !==
+        0
+      if (takesMarkup(schema)) {
+        fields['children'] = {
+          markupName: 'html',
+          commands: [...richTextCommandGroups(schema)],
+        }
+      }
+      const refId = (node?.props as { refId?: string } | undefined)?.refId
+      const definition = isInstance && refId ? definitions?.[refId] : undefined
+      for (const prop of instanceDeclared ?? []) {
+        if (!prop?.name || !definition?.nodes) continue
+        const fed = listPropFedTextNodeIds(definition.nodes, prop.name)
+        const schemas = fed.map((id) =>
+          components.getSchema(
+            (definition.nodes as Record<string, { componentId?: string }>)[id]
+              ?.componentId as Aglyn.ComponentId,
+          ),
+        )
+        if (!schemas.length || !schemas.every(takesMarkup)) continue
+        fields[`${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop.name}`] = {
+          markupName: `${REUSABLE_INSTANCE_PROP_HTML_KEY}.${prop.name}`,
+          commands: [...richTextCommandGroups(schemas[0])],
+        }
+      }
+      return fields
+    }, [schema, node, isInstance, definitions, instanceDeclared])
 
     // The props of the component being edited, set ONLY inside a component
     // editor — the same "am I editing a definition" signal the insert picker
@@ -2150,6 +2262,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         nodeOptions,
         ancestorDatasetId,
         hasFormattedText,
+        richTextFields,
         insertOptions,
         tokenLabelContext,
         // The installed-plugin set arrives from a live subscription and can
@@ -2166,6 +2279,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         nodeOptions,
         ancestorDatasetId,
         hasFormattedText,
+        richTextFields,
         insertOptions,
         tokenLabelContext,
         knownPluginInstallsVersion,
@@ -2693,6 +2807,53 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     )
 
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
+    /**
+     * Brings a field the canvas asked for into view (see
+     * `attributeFocusRequest`): scrolled to, focused and briefly ringed, once
+     * this form is showing the element it was asked for. The form renders a
+     * frame or two after a selection changes, so the field is looked for until
+     * it appears rather than once.
+     */
+    const panelTheme = useTheme()
+    useEffect(
+      () =>
+        reaction(
+          () => attributeFocusRequest.get(),
+          (request) => {
+            if (!request || request.nodeId !== node?.$id) return
+            let frames = 0
+            const find = () => {
+              const input = document.querySelector<HTMLElement>(
+                `[id="aglyn:panel-right"] [name="${request.field}"]`,
+              )
+              const field =
+                input?.closest<HTMLElement>('.MuiFormControl-root') ?? input
+              if (!field) {
+                if (frames++ < 30) requestAnimationFrame(find)
+                else clearAttributeFocusRequest()
+                return
+              }
+              clearAttributeFocusRequest()
+              field.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              const control =
+                field.querySelector<HTMLElement>('[role="combobox"], input:not([type="hidden"])') ??
+                input
+              control?.focus({ preventScroll: true })
+              field.animate?.(
+                [
+                  { boxShadow: `0 0 0 ${panelTheme.spacing(0.25)} ${panelTheme.palette.secondary.main}` },
+                  { boxShadow: `0 0 0 ${panelTheme.spacing(0.25)} ${alpha(panelTheme.palette.secondary.main, 0)}` },
+                ],
+                { duration: 1600, easing: 'ease-out' },
+              )
+            }
+            find()
+          },
+          { fireImmediately: true },
+        ),
+      [node?.$id, panelTheme],
+    )
+
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
         // Hand-typed {{name}} tokens normalize to their rename-safe
@@ -2729,6 +2890,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             )
           }
           normalized[REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
+        }
+        // Formatting cleared from every prop leaves no container behind, so
+        // the stored instance reads as one that was never formatted.
+        if (
+          REUSABLE_INSTANCE_PROP_HTML_KEY in normalized &&
+          !Object.keys(instanceFormattedProps(normalized)).length
+        ) {
+          delete normalized[REUSABLE_INSTANCE_PROP_HTML_KEY]
         }
         // Denormalize each picked icon's SVG path next to its id (AGL-1212) —
         // see `iconPathsForSave` for why a miss does not always clear it.
@@ -2773,7 +2942,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     attribute here and double-click-to-edit on the canvas
                     are the same value, which is the single thing about
                     this panel that surprises people. */}
-                {textEditable || hasTextAttributes ? (
+                {textEditable || hasTextAttributes || hasFormattedText ? (
                   <Box
                     sx={{
                       display: 'flex',
@@ -2820,16 +2989,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       </Tooltip>
                     ) : null}
                     {/* The help tip follows the state the author is IN: with
-                        formatted text the live question is what the greyed
-                        field and that button mean, so it deep-links there
+                        formatted text the live question is how to format here
+                        and what that button does, so it deep-links there
                         rather than to the section's opening paragraph. */}
                     {hasFormattedText ? (
                       <HelpTip
                         title="This text is formatted"
-                        excerpt="Formatted text is edited on the canvas — double-click the element. Remove formatting to edit it in this field instead; the words and line breaks are kept."
+                        excerpt="Click into the field for the formatting toolbar, or double-click the element on the canvas. Remove formatting keeps the words and line breaks."
                         href={besignerDocsUrl(
                           'textEditing',
-                          '#text-field-read-only',
+                          '#text-field-formatting',
                         )}
                         sx={{ fontSize: '0.9em' }}
                       />

@@ -36,6 +36,10 @@ import { fireEvent, render } from '@testing-library/react'
 import NodeLeaf from './node-leaf'
 import { repeatTemplateIdOf } from '../utils/repeat-copy'
 import {
+  attributeFocusRequest,
+  clearAttributeFocusRequest,
+} from '../utils/attribute-focus-request'
+import {
   RepeatRowsContext,
   type RepeatRowsSource,
 } from '../contexts/repeat-rows-context'
@@ -115,10 +119,24 @@ const listNodes = (props: Record<string, unknown>) =>
     },
   }) as any
 
-const withCanvas = (nodes: Record<string, any>) =>
-  jest
+/**
+ * The canvas these nodes are on: its whole-page snapshot, and each node by id,
+ * which is how the copies read what they repeat. Restored together.
+ */
+const withCanvas = (nodes: Record<string, any>) => {
+  const json = jest
     .spyOn(Aglyn.canvas, 'toJSON')
     .mockReturnValue({ nodes } as never)
+  const byId = jest
+    .spyOn(Aglyn.canvas, 'getNode')
+    .mockImplementation(((id: string) => nodes[id]) as never)
+  return {
+    mockRestore: () => {
+      json.mockRestore()
+      byId.mockRestore()
+    },
+  } as unknown as jest.SpyInstance
+}
 
 /** Renders the canvas leaf for `list`, with its one real child inside. */
 const renderList = (
@@ -238,10 +256,12 @@ describe('the canvas preview is bounded exactly as the runtime is', () => {
     canvasJson = withCanvas(nodes)
     const { baseElement } = renderList(answered(READY()), nodes)
     expect(copies(baseElement)).toBeNull()
-    expect(baseElement.textContent).toContain('{{item.name}}')
+    // The template's token is drawn as a named chip, not raw braces.
+    const token = baseElement.querySelector('[data-aglyn-token-chip]')
+    expect(token?.getAttribute('title')).toBe('{{item.name}}')
     const chip = badge(baseElement)
-    expect(chip?.textContent).toContain('no matching records')
-    expect(chip?.textContent).toContain('hidden on the live site')
+    expect(chip?.textContent).toContain('no records match')
+    expect(chip?.textContent).toContain('not shown on your site')
     expect(chip?.hasAttribute('data-aglyn-repeat-empty')).toBe(true)
   })
 
@@ -250,10 +270,16 @@ describe('the canvas preview is bounded exactly as the runtime is', () => {
     canvasJson = withCanvas(nodes)
     const { baseElement } = renderList(answered({ status: 'missing' }), nodes)
     expect(copies(baseElement)).toBeNull()
-    expect(baseElement.textContent).toContain('{{item.name}}')
+    expect(
+      baseElement.querySelector('[data-aglyn-token-chip]')?.textContent,
+    ).toBe('Name')
     // The source's own label: a missing answer carries none of its own.
-    expect(badge(baseElement)?.textContent).toContain('Rows not found')
-    expect(badge(baseElement)?.textContent).toContain('hidden on the live site')
+    expect(badge(baseElement)?.textContent).toContain('Rows not available')
+    expect(badge(baseElement)?.textContent).toContain('not shown on your site')
+    // Hovering it says why, and where the fix is.
+    expect(badge(baseElement)?.getAttribute('title')).toMatch(
+      /Repeat over dataset/,
+    )
   })
 
   it('draws no badge when the read failed — nothing is known', () => {
@@ -284,14 +310,22 @@ describe('the repeat badge is editor-only (AGL-3111)', () => {
     expect(badge(baseElement)?.textContent).toContain('3 records')
   })
 
-  it('is hidden from assistive technology and takes no click', () => {
+  it('is hidden from assistive technology, and a press on it opens the setting it names', () => {
     const nodes = listNodes({ repeatDataset: 'Team' })
     canvasJson = withCanvas(nodes)
     const { baseElement } = renderList(answered(READY()), nodes)
     const chip = badge(baseElement) as HTMLElement
     expect(chip.getAttribute('aria-hidden')).toBe('true')
-    // It describes the element; it must never be the thing an author hits.
-    expect(getComputedStyle(chip).pointerEvents).toBe('none')
+    expect(chip.getAttribute('title')).toBeTruthy()
+    // The press (not the click — the selection's overlay covers the badge
+    // before the release) asks the Attributes panel for the repeat setting.
+    clearAttributeFocusRequest()
+    fireEvent.pointerDown(chip, { button: 0 })
+    expect(attributeFocusRequest.get()).toEqual({
+      nodeId: 'list',
+      field: 'repeatDataset',
+    })
+    clearAttributeFocusRequest()
   })
 
   /**
@@ -360,6 +394,29 @@ describe('the copies sit in the layout the live page gives them', () => {
       // Same parent as the real child: one layout, the page's.
       expect(copy.parentElement).toBe(real?.parentElement)
       expect(copy.getAttribute('aria-hidden')).toBe('true')
+    }
+  })
+
+  it('redraws the copies when what they copy is edited', () => {
+    const nodes = listNodes({ repeatDataset: 'Team' })
+    canvasJson = withCanvas(nodes)
+    const source = answered(READY())
+    const { baseElement, rerender } = renderList(source, nodes)
+    expect(copies(baseElement)?.textContent).not.toContain('more')
+    // The template's text is retyped; the copies are pictures of it.
+    nodes['row'] = {
+      ...nodes['row'],
+      props: { ...nodes['row'].props, children: '{{item.name}} more' },
+    }
+    rerender(
+      <RepeatRowsContext.Provider value={source}>
+        <NodeLeaf node={nodes['list']}>
+          <NodeLeaf node={nodes['row']} />
+        </NodeLeaf>
+      </RepeatRowsContext.Provider>,
+    )
+    for (const copy of copies(baseElement)?.roots ?? []) {
+      expect(copy.textContent).toMatch(/ more$/)
     }
   })
 })

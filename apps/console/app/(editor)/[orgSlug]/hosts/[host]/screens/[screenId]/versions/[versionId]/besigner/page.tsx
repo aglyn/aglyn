@@ -112,7 +112,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
-import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import {
   Alert,
   Button,
@@ -147,7 +147,7 @@ import BesignerPageRecordProvider from '../../../../../../../../../../components
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
-import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import ScreenSocialImageField from '../../../../../../../../../../components/screen-social-image-field.component'
 import ScreenLayoutProperties, {
@@ -203,7 +203,7 @@ import useScreenLinkRoutes, {
   screenLinkLabels,
 } from '../../../../../../../../../../hooks/use-screen-link-routes'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
-import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
+import useHostComponentDefinitions from '@aglyn/tenant-feature-instance/hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'

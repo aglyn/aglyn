@@ -18,7 +18,8 @@
 
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
-import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from './firebase/firebase-services'
+import { useFirestoreCollection } from './use-firestore-collection'
 
 /** One marketplace plugin as a site sees it. */
 export interface SiteMarketplacePlugin {

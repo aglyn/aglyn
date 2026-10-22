@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.277",
+  "version": "1.0.0-beta.278",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -497,7 +497,7 @@
     "@typescript-eslint/parser": "8.71.2",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitejs/plugin-react": "6.1.1",
-    "@vitest/ui": "4.1.11",
+    "@vitest/ui": "4.1.12",
     "babel-eslint": "^10.1.0",
     "babel-jest": "30.5.2",
     "babel-loader": "^10.1.1",
@@ -547,7 +547,7 @@
     "vite-plugin-eslint": "^1.8.1",
     "vite-plugin-svgr": "^5.2.0",
     "vite-tsconfig-paths": "6.1.1",
-    "vitest": "4.1.11",
+    "vitest": "4.1.12",
     "webpack": "^5.111.1",
     "webpack-bundle-analyzer": "^5.4.0",
     "webpack-merge": "^6.0.1"

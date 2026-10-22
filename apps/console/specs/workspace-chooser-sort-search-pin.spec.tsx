@@ -49,7 +49,7 @@ jest.mock('../hooks/use-pinned-orgs', () => ({
     replace: mockReplace,
   }),
 }))
-jest.mock('../hooks/use-org-plans', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
   __esModule: true,
   useOrgPlans: (ids: string[]) => {
     mockPlanReads(ids)

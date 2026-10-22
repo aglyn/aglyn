@@ -44,17 +44,19 @@ const CANVAS_CHROME = [
 
 /**
  * The one deliberate exception, kept here so it is a stated decision and
- * not an oversight: the Layout Slot marker holds a literal accent rather
- * than a theme token, because the canvas renders under the SUBSCRIBER's
- * palette — a token would repaint the editor's own furniture whenever
- * someone restyles their site. It is also the one marker that has to stay
- * unmistakable against an arbitrary host background, and it marks the one
- * region the layout does not own rather than decorating something the
- * author drew.
+ * not an oversight: the Layout Slot marker carries the console's accent, not
+ * the slate. It is the one marker that has to stay unmistakable against an
+ * arbitrary host background, and it marks the one region the layout does not
+ * own rather than decorating something the author drew.
+ *
+ * It reads that accent from the CONSOLE's theme, through
+ * `CanvasChromeThemeContext` — never a literal, and never the theme in force
+ * inside the canvas, which is the SUBSCRIBER's: a token read from that one
+ * repainted the editor's own furniture whenever someone restyled their site.
  */
-const ACCENT_LITERAL_EXCEPTION = {
+const ACCENT_TOKEN_EXCEPTION = {
   file: 'node-leaf.tsx',
-  constant: 'SLOT_ACCENT',
+  read: 'useChromeTheme().palette.primary.main',
 }
 
 /**
@@ -79,6 +81,13 @@ const ACCENT_LITERAL_EXCEPTION = {
 const SELECTION_ACCENT_EXCEPTION = {
   file: 'node-outline.tsx',
   declaration: /^\s*const selectionAccent = tv\.palette\.secondary\.main$/,
+  /**
+   * The same hue as a channel, for the one place it is drawn dimmed: the
+   * element inside a repeat group (AGL-3111), marked as part of the
+   * selection rather than as a second one.
+   */
+  channel:
+    /^\s*const selectionAccentChannel = tv\.palette\.secondary\.mainChannel$/,
 }
 
 /**
@@ -131,7 +140,8 @@ const accentOffenders = (file: string, source: string) =>
       (line) =>
         !(
           file === SELECTION_ACCENT_EXCEPTION.file &&
-          SELECTION_ACCENT_EXCEPTION.declaration.test(line)
+          (SELECTION_ACCENT_EXCEPTION.declaration.test(line) ||
+            SELECTION_ACCENT_EXCEPTION.channel.test(line))
         ),
     )
     .filter(
@@ -178,11 +188,11 @@ describe('canvas chrome stays on the slate (AGL-1194)', () => {
   })
 
   it('keeps the slot marker as a stated exception, not an oversight', () => {
-    const source = read(ACCENT_LITERAL_EXCEPTION.file)
-    expect(source).toContain(ACCENT_LITERAL_EXCEPTION.constant)
-    // If someone converts it to a token, this fails and the reason above
-    // gets re-read before the change lands.
-    expect(source).toMatch(/const SLOT_ACCENT = '#00B0FF'/)
+    const source = read(ACCENT_TOKEN_EXCEPTION.file)
+    // The console's accent, read from the console's theme.
+    expect(source).toContain(ACCENT_TOKEN_EXCEPTION.read)
+    // No colour literal anywhere in the canvas leaf: chrome reads tokens.
+    expect(source).not.toMatch(/['"`]#[0-9a-fA-F]{3,8}['"`]/)
   })
 })
 
@@ -280,6 +290,12 @@ describe('the selection outline is pink, as a carve-out (AGL-1221)', () => {
     expect(uses).toHaveLength(2) // the declaration, and the one use
     expect(source).toMatch(
       /selectedSelf}`]: \{\s*outlineWidth: 2,\s*outlineStyle: 'solid',\s*outlineColor: selectionAccent,\s*\}/,
+    )
+    // Its channel is spent once too: on the repeat member, dimmed.
+    const channelUses = [...source.matchAll(/\bselectionAccentChannel\b/g)]
+    expect(channelUses).toHaveLength(2)
+    expect(source).toMatch(
+      /repeatMember}`]: \{[^}]*outlineColor: `rgba\(\$\{selectionAccentChannel\} \/ 0\.5\)`/,
     )
   })
 

@@ -40,7 +40,13 @@ import {
   ThemeProvider,
   useHostThemeDocument,
 } from '@aglyn/shared-ui-theme'
-import { Box, type BoxProps, CssBaseline, GlobalStyles } from '@mui/material'
+import {
+  Box,
+  type BoxProps,
+  CssBaseline,
+  GlobalStyles,
+  useTheme,
+} from '@mui/material'
 import { observer } from 'mobx-react-lite'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
 import {
@@ -53,6 +59,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import CanvasChromeThemeContext from '../contexts/canvas-chrome-theme-context'
 import { CanvasHostTokensProvider } from '../contexts/canvas-host-tokens-context'
 import CanvasPageRecordContext from '../contexts/canvas-page-record-context'
 import RepeatRecordContext from '../contexts/repeat-record-context'
@@ -205,6 +212,8 @@ const ThemedElementContainer = ({ children }) => {
     devicePreview,
     hostTheme.breakpoints?.values,
   )
+  // The console's own theme, read before the site's replaces it below.
+  const chromeTheme = useTheme()
   const canvasTheme = useMemo(
     () =>
       deviceWidth == null
@@ -280,6 +289,7 @@ const ThemedElementContainer = ({ children }) => {
   )
   return (
     <SiteSchemeThemesContext.Provider value={schemeThemes}>
+      <CanvasChromeThemeContext.Provider value={chromeTheme}>
       <ThemeProvider theme={canvasTheme}>
         <CssBaseline />
         <CanvasRevealContext.Provider value={revealedNodeIds}>
@@ -300,6 +310,7 @@ const ThemedElementContainer = ({ children }) => {
           </CanvasMutedClassesContext.Provider>
         </CanvasRevealContext.Provider>
       </ThemeProvider>
+      </CanvasChromeThemeContext.Provider>
     </SiteSchemeThemesContext.Provider>
   )
 }

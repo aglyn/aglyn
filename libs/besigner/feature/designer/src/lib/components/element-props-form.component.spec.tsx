@@ -727,11 +727,11 @@ describe('the read-only Text field explains itself (AGL-2486)', () => {
   /**
    * A help link is only help if it lands on the paragraph answering the
    * question the reader has RIGHT NOW. With formatted text that question is
-   * "why can I not type in this box", which is its own section — not the
-   * general "the two fields edit the same value" opener.
+   * "how do I format here", which is its own section — not the general "the
+   * two fields edit the same value" opener.
    */
   it('deep-links to the section for the state the author is in', () => {
-    expect(formattedBranch).toContain("'#text-field-read-only'")
+    expect(formattedBranch).toContain("'#text-field-formatting'")
     expect(formattedBranch).toContain("'#the-text-attribute'")
   })
 })

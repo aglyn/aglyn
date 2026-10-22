@@ -41,15 +41,20 @@ import {
 } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { alpha, Box, useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import { observer } from 'mobx-react-lite'
 import {
   forwardRef,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
 } from 'react'
+import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
+import { requestAttributeFocus } from '../utils/attribute-focus-request'
 import BindingPickerContext from '../contexts/binding-picker-context'
+import CanvasChromeThemeContext from '../contexts/canvas-chrome-theme-context'
 import CanvasRevealContext, {
   CanvasMutedClassesContext,
 } from '../contexts/canvas-reveal-context'
@@ -64,7 +69,10 @@ import {
   useRepeatCopies,
   useRepeatPreview,
 } from '../hooks/use-repeat-preview'
-import { RepeatRecordContext } from '../contexts/repeat-record-context'
+import {
+  RepeatRecordContext,
+  RepeatTemplateContext,
+} from '../contexts/repeat-record-context'
 import {
   isNodeHiddenOnSite,
   isNodeRevealedOnCanvas,
@@ -139,20 +147,27 @@ export function denormalizeTree(
 export interface NodeLeafProps extends LeafProps {}
 
 /**
- * The slot marker is EDITOR CHROME, so it holds the brand accent literally
- * rather than reading `secondary` from the theme: the canvas renders under
- * the host's palette, so a token would repaint the editor's own furniture
- * whenever a subscriber restyles their site — and it already rendered pink
- * instead of the design's blue.
+ * The console's theme for chrome drawn inside the canvas, or — outside one,
+ * as in a spec — the theme in force.
+ *
+ * Inside the canvas `useTheme()` is the SITE's theme: editor chrome read from
+ * it would repaint itself whenever a subscriber restyled their site, and the
+ * slot marker once rendered pink instead of the console's blue that way.
+ * See {@link CanvasChromeThemeContext}.
  */
-const SLOT_ACCENT = '#00B0FF'
+function useChromeTheme(): Theme {
+  const theme = useTheme()
+  return useContext(CanvasChromeThemeContext) ?? theme
+}
 
 /**
  * Visible placement marker for the LayoutSlot while editing a layout. The
  * slot is a passthrough at runtime, so without this it disappears once it
  * has children and designers lose track of where screen content lands.
  */
-const SlotMarker = ({ caption }: { caption?: string }) => (
+const SlotMarker = ({ caption }: { caption?: string }) => {
+  const accent = useChromeTheme().palette.primary.main
+  return (
   <Box
     aria-hidden
     data-aglyn-slot-marker=""
@@ -170,54 +185,40 @@ const SlotMarker = ({ caption }: { caption?: string }) => (
       // Brand blue on a faint tint, not a grey dashed box: the slot is the
       // one region the layout does not own, and it should not read as just
       // another empty container.
-      borderColor: SLOT_ACCENT,
-      backgroundColor: alpha(SLOT_ACCENT, 0.06),
+      borderColor: accent,
+      backgroundColor: alpha(accent, 0.06),
       borderRadius: 1,
       color: 'text.secondary',
       fontSize: 13,
       textAlign: 'center',
     }}
   >
-    <Box component="span" sx={{ color: SLOT_ACCENT, fontWeight: 700 }}>
+    <Box component="span" sx={{ color: accent, fontWeight: 'fontWeightBold' }}>
       {'◇ layout-slot'}
     </Box>
     <Box component="span">{caption || 'Page content renders here'}</Box>
   </Box>
-)
-
-/**
- * The repeat badge (AGL-3111).
- *
- * Editor chrome, so it holds its accent literally for the reason
- * {@link SLOT_ACCENT} does: the canvas renders under the SITE's palette, and a
- * theme token here would repaint the editor's own furniture whenever a
- * subscriber restyled their site.
- *
- * It cannot reach a published page: only `NodeLeaf` draws it, and a published
- * page is composed from stored nodes and rendered through the plain `Leaf`.
- * The stored node is untouched either way — this is a render copy, like every
- * other thing the canvas lays over a node.
- */
-const REPEAT_ACCENT = '#7C4DFF'
-
-/** The chip's own ink, for the same reason and read against that accent. */
-const REPEAT_INK = '#FFFFFF'
-
-/**
- * The badge's accent when the repeat renders nothing on the published page
- * (AGL-3496), held literally for the same reason as {@link REPEAT_ACCENT}.
- */
-const REPEAT_EMPTY_ACCENT = '#B45309'
+  )
+}
 
 /**
  * A repeat copy's root as the canvas draws it: hidden from assistive
- * technology, since it repeats what the real element already says, and
- * stamped so {@link repeatCopyCss} can outline it.
+ * technology, since it repeats what the real element already says, stamped so
+ * {@link repeatCopyCss} can outline it, and titled so the pointer is told what
+ * it is over — a click on a copy selects the element it repeats, which with no
+ * word of explanation looks like the canvas picking the wrong thing.
  */
-function asRepeatCopy(copy: any) {
+function asRepeatCopy(copy: any, label: string) {
   return {
     ...copy,
-    props: { ...copy.props, 'aria-hidden': true, [REPEAT_COPY_ATTR]: '' },
+    props: {
+      ...copy.props,
+      'aria-hidden': true,
+      [REPEAT_COPY_ATTR]: '',
+      title:
+        `A copy for the next record of ${label}. ` +
+        'Click to select the element it repeats — edit that one, and every copy follows.',
+    },
   }
 }
 
@@ -235,8 +236,16 @@ function repeatCopyCss(rest: string, hover: string, hovered?: string) {
   )
 }
 
-/** What the badge says: what is repeated, and how many copies the page gets. */
-function repeatBadgeText({
+/**
+ * What the badge says, and what hovering it explains (AGL-3111).
+ *
+ * The short line names the source and what the page gets. The two states that
+ * render nothing on the published page (AGL-3496) say so in plain words, and
+ * their explanation says why and where to fix it — "Dataset not found ·
+ * hidden on the live site" told an author something was wrong and nothing
+ * about what, or what to do.
+ */
+export function repeatBadgeText({
   label,
   count,
   missing,
@@ -244,52 +253,130 @@ function repeatBadgeText({
   label: string
   count: number
   missing?: boolean
-}): string {
-  if (missing) return `⟳ ${label} not found · hidden on the live site`
-  if (!count) return `⟳ ${label} · no matching records · hidden on the live site`
-  return `⟳ ${label} · ${count} ${count === 1 ? 'record' : 'records'}`
+}): { text: string; explanation: string } {
+  const fix =
+    'Click this badge to fix it: it opens Repeat over dataset in the Attributes panel, where you choose another.'
+  if (missing) {
+    return {
+      text: `⟳ ${label} not available · not shown on your site`,
+      explanation:
+        `This element repeats once per record of a ${label.toLowerCase()} this site can’t read — ` +
+        'it was deleted, or it isn’t shared with this site. Until that changes, your published page shows none of it. ' +
+        fix,
+    }
+  }
+  if (!count) {
+    return {
+      text: `⟳ Repeats ${label} · no records match · not shown on your site`,
+      explanation:
+        `No record of ${label} matches this repeat, so your published page shows none of it. ` +
+        'Add records to the dataset, or click this badge and loosen the Repeat filter in the Attributes panel.',
+    }
+  }
+  return {
+    text: `⟳ Repeats ${label} · ${count} ${count === 1 ? 'record' : 'records'}`,
+    explanation:
+      `This element repeats once per record of ${label}: ${count} on your published page. ` +
+      'Edit the first one; the copies after it follow.',
+  }
 }
 
+/**
+ * The repeat badge (AGL-3111), in the console's chrome colours rather than
+ * the site's — see {@link useChromeTheme}. It cannot reach a published page:
+ * only `NodeLeaf` draws it, and a published page is composed from stored nodes
+ * and rendered through the plain `Leaf`.
+ *
+ * It takes the pointer, unlike the rest of the chrome here, so hovering it can
+ * explain itself, and a click on it selects the repeating element and opens
+ * Repeat over dataset in the Attributes panel — the setting it talks about.
+ */
 const RepeatBadge = ({
+  nodeId,
   label,
   count,
   missing,
 }: {
+  nodeId: string
   label: string
   count: number
   missing?: boolean
-}) => (
-  <Box
-    aria-hidden
-    data-aglyn-repeat-badge=""
-    data-aglyn-repeat-empty={count ? undefined : ''}
-    sx={{
-      // Out of the element's own layout: a badge that took part in a flex row
-      // would move the design it is describing.
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      zIndex: 2,
-      // Never swallows a click — the element under it stays selectable.
-      pointerEvents: 'none',
-      px: 0.75,
-      py: 0.25,
-      maxWidth: '100%',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      borderBottomLeftRadius: 3,
-      backgroundColor: count ? REPEAT_ACCENT : REPEAT_EMPTY_ACCENT,
-      color: REPEAT_INK,
-      fontSize: 11,
-      fontWeight: 700,
-      lineHeight: 1.6,
-      letterSpacing: 0.2,
-    }}
-  >
-    {repeatBadgeText({ label, count, missing })}
-  </Box>
-)
+}) => {
+  const chrome = useChromeTheme()
+  const [, setRightPanel] = useAglynBesignerPanel('panelRight')
+  // The setter is a new function every render; the listener reads it here.
+  const setRightPanelRef = useRef(setRightPanel)
+  setRightPanelRef.current = setRightPanel
+  const badgeRef = useRef<HTMLDivElement>(null)
+  // A native listener, as everywhere on this canvas: React delegates at the
+  // root container and the canvas is a closed shadow root. On the PRESS, not
+  // the click: the press selects the repeating element (it bubbles to that
+  // element's own handlers), the selection's overlay then covers the badge,
+  // and the release lands on the overlay — a `click` never reaches the badge.
+  useEffect(() => {
+    const badge = badgeRef.current
+    if (!badge) return undefined
+    const open = (event: Event) => {
+      // A secondary button opens the context menu instead.
+      if (((event as PointerEvent).button ?? 0) > 0) return
+      requestAttributeFocus(nodeId, 'repeatDataset')
+      try {
+        setRightPanelRef.current((prev) => ({
+          ...prev,
+          toggled: true,
+          tab: Besigner.BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
+        }))
+      } catch {
+        // No besigner app around this leaf, so no panel to open.
+      }
+    }
+    badge.addEventListener('pointerdown', open)
+    return () => badge.removeEventListener('pointerdown', open)
+  }, [nodeId])
+  // The slate where it exists — the console's theme always has it — and the
+  // primary where a bare theme does not (a spec, a host without the console).
+  const tone = count
+    ? (chrome.palette.tertiary ?? chrome.palette.primary)
+    : chrome.palette.warning
+  const { text, explanation } = repeatBadgeText({ label, count, missing })
+  const radius = chrome.shape.borderRadius
+  return (
+    <Box
+      ref={badgeRef}
+      aria-hidden
+      data-aglyn-repeat-badge=""
+      data-aglyn-repeat-empty={count ? undefined : ''}
+      title={explanation}
+      sx={{
+        // Out of the element's own layout: a badge that took part in a flex row
+        // would move the design it is describing.
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        zIndex: 2,
+        cursor: 'pointer',
+        px: 0.75,
+        py: 0.25,
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        borderBottomLeftRadius: typeof radius === 'number' ? `${radius}px` : radius,
+        backgroundColor: tone.main,
+        color: tone.contrastText,
+        fontFamily: chrome.typography.fontFamily,
+        fontSize: chrome.typography.caption.fontSize,
+        fontWeight: chrome.typography.fontWeightBold,
+        lineHeight: chrome.typography.caption.lineHeight,
+        // A Stack's spacing gives every child after the first a top margin,
+        // which moved the badge down off the corner; doubled to outrank it.
+        '&&': { m: 0 },
+      }}
+    >
+      {text}
+    </Box>
+  )
+}
 
 export const NodeLeaf = observer(
   forwardRef<any, NodeLeafProps>((props, ref) => {
@@ -776,6 +863,31 @@ export const NodeLeaf = observer(
       [placedForm, shownNode],
     )
 
+    /**
+     * A repeating element is the box its badge is placed in.
+     *
+     * The badge sits at the element's top right, which only holds when the
+     * element is positioned; in a plain Stack it attached to the nearest
+     * positioned ancestor instead, so two repeats in one container drew both
+     * badges in the same corner, the second over the first. The canvas copy
+     * gets `position: relative` — never the stored node, and never over a
+     * position the author set.
+     */
+    const leafNode = useMemo(() => {
+      if (!repeatPreview) return shownLeafNode
+      const sx = (shownLeafNode as { sx?: unknown })?.sx
+      if (sx != null && (typeof sx !== 'object' || Array.isArray(sx))) {
+        return shownLeafNode
+      }
+      if (sx && 'position' in (sx as Record<string, unknown>)) {
+        return shownLeafNode
+      }
+      return {
+        ...(shownLeafNode as Record<string, unknown>),
+        sx: { ...((sx as Record<string, unknown> | undefined) ?? {}), position: 'relative' },
+      } as typeof shownLeafNode
+    }, [repeatPreview, shownLeafNode])
+
     return (
       <DraggableDroppable
         node={node}
@@ -785,7 +897,7 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={registerElement}
-          node={shownLeafNode as typeof node}
+          node={leafNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the
           // node itself or any descendant). Canvas-aware components (nav
@@ -819,6 +931,12 @@ export const NodeLeaf = observer(
             <RepeatRecordContext.Provider value={firstRecord}>
               {children}
             </RepeatRecordContext.Provider>
+          ) : repeatPreview ? (
+            // No record to draw (AGL-3496): the template as written, its
+            // `{{item.*}}` tokens drawn as named chips.
+            <RepeatTemplateContext.Provider value>
+              {children}
+            </RepeatTemplateContext.Provider>
           ) : (
             children
           )}
@@ -849,13 +967,17 @@ export const NodeLeaf = observer(
               </style>
               <RendererComponents.Provider value={INERT_RENDERER as any}>
                 {repeatCopies.map((copy) => (
-                  <Stem key={copy.$id} node={asRepeatCopy(copy)} />
+                  <Stem
+                    key={copy.$id}
+                    node={asRepeatCopy(copy, repeatPreview?.label ?? '')}
+                  />
                 ))}
               </RendererComponents.Provider>
             </>
           ) : null}
           {repeatPreview ? (
             <RepeatBadge
+              nodeId={node.$id}
               label={repeatPreview.label}
               count={repeatPreview.records.length}
               missing={repeatPreview.missing}

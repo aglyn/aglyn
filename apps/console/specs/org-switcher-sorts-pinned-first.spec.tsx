@@ -57,7 +57,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'free' }, ready: true }),
 }))
-jest.mock('../hooks/use-org-plans', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
   useOrgPlans: () => ({}),
   useOrgRows: () => ({}),
 }))
