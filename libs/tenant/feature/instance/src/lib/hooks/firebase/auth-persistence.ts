@@ -132,7 +132,7 @@ function sealPersistence(auth: Auth): Auth {
  *
  * - **A lint rule cannot classify it.** Whether a given `setPersistence` call
  *   is safe depends on which host the browser is on, and the same source file
- *   serves both. `libs/aglyn/src/lib/app-utils/console/passkeys.ts:133` is *correct* on
+ *   serves both. `apps/console/utils/passkeys.ts:133` is *correct* on
  *   `app.aglyn.com` and *fatal* on `console.acme-agency.com`. A rule banning
  *   the call would be false half the time, and AGL-1357's lesson — derive the
  *   classification from what the code declares — has nothing to derive from

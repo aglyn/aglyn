@@ -23,7 +23,7 @@ import {
   JSON_RPC_ERRORS,
   MCP_PROTOCOL_VERSION,
   type McpHandlerDeps,
-} from '@aglyn/aglyn/app-utils/console/mcp-protocol'
+} from '../utils/mcp-protocol'
 
 /**
  * The wire shape, asserted directly. This server writes the protocol out

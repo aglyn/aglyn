@@ -29,7 +29,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../utils/server/staff-list-query'
 import {
   describeOrgPlan,
   isEnterpriseOrg,
@@ -37,14 +37,14 @@ import {
   planCompLabel,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { ORG_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/org-list-query'
-import { overrideCount } from '@aglyn/aglyn/app-utils/console/org-override-count'
+import { ORG_LIST_QUERY } from '../../../../utils/org-list-query'
+import { overrideCount } from '../../../../utils/org-override-count'
 import {
   LAPSED_SUSPENSIONS_NOTICE,
   asksAboutSuspension,
   settleLapsedSuspensions,
   suspensionInForce,
-} from '@aglyn/tenant-data-admin/server/console/suspended-flag'
+} from '../../../../utils/server/suspended-flag'
 
 /**
  * Staff organization list (AGL-878). The page used to read `collection('orgs')`
@@ -210,7 +210,7 @@ async function handler(request: Request): Promise<Response> {
             }
           : null,
         createdAt: ts(data['createdAt']),
-        // When any member last used the console in this org (`@aglyn/aglyn/app-utils/console/org-list-query`).
+        // When any member last used the console in this org (`utils/org-list-query.ts`).
         lastActivityAt: ts(data['lastActivityAt']),
         // In force NOW — the chip and the Suspended filter give one answer.
         suspended: suspensionInForce(data['suspendedAt'], data['suspendedUntilMs']),

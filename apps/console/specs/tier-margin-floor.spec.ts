@@ -167,7 +167,7 @@ import {
   METERED_OVERAGE_COST_USD,
   METERED_UNIT_RATES_USD,
   meteredIncludedAllowance,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../utils/usage-metering'
 import {
   AI_TIER_IDS,
   AI_TIERS,

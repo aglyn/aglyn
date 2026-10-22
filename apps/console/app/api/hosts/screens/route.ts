@@ -38,8 +38,8 @@ import {
   billableScreenIds,
   type BillableScreenSource,
 } from '../resources/count-billable-screens'
-import { announceLivePaths } from '@aglyn/tenant-data-admin/server/console/announce-live-paths'
-import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */

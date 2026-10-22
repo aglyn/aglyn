@@ -23,7 +23,7 @@ import {
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
-import { fetchAllPages } from '@aglyn/aglyn/app-utils/console/fetch-all-pages'
+import { fetchAllPages } from '../utils/fetch-all-pages'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { SystemEmailTemplateDefinition } from '@aglyn/shared-util-email'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -37,7 +37,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { sampleContext } from '@aglyn/aglyn/app-utils/console/system-email-sample-sources'
+import { sampleContext } from '../utils/system-email-sample-sources'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 /**

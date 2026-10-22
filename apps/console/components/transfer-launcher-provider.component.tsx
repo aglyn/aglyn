@@ -49,8 +49,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useUrlNamedOrg } from '../hooks/use-url-names-org'
-import { resolveExtensionEntitlement } from '@aglyn/aglyn/app-utils/console/extension-entitlement'
-import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
+import { resolveExtensionEntitlement } from '../utils/extension-entitlement'
+import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
 /** What the launcher has open. */
 export type TransferLaunchState =

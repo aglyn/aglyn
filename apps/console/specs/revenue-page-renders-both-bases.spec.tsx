@@ -41,7 +41,7 @@
 
 import type { ReactNode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
-import type { RevenuePayload } from '@aglyn/aglyn/app-utils/console/revenue-view'
+import type { RevenuePayload } from '../utils/revenue-view'
 
 jest.mock('@aglyn/shared-data-enums', () => ({
   __esModule: true,
@@ -85,7 +85,7 @@ jest.mock('../components/staff-only.component', () => ({
   __esModule: true,
   default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('../hooks/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
 }))
@@ -93,7 +93,7 @@ jest.mock('../constants/docs-links', () => ({
   __esModule: true,
   docsHelp: () => undefined,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
+jest.mock('../constants/route-links', () => ({
   __esModule: true,
   buildRoute: () => '/admin',
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_REVENUE: 'ADMIN_REVENUE' },

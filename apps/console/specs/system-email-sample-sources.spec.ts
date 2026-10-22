@@ -18,7 +18,7 @@
 import {
   SAMPLE_SOURCE_FILLS,
   sampleContext,
-} from '@aglyn/aglyn/app-utils/console/system-email-sample-sources'
+} from '../utils/system-email-sample-sources'
 
 /**
  * "Populate from" on a system email test (AGL-766) fills the merge tokens a

@@ -1,4 +1,4 @@
-import { revalidateHostAliases } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 /**
  * @license

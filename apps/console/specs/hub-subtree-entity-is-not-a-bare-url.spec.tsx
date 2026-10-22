@@ -113,7 +113,7 @@ jest.mock('../hooks/use-org-permissions', () => ({
 jest.mock('../hooks/use-org-reach', () => ({
   useOrgReach: () => ({ orgWide: true, ready: true }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('../hooks/use-org-hosts', () => ({
   __esModule: true,
   default: () => ({ hosts: [], ready: true, error: undefined }),
   useOrgHosts: () => ({ hosts: [], ready: true, error: undefined }),

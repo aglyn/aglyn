@@ -16,11 +16,11 @@
  */
 
 import { redirect } from 'next/navigation'
-import { DEFAULT_ACCOUNT_SECTION_HREF } from '@aglyn/aglyn/app-utils/console/account-sections'
+import { DEFAULT_ACCOUNT_SECTION_HREF } from '../../../../constants/account-sections'
 import {
   sectionIndexTarget,
   type SearchParams,
-} from '@aglyn/aglyn/app-utils/console/section-index-redirect'
+} from '../../../../utils/section-index-redirect'
 
 /**
  * `/manage/user` is the section index and renders nothing of its own

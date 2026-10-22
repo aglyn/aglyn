@@ -87,25 +87,25 @@ import {
   UPLOAD_TYPES_MESSAGE,
   VIDEO_UPLOADS_PAUSED_CODE,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
-} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
-import { AUDIO_RIGHTS_FIELD, audioRightsVerdict } from '@aglyn/aglyn/app-utils/console/media-audio-rights'
+} from './media-upload-limits'
+import { AUDIO_RIGHTS_FIELD, audioRightsVerdict } from './media-audio-rights'
 import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
-import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
-import { videoUploadsOpenForOrg } from '@aglyn/tenant-data-admin/server/console/video-uploads'
-import { scheduleMediaDeliveryCopies } from '@aglyn/tenant-data-admin/server/console/media-delivery-copies'
-import { folderStoragePath, mediaCdnPathUpdate } from '@aglyn/tenant-data-admin/server/console/media-scope'
-import { embeddedMetadataAtIngress } from '@aglyn/tenant-data-admin/server/console/media-embedded'
+import { resolveOrgMediaBand } from './server/media-storage-band'
+import { videoUploadsOpenForOrg } from './server/video-uploads'
+import { scheduleMediaDeliveryCopies } from './server/media-delivery-copies'
+import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
+import { embeddedMetadataAtIngress } from './server/media-embedded'
 import { mediaEmbeddedPublicView } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 import {
   claimHostForOrg,
   findSubdomainConflict,
-} from '@aglyn/tenant-data-admin/server/console/provision-host'
-import { postTenantRevalidate } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+} from './server/provision-host'
+import { postTenantRevalidate } from './server/tenant-revalidate'
 import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
-import { mediaStorageGate, scopeBillsStorageOverage } from '@aglyn/tenant-data-admin/server/console/storage-overage'
+import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
 
 // ── Sites & form submissions ────────────────────────────────────────────────
 

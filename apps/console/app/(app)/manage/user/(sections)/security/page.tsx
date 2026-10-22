@@ -21,8 +21,8 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import AccountSecurityCard from '../../../../../../components/account/account-security-card.component'
-import { DEFAULT_ACCOUNT_SECTION_HREF } from '@aglyn/aglyn/app-utils/console/account-sections'
-import useAccountSignInMethods from '@aglyn/tenant-feature-instance/hooks/console/use-account-sign-in-methods'
+import { DEFAULT_ACCOUNT_SECTION_HREF } from '../../../../../../constants/account-sections'
+import useAccountSignInMethods from '../../../../../../hooks/use-account-sign-in-methods'
 
 /**
  * Password, passkeys and recent sign-ins — for the accounts they apply to.

@@ -312,7 +312,7 @@ subscription product, Stripe records them and charges no one.
    `x-cron-secret` header) after the rollup; it emails each plan-gated
    tenant one summary per month and stamps `emailedAt` on the rollup.
 5. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
-   `libs/aglyn/src/lib/app-utils/console/usage-metering.ts`) against a real Firebase + Vercel
+   `apps/console/utils/usage-metering.ts`) against a real Firebase + Vercel
    invoice month.
 
    **Done once, against LIST rates, 2026-08-09 (AGL-1280) — and it still
@@ -491,7 +491,7 @@ subscription product, Stripe records them and charges no one.
    re-price a January re-run at January's accumulated bytes. Every month before
    the configured one bills exactly what it billed the first time; that is a
    property of the mechanism, not of anyone's care, and
-   `libs/aglyn/src/lib/app-utils/console/usage-metering.spec.ts` pins it.
+   `apps/console/utils/usage-metering.spec.ts` pins it.
 
    **Measured 2026-08-13, against production:** four orgs hold **24.8 MB** of
    org-scope media between them, 99.9% of it in one *enterprise* org — which

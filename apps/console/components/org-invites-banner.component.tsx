@@ -23,7 +23,7 @@ import {
   useInviteReview,
   usePendingInvites,
   type PendingInvite,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+} from '../hooks/use-pending-invites'
 
 export interface OrgInvitesBannerProps {
   /**

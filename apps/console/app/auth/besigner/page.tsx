@@ -28,8 +28,8 @@ import {
   besignerEntryNeedsSignIn,
   besignerEntryTarget,
   markNativeAppWebView,
-} from '@aglyn/aglyn/app-utils/console/besigner-entry'
-import { signInWithPooledCustomToken } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+} from '../../../utils/besigner-entry'
+import { signInWithPooledCustomToken } from '../../../utils/pooled-custom-token'
 
 /**
  * `/auth/besigner?continue=<Besigner path>` — how the native apps open the

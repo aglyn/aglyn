@@ -37,7 +37,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { useStaffRole } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useStaffRole } from '../hooks/use-is-staff'
 
 /**
  * Staff erasure of a PERSON's account (AGL-1977).

@@ -36,7 +36,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { sweepAbandonedTransferJobs } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
-import { transferEngineDeps } from '@aglyn/tenant-data-admin/server/console/transfer-gate'
+import { transferEngineDeps } from '../../../../utils/server/transfer-gate'
 
 /** The beat id `/api/health/crons` reads. */
 export const TRANSFER_JOBS_JOB_ID = 'transfer-jobs'

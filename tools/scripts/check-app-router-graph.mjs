@@ -65,10 +65,10 @@ if (asJson) {
       },
       usageMetering: {
         inServerGraph: graph.serverModules.has(
-          join(ROOT, 'libs/aglyn/src/lib/app-utils/console/usage-metering.ts'),
+          join(ROOT, 'apps/console/utils/usage-metering.ts'),
         ),
         inClientGraph: graph.clientModules.has(
-          join(ROOT, 'libs/aglyn/src/lib/app-utils/console/usage-metering.ts'),
+          join(ROOT, 'apps/console/utils/usage-metering.ts'),
         ),
       },
       violations: graph.violations.map((violation) => ({

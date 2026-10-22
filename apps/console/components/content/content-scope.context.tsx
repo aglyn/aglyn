@@ -68,7 +68,7 @@ import {
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
+} from '../../utils/revalidate-live-pages'
 import {
   ENTRY_LIST_DEFAULT_SORT,
   entryListBase,
@@ -77,7 +77,7 @@ import {
   type EntryListView,
 } from './entry-list-query'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../constants/route-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'

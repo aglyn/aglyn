@@ -44,11 +44,11 @@ import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
-import { hasEntitlement } from '@aglyn/aglyn/app-utils/console/entitlements'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { hasEntitlement } from '../../constants/entitlements'
+import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { recentDayIds } from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
+import { recentDayIds } from '../../utils/analytics-day-cache'
 import {
   aggregateScreenDays,
   referrerLabel,

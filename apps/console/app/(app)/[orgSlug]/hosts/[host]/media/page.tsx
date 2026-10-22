@@ -32,7 +32,7 @@ import MediaLibraryComponent from '../../../../../../components/media/media-libr
 import { PhotoLinkDialogOnOpen } from '../../../../../../components/media/photo-link-dialog.component'
 import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 

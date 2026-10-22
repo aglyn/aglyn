@@ -19,7 +19,7 @@
 import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import { useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
-import { NOT_FOUND_FROM_PARAM } from '@aglyn/aglyn/app-utils/console/console-routes'
+import { NOT_FOUND_FROM_PARAM } from '../constants/console-routes'
 import AuthenticatedLayout from './layouts/authenticated.layout'
 import MainLayout from './layouts/main.layout'
 import NotFoundContent from './not-found-content.component'

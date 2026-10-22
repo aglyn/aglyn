@@ -109,7 +109,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   quarantinedUploadRefusal: (...args: unknown[]) => mockQuarantine(...(args as [])),
 }))
-jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
+jest.mock('../utils/server/media-scope', () => ({
   resolveMediaScope: async () => ({
     scope: {
       scopeRef: {
@@ -132,14 +132,14 @@ jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
   scopeAllows: () => true,
   mediaObjectPath: () => 'orgs/org-1/media/m1',
 }))
-jest.mock('@aglyn/tenant-data-admin/server/console/media-storage-band', () => ({
+jest.mock('../utils/server/media-storage-band', () => ({
   resolveOrgMediaBand: async () => ({ usedBytes: 0, allowanceMb: 1024 }),
 }))
-jest.mock('@aglyn/tenant-data-admin/server/console/storage-overage', () => ({
+jest.mock('../utils/storage-overage', () => ({
   mediaStorageGate: () => ({ allowed: true }),
   scopeBillsStorageOverage: () => false,
 }))
-jest.mock('@aglyn/tenant-data-admin/server/console/media-delivery-copies', () => ({
+jest.mock('../utils/server/media-delivery-copies', () => ({
   removeAssetDeliveryCopies: (...args: unknown[]) => mockRemoveCopies(...(args as [])),
   scheduleMediaDeliveryCopies: (...args: unknown[]) => mockScheduleCopies(...args),
 }))

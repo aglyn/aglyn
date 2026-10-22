@@ -37,7 +37,7 @@
  *
  * A TypeScript union is erased at runtime, so a `<select>` cannot read it.
  * This script turns it into an array, and
- * `libs/aglyn/src/lib/app-utils/console/stripe-tax-id-types.spec.ts` re-extracts from the same
+ * `apps/console/utils/stripe-tax-id-types.spec.ts` re-extracts from the same
  * `.d.ts` on every test run and fails on any difference. That is the whole
  * design: bumping `@stripe/stripe-js` turns the suite red rather than leaving
  * the dropdown quietly short of a jurisdiction.
@@ -58,7 +58,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '../..')
 const outPath = resolve(
   repoRoot,
-  'libs/aglyn/src/lib/app-utils/console/stripe-tax-id-types.generated.ts',
+  'apps/console/utils/stripe-tax-id-types.generated.ts',
 )
 
 const types = extractStripeTaxIdTypes(repoRoot)

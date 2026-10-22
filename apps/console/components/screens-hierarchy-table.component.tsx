@@ -77,8 +77,8 @@ import {
 import { Fragment, useCallback, useMemo, useState, type ReactNode,
   useEffect,
 } from 'react'
-import { collectionTemplateRoutesSummary } from '@aglyn/aglyn/app-utils/console/collection-templates'
-import type { UseCollectionTemplatesResult } from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import { collectionTemplateRoutesSummary } from '../constants/collection-templates'
+import type { UseCollectionTemplatesResult } from '../hooks/use-collection-templates'
 import {
   TABLE_HEAD_HEIGHT,
   TABLE_PAGE_SIZE_DEFAULT,

@@ -39,7 +39,7 @@ import {
   taxPeriodRange,
   taxReturnSummary,
   type TaxReturnRowInput,
-} from '@aglyn/tenant-data-admin/server/console/tx-return'
+} from '../utils/server/tx-return'
 
 /** The measured TX row: $100 charge, 80% base, 8.25%, $6.60 collected. */
 const TX_ROW: TaxReturnRowInput = {

@@ -52,7 +52,7 @@ import {
   SUBSCRIPTION_CANCEL_REASON_LABELS,
   type SubscriptionCancelReasonCode,
   type SubscriptionCancelWhen,
-} from '@aglyn/aglyn/app-utils/console/subscription-cancel'
+} from '../constants/subscription-cancel'
 import { SuperStaffOnly } from './staff-super-only.component'
 import StaffTableHead from './staff-table-head.component'
 

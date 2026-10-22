@@ -21,9 +21,9 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from './use-org-scope'
-import { usePendingInvites, type PendingInvite } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+import { usePendingInvites, type PendingInvite } from './use-pending-invites'
 
 export type InviteAnswer = 'accept' | 'decline'
 

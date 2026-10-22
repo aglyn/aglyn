@@ -31,7 +31,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { fetchAllPages, MAX_PAGES } from '@aglyn/aglyn/app-utils/console/fetch-all-pages'
+import { fetchAllPages, MAX_PAGES } from '../utils/fetch-all-pages'
 
 const ROOT = join(__dirname, '..')
 

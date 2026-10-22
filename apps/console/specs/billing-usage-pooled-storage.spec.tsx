@@ -45,7 +45,7 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { formatMediaBytes } from '../components/media/media-storage-copy'
-import { meteredIncludedAllowance } from '@aglyn/aglyn/app-utils/console/usage-metering'
+import { meteredIncludedAllowance } from '../utils/usage-metering'
 
 const MB = 1024 * 1024
 
@@ -95,7 +95,7 @@ let mockSiteMb: Record<string, number> = {}
 let mockStorageAnswer: Record<string, unknown> | null = null
 const mockFetched: string[] = []
 
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

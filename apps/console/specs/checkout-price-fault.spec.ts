@@ -36,7 +36,7 @@
  * envelope would let this pass while doing nothing in production.
  */
 
-import { configuredPriceFault } from '@aglyn/aglyn/app-utils/console/stripe-price-fault'
+import { configuredPriceFault } from '../utils/stripe-price-fault'
 
 /** Captured verbatim from live Stripe. */
 const REAL_DEAD_PRICE_ERROR = {

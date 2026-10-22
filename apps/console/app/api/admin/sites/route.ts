@@ -28,15 +28,15 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
-import { STAFF_SITE_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
-import { homeScreenId } from '@aglyn/aglyn/app-utils/console/staff-site-links'
+} from '../../../../utils/server/staff-list-query'
+import { STAFF_SITE_LIST_QUERY } from '../../../../utils/staff-site-list-query'
+import { homeScreenId } from '../../../../utils/staff-site-links'
 import {
   LAPSED_SUSPENSIONS_NOTICE,
   asksAboutSuspension,
   settleLapsedSuspensions,
   suspensionInForce,
-} from '@aglyn/tenant-data-admin/server/console/suspended-flag'
+} from '../../../../utils/server/suspended-flag'
 
 /**
  * The staff Sites list (AGL-3378): every site on the platform, one page at a

@@ -19,7 +19,7 @@
  * Every activity log's filters and search are on its query, and every shape
  * that query can take has its index (AGL-3321).
  *
- * Six lists read the `activity` collections (`@aglyn/aglyn/app-utils/console/activity-list-query`
+ * Six lists read the `activity` collections (`utils/activity-list-query.ts`
  * names them). Each is pinned here against the index file the project
  * deploys: a clause the plan puts on a query with no composite behind it
  * throws FAILED_PRECONDITION for every reader, so it fails here instead.
@@ -44,7 +44,7 @@ import {
   activityActorBase,
   activityTargetBase,
   splitWhereClause,
-} from '@aglyn/aglyn/app-utils/console/activity-list-query'
+} from '../utils/activity-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

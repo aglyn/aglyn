@@ -136,42 +136,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
-  get firebaseAdmin() {
-    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/auth-pools'),
-  get authForPool() {
-    return jest.requireMock('@aglyn/tenant-data-admin').authForPool
-  },
-  get findUserByUidAcrossPools() {
-    return jest.requireMock('@aglyn/tenant-data-admin').findUserByUidAcrossPools
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/token-revocation', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/token-revocation'),
-  get invalidateTokenRevocationCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidateTokenRevocationCache
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/lockdown'),
-  get invalidateUserLockdownCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidateUserLockdownCache
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/operator-alerts', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/operator-alerts'),
-  get raiseOperatorAlert() {
-    return jest.requireMock('@aglyn/tenant-data-admin').raiseOperatorAlert
-  },
-}))
-
 jest.mock('@aglyn/tenant-data-admin/server/account-lock-mail', () => ({
   __esModule: true,
   applyAccountLockToMail: async (input: Record<string, any>) => {

@@ -54,7 +54,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
 }))
 jest.mock('../constants/docs-links', () => ({ __esModule: true, docsHelp: () => null }))
-jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
+jest.mock('../constants/route-links', () => ({
   __esModule: true,
   buildRoute: () => '/acme/hosts',
   Route: { HOST_LIST: 'HOST_LIST' },

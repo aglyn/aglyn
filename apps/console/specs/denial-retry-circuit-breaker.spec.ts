@@ -20,12 +20,12 @@
  * limitations under the License.
  */
 
-import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
+import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 import {
   __resetSessionHealth,
   getSessionHealth,
   reportDeniedRead,
-} from '@aglyn/aglyn/app-utils/console/session-health'
+} from '../utils/session-health'
 
 const denied = () =>
   Object.assign(new Error('denied'), { code: 'permission-denied' })

@@ -38,7 +38,7 @@ import PluginDependenciesCard from '../../../../../../../../components/plugin-de
 import PluginDisableCascadeDialog from '../../../../../../../../components/plugin-disable-cascade-dialog.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../../../../../constants/route-links'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import { useSitePluginSwitchboard } from '../../../../../../../../hooks/use-plugin-switchboard'

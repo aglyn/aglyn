@@ -1888,7 +1888,7 @@ export function resolvePlanPricing(
  * nothing and never will, so it belongs here beside `incomplete`, which is the
  * same subscription an hour earlier. `LIVE_SUBSCRIPTION_STATUSES` in
  * `org-billing-doc.ts` already excludes it and `DEAD_STATUSES` in
- * `./subscription-period-notice.ts` already names it; this set is the one
+ * `utils/subscription-period-notice.ts` already names it; this set is the one
  * that decides both what a workspace GETS and whether we count it as revenue,
  * so it is the one place the omission cost money in both directions at once.
  *
@@ -2600,7 +2600,7 @@ export const INFRA_COGS_PER_SITE_USD = 2
 /**
  * Platform markup on passed-through infrastructure costs (AGL-41).
  *
- * DEFINED HERE, not in `libs/aglyn/src/lib/app-utils/console/usage-metering.ts`, and re-exported
+ * DEFINED HERE, not in `apps/console/utils/usage-metering.ts`, and re-exported
  * from there — the same move AGL-2155 made for `pageViewsFromBandwidthGb`, and
  * for the same reason (AGL-2194). The published `/pricing` pass-through table
  * states both a cost column and a "you pay (+30%)" column, and
@@ -5465,7 +5465,7 @@ export function checkFormSubmissionAbuseCeiling(
  * a customer's measured bandwidth with bytes nobody pays us for.
  *
  * Lives HERE rather than beside the metering rates (AGL-2155). It used to sit
- * in `libs/aglyn/src/lib/app-utils/console/usage-metering.ts`, which the console imports and the
+ * in `apps/console/utils/usage-metering.ts`, which the console imports and the
  * tenant app cannot — and the bandwidth ceiling below has to be evaluated in
  * the tenant app, at the beacon that writes the counter. Re-deriving the
  * conversion there would have been a fourth hand-rolled copy of

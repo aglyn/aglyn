@@ -77,7 +77,7 @@ import {
 
 /** Orgs whose tenant pages the route asked to drop, in order (AGL-3034). */
 let mockRevalidatedOrgs: string[] = []
-jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
+jest.mock('../utils/server/tenant-revalidate', () => ({
   __esModule: true,
   revalidateOrgHosts: async (_firestore: unknown, orgId: string) => {
     mockRevalidatedOrgs.push(orgId)

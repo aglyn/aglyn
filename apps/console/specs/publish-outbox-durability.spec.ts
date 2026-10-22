@@ -50,7 +50,7 @@ const mockRevalidateLivePages = jest.fn(
       settleAnnounce = resolve
     }),
 )
-jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
+jest.mock('../utils/revalidate-live-pages', () => ({
   __esModule: true,
   default: (...args: unknown[]) => (mockRevalidateLivePages as any)(...args),
   revalidateLivePages: (...args: unknown[]) =>
@@ -113,12 +113,12 @@ import {
   PUBLISH_OUTBOX_OPTIONAL_FIELDS,
   PUBLISH_OUTBOX_MAX_PATHS,
   sanitizePublishOutboxPaths,
-} from '@aglyn/aglyn/app-utils/console/publish-outbox'
+} from '../constants/publish-outbox'
 import {
   publishScreenRoute,
   syncScreenRouteEntries,
   unpublishScreenRoute,
-} from '@aglyn/aglyn/app-utils/console/screen-publishing'
+} from '../constants/screen-publishing'
 
 const user = { getIdToken: async () => 'token' }
 const firestore = {} as never

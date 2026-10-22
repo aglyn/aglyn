@@ -43,7 +43,7 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
   TAX_FINDING_COLUMN_SORTS,
   TAX_FINDING_FILTER_FIELDS,

@@ -50,8 +50,8 @@ import {
   INVOICE_SELECT_FIELDS,
   invoiceQueryString,
   planInvoiceQuery,
-} from '@aglyn/aglyn/app-utils/console/billing-invoice-query'
-import { stripeOtherModeInvoiceNotice } from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
+} from '../../../../../../utils/billing-invoice-query'
+import { stripeOtherModeInvoiceNotice } from '../../../../../../utils/stripe-mode-notice'
 
 /** One invoice as `/api/billing/invoices` serializes it. */
 interface InvoiceRow {
@@ -73,7 +73,7 @@ interface InvoiceRow {
  * The history grid's Filters panel and quick search are asked of STRIPE
  * (AGL-3321): the page turns them into the parameters `planInvoiceQuery`
  * writes, and `/api/billing/invoices` asks Stripe's own list, search and
- * retrieve — see `@aglyn/aglyn/app-utils/console/billing-invoice-query`. Nothing is matched over
+ * retrieve — see `utils/billing-invoice-query.ts`. Nothing is matched over
  * the invoices already loaded, so an invoice from three years ago is found
  * as readily as this month's.
  */

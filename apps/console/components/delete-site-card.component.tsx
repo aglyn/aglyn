@@ -33,7 +33,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../hooks/use-host'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 
 /** One resource that goes with the site, as `GET /api/hosts/delete` lists it. */

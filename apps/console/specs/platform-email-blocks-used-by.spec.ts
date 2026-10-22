@@ -31,7 +31,7 @@
  * belongs to that one site alone: any other site's scan must not make it.
  */
 
-import type { UsageCandidate } from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
+import type { UsageCandidate } from '../utils/server/scan-artifact-usage'
 
 const mockReadUsageCandidates = jest.fn()
 const mockReadSystemEmails = jest.fn()

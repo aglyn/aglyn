@@ -20,7 +20,7 @@ import type { PluginSiteEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-e
 import { eraseHost, firebaseAdmin, logOrgActivity } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { teardownSendingDomain } from './provision-sending-domain'
-import { dropDeletedSiteCache } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { dropDeletedSiteCache } from './tenant-revalidate'
 
 /** The site document as the caller read it, before anything was erased. */
 export interface ErasedSiteSnapshot {

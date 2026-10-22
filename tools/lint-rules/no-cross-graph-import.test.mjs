@@ -44,7 +44,7 @@ const ruleTester = new RuleTester({
 })
 
 /** The dual-graph module at the centre of AGL-1349. */
-const DUAL = join(ROOT, 'libs/aglyn/src/lib/app-utils/console/usage-metering.ts')
+const DUAL = join(ROOT, 'apps/console/utils/usage-metering.ts')
 /** One of the three App Routes that reach it. */
 const ROUTE = join(ROOT, 'apps/console/app/api/billing/usage-alerts/route.ts')
 /** The Billing card — a `'use client'` component. */

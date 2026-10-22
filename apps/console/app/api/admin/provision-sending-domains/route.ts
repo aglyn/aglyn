@@ -54,7 +54,7 @@ import {
   provisionPendingSendingDomains,
   readSendingDomainCapacity,
 } from '../../../../utils/server/provision-sending-domain'
-import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 export const dynamic = 'force-dynamic'
 

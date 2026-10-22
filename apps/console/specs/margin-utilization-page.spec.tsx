@@ -72,7 +72,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   ).ceilingedWindow,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('../hooks/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => mockIsStaff,
 }))

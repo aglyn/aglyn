@@ -51,7 +51,7 @@ import {
 } from 'firebase/firestore'
 import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import { type StaffListPage, useStaffListPagination } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-pagination'
+import { type StaffListPage, useStaffListPagination } from '../hooks/use-staff-list-pagination'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 /*

@@ -165,7 +165,7 @@ jest.mock('../app/api/_lib/render-system-email', () => ({
   renderSystemEmail: async () => null,
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/sanctions-geo', () => ({
+jest.mock('../constants/sanctions-geo', () => ({
   __esModule: true,
   enforceSanctionsGeo: (...args: unknown[]) => mockEnforceSanctions(...args),
 }))

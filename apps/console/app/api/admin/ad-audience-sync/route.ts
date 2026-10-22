@@ -36,7 +36,7 @@ import {
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
-import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 // lockdown-423: exempt — a platform cron; it changes no org.
 

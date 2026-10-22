@@ -58,7 +58,7 @@ import {
   METERED_MARKUP,
   METERED_UNIT_RATES_USD,
   type HostUsageSnapshot,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../utils/usage-metering'
 
 const GB = 1024 * 1024 * 1024
 const MONTH = new Date().toISOString().slice(0, 7)

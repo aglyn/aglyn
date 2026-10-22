@@ -29,7 +29,7 @@ import HostDisplayNameComponent from '../../../../../../components/host-display-
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'

@@ -30,12 +30,12 @@ import {
   planActivityQuery,
   readOrgWideActivity,
   withResolvedActors,
-} from '@aglyn/tenant-data-admin/server/console/actor-activity'
+} from '../../../../utils/server/actor-activity'
 import {
   auditLogSearchWords,
   readAuditLogFilters,
   readAuditLogSort,
-} from '@aglyn/tenant-data-admin/server/console/audit-log-filter'
+} from '../../../../utils/server/audit-log-filter'
 import {
   ACTIVITY_LIST_QUERY,
   ORG_ACTIVITY_FILTER_FIELDS,
@@ -44,9 +44,9 @@ import {
   activityActorBase,
   activityTargetBase,
   splitWhereClause,
-} from '@aglyn/aglyn/app-utils/console/activity-list-query'
-import { withActivityLabels } from '@aglyn/tenant-data-admin/server/console/activity-row-labels'
-import { applyListQuery } from '@aglyn/tenant-data-admin/server/console/list-filter'
+} from '../../../../utils/activity-list-query'
+import { withActivityLabels } from '../../../../utils/server/activity-row-labels'
+import { applyListQuery } from '../../../../utils/server/list-filter'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
@@ -106,7 +106,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  * Every mode reads `filters` (a JSON list of `{ field, op, value }`) and
  * `search`, and puts all of it on its query through `planListQuery`
- * (AGL-3321) — see `@aglyn/aglyn/app-utils/console/activity-list-query` for the declarations and
+ * (AGL-3321) — see `utils/activity-list-query.ts` for the declarations and
  * the indexes. What the plan could not put there comes back as `refused`,
  * with `notices` about what it did, and is NOT applied: the page says so
  * rather than narrowing some rows and not others.

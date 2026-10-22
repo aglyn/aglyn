@@ -59,9 +59,9 @@ import {
   useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
+import { checkOrgQuota } from '../../constants/entitlements'
 import { useRouter } from 'next/navigation'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../constants/route-links'
 import { useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import {
@@ -71,12 +71,12 @@ import {
   ICON_VARIANT_SEARCH,
 } from '@aglyn/shared-data-enums'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { STARTER_TEMPLATES } from '@aglyn/aglyn/app-utils/console/starter-templates'
+import { STARTER_TEMPLATES } from '../../constants/starter-templates'
 import createPageFromTemplate, {
   templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
-import { releaseDefaultHomeRoot } from '@aglyn/aglyn/app-utils/console/screen-publishing'
+import { releaseDefaultHomeRoot } from '../../constants/screen-publishing'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
@@ -86,7 +86,7 @@ import {
   ARTIFACT_NAME_SEARCH,
   TEMPLATE_LIST_BASE,
 } from '../../utils/artifact-list-queries'
-import useStarterPages from '@aglyn/tenant-feature-instance/hooks/console/use-starter-pages'
+import useStarterPages from './use-starter-pages'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
 import {
   LIBRARY_TEMPLATE_SOURCE_TYPES,

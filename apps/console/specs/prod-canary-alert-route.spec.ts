@@ -30,10 +30,10 @@
 
 import { CORE_OPERATOR_ALERTS } from '@aglyn/aglyn/app-utils/operator-alerts'
 import { POST } from '../app/api/admin/operator-alerts/canary/route'
-import { PROD_CANARY_ALERT_TYPE, canaryAlertFromBody } from '@aglyn/tenant-data-admin/server/console/prod-canary-alert'
+import { PROD_CANARY_ALERT_TYPE, canaryAlertFromBody } from '../utils/server/prod-canary-alert'
 
 const mockRaise = jest.fn()
-jest.mock('@aglyn/tenant-data-admin/server/console/raise-operator-alert', () => ({
+jest.mock('../utils/server/raise-operator-alert', () => ({
   __esModule: true,
   raiseConsoleOperatorAlert: (...args: unknown[]) => mockRaise(...args),
 }))

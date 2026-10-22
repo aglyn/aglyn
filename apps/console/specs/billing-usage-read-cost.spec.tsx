@@ -54,7 +54,7 @@ const mockReads: Array<{ kind: string; path: string }> = []
 /** Every URL fetched. */
 const mockFetched: string[] = []
 
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   // Counted server-side since AGL-1255 and metered by that route's own spec.
   // Recorded here as one call so it cannot silently become one per host.

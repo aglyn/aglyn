@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { createResourceUid, encodeStoredNodes } from '@aglyn/aglyn'
 import {
   SYSTEM_EMAIL_COLLECTION,
   buildDefaultEmailNodeMap,

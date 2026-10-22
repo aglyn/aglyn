@@ -32,7 +32,7 @@ import {
 import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { platformMarketingHostId } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
-import type { StaffAcquisitionView } from '@aglyn/aglyn/app-utils/console/staff-acquisition'
+import type { StaffAcquisitionView } from '../../../../utils/staff-acquisition'
 import { readDeviceRows } from '../../_lib/device-registry'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 

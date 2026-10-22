@@ -25,12 +25,12 @@
  * `TransferFieldsRequest`; answer: `TransferFieldsResponse`.
  */
 
-// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
+// lockdown-423: via apps/console/utils/server/transfer-gate.ts
 
 import type { TransferFieldsResponse } from '@aglyn/aglyn/data-transfer'
 import { readTransferPrefs } from '@aglyn/tenant-data-admin/server/transfer-export'
 import { readTransferResourceInfo } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { transferErrorResponse, transferGate } from '@aglyn/tenant-data-admin/server/console/transfer-gate'
+import { transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
 
 async function handler(request: Request): Promise<Response> {
   const caller = await transferGate(request, 'fields')

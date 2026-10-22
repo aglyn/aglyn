@@ -71,14 +71,14 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 }))
 
 const mockPooledSignIn = jest.fn(async () => undefined)
-jest.mock('@aglyn/aglyn/app-utils/console/pooled-custom-token', () => ({
+jest.mock('../utils/pooled-custom-token', () => ({
   __esModule: true,
   adoptRestoredPool: jest.fn(),
   signInWithPooledCustomToken: (...args: unknown[]) =>
     mockPooledSignIn(...(args as [])),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/email-verification-gate', () => ({
+jest.mock('../utils/email-verification-gate', () => ({
   __esModule: true,
   emailGateWouldRefuse: async () => false,
 }))
@@ -88,7 +88,7 @@ jest.mock('@aglyn/shared-util-dom/clear-service-worker-caches', () => ({
   default: async () => undefined,
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('../utils/interactive-signin', () => ({
   __esModule: true,
   clearInteractiveSignIn: jest.fn(),
   consumeInteractiveSignIn: () => false,
@@ -96,7 +96,7 @@ jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
 }))
 
 const mockRequestReauth = jest.fn()
-jest.mock('@aglyn/aglyn/app-utils/console/session-reauth', () => ({
+jest.mock('../utils/session-reauth', () => ({
   __esModule: true,
   captureReauthIdentity: () => ({
     email: 'owner@example.com',

@@ -37,11 +37,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { isAuthFailure } from '@aglyn/aglyn/app-utils/console/auth-failure'
+import { isAuthFailure } from '../utils/auth-failure'
 import { currentWorkspaceSlug } from '../constants/workspace-domain'
-import { consolePathFor, hostOrgSlugFor, resolveNavSection } from '@aglyn/tenant-feature-instance/hooks/console/nav-section'
-import { useAuthRecovery } from '@aglyn/tenant-feature-instance/hooks/console/use-auth-recovery'
-import { MAX_RETRIES, retryDelayMs } from '@aglyn/tenant-feature-instance/hooks/console/use-host-resolution'
+import { consolePathFor, hostOrgSlugFor, resolveNavSection } from './nav-section'
+import { useAuthRecovery } from './use-auth-recovery'
+import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
 
 const SELECTED_ORG_STORAGE_KEY = 'aglyn.selectedOrgId'
 

@@ -33,7 +33,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { useStaffRole } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useStaffRole } from '../hooks/use-is-staff'
 
 /** One row of the account's sign-in history, as the detail route returns it. */
 export interface StaffDeviceRow {

@@ -54,7 +54,7 @@ import {
   TAX_JURISDICTION_ENV,
   TAX_REGISTRATION_ID_ENV,
   taxFilingJurisdiction,
-} from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
+} from '../tax-jurisdictions'
 
 /** Platform-wide settings nobody's browser may read. One doc per subject. */
 export const PLATFORM_SETTINGS_COLLECTION = 'platformSettings'

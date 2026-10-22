@@ -172,7 +172,7 @@ pre-existing defect regardless of MFA — it is the generic catch on that form.)
 
 `auth/multi-factor-auth-required` is not password-specific. The Google popup
 path (`signInWithPopup`) and the mobile redirect path
-(`libs/tenant/feature/instance/src/lib/hooks/console/use-google-redirect-result.tsx`) both need the resolver.
+(`apps/console/hooks/use-google-redirect-result.tsx`) both need the resolver.
 Handling only the password form ships a flow where enrolled users can sign in
 one way and not the other.
 
@@ -418,7 +418,7 @@ Firebase console as the true break-glass.
 | Security section | `apps/console/app/(app)/manage/user/page.tsx` | mount the card; extend the reauth gate to enrolment |
 | Password change | same file, `handleSecuritySave` | `reauthenticateWithCredential` + resolver; stop rendering `JSON.stringify(e)` |
 | Sign-in | `apps/console/app/(auth)/signin/page.tsx` | catch, resolver, code step |
-| Google redirect | `libs/tenant/feature/instance/src/lib/hooks/console/use-google-redirect-result.tsx` | same |
+| Google redirect | `apps/console/hooks/use-google-redirect-result.tsx` | same |
 | Error classes | `libs/shared/data/enums/src/lib/firebase-auth.ts` | `MFA_REQUIRED` → `AuthErrorNotice`; real copy for the four stuck states |
 | Staff user manage | `apps/console/app/api/admin/users/manage/route.ts` + its admin UI | `clearMfa` action, required reason, audit, notify |
 | Staff user detail | admin users UI | show "Two-factor: enrolled 2026-08-20 (iPhone)" from `TotpMultiFactorInfo` — staff cannot answer "do they have MFA?" today |

@@ -27,17 +27,17 @@ import {
   staffMediaScopeBase,
   staffMediaScopeFrom,
   staffMediaSort,
-} from '@aglyn/aglyn/app-utils/console/staff-media-library'
+} from '../../../../utils/staff-media-library'
 import {
   readStaffListQuery,
   STAFF_LIST_DEFAULT_PAGE,
   STAFF_LIST_MAX_PAGE,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../utils/server/staff-list-query'
 import {
   recordStaffMediaView,
   staffMediaPageQuery,
   staffMediaRowFrom,
-} from '@aglyn/tenant-data-admin/server/console/staff-media-library'
+} from '../../../../utils/server/staff-media-library'
 
 /**
  * One page of a media library, for the staff organization and site pages —

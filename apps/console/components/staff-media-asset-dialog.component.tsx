@@ -33,14 +33,14 @@ import {
   Typography,
 } from '@mui/material'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { StaffMediaTakedown } from './staff-media-takedown.component'
 import {
   type StaffMediaAsset,
   type StaffMediaRow,
   staffMediaSizeLabel,
   staffMediaTypeLabel,
-} from '@aglyn/aglyn/app-utils/console/staff-media-library'
+} from '../utils/staff-media-library'
 
 export interface StaffMediaAssetDialogProps {
   /** The library: `orgId=…` or `hostId=…`, as the card asked for it. */

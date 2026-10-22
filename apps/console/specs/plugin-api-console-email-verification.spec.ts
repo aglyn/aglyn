@@ -116,7 +116,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/remote-server-bundles', () => ({
+jest.mock('../utils/remote-server-bundles', () => ({
   __esModule: true,
   ensureRemoteServerBundles: jest.fn(async () => undefined),
 }))

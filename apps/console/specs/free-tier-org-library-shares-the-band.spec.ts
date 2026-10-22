@@ -49,9 +49,9 @@
 
 import {
   meteredIncludedAllowance,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
-import { mediaStorageGate } from '@aglyn/tenant-data-admin/server/console/storage-overage'
-import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+} from '../utils/usage-metering'
+import { mediaStorageGate } from '../utils/storage-overage'
+import { resolveOrgMediaBand } from '../utils/server/media-storage-band'
 
 const MB = 1024 * 1024
 

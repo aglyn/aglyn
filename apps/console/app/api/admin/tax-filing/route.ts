@@ -74,7 +74,7 @@ import {
   taxFilingConfigView,
   validateTaxFilingProposal,
 } from '../../../../utils/tax-filing-config'
-import { normalizeTaxJurisdictionKey } from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
+import { normalizeTaxJurisdictionKey } from '../../../../utils/tax-jurisdictions'
 import {
   PLATFORM_SETTINGS_COLLECTION,
   TAX_FILING_CONFIG_DOC,

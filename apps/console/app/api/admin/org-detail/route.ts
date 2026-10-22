@@ -31,7 +31,7 @@ import {
   type AuditAfterSummary,
   auditAfterSummary,
   resolveAuditNames,
-} from '@aglyn/tenant-data-admin/server/console/audit-names'
+} from '../../../../utils/server/audit-names'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**

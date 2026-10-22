@@ -22,7 +22,7 @@ import {
   isPreviewConsole,
   siteLiveUrlForSlug,
 } from '@aglyn/aglyn/app-utils/site-live-url'
-import type { CollectionTemplateRoute } from '@aglyn/aglyn/app-utils/console/collection-templates'
+import type { CollectionTemplateRoute } from './collection-templates'
 
 // The origin rules live beside the URL builder in `libs/aglyn` (AGL-3758),
 // so a plugin's console card opens the page these links do.

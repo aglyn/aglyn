@@ -35,7 +35,7 @@ const mockEnsureAll = jest.fn(async (..._args: unknown[]) => undefined)
 
 const mockOperatorAlerts: Array<{ type: string; options: any }> = []
 // The operator alert a failed job raises (AGL-3377): what, not how.
-jest.mock('@aglyn/tenant-data-admin/server/console/raise-operator-alert', () => ({
+jest.mock('../utils/server/raise-operator-alert', () => ({
   __esModule: true,
   raiseConsoleOperatorAlert: async (type: string, options: any) => {
     mockOperatorAlerts.push({ type, options })

@@ -49,8 +49,8 @@ import type {
   NativeNavManifest,
   NativeNavRow,
 } from '@aglyn/aglyn/app-utils/native-nav'
-import hostNavTabItems from '@aglyn/aglyn/app-utils/console/host-nav-tabs'
-import orgNavTabItems from '@aglyn/aglyn/app-utils/console/org-nav-tabs'
+import hostNavTabItems from '../constants/host-nav-tabs'
+import orgNavTabItems from '../constants/org-nav-tabs'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 import { setupSections } from '../app/(app)/[orgSlug]/hosts/[host]/setup/setup-sections'
 import { DOCS_HELP_TOPICS } from '../constants/docs-help.generated'

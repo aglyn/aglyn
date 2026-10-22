@@ -22,7 +22,7 @@ import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
   collectionTemplateScreenIds,
-} from '@aglyn/aglyn/app-utils/console/collection-templates'
+} from '../constants/collection-templates'
 
 describe('collection template screen ids (AGL-1269)', () => {
   it('collects all three template fields, like countBillableScreens', () => {

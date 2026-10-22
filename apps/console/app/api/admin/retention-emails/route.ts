@@ -45,7 +45,7 @@ import {
   summarizePages,
   type RetentionDecision,
   type RetentionPage,
-} from '@aglyn/tenant-data-admin/server/console/retention-emails'
+} from '../../../../utils/server/retention-emails'
 import {
   consoleOriginForEmail,
   greetingName,

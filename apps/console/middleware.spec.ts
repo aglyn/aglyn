@@ -25,7 +25,7 @@ import {
   parseOnboardingPlanIntent,
 } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
 import { config, middleware } from './middleware'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from './constants/route-links'
 import { consoleLandingHref } from './utils/console-landing'
 
 /**

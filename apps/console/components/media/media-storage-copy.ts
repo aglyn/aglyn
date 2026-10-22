@@ -20,7 +20,7 @@ import {
   usageMeterTone,
   type UsageMeterTone,
 } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
-import { formatStorageMb } from '@aglyn/aglyn/app-utils/console/usage-alert-notice'
+import { formatStorageMb } from '../../utils/usage-alert-notice'
 
 /**
  * The media library's toolbar readout (AGL-3470): how many files, and how

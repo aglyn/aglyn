@@ -136,17 +136,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   const user = { data: { uid: 'u-1' } }
   return { __esModule: true, useUser: () => user, useFirestore: () => firestore }
 })
-
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-  get useFirestore() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
-  },
-}))
 /* A live listener over the fake, as the shared hook is. */
 jest.mock('../hooks/use-firestore-collection', () => {
   const firestore = jest.requireMock('firebase/firestore')
@@ -165,14 +154,14 @@ jest.mock('../hooks/use-firestore-collection', () => {
   }
   return { __esModule: true, default: useFirestoreCollection, useFirestoreCollection }
 })
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-index-entries', () => ({ __esModule: true, default: () => new Map() }))
+jest.mock('../hooks/use-host-index-entries', () => ({ __esModule: true, default: () => new Map() }))
 let mockTabBadge = false
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs', () => ({
+jest.mock('../hooks/use-notification-prefs', () => ({
   __esModule: true,
   default: () => [{ sound: false, desktop: false, tabBadge: mockTabBadge }],
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ __esModule: true, default: () => ({ hosts: [] }) }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
+jest.mock('../hooks/use-org-hosts', () => ({ __esModule: true, default: () => ({ hosts: [] }) }))
+jest.mock('../hooks/use-pending-invites', () => ({
   __esModule: true,
   useInviteReview: () => ({ review: jest.fn() }),
   usePendingInvites: () => ({ refresh: jest.fn() }),

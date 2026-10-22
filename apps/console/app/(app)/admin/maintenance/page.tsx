@@ -63,13 +63,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MaintenanceJobCard from '../../../../components/maintenance-job-card.component'
 import StaffOnly from '../../../../components/staff-only.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { MAINTENANCE_JOBS } from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
+import { MAINTENANCE_JOBS } from '../../../../utils/maintenance-jobs'
 import {
   readHealthResponse,
   type HealthCheckLine,
-} from '@aglyn/aglyn/app-utils/console/platform-health'
+} from '../../../../utils/platform-health'
 
 const AdminMaintenance: NextPageWithLayout<Record<string, never>> = () => {
   const [checks, setChecks] = useState<HealthCheckLine[]>([])

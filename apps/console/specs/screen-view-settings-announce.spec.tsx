@@ -82,13 +82,13 @@ jest.mock('firebase/firestore', () => ({
     mockUpdateDoc(ref, data),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
+jest.mock('../utils/revalidate-live-pages', () => ({
   __esModule: true,
   default: (options: Record<string, unknown>) => mockRevalidateLivePages(options),
   revalidateLivePages: (options: Record<string, unknown>) =>
     mockRevalidateLivePages(options),
   describeRevalidateShortfall: jest.requireActual(
-    '@aglyn/aglyn/app-utils/console/revalidate-live-pages',
+    '../utils/revalidate-live-pages',
   ).describeRevalidateShortfall,
 }))
 
@@ -161,7 +161,7 @@ jest.mock('../components/host-id-provider', () => ({
   useHostSubdomain: () => 'shop',
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
+jest.mock('../hooks/use-host-role', () => ({
   __esModule: true,
   default: () => ({ hostRole: 'owner', canPublish: true, loaded: true }),
 }))
@@ -169,7 +169,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'business' } }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-collection-templates', () => ({
+jest.mock('../hooks/use-collection-templates', () => ({
   __esModule: true,
   default: () => ({
     templateScreenIds: new Set<string>(),

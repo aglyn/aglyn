@@ -76,7 +76,7 @@ const EDITOR = 'apps/console/app/(editor)/[orgSlug]/hosts/[host]'
 const VIEW_PAGE = `${EDITOR}/screens/[screenId]/versions/[versionId]/view/page.tsx`
 const SCREEN_BESIGNER = `${EDITOR}/screens/[screenId]/versions/[versionId]/besigner/page.tsx`
 const COMPONENT_BESIGNER = `${EDITOR}/components/[componentId]/versions/[versionId]/besigner/page.tsx`
-const HOOK = 'libs/tenant/feature/instance/src/lib/hooks/console/use-host-role.ts'
+const HOOK = 'apps/console/hooks/use-host-role.ts'
 
 const AUTHOR = {
   role: 'editor',

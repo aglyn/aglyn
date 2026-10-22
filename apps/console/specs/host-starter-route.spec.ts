@@ -32,7 +32,7 @@ const mockLockdown = jest.fn(async () => null as Response | null)
 const mockVerify = jest.fn()
 const mockHosts = new Map<string, Record<string, unknown>>()
 
-jest.mock('@aglyn/tenant-data-admin/server/console/provision-host', () => ({
+jest.mock('../utils/server/provision-host', () => ({
   __esModule: true,
   provisionStarterSite: (...args: unknown[]) => mockProvision(...args),
 }))

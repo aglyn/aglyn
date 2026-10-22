@@ -25,7 +25,7 @@ import BillingAddressCardComponent from '../../../../../../components/billing/bi
 import BillingEmailCardComponent from '../../../../../../components/billing/billing-email-card.component'
 import BillingPaymentMethodsCardComponent from '../../../../../../components/billing/billing-payment-methods-card.component'
 import BillingTaxIdCardComponent from '../../../../../../components/billing/billing-tax-id-card.component'
-import { useBillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import { useBillingProfile } from '../../../../../../components/billing/use-billing-profile'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'

@@ -43,7 +43,7 @@ import {
   isTransientFirestoreError,
   NEW_SITE_ENABLED_PLUGINS,
   resumeUnfinishedCreate,
-} from '@aglyn/tenant-data-admin/server/console/provision-host'
+} from '../../../../utils/server/provision-host'
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { reportServerError } from '../../../../utils/report-server-error'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'

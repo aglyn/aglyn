@@ -67,7 +67,7 @@ const PAGE = code(
  */
 const SIGN_IN_METHODS = code(
   readFileSync(
-    join(__dirname, '..', '..', '..', 'libs', 'tenant', 'feature', 'instance', 'src', 'lib', 'hooks', 'console', 'use-account-sign-in-methods.ts'),
+    join(__dirname, '..', 'hooks', 'use-account-sign-in-methods.ts'),
     'utf8',
   ),
   'hooks/use-account-sign-in-methods.ts',

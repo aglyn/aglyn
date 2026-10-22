@@ -18,7 +18,7 @@
 import {
   scanComponentUsage,
   screenIdsUsingComponentDeep,
-} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
+} from '../utils/server/scan-artifact-usage'
 
 /**
  * Publishing a component has to drop the cache of every screen that renders it

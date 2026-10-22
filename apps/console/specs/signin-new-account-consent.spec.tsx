@@ -111,7 +111,7 @@ jest.mock('../hooks/use-delegate-workspace-signin', () => ({
   __esModule: true,
   default: () => 'off',
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result', () => ({
+jest.mock('../hooks/use-google-redirect-result', () => ({
   __esModule: true,
   default: (
     _event: string,
@@ -122,10 +122,10 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-resu
     mockRedirectCallback = onCredential
   },
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
+jest.mock('../utils/oauth-providers', () => ({
   createGoogleOAuthProvider: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
+jest.mock('../utils/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))
@@ -133,7 +133,7 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   __esModule: true,
   default: () => false,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))
@@ -149,7 +149,7 @@ jest.mock('../utils/legal-consent', () => ({
   ...jest.requireActual('../utils/legal-consent'),
   sendToConsentGate: () => mockSendToGate(),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
+jest.mock('../utils/passkeys', () => ({
   describePasskeySignInFailure: () => null,
   signInWithPasskey: jest.fn(),
   usePasskeysSupported: () => false,

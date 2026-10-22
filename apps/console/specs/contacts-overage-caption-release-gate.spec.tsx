@@ -78,7 +78,7 @@ let mockOrgOverrides: Record<string, unknown> | undefined
 /** When false, Remote Config activation never settles — the loading window. */
 let mockActivationSettles: boolean
 
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 2, collaboratorSeats: 0 }),
 }))

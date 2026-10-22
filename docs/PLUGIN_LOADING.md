@@ -373,7 +373,7 @@ The script is a thin client for the route, not a second implementation:
 the join needs the Admin SDK plus `PLUGIN_ARTIFACTS_BUCKET`, and one home
 for the rules means a local dry run and the weekly cron can never disagree
 about what counts as an orphan. The decision itself is a pure function
-(`planArtifactReap`, `libs/tenant/data/admin/src/lib/server/console/reap-plugin-artifacts.ts`)
+(`planArtifactReap`, `apps/console/utils/server/reap-plugin-artifacts.ts`)
 so the rules that authorize a permanent delete are unit-tested.
 
 **A GCS lifecycle rule cannot do this job** — it matches on age, storage

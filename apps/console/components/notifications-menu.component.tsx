@@ -47,7 +47,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useIsNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import {
   NOTIFICATION_LEVEL_COLORS,
   NotificationLevelIcon,
@@ -56,28 +56,28 @@ import {
   notificationTypeLabel,
 } from './notification-level.component'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
-import useHostIndexEntries from '@aglyn/tenant-feature-instance/hooks/console/use-host-index-entries'
-import useNotificationAlertPrefs from '@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs'
-import useNotificationSound from '@aglyn/tenant-feature-instance/hooks/console/use-notification-sound'
+import useHostIndexEntries from '../hooks/use-host-index-entries'
+import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
+import useNotificationSound from '../hooks/use-notification-sound'
 import {
   markAllNotificationsReadFor,
   markNotificationRead,
   useNotificationFeed,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-notification-feed'
-import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
-import { useInviteReview, usePendingInvites } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+} from '../hooks/use-notification-feed'
+import useOrgHosts from '../hooks/use-org-hosts'
+import { useInviteReview, usePendingInvites } from '../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import {
   playNotificationChime,
   showDesktopNotification,
   stripUnreadBadge,
   unreadBadge,
-} from '@aglyn/aglyn/app-utils/console/notification-alerts'
+} from '../utils/notification-alerts'
 import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
-} from '@aglyn/aglyn/app-utils/console/notification-links'
-import { isNearScrollEnd, isNotificationRead } from '@aglyn/aglyn/app-utils/console/notification-feed'
+} from '../utils/notification-links'
+import { isNearScrollEnd, isNotificationRead } from '../utils/notification-feed'
 
 /**
  * App-bar notifications dropdown (AGL-260): unread badge, an Inbox (unread)

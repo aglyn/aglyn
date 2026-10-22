@@ -100,13 +100,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => mockUser,
 }))
 
-// The billing profile hook lives in the instance lib and reads the user from
-// the module that declares it, which the index mock above does not reach.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  useFirestore: () => jest.requireMock('@aglyn/tenant-feature-instance').useFirestore(),
-  useUser: () => jest.requireMock('@aglyn/tenant-feature-instance').useUser(),
-}))
-
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
@@ -186,11 +179,11 @@ jest.mock('../hooks/use-org-permissions', () => ({
     loaded: true,
   }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

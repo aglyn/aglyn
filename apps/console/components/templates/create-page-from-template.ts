@@ -22,7 +22,7 @@ import {
   withBundleRootScreen,
 } from '@aglyn/aglyn/app-utils/template-slug'
 import type { Firestore } from 'firebase/firestore'
-import { publishScreenRoute } from '@aglyn/aglyn/app-utils/console/screen-publishing'
+import { publishScreenRoute } from '../../constants/screen-publishing'
 
 /**
  * Create one live page from a node map (AGL-672).

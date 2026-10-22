@@ -277,16 +277,6 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "Not a sink: the `icons` marker is the JSON SCHEMA that DESCRIBES the web app manifest's `icons[].src` member in `/openapi.json` (AGL-2722). It is a `{ type: 'string' }` under a property key, so the only thing this file emits for it is the word `src` in a published description. The manifest's real icon URLs are built by `buildSiteManifest` in `apps/tenant/utils/site-icons.ts` (AGL-3484), outside this sweep's roots: the resolved app icon, favicon or logo made absolute against the host's public origin, then `siteManifestIcons` in `site-icon-set.ts` appends an `?icon=` query naming a size our own CDN draws — no host the resolver did not already admit. No author string is read here and no URL is produced here.",
   },
-  'libs/aglyn/src/lib/app-utils/console/not-found-refusal.ts': {
-    markers: 2,
-    guard: 'off-tenant',
-    why: "Not a tenant page: the body the CONSOLE's edge middleware answers a refused path with (AGL-3261), imported only by apps/console/middleware.ts. Both markers are constants written in this file, the background pattern in its <style> and the brand icon's <img>, each a path on the console's own `/_static` origin; no author or visitor string reaches it.",
-  },
-  'libs/aglyn/src/lib/app-utils/console/screen-seo.ts': {
-    markers: 1,
-    guard: 'off-tenant',
-    why: "Not a sink, and never on a tenant render: the `image` marker is a field of `ScreenSocialImageDraft`, the console's draft of a page's share image while its SEO form edits it (the screen view and Besigner pages and screen-social-image-field.component.tsx). It holds the stored value the form saves; nothing here renders a URL for a visitor.",
-  },
   'libs/aglyn/src/lib/app-utils/seo-page-facts.ts': {
     markers: 1,
     guard: 'off-tenant',

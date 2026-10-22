@@ -40,7 +40,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
   CLAIM_AGE_SORT,
   CLAIM_COLUMN_SORTS,
@@ -48,7 +48,7 @@ import {
   CLAIM_FILTER_HEADERS,
   CLAIM_FILTER_OPTIONS,
   CLAIM_SELECT_FIELDS,
-} from '@aglyn/aglyn/app-utils/console/idempotency-claims-list-query'
+} from '../utils/idempotency-claims-list-query'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 export interface IdempotencyClaim {
@@ -139,7 +139,7 @@ export default function IdempotencyClaimsCard() {
    * The Filters panel, SERVED by the route (AGL-3321): every clause is on
    * one query over the pending claims, oldest first, and each page the
    * footer turns is a page of the narrowed list. See
-   * `@aglyn/aglyn/app-utils/console/idempotency-claims-list-query`.
+   * `utils/idempotency-claims-list-query.ts`.
    */
   const gridFilter = useListGridFilter({ selectFields: CLAIM_SELECT_FIELDS })
   const onError = useCallback(
@@ -161,7 +161,7 @@ export default function IdempotencyClaimsCard() {
     endpoint: '/api/admin/idempotency-claims',
     clauses: gridFilter.clauses,
     // No search box: every value on a claim is an identifier, which the
-    // panel's exact filters match (`@aglyn/aglyn/app-utils/console/idempotency-claims-list-query`).
+    // panel's exact filters match (`utils/idempotency-claims-list-query.ts`).
     search: NO_SEARCH,
     sort: askedSort,
     onError,

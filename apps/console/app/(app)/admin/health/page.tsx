@@ -86,17 +86,17 @@ import ServerConfigCard from '../../../../components/server-config-card.componen
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
   CSP_COLUMN_SORTS,
   CSP_FILTER_FIELDS,
   CSP_FILTER_HEADERS,
   CSP_LIST_SORT,
   CSP_SEARCH_HINT,
-} from '@aglyn/aglyn/app-utils/console/csp-report-list-query'
+} from '../../../../utils/csp-report-list-query'
 import {
   HEALTH_PROBES,
   readCspReport,
@@ -107,7 +107,7 @@ import {
   type CspReportView,
   type HealthProbeResult,
   type HealthVerdict,
-} from '@aglyn/aglyn/app-utils/console/platform-health'
+} from '../../../../utils/platform-health'
 
 const VERDICT_COLOR: Record<
   HealthVerdict,
@@ -129,7 +129,7 @@ const CSP_WINDOWS = [7, 14, 30, 60]
 /*
  * What the violations table filters and searches by — every clause and the
  * search on the route's query beneath the Window (AGL-3321;
- * `@aglyn/aglyn/app-utils/console/csp-report-list-query`). App and Directive are picked from the
+ * `utils/csp-report-list-query.ts`). App and Directive are picked from the
  * values the window's rollup holds — the collector records whatever a
  * browser reports, so there is no fixed catalog to offer instead.
  */

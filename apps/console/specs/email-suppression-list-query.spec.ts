@@ -39,7 +39,7 @@ import {
   SUPPRESSION_FILTER_OPTIONS,
   SUPPRESSION_LIST_QUERY,
   SUPPRESSION_REASON_LABELS,
-} from '@aglyn/aglyn/app-utils/console/email-suppression-filters'
+} from '../utils/email-suppression-filters'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

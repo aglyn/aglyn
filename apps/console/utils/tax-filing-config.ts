@@ -68,7 +68,7 @@ import {
   TAX_REGISTRATION_ID_ENV,
   taxFilingJurisdiction,
   type TaxFilingJurisdiction,
-} from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
+} from './tax-jurisdictions'
 
 /**
  * Which layer a value in force came from.

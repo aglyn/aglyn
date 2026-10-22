@@ -16,7 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { revalidateHostAliases } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import {
   disconnectHostCustomDomain,
   emailUnverifiedResponse,

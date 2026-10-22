@@ -72,8 +72,8 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { overLimitSummary as computeOverLimitSummary } from '@aglyn/aglyn/app-utils/console/over-limit-summary'
-import { stripeOtherModeInvoiceNotice } from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
+import { overLimitSummary as computeOverLimitSummary } from '../../../../../utils/over-limit-summary'
+import { stripeOtherModeInvoiceNotice } from '../../../../../utils/stripe-mode-notice'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
   TOGGLE_ADDON_KINDS,
@@ -106,19 +106,19 @@ import BillingTaxIdCardComponent from '../../../../../components/billing/billing
 import BillingOpenInvoicesCardComponent from '../../../../../components/billing/billing-open-invoices-card.component'
 import BillingPlanQuoteComponent from '../../../../../components/billing/billing-plan-quote.component'
 import BillingUpgradeDialogComponent from '../../../../../components/billing/billing-upgrade.dialog'
-import { useBillingProfile } from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+import { useBillingProfile } from '../../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../../utils/browser-stripe'
 import { finishPendingCharge } from '../../../../../utils/finish-pending-charge'
 import {
   carriedAiAddonSentence,
   prorationQuote,
-} from '@aglyn/aglyn/app-utils/console/proration-quote'
-import { purchaseConfirmQuote } from '@aglyn/aglyn/app-utils/console/purchase-confirm-quote'
-import { subscriptionPeriodNotice } from '@aglyn/aglyn/app-utils/console/subscription-period-notice'
+} from '../../../../../utils/proration-quote'
+import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
+import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
 import {
   PAYMENT_METHOD_UPDATE_FLOW,
   UPDATE_PAYMENT_METHOD_ANCHOR,
-} from '@aglyn/aglyn/app-utils/console/update-payment-method-link'
+} from '../../../../../utils/update-payment-method-link'
 import {
   clearSubscribeCheckoutPending,
   markSubscribeCheckoutPending,
@@ -136,10 +136,10 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
-import { useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
+import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
 import SiteCareBillingCard from '../../../../../components/site-care/site-care-billing-card.component'
 import SiteCareProjectsBillingCard from '../../../../../components/site-care/site-care-projects-billing-card.component'

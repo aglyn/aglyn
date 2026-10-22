@@ -75,7 +75,7 @@ let mockCeilingPayload: Record<string, unknown> | 'error'
 /** Every URL the component fetched, so per-site fan-out is detectable. */
 let mockFetched: string[]
 
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

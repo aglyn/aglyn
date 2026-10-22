@@ -38,14 +38,14 @@ import {
   bandwidthGbFromPageViews,
   billsEmailSendOverage,
   pageViewsFromBandwidthGb,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../../../../utils/usage-metering'
 import {
   resolveStorageCap,
   scopeBillsStorageOverage,
   usageAlertThreshold,
   USAGE_ALERT_BANDS,
-} from '@aglyn/tenant-data-admin/server/console/storage-overage'
-import { orgMediaAllowanceMb } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+} from '../../../../utils/storage-overage'
+import { orgMediaAllowanceMb } from '../../../../utils/server/media-storage-band'
 import {
   formatBandwidthGb,
   formatCount,
@@ -59,7 +59,7 @@ import {
   type UsageAlertCadence,
   type UsageAlertGuard,
   type UsageAlertGuardEntry,
-} from '@aglyn/aglyn/app-utils/console/usage-alert-notice'
+} from '../../../../utils/usage-alert-notice'
 import {
   measureScreenCaps,
   screenCapReading,
@@ -80,7 +80,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   billingAutoLockEnabled,
   shouldAutoLockOrgForBilling,
-} from '@aglyn/aglyn/app-utils/console/billing-auto-lock'
+} from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 import { sendLockdownOwnerNotice } from '../../../../utils/server/lockdown-owner-notice'
 import {

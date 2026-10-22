@@ -25,7 +25,7 @@
  * deleted site, and nothing here may ever read it.
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
-import useHostResolution, { type HostResolution } from '@aglyn/tenant-feature-instance/hooks/console/use-host-resolution'
+import useHostResolution, { type HostResolution } from './use-host-resolution'
 
 const mockGetDocs = jest.fn()
 const mockGetDocsFromServer = jest.fn()

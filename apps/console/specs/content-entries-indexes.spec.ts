@@ -52,7 +52,7 @@ import {
   entryListStoredSort,
   planEntryList,
 } from '../components/content/entry-list-query'
-import { ENTRY_LIST_FILTER_FIELDS } from '@aglyn/aglyn/app-utils/console/list-filters'
+import { ENTRY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(

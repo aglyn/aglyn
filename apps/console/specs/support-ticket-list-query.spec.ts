@@ -17,7 +17,7 @@
 
 /**
  * The staff support queue's Status filter is on its query, with the index
- * behind it (AGL-3321). See `@aglyn/aglyn/app-utils/console/support-ticket-list-query`.
+ * behind it (AGL-3321). See `utils/support-ticket-list-query.ts`.
  */
 
 import { readFileSync } from 'node:fs'
@@ -31,7 +31,7 @@ import {
 import {
   SUPPORT_TICKETS_COLLECTION,
   SUPPORT_TICKET_LIST_QUERY,
-} from '@aglyn/aglyn/app-utils/console/support-ticket-list-query'
+} from '../utils/support-ticket-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

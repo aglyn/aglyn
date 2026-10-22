@@ -19,7 +19,7 @@ import { redirect } from 'next/navigation'
 import {
   sectionIndexTarget,
   type SearchParams,
-} from '@aglyn/aglyn/app-utils/console/section-index-redirect'
+} from '../../../../../../utils/section-index-redirect'
 import {
   DEFAULT_SETUP_SECTION,
   SETUP_TAB_SECTIONS,

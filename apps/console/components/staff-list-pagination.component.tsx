@@ -17,7 +17,7 @@
 'use client'
 
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import type { StaffListPagination } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-pagination'
+import type { StaffListPagination } from '../hooks/use-staff-list-pagination'
 
 export interface StaffListPaginationControlsProps<TRow> {
   /** The value returned by `useStaffListPagination`. */

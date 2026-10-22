@@ -50,24 +50,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/release-flags', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/release-flags'),
-  get isServerReleaseFlagOnForOrg() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isServerReleaseFlagOnForOrg
-  },
-}))
-
 import {
   getReleaseFlagDefinition,
   parseReleaseFlagValue,
 } from '@aglyn/aglyn/app-utils/release-flags'
-import { UPLOAD_TYPES } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
+import { UPLOAD_TYPES } from '../utils/media-upload-limits'
 import {
   videoUploadPausedRefusal,
   videoUploadsOpenForOrg,
-} from '@aglyn/tenant-data-admin/server/console/video-uploads'
+} from '../utils/server/video-uploads'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 

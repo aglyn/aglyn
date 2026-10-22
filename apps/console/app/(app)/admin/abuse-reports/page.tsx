@@ -140,18 +140,18 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
   ABUSE_REPORT_FILTER_FIELDS,
   ABUSE_REPORT_FILTER_HEADERS,
   ABUSE_REPORT_FILTER_OPTIONS,
-} from '@aglyn/aglyn/app-utils/console/abuse-report-list-query'
+} from '../../../../utils/abuse-report-list-query'
 import {
   ownerNoticeCaption,
   type RiskNoticeOwnerDelivery,
-} from '@aglyn/aglyn/app-utils/console/risk-notice-owner-caption'
+} from '../../../../utils/risk-notice-owner-caption'
 
 /**
  * The statutory block, exactly as the route hands it over. `signature` is the

@@ -45,14 +45,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   return { useUser: () => userResult, __state: state }
 })
 
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-}))
-
 /**
  * `notFound()` is the refusal now (AGL-847). It works by throwing, so the
  * spec has to both observe the call and absorb the throw — a bare render
@@ -76,7 +68,7 @@ jest.mock('next/navigation', () => {
 import * as nextNavigation from 'next/navigation'
 import * as tenantInstance from '@aglyn/tenant-feature-instance'
 import StaffOnly from '../components/staff-only.component'
-import { resetStaffClaimReconciliation } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { resetStaffClaimReconciliation } from '../hooks/use-is-staff'
 
 /** The factory's state, reached through the namespace — `__state` exists on
  *  the mock only, so it is not on the real module's type. */

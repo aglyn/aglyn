@@ -84,12 +84,12 @@ import PluginWidgetSlot from '../../../../components/plugin-widget-slot.componen
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
-import { type OrgHost, useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
-import { resolveOrgMount } from '@aglyn/aglyn/app-utils/console/org-mount'
+import { type OrgHost, useOrgHosts } from '../../../../hooks/use-org-hosts'
+import { resolveOrgMount } from '../../../../utils/org-mount'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import {
   describeHostStatus,
@@ -105,8 +105,8 @@ import {
 } from '@aglyn/aglyn/app-utils/site-list-query'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
-import { usePendingInvites } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
-import { usePinnedHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-hosts'
+import { usePendingInvites } from '../../../../hooks/use-pending-invites'
+import { usePinnedHosts } from '../../../../hooks/use-pinned-hosts'
 
 /**
  * One labelled address on a site card. The address is one unbroken piece: it

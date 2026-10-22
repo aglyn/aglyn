@@ -31,7 +31,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { OrgScopeProvider, useOrgScope } from '../hooks/use-org-scope'
-import { MAX_RETRIES, retryDelayMs } from '@aglyn/tenant-feature-instance/hooks/console/use-host-resolution'
+import { MAX_RETRIES, retryDelayMs } from '../hooks/use-host-resolution'
 
 /** Every listen opened, in order; tests drive delivery/failure explicitly. */
 const mockListeners: Array<{
@@ -95,26 +95,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     subscribeFirestoreSessionHeal: () => () => undefined,
   }
 })
-
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useFirestore() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
-  },
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-  get useAuth() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useAuth
-  },
-}))
-jest.mock('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter', () => ({
-  ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter'),
-  get subscribeFirestoreSessionHeal() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').subscribeFirestoreSessionHeal
-  },
-}))
 
 jest.mock('next/navigation', () => ({
   useParams: () => ({}),

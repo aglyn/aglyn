@@ -99,17 +99,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'u1', getIdToken: async () => 'token' } }),
 }))
 
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useFirestore() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
-  },
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-}))
-
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
@@ -191,11 +180,11 @@ jest.mock('../hooks/use-org-permissions', () => ({
     loaded: mockPermissionsLoaded,
   }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))
@@ -343,7 +332,7 @@ const invoiceCalls = () =>
     String(call[0] ?? '').includes('/api/billing/invoices'),
   )
 
-import { subscriptionPeriodNotice } from '@aglyn/aglyn/app-utils/console/subscription-period-notice'
+import { subscriptionPeriodNotice } from '../utils/subscription-period-notice'
 
 describe('THE FLICKER: no ledger paints before the permission read lands', () => {
   beforeEach(() => {

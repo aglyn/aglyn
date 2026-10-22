@@ -30,10 +30,10 @@ const mockAnnounceLivePaths = jest.fn()
 const mockDropSiteCaches = jest.fn()
 const mockHostGet = jest.fn()
 
-jest.mock('@aglyn/tenant-data-admin/server/console/announce-live-paths', () => ({
+jest.mock('./announce-live-paths', () => ({
   announceLivePaths: (...args: unknown[]) => mockAnnounceLivePaths(...args),
 }))
-jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
+jest.mock('./tenant-revalidate', () => ({
   dropSiteCaches: (...args: unknown[]) => mockDropSiteCaches(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({

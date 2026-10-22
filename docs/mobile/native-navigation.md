@@ -228,7 +228,7 @@ must be deployed (§6).
 Zach decided "five everywhere, the console included". What the console does
 now:
 
-- `libs/tenant/feature/instance/src/lib/hooks/console/use-pinned-orgs.ts` returns `pinned`, the pins in force:
+- `apps/console/hooks/use-pinned-orgs.ts` returns `pinned`, the pins in force:
   at most five, and the first five stored until the person picks. It also
   returns `stored`, `overCap` and `full`, and three actions. `toggle` answers
   `full` for a sixth pin and writes nothing. `replace` and `keep` write the

@@ -62,7 +62,7 @@ test('flags a NUL inside git binary window, and says the file is unreviewable', 
   ].join('\n')
   const verdict = evaluateNulBytes([
     {
-      path: 'libs/aglyn/src/lib/app-utils/console/analytics-day-cache.ts',
+      path: 'apps/console/utils/analytics-day-cache.ts',
       bytes: Buffer.from(source, 'utf8'),
     },
   ])
@@ -143,7 +143,7 @@ test('locates every NUL by line and column, not just the first', () => {
 
 test('sweeps source and config text, and never a tracked binary asset', () => {
   for (const path of [
-    'libs/aglyn/src/lib/app-utils/console/analytics-day-cache.ts',
+    'apps/console/utils/analytics-day-cache.ts',
     'apps/console/components/x.component.tsx',
     'tools/scripts/check-nul-bytes.mjs',
     'cloud/firestore.rules',

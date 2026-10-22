@@ -56,7 +56,7 @@ const COUNTS: Record<string, number> = {
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

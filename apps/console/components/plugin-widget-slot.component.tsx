@@ -28,7 +28,7 @@ import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { Stack } from '@mui/material'
 import type { ComponentType } from 'react'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { STAFF_PLUGIN_IDS } from '../constants/staff-plugins'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
@@ -42,7 +42,7 @@ import {
   entitlementPurchasable,
   lockedPreviewPlanLabel,
   resolveExtensionEntitlement,
-} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
+} from '../utils/extension-entitlement'
 import {
   PlanLockedWidget,
   type PlanLockedWidgetContent,
@@ -50,11 +50,11 @@ import {
 import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '@aglyn/aglyn/app-utils/console/extension-permission'
+} from '../utils/extension-permission'
 import {
   isDashboardWidgetHidden,
   orderDashboardWidgets,
-} from '@aglyn/aglyn/app-utils/console/dashboard-widgets'
+} from '../utils/dashboard-widgets'
 
 /**
  * The gap a console page puts between two of its cards, in theme spacing

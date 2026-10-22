@@ -34,9 +34,9 @@ import { accountPhotoProfilePatch } from '../account-photo-payload'
 import MediaUrlField from '../media-url-field.component'
 import MemberAvatar from '../member-avatar.component'
 import { docsHelp } from '../../constants/docs-links'
-import { AVATAR_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { AVATAR_HINT } from '../../constants/media-size-hints'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
-import useAccountSignInMethods from '@aglyn/tenant-feature-instance/hooks/console/use-account-sign-in-methods'
+import useAccountSignInMethods from '../../hooks/use-account-sign-in-methods'
 import { useOrgScope } from '../../hooks/use-org-scope'
 
 /**

@@ -21,7 +21,7 @@ import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import { Button, Stack } from '@mui/material'
 import EmptyState from './empty-state.component'
 import { CONTENT_MAX_WIDTH } from '../constants/shared'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { useUrlNamedOrg } from '../hooks/use-url-names-org'
 
 /**

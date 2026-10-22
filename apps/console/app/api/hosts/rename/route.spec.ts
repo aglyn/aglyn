@@ -91,7 +91,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
+jest.mock('../../../../utils/server/tenant-revalidate', () => ({
   __esModule: true,
   revalidateHostAliases: (...args: unknown[]) => mockRevalidateHostAliases(...args),
 }))

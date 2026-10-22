@@ -39,7 +39,7 @@ let mockPinned: string[] = []
 let mockPlans: Record<string, string> = {}
 const mockPlanReads = jest.fn()
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
+jest.mock('../hooks/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({
     pinned: mockPinned,
@@ -79,7 +79,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
   useOrgSlug: () => '',
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
+jest.mock('../hooks/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 jest.mock('firebase/firestore', () => ({

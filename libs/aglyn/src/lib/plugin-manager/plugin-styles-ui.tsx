@@ -35,7 +35,7 @@
  * `realm-plugins.ts` — which is isomorphic — has to call the capture. This
  * component is deep-imported instead:
  *
- *     import { PluginStyles } from './plugin-styles-ui'
+ *     import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
  *
  * exactly as `app-utils/consent-banner-ui` already is. Do not add it to
  * `plugin-manager/index.ts`; that is the change that breaks every route.

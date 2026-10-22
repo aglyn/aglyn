@@ -40,7 +40,7 @@ import {
   scanCollectionUsage,
   scanScreenUsage,
   type UsageCandidate,
-} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
+} from '../utils/server/scan-artifact-usage'
 
 const mockReadUsageCandidates = jest.fn()
 

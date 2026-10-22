@@ -21,7 +21,7 @@ import {
   USER_LIST_DEFAULT_SORT,
   USER_LIST_SORT_VALUES,
   userListSort,
-} from '@aglyn/aglyn/app-utils/console/list-filters'
+} from '../utils/list-filters'
 
 /*
  * THE ACCOUNTS LIST OPENS NEWEST FIRST (AGL-3660), and the route answers it.

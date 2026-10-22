@@ -1,0 +1,593 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Shared media upload size limits (AGL-1317).
+ *
+ * Two upload paths exist and their split point is a PLATFORM constraint,
+ * not an app choice: `/api/media/upload` carries the file as base64 inside
+ * a JSON body, and Vercel rejects any serverless request body over 4.5MB
+ * with a 413 **before our code runs** — no config raises it. Base64
+ * inflates by 4/3, so the direct path's real-world ceiling is ~3.3MB of
+ * raw file. Anything bigger must go direct-to-storage via the signed-URL
+ * path (`/api/media/upload-url`), which PUTs the bytes straight to GCS.
+ */
+
+import {
+  isImageUploadContentType,
+  normalizeImageContentType,
+} from '@aglyn/aglyn/app-utils/image-upload-types'
+import type { MediaPickerKind } from '@aglyn/aglyn/app-utils/media-picker-context'
+
+export const MB = 1024 * 1024
+
+/**
+ * Client-side routing threshold: files above this go through the
+ * signed-URL path. 3MB × 4/3 ≈ 4MB of body, safely under Vercel's 4.5MB
+ * platform cap (which fires as an opaque 413 our handler never sees).
+ */
+export const SIGNED_UPLOAD_THRESHOLD_BYTES = 3 * MB
+
+/**
+ * ONE upload allowlist (AGL-1465).
+ *
+ * There were three hand-maintained lists — the library's `accept`
+ * attribute, `uploadOne`'s client pre-check, and the 415 gate in
+ * `/api/media/upload` — plus a fourth implicit one, the key set of
+ * `SIGNED_UPLOAD_MAX_BYTES`. They had already drifted:
+ * `application/x-zip-compressed` was in two of the three, and no type had
+ * to justify having a ceiling. The failure modes are both silent from the
+ * author's side — a drop the UI accepts and the server 415s, or a type
+ * that uploads fine until it crosses 3 MB and then 413s (AGL-1454).
+ *
+ * So the table below is the only place a type is named. `accept`, both
+ * allowlists, both ceiling lookups and the "supported uploads" copy are
+ * all derived from it, and a spec asserts the derivation reaches every
+ * layer. Adding a type means adding one row, and a row cannot exist
+ * without a ceiling.
+ *
+ * Images are enumerated too, in `@aglyn/aglyn`'s `IMAGE_UPLOAD_TYPES` rather
+ * than here — the same module the byte-signature table keys off, so a format
+ * cannot be accepted by one and unrecognised by the other. They
+ * carry one shared ceiling, which is why they are not rows in this table.
+ */
+export interface UploadTypeSpec {
+  /** Canonical content type — what gets stored on the asset document. */
+  contentType: string
+  /**
+   * Extensions that resolve to this type, lower case with the dot. Two
+   * jobs: the `accept` attribute's fallback for browsers that report an
+   * empty type, and `normalizeUploadContentType`'s name-based inference.
+   */
+  extensions: string[]
+  /**
+   * Ceiling on the signed direct-to-storage path. **Required** — a type
+   * without one takes the base64 route at every size and 413s past ~3 MB,
+   * which is precisely AGL-1454. Making it a non-optional field on the
+   * row is what stops the next type from repeating that.
+   */
+  signedMaxBytes: number
+  /** Ceiling on the base64-JSON direct route (below the threshold). */
+  directMaxBytes: number
+  /** How the type is named in the "supported uploads" message. */
+  label: string
+}
+
+/**
+ * Image ceiling (AGL-1454). Images had NO entry at all, so the signed-path
+ * conjunction short-circuited and every image — the most-uploaded type in a
+ * media library — took the base64 route regardless of size, straight into
+ * Vercel's 4.5 MB platform 413. AGL-1317's wall, still live, for the type it
+ * mattered most for.
+ *
+ * 15 MB because that is the number the product already promises:
+ * `docs/content-and-data/media/overview.md` has published "Images · 15 MB per
+ * file · Every plan" the whole time, against a real ceiling of ~3.3 MB. This
+ * makes the promise true rather than inventing a new one. Raising it further
+ * (a print-resolution TIFF exceeds 15 MB, and the DAM takes 200 MB of video)
+ * is a storage-cost decision on the highest-volume type, so it belongs to
+ * whoever owns the pricing page, not to this constant.
+ */
+const IMAGE_MAX_BYTES = 15 * MB
+
+/** Ceiling shared by document types — PDF's, because PDF is the precedent. */
+const DOCUMENT_MAX_BYTES = 25 * MB
+
+/**
+ * Presentations get ZIP's ceiling, not PDF's. A `.pptx` IS a zip archive of
+ * embedded media, and an image-heavy deck passes 25 MB routinely — the same
+ * reason the brand-kit zip in AGL-1317 got 50 MB.
+ */
+const PRESENTATION_MAX_BYTES = 50 * MB
+
+/**
+ * Audio ceiling (AGL-3716): a track for the Music player. 50 MB holds a
+ * long lossless WAV of a single song and any MP3 album track several times
+ * over; a whole album is many tracks, never one file.
+ */
+const AUDIO_MAX_BYTES = 50 * MB
+
+export const UPLOAD_TYPES: readonly UploadTypeSpec[] = [
+  // Video (AGL-167).
+  { contentType: 'video/mp4', extensions: ['.mp4'], signedMaxBytes: 200 * MB, directMaxBytes: 25 * MB, label: 'mp4' },
+  { contentType: 'video/webm', extensions: ['.webm'], signedMaxBytes: 200 * MB, directMaxBytes: 25 * MB, label: 'webm' },
+  { contentType: 'video/quicktime', extensions: ['.mov'], signedMaxBytes: 200 * MB, directMaxBytes: 25 * MB, label: 'quicktime video' },
+
+  // Audio (AGL-3716), for the Music player. Every row needs the uploader's
+  // rights confirmation (`media-audio-rights.ts`), on every ingress route.
+  { contentType: 'audio/mpeg', extensions: ['.mp3'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'MP3' },
+  { contentType: 'audio/mp4', extensions: ['.m4a'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'M4A' },
+  { contentType: 'audio/aac', extensions: ['.aac'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'AAC' },
+  { contentType: 'audio/ogg', extensions: ['.ogg', '.oga'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'OGG' },
+  { contentType: 'audio/wav', extensions: ['.wav'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'WAV' },
+
+  // PDF and archives (AGL-162, AGL-1317).
+  { contentType: 'application/pdf', extensions: ['.pdf'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'PDF' },
+  { contentType: 'application/zip', extensions: ['.zip'], signedMaxBytes: 50 * MB, directMaxBytes: 10 * MB, label: 'ZIP' },
+
+  // Documents (AGL-1465). Stored and served as opaque objects, exactly like
+  // ZIP — nothing on the platform opens, extracts, renders or executes them.
+  { contentType: 'application/msword', extensions: ['.doc'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'Word' },
+  {
+    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    extensions: ['.docx'],
+    signedMaxBytes: DOCUMENT_MAX_BYTES,
+    directMaxBytes: 10 * MB,
+    label: 'Word',
+  },
+  { contentType: 'application/rtf', extensions: ['.rtf'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'RTF' },
+  { contentType: 'application/vnd.ms-excel', extensions: ['.xls'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'Excel' },
+  {
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    extensions: ['.xlsx'],
+    signedMaxBytes: DOCUMENT_MAX_BYTES,
+    directMaxBytes: 10 * MB,
+    label: 'Excel',
+  },
+  { contentType: 'text/csv', extensions: ['.csv'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'CSV' },
+  { contentType: 'application/vnd.ms-powerpoint', extensions: ['.ppt'], signedMaxBytes: PRESENTATION_MAX_BYTES, directMaxBytes: 10 * MB, label: 'PowerPoint' },
+  {
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    extensions: ['.pptx'],
+    signedMaxBytes: PRESENTATION_MAX_BYTES,
+    directMaxBytes: 10 * MB,
+    label: 'PowerPoint',
+  },
+  { contentType: 'text/plain', extensions: ['.txt'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'text' },
+  { contentType: 'text/markdown', extensions: ['.md'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'Markdown' },
+  { contentType: 'application/json', extensions: ['.json'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'JSON' },
+
+  // Web fonts (AGL-3656). WOFF2 only: the theme's font installer converts a
+  // .ttf, .otf or .woff to WOFF2 (and checks its license) before it reaches
+  // the library, and a published page loads nothing else. Served inline and
+  // edge-cached like an image, because a page loads it the way it loads one.
+  { contentType: 'font/woff2', extensions: ['.woff2'], signedMaxBytes: 10 * MB, directMaxBytes: 10 * MB, label: 'WOFF2 font' },
+] as const
+
+const UPLOAD_TYPES_BY_CONTENT_TYPE = new Map(
+  UPLOAD_TYPES.map((spec) => [spec.contentType, spec]),
+)
+
+const UPLOAD_TYPES_BY_EXTENSION = new Map(
+  UPLOAD_TYPES.flatMap((spec) =>
+    spec.extensions.map((extension) => [extension, spec] as const),
+  ),
+)
+
+export const VIDEO_TYPES = new Set(
+  UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('video/')).map(
+    (spec) => spec.contentType,
+  ),
+)
+
+export const AUDIO_TYPES = new Set(
+  UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('audio/')).map(
+    (spec) => spec.contentType,
+  ),
+)
+
+/**
+ * The other names browsers and operating systems give the five audio types
+ * (AGL-3716), folded to the one stored type so one format is one family row:
+ * Safari reports `.m4a` as `audio/x-m4a`, Windows `.wav` as `audio/x-wav`,
+ * Chrome `.mp3` as `audio/mp3` on some systems.
+ */
+const AUDIO_ALIAS_TYPES: Readonly<Record<string, string>> = {
+  'audio/mp3': 'audio/mpeg',
+  'audio/mpeg3': 'audio/mpeg',
+  'audio/x-mpeg': 'audio/mpeg',
+  'audio/x-mp3': 'audio/mpeg',
+  'audio/x-m4a': 'audio/mp4',
+  'audio/m4a': 'audio/mp4',
+  'audio/x-aac': 'audio/aac',
+  'audio/aacp': 'audio/aac',
+  'application/ogg': 'audio/ogg',
+  'audio/vorbis': 'audio/ogg',
+  'audio/x-wav': 'audio/wav',
+  'audio/wave': 'audio/wav',
+  'audio/vnd.wave': 'audio/wav',
+}
+
+export const FONT_TYPES = new Set(
+  UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('font/')).map(
+    (spec) => spec.contentType,
+  ),
+)
+
+/** Windows browsers report zips as x-zip-compressed; store one canonical type. */
+export const ZIP_ALIAS_TYPES = new Set([
+  'application/zip',
+  'application/x-zip-compressed',
+])
+
+/**
+ * Excel claims `.csv` on Windows, so a spreadsheet export arrives labelled
+ * `application/vnd.ms-excel`. Both are accepted, so this is not a gate
+ * question — but the stored type decides the grid icon and the ceiling, and
+ * a CSV filed as XLS is simply wrong. The file name wins for these.
+ */
+const EXTENSION_WINS_OVER_TYPE = new Set(['.csv', '.md', '.txt'])
+
+function fileExtension(fileName: string): string {
+  const lower = fileName.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  return dot > 0 ? lower.slice(dot) : ''
+}
+
+/**
+ * Canonical content type for upload decisions: folds zip aliases to
+ * `application/zip`, infers the type from the file name when the browser
+ * reports an empty one (common for `.zip` on macOS drag-drop and for
+ * `.md` everywhere), and corrects the handful of extensions browsers
+ * habitually mislabel.
+ */
+export function normalizeUploadContentType(
+  contentType: string,
+  fileName?: string,
+): string {
+  if (ZIP_ALIAS_TYPES.has(contentType)) return 'application/zip'
+  const audio = AUDIO_ALIAS_TYPES[contentType.trim().toLowerCase()]
+  if (audio) return audio
+  // `image/jpg`, `image/x-png`, `image/svg` and friends fold to the canonical
+  // spelling, so one format is one stored type. Returns the bare type
+  // unchanged for anything it does not recognise, so this cannot widen the
+  // allowlist below.
+  const image = normalizeImageContentType(contentType)
+  if (isImageUploadContentType(image)) return image
+  const extension = fileName ? fileExtension(fileName) : ''
+  const byExtension = extension
+    ? UPLOAD_TYPES_BY_EXTENSION.get(extension)
+    : undefined
+  if (byExtension) {
+    if (!contentType) return byExtension.contentType
+    if (EXTENSION_WINS_OVER_TYPE.has(extension)) return byExtension.contentType
+  }
+  return contentType
+}
+
+/**
+ * Whether this is one of the image formats media ingress accepts.
+ *
+ * Was `contentType.startsWith('image/')`, on a string the CALLER supplies.
+ * Three decisions hang off the answer — the `videoMedia` entitlement, the
+ * size ceiling, and whether `inspectUploadBytes` has a signature to check the
+ * bytes against — and an open prefix got all three wrong for a label nothing
+ * recognises. See `IMAGE_UPLOAD_TYPES` for the set and the reasoning.
+ */
+export function isImageUploadType(contentType: string): boolean {
+  return isImageUploadContentType(contentType)
+}
+
+/** Whether a (normalized) content type may be uploaded at all. */
+export function isAllowedUploadType(contentType: string): boolean {
+  return (
+    isImageUploadType(contentType) ||
+    UPLOAD_TYPES_BY_CONTENT_TYPE.has(contentType)
+  )
+}
+
+/** Whether a (normalized) content type is a web font (AGL-3656). */
+export function isFontUploadType(contentType: string): boolean {
+  return FONT_TYPES.has(contentType)
+}
+
+/**
+ * Everything that is not an image rides the `videoMedia` entitlement —
+ * AGL-162's "video & file uploads" tier gate, which documents join.
+ *
+ * A web font does not (AGL-3656): it is part of a site's theme, a page loads
+ * it the way it loads an image, and a theme's fonts are on every plan. It
+ * still counts toward the storage band like every other file.
+ */
+export function requiresFileUploadEntitlement(contentType: string): boolean {
+  return !isImageUploadType(contentType) && !isFontUploadType(contentType)
+}
+
+/**
+ * The families a stored asset belongs to (AGL-2732; fonts since AGL-3656).
+ *
+ * Derived from the same table above rather than from a prefix test, for the
+ * reason `isImageUploadType` stopped being one: a family decides what the
+ * platform does with the bytes, and `startsWith('video/')` answers for a
+ * label nothing here accepts.
+ *
+ * It exists for **replace**, which is the one operation that changes an
+ * asset's type under references that already exist. A `cdnPath` embedded in a
+ * published page was chosen for a picture, a film or a download, and those
+ * are three different elements — an `<img>` pointing at a PDF is a broken
+ * page, not an updated one. Swapping WITHIN a family is the whole point of
+ * replace (a corrected PDF, a re-cut MP4, a Word file reissued as a PDF);
+ * swapping ACROSS one is a new asset wearing an old id.
+ */
+export type MediaUploadKind = 'image' | 'video' | 'audio' | 'font' | 'document'
+
+/**
+ * Which family an accepted content type belongs to, or `undefined` for a type
+ * media ingress does not accept at all — the same answer shape
+ * `signedUploadMaxBytes` gives, and for the same reason: one value means
+ * "refuse it" rather than "treat it as the default".
+ */
+export function mediaUploadKind(
+  contentType: string,
+): MediaUploadKind | undefined {
+  if (isImageUploadType(contentType)) return 'image'
+  if (VIDEO_TYPES.has(contentType)) return 'video'
+  if (AUDIO_TYPES.has(contentType)) return 'audio'
+  if (FONT_TYPES.has(contentType)) return 'font'
+  return UPLOAD_TYPES_BY_CONTENT_TYPE.has(contentType) ? 'document' : undefined
+}
+
+/** How a family is named in a refusal a person reads. */
+export const MEDIA_UPLOAD_KIND_LABELS: Readonly<
+  Record<MediaUploadKind, string>
+> = {
+  image: 'an image',
+  video: 'a video',
+  audio: 'an audio file',
+  font: 'a font',
+  document: 'a document',
+}
+
+/**
+ * Ceiling on the signed direct-to-storage path, or `undefined` for a type
+ * that is not accepted at all.
+ *
+ * AGL-1454's real defect was that the caller wrote
+ * `SIGNED_UPLOAD_MAX_BYTES[contentType] && size > THRESHOLD`, so a missing
+ * key meant "small file" rather than "unknown type" and the upload fell
+ * back to the route that 413s. Here an ACCEPTED type always resolves a
+ * number — images included — so callers can route on size alone, and
+ * `undefined` means exactly one thing: refuse it.
+ */
+export function signedUploadMaxBytes(
+  contentType: string,
+): number | undefined {
+  if (isImageUploadType(contentType)) return IMAGE_MAX_BYTES
+  return UPLOAD_TYPES_BY_CONTENT_TYPE.get(contentType)?.signedMaxBytes
+}
+
+/**
+ * Per-type caps for the base64-JSON direct route (AGL-162). In production
+ * the platform body cap bites first (~3.3MB); these caps are the app-level
+ * truth for self-hosted deployments without the Vercel wall.
+ */
+export function directUploadMaxBytes(contentType: string): number | undefined {
+  if (isImageUploadType(contentType)) return IMAGE_MAX_BYTES
+  return UPLOAD_TYPES_BY_CONTENT_TYPE.get(contentType)?.directMaxBytes
+}
+
+/**
+ * The release flag that decides whether an org may store a NEW video
+ * (AGL-2830). It is OFF by default, so every ingress route refuses a video
+ * and the library stops offering one until staff turn it on: for everyone at
+ * `/admin/flags`, or for one org through its release-flag override.
+ *
+ * A video already stored is not affected either way. The flag gates ingress,
+ * not delivery.
+ */
+export const VIDEO_UPLOADS_RELEASE_FLAG = 'release_video_uploads' as const
+
+/** Whether an accepted content type is audio (AGL-3716). */
+export function isAudioUploadType(contentType: string): boolean {
+  return AUDIO_TYPES.has(contentType)
+}
+
+/** The `code` on every refusal of a paused video, console and `/v1` alike. */
+export const VIDEO_UPLOADS_PAUSED_CODE = 'video_uploads_paused'
+
+/** What a person is told when a video is refused while uploads are paused. */
+export const VIDEO_UPLOADS_PAUSED_MESSAGE =
+  'Video uploads are paused. Videos already in your media library keep ' +
+  'playing, and images and documents upload as usual.'
+
+/**
+ * Whether an accepted content type is a video — the one family the pause
+ * refuses. Derived from {@link UPLOAD_TYPES} like every other layer, so a
+ * video row added to the table is paused with the rest.
+ */
+export function isVideoUploadType(contentType: string): boolean {
+  return VIDEO_TYPES.has(contentType)
+}
+
+/**
+ * The library file input's `accept`. Extensions are listed alongside the
+ * MIME types because browsers report an empty type for several of these
+ * (`.zip` on macOS, `.md` almost everywhere) and would otherwise grey the
+ * file out in the picker.
+ *
+ * `video: false` drops every video row, MIME type and extension both, for a
+ * library whose org cannot store video right now (AGL-2830).
+ */
+export function uploadAcceptAttribute(options: { video: boolean }): string {
+  const rows = UPLOAD_TYPES.filter(
+    (spec) => options.video || !isVideoUploadType(spec.contentType),
+  )
+  return [
+    'image/*',
+    ...rows.map((spec) => spec.contentType),
+    // Windows' zip alias — historically present in `accept` and the client
+    // pre-check but NOT the server allowlist. Folded by
+    // `normalizeUploadContentType`, listed here so the picker shows it.
+    'application/x-zip-compressed',
+    ...rows.flatMap((spec) => spec.extensions),
+  ].join(',')
+}
+
+/** Every accepted type, video included. */
+export const UPLOAD_ACCEPT_ATTRIBUTE = uploadAcceptAttribute({ video: true })
+
+/**
+ * The `accept` for a picker that may only offer ONE family (AGL-2732).
+ *
+ * Replace keeps the asset's id and its published URL, so the file it offers
+ * has to be the same kind of thing the references already point at. Narrowing
+ * the native picker is the cheap half of saying so — the route refuses a
+ * cross-family swap either way, but a person should not be able to choose a
+ * PNG for a PDF and only then be told.
+ *
+ * Derived from {@link UPLOAD_TYPES} like every other layer. An unrecognized
+ * family (a legacy asset with no usable stored type) falls back to the full
+ * attribute rather than to nothing, which matches the route's own decision to
+ * let that asset be replaced at all. That fallback drops video while
+ * `options.video` is false, exactly as the library's own input does.
+ */
+export function uploadAcceptForKind(
+  kind: MediaUploadKind | undefined,
+  options: { video: boolean } = { video: true },
+): string {
+  if (!kind) return uploadAcceptAttribute(options)
+  if (kind === 'image') return 'image/*'
+  const rows = UPLOAD_TYPES.filter(
+    (spec) => mediaUploadKind(spec.contentType) === kind,
+  )
+  return [
+    ...rows.map((spec) => spec.contentType),
+    // Windows' zip alias, listed for the same reason it is listed above.
+    ...(kind === 'document' ? ['application/x-zip-compressed'] : []),
+    ...rows.flatMap((spec) => spec.extensions),
+  ].join(',')
+}
+
+/** The one upload row a picker narrowed to `pdf` takes (AGL-2953). */
+const PDF_CONTENT_TYPE = 'application/pdf'
+
+/**
+ * Which picker kind an accepted content type belongs to, or `undefined` for a
+ * type no narrowed picker takes (AGL-2953).
+ *
+ * `image` and `video` are the families {@link mediaUploadKind} names. `pdf`
+ * is one row of the document family, because the library's Type filter offers
+ * PDF and no other document: a ZIP or a Word file belongs to no kind, so a
+ * picker narrowed to PDFs refuses it rather than storing a file its own grid
+ * would then hide.
+ */
+export function mediaPickerKindOf(
+  contentType: string,
+): MediaPickerKind | undefined {
+  const family = mediaUploadKind(contentType)
+  if (family === 'image' || family === 'video' || family === 'audio') return family
+  return family === 'document' && contentType === PDF_CONTENT_TYPE
+    ? 'pdf'
+    : undefined
+}
+
+/**
+ * The `accept` for a picker narrowed to one kind (AGL-2953).
+ *
+ * A family's own attribute for `image` and `video`, through
+ * {@link uploadAcceptForKind}, and the PDF row alone for `pdf`. Derived from
+ * {@link UPLOAD_TYPES} like every other layer, so the chooser offers exactly
+ * what {@link mediaPickerKindOf} lets the upload through.
+ */
+export function uploadAcceptForPickerKind(
+  kind: MediaPickerKind,
+  options: { video: boolean } = { video: true },
+): string {
+  if (kind !== 'pdf') return uploadAcceptForKind(kind, options)
+  const row = UPLOAD_TYPES_BY_CONTENT_TYPE.get(PDF_CONTENT_TYPE)
+  return [PDF_CONTENT_TYPE, ...(row?.extensions ?? [])].join(',')
+}
+
+/** Every family but video, as the "supported uploads" sentence names them. */
+const NON_VIDEO_UPLOADS_LABEL =
+  'MP3/M4A/AAC/OGG/WAV audio, PDF, ZIP, Word, Excel, PowerPoint, CSV, text, ' +
+  'Markdown, JSON and WOFF2 fonts'
+
+/**
+ * The "supported uploads" sentence. `video: false` stops naming video as a
+ * thing to upload and says it is paused (AGL-2830), for a library whose org
+ * cannot store one right now.
+ */
+export function uploadTypesMessage(options: { video: boolean }): string {
+  return options.video
+    ? `Supported uploads: images, mp4/webm/quicktime video, ${NON_VIDEO_UPLOADS_LABEL}`
+    : `Supported uploads: images, ${NON_VIDEO_UPLOADS_LABEL} (video uploads are paused)`
+}
+
+/** One sentence, used by the client snackbar and both routes' 415s. */
+export const UPLOAD_TYPES_MESSAGE = uploadTypesMessage({ video: true })
+
+export const SIGNED_UPLOAD_TYPES_MESSAGE = UPLOAD_TYPES_MESSAGE
+
+/**
+ * A `contentHash` for an object GCS already hashed for us.
+ *
+ * The signed-upload route wrote no `contentHash` at all, because the bytes
+ * never pass through the server — they go client → bucket, and hashing them
+ * afterwards would mean downloading up to 200 MB back into the function just
+ * to digest it. So the field was simply omitted, and `serveMediaCdn` reads
+ * it in two places: it is the ETag, and it is what the immutable
+ * content-hashed URL must match.
+ *
+ * With no `contentHash` there is **no ETag**, so a conditional request can
+ * never be answered 304 — every edge revalidation re-streams the whole
+ * object out of Cloud Storage and back out to the client. That is the worst
+ * possible place for it to be missing: this route is the one carrying the
+ * 200 MB videos.
+ *
+ * The hash is already in hand and costs nothing: `getMetadata()` — which
+ * finalize calls anyway to check the real size and type — returns GCS's own
+ * `md5Hash`. It is base64, and a CDN path segment is `[A-Za-z0-9_-]{1,64}`,
+ * so it is re-encoded as hex and cut to the same 16 characters the direct
+ * upload route's sha256 produces. Same shape, same length, same field.
+ *
+ * Returns `undefined` rather than a placeholder when GCS gives us nothing
+ * (composite objects have no md5) — an absent hash is the status quo and
+ * degrades to "no ETag", where a WRONG one would pin stale bytes under an
+ * immutable URL for a year.
+ *
+ * **This value is a cache validator, not a security key** (AGL-1614). It is
+ * md5, truncated to 64 bits, so two files sharing it are hours of ordinary
+ * compute to construct — fine for "did these bytes change", unfit for "is
+ * this the file we took down". Asset quarantine therefore prefers the
+ * full-width `contentSha256` written by the routes that hash the bytes
+ * server-side, and this field remains a fallback key rather than the
+ * primary one. Do not widen or re-derive it: it is the ETag and the
+ * immutable URL's path segment on every media document already written.
+ */
+export function storageContentHash(md5Hash: unknown): string | undefined {
+  const raw = typeof md5Hash === 'string' ? md5Hash : ''
+  if (!raw) return undefined
+  try {
+    const hex = Buffer.from(raw, 'base64').toString('hex')
+    // A truncated or non-base64 value decodes to something too short to be
+    // an md5; treat it as absent rather than emitting a weak hash.
+    return hex.length >= 16 ? hex.slice(0, 16) : undefined
+  } catch {
+    return undefined
+  }
+}

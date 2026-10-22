@@ -318,7 +318,7 @@ jest.mock('../hooks/use-host-activity-logger', () => ({
   default: () => () => undefined,
 }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
-jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
+jest.mock('../constants/route-links', () => ({
   buildRoute: () => '/x',
   Route: {
     HOST_SETUP: 'host-setup',

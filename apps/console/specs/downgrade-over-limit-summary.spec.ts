@@ -54,13 +54,13 @@ jest.mock('firebase/firestore', () => ({
   }),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
+jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => mockSeatCounts,
 }))
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn'
-import overLimitSummary from '@aglyn/aglyn/app-utils/console/over-limit-summary'
+import overLimitSummary from '../utils/over-limit-summary'
 
 const summarize = (targetPlan: 'starter' | 'pro') =>
   overLimitSummary({

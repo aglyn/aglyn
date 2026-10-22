@@ -22,7 +22,7 @@ import type { ReactNode } from 'react'
 import type {
   BillingProfileLoadState,
   BillingProfileState,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-billing-profile'
+} from './use-billing-profile'
 
 export interface BillingProfileGateProps {
   loadState: BillingProfileLoadState

@@ -47,7 +47,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../lockdown-notice.component'
-import { taxExplanation } from '@aglyn/aglyn/app-utils/console/tax-explanation'
+import { taxExplanation } from '../../utils/tax-explanation'
 
 /** What `/api/billing/checkout` `action: 'preview'` answers with. */
 interface QuoteState {

@@ -37,11 +37,11 @@ import {
 } from '../../_lib/success-manager'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { SUPPORT_TICKET_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/support-ticket-list-query'
+import { SUPPORT_TICKET_LIST_QUERY } from '../../../../utils/support-ticket-list-query'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../utils/server/staff-list-query'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
 // "contact support", and a locked member doing so is the happy path.
@@ -215,7 +215,7 @@ async function handler(request: Request): Promise<Response> {
       /**
        * THE STAFF QUEUE (AGL-3321): every organization's tickets, the Status
        * clause on the Firestore query and the queue paged by a cursor in
-       * its own order (`@aglyn/aglyn/app-utils/console/support-ticket-list-query`) — the staff
+       * its own order (`utils/support-ticket-list-query.ts`) — the staff
        * list wire, so nothing is narrowed over a window of tickets already
        * read. `view=openCount` is the header's count, its own count query
        * over the whole queue.

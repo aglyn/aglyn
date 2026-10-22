@@ -249,48 +249,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/media-variants', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/media-variants'),
-  get mediaVariantDocFields() {
-    return jest.requireMock('@aglyn/tenant-data-admin').mediaVariantDocFields
-  },
-  get generateMediaVariants() {
-    return jest.requireMock('@aglyn/tenant-data-admin').generateMediaVariants
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
-  get getOrgDoc() {
-    return jest.requireMock('@aglyn/tenant-data-admin').getOrgDoc
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/lockdown'),
-  get lockdownRefusal() {
-    return jest.requireMock('@aglyn/tenant-data-admin').lockdownRefusal
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/release-flags', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/release-flags'),
-  get isServerReleaseFlagOnForOrg() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isServerReleaseFlagOnForOrg
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/rate-limit-store', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/rate-limit-store'),
-  get consumeRateLimit() {
-    return jest.requireMock('@aglyn/tenant-data-admin').consumeRateLimit
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
-  get firebaseAdmin() {
-    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
-  },
-}))
-
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   // The real structural inspector (AGL-1475), not a stub. This mock replaces
@@ -323,7 +281,7 @@ jest.mock('../../../libs/plugins/data/src/lib/model/dataset-models', () => ({
   validateDocument: () => ({}),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
+jest.mock('../utils/server/media-scope', () => ({
   __esModule: true,
   folderStoragePath: async () => '',
   // The real helper takes ONE options object and decides the path itself from

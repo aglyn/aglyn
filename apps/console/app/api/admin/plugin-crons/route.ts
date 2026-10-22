@@ -25,7 +25,7 @@ import { registerPluginServerDeclarations } from '../../../../constants/plugins.
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { batchedCronBeat, recordCronBeat } from '../../../../utils/cron-beat'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
-import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 /**
  * EVERY PLUGIN'S CONSOLE JOBS, ON ONE TICK (AGL-2981): `POST /api/admin/plugin-crons`.

@@ -126,11 +126,11 @@ import ScreenSocialImageField, {
 } from '../../../../../../../../../../components/screen-social-image-field.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
-import { buildScreenSeoUpdate } from '@aglyn/aglyn/app-utils/console/screen-seo'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
+import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import DocumentPresenceLive from '../../../../../../../../../../components/document-presence-live.component'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
@@ -138,8 +138,8 @@ import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/te
 import {
   publishScreenRoute,
   unpublishScreenRoute,
-} from '@aglyn/aglyn/app-utils/console/screen-publishing'
-import { announceLiveScreenChange } from '@aglyn/aglyn/app-utils/console/screen-live-announce'
+} from '../../../../../../../../../../constants/screen-publishing'
+import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import SeoPageCheck from '../../../../../../../../../../components/seo-page-check.component'
 import {
@@ -159,14 +159,14 @@ import LiveDescendantsNote, {
 import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
-} from '@aglyn/aglyn/app-utils/console/collection-templates'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+} from '../../../../../../../../../../constants/collection-templates'
+import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import { usePlanFeatureLock } from '../../../../../../../../../../hooks/use-plan-feature-lock'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-activity-logger'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const whiteSpace = '--'

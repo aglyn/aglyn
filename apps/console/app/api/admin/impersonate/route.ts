@@ -26,7 +26,7 @@ import {
 import {
   IMPERSONATION_MAX_REASON_LENGTH,
   IMPERSONATION_MIN_REASON_LENGTH,
-} from '@aglyn/aglyn/app-utils/console/impersonation-reason'
+} from '../../../../utils/impersonation-reason'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'

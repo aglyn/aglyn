@@ -441,7 +441,7 @@ per item, so neither has a field policy.
 
 `@aglyn/tenant-data-admin/server/transfer-jobs` runs an import as a durable
 job; the eight console routes are wiring over it, behind one gate
-(`libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts`): `POST`, a verified Bearer ID
+(`apps/console/utils/server/transfer-gate.ts`): `POST`, a verified Bearer ID
 token, a per-member rate limit per route (`rate-limit-store`), the
 workspace's lockdown verdict (`status`, `fields` and `export` ask with a read intent, so a read-only lock still lets a workspace take its data out), and
 the member's access for the route's intent (`data-transfer/access.ts`,
@@ -821,7 +821,7 @@ stops and offers Resume; pages every undo conflict into the preview; and
 throws every refusal as a `TransferRequestError` with the route's `code`.
 Its `export` reads the file's bytes (keeping a byte-order mark) and refuses
 one holding fewer rows than `X-Aglyn-Export-Rows` promised; its `savePrefs`
-is the surface's `saveTransferPrefs` (`libs/aglyn/src/lib/app-utils/console/transfer-prefs-store.ts`),
+is the surface's `saveTransferPrefs` (`apps/console/utils/transfer-prefs-store.ts`),
 which merges over the stored document and writes it back normalized.
 
 ## Site packages

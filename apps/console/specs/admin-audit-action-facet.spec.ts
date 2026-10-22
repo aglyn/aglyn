@@ -37,7 +37,7 @@ import { readFileSync } from 'node:fs'
 // plugin's levers and activity codes come from its declaration, not core.
 import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
 import { join } from 'node:path'
-import { ADMIN_AUDIT_LIST_FIELDS } from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
+import { ADMIN_AUDIT_LIST_FIELDS } from '../utils/admin-audit-list-query'
 import {
   pluginStaffAuditActionGroup as staffAuditActionGroup,
   pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,

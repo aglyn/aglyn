@@ -48,7 +48,7 @@ import {
   conflictingHostIdResponse,
   pluginApiRequestHost,
 } from '@aglyn/aglyn/app-utils/plugin-api-request-host'
-import { ensureRemoteServerBundles } from '@aglyn/tenant-data-admin/server/console/remote-server-bundles'
+import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
 export const dynamic = 'force-dynamic'

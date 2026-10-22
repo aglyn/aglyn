@@ -38,9 +38,9 @@ import {
   couponListRow,
   PROMOTION_CODE_READ_BOUND,
   STRIPE_LIST_PAGE,
-} from '@aglyn/aglyn/app-utils/console/coupon-list-query'
-import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
-import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../utils/coupon-list-query'
+import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 /**
  * Staff coupon management (AGL-1105). Coupons live in Stripe — the source of
@@ -52,7 +52,7 @@ import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staf
  *          read bounds it answers 413 rather than a first page of them.
  *          `view=list` is the Coupons page's list: the staff list wire
  *          (`readStaffListQuery`), its Filters clauses and search matched
- *          over that complete read (`@aglyn/aglyn/app-utils/console/coupon-list-query` says why
+ *          over that complete read (`utils/coupon-list-query.ts` says why
  *          Stripe cannot be asked instead). Without it, the whole set as
  *          `{ coupons }`, which the apply picker reads.
  *   POST — dispatches on `action`, defaulting to `create`:

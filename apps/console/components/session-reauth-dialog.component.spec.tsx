@@ -31,7 +31,7 @@ import {
   __resetSessionReauth,
   getSessionReauth,
   requestSessionReauth,
-} from '@aglyn/aglyn/app-utils/console/session-reauth'
+} from '../utils/session-reauth'
 
 const mockUser: { data: unknown } = { data: undefined }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -83,7 +83,7 @@ jest.mock('firebase/auth', () => {
 
 const mockMarkSignIn = jest.fn()
 const mockMarkSignOut = jest.fn()
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignIn: (...args: unknown[]) => mockMarkSignIn(...args),
   markInteractiveSignOut: (...args: unknown[]) => mockMarkSignOut(...args),
 }))

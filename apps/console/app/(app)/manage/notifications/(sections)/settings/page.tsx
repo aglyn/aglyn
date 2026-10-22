@@ -62,17 +62,17 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import NotificationCategoryTable from '../../../../../../components/notification-category-table.component'
 import NotificationScopeTable from '../../../../../../components/notification-scope-table.component'
-import useIsStaff from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
-import useNotificationAlertPrefs from '@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs'
-import useNotificationSound from '@aglyn/tenant-feature-instance/hooks/console/use-notification-sound'
-import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
+import useIsStaff from '../../../../../../hooks/use-is-staff'
+import useNotificationAlertPrefs from '../../../../../../hooks/use-notification-prefs'
+import useNotificationSound from '../../../../../../hooks/use-notification-sound'
+import useOrgHosts from '../../../../../../hooks/use-org-hosts'
 import { useOrgScope } from '../../../../../../hooks/use-org-scope'
 import {
   desktopNotificationPermission,
   playNotificationChime,
   requestDesktopNotifications,
   showDesktopNotification,
-} from '@aglyn/aglyn/app-utils/console/notification-alerts'
+} from '../../../../../../utils/notification-alerts'
 
 /**
  * How the settings field is written: REPLACED whole, never merged.

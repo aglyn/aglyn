@@ -41,7 +41,7 @@ import {
   STRANDED_AFTER_MS,
   claimQuerySort,
   splitClaimTimeClauses,
-} from '@aglyn/aglyn/app-utils/console/idempotency-claims-list-query'
+} from '../utils/idempotency-claims-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

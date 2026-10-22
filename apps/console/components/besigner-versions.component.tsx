@@ -74,21 +74,21 @@ import {
   useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
+import useFormsPublishBlock from '../hooks/use-forms-publish-block'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
+} from '../utils/revalidate-live-pages'
 import rewriteStoredBindingTokens, {
   storedBindingTokenNeeds,
-} from '@aglyn/aglyn/app-utils/console/rewrite-stored-binding-tokens'
+} from '../utils/rewrite-stored-binding-tokens'
 import resolveComponentDefinition, {
   isComponentDefinitionRefusal,
-} from '@aglyn/aglyn/app-utils/console/component-definition-write'
+} from '../utils/component-definition-write'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import { usePlanFeatureLock } from '../hooks/use-plan-feature-lock'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'

@@ -65,7 +65,7 @@ const day = (id: string, total: number): SeededDay => ({
 
 let mockDays: SeededDay[] = []
 
-jest.mock('@aglyn/aglyn/app-utils/console/analytics-day-cache', () => ({
+jest.mock('../utils/analytics-day-cache', () => ({
   __esModule: true,
   recentDayIds: (_now: number, count: number) =>
     Array.from({ length: count }, (_unused, index) => `d${index}`),

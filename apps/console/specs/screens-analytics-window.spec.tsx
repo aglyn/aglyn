@@ -152,7 +152,7 @@ jest.mock('../hooks/use-org-scope', () => ({
 }))
 
 import ScreensAnalyticsTable from '../components/analytics/screens-analytics-table.component'
-import { recentDayIds } from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
+import { recentDayIds } from '../utils/analytics-day-cache'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 /** The default range the card opens on. */

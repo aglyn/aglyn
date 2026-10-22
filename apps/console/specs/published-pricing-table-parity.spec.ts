@@ -79,7 +79,7 @@ import {
   METERED_BILLED_RATES_USD,
   METERED_MARKUP,
   METERED_UNIT_RATES_USD,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../utils/usage-metering'
 import {
   AI_TIER_IDS,
   AI_TIERS,

@@ -79,7 +79,7 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ org: mockBilling.org, orgId: 'org-1', ready: mockBilling.ready, entitlementsFromCache: false }),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/firestore-one-shot-retry', () => ({
+jest.mock('../utils/firestore-one-shot-retry', () => ({
   __esModule: true,
   default: async () => ({ data: () => mockMemberDoc }),
 }))

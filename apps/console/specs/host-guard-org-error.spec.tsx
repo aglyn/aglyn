@@ -45,7 +45,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-resolution', () => ({
+jest.mock('../hooks/use-host-resolution', () => ({
   useHostResolution: () => mockResolution,
 }))
 
@@ -68,20 +68,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useAuth: () => auth,
   }
 })
-
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useFirestore() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
-  },
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-  get useAuth() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useAuth
-  },
-}))
 
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(),

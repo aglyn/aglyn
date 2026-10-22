@@ -65,7 +65,7 @@ import {
   ORG_LIST_FILTER_HEADERS,
   ORG_LIST_QUERY,
   ORG_SUSPENDED_FILTER_OPTIONS,
-} from '@aglyn/aglyn/app-utils/console/org-list-query'
+} from '../../../../utils/org-list-query'
 import {
   ListTable,
   listActionsColumn,
@@ -90,13 +90,13 @@ import { usePluginListColumns } from '../../../../components/plugin-list-columns
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
-} from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+} from '../../../../utils/staff-timestamps'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -565,7 +565,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
       {
         /*
          * When any member last used the console in this organization
-         * (`lastActivityAt`, `@aglyn/aglyn/app-utils/console/org-list-query`). Sorted by the
+         * (`lastActivityAt`, `utils/org-list-query.ts`). Sorted by the
          * route's query over every organization, like Created.
          */
         field: 'lastActivityAt',

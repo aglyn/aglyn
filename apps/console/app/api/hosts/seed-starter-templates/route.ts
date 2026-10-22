@@ -26,7 +26,7 @@ import {
 import { Timestamp } from 'firebase-admin/firestore'
 import materializeStarterTemplate, {
   type SeedFirestore,
-} from '@aglyn/tenant-data-admin/server/console/seed-starter-templates'
+} from '../../../../utils/server/seed-starter-templates'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**

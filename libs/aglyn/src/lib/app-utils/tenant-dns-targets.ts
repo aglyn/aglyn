@@ -20,7 +20,7 @@
  * target and the apex address pool (AGL-3963).
  *
  * A leaf of its own so the three readers that must agree read ONE copy: the
- * console's connect card prints these (`libs/aglyn/src/lib/app-utils/console/tenant-dns.ts`
+ * console's connect card prints these (`apps/console/utils/tenant-dns.ts`
  * re-exports them beside the instruction copy), the DNS check in
  * `@aglyn/tenant-data-admin/server/tenant-dns-check` accepts them, and the
  * domains plugin's one-click DNS checks the records a provider wrote against

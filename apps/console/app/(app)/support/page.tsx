@@ -32,8 +32,8 @@ import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import EmptyState from '../../../components/empty-state.component'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
-import { useWorkspacePage } from '@aglyn/tenant-feature-instance/hooks/console/use-workspace-page'
-import { resolveSupportEntry, supportHrefFor } from '@aglyn/aglyn/app-utils/console/support-entry'
+import { useWorkspacePage } from '../../../hooks/use-workspace-page'
+import { resolveSupportEntry, supportHrefFor } from '../../../utils/support-entry'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 
 /**
