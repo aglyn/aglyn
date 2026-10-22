@@ -18,6 +18,7 @@
 
 import { Alert, Button, Stack } from '@mui/material'
 import { useEffect } from 'react'
+import { useInviteAutoAccept } from '../hooks/use-invite-auto-accept'
 import { useInviteResponse } from '../hooks/use-invite-response'
 import {
   useInviteReview,
@@ -64,9 +65,16 @@ export function inviteSentence(invite: PendingInvite): string {
  * once: a declined invitation is gone, and only the org can send another.
  */
 export function OrgInvitesBanner({ placement = 'inline' }: OrgInvitesBannerProps) {
-  const { invites } = usePendingInvites()
+  const { invites: pending } = usePendingInvites()
   const { review, claimInline, inlineClaims } = useInviteReview()
   const { respond, busyId } = useInviteResponse()
+  // An invitation being joined on its own (AGL-4023) is not asked about; one
+  // the server refused is, so it can be answered by hand.
+  const { statusOf } = useInviteAutoAccept()
+  const invites = pending.filter((invite) => {
+    const status = statusOf(invite.$id)
+    return status !== 'joining' && status !== 'joined'
+  })
 
   useEffect(
     () => (placement === 'inline' ? claimInline() : undefined),

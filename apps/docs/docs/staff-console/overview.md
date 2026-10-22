@@ -368,7 +368,8 @@ at any step: staff take none of a workspace's seats.
    Domain step. Change any of it before you send.
    **Hand off and propose** sends one invitation and records the proposal together,
    so a refused invitation leaves no proposal behind. The client's email carries a
-   link to Billing with the bundle chosen; when they accept, they land on Billing,
+   link to Billing with the bundle chosen. When they sign in, or sign up, with that
+   address they take the workspace over with nothing to accept, and land on Billing,
    one tap from paid. The invitation reserves no seat. A workspace that already pays
    for a plan is handed off without a proposal.
 4. **Standing in front of the owner?** The **Hand off** dialog's header has **Copy
