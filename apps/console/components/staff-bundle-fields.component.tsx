@@ -135,6 +135,9 @@ export interface StaffBundleFieldsProps {
  * disabled with the plan it needs (POS registers on Starter), rather than
  * left off. A coupon is applied only — codes are minted on the staff
  * Coupons page.
+ *
+ * Designed in the Figma file "Aglyn Console (web)" (gSzLG5uHiuBFJ5AK1Mr6KE),
+ * page "Staff · Organization page", frame 5:2 (the bundle link card).
  */
 export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFieldsProps) {
   const set = (patch: Partial<BundleDraft>) => onChange({ ...value, ...patch })

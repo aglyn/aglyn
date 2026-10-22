@@ -45,6 +45,9 @@ export interface AiTierSelectProps {
  * adds, all read from `AI_TIERS`. The staff bundle fields choose the tier a
  * link and a proposal carry; the Billing quote lets the owner change it
  * before paying. Nothing renders on a plan that sells no tier.
+ *
+ * Figma: "Aglyn Console (web)" (gSzLG5uHiuBFJ5AK1Mr6KE), frames 5:2 (the
+ * staff card), 6:90 (the open menu) and 6:110 (the Billing quote's add-ons).
  */
 export function AiTierSelect(props: AiTierSelectProps) {
   const { plan, value, onChange, interval = 'month', disabled, brand } = props
