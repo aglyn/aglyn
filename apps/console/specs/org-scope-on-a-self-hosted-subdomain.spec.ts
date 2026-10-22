@@ -36,12 +36,8 @@
  * on `localhost`.
  */
 
-// The section parser reads no configuration, so a static import is as fresh
-// as a reload; only the workspace domain has to load under the test's env.
-import * as NavSectionModule from '@aglyn/tenant-feature-instance/hooks/console/nav-section'
-
 type WorkspaceDomain = typeof import('../constants/workspace-domain')
-type NavSection = typeof NavSectionModule
+type NavSection = typeof import('../hooks/nav-section')
 
 let domain: WorkspaceDomain
 let nav: NavSection
@@ -51,7 +47,7 @@ beforeAll(() => {
   process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN = 'example.com'
   process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://studio.example.com'
   domain = require('../constants/workspace-domain')
-  nav = NavSectionModule
+  nav = require('../hooks/nav-section')
 })
 
 afterAll(() => {

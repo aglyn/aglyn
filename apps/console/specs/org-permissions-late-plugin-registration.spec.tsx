@@ -64,7 +64,7 @@ jest.mock('../hooks/use-org-scope', () => ({
 
 import { registerPluginPermissions } from '@aglyn/aglyn'
 import useOrgPermissions, { OrgPermissionsProvider } from '../hooks/use-org-permissions'
-import { resolveExtensionPermission } from '@aglyn/aglyn/app-utils/console/extension-permission'
+import { resolveExtensionPermission } from '../utils/extension-permission'
 
 /** A reader gated the way the plugin route gates a surface. */
 function Surface(props: { requires: string }) {

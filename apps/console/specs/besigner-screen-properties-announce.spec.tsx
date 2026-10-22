@@ -140,13 +140,13 @@ jest.mock('firebase/firestore', () => ({
 
 // Mocked BENEATH the helper rather than in place of it. The shortfall wording
 // stays real, because what the author reads is part of what is asserted.
-jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
+jest.mock('../utils/revalidate-live-pages', () => ({
   __esModule: true,
   default: (options: Record<string, unknown>) => mockRevalidateLivePages(options),
   revalidateLivePages: (options: Record<string, unknown>) =>
     mockRevalidateLivePages(options),
   describeRevalidateShortfall: jest.requireActual(
-    '@aglyn/aglyn/app-utils/console/revalidate-live-pages',
+    '../utils/revalidate-live-pages',
   ).describeRevalidateShortfall,
 }))
 
@@ -377,7 +377,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration',
   __esModule: true,
   default: () => undefined,
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-collection-templates', () => ({
+jest.mock('../hooks/use-collection-templates', () => ({
   __esModule: true,
   default: () => ({
     templateScreenIds: new Set<string>(),
@@ -422,26 +422,26 @@ jest.mock('../hooks/use-current-org', () => {
 // At the owner's answer unless a case says otherwise: none of these saves is
 // gated by the host role, and the owner's standing leaves the routing map the
 // only thing deciding. The author cases below prove the first half.
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
+jest.mock('../hooks/use-host-role', () => ({
   __esModule: true,
   default: () => mockHostRole.current,
 }))
 jest.mock('../constants/app-setup', () => ({}))
-jest.mock('@aglyn/aglyn/app-utils/console/preview-state', () => ({
+jest.mock('../constants/preview-state', () => ({
   previewWindowName: () => 'preview',
   writePreviewState: () => undefined,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/screen-publishing', () => ({
+jest.mock('../constants/screen-publishing', () => ({
   syncScreenRouteEntries: jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('../constants/tenant-links', () => ({
   resolveScreenLiveUrl: () => ({ url: undefined, unavailableReason: undefined }),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/collection-templates', () => ({
+jest.mock('../constants/collection-templates', () => ({
   collectionTemplatePublishMessage: () => '',
   collectionTemplateRoutesSummary: () => '',
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
+jest.mock('../constants/route-links', () => ({
   buildRoute: () => '/x',
   Route: {
     SCREEN_DETAILS: 'screen-details',

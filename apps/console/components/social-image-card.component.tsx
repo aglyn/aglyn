@@ -28,7 +28,7 @@ import {
 import { useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import MediaFieldSection from './media-field-section.component'
-import { SOCIAL_IMAGE_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { SOCIAL_IMAGE_HINT } from '../constants/media-size-hints'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface SocialImageCardProps {

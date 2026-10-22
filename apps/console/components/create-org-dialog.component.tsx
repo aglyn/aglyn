@@ -49,8 +49,8 @@ import {
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { buildRoute, Route } from '../constants/route-links'
+import { useIsStaff } from '../hooks/use-is-staff'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 

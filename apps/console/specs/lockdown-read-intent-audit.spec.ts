@@ -265,7 +265,7 @@ describe('AGL-1625 · which console routes are declared READS', () => {
     // mutate. A default of `read` here would relax every one of them at
     // once, from a single line nobody would think to look at.
     const source = read(
-      resolve(REPO_ROOT, 'libs/tenant/data/admin/src/lib/server/console/media-scope.ts'),
+      resolve(REPO_ROOT, 'apps/console/utils/server/media-scope.ts'),
     )
     expect(source).toMatch(/intent\?: LockdownVerdictOptions\['intent'\]/)
     expect(source).not.toMatch(DECLARES_READ)

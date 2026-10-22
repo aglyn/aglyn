@@ -35,7 +35,7 @@
  */
 
 import { ID_TOKEN_TIMEOUT_MS } from '@aglyn/shared-util-http/authorized-token'
-import { supportRequest, scopeToOrg } from '@aglyn/aglyn/app-utils/console/support-request'
+import { supportRequest, scopeToOrg } from '../utils/support-request'
 
 const ok = (payload: unknown = { items: [] }) =>
   jest.fn(async () => ({

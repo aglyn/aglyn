@@ -48,7 +48,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
-import { OVER_LIMIT_KINDS, overLimitRows } from '@aglyn/aglyn/app-utils/console/over-limit'
+import { OVER_LIMIT_KINDS, overLimitRows } from '../utils/over-limit'
 import {
   CAPACITY_ADDON_KINDS,
   includedCapacity,

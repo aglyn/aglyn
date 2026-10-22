@@ -62,7 +62,7 @@ jest.mock('../utils/cron-beat', () => ({
   recordCronBeat: (id: string) => mockBeat(id),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/raise-operator-alert', () => ({
+jest.mock('../utils/server/raise-operator-alert', () => ({
   __esModule: true,
   raiseConsoleOperatorAlert: (...args: unknown[]) => mockAlert(...args),
 }))

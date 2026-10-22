@@ -66,14 +66,14 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 import { POST } from '../app/api/orgs/last-activity/route'
-import { orgActivityBeatDue } from '@aglyn/tenant-feature-instance/hooks/console/use-org-last-activity'
-import { accountLastActiveAt } from '@aglyn/aglyn/app-utils/console/list-filters'
-import { ORG_LAST_ACTIVITY_INTERVAL_MS } from '@aglyn/aglyn/app-utils/console/org-list-query'
+import { orgActivityBeatDue } from '../hooks/use-org-last-activity'
+import { accountLastActiveAt } from '../utils/list-filters'
+import { ORG_LAST_ACTIVITY_INTERVAL_MS } from '../utils/org-list-query'
 import {
   orgActivityIsStale,
   stampOrgLastActivity,
   type OrgActivityStore,
-} from '@aglyn/tenant-data-admin/server/console/org-last-activity'
+} from '../utils/server/org-last-activity'
 
 const MIN = 60_000
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')

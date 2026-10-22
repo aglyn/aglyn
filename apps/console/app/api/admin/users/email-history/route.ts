@@ -24,8 +24,8 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { resolveAccountAddresses } from '@aglyn/tenant-data-admin/server/account-addresses'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
-import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
-import { readUserEmailHistoryPage } from '@aglyn/tenant-data-admin/server/console/user-email-history'
+import { readStaffListQuery } from '../../../../../utils/server/staff-list-query'
+import { readUserEmailHistoryPage } from '../../../../../utils/server/user-email-history'
 
 // lockdown-423: exempt — read-only, writes nothing; the record of what we
 // sent a person is what a lockdown investigation reads.

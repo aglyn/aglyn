@@ -29,14 +29,14 @@ import { doc, getDoc } from 'firebase/firestore'
 import {
   readAnalyticsDays,
   recentDayIds,
-} from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
+} from '../../utils/analytics-day-cache'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
 import { formatDwell } from '@aglyn/aglyn/app-utils/analytics-summary'
 import { referrerLabel } from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
-import { hasEntitlement } from '@aglyn/aglyn/app-utils/console/entitlements'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { hasEntitlement } from '../../constants/entitlements'
+import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
 

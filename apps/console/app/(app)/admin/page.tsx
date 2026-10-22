@@ -16,11 +16,11 @@
  */
 
 import { redirect } from 'next/navigation'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../constants/route-links'
 import {
   sectionIndexTarget,
   type SearchParams,
-} from '@aglyn/aglyn/app-utils/console/section-index-redirect'
+} from '../../../utils/section-index-redirect'
 
 /**
  * `/admin` is the staff console's index and renders nothing of its own

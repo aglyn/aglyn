@@ -242,39 +242,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))
 
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/media-storage-path', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/media-storage-path'),
-  get mediaStoragePathInScope() {
-    return jest.requireMock('@aglyn/tenant-data-admin').mediaStoragePathInScope
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
-  get firebaseAdmin() {
-    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
-  },
-  get isImpersonationSession() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
-  },
-  get emailUnverifiedResponse() {
-    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/media-variants', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/media-variants'),
-  get generateMediaPoster() {
-    return jest.requireMock('@aglyn/tenant-data-admin').generateMediaPoster
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/release-flags', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/release-flags'),
-  get isServerReleaseFlagOnForOrg() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isServerReleaseFlagOnForOrg
-  },
-}))
-
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   // The real metadata bounds and the real structural inspector — this fake
@@ -304,7 +271,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
+jest.mock('../utils/server/media-scope', () => ({
   __esModule: true,
   resolveMediaScope: async () => ({
     scope: {

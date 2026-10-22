@@ -45,11 +45,11 @@ import {
   SITE_MEMBER_LIST_FILTER_FIELDS,
   SITE_MEMBER_LIST_FILTER_HEADERS,
   SITE_MEMBER_LIST_FILTER_OPTIONS,
-} from '@aglyn/aglyn/app-utils/console/list-filters'
+} from '../utils/list-filters'
 import {
   SITE_ACCOUNT_LIST_COLUMN_SORTS,
   SITE_ACCOUNT_LIST_QUERY,
-} from '@aglyn/aglyn/app-utils/console/site-account-query'
+} from '../utils/site-account-query'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 import SiteMemberDrawer from './site-member-drawer.component'

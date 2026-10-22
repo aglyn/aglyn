@@ -47,7 +47,7 @@ function read(relativePath: string): string {
   return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8')
 }
 
-/** Mirrors `libs/tenant/data/admin/src/lib/server/console/backfill-scope.ts`'s list. */
+/** Mirrors `apps/console/utils/server/backfill-scope.ts`'s list. */
 const SCOPED_COLLECTIONS = [
   'datasets',
   'media',

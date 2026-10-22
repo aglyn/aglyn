@@ -33,7 +33,7 @@ const mockPage: {
   hasMore: boolean
 } = { rows: [], failed: false, hasMore: false }
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query', () => ({
+jest.mock('../hooks/use-staff-list-query', () => ({
   __esModule: true,
   useStaffListQuery: () => ({
     rows: mockPage.rows,

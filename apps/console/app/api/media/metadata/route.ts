@@ -18,8 +18,8 @@
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
-} from '@aglyn/tenant-data-admin/server/console/storage-overage'
-import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+} from '../../../../utils/storage-overage'
+import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   bytesReader,
   EmbeddedWriteError,
@@ -43,15 +43,15 @@ import {
   mediaObjectPath,
   resolveMediaScope,
   scopeAllows,
-} from '@aglyn/tenant-data-admin/server/console/media-scope'
+} from '../../../../utils/server/media-scope'
 import {
   embeddedMetadataIsCurrent,
   storageObjectReader,
-} from '@aglyn/tenant-data-admin/server/console/media-embedded'
+} from '../../../../utils/server/media-embedded'
 import {
   removeAssetDeliveryCopies,
   scheduleMediaDeliveryCopies,
-} from '@aglyn/tenant-data-admin/server/console/media-delivery-copies'
+} from '../../../../utils/server/media-delivery-copies'
 import { createHash, randomUUID } from 'crypto'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -123,7 +123,7 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    // lockdown-423: via libs/tenant/data/admin/src/lib/server/console/media-scope.ts — the scope
+    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
     // resolver runs the verdict on the org/host docs it already reads and
     // hands the 423 refusal back as `error.response`. Both actions are
     // writes as far as a lock is concerned (`read` stores what it read), and

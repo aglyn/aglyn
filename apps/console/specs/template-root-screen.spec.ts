@@ -19,7 +19,7 @@ import { SCREEN_ROOT_PATH } from '@aglyn/aglyn'
 
 // `mock`-prefixed so jest's hoisted factory may close over it.
 const mockPublishScreenRoute = jest.fn(async () => undefined)
-jest.mock('@aglyn/aglyn/app-utils/console/screen-publishing', () => ({
+jest.mock('../constants/screen-publishing', () => ({
   publishScreenRoute: (...args: unknown[]) =>
     (mockPublishScreenRoute as any)(...args),
 }))
@@ -31,7 +31,7 @@ import createPageFromTemplate, {
 import {
   buildStarterTemplateDocs,
   STARTER_TEMPLATES,
-} from '@aglyn/aglyn/app-utils/console/starter-templates'
+} from '../constants/starter-templates'
 
 /**
  * A site started from a template must have a HOME PAGE (AGL-1575).

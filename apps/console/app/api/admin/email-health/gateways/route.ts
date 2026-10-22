@@ -39,7 +39,7 @@
  *           no held ledger can sit outside the read.
  *           `rows`: the table, one page of it, on the staff list wire —
  *           every Filters clause on the Firestore query, ordered by document
- *           id (`@aglyn/aglyn/app-utils/console/mail-gateway-ledger-list-query`).
+ *           id (`utils/mail-gateway-ledger-list-query.ts`).
  */
 
 import {
@@ -51,8 +51,8 @@ import {
   mailGatewayLedgerRow,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
-import { MAIL_GATEWAY_LEDGER_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/mail-gateway-ledger-list-query'
-import { readStaffListQuery, runStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+import { MAIL_GATEWAY_LEDGER_LIST_QUERY } from '../../../../../utils/mail-gateway-ledger-list-query'
+import { readStaffListQuery, runStaffListQuery } from '../../../../../utils/server/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 

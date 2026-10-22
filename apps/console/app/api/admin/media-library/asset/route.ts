@@ -31,13 +31,13 @@ import {
   staffMediaScopeBase,
   staffMediaScopeFrom,
   staffRightsConfirmation,
-} from '@aglyn/aglyn/app-utils/console/staff-media-library'
+} from '../../../../../utils/staff-media-library'
 import {
   recordStaffMediaView,
   staffMediaRowFrom,
   staffMediaSrc,
   staffMediaStoragePath,
-} from '@aglyn/tenant-data-admin/server/console/staff-media-library'
+} from '../../../../../utils/server/staff-media-library'
 import {
   HOSTS_PER_SCAN,
   type MediaScanHost,

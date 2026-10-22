@@ -48,7 +48,7 @@ import {
   __resetSessionHealth,
   getSessionHealth,
   reportDeniedRead,
-} from '@aglyn/aglyn/app-utils/console/session-health'
+} from '../utils/session-health'
 
 /** The whole-object payload the guard exists to keep off the wire. */
 const SCHEMA = {

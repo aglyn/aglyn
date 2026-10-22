@@ -47,7 +47,7 @@ import {
   preservePhaseTerms,
   restateExistingPhase,
   writePhaseItems,
-} from '@aglyn/tenant-data-admin/server/console/billing-schedule'
+} from '../../../../utils/server/billing-schedule'
 import {
   CAPACITY_ADDON_KINDS,
   planDowngradeRefusal,
@@ -58,10 +58,10 @@ import {
   immediateChargeParams,
   pendingChargeResponse,
   readImmediateCharge,
-} from '@aglyn/tenant-data-admin/server/console/immediate-charge'
+} from '../../../../utils/server/immediate-charge'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { PAYMENT_METHOD_UPDATE_FLOW } from '@aglyn/aglyn/app-utils/console/update-payment-method-link'
+import { PAYMENT_METHOD_UPDATE_FLOW } from '../../../../utils/update-payment-method-link'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.

@@ -48,7 +48,7 @@ const APPLY = process.argv.includes('--apply')
 const SECRET = process.env.STRIPE_SECRET_KEY
 
 /**
- * Mirrors `libs/aglyn/src/lib/app-utils/console/stripe-customer-identity.ts`.
+ * Mirrors `apps/console/utils/stripe-customer-identity.ts`.
  *
  * A deliberate copy, not an import: this is a plain `.mjs` script with no
  * build step and no path aliases, and the alternative — a second tsconfig

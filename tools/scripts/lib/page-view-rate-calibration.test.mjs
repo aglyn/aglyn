@@ -96,7 +96,7 @@ function realRates() {
   )
   return {
     meteredRate: parseUnitRates(
-      read('libs', 'aglyn', 'src', 'lib', 'app-utils', 'console', 'usage-metering.ts'),
+      read('apps', 'console', 'utils', 'usage-metering.ts'),
       'METERED_UNIT_RATES_USD',
     )?.perPageView,
     cogsRate: parseUnitRates(cogsSource, 'ORG_COGS_UNIT_RATES_USD')?.perPageView,

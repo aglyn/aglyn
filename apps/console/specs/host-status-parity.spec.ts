@@ -21,7 +21,7 @@
  * line. Neither existed.
  */
 
-import { hostIsBlankSite } from '@aglyn/aglyn/app-utils/console/host-first-run'
+import { hostIsBlankSite } from '../utils/host-first-run'
 import {
   describeHostStatus,
   describeSiteAllowance,

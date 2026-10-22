@@ -35,7 +35,7 @@ import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../utils/server/staff-list-query'
 
 /**
  * The intake path for Privacy Policy v4 §11's non-SMS routes (AGL-1592).

@@ -50,7 +50,7 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
   SUPPRESSION_COLUMN_SORTS,
   SUPPRESSION_FILTER_FIELDS,
@@ -60,7 +60,7 @@ import {
   SUPPRESSION_REASON_LABELS,
   SUPPRESSION_SEARCH_HINT,
   SUPPRESSION_SELECT_FIELDS,
-} from '@aglyn/aglyn/app-utils/console/email-suppression-filters'
+} from '../utils/email-suppression-filters'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 interface PlatformSuppression {
@@ -137,7 +137,7 @@ export default function StaffEmailSuppressionsCard() {
    * the list's cursor, so each page the footer turns is a page of the
    * narrowed list. Any combination stands together; what one query cannot
    * hold is named above the list and not applied. See
-   * `@aglyn/aglyn/app-utils/console/email-suppression-filters`.
+   * `utils/email-suppression-filters.ts`.
    */
   const gridFilter = useListGridFilter({ selectFields: SUPPRESSION_SELECT_FIELDS })
 

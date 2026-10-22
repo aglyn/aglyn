@@ -60,17 +60,17 @@ import {
   type MaybeTokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
-import fetchSeatCounts from '@aglyn/aglyn/app-utils/console/fetch-seat-counts'
+import fetchSeatCounts from '../../utils/fetch-seat-counts'
 import {
   monthlyAllowanceResetsAt,
   parseOrgEmailSendCeiling,
   planExceedsDeliverableMonthly,
   type OrgEmailSendCeiling,
-} from '@aglyn/aglyn/app-utils/console/email-send-ceiling'
+} from '../../utils/email-send-ceiling'
 import {
   meteredIncludedAllowance,
   orgBandwidthGb,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../../utils/usage-metering'
 import { docsHelp } from '../../constants/docs-links'
 import { formatMediaBytes } from '../media/media-storage-copy'
 import { useMediaStorageBand } from '../media/use-media-storage-band'

@@ -107,7 +107,7 @@ import {
   listQueryIndexes,
   missingListQueryIndexes,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { EMAIL_DELIVERIES_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/email-deliveries-list-query'
+import { EMAIL_DELIVERIES_LIST_QUERY } from '../utils/email-deliveries-list-query'
 
 const get = (params: Record<string, string>) => {
   const url = new URL('https://console.test/api/admin/email-deliveries')

@@ -162,7 +162,7 @@ import EntityPickerProvider from '../../../../../../../../../../components/entit
 import LinkTargetSearchProvider from '../../../../../../../../../../components/link-target-search-provider.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
@@ -171,11 +171,11 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   previewWindowName,
   writePreviewState,
-} from '@aglyn/aglyn/app-utils/console/preview-state'
+} from '../../../../../../../../../../constants/preview-state'
 import {
   buildRoute,
   Route,
-} from '@aglyn/aglyn/app-utils/console/route-links'
+} from '../../../../../../../../../../constants/route-links'
 import {
   useHostId,
   useHostSubdomain,
@@ -186,30 +186,30 @@ import {
   publishScreenRoute,
   syncScreenRouteEntries,
   unpublishScreenRoute,
-} from '@aglyn/aglyn/app-utils/console/screen-publishing'
+} from '../../../../../../../../../../constants/screen-publishing'
 import { liveDescendantsToastClause } from '../../../../../../../../../../components/live-descendants-note.component'
-import { announceLiveScreenChange } from '@aglyn/aglyn/app-utils/console/screen-live-announce'
+import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import {
   buildScreenSeoUpdate,
   type ScreenSocialImageDraft,
-} from '@aglyn/aglyn/app-utils/console/screen-seo'
+} from '../../../../../../../../../../constants/screen-seo'
 import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
-} from '@aglyn/aglyn/app-utils/console/collection-templates'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+} from '../../../../../../../../../../constants/collection-templates'
+import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
+} from '../../../../../../../../../../hooks/use-screen-link-routes'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useHostComponentDefinitions from '@aglyn/tenant-feature-instance/hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
-import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
+import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 

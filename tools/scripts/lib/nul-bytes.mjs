@@ -29,7 +29,7 @@
 //
 // The consequence is not cosmetic. A file in that state has never been
 // reviewed and cannot be: not the commit that introduced it and not any
-// commit since. `libs/aglyn/src/lib/app-utils/console/analytics-day-cache.ts` shipped 6.7 KB of
+// commit since. `apps/console/utils/analytics-day-cache.ts` shipped 6.7 KB of
 // caching logic in exactly that state (AGL-1440, 2026-08-12) and stayed there
 // for six days. When it was finally read as text it held two real defects
 // nobody had had the chance to see.

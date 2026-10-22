@@ -79,7 +79,7 @@ describe('the analytics instance gate (AGL-1979)', () => {
     expect(ungated).not.toMatch(/setUserId\s*\(/)
     expect(ungated).not.toMatch(/setUserProperties\s*\(/)
     // Renamed by AGL-2087: the raw SDK call now lives behind the single
-    // owner in `@aglyn/aglyn/app-utils/console/analytics-default-params`. Both spellings are
+    // owner in `utils/analytics-default-params.ts`. Both spellings are
     // refused here, so re-importing the raw API into this component — the
     // race AGL-2087 exists to prevent — cannot land ungated either.
     expect(ungated).not.toMatch(/setDefaultEventParameters\s*\(/)

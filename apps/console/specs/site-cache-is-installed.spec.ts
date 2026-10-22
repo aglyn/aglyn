@@ -58,7 +58,7 @@ jest.mock('../constants/plugins.declarations.server.generated', () => ({
   registerPluginServerDeclarations: async () => undefined,
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
+jest.mock('../utils/server/tenant-revalidate', () => ({
   __esModule: true,
   dropSiteCaches: async (
     _firestore: unknown,

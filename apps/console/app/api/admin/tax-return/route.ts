@@ -30,12 +30,12 @@ import {
   taxReturnSummary,
   type TaxReturnRowInput,
   type TaxReturnScope,
-} from '@aglyn/tenant-data-admin/server/console/tx-return'
+} from '../../../../utils/server/tx-return'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import {
   taxFilingJurisdiction,
   TX_JURISDICTION,
-} from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
+} from '../../../../utils/tax-jurisdictions'
 import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-store'
 import { readTaxablePurchases } from '../../../../utils/server/taxable-purchases-store'
 import { taxFindingListRows } from '../../../../utils/tax-findings-list'
@@ -47,7 +47,7 @@ import {
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
 import { taxReturnView } from '../../../../utils/tax-return-view'
-import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 /**
  * The sales tax return for one filing period, summed from the

@@ -26,7 +26,7 @@ import {
 import { Alert, Box, CircularProgress } from '@mui/material'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useCurrentOrg from '../../../../../hooks/use-current-org'

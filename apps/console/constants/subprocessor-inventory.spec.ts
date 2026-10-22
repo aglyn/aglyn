@@ -230,7 +230,7 @@ describe('every third-party host is declared (AGL-1648)', () => {
     // that outlives its file quietly widens what is allowed — so the file is
     // asserted to still be the thing producing them.
     const source = readFileSync(
-      join(REPO_ROOT, 'libs/tenant/data/admin/src/lib/server/console/member-state-exposure.ts'),
+      join(REPO_ROOT, 'apps/console/utils/server/member-state-exposure.ts'),
       'utf8',
     )
     for (const host of SUPERVISORY_AUTHORITY_HOSTS) {

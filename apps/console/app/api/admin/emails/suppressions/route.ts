@@ -29,11 +29,11 @@ import {
   recordAdminAudit,
   subjectAddressKeyForRecipients,
 } from '@aglyn/tenant-data-admin/server/admin-audit'
-import { SUPPRESSION_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/email-suppression-filters'
+import { SUPPRESSION_LIST_QUERY } from '../../../../../utils/email-suppression-filters'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../../utils/server/staff-list-query'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**
@@ -122,7 +122,7 @@ async function listHandler(request: Request): Promise<Response> {
      * is the wrong answer in the reassuring direction. What one query cannot
      * hold comes back in `refused` and is not applied, and the card says so.
      * An unreadable ask is refused outright rather than answered unfiltered.
-     * See `@aglyn/aglyn/app-utils/console/email-suppression-filters`.
+     * See `utils/email-suppression-filters.ts`.
      */
     const asked = readStaffListQuery(query as Record<string, unknown>, {
       maxPageSize: PAGE_MAX,

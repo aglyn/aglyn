@@ -41,7 +41,7 @@ import {
 import { createElement, useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { createHttpTransferClient } from '../utils/transfer-http-client'
-import { saveTransferPrefs } from '@aglyn/aglyn/app-utils/console/transfer-prefs-store'
+import { saveTransferPrefs } from '../utils/transfer-prefs-store'
 import type { TransferLaunchState } from './transfer-launcher-provider.component'
 
 export interface TransferLauncherSurfaceProps {

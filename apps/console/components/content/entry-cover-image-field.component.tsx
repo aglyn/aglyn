@@ -21,7 +21,7 @@ import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mdiImageOutline } from '@aglyn/shared-data-mdi'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
-import { COVER_IMAGE_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { COVER_IMAGE_HINT } from '../../constants/media-size-hints'
 
 export interface EntryCoverImageFieldProps {
   /** Media-library scope, and the scope the preview src resolves against. */

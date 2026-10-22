@@ -26,7 +26,7 @@ import {
   NATIVE_AUTH_LINK_SEGMENTS,
   NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS,
 } from '@aglyn/aglyn/app-utils/native-app-association'
-import { CONSOLE_TOP_LEVEL_SEGMENTS } from '@aglyn/aglyn/app-utils/console/console-routes'
+import { CONSOLE_TOP_LEVEL_SEGMENTS } from '../constants/console-routes'
 import { CONSOLE_HOSTNAME } from '../constants/workspace-domain'
 import { GET as getAppleAppSiteAssociation } from '../app/api/native-app-association/apple-app-site-association/route'
 import { GET as getAssetLinks } from '../app/api/native-app-association/assetlinks/route'

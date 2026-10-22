@@ -224,45 +224,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
 }))
 
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
-  get firebaseAdmin() {
-    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
-  },
-  get isImpersonationSession() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
-  },
-  get emailUnverifiedResponse() {
-    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/lockdown'),
-  get getLockdownVerdict() {
-    return jest.requireMock('@aglyn/tenant-data-admin').getLockdownVerdict
-  },
-  get featureLockdownRefusal() {
-    return jest.requireMock('@aglyn/tenant-data-admin').featureLockdownRefusal
-  },
-  get lockdownJsonResponse() {
-    return jest.requireMock('@aglyn/tenant-data-admin').lockdownJsonResponse
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
-  get getOrgDoc() {
-    return jest.requireMock('@aglyn/tenant-data-admin').getOrgDoc
-  },
-  get getOrgForHost() {
-    return jest.requireMock('@aglyn/tenant-data-admin').getOrgForHost
-  },
-  get resolveOrgMembership() {
-    return jest.requireMock('@aglyn/tenant-data-admin').resolveOrgMembership
-  },
-}))
-
 import { POST } from '../app/api/media/folders/route'
 
 const post = (body: Record<string, unknown>) =>

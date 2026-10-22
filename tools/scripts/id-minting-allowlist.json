@@ -218,7 +218,7 @@
       "reason": "An admin audit row written from the staff console: append-only, read by query, never addressed by its id."
     },
     {
-      "site": "libs/aglyn/src/lib/app-utils/console/screen-publishing.ts: doc(collection(firestore, PUBLISH_OUTBOX_COLLECTION))",
+      "site": "apps/console/constants/screen-publishing.ts: doc(collection(firestore, PUBLISH_OUTBOX_COLLECTION))",
       "class": "RECORD",
       "reason": "A publish outbox entry: a transient queue row the tab deletes once its announce lands, and the drain ages; never addressed from outside."
     },

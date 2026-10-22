@@ -44,23 +44,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'u-1' } }),
 }))
-
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useFirestore() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
-  },
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-}))
 jest.mock('../hooks/use-firestore-doc', () => ({
   __esModule: true,
   default: () => ({ data: mockProfile, status: 'success' }),
 }))
-// The moved console hooks read the lib's use-firestore-doc directly; hand them this mock.
-jest.mock('@aglyn/tenant-feature-instance/hooks/use-firestore-doc', () => jest.requireMock('../hooks/use-firestore-doc'))
 
 let mockScope = {
   orgs: [] as Array<{ $id: string; slug: string; orgName?: string }>,
@@ -73,7 +60,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
 }))
 
-import { usePinnedOrgs } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs'
+import { usePinnedOrgs } from '../hooks/use-pinned-orgs'
 import {
   PinnedFullDialog,
   PinnedOrgsKeepPrompt,

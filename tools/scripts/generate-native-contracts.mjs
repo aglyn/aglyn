@@ -66,7 +66,7 @@ const NAME_SEARCH = 'libs/aglyn/src/lib/app-utils/name-search.ts'
 const PLUGIN_SETTINGS_FILE = 'libs/native/screens/plugin-settings.screens.json'
 const TRANSFER_RESOURCES_FILE = 'libs/native/screens/transfer-resources.screens.json'
 const PLAN_ENTITLEMENTS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
-const USAGE_METERING = 'libs/aglyn/src/lib/app-utils/console/usage-metering.ts'
+const USAGE_METERING = 'apps/console/utils/usage-metering.ts'
 const BILLING_ESTIMATE_CASES_FILE = 'libs/native/contracts/billing-estimate-cases.generated.json'
 // Each plugin whose console draws a settings card from a PluginConfigSchema.
 const PLUGIN_SETTINGS = [

@@ -70,7 +70,7 @@ const args = parseDeployArgs({
   ],
 })
 
-/** The stored field. `ORG_LAST_ACTIVITY_PATH` in `libs/aglyn/src/lib/app-utils/console/org-list-query.ts`. */
+/** The stored field. `ORG_LAST_ACTIVITY_PATH` in `apps/console/utils/org-list-query.ts`. */
 export const FIELD = 'lastActivityAt'
 
 /** How many uids one `getUsers` call takes. */

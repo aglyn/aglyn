@@ -109,17 +109,17 @@ jest.mock('../components/auth-form.component', () => ({
   __esModule: true,
   default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
 }))
 jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   __esModule: true,
   default: () => mockIsMobile,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
+jest.mock('../utils/oauth-providers', () => ({
   createAuthProvider: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/sso-errors', () => ({
+jest.mock('../utils/sso-errors', () => ({
   describeSsoError: () => ({ code: 'sso-failed', message: 'failed' }),
 }))
 

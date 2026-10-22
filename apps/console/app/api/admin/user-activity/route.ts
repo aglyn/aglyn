@@ -25,13 +25,13 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   readActorActivity,
   withResolvedActors,
-} from '@aglyn/tenant-data-admin/server/console/actor-activity'
+} from '../../../../utils/server/actor-activity'
 import {
   auditLogSearchWords,
   readAuditLogFilters,
-} from '@aglyn/tenant-data-admin/server/console/audit-log-filter'
-import { ACTIVITY_LIST_FILTER_FIELDS } from '@aglyn/aglyn/app-utils/console/list-filters'
-import { withScopeNames } from '@aglyn/tenant-data-admin/server/console/audit-names'
+} from '../../../../utils/server/audit-log-filter'
+import { ACTIVITY_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
+import { withScopeNames } from '../../../../utils/server/audit-names'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // what someone did. A lockdown is often the reason staff are reading it.

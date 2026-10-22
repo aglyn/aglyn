@@ -50,7 +50,7 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { activityRowText, describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
+import { staffActivityLinks } from '../utils/activity-details'
 import { listPluginActivityActions, listPluginActivityFilters } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
@@ -62,12 +62,12 @@ import {
   ORG_ACTIVITY_SELECT_FIELDS,
   SUBJECT_ACTIVITY_QUERY,
   SUBJECT_ACTIVITY_SORTS,
-} from '@aglyn/aglyn/app-utils/console/activity-list-query'
+} from '../utils/activity-list-query'
 import {
   ACTIVITY_LIST_FILTER_FIELDS,
   ACTIVITY_LIST_FILTER_HEADERS,
-} from '@aglyn/aglyn/app-utils/console/list-filters'
-import { formatWireTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
+} from '../utils/list-filters'
+import { formatWireTimestamp } from '../utils/staff-timestamps'
 
 /** The organization's own activity log — the card's default surface. */
 const ORG_ACTIVITY_HELP = docsHelp('inviteTeammates', {
@@ -137,7 +137,7 @@ interface OrgActivityFacets {
  *
  * Every clause in the grid's Filters panel and the search word go to the
  * route, which puts them all on its query (AGL-3321, see
- * `@aglyn/aglyn/app-utils/console/activity-list-query`): Action, and on the org-wide log Who and
+ * `utils/activity-list-query.ts`): Action, and on the org-wide log Who and
  * Where, from pickers, When as a date or a range, and the search over the
  * written `searchTokens`. What the route could not put on the query it says,
  * and the card shows (`ListQueryNotices`) rather than narrowing the page. A

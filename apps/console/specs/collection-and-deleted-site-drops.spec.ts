@@ -35,7 +35,7 @@ import { join } from 'node:path'
 const mockAnnounce = jest.fn(async (_options: unknown) => true)
 const mockTarget = jest.fn()
 
-jest.mock('@aglyn/tenant-data-admin/server/console/announce-live-paths', () => ({
+jest.mock('../utils/server/announce-live-paths', () => ({
   __esModule: true,
   announceLivePaths: (options: unknown) => mockAnnounce(options),
 }))
@@ -56,11 +56,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
 import {
   announceCollectionChange,
   collectionLivePaths,
-} from '@aglyn/tenant-data-admin/server/console/announce-collection-change'
+} from '../utils/server/announce-collection-change'
 import {
   dropDeletedSiteCache,
   wholeHostPaths,
-} from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+} from '../utils/server/tenant-revalidate'
 
 /** One host, one collection, its published entries — read-only. */
 function fakeFirestore(options: {

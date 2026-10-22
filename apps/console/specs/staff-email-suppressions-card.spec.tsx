@@ -42,14 +42,6 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => mockUser,
 }))
-
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-}))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ header, children }: { header: ReactNode; children: ReactNode }) => (
     <section>

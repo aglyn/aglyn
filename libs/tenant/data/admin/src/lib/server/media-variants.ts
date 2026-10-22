@@ -527,7 +527,7 @@ export function mediaDerivedObjectPaths(
  * The largest object this will pull back OUT of storage in order to generate.
  *
  * Deliberately equal to `IMAGE_MAX_BYTES`, the console's per-type ceiling for
- * an image (`libs/aglyn/src/lib/app-utils/console/media-upload-limits.ts`), rather than derived
+ * an image (`apps/console/utils/media-upload-limits.ts`), rather than derived
  * from it: this library cannot import that file, and the two numbers answer
  * different questions. That one asks "may this be uploaded at all"; this one
  * asks "may a serverless function afford to fetch it back and decode it". They

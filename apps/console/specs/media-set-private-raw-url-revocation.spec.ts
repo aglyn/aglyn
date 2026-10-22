@@ -223,8 +223,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 /** The org media library's document ref, which the route writes through. */
 const mockOrgScopeRef = mockDocHandle(`orgs/${ORG}`)
 
-jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => {
-  const actual = jest.requireActual('@aglyn/tenant-data-admin/server/console/media-scope')
+jest.mock('../utils/server/media-scope', () => {
+  const actual = jest.requireActual('../utils/server/media-scope')
   return {
     __esModule: true,
     ...actual,

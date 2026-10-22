@@ -31,14 +31,14 @@
  */
 
 import { SUPPORT_BY_PLAN, supportForPlan, type SupportCommitment } from '@aglyn/aglyn'
-import { Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { Route } from '../constants/route-links'
 import { resolveActiveTab } from '../hooks/use-secondary-nav'
-import orgNavTabItems from '@aglyn/aglyn/app-utils/console/org-nav-tabs'
+import orgNavTabItems from '../constants/org-nav-tabs'
 import {
   primarySupportSurface,
   supportLandingRoute,
   supportSurfaceRoute,
-} from '@aglyn/aglyn/app-utils/console/support-surfaces'
+} from '../utils/support-surfaces'
 
 const ORG = 'acme'
 

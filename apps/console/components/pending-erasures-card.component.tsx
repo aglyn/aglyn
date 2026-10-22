@@ -42,7 +42,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
   ERASURE_COLUMN_SORTS,
   ERASURE_FILTER_FIELDS,
@@ -51,7 +51,7 @@ import {
   ERASURE_SEARCH_HINT,
   ERASURE_LIST_SORT,
   ERASURE_SELECT_FIELDS,
-} from '@aglyn/aglyn/app-utils/console/pending-erasures-list-query'
+} from '../utils/pending-erasures-list-query'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 /**
@@ -129,7 +129,7 @@ export function PendingErasuresCard() {
    * The queue, every Filters-panel clause and the search word SERVED by the
    * route on one query (AGL-3321), oldest request first; each page the
    * footer turns is a page of the narrowed queue. See
-   * `@aglyn/aglyn/app-utils/console/pending-erasures-list-query`.
+   * `utils/pending-erasures-list-query.ts`.
    */
   const gridFilter = useListGridFilter({ selectFields: ERASURE_SELECT_FIELDS })
   const onListError = useCallback(

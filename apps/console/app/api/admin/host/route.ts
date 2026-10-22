@@ -31,7 +31,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
-import { revalidateHostAliases } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**

@@ -242,51 +242,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => mockResolveOrgMembership(...args),
 }))
 
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
-  get firebaseAdmin() {
-    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
-  },
-  get emailUnverifiedResponse() {
-    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
-  },
-  get isImpersonationSession() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/rate-limit-store', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/rate-limit-store'),
-  get consumeRateLimit() {
-    return jest.requireMock('@aglyn/tenant-data-admin').consumeRateLimit
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
-  get ensureOrgForUser() {
-    return jest.requireMock('@aglyn/tenant-data-admin').ensureOrgForUser
-  },
-  get logHostActivity() {
-    return jest.requireMock('@aglyn/tenant-data-admin').logHostActivity
-  },
-  get registerOrgHost() {
-    return jest.requireMock('@aglyn/tenant-data-admin').registerOrgHost
-  },
-  get memberHasOrgPermission() {
-    return jest.requireMock('@aglyn/tenant-data-admin').memberHasOrgPermission
-  },
-  get resolveOrgMembership() {
-    return jest.requireMock('@aglyn/tenant-data-admin').resolveOrgMembership
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/lockdown'),
-  get lockdownRefusal() {
-    return jest.requireMock('@aglyn/tenant-data-admin').lockdownRefusal
-  },
-}))
-
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   pluginRequestFromWeb: async (request: Request) => ({

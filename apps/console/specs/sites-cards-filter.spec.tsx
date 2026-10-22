@@ -41,7 +41,7 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 const mockUseOrgHosts = jest.fn()
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('../hooks/use-org-hosts', () => ({
   __esModule: true,
   useOrgHosts: (...args: unknown[]) => mockUseOrgHosts(...args),
   default: (...args: unknown[]) => mockUseOrgHosts(...args),
@@ -104,7 +104,7 @@ jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: { createHosts: true }, can: () => true, loaded: true }),
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
+jest.mock('../hooks/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 
@@ -112,7 +112,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', ()
 const mockPins = { pinned: [] as string[], full: false }
 const mockTogglePin = jest.fn()
 const mockReplacePin = jest.fn()
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-hosts', () => ({
+jest.mock('../hooks/use-pinned-hosts', () => ({
   usePinnedHosts: (orgId: unknown) => ({
     pinned: orgId === 'org-1' ? mockPins.pinned : [],
     full: mockPins.full,

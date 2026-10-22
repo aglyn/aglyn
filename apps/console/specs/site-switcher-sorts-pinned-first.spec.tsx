@@ -83,7 +83,7 @@ jest.mock('../hooks/use-firestore-collection', () => ({
     return { data: query ? [mockOutside] : [], status: 'success' }
   },
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-hosts', () => ({
+jest.mock('../hooks/use-pinned-hosts', () => ({
   usePinnedHosts: (orgId: unknown, enabled: boolean) => {
     mockPinnedReads(orgId, enabled)
     return {

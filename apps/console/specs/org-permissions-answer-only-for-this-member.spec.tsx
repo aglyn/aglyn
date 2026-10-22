@@ -121,26 +121,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   }
 })
 
-// The moved hooks import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
-  get useFirestore() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
-  },
-  get useAuth() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useAuth
-  },
-  get useUser() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
-  },
-}))
-jest.mock('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter', () => ({
-  ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter'),
-  get subscribeFirestoreSessionHeal() {
-    return jest.requireMock('@aglyn/tenant-feature-instance').subscribeFirestoreSessionHeal
-  },
-}))
-
 const mockRoute: { orgSlug: string | undefined; pathname: string } = {
   orgSlug: 'aglyn-org',
   pathname: '/aglyn-org/outreach/compliance',
@@ -158,9 +138,9 @@ import useOrgPermissions, {
   OrgPermissionsProvider,
 } from '../hooks/use-org-permissions'
 import { OrgScopeProvider } from '../hooks/use-org-scope'
-import { resolveExtensionPermission } from '@aglyn/aglyn/app-utils/console/extension-permission'
-import { resolveOrgCrmAccess } from '@aglyn/aglyn/app-utils/console/org-crm-access'
-import { orgPluginNavTabItems } from '@aglyn/aglyn/app-utils/console/org-plugin-surfaces'
+import { resolveExtensionPermission } from '../utils/extension-permission'
+import { resolveOrgCrmAccess } from '../utils/org-crm-access'
+import { orgPluginNavTabItems } from '../utils/org-plugin-surfaces'
 
 /**
  * A surface shaped like Sequences: a plugin-declared permission only owners

@@ -26,9 +26,9 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { buildSiteLiveUrl } from '../constants/tenant-links'
-import { staffSitePreviewHref } from '@aglyn/aglyn/app-utils/console/staff-site-links'
+import { staffSitePreviewHref } from '../utils/staff-site-links'
 
 /** One row of `/api/admin/sites`. */
 export interface StaffSiteRow {

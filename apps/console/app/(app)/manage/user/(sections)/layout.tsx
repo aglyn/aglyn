@@ -25,10 +25,10 @@ import {
 } from '@aglyn/shared-ui-next/components/hub-tabs'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import { ACCOUNT_SECTIONS } from '@aglyn/aglyn/app-utils/console/account-sections'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { ACCOUNT_SECTIONS } from '../../../../../constants/account-sections'
+import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
-import useAccountSignInMethods from '@aglyn/tenant-feature-instance/hooks/console/use-account-sign-in-methods'
+import useAccountSignInMethods from '../../../../../hooks/use-account-sign-in-methods'
 
 /**
  * Manage Account, section by section (AGL-2501).

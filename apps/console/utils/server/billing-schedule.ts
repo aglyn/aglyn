@@ -1,0 +1,458 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { OrgPlan } from '@aglyn/aglyn/server'
+import {
+  addonMaxForPlan,
+  addonKindFromPriceId,
+  addonTargetPriceId,
+  findPlanItem,
+  isMeteredPriceId,
+  meteredPriceId,
+  planAndIntervalFromPriceId,
+  planPriceId,
+  type AddonKind,
+  type BillingInterval,
+} from '@aglyn/tenant-data-admin/server/billing-addons'
+import type { StripeCall } from './immediate-charge'
+
+/** One item as a `subscription_schedules` phase wants it. */
+export interface PhaseItem {
+  price: string
+  quantity?: number
+  /**
+   * Manually applied tax rate ids on this item (AGL-2146). A phase item is
+   * restated in full or not at all, so an item written back with only its
+   * price and quantity loses its `tax_rates` — the customer's line is then
+   * taxed differently after the flip than it was before it, which is the same
+   * silent, unannounced money change the discount loss was.
+   */
+  taxRates?: string[]
+}
+
+/**
+ * The tax rate ids on a subscription item or a phase item.
+ *
+ * Stripe returns `tax_rates` expanded (objects) or as bare ids depending on
+ * the call, exactly like `discounts[].coupon` — both shapes are read here so a
+ * restatement never depends on which one came back.
+ */
+function taxRateIdsOf(item: any): string[] | undefined {
+  const rates = item?.tax_rates
+  if (!Array.isArray(rates) || rates.length === 0) return undefined
+  const ids: string[] = []
+  for (const rate of rates) {
+    const id = typeof rate === 'string' ? rate : rate?.id
+    if (id) ids.push(String(id))
+  }
+  return ids.length > 0 ? ids : undefined
+}
+
+/**
+ * An add-on the target plan sells, but not in the quantity the org holds.
+ *
+ * Reported so a plan change can SAY what it reduced. Silence here is how an
+ * org came to pay for ten seats and receive five.
+ */
+export interface ClampedAddon {
+  kind: AddonKind
+  from: number
+  to: number
+}
+
+export interface TargetItemPlan {
+  /** The item list, plan item first, metered item last. */
+  items: PhaseItem[]
+  /** Recognised add-on kinds the target plan does not sell. */
+  droppedAddons: AddonKind[]
+  /**
+   * Add-ons reduced to what the target plan can deliver.
+   *
+   * Separate from `droppedAddons` because they are different sentences to a
+   * customer: one line is gone, the other is smaller. Collapsing them would
+   * tell somebody their POS registers vanished when they went from four to
+   * two.
+   */
+  clampedAddons: ClampedAddon[]
+  /**
+   * Price ids on the subscription that are neither the plan item, the metered
+   * item, nor a recognised add-on — carried through verbatim, and REPORTED so
+   * the carry-through is visible rather than assumed.
+   */
+  unrecognizedPriceIds: string[]
+}
+
+/**
+ * The item list a subscription's items become on a TARGET plan/interval — the
+ * absolute list a schedule phase needs (AGL-2150).
+ *
+ * The instant-switch path builds a DELTA (`items[n][id]` + a new price) and so
+ * leaves anything it does not recognise exactly where it is. A schedule phase
+ * is an ABSOLUTE list: whatever is not written is gone at the flip. Building
+ * it from the recognised kinds alone therefore deleted, silently and at
+ * renewal, every item `addonKindFromPriceId` cannot classify — and that
+ * function resolves purely by comparing against the CURRENT env values, so it
+ * misses a legacy add-on whose env var was rotated or unset, a price attached
+ * by hand in the Stripe dashboard, a negotiated line item, and the POS-register
+ * / event-calendar flat add-ons in any environment where those env names are
+ * not configured. Every one of those is recurring revenue.
+ *
+ * So unknown items pass through VERBATIM, which is the instant path's posture,
+ * and they come back named so the caller can log and report them.
+ *
+ * The plan item is identified positively by `findPlanItem` (AGL-1340) and
+ * replaced by `targetPlanPrice`; the metered item is excluded here and
+ * re-attached from `meteredPrice` so it follows the target interval
+ * (AGL-635/1340).
+ */
+export function buildTargetItems(
+  items: readonly any[] | null | undefined,
+  options: {
+    targetPlan: OrgPlan
+    targetInterval: BillingInterval
+    targetPlanPrice: string
+    meteredPrice: string | null
+  },
+): TargetItemPlan {
+  const list = items ?? []
+  const planItem = findPlanItem<any>(list)
+  const result: PhaseItem[] = [{ price: options.targetPlanPrice, quantity: 1 }]
+  const droppedAddons: AddonKind[] = []
+  const clampedAddons: ClampedAddon[] = []
+  const unrecognizedPriceIds: string[] = []
+  for (const item of list) {
+    if (planItem && item === planItem) continue
+    const priceId = item?.price?.id
+    if (isMeteredPriceId(priceId)) continue
+    const kind = addonKindFromPriceId(priceId)
+    if (kind) {
+      const target = addonTargetPriceId(kind, options.targetPlan, options.targetInterval, priceId)
+      if (!target) {
+        droppedAddons.push(kind)
+        continue
+      }
+      // CLAMP to what the target plan can actually deliver.
+      //
+      // Kinds the target does not sell were already dropped. Quantities were
+      // not, and the gap is the expensive one: `checkSeatQuota` and
+      // `checkDatasetQuota` apply `Math.min(…, maxSeats)` at the point of USE,
+      // so an org moving to a smaller plan kept paying for ten manager seats
+      // and silently received five. Nothing said so anywhere — the excess was
+      // discarded by a `Math.min` and invoiced in full.
+      //
+      // Clamped rather than refused: a downgrade is a legitimate thing to want,
+      // and refusing it would trap a customer on a plan they are trying to
+      // leave. Clamped rather than carried: carrying it is the current defect.
+      // Because the quantity IS the Stripe line item, reducing it here reduces
+      // the invoice too — delivery and the charge move together, which is the
+      // only version of this that is not billing for nothing.
+      const wanted = Number(item?.quantity ?? 1)
+      const ceiling = addonMaxForPlan(kind, options.targetPlan)
+      const quantity = Math.max(0, Math.min(wanted, ceiling))
+      if (quantity < wanted) {
+        clampedAddons.push({ kind, from: wanted, to: quantity })
+      }
+      // A ceiling of zero is a kind the target plan cannot deliver at all —
+      // the same outcome as an unsold kind, so it is reported the same way
+      // rather than as a line item of quantity 0 nobody can read.
+      if (quantity === 0) droppedAddons.push(kind)
+      else result.push({ price: target, quantity })
+      continue
+    }
+    // An item with no price id cannot be restated at all — Stripe would reject
+    // the phase. Reported, never invented.
+    if (!priceId) continue
+    unrecognizedPriceIds.push(String(priceId))
+    // Verbatim means verbatim, `tax_rates` included (AGL-2146). This branch is
+    // the one the caller has decided it cannot reason about — a negotiated
+    // line, a hand-attached dashboard price — so re-taxing it by omission is
+    // exactly the change the carry-through exists to avoid. The RECOGNISED
+    // items above are deliberately not given rates: they are re-priced onto
+    // the target plan's own prices and the target phase sets `automatic_tax`
+    // for itself, so a rate that applied to the old price is not this item's.
+    const taxRates = taxRateIdsOf(item)
+    result.push({
+      price: String(priceId),
+      ...(item?.quantity != null ? { quantity: Number(item.quantity) } : {}),
+      ...(taxRates ? { taxRates } : {}),
+    })
+  }
+  if (options.meteredPrice) result.push({ price: options.meteredPrice })
+  return { items: result, droppedAddons, clampedAddons, unrecognizedPriceIds }
+}
+
+/** A live subscription's items, as phase items. */
+export function subscriptionItemsAsPhaseItems(
+  items: readonly any[] | null | undefined,
+): PhaseItem[] {
+  const phaseItems: PhaseItem[] = []
+  for (const item of items ?? []) {
+    const priceId = item?.price?.id
+    if (!priceId) continue
+    const taxRates = taxRateIdsOf(item)
+    phaseItems.push({
+      price: String(priceId),
+      ...(item?.quantity != null ? { quantity: Number(item.quantity) } : {}),
+      ...(taxRates ? { taxRates } : {}),
+    })
+  }
+  return phaseItems
+}
+
+/** A schedule phase's own items (phase items carry `price` as an id). */
+export function phaseItemsOf(phase: any): PhaseItem[] {
+  const phaseItems: PhaseItem[] = []
+  for (const item of phase?.items ?? []) {
+    const priceId =
+      typeof item?.price === 'string' ? item.price : item?.price?.id
+    if (!priceId) continue
+    const taxRates = taxRateIdsOf(item)
+    phaseItems.push({
+      price: String(priceId),
+      ...(item?.quantity != null ? { quantity: Number(item.quantity) } : {}),
+      ...(taxRates ? { taxRates } : {}),
+    })
+  }
+  return phaseItems
+}
+
+/** Writes `phases[index][items][…]` for an absolute item list. */
+export function writePhaseItems(
+  params: URLSearchParams,
+  index: number,
+  items: readonly PhaseItem[],
+): void {
+  items.forEach((item, itemIndex) => {
+    const prefix = `phases[${index}][items][${itemIndex}]`
+    params.set(`${prefix}[price]`, item.price)
+    if (item.quantity != null) {
+      params.set(`${prefix}[quantity]`, String(item.quantity))
+    }
+    // Only written when the item actually carries rates: an EMPTY `tax_rates`
+    // is not a no-op to Stripe, it is an instruction to clear them, so an
+    // unconditional write would turn "preserve" into the very deletion this
+    // restatement exists to prevent (AGL-2146).
+    item.taxRates?.forEach((rate, rateIndex) => {
+      params.set(`${prefix}[tax_rates][${rateIndex}]`, rate)
+    })
+  })
+}
+
+/**
+ * Restates the terms Stripe put on the schedule's current phase but that a
+ * phase-list replacement would otherwise drop (AGL-2146).
+ *
+ * `subscription_schedules` update REPLACES the whole phase list, so anything
+ * not written back is gone. The original restatement covered price, quantity
+ * and the phase window — which meant a downgrade silently ended the customer's
+ * coupon, their trial, and the tax/collection configuration.
+ *
+ * The discount is the one that costs money in both directions: an org holding
+ * a staff coupon, a checkout promotion code, or the winback the retention
+ * funnel just minted lost it at the flip, having been told nothing. An instant
+ * UPGRADE never touches subscription discounts, so a downgrade must not
+ * either — which is why the discount is restated on the target phase too and a
+ * time-boxed coupon keeps running its remaining months across the change.
+ *
+ * `trial_end` and `automatic_tax` are restated only when `current`: on the
+ * CREATE path the target phase is derived from phase 0 and a trial must not
+ * restart at the flip, while the target phase sets its own tax flag
+ * explicitly. Restating an EXISTING phase passes `current: true` for it too —
+ * there the values are the phase's own.
+ */
+export function preservePhaseTerms(
+  params: URLSearchParams,
+  index: number,
+  phase: any,
+  options: { current: boolean },
+): void {
+  const prefix = `phases[${index}]`
+  // Both shapes: `discounts` is the current list-valued field, `coupon` the
+  // singular legacy one older API versions still return.
+  const discounts: any[] = Array.isArray(phase?.discounts) ? phase.discounts : []
+  let written = 0
+  for (const entry of discounts) {
+    const coupon =
+      typeof entry?.coupon === 'string' ? entry.coupon : entry?.coupon?.id
+    const promotionCode =
+      typeof entry?.promotion_code === 'string'
+        ? entry.promotion_code
+        : entry?.promotion_code?.id
+    if (coupon) {
+      params.set(`${prefix}[discounts][${written}][coupon]`, String(coupon))
+      written += 1
+    } else if (promotionCode) {
+      params.set(
+        `${prefix}[discounts][${written}][promotion_code]`,
+        String(promotionCode),
+      )
+      written += 1
+    }
+  }
+  if (written === 0 && phase?.coupon) {
+    const legacy =
+      typeof phase.coupon === 'string' ? phase.coupon : phase.coupon?.id
+    if (legacy) params.set(`${prefix}[coupon]`, String(legacy))
+  }
+  if (phase?.collection_method) {
+    params.set(`${prefix}[collection_method]`, String(phase.collection_method))
+  }
+  const paymentMethod =
+    typeof phase?.default_payment_method === 'string'
+      ? phase.default_payment_method
+      : phase?.default_payment_method?.id
+  if (paymentMethod) {
+    params.set(`${prefix}[default_payment_method]`, String(paymentMethod))
+  }
+  if (!options.current) return
+  if (phase?.trial_end) {
+    params.set(`${prefix}[trial_end]`, String(phase.trial_end))
+  }
+  if (phase?.automatic_tax?.enabled != null) {
+    params.set(
+      `${prefix}[automatic_tax][enabled]`,
+      phase.automatic_tax.enabled ? 'true' : 'false',
+    )
+  }
+}
+
+/**
+ * Restates an EXISTING phase of a schedule read back from Stripe, optionally
+ * replacing its item list.
+ *
+ * Used when a schedule has to be rewritten for a reason unrelated to its
+ * phases — an add-on purchase changing the subscription's items (AGL-2150).
+ * The update replaces the whole phase list, so every phase has to be written
+ * back, and everything on it that is not restated is dropped: the window, the
+ * `metadata[plan]` the webhook mirror reads at the flip, the discount, the
+ * trial and the tax posture.
+ */
+export function restateExistingPhase(
+  params: URLSearchParams,
+  index: number,
+  phase: any,
+  overrideItems?: readonly PhaseItem[],
+): void {
+  const prefix = `phases[${index}]`
+  writePhaseItems(params, index, overrideItems ?? phaseItemsOf(phase))
+  if (phase?.start_date) {
+    params.set(`${prefix}[start_date]`, String(phase.start_date))
+  }
+  if (phase?.end_date) {
+    params.set(`${prefix}[end_date]`, String(phase.end_date))
+  }
+  for (const [key, value] of Object.entries(phase?.metadata ?? {})) {
+    if (value != null) {
+      params.set(`${prefix}[metadata][${key}]`, String(value))
+    }
+  }
+  preservePhaseTerms(params, index, phase, { current: true })
+}
+
+/**
+ * Re-derives a pending downgrade schedule's TARGET phase from the
+ * subscription's items as they are RIGHT NOW (AGL-2150).
+ *
+ * A subscription schedule's phases are ABSOLUTE item lists, snapshotted when
+ * the downgrade was requested. The add-ons route changes the subscription's
+ * items and knew nothing about `subscription.schedule`, so the sequence "schedule a
+ * downgrade, then buy five more seats" charged for the seats, prorated them,
+ * and then deleted them at the period end when phase 1 applied its stale list.
+ * Recurring revenue, gone on a timer, with nothing on any screen saying so.
+ *
+ * Refreshing from the subscription's CURRENT items is correct whatever Stripe
+ * does with a schedule mid-phase, which is the point: it makes the snapshot
+ * match reality at the one moment reality changed, rather than depending on an
+ * answer only a live account could give. Phase 0 is restated from the live
+ * subscription for the same reason — if Stripe already amended it the write is
+ * a no-op, and if it did not, the schedule stops disagreeing with the
+ * subscription the customer is actually being billed for.
+ *
+ * The target phase's PLAN comes from its own `metadata[plan]` (written by the
+ * downgrade path, and what the webhook mirror reads at the flip), falling back
+ * to whichever plan its base price sells. An unclassifiable phase is left
+ * strictly alone: a schedule this does not understand is safer stale than
+ * rewritten wrong.
+ *
+ * Two callers: the add-ons route, right after an increase it was paid for
+ * applies; and the billing webhook, when an increase that was HELD for its
+ * payment (AGL-3358) applies later, after the customer's bank confirmed it.
+ */
+export async function refreshScheduleTargetPhase(options: {
+  /** The caller's own Stripe request function; this module holds no key. */
+  stripe: StripeCall
+  scheduleId: string
+  /** The subscription's items AFTER the add-on change. */
+  items: any[]
+}): Promise<void> {
+  const { stripe, scheduleId, items } = options
+  const schedule = await stripe(
+    'GET',
+    `subscription_schedules/${encodeURIComponent(scheduleId)}`,
+  )
+  const phases: any[] = Array.isArray(schedule?.phases) ? schedule.phases : []
+  // Nothing pending: a released/canceled schedule, or one with no future
+  // phase, has no snapshot to go stale.
+  if (phases.length < 2) return
+  if (schedule?.status !== 'active' && schedule?.status !== 'not_started') return
+  const targetIndex = phases.length - 1
+  const targetPhase = phases[targetIndex]
+  const basePrice = (targetPhase?.items ?? [])
+    .map((item: any) =>
+      typeof item?.price === 'string' ? item.price : item?.price?.id,
+    )
+    .map((priceId: string) => planAndIntervalFromPriceId(priceId))
+    .find((match: unknown) => match) as
+    | ReturnType<typeof planAndIntervalFromPriceId>
+    | undefined
+  const targetPlan = (targetPhase?.metadata?.plan ?? basePrice?.plan) as
+    | Parameters<typeof planPriceId>[0]
+    | undefined
+  const targetInterval: BillingInterval = basePrice?.interval ?? 'month'
+  if (!targetPlan) return
+  const targetPlanPrice = planPriceId(targetPlan, targetInterval)
+  if (!targetPlanPrice) return
+  const rebuilt = buildTargetItems(items, {
+    targetPlan,
+    targetInterval,
+    targetPlanPrice,
+    meteredPrice: meteredPriceId(targetInterval),
+  })
+  const params = new URLSearchParams({
+    end_behavior: String(schedule?.end_behavior ?? 'release'),
+    // The items already match the live subscription, so there is nothing to
+    // prorate — and a downgrade schedule never prorates by design (AGL-1862).
+    proration_behavior: 'none',
+  })
+  phases.forEach((phase, index) => {
+    restateExistingPhase(
+      params,
+      index,
+      phase,
+      index === targetIndex
+        ? rebuilt.items
+        : index === 0
+          ? subscriptionItemsAsPhaseItems(items)
+          : undefined,
+    )
+  })
+  await stripe(
+    'POST',
+    `subscription_schedules/${encodeURIComponent(scheduleId)}`,
+    params,
+  )
+}

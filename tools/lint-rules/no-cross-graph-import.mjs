@@ -21,7 +21,7 @@
  * This is the AGL-1349 class. `nx build console` failed on `main` with five
  * Turbopack errors — "You're importing a module that depends on
  * `createContext` into a React Server Component module" — because AGL-1280
- * added one import to `libs/aglyn/src/lib/app-utils/console/usage-metering.ts`:
+ * added one import to `apps/console/utils/usage-metering.ts`:
  *
  * ```ts
  * import { type AglynOrgBilling, planMetersInfraOverage } from '@aglyn/aglyn'

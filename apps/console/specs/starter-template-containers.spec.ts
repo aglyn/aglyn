@@ -37,7 +37,7 @@ import {
   buildAllStarterTemplateDocs,
   STARTER_TEMPLATES,
   type StarterTemplateScreen,
-} from '@aglyn/aglyn/app-utils/console/starter-templates'
+} from '../constants/starter-templates'
 
 const CANVAS_ROOT = CANVAS_ROOT_ELEMENT_ID
 

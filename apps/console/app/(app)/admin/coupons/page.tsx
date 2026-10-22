@@ -65,10 +65,10 @@ import StaffListPaginationControls from '../../../../components/staff-list-pagin
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
   COUPON_DURATIONS,
   COUPON_FILTER_FIELDS,
@@ -78,7 +78,7 @@ import {
   type CouponListRow,
   type CouponRow,
   couponFullUse,
-} from '@aglyn/aglyn/app-utils/console/coupon-list-query'
+} from '../../../../utils/coupon-list-query'
 
 /** The picked fields, which the panel shows as selects. */
 const COUPON_SELECT_FIELDS = Object.keys(COUPON_FILTER_OPTIONS)

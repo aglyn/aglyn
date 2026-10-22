@@ -23,12 +23,12 @@ import { useEnabledPluginIds } from '../components/console-plugins-gate.componen
 import {
   composeExtensionEntitlements,
   resolveExtensionEntitlement,
-} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
+} from '../utils/extension-entitlement'
 import {
   composeExtensionPermissions,
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '@aglyn/aglyn/app-utils/console/extension-permission'
+} from '../utils/extension-permission'
 import useCurrentOrg from './use-current-org'
 import useOrgPermissions from './use-org-permissions'
 

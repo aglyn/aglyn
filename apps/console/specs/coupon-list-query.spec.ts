@@ -17,14 +17,12 @@
  * limitations under the License.
  */
 
-import * as couponListQueryModule from '@aglyn/aglyn/app-utils/console/coupon-list-query'
-
 /**
  * The staff Coupons list reads EVERY Stripe coupon and code, and answers its
  * filters and search over that complete read (AGL-3321).
  *
  * A coupon is a Stripe object, and Stripe can neither filter nor search
- * coupons by anything the panel names (`@aglyn/aglyn/app-utils/console/coupon-list-query`). So the
+ * coupons by anything the panel names (`utils/coupon-list-query.ts`). So the
  * list is the exception to "every clause on the Firestore query", and what is
  * pinned here is what makes the exception honest: Stripe paged to the end,
  * never a first page; a 413 past the bound rather than an answer from part of
@@ -73,7 +71,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 const { GET } = require('../app/api/admin/coupons/route') as {
   GET: (request: Request) => Promise<Response>
 }
-const { COUPON_READ_BOUND } = couponListQueryModule as {
+const { COUPON_READ_BOUND } = require('../utils/coupon-list-query') as {
   COUPON_READ_BOUND: number
 }
 

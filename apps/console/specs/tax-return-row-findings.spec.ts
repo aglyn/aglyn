@@ -45,7 +45,7 @@ import {
   taxReturnRowFindings,
   taxReturnSummary,
   type TaxReturnRowInput,
-} from '@aglyn/tenant-data-admin/server/console/tx-return'
+} from '../utils/server/tx-return'
 
 const PERIOD = {
   start: new Date(Date.UTC(2026, 6, 1)),

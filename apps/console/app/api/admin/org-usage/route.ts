@@ -36,7 +36,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   staffOrgUsageRowView,
   type StaffOrgUsageMonth,
-} from '@aglyn/aglyn/app-utils/console/staff-org-usage-view'
+} from '../../../../utils/staff-org-usage-view'
 
 /**
  * "The rollup did not record this" and "the rollup recorded zero/false" are

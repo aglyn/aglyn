@@ -28,7 +28,7 @@ import { authenticateApiV1 } from '../../../../utils/api-v1'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_OPENAPI_PATH,
-} from '@aglyn/tenant-data-admin/server/console/api-v1-openapi'
+} from '../../../../utils/api-v1-openapi'
 import {
   describePluginApiV1Resources,
   dispatchResource,

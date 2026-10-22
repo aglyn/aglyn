@@ -41,7 +41,7 @@ import {
   type NotificationEmailDetail,
 } from '@aglyn/tenant-data-admin'
 import { DOCS_BASE_URL } from '../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../constants/route-links'
 import { renderSystemEmail } from './render-system-email'
 
 /**

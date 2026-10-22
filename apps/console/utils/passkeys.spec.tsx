@@ -20,7 +20,6 @@ import { join } from 'path'
 import { render, screen } from '@testing-library/react'
 import { AuthAppErrorCodes, AuthErrorIgnore } from '@aglyn/shared-data-enums'
 import AuthErrorAlertComponent from '../components/auth-error-alert.component'
-import * as passkeysModule from '@aglyn/aglyn/app-utils/console/passkeys'
 
 /**
  * AGL-1417 — the passkey button that did nothing.
@@ -44,7 +43,8 @@ const CEREMONY_SITES = [
   'components/session-reauth-dialog.component.tsx',
 ]
 
-const passkeys = () => passkeysModule
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const passkeys = () => require('./passkeys')
 
 describe('passkey sign-in failures are never silent (AGL-1417)', () => {
   it('has no bare NotAllowedError branch left in either ceremony site', () => {

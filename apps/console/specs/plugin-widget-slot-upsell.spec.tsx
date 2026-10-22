@@ -113,7 +113,7 @@ import {
   resetPluginEntitlementsForTests,
 } from '@aglyn/aglyn'
 import PluginWidgetSlot from '../components/plugin-widget-slot.component'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import { OrgPermissionsProvider } from '../hooks/use-org-permissions'
 
 const widgetComponent = (id: string) => (props: Record<string, unknown>) => {

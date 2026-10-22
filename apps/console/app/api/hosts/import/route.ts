@@ -119,7 +119,7 @@ import {
   type BillableScreenSource,
   nonPageScreenIds,
 } from '../resources/count-billable-screens'
-import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**

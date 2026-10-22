@@ -35,7 +35,7 @@
  * the one write this route makes, asked under a write intent.
  */
 
-// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
+// lockdown-423: via apps/console/utils/server/transfer-gate.ts
 
 import {
   TRANSFER_PACKAGE_RESOURCE,
@@ -51,7 +51,7 @@ import {
   listTransferJobs,
   listUnfinishedTransferJobs,
 } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { transferErrorResponse, transferGate, type TransferCaller } from '@aglyn/tenant-data-admin/server/console/transfer-gate'
+import { transferErrorResponse, transferGate, type TransferCaller } from '../../../../utils/server/transfer-gate'
 import {
   PACKAGE_IMPORTS_COLLECTION,
   PACKAGE_UNDO_WINDOW_MS,

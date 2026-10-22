@@ -69,8 +69,8 @@
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
-} from '@aglyn/tenant-data-admin/server/console/storage-overage'
-import { billsOrgLibraryStorage } from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../utils/storage-overage'
+import { billsOrgLibraryStorage } from '../utils/usage-metering'
 import { PLAN_ENTITLEMENTS, planMetersInfraOverage } from '@aglyn/aglyn/server'
 
 /** A plan that meters infra overage, so the gate can reach the billed arm. */

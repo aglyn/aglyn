@@ -33,7 +33,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   readAnalyticsDays,
   recentDayIds,
-} from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
+} from '../../utils/analytics-day-cache'
 import {
   deviceSplit,
   deviceSplitLabel,

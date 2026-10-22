@@ -58,7 +58,7 @@ import {
   overLimitRows,
   type OverLimitCounts,
   type OverLimitRow,
-} from '@aglyn/aglyn/app-utils/console/over-limit'
+} from '../over-limit'
 import type { AddonKind } from '@aglyn/tenant-data-admin/server/billing-addons'
 
 /**

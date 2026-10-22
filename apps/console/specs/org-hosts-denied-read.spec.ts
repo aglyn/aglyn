@@ -87,11 +87,11 @@ jest.mock('firebase/firestore', () => ({
   },
 }))
 
-import { useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
+import { useOrgHosts } from '../hooks/use-org-hosts'
 import {
   __resetSessionHealth,
   getSessionHealth,
-} from '@aglyn/aglyn/app-utils/console/session-health'
+} from '../utils/session-health'
 
 const { getDocsFromServer } = jest.requireMock('firebase/firestore')
 

@@ -41,7 +41,7 @@ import {
   CSP_LIST_QUERY,
   CSP_SEARCH_TOKENS_PATH,
   cspWindowBase,
-} from '@aglyn/aglyn/app-utils/console/csp-report-list-query'
+} from '../utils/csp-report-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

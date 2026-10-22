@@ -104,11 +104,11 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { quarantineLogLines } from '@aglyn/aglyn/app-utils/console/quarantine-log-lines'
-import { useStaffRole } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
-import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
+import { quarantineLogLines } from '../../../../utils/quarantine-log-lines'
+import { useStaffRole } from '../../../../hooks/use-is-staff'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
   DENY_COLUMN_SORTS,
   DENY_FILTER_FIELDS,
@@ -118,7 +118,7 @@ import {
   LISTED_KIND_LABEL,
   QUARANTINE_KEY_REACH as KEY_REACH,
   ROW_STATE_LABEL,
-} from '@aglyn/aglyn/app-utils/console/media-quarantine-list-query'
+} from '../../../../utils/media-quarantine-list-query'
 
 /** One key that could refuse the looked-up asset, and whether it is set. */
 interface AssetKey {

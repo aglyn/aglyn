@@ -218,8 +218,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
  * else in that module — `scopeAllows`, `mediaObjectPath` — stays REAL, since
  * the needle set is built from it.
  */
-jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => {
-  const actual = jest.requireActual('@aglyn/tenant-data-admin/server/console/media-scope')
+jest.mock('../utils/server/media-scope', () => {
+  const actual = jest.requireActual('../utils/server/media-scope')
   return {
     ...actual,
     resolveMediaScope: async () => ({

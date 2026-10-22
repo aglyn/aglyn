@@ -61,7 +61,7 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-host', () => ({
   planHostTransfer: (...args: unknown[]) => mockPlan(...args),
   transferHost: (...args: unknown[]) => mockTransfer(...args),
 }))
-jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
+jest.mock('../utils/server/tenant-revalidate', () => ({
   __esModule: true,
   revalidateEntireHost: async () => undefined,
 }))

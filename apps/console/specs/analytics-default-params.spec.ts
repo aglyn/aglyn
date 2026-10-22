@@ -56,29 +56,15 @@ import {
   readAnalyticsDefaultParams,
   resetAnalyticsDefaultParams,
   setAnalyticsDefaultParams,
-} from '@aglyn/aglyn/app-utils/console/analytics-default-params'
-import { buildConsolePageTitle } from '@aglyn/aglyn/app-utils/console/page-view-params'
-import { unreadBadge } from '@aglyn/aglyn/app-utils/console/notification-alerts'
+} from '../utils/analytics-default-params'
+import { buildConsolePageTitle } from '../utils/page-view-params'
+import { unreadBadge } from '../utils/notification-alerts'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
 } from '../utils/internal-traffic'
 
 const CONSOLE_ROOT = resolve(__dirname, '..')
-/** The repository root, and the core lib's app utilities the owners moved to. */
-const REPO_ROOT = resolve(__dirname, '../../..')
-const CORE_APP_UTILS = 'libs/aglyn/src/lib/app-utils/console'
-
-/** Files under the console and the core's app utilities that match `args`. */
-const grepOwners = (args: string[]): string[] =>
-  ['apps/console', CORE_APP_UTILS].flatMap((root) =>
-    execFileSync('grep', ['-rl', ...GREP_SCOPE, ...args, root], {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-    })
-      .split('\n')
-      .filter(Boolean),
-  )
 
 /**
  * Source only. `.next` carries generated `.ts` route types after a build, and
@@ -225,9 +211,14 @@ describe('the single owner is structurally the only one (AGL-2087)', () => {
     // Comments are stripped before the check. Several files legitimately
     // EXPLAIN the API — that is the point of the explanation — and a guard
     // that fired on prose would be paid for by deleting the prose.
-    const named = grepOwners(['setDefaultEventParameters']).filter(
-      (file) => !file.includes('node_modules'),
+    const named = execFileSync(
+      'grep',
+      ['-rl', ...GREP_SCOPE, 'setDefaultEventParameters', '.'],
+      { cwd: CONSOLE_ROOT, encoding: 'utf8' },
     )
+      .split('\n')
+      .filter(Boolean)
+      .filter((file) => !file.includes('node_modules'))
 
     // Sanity: the grep has to be finding things, or this guard cannot fail.
     expect(named.length).toBeGreaterThan(1)
@@ -237,12 +228,12 @@ describe('the single owner is structurally the only one (AGL-2087)', () => {
       .filter((file) => !/\.spec\.tsx?$/.test(file))
       .filter((file) =>
         stripComments(
-          readFileSync(resolve(REPO_ROOT, file), 'utf8'),
+          readFileSync(resolve(CONSOLE_ROOT, file), 'utf8'),
         ).includes('setDefaultEventParameters'),
       )
       .sort()
 
-    expect(callers).toEqual([`${CORE_APP_UTILS}/analytics-default-params.ts`])
+    expect(callers).toEqual(['./utils/analytics-default-params.ts'])
   })
 
   it('the layout writes both keys, each through the owner', () => {
@@ -266,16 +257,22 @@ describe('the single owner is structurally the only one (AGL-2087)', () => {
     // A second regex somewhere else is how the capped `(99+)` form survives
     // a fix that looked complete.
     const builder = readFileSync(
-      resolve(REPO_ROOT, CORE_APP_UTILS, 'page-view-params.ts'),
+      resolve(CONSOLE_ROOT, 'utils/page-view-params.ts'),
       'utf8',
     )
     expect(builder).toContain('stripUnreadBadge')
 
-    const restated = grepOwners(['-E', String.raw`\\\(\\d\+`])
+    const restated = execFileSync(
+      'grep',
+      ['-rlE', ...GREP_SCOPE, String.raw`\\\(\\d\+`, '.'],
+      { cwd: CONSOLE_ROOT, encoding: 'utf8' },
+    )
+      .split('\n')
+      .filter(Boolean)
       .filter((file) => !/\.spec\.tsx?$/.test(file))
       .filter((file) => !file.includes('node_modules'))
 
     // Exactly one definition, next to the `unreadBadge` that writes it.
-    expect(restated).toEqual([`${CORE_APP_UTILS}/notification-alerts.ts`])
+    expect(restated).toEqual(['./utils/notification-alerts.ts'])
   })
 })

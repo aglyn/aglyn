@@ -32,23 +32,23 @@ import {
   ORG_LIST_FILTER_FIELDS,
   ORG_LIST_FILTER_HEADERS,
   ORG_SUSPENDED_FILTER_OPTIONS,
-} from '@aglyn/aglyn/app-utils/console/org-list-query'
+} from '../utils/org-list-query'
 import {
   STAFF_SITE_LIST_FILTER_FIELDS,
   STAFF_SITE_LIST_FILTER_HEADERS,
   STAFF_SITE_LIST_FILTER_OPTIONS,
-} from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
+} from '../utils/staff-site-list-query'
 import {
   USER_LIST_FILTER_FIELDS,
   USER_LIST_FILTER_HEADERS,
   USER_LIST_FILTER_OPTIONS,
-} from '@aglyn/aglyn/app-utils/console/list-filters'
+} from '../utils/list-filters'
 import {
   SUSPENDED_FIELD,
   asksAboutSuspension,
   settleLapsedSuspensions,
   suspensionInForce,
-} from '@aglyn/tenant-data-admin/server/console/suspended-flag'
+} from '../utils/server/suspended-flag'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 const INDEX_FILE = JSON.parse(

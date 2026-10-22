@@ -73,7 +73,7 @@ import {
 /**
  * NO SANCTIONS GEO-BLOCK HERE, ON PURPOSE (AGL-1492).
  *
- * The block lives in `libs/aglyn/src/lib/app-utils/console/sanctions-geo.ts` and is wired
+ * The block lives in `apps/console/constants/sanctions-geo.ts` and is wired
  * into the console only. It was considered here and deliberately not added:
  *
  * ToS §3.6 forbids "you" — the party that registers for the Services, per the

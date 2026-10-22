@@ -31,7 +31,7 @@ import {
   storedPhotoLinkBytes,
   type PhotoLinkRefusal,
 } from '@aglyn/tenant-data-admin'
-import { normalizeUploadContentType } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
+import { normalizeUploadContentType } from '../../../../../utils/media-upload-limits'
 import { ingestMedia } from '../../../../../utils/server/media-ingest'
 
 /**
@@ -127,7 +127,7 @@ async function store(request: Request, body: Record<string, unknown>): Promise<R
 
   const claim = await claimPhotoLinkUpload(firestore, link.ref, stored.bytes.length)
   if (claim.ok === false) return refusal(claim.reason)
-  // lockdown-423: via libs/tenant/data/admin/src/lib/server/console/media-scope.ts — the ingest
+  // lockdown-423: via apps/console/utils/server/media-scope.ts — the ingest
   // resolves the minting member's scope through the same resolver, so a
   // locked workspace stores nothing and the place is given back. `open`
   // reads only the link's own document and the site's name.

@@ -28,11 +28,11 @@ import { useOrgPermissions } from '../../hooks/use-org-permissions'
 import {
   composeExtensionEntitlements,
   resolveExtensionEntitlement,
-} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
+} from '../../utils/extension-entitlement'
 import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '@aglyn/aglyn/app-utils/console/extension-permission'
+} from '../../utils/extension-permission'
 import { type GlobalSearchEntityDef, searchSourceEntity } from './global-search-scope'
 
 /**

@@ -126,11 +126,11 @@ import {
   rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { quarantineLogLines } from '@aglyn/aglyn/app-utils/console/quarantine-log-lines'
+import { quarantineLogLines } from '../../../../utils/quarantine-log-lines'
 import {
   scheduleMediaDeliveryCopies,
   takeDownAssetDeliveryCopies,
-} from '@aglyn/tenant-data-admin/server/console/media-delivery-copies'
+} from '../../../../utils/server/media-delivery-copies'
 import { FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
@@ -140,9 +140,9 @@ import {
   DENY_SORT_COLUMNS,
   denyListRow,
   type QuarantineRecord,
-} from '@aglyn/aglyn/app-utils/console/media-quarantine-list-query'
-import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
-import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+} from '../../../../utils/media-quarantine-list-query'
+import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 
@@ -504,7 +504,7 @@ async function handler(request: Request): Promise<Response> {
        * over EVERY entry of the one index document, a page at a time, oldest
        * first — the entries of one document cannot be queried, so the whole
        * source is read and matched, never a window of it
-       * (`@aglyn/aglyn/app-utils/console/media-quarantine-list-query`). `view=summary` is the facts
+       * (`utils/media-quarantine-list-query.ts`). `view=summary` is the facts
        * about the whole list the page states above the table, without the
        * entries. The plain `GET` below still answers every entry.
        */
@@ -938,7 +938,7 @@ async function handler(request: Request): Promise<Response> {
 
 /**
  * A disable or release answers with the line the page keeps under "Actions taken in this session" (`logLines`), so
- * the staff apps keep the same one (`@aglyn/aglyn/app-utils/console/quarantine-log-lines`, which the page builds it with too).
+ * the staff apps keep the same one (`utils/quarantine-log-lines.ts`, which the page builds it with too).
  */
 async function post(request: Request): Promise<Response> {
   const body = (await request.clone().json().catch(() => null)) as Record<string, unknown> | null

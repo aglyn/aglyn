@@ -19,7 +19,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   STAFF_CANCELLATION_COMMENT_MARKER,
   staffCancellationActor,
-} from '@aglyn/aglyn/app-utils/console/subscription-cancel'
+} from '../../../../constants/subscription-cancel'
 
 /**
  * WHICH SUBSCRIPTION EVENTS REACH THE WORKSPACE ACTIVITY LOG, AND WHOSE NAME

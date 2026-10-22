@@ -69,10 +69,10 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import resolveComponentDefinition, {
   isComponentDefinitionRefusal,
-} from '@aglyn/aglyn/app-utils/console/component-definition-write'
+} from '../../../../../../../../../../utils/component-definition-write'
 import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -102,12 +102,12 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   buildRoute,
   Route,
-} from '@aglyn/aglyn/app-utils/console/route-links'
-import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
-import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
+} from '../../../../../../../../../../constants/route-links'
+import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
+import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
+} from '../../../../../../../../../../hooks/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
@@ -119,9 +119,9 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
-import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
+import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 import useComponentEditorSurface from '../../../../../../../../../../hooks/use-component-editor-surface'
-import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 

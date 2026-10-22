@@ -30,7 +30,7 @@ import {
 import revalidateLivePages, {
   type RevalidateLivePagesOptions,
   type RevalidateLivePagesResult,
-} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
+} from './revalidate-live-pages'
 
 /**
  * THE ONE DOOR A CONSOLE WRITE TO `hosts/{hostId}` GOES THROUGH (AGL-3386).

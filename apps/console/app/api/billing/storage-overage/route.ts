@@ -32,7 +32,7 @@ import {
   resolveStorageCap,
   storageOveragePricePerGbUsd,
   STORAGE_CAP_FALLBACK_USD,
-} from '@aglyn/tenant-data-admin/server/console/storage-overage'
+} from '../../../../utils/storage-overage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 

@@ -40,7 +40,7 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { COVER_VIDEO_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
+import { COVER_VIDEO_HINT } from '../../constants/media-size-hints'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 
 /**

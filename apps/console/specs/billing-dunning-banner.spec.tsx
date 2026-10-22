@@ -48,7 +48,7 @@ import type { ReactNode } from 'react'
 import {
   LIVE_RETRY_WINDOW_IS_KNOWN,
   MAY_QUOTE_RETRY_WINDOW_IN_COPY,
-} from '@aglyn/aglyn/app-utils/console/stripe-dunning-schedule'
+} from '../utils/stripe-dunning-schedule'
 
 export {}
 

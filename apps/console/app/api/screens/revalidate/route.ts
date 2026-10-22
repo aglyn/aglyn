@@ -54,12 +54,12 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   screenIdsUsingComponentDeep,
   screenIdsUsingLayoutDeep,
-} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
+} from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 import {
   postTenantRevalidate,
   revalidateEntireHost,
-} from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+} from '../../../../utils/server/tenant-revalidate'
 
 export const dynamic = 'force-dynamic'
 

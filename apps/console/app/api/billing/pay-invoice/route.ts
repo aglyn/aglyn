@@ -25,7 +25,7 @@ import {
   readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import { platformPaymentsConfigured } from '@aglyn/tenant-data-admin/server/console/payments-platform'
+import { platformPaymentsConfigured } from '../../../../utils/server/payments-platform'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — this IS the recovery path. A billing-locked, past-due or

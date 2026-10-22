@@ -29,7 +29,7 @@ import {
   EMAIL_LOGO_HINT,
   FAVICON_HINT,
   SITE_LOGO_HINT,
-} from '@aglyn/aglyn/app-utils/console/media-size-hints'
+} from '../constants/media-size-hints'
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'

@@ -312,7 +312,7 @@ describe('the screen draft serves nothing until a member publishes it', () => {
 
     // The one door that publishes a screen writes its routing-map entry; read
     // from its own source, so this spec applies the same write it makes.
-    const publisher = readFileSync(join(REPO_ROOT, 'libs/aglyn/src/lib/app-utils/console/screen-publishing.ts'), 'utf8')
+    const publisher = readFileSync(join(REPO_ROOT, 'apps/console/constants/screen-publishing.ts'), 'utf8')
     const publish = publisher.slice(publisher.indexOf('export async function publishScreenRoute('), publisher.indexOf('export async function syncScreenRouteEntries('))
     expect(publish).toContain('[`screens.${screenId}`]: path')
     expect(publish).toContain('{ slug, publishedAt: Timestamp.now() }')

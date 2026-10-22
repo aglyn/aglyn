@@ -717,7 +717,7 @@ export interface LegalDocumentManifestEntry {
  * on their site, and that the confirmation is stored with the file: the
  * statement confirmed, who confirmed it (the user identifier, or the API
  * key used), and when. That is exactly `rightsConfirmation { uid, atMs,
- * statement }` in `@aglyn/aglyn/app-utils/console/media-audio-rights`.   - Privacy §2 "Aglyn Assist
+ * statement }` in `utils/media-audio-rights.ts`.   - Privacy §2 "Aglyn Assist
  * conversations" lists five purposes instead of     three, adding support and
  * the investigation of abuse, security     incidents and violations of our
  * terms; "AI generation jobs" says the     record serves the same two uses,

@@ -27,7 +27,7 @@
  * and states that address back on the session. Nothing stored it, so every
  * facilitated sale reached the return with no jurisdiction at all.
  *
- * THE WRITE HALF. The reader is `libs/tenant/data/admin/src/lib/server/console/tx-return.ts`, and
+ * THE WRITE HALF. The reader is `apps/console/utils/server/tx-return.ts`, and
  * its counts are asserted by `apps/console/specs/marketplace-tax-jurisdiction`
  * — a separate suite because a `scope:app` project may not import this lib.
  * That spec pins the field NAME against this file's source for the same

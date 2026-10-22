@@ -38,7 +38,7 @@ import {
   removePasskey,
   usePasskeysSupported,
   PasskeyRequestError,
-} from '@aglyn/aglyn/app-utils/console/passkeys'
+} from '../utils/passkeys'
 
 interface PasskeyRow {
   id: string

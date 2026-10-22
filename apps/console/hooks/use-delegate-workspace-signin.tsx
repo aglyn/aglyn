@@ -26,7 +26,7 @@ import {
   shouldDelegateSignIn,
 } from '../utils/auth-delegation'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { signInWithPooledCustomToken } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 
 /**
  * Workspace-subdomain sign-in delegation (AGL-465). On an org subdomain,

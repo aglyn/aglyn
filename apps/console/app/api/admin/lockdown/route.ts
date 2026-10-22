@@ -102,13 +102,13 @@ import {
   readSignupsCreationTriggerStatus,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { lockLogLines, resendLogLines } from '@aglyn/aglyn/app-utils/console/lockdown-log-lines'
+import { lockLogLines, resendLogLines } from '../../../../utils/lockdown-log-lines'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
-import { applyUserLockdown } from '@aglyn/tenant-data-admin/server/console/user-lockdown'
+import { applyUserLockdown } from '../../../../utils/server/user-lockdown'
 import {
   LOCKDOWN_RESEND_MAX_TARGETS,
   type LockdownNoticeEffects,
@@ -2048,7 +2048,7 @@ async function handler(request: Request): Promise<Response> {
 /**
  * A lock, lift or resend answers with the lines the page keeps under "Actions taken in this session"
  * (`logLines`), so the staff apps keep the same ones without working them out of the answer themselves
- * (`@aglyn/aglyn/app-utils/console/lockdown-log-lines`, which the page builds them with too).
+ * (`utils/lockdown-log-lines.ts`, which the page builds them with too).
  */
 async function post(request: Request): Promise<Response> {
   const body = (await request.clone().json().catch(() => null)) as Record<string, unknown> | null

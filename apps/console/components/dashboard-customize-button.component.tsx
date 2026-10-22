@@ -39,7 +39,7 @@ import {
   DASHBOARD_WIDGET_SLOTS,
   isDashboardWidgetHidden,
   orderDashboardWidgets,
-} from '@aglyn/aglyn/app-utils/console/dashboard-widgets'
+} from '../utils/dashboard-widgets'
 
 /** One row of the dialog: a card, and the group its arrows move it within. */
 interface CustomizeRow {

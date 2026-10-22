@@ -105,7 +105,7 @@ const RESOLVER_DIR = 'libs/aglyn/src/lib/app-utils'
 // `claimHostForOrg`, so `/api/hosts/create` and `POST /v1/sites` share it
 // verbatim. The guard threw rather than silently asserting nothing about the
 // host field set — which is the whole point of the throw. Repointed here.
-const HOST_SEED_FILE = 'libs/tenant/data/admin/src/lib/server/console/provision-host.ts'
+const HOST_SEED_FILE = 'apps/console/utils/server/provision-host.ts'
 
 /** The resolver modules, read once. */
 const resolverSources = readdirSync(resolve(REPO_ROOT, RESOLVER_DIR))

@@ -24,7 +24,7 @@
  * finally have an input for.
  *
  * `GET` answers three reads, each served by its own query
- * (`@aglyn/aglyn/app-utils/console/abuse-report-list-query`, AGL-3321):
+ * (`utils/abuse-report-list-query.ts`, AGL-3321):
  *
  *   (default)                one page of reports — the staff list wire,
  *                            Status and Category on the query, cursor-paged
@@ -139,13 +139,13 @@ import {
   COUNTER_NOTICE_OVERDUE_READ_MAX,
   URGENT_ABUSE_CATEGORIES,
   counterNoticeOverdueBefore,
-} from '@aglyn/aglyn/app-utils/console/abuse-report-list-query'
+} from '../../../../utils/abuse-report-list-query'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
-import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
-import { SUSPENDED_FIELD, suspensionInForce } from '@aglyn/tenant-data-admin/server/console/suspended-flag'
+} from '../../../../utils/server/staff-list-query'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
+import { SUSPENDED_FIELD, suspensionInForce } from '../../../../utils/server/suspended-flag'
 
 export const dynamic = 'force-dynamic'
 

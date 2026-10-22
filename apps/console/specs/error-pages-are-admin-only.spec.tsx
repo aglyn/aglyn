@@ -146,10 +146,10 @@ jest.mock('../hooks/use-firestore-collection', () => ({
   __esModule: true,
   default: () => ({ data: [] }),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/screen-publishing', () => ({
+jest.mock('../constants/screen-publishing', () => ({
   unpublishScreenRoute: jest.fn(async () => undefined),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
+jest.mock('../utils/revalidate-live-pages', () => ({
   __esModule: true,
   default: (...args: unknown[]) => mockRevalidateLivePages(...args),
 }))

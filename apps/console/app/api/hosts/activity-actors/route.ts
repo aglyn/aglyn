@@ -21,7 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { resolveAccountEmails } from '@aglyn/tenant-data-admin/server/console/actor-activity'
+import { resolveAccountEmails } from '../../../../utils/server/actor-activity'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — read-only, writes nothing: it names who acted in a

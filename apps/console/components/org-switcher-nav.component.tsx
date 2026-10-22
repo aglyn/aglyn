@@ -46,17 +46,17 @@ import {
   isEnterpriseOrg,
   resolveEffectivePlan,
 } from '@aglyn/aglyn'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgRows } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
-import { usePinnedOrgs } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs'
+import { usePinnedOrgs } from '../hooks/use-pinned-orgs'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
 import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 import { onlyInScheme } from '@aglyn/shared-ui-theme/util/scheme-visibility'
-import { arrangeWorkspaces } from '@aglyn/aglyn/app-utils/console/workspace-list'
+import { arrangeWorkspaces } from '../utils/workspace-list'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 

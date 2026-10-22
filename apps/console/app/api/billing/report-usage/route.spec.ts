@@ -255,7 +255,7 @@ jest.mock('../../../../utils/screen-cap-reconciliation', () => ({
 
 // ---------------------------------------------------------------------------
 
-import { currentMonth, previousMonth } from '@aglyn/aglyn/app-utils/console/billing-month'
+import { currentMonth, previousMonth } from '../../../../utils/billing-month'
 
 const GB = 1024 * 1024 * 1024
 

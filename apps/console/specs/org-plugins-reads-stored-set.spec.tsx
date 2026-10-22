@@ -69,7 +69,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ uid: 'user-1', getIdToken: async () => 'token' }),
 }))
 jest.mock('../../../hooks/use-org-hosts', () => ({}), { virtual: true })
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
+jest.mock('../hooks/use-org-hosts', () => ({
   useOrgHosts: () => ({ hosts: [] }),
 }))
 jest.mock('../hooks/use-branding', () => ({

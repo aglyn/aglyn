@@ -41,7 +41,7 @@ jest.mock('firebase/auth', () => ({
 }))
 
 let mockIsStaff: boolean | null = null
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('../hooks/use-is-staff', () => ({
   useIsStaff: () => mockIsStaff,
 }))
 const mockNotFound = jest.fn(() => {
@@ -55,7 +55,7 @@ import {
   adoptRestoredPool,
   aimAuthAtPool,
   signInWithPooledCustomToken,
-} from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+} from '../utils/pooled-custom-token'
 import { StaffGuard } from '../components/staff-guard.component'
 
 /**

@@ -32,7 +32,7 @@ import {
   usePendingInvites,
   type InviteReviewTarget,
   type PendingInvite,
-} from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+} from '../hooks/use-pending-invites'
 import { inviteSentence } from './org-invites-banner.component'
 
 export interface InviteResponseDialogProps {

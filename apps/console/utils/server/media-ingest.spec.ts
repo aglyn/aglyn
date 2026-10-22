@@ -75,7 +75,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   mediaVariantDocFields: (outcome: { variants: number[] }) => ({ variants: outcome.variants }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
+jest.mock('./media-scope', () => ({
   __esModule: true,
   resolveMediaScope: async (...args: unknown[]) => {
     mockScopeCalls.push(args)
@@ -111,12 +111,12 @@ jest.mock('@aglyn/tenant-data-admin/server/console/media-scope', () => ({
   folderStoragePath: async (_scopeRef: unknown, folderId: string | null) => (folderId === 'owner' ? 'From the owner' : ''),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/media-storage-band', () => ({
+jest.mock('./media-storage-band', () => ({
   __esModule: true,
   resolveOrgMediaBand: async () => ({ usedBytes: 0, allowanceMb: 100 }),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/storage-overage', () => ({
+jest.mock('../storage-overage', () => ({
   __esModule: true,
   mediaStorageGate: () =>
     mockGateAllowed
@@ -125,7 +125,7 @@ jest.mock('@aglyn/tenant-data-admin/server/console/storage-overage', () => ({
   scopeBillsStorageOverage: () => false,
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/media-embedded', () => ({
+jest.mock('./media-embedded', () => ({
   __esModule: true,
   embeddedMetadataAtIngress: async () => null,
 }))

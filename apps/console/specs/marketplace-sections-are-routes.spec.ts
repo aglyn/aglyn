@@ -58,7 +58,7 @@ import {
   type ReleaseFlagKey,
 } from '@aglyn/aglyn'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
-import { resolveHubSections } from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
+import { resolveHubSections } from '../utils/plugin-hub-sections'
 
 const BASE = '/acme/marketplace'
 

@@ -50,7 +50,7 @@ import {
   hostMeterReadings,
   type HostUsageSnapshot,
   meteredBands,
-} from '@aglyn/aglyn/app-utils/console/usage-metering'
+} from '../../../../utils/usage-metering'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
 import { orgCounterTotals } from '../../../../utils/org-counter-totals'
@@ -61,7 +61,7 @@ import {
   raiseOperatorAlert,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
-import { CRON_CHUNK_SIZE, selectCronChunk } from '@aglyn/aglyn/app-utils/console/cron-chunk'
+import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
 import {
   isMeteredPriceId,
   meteredPriceId,
@@ -70,13 +70,13 @@ import {
   currentMonth,
   monthIsClosed,
   previousMonth,
-} from '@aglyn/aglyn/app-utils/console/billing-month'
+} from '../../../../utils/billing-month'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller; metering must
 // keep running under a lock so billing stays truthful.
 
 // `previousMonth` / `currentMonth` / `monthIsClosed` moved to
-// `@aglyn/aglyn/app-utils/console/billing-month` (AGL-2219). `previousMonth` had three byte-identical
+// `utils/billing-month.ts` (AGL-2219). `previousMonth` had three byte-identical
 // private copies across this route, `billing/usage-email` and `admin/overview`,
 // and `monthIsClosed` is a rule about which months may be invoiced — neither
 // belongs inline in the route that sends the meter event.

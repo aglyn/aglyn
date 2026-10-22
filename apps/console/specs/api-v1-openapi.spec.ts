@@ -25,7 +25,7 @@ import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_OPENAPI_PATH,
   CUSTOMER_API_VERSION,
-} from '@aglyn/tenant-data-admin/server/console/api-v1-openapi'
+} from '../utils/api-v1-openapi'
 
 let document: any
 

@@ -96,7 +96,7 @@ import {
   resolveOrgEntitlements,
   SITE_MEMBERS_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
-import { mediaStorageGate } from '@aglyn/tenant-data-admin/server/console/storage-overage'
+import { mediaStorageGate } from '../utils/storage-overage'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 
@@ -166,7 +166,7 @@ const DIMENSIONS: Record<string, Dimension> = {
   hostLimit: quotaRow(
     'hostLimit',
     1,
-    'libs/tenant/data/admin/src/lib/server/console/provision-host.ts',
+    'apps/console/utils/server/provision-host.ts',
     0,
   ),
   screensPerHost: quotaRow('screensPerHost', 5, RESOURCES_ROUTE, 4),
@@ -237,7 +237,7 @@ const DIMENSIONS: Record<string, Dimension> = {
     refusedAt: 250,
     allowedAt: 249,
     relax: (n) => free({ storagePerHostMb: n }),
-    enforcedIn: 'libs/tenant/data/admin/src/lib/server/console/storage-overage.ts',
+    enforcedIn: 'apps/console/utils/storage-overage.ts',
     decider: 'mediaStorageGate',
   },
 

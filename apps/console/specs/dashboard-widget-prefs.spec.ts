@@ -36,7 +36,7 @@ import {
   readDashboardWidgetPrefs,
   RETIRED_DASHBOARD_WIDGET_IDS,
   setDashboardWidgetHidden,
-} from '@aglyn/aglyn/app-utils/console/dashboard-widgets'
+} from '../utils/dashboard-widgets'
 
 const ids = (widgets: Array<{ widgetId: string }>) =>
   widgets.map((widget) => widget.widgetId)

@@ -13,8 +13,8 @@
  *
  * A staff screen shows what the console's page says about a probe, and asks
  * for the phrase the console's route insists on before a destructive job
- * runs. Those live in console modules (`@aglyn/aglyn/app-utils/console/platform-health`,
- * `@aglyn/aglyn/app-utils/console/maintenance-jobs`), so this generator READS them and writes only
+ * runs. Those live in console modules (`utils/platform-health.ts`,
+ * `utils/maintenance-jobs.ts`), so this generator READS them and writes only
  * their values into `libs/native/screens/staff.screens.json`: the probe
  * texts as the `constants` of `core.staff.health`, the lock and cancellation
  * reasons a route insists on as the `constants` of the screens that offer
@@ -49,32 +49,32 @@ export async function staffSources() {
   delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
   const { createJiti } = require('jiti')
   const jiti = createJiti(join(ROOT, 'package.json'), { interopDefault: true, fsCache: false, alias: aliases() })
-  const health = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/platform-health.ts'))
-  const maintenance = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/maintenance-jobs.ts'))
+  const health = await jiti.import(join(ROOT, 'apps/console/utils/platform-health.ts'))
+  const maintenance = await jiti.import(join(ROOT, 'apps/console/utils/maintenance-jobs.ts'))
   const lockdown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/lockdown.ts'))
-  const cancel = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/subscription-cancel.ts'))
+  const cancel = await jiti.import(join(ROOT, 'apps/console/constants/subscription-cancel.ts'))
   const options = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }))
   // The AI plugin declares the AI levers the Locks screen lists beside the core ones.
   await jiti.import(join(ROOT, 'libs/plugins/ai/src/lib/declarations.ts'))
   const emails = await jiti.import(join(ROOT, 'libs/shared/util/email/src/lib/system-email-catalog.ts'))
-  const suppression = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/email-suppression-filters.ts'))
+  const suppression = await jiti.import(join(ROOT, 'apps/console/utils/email-suppression-filters.ts'))
   const plans = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'))
-  const revenue = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/revenue-view.ts'))
-  const overrides = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/org-override-fields.ts'))
-  const domain = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/domain-status.ts'))
-  const leaving = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/staff-leaving-notice.ts'))
+  const revenue = await jiti.import(join(ROOT, 'apps/console/utils/revenue-view.ts'))
+  const overrides = await jiti.import(join(ROOT, 'apps/console/utils/org-override-fields.ts'))
+  const domain = await jiti.import(join(ROOT, 'apps/console/utils/domain-status.ts'))
+  const leaving = await jiti.import(join(ROOT, 'apps/console/utils/staff-leaving-notice.ts'))
   const apex = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/tenant-apex.ts'))
-  const identity = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/staff-identity-source.ts'))
+  const identity = await jiti.import(join(ROOT, 'apps/console/utils/staff-identity-source.ts'))
   const passwordPolicy = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/password-policy.ts'))
-  const passwordGenerator = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/password-generator.ts'))
+  const passwordGenerator = await jiti.import(join(ROOT, 'apps/console/utils/password-generator.ts'))
   const taxFiling = await jiti.import(join(ROOT, 'apps/console/utils/tax-filing-config.ts'))
   const quarantine = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-quarantine.ts'))
-  const samples = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/system-email-sample-sources.ts'))
-  const impersonation = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/impersonation-reason.ts'))
+  const samples = await jiti.import(join(ROOT, 'apps/console/utils/system-email-sample-sources.ts'))
+  const impersonation = await jiti.import(join(ROOT, 'apps/console/utils/impersonation-reason.ts'))
   const takedown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-takedown-reach.ts'))
-  const denyList = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/media-quarantine-list-query.ts'))
+  const denyList = await jiti.import(join(ROOT, 'apps/console/utils/media-quarantine-list-query.ts'))
   const gateways = await jiti.import(join(ROOT, 'libs/shared/util/email/src/lib/mail-gateway.ts'))
-  const auditQuery = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/admin-audit-list-query.ts'))
+  const auditQuery = await jiti.import(join(ROOT, 'apps/console/utils/admin-audit-list-query.ts'))
   const organizations = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/organizations.ts'))
   const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))

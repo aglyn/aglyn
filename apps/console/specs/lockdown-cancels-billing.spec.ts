@@ -43,7 +43,7 @@
  * carrier doc so the route's read-back is real.
  */
 
-import { lockdownCancelsBillingByDefault } from '@aglyn/aglyn/app-utils/console/subscription-cancel'
+import { lockdownCancelsBillingByDefault } from '../constants/subscription-cancel'
 import {
   installStripeDouble,
   subscription,
@@ -147,54 +147,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     reason: 'not probed in tests',
   }),
   readOrgBilling: (orgId: string) => mockReadOrgBilling(orgId),
-}))
-
-// The moved server routines import these modules directly, which the index mock
-// above does not reach; each hands back the index mock's value.
-jest.mock('@aglyn/tenant-data-admin/server/token-revocation', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/token-revocation'),
-  get invalidateTokenRevocationCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidateTokenRevocationCache
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
-  get firebaseAdmin() {
-    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
-  },
-  get isImpersonationSession() {
-    return jest.requireMock('@aglyn/tenant-data-admin').isImpersonationSession
-  },
-  get emailUnverifiedResponse() {
-    return jest.requireMock('@aglyn/tenant-data-admin').emailUnverifiedResponse
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/auth-pools'),
-  get authForPool() {
-    return jest.requireMock('@aglyn/tenant-data-admin').authForPool
-  },
-  get findUserByUidAcrossPools() {
-    return jest.requireMock('@aglyn/tenant-data-admin').findUserByUidAcrossPools
-  },
-}))
-jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/lockdown'),
-  get invalidateDomainLockdownCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidateDomainLockdownCache
-  },
-  get invalidateFeatureLockdownCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidateFeatureLockdownCache
-  },
-  get invalidatePlatformLockdownCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidatePlatformLockdownCache
-  },
-  get invalidateUserLockdownCache() {
-    return jest.requireMock('@aglyn/tenant-data-admin').invalidateUserLockdownCache
-  },
-  get readSignupsCreationTriggerStatus() {
-    return jest.requireMock('@aglyn/tenant-data-admin').readSignupsCreationTriggerStatus
-  },
 }))
 
 jest.mock('../utils/server/org-lockdown', () => ({

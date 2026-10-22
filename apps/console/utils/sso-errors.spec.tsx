@@ -18,7 +18,7 @@
 import { render, screen } from '@testing-library/react'
 import { AuthAppErrorCodes, AuthErrorIgnore } from '@aglyn/shared-data-enums'
 import AuthErrorAlertComponent from '../components/auth-error-alert.component'
-import { describeSsoError } from '@aglyn/aglyn/app-utils/console/sso-errors'
+import { describeSsoError } from './sso-errors'
 
 /**
  * AGL-1416.

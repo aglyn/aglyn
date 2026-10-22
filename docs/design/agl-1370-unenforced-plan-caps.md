@@ -51,7 +51,7 @@ Neither answer is "add a wall". Recommended change is copy-only.
 
 ### `bandwidthGb` is the page-view band — it is not a second name, it is the band
 
-`libs/aglyn/src/lib/app-utils/console/usage-metering.ts:135-137` converts it directly into the
+`apps/console/utils/usage-metering.ts:135-137` converts it directly into the
 included page-view allowance:
 
 ```ts

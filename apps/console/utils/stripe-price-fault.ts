@@ -1,0 +1,80 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { defaultAiTierForPlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+
+/**
+ * Turn Stripe's `resource_missing` into the env var that caused it (AGL-1137).
+ *
+ * Returns null for every other Stripe error, so a genuine outage still reads
+ * as one — the point is to separate "we are misconfigured" from "Stripe is
+ * unhappy", not to relabel everything as configuration.
+ */
+export function configuredPriceFault(
+  error: { code?: string; param?: string; message?: string } | undefined,
+  plan: string,
+  interval: 'month' | 'year',
+  /**
+   * Where the Aglyn AI add-on item sits in the request (AGL-2897), when the
+   * checkout attached one. It follows the metered item, so its index depends
+   * on whether that item was configured — the caller knows, this cannot.
+   */
+  aiAddonItemIndex: number | null = null,
+  /**
+   * Where the Site Care item sits (AGL-3954), when the checkout attached one.
+   * It follows the AI add-on when both were bought, so again only the caller
+   * knows the index.
+   */
+  siteCareItemIndex: number | null = null,
+  /**
+   * The Aglyn AI tier that item sells (AGL-3965): its env is per tier.
+   * Absent, the tier a plan-named purchase means (`defaultAiTierForPlan`).
+   */
+  aiTier: string | null = null,
+  /**
+   * Every other add-on item a bundle checkout attached (AGL-3955): where it
+   * sits and the env var its price came from, which only the caller knows.
+   */
+  addonItems: ReadonlyArray<{ index: number; envVar: string }> = [],
+): string | null {
+  if (!error || error.code !== 'resource_missing') return null
+  const param = String(error.param ?? '')
+  if (!param.includes('price')) return null
+  // line_items[1] is the shared metered price; [0] is the plan itself. Both
+  // are interval-suffixed, the metered one since AGL-1280 gave it a yearly
+  // twin — naming the monthly var for a failed ANNUAL checkout would send
+  // someone to fix a variable that was never consulted.
+  const yearly = interval === 'year' ? '_YEARLY' : ''
+  const at = (index: number | null) =>
+    index !== null && param.includes(`[${index}]`)
+  const addonItem = addonItems.find((item) => at(item.index))
+  const envVar = addonItem
+    ? addonItem.envVar
+    : at(aiAddonItemIndex)
+    ? `STRIPE_PRICE_AI_${String(aiTier ?? defaultAiTierForPlan(plan) ?? 'spark').toUpperCase()}${yearly}`
+    : at(siteCareItemIndex)
+      ? `STRIPE_PRICE_SITE_CARE${yearly}`
+      : param.includes('[1]')
+        ? `STRIPE_PRICE_METERED${yearly}`
+        : `STRIPE_PRICE_${plan.toUpperCase()}${yearly}`
+  return (
+    `Billing is misconfigured: ${envVar} points at a price that does not ` +
+    `exist in this Stripe account/mode. This is the shape you get when the ` +
+    `secret key is switched between test and live and the price ids are not. ` +
+    `Stripe said: ${error.message ?? 'no such price'}`
+  )
+}

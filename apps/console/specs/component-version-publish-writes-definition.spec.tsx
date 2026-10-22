@@ -106,13 +106,13 @@ jest.mock('../hooks/use-firestore-doc', () => ({
   default: () => ({ data: {} }),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
+jest.mock('../utils/revalidate-live-pages', () => ({
   __esModule: true,
   default: jest.fn(async () => ({})),
   describeRevalidateShortfall: jest.fn(() => null),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/console/rewrite-stored-binding-tokens', () => ({
+jest.mock('../utils/rewrite-stored-binding-tokens', () => ({
   __esModule: true,
   default: jest.fn(() => null),
   storedBindingTokenNeeds: jest.fn(() => ({ variables: false, functions: false })),

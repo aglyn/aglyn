@@ -64,12 +64,12 @@ import {
   ORG_MEMBER_FILTER_FIELDS,
   ORG_MEMBER_LIST_PAGE,
   ORG_MEMBER_LIST_QUERY,
-} from '@aglyn/aglyn/app-utils/console/org-member-list-query'
+} from '../../../../utils/org-member-list-query'
 import {
   auditLogSearchWords,
   readAuditLogFilters,
-} from '@aglyn/tenant-data-admin/server/console/audit-log-filter'
-import { applyListQuery } from '@aglyn/tenant-data-admin/server/console/list-filter'
+} from '../../../../utils/server/audit-log-filter'
+import { applyListQuery } from '../../../../utils/server/list-filter'
 
 // `author` (AGL-2334) is assignable per site like every other host role —
 // a capability the rules enforce but no door writes is not a feature.

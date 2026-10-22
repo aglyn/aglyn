@@ -70,7 +70,7 @@ import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
 import { FieldValue } from 'firebase-admin/firestore'
 import { lockdownNoticeReference, sendLockdownOwnerNotice } from './lockdown-owner-notice'
 import { applyHostLockdown, applyOrgLockdown } from './org-lockdown'
-import { applyUserLockdown } from '@aglyn/tenant-data-admin/server/console/user-lockdown'
+import { applyUserLockdown } from './user-lockdown'
 
 type AdminFirestore = FirebaseFirestore.Firestore
 

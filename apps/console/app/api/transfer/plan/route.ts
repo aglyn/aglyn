@@ -26,7 +26,7 @@
  * `TransferPlanResponse` or `TransferPlanRowsResponse`.
  */
 
-// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
+// lockdown-423: via apps/console/utils/server/transfer-gate.ts
 
 import type {
   TransferPlanChoices,
@@ -35,7 +35,7 @@ import type {
   TransferRowVerdict,
 } from '@aglyn/aglyn/data-transfer'
 import { planTransferJob, readTransferPlanRows } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { auditTransfer, transferErrorResponse, transferGate } from '@aglyn/tenant-data-admin/server/console/transfer-gate'
+import { auditTransfer, transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
 
 async function handler(request: Request): Promise<Response> {
   const caller = await transferGate(request, 'plan')

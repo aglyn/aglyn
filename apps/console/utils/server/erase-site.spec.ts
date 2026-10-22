@@ -70,7 +70,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...args),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
+jest.mock('./tenant-revalidate', () => ({
   __esModule: true,
   dropDeletedSiteCache: (...args: unknown[]) => mockDrop(...args),
 }))

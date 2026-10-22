@@ -28,7 +28,7 @@ import {
   deviceLocationCountry,
   memberStateExposure,
   type ExposureSubject,
-} from '@aglyn/tenant-data-admin/server/console/member-state-exposure'
+} from '../../../../utils/server/member-state-exposure'
 
 /**
  * AGL-2008 — which Member States are the affected data subjects in?

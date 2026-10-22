@@ -59,7 +59,7 @@ import {
 } from './lib/pricing-drift.mjs'
 
 const PLAN_ENTITLEMENTS_TS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
-const USAGE_METERING_TS = 'libs/aglyn/src/lib/app-utils/console/usage-metering.ts'
+const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
 
 /**
  * The price set LOCKED for the Sept 1 public beta.

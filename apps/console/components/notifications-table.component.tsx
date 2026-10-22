@@ -29,15 +29,15 @@ import { Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import { isNotificationRead } from '@aglyn/aglyn/app-utils/console/notification-feed'
+import { isNotificationRead } from '../utils/notification-feed'
 import {
   NOTIFICATION_DEFAULT_SORT,
   NOTIFICATION_FILTER_FIELDS,
   NOTIFICATION_FILTER_HEADERS,
   NOTIFICATION_FILTER_OPTIONS,
   NOTIFICATION_SORTS,
-} from '@aglyn/aglyn/app-utils/console/notification-filters'
-import type { NotificationWorkspace } from '@aglyn/aglyn/app-utils/console/notification-links'
+} from '../utils/notification-filters'
+import type { NotificationWorkspace } from '../utils/notification-links'
 import {
   NotificationLevelIcon,
   notificationLevelRowClass,
@@ -249,7 +249,7 @@ const NOTIFICATION_SORT_HEADERS = { workspace: 'Workspace' }
  *
  * The Filters panel is the FEED'S, not the page's (AGL-3321): Type and
  * Status are equalities the feed's query applies beneath its `createdAt`
- * cursor (`@aglyn/aglyn/app-utils/console/notification-filters`), so every page the pager turns is
+ * cursor (`utils/notification-filters.ts`), so every page the pager turns is
  * a page of the filtered feed. The search box stays off: a notification's
  * words are held by no index, so a search could only narrow the page on
  * screen and would call that the whole feed.

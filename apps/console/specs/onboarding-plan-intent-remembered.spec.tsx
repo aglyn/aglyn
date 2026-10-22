@@ -32,7 +32,7 @@ import type { ReactNode } from 'react'
 import {
   consumeOnboardingPlanIntent,
   rememberOnboardingPlanIntent,
-} from '@aglyn/aglyn/app-utils/console/onboarding-plan-intent'
+} from '../utils/onboarding-plan-intent'
 
 const mockCreateUser = jest.fn()
 const mockSetDoc = jest.fn(async () => undefined)
@@ -162,7 +162,7 @@ jest.mock('../hooks/use-delegate-workspace-signin', () => ({
   __esModule: true,
   default: () => 'off',
 }))
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result', () => ({
+jest.mock('../hooks/use-google-redirect-result', () => ({
   __esModule: true,
   default: () => undefined,
 }))
@@ -174,7 +174,7 @@ jest.mock('../utils/legal-consent', () => ({
   markLegalConsent: jest.fn(),
   postLegalAcceptance: jest.fn(async () => undefined),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
+jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
 }))
 jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
@@ -184,10 +184,10 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
 jest.mock('../utils/auth-delegation', () => ({
   authSignInHost: () => 'app.aglyn.com',
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
+jest.mock('../utils/oauth-providers', () => ({
   createGoogleOAuthProvider: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
+jest.mock('../utils/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))

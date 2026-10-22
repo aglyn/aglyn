@@ -138,20 +138,20 @@ jest.mock('../components/boot-splash.component', () => ({
   __esModule: true,
   default: () => null,
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/analytics-user-properties', () => ({
+jest.mock('../utils/analytics-user-properties', () => ({
   __esModule: true,
   buildOrgUserProperties: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/page-view-params', () => ({
+jest.mock('../utils/page-view-params', () => ({
   __esModule: true,
   buildPageViewParams: () => ({}),
   consumePendingPageViewParams: () => ({}),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/analytics-default-params', () => ({
+jest.mock('../utils/analytics-default-params', () => ({
   __esModule: true,
   setAnalyticsDefaultParams: jest.fn(),
 }))
-jest.mock('@aglyn/aglyn/app-utils/console/session-health', () => ({
+jest.mock('../utils/session-health', () => ({
   __esModule: true,
   reportFirestoreSessionDenial: jest.fn(),
   startSessionHealthWatch: jest.fn(),

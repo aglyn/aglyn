@@ -62,7 +62,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import createScreenDraft from '@aglyn/aglyn/app-utils/console/create-screen-draft'
+import createScreenDraft from '../utils/create-screen-draft'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 
@@ -79,7 +79,7 @@ const readRepo = (rel: string) =>
 const SCREENS_PAGE =
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'
 const RESOURCES_ROUTE = 'apps/console/app/api/hosts/resources/route.ts'
-const HELPER = 'libs/aglyn/src/lib/app-utils/console/create-screen-draft.ts'
+const HELPER = 'apps/console/utils/create-screen-draft.ts'
 
 /**
  * Every field `/api/hosts/resources` will accept on a screen create. Anything
@@ -262,7 +262,7 @@ describe('a created screen serves nothing until somebody publishes it', () => {
 
     // The one door that publishes a screen, read from its own source so this
     // spec applies the write it actually makes rather than a paraphrase.
-    const publisher = readRepo('libs/aglyn/src/lib/app-utils/console/screen-publishing.ts')
+    const publisher = readRepo('apps/console/constants/screen-publishing.ts')
     const publish = publisher.slice(
       publisher.indexOf('export async function publishScreenRoute('),
       publisher.indexOf('export async function syncScreenRouteEntries('),

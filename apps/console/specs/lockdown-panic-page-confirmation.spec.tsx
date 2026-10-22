@@ -83,7 +83,7 @@ jest.mock('../components/staff-only.component', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
+jest.mock('../hooks/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
   /*

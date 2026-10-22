@@ -70,7 +70,7 @@ import {
   nonPageScreenIds,
   readScreenSources,
 } from './count-billable-screens'
-import { announceLivePaths } from '@aglyn/tenant-data-admin/server/console/announce-live-paths'
+import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { isSitePath } from '../../_lib/external-destination'
 

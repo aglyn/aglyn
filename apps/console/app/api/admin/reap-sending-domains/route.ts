@@ -64,10 +64,10 @@ import {
   planSendingDomainReap,
   type ClaimOwnership,
   type SendingDomainClaim,
-} from '@aglyn/tenant-data-admin/server/console/reap-sending-domains'
+} from '../../../../utils/server/reap-sending-domains'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
-import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 export const dynamic = 'force-dynamic'
 
