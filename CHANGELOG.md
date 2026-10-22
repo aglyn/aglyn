@@ -22,6 +22,13 @@ content on the marketing site and is written separately.
 - **console:** six site-data hooks join tenant-feature-instance
 - **console:** six generic hooks and helpers leave the app for their libs
 
+<details>
+<summary>Also in this release: 1 build</summary>
+
+- **deps-dev:** vitest 4.1.12, clearing two @vitest/mocker advisories
+
+</details>
+
 ## v1.0.0-beta.277 — 2026-10-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.276...v1.0.0-beta.277)
