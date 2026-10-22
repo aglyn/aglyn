@@ -48,7 +48,7 @@ import {
 } from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
-import { useOrgRows } from '../hooks/use-org-plans'
+import { useOrgRows } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { usePinnedOrgs } from '../hooks/use-pinned-orgs'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
