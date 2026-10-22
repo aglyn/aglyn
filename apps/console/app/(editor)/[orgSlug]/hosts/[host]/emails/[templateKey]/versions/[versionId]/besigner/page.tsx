@@ -18,7 +18,7 @@
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
-import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import type * as Aglyn from '@aglyn/aglyn'

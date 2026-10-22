@@ -62,7 +62,7 @@ import PlatformMarketingConsentPrompt from '../../../components/marketing-consen
 import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
-import { useOrgPlans } from '../../../hooks/use-org-plans'
+import { useOrgPlans } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
 import { useOrgScope } from '../../../hooks/use-org-scope'
 import { usePinnedOrgs } from '../../../hooks/use-pinned-orgs'
 import {

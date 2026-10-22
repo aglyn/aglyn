@@ -57,7 +57,7 @@ jest.mock('../hooks/use-current-org', () => ({
     ready: true,
   }),
 }))
-jest.mock('../hooks/use-org-plans', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
   useOrgPlans: () => ({}),
   useOrgRows: (ids: string[], enabled: boolean) => {
     mockRowReads(ids, enabled)

@@ -144,7 +144,7 @@ import useCurrentOrg from '../../../../../hooks/use-current-org'
 import SiteCareBillingCard from '../../../../../components/site-care/site-care-billing-card.component'
 import SiteCareProjectsBillingCard from '../../../../../components/site-care/site-care-projects-billing-card.component'
 import { hasSiteCare } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import useConfirmedDoc from '../../../../../hooks/use-confirmed-doc'
+import useConfirmedDoc from '@aglyn/tenant-feature-instance/hooks/use-confirmed-doc'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
 
