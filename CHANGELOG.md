@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.278 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.277...v1.0.0-beta.278)
+
+### Fixed
+
+- **besigner:** rich text everywhere text is edited, and repeats that explain themselves ([AGL-1304](https://linear.app/aglyn/issue/AGL-1304))
+
+### Changed
+
+- **console:** six site-data hooks join tenant-feature-instance
+- **console:** six generic hooks and helpers leave the app for their libs
+
 ## v1.0.0-beta.277 — 2026-10-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.276...v1.0.0-beta.277)
