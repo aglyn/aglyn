@@ -26,6 +26,11 @@ content on the marketing site and is written separately.
 - **signup:** retry a derived sign-up workspace address under a suffix on 409 ([AGL-4024](https://linear.app/aglyn/issue/AGL-4024))
 - **console:** the Aglyn AI switch lines up with the other add-on switches ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
 
+### Changed
+
+- **privacy:** guard client identifiers by digest in files, commit messages and PR text ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **monitoring:** keep real client pages out of the canary and render monitor source ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
 ### Documentation
 
 - **billing:** the bundle link's Aglyn AI tier, and POS registers on the staff bundle ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
@@ -34,6 +39,7 @@ content on the marketing site and is written separately.
 
 ### Tests
 
+- **privacy:** replace real client names and ids in fixtures, comments and docs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **email:** two host-email specs expect addresses as text, not mailto links ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **handoff:** neutral fixtures in the handoff and invite specs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 
