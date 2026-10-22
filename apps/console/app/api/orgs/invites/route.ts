@@ -383,20 +383,21 @@ async function handler(request: Request): Promise<Response> {
       try {
         const inviteeUid = await attributableAccountForAddress(email)
         if (!inviteeUid || inviteeUid === decoded.uid) return
-        const orgName = String(
-          (await getOrgDoc(orgId))?.['name'] ?? 'a workspace',
-        )
+        const inviteOrgDoc = await getOrgDoc(orgId)
+        const orgName = String(inviteOrgDoc?.['name'] ?? 'a workspace')
+        const orgSlug = String(inviteOrgDoc?.['slug'] ?? '')
         await notifyUsers(
           [inviteeUid],
           {
             type: 'team.invite',
             title: `You've been invited to ${orgName}`,
-            body: `Join as ${role}, or decline the invitation.`,
+            // Nothing to accept (AGL-4023): the console joins them.
+            body: `You join as ${role} the next time you open the console.`,
             orgId,
+            // Kept so the notification is marked read when the join lands.
             inviteId,
-            // The workspace chooser, for a client that predates the
-            // accept/decline dialog this notification opens.
-            link: '/',
+            // The workspace itself, which shows "Joining …" while it is added.
+            link: orgSlug ? `/${orgSlug}` : '/',
           },
           { skipEmail: true },
         )
@@ -505,17 +506,17 @@ async function handler(request: Request): Promise<Response> {
           `${previousOwnerLine}\n\n` +
           `Your plan: ${proposalSummary}.` +
           (proposal?.note ? `\n\n${proposal.note}` : '') +
-          '\n\nSign in with this email address, accept the invitation, and ' +
+          '\n\nSign in or create your account with this email address, and ' +
           `Billing opens with everything already chosen:\n\n${billingUrl}\n\n` +
           'Nothing is charged until you confirm.'
         : handoff
         ? `You've been invited to take over ${orgName} as its owner. ` +
           `${previousOwnerLine}\n\n` +
-          `Sign in at ${origin} with this email address and accept ` +
-          'the invitation from your dashboard. Nothing changes until you accept.'
+          `Sign in or create your account at ${origin} with this email ` +
+          'address and the workspace is yours. Nothing changes until you do.'
         : `You've been invited to join ${orgName} as ${role}.\n\n` +
-          `Sign in at ${origin} with this email address and accept ` +
-          'the invite from your dashboard.'
+          `Sign in or create your account at ${origin} with this email ` +
+          'address and you join it right away.'
       // The staff design when one is published (AGL-750), else the catalog's
       // built-in copy, in this org's header and footer (AGL-3322). The copy
       // here is the last resort behind both.
@@ -631,6 +632,29 @@ async function handler(request: Request): Promise<Response> {
         if (ownerEmail && ownerEmail === email) {
           return Response.json({ error: 'That address already owns this workspace' }, { status: 400 })
         }
+      } else {
+        // Nobody is invited into a workspace they already own (AGL-4023).
+        // Joining would be refused (AGL-1888), and an invitation now takes
+        // effect on its own, so the refusal belongs here, with the person
+        // sending it, rather than with the person it was sent to.
+        const ownerUid = String((await getOrgDoc(orgId))?.['ownerUid'] ?? '')
+        const ownerEmail = ownerUid
+          ? String(
+              (
+                await firestore
+                  .collection('orgs')
+                  .doc(orgId)
+                  .collection('members')
+                  .doc(ownerUid)
+                  .get()
+              ).get('email') ?? '',
+            ).toLowerCase()
+          : ''
+        if (ownerEmail && ownerEmail === email) {
+          return Response.json({
+            error: 'That address already owns this workspace',
+          }, { status: 400 })
+        }
       }
       /*
        * HAND OFF AND PROPOSE, ONE ACT (AGL-3956). For a site the platform
@@ -742,6 +766,31 @@ async function handler(request: Request): Promise<Response> {
           inviteeStaff: staffInvitee,
         })
         if (handoffRefusal) return handoffRefusal
+        // The single sign-on lockout check (AGL-1888) at SENDING, not only at
+        // joining (AGL-4023): a hand-off takes effect on its own, so a
+        // workspace that would be left with no way in is refused here, to the
+        // person handing it over. Only an enforced workspace can be stranded.
+        const handoffOrgDoc = (await getOrgDoc(orgId)) as
+          | Record<string, unknown>
+          | undefined
+        if (
+          (handoffOrgDoc?.['sso'] as { enforced?: boolean } | undefined)
+            ?.enforced === true
+        ) {
+          const inviteeUid = await attributableAccountForAddress(email)
+          const lockout = inviteeUid
+            ? await assessOwnershipTransferLockout(orgId, inviteeUid, handoffOrgDoc)
+            : {
+                refused: true,
+                reason:
+                  'This workspace signs in through single sign-on. Hand it to ' +
+                  'someone who already signs in with it, so its new owner can ' +
+                  'never be locked out.',
+              }
+          if (lockout.refused) {
+            return Response.json({ error: lockout.reason }, { status: 409 })
+          }
+        }
       }
       const managerRefusal = handoff
         ? null
@@ -1008,7 +1057,11 @@ async function handler(request: Request): Promise<Response> {
                   'check did not complete',
             { type: 'invite', id: inviteId, name: email },
           )
-          return Response.json({ error: lockout.reason }, { status: 409 })
+          return blockedJoinResponse(
+            orgId,
+            inviteId,
+            lockout.reason ?? 'The single sign-on lockout check did not pass',
+          )
         }
         const moved = await acceptOwnerHandoff({
           orgId,
@@ -1158,11 +1211,31 @@ async function handler(request: Request): Promise<Response> {
     // for anything else, so a real failure keeps the answer below.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
+    // Every refusal below can reach us through JOINING, and a join is no
+    // longer something the invitee asks for (AGL-4023): it is recorded on the
+    // invitation and told to whoever sent it, while the invitee is only told
+    // their access is being set up. From any other action it is the sender's
+    // own answer, as before.
+    const refused = async (refusal: Response): Promise<Response> => {
+      const inviteId = String(body?.inviteId ?? '')
+      if (method !== 'POST' || String(body?.action ?? '') !== 'accept' || !inviteId) {
+        return refusal
+      }
+      const payload = (await refusal
+        .clone()
+        .json()
+        .catch(() => ({}))) as { error?: unknown }
+      return blockedJoinResponse(
+        orgId,
+        inviteId,
+        String(payload.error ?? '') || 'The workspace refused the join',
+      )
+    }
     // Acceptance is the hard cap for a site-scoped invite (AGL-2068):
     // `upsertOrgMember` raises the refusal from inside the grant transaction,
     // which is what makes N simultaneous accepts land as one.
     const seatRefusal = collaboratorSeatRefusalResponse(error)
-    if (seatRefusal) return seatRefusal
+    if (seatRefusal) return refused(seatRefusal)
     // The owner seat (AGL-1888). ACCEPTANCE is the door this reaches us
     // through: it passes the invite doc's stored role into `upsertOrgMember`
     // without re-validating it, so an invitation addressed to the OWNER'S own
@@ -1171,19 +1244,88 @@ async function handler(request: Request): Promise<Response> {
     // person clicking a legitimate-looking invite gets told why rather than a
     // bare 500. Nothing was written and the invite is left unaccepted.
     const ownerRefusal = orgOwnerSeatRefusalResponse(error)
-    if (ownerRefusal) return ownerRefusal
+    if (ownerRefusal) return refused(ownerRefusal)
     // A handoff refused inside its transaction (AGL-3466): the seat the
     // outgoing owner would keep, or an invite answered in the meantime.
     const handoffRefusal = ownerHandoffRefusalResponse(error)
-    if (handoffRefusal) return handoffRefusal
+    if (handoffRefusal) return refused(handoffRefusal)
     // Accepting an invite into a full org (AGL-2068 on the manager key). The
     // refusal is now raised inside the grant transaction, so it arrives here
     // as a throw rather than as an early return.
     const managerRefusal = managerSeatRefusalResponse(error)
-    if (managerRefusal) return managerRefusal
+    if (managerRefusal) return refused(managerRefusal)
     console.error(error)
     return Response.json({ error: 'Invite operation failed' }, { status: 500 })
   }
+}
+
+/**
+ * A join refused at acceptance (AGL-4023). Invitations take effect on their
+ * own, and every refusal the server can raise there is already asked when the
+ * invitation is SENT, to the person sending it: the seat quotas count pending
+ * invitations, an owner's own address is refused, and a hand-off runs the
+ * single sign-on lockout check. What remains is the workspace changing in
+ * between (seats removed, a downgrade), and that is the sender's to fix.
+ *
+ * So the reason is recorded on the invitation (the Team page shows it on the
+ * pending row) and told, once per reason, to the person who sent it and the
+ * workspace's admins. The invitee is told only that their access is being
+ * set up: the reason is not theirs to act on, and their next visit joins them
+ * as soon as it is fixed.
+ */
+async function blockedJoinResponse(
+  orgId: string,
+  inviteId: string,
+  reason: string,
+): Promise<Response> {
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const orgRef = firestore.collection('orgs').doc(orgId)
+    const inviteRef = orgRef.collection('invites').doc(inviteId)
+    const snapshot = await inviteRef.get()
+    const invite = snapshot.data()
+    const toldAlready =
+      (invite?.['joinBlocked'] as { reason?: unknown } | undefined)?.reason === reason
+    if (snapshot.exists && invite && !invite['acceptedAt'] && !toldAlready) {
+      await inviteRef.set(
+        { joinBlocked: { reason, at: FieldValue.serverTimestamp() } },
+        { merge: true },
+      )
+      const org = (await orgRef.get()).data() ?? {}
+      const orgName = String(org['name'] ?? 'the workspace')
+      const slug = String(org['slug'] ?? '')
+      const who = String(invite['email'] ?? 'Someone you invited')
+      const notice = {
+        type: 'team.invite' as const,
+        title: `${who} couldn't join ${orgName} yet`,
+        body: `${reason} They join on their own as soon as this is fixed.`,
+        ...(slug ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: slug }) } : {}),
+      }
+      void notifyOrgAdmins(orgId, notice)
+      // The sender, when the admins' notice does not already reach them
+      // (staff, or a member who has since lost the role).
+      const sender = String(invite['invitedBy'] ?? '')
+      if (sender) {
+        const senderRole = String(
+          (await orgRef.collection('members').doc(sender).get()).get('role') ?? '',
+        )
+        if (senderRole !== 'owner' && senderRole !== 'admin') {
+          void notifyUsers([sender], { ...notice, orgId })
+        }
+      }
+    }
+  } catch (error) {
+    console.error('recording a blocked join failed', error)
+  }
+  return Response.json(
+    {
+      error:
+        "Your access is still being set up. The workspace's admins have been " +
+        "told, and it opens on its own once they're done.",
+      blocked: true,
+    },
+    { status: 409 },
+  )
 }
 
 export const dynamic = 'force-dynamic'

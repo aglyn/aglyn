@@ -435,6 +435,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#ai-usage': 'Each member\'s page carries an AI usage card: their AI credits this month and last, their share of the workspace\'s pool, their requests, the kinds of request they mostly made, and the split by site.',
     '#help-a-teammate-who-is-locked-out': 'When a teammate cannot sign in, open them from the Team page and use the Password card to email them a reset link — or, when their account belongs to your organization alone, to set a password for them.',
     '#invite-someone': 'Open the organization\'s Team page and choose Add or invite.',
+    '#joining-from-an-invite': 'If you\'re the one being invited, sign up or sign in with the address the invite was sent to, or with any address you\'ve confirmed on your account.',
     '#member-access': 'The Member card sets this person\'s organization role and job title and, for an editor or viewer, which sites they can reach.',
     '#member-activity': 'Activity by this member lists everything this person has done in the organization — on its sites as well as at organization level — newest first.',
     '#member-changes': 'Changes to this member lists what other people changed about this person, such as role and site-access edits, newest first, with who made each change and when.',

@@ -154,15 +154,31 @@ describe('AGL-3466 · every owner handoff passes the lockout check', () => {
   })
 
   it('the route checks BEFORE it accepts, and a refusal is logged', () => {
-    const check = HANDOFF_ROUTE.indexOf('assessOwnershipTransferLockout(')
     const accept = HANDOFF_ROUTE.indexOf('await acceptOwnerHandoff(')
+    // The call nearest the acceptance; the one at sending is pinned below.
+    const check = HANDOFF_ROUTE.lastIndexOf('assessOwnershipTransferLockout(', accept)
     expect(check).toBeGreaterThan(-1)
     expect(accept).toBeGreaterThan(-1)
     expect(check).toBeLessThan(accept)
     const block = HANDOFF_ROUTE.slice(check, accept)
     expect(block).toContain('lockout.refused')
-    expect(block).toContain('status: 409')
+    // A refusal at joining goes to whoever sent the hand-off (AGL-4023),
+    // and the helper answers the invitee 409.
+    expect(block).toContain('blockedJoinResponse(')
+    expect(HANDOFF_ROUTE).toMatch(/async function blockedJoinResponse[\s\S]*status: 409/)
     expect(block).toContain('logOrgActivity')
     expect(block).not.toContain('staff')
+  })
+
+  it('is also asked when the hand-off is SENT, so its sender hears a refusal (AGL-4023)', () => {
+    const send = HANDOFF_ROUTE.indexOf('assessOwnershipTransferLockout(')
+    const accept = HANDOFF_ROUTE.indexOf('await acceptOwnerHandoff(')
+    const atJoin = HANDOFF_ROUTE.lastIndexOf('assessOwnershipTransferLockout(', accept)
+    expect(send).toBeGreaterThan(-1)
+    expect(send).toBeLessThan(atJoin)
+    // Beside the hand-off's other sending check, the seat pre-flight.
+    expect(HANDOFF_ROUTE.slice(Math.max(0, send - 2000), send)).toContain(
+      'ownerHandoffSeatRefusal(',
+    )
   })
 })

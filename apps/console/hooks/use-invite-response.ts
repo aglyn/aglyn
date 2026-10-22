@@ -45,7 +45,12 @@ export function useInviteResponse() {
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const respond = useCallback(
-    async (invite: PendingInvite, answer: InviteAnswer): Promise<boolean> => {
+    async (
+      invite: PendingInvite,
+      answer: InviteAnswer,
+      options: { navigate?: boolean; quiet?: boolean } = {},
+    ): Promise<boolean> => {
+      const { navigate = true, quiet = false } = options
       setBusyId(invite.$id)
       try {
         const response = await authorizedFetch(user, '/api/orgs/invites', {
@@ -59,6 +64,9 @@ export function useInviteResponse() {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // The automatic join (AGL-4023) never shows the invitee a refusal:
+          // the server has told whoever sent the invitation.
+          if (quiet) return false
           enqueueSnackbar(
             payload?.error ??
               (answer === 'accept'
@@ -76,7 +84,7 @@ export function useInviteResponse() {
             payload?.owner === true ? `You now own ${name}` : `Joined ${name}`,
             { variant: 'success' },
           )
-          if (invite.orgId) selectOrg(invite.orgId)
+          if (invite.orgId && navigate) selectOrg(invite.orgId)
           // A hand-off that proposed its plan (AGL-3956) answers where Billing
           // has the bundle preselected; the new owner goes straight there.
           const billingDestination =
@@ -85,7 +93,10 @@ export function useInviteResponse() {
             !payload.billingDestination.startsWith('//')
               ? payload.billingDestination
               : null
-          if (billingDestination) {
+          if (!navigate) {
+            // The automatic join (AGL-4023) leaves a person working elsewhere
+            // where they are; the snackbar above says what happened.
+          } else if (billingDestination) {
             void router.push(billingDestination)
           } else if (invite.orgSlug) {
             void router.push(
@@ -100,6 +111,7 @@ export function useInviteResponse() {
         await refresh()
         return true
       } catch {
+        if (quiet) return false
         enqueueSnackbar('Could not reach the server — try again', {
           variant: 'warning',
         })
