@@ -21,6 +21,8 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **auth:** signing in keeps the page's query string ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **invites:** a refused join is told to its sender, never the invitee ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **ci:** beta.279's three reds: Syria spec, staff screens, Linear ceiling ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 
 ### Changed
 
