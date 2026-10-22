@@ -8602,6 +8602,20 @@
             "editable": true
           },
           {
+            "key": "org-owner-handoff-new-owner",
+            "name": "Workspace handoff: you own it now",
+            "description": "Sent to the new owner the moment a workspace handoff takes effect (AGL-4023): the workspace is theirs, what that covers, what happened to the previous owner, and the next step, which is the proposed plan on Billing when one was proposed with the handoff.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "org-owner-handoff-previous-owner",
+            "name": "Workspace handoff: done",
+            "description": "Sent to the previous owner the moment a workspace handoff takes effect (AGL-4023): who owns the workspace now, and whether they stayed on as an admin or left.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "org-upgrade-proposal",
             "name": "Upgrade proposal",
             "description": "Sent to a workspace's owner when the platform team proposes a paid plan for it, after the workspace has been evaluated.",
@@ -9404,6 +9418,100 @@
               "name": "billingUrl",
               "description": "Billing page with the bundle preselected; signing in with this address joins the workspace first",
               "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "org-owner-handoff-new-owner": [
+            {
+              "name": "org.name",
+              "description": "The workspace that was handed over",
+              "sample": "Test Org"
+            },
+            {
+              "name": "handoff.previousOwner",
+              "description": "What happened to the previous owner, as one sentence",
+              "sample": "Pat Lee stays on as an admin."
+            },
+            {
+              "name": "nextStep",
+              "description": "What to do now: the proposed plan when one stands, else a look around the workspace",
+              "sample": "Your plan is ready to start: Starter with Site Care, billed yearly. Billing opens with it already chosen, and nothing is charged until you confirm."
+            },
+            {
+              "name": "cta.label",
+              "description": "The button, naming what it opens",
+              "sample": "Start the Starter plan"
+            },
+            {
+              "name": "cta.url",
+              "description": "Billing with the plan chosen, or the workspace",
+              "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "org-owner-handoff-previous-owner": [
+            {
+              "name": "org.name",
+              "description": "The workspace that was handed over",
+              "sample": "Test Org"
+            },
+            {
+              "name": "newOwner.name",
+              "description": "The new owner, by name when the account has one, else their address",
+              "sample": "Jordan Lee"
+            },
+            {
+              "name": "newOwner.email",
+              "description": "The new owner’s address",
+              "sample": "jordan@example.com"
+            },
+            {
+              "name": "previousOwner.role",
+              "description": "Where that leaves the previous owner",
+              "sample": "Admin"
+            },
+            {
+              "name": "previousOwner.outcome",
+              "description": "What that means for them, as one sentence",
+              "sample": "You stay on as an admin, so you can keep helping with the workspace and its sites."
+            },
+            {
+              "name": "cta.label",
+              "description": "The button, naming what it opens",
+              "sample": "Open the team"
+            },
+            {
+              "name": "cta.url",
+              "description": "The workspace’s Team page, or the console home if they left",
+              "sample": "https://app.aglyn.com/test-org/team"
             },
             {
               "name": "brand.productName",

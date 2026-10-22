@@ -60,9 +60,9 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 const INVITE = {
   $id: 'invite-1',
-  orgId: 'org-rtr',
-  orgName: 'Ready To Roll',
-  orgSlug: 'ready-to-roll',
+  orgId: 'org-acme',
+  orgName: 'Acme Builders',
+  orgSlug: 'acme-builders',
   role: 'admin',
 }
 let mockPending: Array<typeof INVITE>
@@ -92,7 +92,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 function OpenReview({ inviteId }: { inviteId: string }) {
   const { review } = useInviteReview()
   useEffect(() => {
-    review({ orgId: 'org-rtr', inviteId })
+    review({ orgId: 'org-acme', inviteId })
   }, [review, inviteId])
   return null
 }
@@ -117,8 +117,8 @@ describe('an ordinary session (AGL-4023)', () => {
       ),
     )
     // From the console home, the joined workspace opens.
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/ready-to-roll'))
-    expect(mockSelectOrg).toHaveBeenCalledWith('org-rtr')
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme-builders'))
+    expect(mockSelectOrg).toHaveBeenCalledWith('org-acme')
     expect(screen.queryByText(/You've been invited/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
   })
@@ -149,7 +149,7 @@ describe('a staff impersonation session, which never joins on its own', () => {
       </PendingInvitesProvider>,
     )
     expect(
-      await screen.findByText("You've been invited to Ready To Roll as admin."),
+      await screen.findByText("You've been invited to Acme Builders as admin."),
     ).toBeTruthy()
   })
 
@@ -160,9 +160,9 @@ describe('a staff impersonation session, which never joins on its own', () => {
         <OrgInvitesBanner placement="inline" />
       </PendingInvitesProvider>,
     )
-    await screen.findByText("You've been invited to Ready To Roll as admin.")
+    await screen.findByText("You've been invited to Acme Builders as admin.")
     expect(
-      screen.getAllByText("You've been invited to Ready To Roll as admin."),
+      screen.getAllByText("You've been invited to Acme Builders as admin."),
     ).toHaveLength(1)
   })
 
@@ -178,8 +178,8 @@ describe('a staff impersonation session, which never joins on its own', () => {
         expect.objectContaining({ action: 'accept', inviteId: 'invite-1' }),
       ),
     )
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/ready-to-roll'))
-    expect(mockSelectOrg).toHaveBeenCalledWith('org-rtr')
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme-builders'))
+    expect(mockSelectOrg).toHaveBeenCalledWith('org-acme')
     await waitFor(() =>
       expect(screen.queryByText(/You've been invited/)).toBeNull(),
     )
@@ -193,7 +193,7 @@ describe('a staff impersonation session, which never joins on its own', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Decline' }))
     expect(
-      await screen.findByText('Decline the invitation to Ready To Roll?'),
+      await screen.findByText('Decline the invitation to Acme Builders?'),
     ).toBeTruthy()
     expect(mockPost).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }))
@@ -211,7 +211,7 @@ describe('a staff impersonation session, which never joins on its own', () => {
         <OpenReview inviteId="invite-1" />
       </PendingInvitesProvider>,
     )
-    expect(await screen.findByText('Join Ready To Roll?')).toBeTruthy()
+    expect(await screen.findByText('Join Acme Builders?')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
   })

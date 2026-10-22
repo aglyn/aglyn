@@ -417,7 +417,7 @@ describe('accepting an owner handoff (AGL-3466)', () => {
   it('tells the SENDER why a join was refused, and the invitee only that it is being set up', async () => {
     mockStore.set('orgs/org-1/invites/handoff-1', {
       ...mockStore.get('orgs/org-1/invites/handoff-1'),
-      invitedBy: 'staff-zach',
+      invitedBy: 'staff-sender',
     })
     mockLockout.mockResolvedValue({
       refused: true,
@@ -443,7 +443,7 @@ describe('accepting an owner handoff (AGL-3466)', () => {
     )
     // Staff sent it and are no admin of the workspace: told directly too.
     expect(mockNotifyUsers).toHaveBeenCalledWith(
-      ['staff-zach'],
+      ['staff-sender'],
       expect.objectContaining({ title: "client@acme.test couldn't join Acme yet" }),
     )
 

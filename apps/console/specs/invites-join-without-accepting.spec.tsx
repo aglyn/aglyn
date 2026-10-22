@@ -33,14 +33,14 @@ import {
 import type { PendingInvite } from '../hooks/use-pending-invites'
 
 let mockClaims: Record<string, unknown> = {}
-let mockPathname = '/edr-construction/billing'
+let mockPathname = '/acme-builders/billing'
 let mockInvites: PendingInvite[] = []
 const mockRespond = jest.fn()
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({
     data: {
-      uid: 'u-jacob',
+      uid: 'u-new-owner',
       getIdTokenResult: () => Promise.resolve({ claims: mockClaims }),
     },
   }),
@@ -57,9 +57,9 @@ jest.mock('../hooks/use-invite-response', () => ({
 
 const HANDOFF: PendingInvite = {
   $id: 'inv-handoff',
-  orgId: 'org-edr',
-  orgName: 'EDR Construction',
-  orgSlug: 'edr-construction',
+  orgId: 'org-acme',
+  orgName: 'Acme Builders',
+  orgSlug: 'acme-builders',
   role: 'owner',
   handoff: { previousOwner: 'stay' },
 }
@@ -82,7 +82,7 @@ function Status({ inviteId }: { inviteId: string }) {
 
 beforeEach(() => {
   mockClaims = {}
-  mockPathname = '/edr-construction/billing'
+  mockPathname = '/acme-builders/billing'
   mockInvites = []
   mockRespond.mockReset()
   mockRespond.mockResolvedValue(true)
@@ -98,11 +98,11 @@ describe('an invitation is joined without pressing Accept', () => {
     )
     await waitFor(() => expect(mockRespond).toHaveBeenCalledTimes(2))
     expect(mockRespond).toHaveBeenCalledWith(HANDOFF, 'accept', { navigate: true, quiet: true })
-    // Working on EDR's page: Other Co is joined without leaving it.
+    // Working on Acme Builders' page: Other Co is joined without leaving it.
     expect(mockRespond).toHaveBeenCalledWith(SITE_EDITOR, 'accept', { navigate: false, quiet: true })
     await waitFor(() =>
       expect(screen.getByTestId('inv-handoff').textContent).toBe(
-        'true|joined|edr-construction,other-co',
+        'true|joined|acme-builders,other-co',
       ),
     )
     // A re-render with the same list asks nothing twice.
@@ -145,12 +145,12 @@ describe('an invitation is joined without pressing Accept', () => {
 
 describe('whether joining also opens the workspace', () => {
   it.each([
-    ['/edr-construction/billing', 'edr-construction', true],
-    ['/edr-construction', 'edr-construction', true],
-    ['/', 'edr-construction', true],
-    ['/acme/hosts', 'edr-construction', false],
+    ['/acme-builders/billing', 'acme-builders', true],
+    ['/acme-builders', 'acme-builders', true],
+    ['/', 'acme-builders', true],
+    ['/acme/hosts', 'acme-builders', false],
     // A slug that merely starts the same is a different workspace.
-    ['/edr-construction-2/billing', 'edr-construction', false],
+    ['/acme-builders-2/billing', 'acme-builders', false],
     ['/acme', null, false],
   ])('on %s for %s → %s', (pathname, slug, expected) => {
     expect(autoJoinOpensWorkspace(pathname, slug)).toBe(expected)

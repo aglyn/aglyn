@@ -392,6 +392,124 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'apps/console/app/api/orgs/invites/route.ts',
     },
     {
+      key: 'org-owner-handoff-new-owner',
+      name: 'Workspace handoff: you own it now',
+      description:
+        'Sent to the new owner the moment a workspace handoff takes effect ' +
+        '(AGL-4023): the workspace is theirs, what that covers, what happened ' +
+        'to the previous owner, and the next step, which is the proposed plan ' +
+        'on Billing when one was proposed with the handoff.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{org.name}} is yours on {{brand.productName}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The workspace that was handed over',
+          sample: 'Test Org',
+        },
+        {
+          name: 'handoff.previousOwner',
+          description: 'What happened to the previous owner, as one sentence',
+          sample: 'Pat Lee stays on as an admin.',
+        },
+        {
+          name: 'nextStep',
+          description:
+            'What to do now: the proposed plan when one stands, else a look ' +
+            'around the workspace',
+          sample:
+            'Your plan is ready to start: Starter with Site Care, billed ' +
+            'yearly. Billing opens with it already chosen, and nothing is ' +
+            'charged until you confirm.',
+        },
+        {
+          name: 'cta.label',
+          description: 'The button, naming what it opens',
+          sample: 'Start the Starter plan',
+        },
+        {
+          name: 'cta.url',
+          description: 'Billing with the plan chosen, or the workspace',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Workspace handoff · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{org.name}} is yours', variant: 'heading' },
+        { block: 'text', text: 'You now own {{org.name}} on {{brand.productName}}: the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nYour role: Owner', variant: 'details' },
+        { block: 'text', text: '{{nextStep}}', variant: 'body' },
+        { block: 'button', label: '{{cta.label}}', href: '{{cta.url}}' },
+        { block: 'text', text: 'Sign in with the address this email was sent to. Questions? Contact support: {{brand.supportUrl}}', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because {{org.name}} was handed to you on ' +
+        '{{brand.productName}}.',
+      source: 'libs/tenant/data/admin/src/lib/server/owner-handoff-emails.ts',
+    },
+    {
+      key: 'org-owner-handoff-previous-owner',
+      name: 'Workspace handoff: done',
+      description:
+        'Sent to the previous owner the moment a workspace handoff takes ' +
+        'effect (AGL-4023): who owns the workspace now, and whether they ' +
+        'stayed on as an admin or left.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{newOwner.name}} now owns {{org.name}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The workspace that was handed over',
+          sample: 'Test Org',
+        },
+        {
+          name: 'newOwner.name',
+          description: 'The new owner, by name when the account has one, else their address',
+          sample: 'Jordan Lee',
+        },
+        {
+          name: 'newOwner.email',
+          description: 'The new owner’s address',
+          sample: 'jordan@example.com',
+        },
+        {
+          name: 'previousOwner.role',
+          description: 'Where that leaves the previous owner',
+          sample: 'Admin',
+        },
+        {
+          name: 'previousOwner.outcome',
+          description: 'What that means for them, as one sentence',
+          sample:
+            'You stay on as an admin, so you can keep helping with the ' +
+            'workspace and its sites.',
+        },
+        {
+          name: 'cta.label',
+          description: 'The button, naming what it opens',
+          sample: 'Open the team',
+        },
+        {
+          name: 'cta.url',
+          description: 'The workspace’s Team page, or the console home if they left',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/team`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Workspace handoff · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{org.name}} has a new owner', variant: 'heading' },
+        { block: 'text', text: '{{newOwner.name}} took over {{org.name}}. They now hold the workspace, every site in it, and its billing.', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nNew owner: {{newOwner.email}}\nYour role: {{previousOwner.role}}', variant: 'details' },
+        { block: 'text', text: '{{previousOwner.outcome}}', variant: 'body' },
+        { block: 'button', label: '{{cta.label}}', href: '{{cta.url}}' },
+        { block: 'text', text: 'Didn’t expect this? Contact support: {{brand.supportUrl}}', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you handed {{org.name}} over on ' +
+        '{{brand.productName}}.',
+      source: 'libs/tenant/data/admin/src/lib/server/owner-handoff-emails.ts',
+    },
+    {
       key: 'org-upgrade-proposal',
       name: 'Upgrade proposal',
       description:

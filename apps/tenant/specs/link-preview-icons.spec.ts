@@ -20,7 +20,7 @@
 /**
  * A customer's link previews as THEIR site, never as Aglyn (AGL-3382).
  *
- * Measured on production before the fix: `ready-to-roll.aglyn.app` emitted no
+ * Measured on production before the fix: a client site emitted no
  * `apple-touch-icon` link, `/apple-touch-icon.png` was a 404, and
  * `/favicon.ico` answered with Aglyn's own nine-size icon from
  * `apps/tenant/public`. iMessage and Safari fall back to exactly those two
@@ -70,26 +70,26 @@ import {
   siteThemeColorMeta,
 } from '../utils/site-icons'
 
-const HOST_ID = 'ZG22ootbN-'
+const HOST_ID = 'Hb7nQe2Ws-'
 
 /** The four sites. `$id` qualifies each `media:` scope, as in production. */
 const WITH_APP_ICON = {
   $id: HOST_ID,
-  subdomain: 'ready-to-roll',
+  subdomain: 'acme-builders',
   seo: {
-    favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA',
-    appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0',
+    favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa',
+    appIcon: 'media:org:Xr4kPa9Lm-/nAppIc0nQ7',
   },
 }
 const FAVICON_ONLY = {
   $id: HOST_ID,
-  subdomain: 'ready-to-roll',
-  seo: { favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA' },
+  subdomain: 'acme-builders',
+  seo: { favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa' },
 }
 const NEITHER = { $id: HOST_ID, subdomain: 'plain', seo: {} }
 
-const APP_ICON_SRC = `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/mKeulwfbL0`
-const FAVICON_SRC = `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/o0-uaWHCNA`
+const APP_ICON_SRC = `/api/media/cdn/org:Xr4kPa9Lm-:${HOST_ID}/nAppIc0nQ7`
+const FAVICON_SRC = `/api/media/cdn/org:Xr4kPa9Lm-:${HOST_ID}/k3-fvIcoNa`
 /**
  * Where the two origin paths lead for a CDN-served source (AGL-3484): a
  * multi-size ICO drawn from the favicon, and the 180px touch icon flattened
@@ -254,24 +254,24 @@ describe('the /api/site-icon route', () => {
 
   const call = (host: string, icon: 'favicon' | 'apple-touch-icon') =>
     GET(
-      new Request('https://ready-to-roll.aglyn.app/favicon.ico', {
+      new Request('https://acme-builders.aglyn.app/favicon.ico', {
         headers: { 'x-aglyn-tenant-host': host, 'x-aglyn-site-icon': icon },
       }),
     )
 
   it('redirects to the site’s app icon, relative to the domain asked on', async () => {
     mockGetHost.mockResolvedValue({ host: WITH_APP_ICON })
-    const response = await call('ready-to-roll', 'apple-touch-icon')
+    const response = await call('acme-builders', 'apple-touch-icon')
     expect(response.status).toBe(302)
     expect(response.headers.get('Location')).toBe(APP_TOUCH_ICON)
   })
 
   it('redirects /favicon.ico to a favicon-only site’s favicon', async () => {
     mockGetHost.mockResolvedValue({ host: FAVICON_ONLY })
-    const favicon = await call('ready-to-roll', 'favicon')
+    const favicon = await call('acme-builders', 'favicon')
     expect(favicon.status).toBe(302)
     expect(favicon.headers.get('Location')).toBe(FAVICON_ICO)
-    const touch = await call('ready-to-roll', 'apple-touch-icon')
+    const touch = await call('acme-builders', 'apple-touch-icon')
     expect(touch.headers.get('Location')).toBe(FAVICON_TOUCH_ICON)
   })
 
@@ -280,7 +280,7 @@ describe('the /api/site-icon route', () => {
     mockIconFacts.mockResolvedValue(
       new Map([[FAVICON_SRC, { contentType: 'image/png', contentHash: 'fav1' }]]),
     )
-    const favicon = await call('ready-to-roll', 'favicon')
+    const favicon = await call('acme-builders', 'favicon')
     expect(mockIconFacts).toHaveBeenCalledWith({
       hostId: HOST_ID,
       srcs: [FAVICON_SRC],
@@ -353,7 +353,7 @@ describe('the /api/site-icon route', () => {
   it('answers a locked site with nothing, uncached', async () => {
     mockGetHost.mockResolvedValue({ host: WITH_APP_ICON })
     mockGetSiteLockdown.mockResolvedValue({ mode: 'full' })
-    const response = await call('ready-to-roll', 'favicon')
+    const response = await call('acme-builders', 'favicon')
     expect(response.status).toBe(404)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
@@ -402,7 +402,7 @@ describe('<meta name="theme-color">, from the manifest’s own read', () => {
 
 describe('the manifest short_name', () => {
   it.each([
-    ['Ready To Roll', 'Ready To'],
+    ['Acme Home Builders', 'Acme Home'],
     ['A Very Long Coffee Company Name', 'A Very Long'],
     ['Northwind', 'Northwind'],
     ['Twelve Chars', 'Twelve Chars'],
@@ -413,7 +413,7 @@ describe('the manifest short_name', () => {
   })
 
   it('never ends mid-word', () => {
-    const name = 'Ready To Roll'
+    const name = 'Acme Home Builders'
     const short = manifestShortName(name)
     expect(name.split(' ')).toEqual(expect.arrayContaining(short.split(' ')))
   })
@@ -440,7 +440,7 @@ describe('the middleware rewrites the icon paths per host', () => {
   })
 
   const rewrite = async (pathname: string) => {
-    process.env.AGLYN_TENANT_DEMO = 'ready-to-roll'
+    process.env.AGLYN_TENANT_DEMO = 'acme-builders'
     const response = (await middleware(
       new NextRequest(
         new Request(`http://localhost:4500${pathname}`, {
@@ -464,7 +464,7 @@ describe('the middleware rewrites the icon paths per host', () => {
     expect(config.matcher).toContain(pathname)
     const result = await rewrite(pathname)
     expect(result.to).toMatch(/\/api\/site-icon\?/)
-    expect(result.host).toBe('ready-to-roll')
+    expect(result.host).toBe('acme-builders')
     expect(result.icon).toBe(icon)
   })
 })

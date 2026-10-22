@@ -32,7 +32,7 @@ import { inheritedThemeColor } from './theme-editor-defaults'
 /** The operator's own marketing host, as the console knows it. */
 const PLATFORM_SITE = 'aglyn.com'
 /** A customer site with no domain attached, as the console knows it. */
-const CUSTOMER_SITE = 'ready-to-roll'
+const CUSTOMER_SITE = 'acme-builders'
 
 describe('inheritedThemeColor', () => {
   it('reports the tenant default for a customer site', () => {
@@ -85,7 +85,7 @@ describe('hostBrandKey', () => {
   })
 
   it('falls back to the subdomain a site with no domain is reached by', () => {
-    expect(hostBrandKey({ subdomain: 'ready-to-roll' })).toBe('ready-to-roll')
+    expect(hostBrandKey({ subdomain: 'acme-builders' })).toBe('acme-builders')
   })
 
   it('names nothing for a site it has not read yet', () => {

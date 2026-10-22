@@ -381,7 +381,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#usage-budget': 'A usage budget is a monthly amount you choose, plus the percentages of it you want to hear about — the same shape as a Google Cloud billing budget.',
     '#usage-card': 'The Usage card on Billing → Usage shows every quota on your plan as a meter — sites, team seats, storage, bandwidth, CRM records, campaign emails and the rest — with what you have used against what the plan includes.',
     '#usage-history': 'The Usage history card charts the last twelve months of your workspace\'s usage, one bar per month, so you can tell whether this month is unusual.',
-    '#what-you-will-pay': 'The What you will pay card appears on the Plan tab once you pick a plan to move to, and quotes that plan\'s total for the billing interval you chose, tax included, straight from Stripe.',
+    '#what-you-will-pay': 'The What you will pay card appears on the Plan tab once you pick a plan to move to, and quotes that plan\'s total for the billing interval you chose: with tax, straight from Stripe, once your billing address is on…',
     '#who-is-generating-what': 'Beneath the meters on Billing → Usage, a table lists each member\'s AI credits for a month — their share of the workspace\'s spend, requests, and how often the assistant refused them — dearest first, with the kinds of…',
   },
   bindings: {

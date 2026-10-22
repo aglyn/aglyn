@@ -76,14 +76,14 @@ jest.mock('@aglyn/tenant-runtime/get-site-icon-facts', () => ({
 
 import HostLayout from '../app/[host]/[scheme]/layout'
 
-const HOST_ID = 'ZG22ootbN-'
+const HOST_ID = 'Hb7nQe2Ws-'
 
 /** Every `<link>` and `<meta>` the layout returns, as plain props. */
 const headFor = async (host: Record<string, unknown>) => {
   mockGetHostCached.mockResolvedValue({ host: { $id: HOST_ID, ...host } })
   const tree = await HostLayout({
     children: null,
-    params: Promise.resolve({ host: 'ready-to-roll', scheme: 'light' }),
+    params: Promise.resolve({ host: 'acme-builders', scheme: 'light' }),
   } as never)
   const links: Array<Record<string, string>> = []
   const metas: Array<Record<string, string>> = []
@@ -127,31 +127,31 @@ describe('the layout’s apple-touch-icon (AGL-3382)', () => {
   it('links the site’s app icon', async () => {
     const { touchIcons } = await headFor({
       seo: {
-        favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA',
-        appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0',
+        favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa',
+        appIcon: 'media:org:Xr4kPa9Lm-/nAppIc0nQ7',
       },
     })
     expect(sourcesOf(touchIcons)).toEqual([
-      `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/mKeulwfbL0`,
+      `/api/media/cdn/org:Xr4kPa9Lm-:${HOST_ID}/nAppIc0nQ7`,
     ])
   })
 
   it('links the favicon when that is all the site has', async () => {
     const { touchIcons } = await headFor({
-      seo: { favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA' },
+      seo: { favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa' },
     })
     expect(sourcesOf(touchIcons)).toEqual([
-      `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/o0-uaWHCNA`,
+      `/api/media/cdn/org:Xr4kPa9Lm-:${HOST_ID}/k3-fvIcoNa`,
     ])
   })
 
   it('links each iOS size, flattened onto the site’s background (AGL-3484)', async () => {
-    const src = `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/mKeulwfbL0`
+    const src = `/api/media/cdn/org:Xr4kPa9Lm-:${HOST_ID}/nAppIc0nQ7`
     mockIconFacts.mockResolvedValue(
       new Map([[src, { contentType: 'image/png', contentHash: 'h4sh' }]]),
     )
     const { touchIconLinks } = await headFor({
-      seo: { appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0' },
+      seo: { appIcon: 'media:org:Xr4kPa9Lm-/nAppIc0nQ7' },
       theme: {
         colorSchemes: { light: { background: { default: '#FFF8F0' } } },
       },

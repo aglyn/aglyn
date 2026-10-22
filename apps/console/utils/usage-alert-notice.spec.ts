@@ -122,7 +122,7 @@ describe('the words a notice is built from', () => {
   })
 
   it('names the workspace, or says "your workspace" when it has no name', () => {
-    expect(workspacePhrases('Ready To Roll').subject).toBe('The Ready To Roll workspace')
+    expect(workspacePhrases('Acme Builders').subject).toBe('The Acme Builders workspace')
     expect(workspacePhrases('  ').object).toBe('your workspace')
   })
 

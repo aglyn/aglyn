@@ -125,11 +125,11 @@ describe('a continue URL that leaves the origin is refused', () => {
 describe('the place a signed-out visitor returns to keeps its query (AGL-4023)', () => {
   it('keeps a hand-off link’s plan, add-ons and cadence', () => {
     const path = continuePathFor(
-      '/edr-construction/billing',
+      '/acme-builders/billing',
       'plan=starter&interval=year&addons=siteCare',
     )
     expect(path).toBe(
-      '/edr-construction/billing?plan=starter&interval=year&addons=siteCare',
+      '/acme-builders/billing?plan=starter&interval=year&addons=siteCare',
     )
     // The same value survives the trip to /signin and back.
     const href = withContinueUrl('/signin', path)

@@ -12,7 +12,7 @@ Aglyn uses **two** email systems that do different jobs and don't conflict:
 | --- | --- | --- | --- |
 | **Google Workspace** | Human **mailboxes** + **inbound** mail (`info@aglyn.com` inbox). Your `MX` records point here. | n/a (receiving) | Workspace admin |
 | **Firebase Auth** | Mints the action LINKS only — verification and password reset come from `generateEmailVerificationLink` / `generatePasswordResetLink`, and the console sends the email itself as a catalog system email through Resend. Firebase's own templates are not sent by any flow; its `CUSTOM_SMTP` relay (`smtp.resend.com`) is a dormant fallback. | `noreply@notify.aglyn.com` (fallback only) | Firebase console |
-| **Resend** | Everything the **app** sends programmatically, auth emails included. | `noreply@notify.aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
+| **Resend** | Everything the **app** sends programmatically, auth emails included. | `support@notify.aglyn.com`, replies to `support@aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
 
 Sending **from** `@aglyn.com` does **not** mean sending **through** Google.
 Resend sends on your behalf and proves it's authorized with DKIM/SPF DNS
@@ -29,7 +29,7 @@ on separate registered domains, never under `aglyn.com`.
 | Stream | Sends as | Where it is set |
 | --- | --- | --- |
 | A person writing 1:1 | their own `@aglyn.com` Workspace mailbox | Gmail |
-| Platform mail — invites, billing, account notices, auth | `noreply@notify.aglyn.com` | team-shared `USAGE_EMAIL_FROM` |
+| Platform mail — invites, billing, account notices, auth | `support@notify.aglyn.com`; Reply-To `support@aglyn.com` | team-shared `USAGE_EMAIL_FROM`; the Reply-To is `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` |
 | Aglyn's own marketing — product updates, newsletters | `@news.aglyn.com` | the aglyn-marketing site's sending domain (org `jWmGooWE3L`) |
 | Cold outreach | `getaglyn.com`, `tryaglyn.com`, `aglynhq.com` (Microsoft 365) | Sequences mailboxes |
 
@@ -464,7 +464,7 @@ the `aglyn.com` domain. Copy the key (`re_...`) — it's shown once.
 **Local** (`apps/console/.env.development.local`):
 ```
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
-USAGE_EMAIL_FROM="Aglyn <noreply@notify.aglyn.com>"
+USAGE_EMAIL_FROM="Aglyn <support@notify.aglyn.com>"
 STAFF_ALERT_EMAIL=you@aglyn.com   # optional
 ```
 
@@ -490,7 +490,7 @@ because neither produces an error; mail just silently never sends:
 
 1. **It does not set `USAGE_EMAIL_FROM`.** Every sender is guarded on *both*
    vars, so a valid API key on its own delivers exactly nothing. Add
-   `USAGE_EMAIL_FROM="Aglyn <noreply@notify.aglyn.com>"` by hand.
+   `USAGE_EMAIL_FROM="Aglyn <support@notify.aglyn.com>"` by hand.
 2. **It only sets the key on the project you installed it into.** The
    integration writes a *project-level* var, not a team-level shared one. The
    tenant app sends its own mail (receipts, booking confirmations, campaigns,
@@ -677,7 +677,9 @@ a cold domain, whatever aglyn.com's history).
   carried `p=reject; sp=reject` since before 2026-08-24. (`p=none` →
   `p=quarantine` was AGL-1493; see "Current DNS facts" above for the
   refused-at-SMTP failure signature this creates.)
-- Consider a monitored `hello@aglyn.com` reply-to for a human touch. Nothing
-  sets `replyTo` today, on any message — AGL-2408 §4.
+- ~~Consider a monitored reply-to~~ — done (AGL-4023): mail on the platform
+  sender replies to `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` (`support@aglyn.com`)
+  unless its caller sets its own, so the From no longer says "noreply". A
+  site's own mail, on its resolved identity, never gets it.
 - ~~Consolidate the ~18 copy-pasted Resend call sites~~ — done in AGL-709; see
   [`@aglyn/shared-util-email`](../libs/shared/util/email/README.md).

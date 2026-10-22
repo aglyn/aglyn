@@ -103,7 +103,10 @@ nothing to accept:
 
 - they become the owner of the workspace and every site in it;
 - you stay on as an admin, or leave the workspace, as you chose;
-- the invitation is marked accepted and the activity log records the handoff.
+- the invitation is marked accepted and the activity log records the handoff;
+- you both get an email: they're told the workspace is theirs, with **Start the plan**
+  when one was proposed with the handoff, and you're told who owns it now and
+  whether you stayed on.
 
 They land on the workspace's home, like anyone joining, or on the page the email
 linked to. Taking over does not ask them to upgrade or start a subscription.

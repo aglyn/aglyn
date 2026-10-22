@@ -158,7 +158,7 @@ beforeEach(() => {
   mockDocsByPath = { 'orgs/org-1': { name: 'Vacation to Pen' } }
   mockGroupDocs = {}
   mockQueryDocs = {
-    'orgs/org-1/members': [{ id: 'uid-1', data: { email: 'molly@example.com', displayName: 'Molly McBride' } }],
+    'orgs/org-1/members': [{ id: 'uid-1', data: { email: 'jordan@example.com', displayName: 'Jordan Lee' } }],
   }
 })
 
@@ -200,7 +200,7 @@ describe('Assist chat', () => {
           id: 'ex-1',
           orgId: 'org-1',
           at: new Date(1791388000000).toISOString(),
-          by: { uid: 'uid-1', email: 'molly@example.com', name: 'Molly McBride' },
+          by: { uid: 'uid-1', email: 'jordan@example.com', name: 'Jordan Lee' },
           hostId: 'h1',
           route: 'analytics',
           question: QUESTION,
@@ -285,7 +285,7 @@ describe('AI jobs', () => {
       brief: QUESTION,
       kind: 'insight',
       credits: 24,
-      by: { email: 'molly@example.com' },
+      by: { email: 'jordan@example.com' },
       outputs: [{ label: 'Answer', note: '2 insights', resource: 'insight', hostSubdomain: null }],
     })
     // A member who has since left is named by uid alone.
@@ -440,7 +440,7 @@ describe('one row by id, and the rows as the card prints them (AGL-3667)', () =>
     staff()
     const assist = await (await get('orgId=org-1&kind=assist&view=prepared')).json()
     expect(assist.rows[0].view).toEqual({
-      who: 'molly@example.com',
+      who: 'jordan@example.com',
       meta: 'analytics · claude-sonnet-5 · $0.0235 · Rated down',
       chips: ['analytics', 'claude-sonnet-5', '$0.0235', 'Rated down'],
       filledIn: '',
