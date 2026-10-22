@@ -86,6 +86,7 @@ import {
   bundleAddonsParam,
   bundleDomainLine,
   fitBundleAddonsToPlan,
+  type AddonKind,
   type BundleAddons,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
 import OrgUpgradeProposalCard from '../../../../../components/org-upgrade-proposal-card.component'
@@ -325,6 +326,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     // time the search params are re-read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intentAddonsKey])
+  // The add-ons the link named (AGL-4026): the quote offers these and no
+  // others, so a link for Site Care alone does not put the Event Calendar in
+  // front of the owner too.
+  const linkAddonKinds = useMemo(
+    () =>
+      (Object.keys(intentAddons(planIntent)) as AddonKind[]).filter(
+        (kind) => (intentAddons(planIntent)[kind] ?? 0) > 0,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [intentAddonsKey],
+  )
   // `parseOnboardingPlanIntent` defaults a missing interval to 'month', which is
   // the safe reading for checkout but the wrong one for the toggle: some CTAs
   // carry a plan and deliberately no interval (the /pricing scale strip quotes
@@ -1582,8 +1594,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         anchor: '#what-you-will-pay',
                       })}
                       subheader={
-                        'The total for the plan you are looking at, tax included, ' +
-                        'straight from Stripe.'
+                        'What the plan you are looking at costs: with tax from ' +
+                        'Stripe once your billing address is on file, before tax until then.'
                       }
                       HeaderProps={
                         // Pay, in the card's header, for a workspace with no
@@ -1627,6 +1639,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         onAddonsChange={setBundleAddons}
                         aiTier={aiTier}
                         onAiTierChange={setAiTier}
+                        offered={linkAddonKinds}
+                        onIntervalChange={setInterval}
                         initialCoupon={planIntent?.coupon ?? null}
                         linkNotice={bundleLinkNotice}
                         onQuoted={onQuoted}
