@@ -35,6 +35,7 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_HTML_KEY,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   STYLE_OVERRIDES_ROOT_KEY,
 } from './reusable-component-keys'
@@ -733,6 +734,85 @@ function instancePropValues(
 }
 
 /**
+ * An instance's formatted text, keyed by declared prop name — see
+ * {@link REUSABLE_INSTANCE_PROP_HTML_KEY}. Only non-empty strings count.
+ */
+function instancePropHtml(
+  instanceProps: unknown,
+): Record<string, string> | undefined {
+  const stored = (instanceProps as Record<string, unknown> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_HTML_KEY
+  ]
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    return undefined
+  }
+  const markup: Record<string, string> = {}
+  for (const [name, value] of Object.entries(stored)) {
+    if (typeof value === 'string' && value) markup[name] = value
+  }
+  return Object.keys(markup).length ? markup : undefined
+}
+
+/**
+ * The markup a prop's formatted text renders as, or `''` when it renders
+ * plain.
+ *
+ * Formatting counts only beside a value of its own: the plain reading in
+ * `propValues` is the half the Attributes field and every walker read, and
+ * markup with no value under it describes text the instance no longer sets.
+ * An undeclared name never substitutes, so its markup never draws either.
+ */
+function formattedPropMarkup(
+  name: string,
+  declared: ReusableComponentProp[] | undefined | null,
+  values: Readonly<Record<string, unknown>> | null | undefined,
+  formatted: Readonly<Record<string, unknown>> | null | undefined,
+): string {
+  const markup = formatted?.[name]
+  if (typeof markup !== 'string' || !markup) return ''
+  const value = values?.[name]
+  if (typeof value !== 'string' || !value) return ''
+  return (declared ?? []).some((prop) => prop?.name === name) ? markup : ''
+}
+
+/**
+ * The formatted text an instance renders for a declared prop, or `''` when
+ * it renders the prop plain — what the canvas editor opens with.
+ */
+export function getInstanceEffectivePropHtml(
+  instanceProps: unknown,
+  declared: ReusableComponentProp[] | undefined | null,
+  propName: string,
+): string {
+  return formattedPropMarkup(
+    propName,
+    declared,
+    instancePropValues(instanceProps),
+    instancePropHtml(instanceProps),
+  )
+}
+
+/**
+ * The definition nodes whose text IS one declared prop: their `children` is
+ * exactly its `{{prop.<name>}}` token. These are the elements formatted text
+ * for that prop is drawn into, so a caller offering formatting asks each of
+ * them whether it can draw it.
+ */
+export function listPropFedTextNodeIds(
+  nodes: Readonly<Record<string, { props?: unknown } | undefined>> | null | undefined,
+  propName: string,
+): string[] {
+  return Object.entries(nodes ?? {})
+    .filter(
+      ([, node]) =>
+        matchComponentPropToken(
+          (node?.props as Record<string, unknown> | undefined)?.['children'],
+        ) === propName,
+    )
+    .map(([id]) => id)
+}
+
+/**
  * The text an instance currently renders for a declared prop: its override
  * when set, else the prop's `defaultValue`, else `''`. `''` counts as unset,
  * as it does in the graft — clearing an override restores the component's own
@@ -1053,18 +1133,65 @@ export function applyDeclaredProps<N extends AglynNodeSchema = AglynNodeSchema>(
   declared: ReusableComponentProp[] | undefined | null,
   values: Readonly<Record<string, unknown>> | null | undefined,
   rootId: NodeId,
+  /** The page's formatted text, keyed like `values` — see {@link REUSABLE_INSTANCE_PROP_HTML_KEY}. */
+  formatted?: Readonly<Record<string, unknown>> | null,
 ): NormalizedNodes<N> {
   const resolved = resolveReusablePropValues(declared, values)
   return pruneHiddenNodes(
-    resolveComponentPropTokens(
+    withFormattedPropText(
+      resolveComponentPropTokens(
+        nodes,
+        declared,
+        resolved.tokens,
+        resolved.iconPaths,
+        resolved.values,
+      ),
       nodes,
       declared,
-      resolved.tokens,
-      resolved.iconPaths,
-      resolved.values,
+      values,
+      formatted,
     ),
     rootId,
   )
+}
+
+/**
+ * Hands each element whose text IS a formatted prop that prop's markup, as
+ * the element's own `html`.
+ *
+ * `children` already holds the plain reading the substitution wrote, so the
+ * element ends up exactly as a formatted text node is stored: markup for the
+ * renderer, which draws `html` in preference and sanitizes it as it draws,
+ * and plain text for everything that reads words. Read off `source` — the
+ * nodes BEFORE substitution — because that is where the token still says
+ * which prop fills the element.
+ */
+function withFormattedPropText<N extends AglynNodeSchema>(
+  substituted: NormalizedNodes<N>,
+  source: NormalizedNodes<N>,
+  declared: ReusableComponentProp[] | undefined | null,
+  values: Readonly<Record<string, unknown>> | null | undefined,
+  formatted: Readonly<Record<string, unknown>> | null | undefined,
+): NormalizedNodes<N> {
+  if (!formatted) return substituted
+  let next: NormalizedNodes<N> | undefined
+  for (const [id, node] of Object.entries(source)) {
+    const name = matchComponentPropToken(
+      (node?.props as Record<string, unknown> | undefined)?.['children'],
+    )
+    if (!name || !substituted[id]) continue
+    const markup = formattedPropMarkup(name, declared, values, formatted)
+    if (!markup) continue
+    next = next ?? { ...substituted }
+    next[id] = {
+      ...substituted[id],
+      props: {
+        ...(substituted[id].props as Record<string, unknown> | undefined),
+        html: markup,
+      },
+    } as N
+  }
+  return next ?? substituted
 }
 
 /**
@@ -1472,6 +1599,7 @@ export function composeReusableComponentNodes<
           definition.props,
           instancePropValues(instanceNode.props),
           prefixId(definition.rootId),
+          instancePropHtml(instanceNode.props),
         ),
       )
       /*
@@ -1905,6 +2033,8 @@ export function detachInstanceSubtree<
       definition.props,
       instancePropValues(instanceNode.props),
       instanceId,
+      // Formatting is part of what the instance renders, so the copy keeps it.
+      instancePropHtml(instanceNode.props),
     ),
   )
 }

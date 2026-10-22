@@ -17,6 +17,7 @@
 
 import { Button, Popover, Stack, Typography } from '@mui/material'
 import type { Theme } from '@mui/material/styles'
+import type { CSSProperties } from 'react'
 import type { SystemStyleObject } from '@mui/system'
 
 import {
@@ -66,10 +67,11 @@ const containerStyles: Record<string, unknown> = {
     display: 'inline-block',
     borderRadius: 1,
     px: 0.75,
-    mx: '1px',
+    mx: 0.125,
+    // Relative to the text the pill sits in, so it scales with a heading.
     fontSize: '0.8em',
     lineHeight: 1.7,
-    fontWeight: 600,
+    fontWeight: 'fontWeightMedium',
     whiteSpace: 'nowrap',
     verticalAlign: 'baseline',
     cursor: 'pointer',
@@ -84,6 +86,64 @@ for (const [group, style] of Object.entries(PILL_GROUP_STYLES)) {
 }
 export const tokenPillContainerSx =
   containerStyles as SystemStyleObject<Theme>
+
+/** A palette path (`tertiary.main`, `grey.700`) read off a theme. */
+function paletteValue(theme: Theme, path: string): string | undefined {
+  let value: unknown = theme.palette
+  for (const key of path.split('.')) {
+    value = (value as Record<string, unknown> | undefined)?.[key]
+  }
+  return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * Gives every pill under `root` the pill look as INLINE style, for a surface
+ * the container styles above cannot reach.
+ *
+ * The canvas edits text in place, inside the page's own closed shadow root:
+ * the console's style sheets stop at its boundary, and the page's theme is the
+ * SITE's, which has no `tertiary` at all. A pill there was bare text with a
+ * tooltip — nothing said it was a variable. So the console's own colours are
+ * written onto each pill directly. Presentation only: pills turn back into raw
+ * tokens before anything is read or stored, so none of this is ever saved.
+ */
+export function paintTokenPills(root: HTMLElement, theme: Theme): void {
+  const pills = root.querySelectorAll<HTMLElement>(`[${TOKEN_PILL_ATTR}]`)
+  for (const pill of pills) {
+    Object.assign(
+      pill.style,
+      tokenPillStyle(theme, pill.getAttribute(TOKEN_PILL_GROUP_ATTR)),
+    )
+  }
+}
+
+/**
+ * The pill look as resolved style values — the container styles above,
+ * read off `theme` — for a pill drawn where those styles cannot reach.
+ */
+export function tokenPillStyle(
+  theme: Theme,
+  group: string | null | undefined,
+): CSSProperties {
+  const colors =
+    PILL_GROUP_STYLES[group ?? 'unknown'] ?? PILL_GROUP_STYLES['unknown']!
+  const radius = theme.shape.borderRadius
+  return {
+    display: 'inline-block',
+    borderRadius: typeof radius === 'number' ? `${radius}px` : String(radius),
+    padding: theme.spacing(0, 0.75),
+    margin: theme.spacing(0, 0.125),
+    fontSize: '0.8em',
+    lineHeight: '1.7',
+    fontWeight: theme.typography.fontWeightMedium,
+    whiteSpace: 'nowrap',
+    verticalAlign: 'baseline',
+    cursor: 'pointer',
+    userSelect: 'none',
+    backgroundColor: paletteValue(theme, colors.bgcolor) ?? '',
+    color: paletteValue(theme, colors.color) ?? '',
+  }
+}
 
 export interface TokenPillProps {
   /** Raw stored token, e.g. `{{var:AbC123}}`. */

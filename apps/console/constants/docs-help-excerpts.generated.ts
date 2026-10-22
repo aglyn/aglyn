@@ -1053,7 +1053,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#where-a-template-came-from': 'Every template shows a badge: Saved here — you created it on this site',
   },
   textEditing: {
-    '#text-field-read-only': 'Once an element carries formatted text, the Text field goes read-only and says so: > This text is formatted — double-click the element on the canvas to edit it.',
+    '#text-field-formatting': 'On an element that takes rich text, the Text field shows your text with its formatting — bold reads as bold, links as links.',
     '#the-text-attribute': 'The Text field in the right-hand panel and double-clicking on the canvas edit the same value.',
   },
   transferHub: {

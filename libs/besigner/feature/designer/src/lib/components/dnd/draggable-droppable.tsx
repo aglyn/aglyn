@@ -18,10 +18,13 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
+  components,
   FEATURE_FLAG,
+  getInstanceEffectivePropHtml,
   getInstanceEffectivePropText,
   inheritedMediaAlt,
   isDefinitionPlacement,
+  listPropFedTextNodeIds,
   placementDefinitionFor,
   resolveInstanceLeafBinding,
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -37,9 +40,11 @@ import {
   Children,
   cloneElement,
   CSSProperties,
+  useCallback,
   useContext,
   useEffect,
   useRef,
+  useState,
 } from 'react'
 import ComponentPromotionContext from '../../contexts/component-promotion-context'
 import { MediaPickerContext } from '../../contexts/media-picker-context'
@@ -103,6 +108,23 @@ export const DraggableDroppable = observer(
     } = props
     const id = useId(node?.$id)
     const ref = useRef<HTMLElement>(null)
+    /**
+     * The element as STATE, beside the ref, so the listeners below follow it.
+     *
+     * A component may render a different element for the same node: a
+     * Typography whose text gains a line break holds block content, which a
+     * `<p>` cannot, so it re-renders as a `<div>`. The listeners were bound
+     * once per node, to the element that was there first, and stayed on the
+     * detached `<p>` — a click on the text then reached the parent instead,
+     * which selected the Stack around it, and a double-click opened nothing.
+     */
+    const [element, setElement] = useState<HTMLElement | null>(null)
+    // Records a real element only. The merged ref below is a fresh callback
+    // every render, so React hands it `null` and then the element on each
+    // commit; setting the same element again bails out, a `null` would not.
+    const trackElement = useCallback((next: HTMLElement | null) => {
+      if (next) setElement(next)
+    }, [])
 
     const draggable = useDraggable({
       id: `${id}:${type}${idSuffix || ''}`,
@@ -466,6 +488,14 @@ export const DraggableDroppable = observer(
           e.stopPropagation()
           return
         }
+        // Inside an open edit, a double-click selects a word, as the
+        // double-tap does (see handleTouchEnd). The default is the word
+        // selection, so it is left alone; only delivery stops, or an
+        // instance would reopen its prop edit over the text being typed.
+        if (isInlineEditWithin(el)) {
+          e.stopPropagation()
+          return
+        }
         if (!openEditAt(e as globalThis.MouseEvent)) return
         e.preventDefault()
         e.stopPropagation()
@@ -587,6 +617,25 @@ export const DraggableDroppable = observer(
         )
         if (text?.boundProp) {
           const rect = hit.element.getBoundingClientRect()
+          const propName = text.boundProp
+          // The schema of the element the prop fills decides the toolbar, as
+          // a node's own schema does. Formatting is offered only when EVERY
+          // element the prop fills draws markup: the graft hands the markup
+          // to each of them, and one that ignores it would show bold that
+          // never renders.
+          const schemaOf = (id: string) =>
+            components.getSchema(
+              (definition.nodes as Record<string, { componentId?: string }>)[
+                id
+              ]?.componentId as Aglyn.ComponentId,
+            )
+          const rich = listPropFedTextNodeIds(definition.nodes, propName).every(
+            (id) =>
+              ((schemaOf(id)?.flags?.richTextEditable ??
+                FEATURE_FLAG.DISABLED) &
+                FEATURE_FLAG.ENABLED) !==
+              0,
+          )
           inlineTextEdit.open(
             node,
             {
@@ -596,12 +645,21 @@ export const DraggableDroppable = observer(
               height: rect.height,
             },
             {
-              propName: text.boundProp,
+              propName,
               initialText: getInstanceEffectivePropText(
                 node.props,
                 definition.props,
-                text.boundProp,
+                propName,
               ),
+              schema: schemaOf(text.componentInternalId),
+              rich,
+              initialHtml: rich
+                ? getInstanceEffectivePropHtml(
+                    node.props,
+                    definition.props,
+                    propName,
+                  )
+                : '',
             },
             // The GRAFTED leaf, not the instance node: it is what was measured,
             // and it is the one anchor `Besigner.refs` could never supply
@@ -674,13 +732,14 @@ export const DraggableDroppable = observer(
         }
         return false
       }
-    }, [node])
+    }, [node, element])
 
     return cloneElement(
       child,
       mergeProps(child.props, draggable.attributes, {
         ref: mergeRefs(
           ref,
+          trackElement,
           child.props.ref,
           draggable.setNodeRef,
           droppable.setNodeRef,
