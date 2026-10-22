@@ -411,6 +411,36 @@ export function bundleAiTier(
   return isAiTierId(tier) ? tier : defaultAiTierForPlan(plan)
 }
 
+/**
+ * What a bundle costs at list price, in cents, before tax and any promotion
+ * code (AGL-4026): the plan at its price for the cadence (the annual monthly
+ * price × 12 yearly, the monthly price monthly), plus every add-on the plan
+ * sells at its unit price × quantity, × 12 yearly as every add-on bills.
+ *
+ * The figure Billing shows while Stripe cannot price the bundle with tax —
+ * no billing address yet, the preview still on its way, or a preview that
+ * failed — so the owner always sees what the bundle costs and sees it move
+ * as they change it. Never shown in place of Stripe's taxed total.
+ */
+export function bundleListPriceCents(bundle: {
+  plan: OrgPlan
+  interval: 'month' | 'year'
+  addons?: BundleAddons | null
+  aiTier?: AiTierId | null
+}): number {
+  const pricing = PLAN_PRICING[bundle.plan]
+  const yearly = bundle.interval === 'year'
+  const base = yearly ? pricing.basePriceAnnualMonthlyUsd * 12 : pricing.basePriceMonthlyUsd
+  let cents = Math.round(base * 100)
+  const addons = fitBundleAddonsToPlan(bundle.addons, bundle.plan).addons
+  for (const kind of ADDON_KINDS) {
+    const quantity = addons[kind] ?? 0
+    const unit = addonUnitUsd(kind, bundle.plan, kind === 'aiAddon' ? bundle.aiTier : null)
+    if (quantity > 0 && unit != null) cents += Math.round(unit * 100) * quantity * (yearly ? 12 : 1)
+  }
+  return cents
+}
+
 /** Whether any add-on is asked for. */
 export function hasBundleAddons(addons: BundleAddons | null | undefined): boolean {
   return ADDON_KINDS.some((kind) => (addons?.[kind] ?? 0) > 0)
