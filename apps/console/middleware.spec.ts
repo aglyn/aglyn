@@ -738,7 +738,9 @@ describe('sanctions geo-block', () => {
     return new NextRequest(`https://${host}${path}`, { headers })
   }
 
-  it.each(['CU', 'IR', 'KP', 'SY'])(
+  // Syria left the list with Legal v19 (#1900); `sanctions-geo.spec.ts`
+  // pins that it is now served.
+  it.each(['CU', 'IR', 'KP'])(
     'refuses a %s request with 451 before anything else runs',
     async (country) => {
       const response = await middleware(geoRequest(country))

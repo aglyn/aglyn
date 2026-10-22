@@ -23,9 +23,9 @@ import { createContext, useContext } from 'react'
  *
  * - `joining`: the accept request is in flight.
  * - `joined`: the server accepted it; the membership is on its way.
- * - `failed`: the server refused it (a full seat quota, the single sign-on
- *   lockout check, a revoked invite). The invitation stays pending and is
- *   answered by hand, with the server's reason already shown.
+ * - `failed`: the server refused it, because the workspace changed after the
+ *   invitation was sent (a seat removed, say). The sender has been told; the
+ *   invitee waits, and the next visit tries again.
  */
 export type InviteAutoAcceptStatus = 'joining' | 'joined' | 'failed'
 

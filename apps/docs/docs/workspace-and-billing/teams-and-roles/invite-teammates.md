@@ -37,7 +37,7 @@ stops working immediately.
   in" — so a workspace with email delivery unavailable never leaves you assuming a
   message was delivered.
 - If the address already belongs to an Aglyn account, that person also gets an
-  **in-app notification**.
+  **in-app notification**, which opens the workspace.
 - Your workspace's **owner and admins** get an in-app notification when an invite is
   created, and again when it is **accepted** or **declined**, so whoever sent it finds
   out what happened without re-checking the Team page. These appear under
@@ -58,12 +58,18 @@ the new workspace is added to your list and a message says you joined it.
 
 ### When joining doesn't go through
 
-The join is the same as accepting by hand, so the workspace's own limits still apply.
-If one stops it — the workspace has no free seat for your role, say — you're told why,
-and the invitation stays open: a banner at the top of the console and the page the
-email linked to both offer **Accept** to try again and **Decline**. **Decline** asks
-you to confirm, then removes the invitation, and the workspace's admins are told you
-declined. To join later, an admin has to invite you again.
+Everything that could stop someone joining is checked when the invitation is **sent**,
+and the person sending it is told then: the workspace's free seats (pending invitations
+count against them), an invitation to the address that already owns the workspace, and,
+for a hand-off on a workspace that signs in through single sign-on, whether the new
+owner could be locked out.
+
+What's left is the workspace changing after the invitation went out — seats removed,
+or a downgrade. Then the person invited isn't asked anything and isn't shown a
+refusal: the page tells them their access is almost ready. The person who sent the
+invitation and the workspace's admins get a notification saying why, the pending row on
+the **Team** page shows **Can't join yet** with the reason, and the invited person
+joins on their next visit once it's fixed.
 
 ### An ordinary invitation never changes who owns the workspace
 
