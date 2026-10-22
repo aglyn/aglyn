@@ -209,7 +209,7 @@ describe('expandRepeatables', () => {
   /**
    * AGL-3496: a repeat with nothing to render publishes NOTHING. Drawn as
    * written, its template is `{{item.name}} — {{item.role}}` on a customer's
-   * live page — the broken card edr-construction.aglyn.app/services showed.
+   * live page — the broken card a client's services page showed.
    */
   it('renders zero copies for an unknown dataset, no records, or no rows map', () => {
     for (const rows of [{ Other: team }, { Team: { records: [] } }, {}, undefined]) {

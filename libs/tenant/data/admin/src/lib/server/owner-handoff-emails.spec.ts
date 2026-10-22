@@ -81,7 +81,7 @@ beforeEach(() => {
 
 const run = (stays = true) =>
   sendOwnerHandoffEmails({
-    orgId: 'org-edr',
+    orgId: 'org-acme',
     newOwner: { email: 'jordan@example.com', displayName: 'Jordan Lee' },
     previousOwner: { email: 'pat@example.com', displayName: 'Pat Lee' },
     previousOwnerStays: stays,

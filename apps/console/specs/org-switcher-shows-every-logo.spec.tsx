@@ -25,20 +25,20 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 const mockRowReads = jest.fn()
 
 jest.mock('next/navigation', () => ({
-  usePathname: () => '/elevated-concepts/hosts',
+  usePathname: () => '/ember-studio/hosts',
   useRouter: () => ({ push: jest.fn() }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({
     orgs: [
       { $id: 'org_aglyn', slug: 'aglyn-org', orgName: 'Aglyn LLC' },
-      { $id: 'org_edr', slug: 'edr-construction', orgName: 'EDR Construction' },
-      { $id: 'org_ec', slug: 'elevated-concepts', orgName: 'Elevated Concepts' },
+      { $id: 'org_ewd', slug: 'eastwood-plumbing', orgName: 'Eastwood Plumbing' },
+      { $id: 'org_es', slug: 'ember-studio', orgName: 'Ember Studio' },
     ],
     currentOrg: {
-      $id: 'org_ec',
-      slug: 'elevated-concepts',
-      orgName: 'Elevated Concepts',
+      $id: 'org_es',
+      slug: 'ember-studio',
+      orgName: 'Ember Studio',
     },
     orgSlug: null,
     hostOrgSlug: null,
@@ -53,7 +53,7 @@ jest.mock('../hooks/use-pinned-orgs', () => ({
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({
-    org: { plan: 'starter', logoUrl: 'https://cdn.example/ec.png' },
+    org: { plan: 'starter', logoUrl: 'https://cdn.example/es.png' },
     ready: true,
   }),
 }))
@@ -68,7 +68,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
             logoUrl: 'https://cdn.example/aglyn.png',
             logoDarkUrl: 'https://cdn.example/aglyn-dark.png',
           },
-          org_edr: { plan: 'starter' },
+          org_ewd: { plan: 'starter' },
         }
       : {}
   },
@@ -83,7 +83,7 @@ async function openMenu() {
     '../components/org-switcher-nav.component'
   )
   render(<OrgSwitcherNav />)
-  fireEvent.click(screen.getByLabelText('Workspace: Elevated Concepts'))
+  fireEvent.click(screen.getByLabelText('Workspace: Ember Studio'))
   return screen.getByRole('menu')
 }
 
@@ -110,14 +110,14 @@ describe('the workspace switcher · logos', () => {
 
   it('still shows the current workspace its own logo', async () => {
     const menu = await openMenu()
-    expect(imageSources(rowFor(menu, 'Elevated Concepts'))).toEqual([
-      'https://cdn.example/ec.png',
+    expect(imageSources(rowFor(menu, 'Ember Studio'))).toEqual([
+      'https://cdn.example/es.png',
     ])
   })
 
   it('keeps the workspace glyph for a workspace with no logo', async () => {
     const menu = await openMenu()
-    expect(imageSources(rowFor(menu, 'EDR Construction'))).toEqual([])
+    expect(imageSources(rowFor(menu, 'Eastwood Plumbing'))).toEqual([])
   })
 
   it('reads the rows only once the menu opens', async () => {
@@ -128,9 +128,9 @@ describe('the workspace switcher · logos', () => {
     expect(mockRowReads.mock.calls.every(([, enabled]) => enabled === false)).toBe(
       true,
     )
-    fireEvent.click(screen.getByLabelText('Workspace: Elevated Concepts'))
+    fireEvent.click(screen.getByLabelText('Workspace: Ember Studio'))
     expect(mockRowReads).toHaveBeenLastCalledWith(
-      expect.arrayContaining(['org_aglyn', 'org_edr', 'org_ec']),
+      expect.arrayContaining(['org_aglyn', 'org_ewd', 'org_es']),
       true,
     )
   })

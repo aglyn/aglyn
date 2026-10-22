@@ -289,7 +289,7 @@ describe('a leaf repeats itself (AGL-3111)', () => {
   })
 
   /**
-   * AGL-3496: the EDR services grid. A card repeating itself over a filter
+   * AGL-3496: a client's services grid. A card repeating itself over a filter
    * that matched nothing was published as one card reading `{{item.name}}`.
    */
   it('leaves its parent with no copy when no record matches', () => {

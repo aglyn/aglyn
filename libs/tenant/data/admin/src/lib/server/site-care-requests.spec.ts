@@ -288,7 +288,7 @@ const BASE_ROUTES: Record<string, Route> = {
 
 const ORG = {
   $id: 'org-1',
-  name: 'Ready to Roll',
+  name: 'Acme Builders',
   plan: 'starter',
   ownerUid: 'owner-1',
   subscription: { status: 'active' },
@@ -335,7 +335,7 @@ async function openOne(subject = 'New hours on the contact page'): Promise<strin
 
 beforeEach(() => {
   store = new FakeStore()
-  store.docs.set('orgs/org-1', { name: 'Ready to Roll', ownerUid: 'owner-1' })
+  store.docs.set('orgs/org-1', { name: 'Acme Builders', ownerUid: 'owner-1' })
   store.docs.set('orgs/org-1/members/owner-1', { email: 'owner@example.com' })
   clock = T0
   emails = []
