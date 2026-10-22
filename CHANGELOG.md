@@ -28,6 +28,7 @@ content on the marketing site and is written separately.
 - **besigner:** canvas labels stay dark in dark mode, and the action strip centres on phones
 - **besigner:** double-tap text on a phone opens it for editing, with the keyboard
 - **besigner:** the drop marker shows exactly where a drag will land
+- **console:** the Besigner page reads its theme via useTheme; the page-view layout spec knows the Name & description card
 
 ### Changed
 
