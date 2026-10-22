@@ -410,7 +410,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'handoff.previousOwner',
           description: 'What happened to the previous owner, as one sentence',
-          sample: 'Zach Gover stays on as an admin.',
+          sample: 'Pat Lee stays on as an admin.',
         },
         {
           name: 'nextStep',

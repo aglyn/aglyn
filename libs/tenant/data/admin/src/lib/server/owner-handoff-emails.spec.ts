@@ -76,14 +76,14 @@ const PROPOSAL = {
 beforeEach(() => {
   jest.clearAllMocks()
   mockConfigured = true
-  mockOrg = { name: 'EDR Construction', slug: 'edr-construction', upgradeProposal: PROPOSAL }
+  mockOrg = { name: 'Acme Builders', slug: 'acme-builders', upgradeProposal: PROPOSAL }
 })
 
 const run = (stays = true) =>
   sendOwnerHandoffEmails({
     orgId: 'org-edr',
-    newOwner: { email: 'jacob@example.com', displayName: 'Jacob Trevino' },
-    previousOwner: { email: 'zach@aglyn.com', displayName: 'Zach Gover' },
+    newOwner: { email: 'jordan@example.com', displayName: 'Jordan Lee' },
+    previousOwner: { email: 'pat@example.com', displayName: 'Pat Lee' },
     previousOwnerStays: stays,
   })
 
@@ -92,14 +92,14 @@ describe('the new owner', () => {
     await run()
     const [key, merge] = mockRender.mock.calls[0]
     expect(key).toBe('org-owner-handoff-new-owner')
-    expect(merge['org.name']).toBe('EDR Construction')
-    expect(merge['handoff.previousOwner']).toBe('Zach Gover stays on as an admin.')
+    expect(merge['org.name']).toBe('Acme Builders')
+    expect(merge['handoff.previousOwner']).toBe('Pat Lee stays on as an admin.')
     expect(merge.nextStep).toContain('Your plan is ready to start')
     expect(merge['cta.label']).toBe('Start the Starter plan')
-    expect(merge['cta.url']).toMatch(/^https:\/\/app\.aglyn\.com\/edr-construction\/billing\?plan=starter/)
+    expect(merge['cta.url']).toMatch(/^https:\/\/app\.aglyn\.com\/acme-builders\/billing\?plan=starter/)
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: 'jacob@example.com',
+        to: 'jordan@example.com',
         subject: 'subject:org-owner-handoff-new-owner',
         fromName: 'Aglyn',
         context: 'org-owner-handoff-new-owner',
@@ -108,11 +108,11 @@ describe('the new owner', () => {
   })
 
   it('without a standing proposal, opens the workspace instead', async () => {
-    mockOrg = { name: 'EDR Construction', slug: 'edr-construction' }
+    mockOrg = { name: 'Acme Builders', slug: 'acme-builders' }
     await run()
     const [, merge] = mockRender.mock.calls[0]
-    expect(merge['cta.label']).toBe('Open EDR Construction')
-    expect(merge['cta.url']).toBe('https://app.aglyn.com/edr-construction')
+    expect(merge['cta.label']).toBe('Open Acme Builders')
+    expect(merge['cta.url']).toBe('https://app.aglyn.com/acme-builders')
     expect(merge.nextStep).not.toContain('plan')
   })
 })
@@ -122,12 +122,12 @@ describe('the person who handed it over', () => {
     await run()
     const [key, merge] = mockRender.mock.calls[1]
     expect(key).toBe('org-owner-handoff-previous-owner')
-    expect(merge['newOwner.name']).toBe('Jacob Trevino')
-    expect(merge['newOwner.email']).toBe('jacob@example.com')
+    expect(merge['newOwner.name']).toBe('Jordan Lee')
+    expect(merge['newOwner.email']).toBe('jordan@example.com')
     expect(merge['previousOwner.role']).toBe('Admin')
-    expect(merge['cta.url']).toBe('https://app.aglyn.com/edr-construction/team')
+    expect(merge['cta.url']).toBe('https://app.aglyn.com/acme-builders/team')
     expect(mockSend).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'zach@aglyn.com', context: 'org-owner-handoff-previous-owner' }),
+      expect.objectContaining({ to: 'pat@example.com', context: 'org-owner-handoff-previous-owner' }),
     )
     expect(mockMeter).toHaveBeenCalledTimes(2)
   })
@@ -135,7 +135,7 @@ describe('the person who handed it over', () => {
   it('who left is told so, and is not sent to a Team page they cannot open', async () => {
     await run(false)
     const [, newOwnerMerge] = mockRender.mock.calls[0]
-    expect(newOwnerMerge['handoff.previousOwner']).toBe('Zach Gover has left the workspace.')
+    expect(newOwnerMerge['handoff.previousOwner']).toBe('Pat Lee has left the workspace.')
     const [, merge] = mockRender.mock.calls[1]
     expect(merge['previousOwner.role']).toBe('Left the workspace')
     expect(merge['cta.url']).toBe('https://app.aglyn.com')
