@@ -179,7 +179,7 @@ interface AccessDraft {
  * Organization membership manager (AGL-234): the permanent org-role model
  * (owner/admin/editor/viewer + all-hosts toggle) over /api/orgs/members
  * and /api/orgs/invites. People without an Aglyn account get a pending
- * invite they accept on first sign-in; per-site access editing lands with
+ * invite that takes effect when they sign up (AGL-4023); per-site access editing lands with
  * the workspace host picker.
  */
 export function OrgMembersCard() {
@@ -433,7 +433,8 @@ export function OrgMembersCard() {
     setBusy(true)
     try {
       // An owner handoff is always an invitation (AGL-3466): it moves the
-      // workspace, so the person it names has to accept it, account or not.
+      // workspace, and takes effect when the person it names is next in the
+      // console, account or not (AGL-4023).
       if (role === 'handoff') {
         const sent = await sendOwnerHandoff(user, {
           orgId,
@@ -968,8 +969,8 @@ export function OrgMembersCard() {
               {role === 'handoff'
                 ? OWNER_HANDOFF_HINT
                 : `Already on ${branding.productName}? They join right away. ` +
-                  `New to ${branding.productName}? We email them an invite they ` +
-                  'accept when they first sign in.'}
+                  `New to ${branding.productName}? We email them, and they join ` +
+                  'as soon as they sign up with that address.'}
             </Typography>
           </Stack>
         ) : null}

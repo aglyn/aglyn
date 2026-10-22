@@ -505,17 +505,17 @@ async function handler(request: Request): Promise<Response> {
           `${previousOwnerLine}\n\n` +
           `Your plan: ${proposalSummary}.` +
           (proposal?.note ? `\n\n${proposal.note}` : '') +
-          '\n\nSign in with this email address, accept the invitation, and ' +
+          '\n\nSign in or create your account with this email address, and ' +
           `Billing opens with everything already chosen:\n\n${billingUrl}\n\n` +
           'Nothing is charged until you confirm.'
         : handoff
         ? `You've been invited to take over ${orgName} as its owner. ` +
           `${previousOwnerLine}\n\n` +
-          `Sign in at ${origin} with this email address and accept ` +
-          'the invitation from your dashboard. Nothing changes until you accept.'
+          `Sign in or create your account at ${origin} with this email ` +
+          'address and the workspace is yours. Nothing changes until you do.'
         : `You've been invited to join ${orgName} as ${role}.\n\n` +
-          `Sign in at ${origin} with this email address and accept ` +
-          'the invite from your dashboard.'
+          `Sign in or create your account at ${origin} with this email ` +
+          'address and you join it right away.'
       // The staff design when one is published (AGL-750), else the catalog's
       // built-in copy, in this org's header and footer (AGL-3322). The copy
       // here is the last resort behind both.

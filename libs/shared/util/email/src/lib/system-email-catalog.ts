@@ -274,7 +274,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         {
           name: 'signInUrl',
-          description: 'Console URL to sign in and accept',
+          description: 'Console URL to sign in and join',
           sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
@@ -282,10 +282,10 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       defaultBody: [
         { block: 'text', text: 'Invitation · {{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: 'Join {{org.name}} on {{brand.productName}}', variant: 'heading' },
-        { block: 'text', text: 'You\'ve been invited to join {{org.name}} as {{invite.role}}. Sign in with this email address and the invitation is waiting on your dashboard.', variant: 'body' },
+        { block: 'text', text: 'You\'ve been invited to join {{org.name}} as {{invite.role}}. Sign in or create your account with this email address and you join it right away.', variant: 'body' },
         { block: 'text', text: 'Workspace: {{org.name}}\nYour role: {{invite.role}}', variant: 'details' },
-        { block: 'button', label: 'Accept the invitation', href: '{{signInUrl}}' },
-        { block: 'text', text: 'Not expecting this? You can ignore it. Nothing happens unless you accept.', variant: 'caption' },
+        { block: 'button', label: 'Open {{org.name}}', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Not expecting this? You can ignore it. Nothing happens unless you sign in with this address.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone invited you to join ' +
@@ -309,12 +309,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'handoff.previousOwner',
           description:
-            'What happens to the current owner once the handoff is accepted',
+            'What happens to the current owner once the handoff takes effect',
           sample: 'The current owner stays on as an admin.',
         },
         {
           name: 'signInUrl',
-          description: 'Console URL to sign in and accept',
+          description: 'Console URL to sign in and join',
           sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
@@ -324,8 +324,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{org.name}} is being handed to you', variant: 'heading' },
         { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
         { block: 'text', text: 'Workspace: {{org.name}}\nYour role: Owner', variant: 'details' },
-        { block: 'button', label: 'Review and accept', href: '{{signInUrl}}' },
-        { block: 'text', text: 'Nothing changes until you accept. Sign in with this email address to see the invitation.', variant: 'caption' },
+        { block: 'button', label: 'Open {{org.name}}', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Sign in or create your account with this email address and the workspace is yours. Nothing changes until you do.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone invited you to take over ' +
@@ -350,7 +350,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'handoff.previousOwner',
           description:
-            'What happens to the current owner once the handoff is accepted',
+            'What happens to the current owner once the handoff takes effect',
           sample: 'The current owner stays on as an admin.',
         },
         {
@@ -372,7 +372,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           name: 'billingUrl',
           description:
             'Billing page with the bundle preselected; signing in with this ' +
-            'address shows the invitation to accept first',
+            'address joins the workspace first',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
         },
       ],
@@ -383,8 +383,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
         { block: 'text', text: 'Your plan: {{proposal.summary}}', variant: 'details' },
-        { block: 'button', label: 'Accept and start the {{plan.name}} plan', href: '{{billingUrl}}' },
-        { block: 'text', text: 'Sign in with this email address, accept the invitation, and Billing opens with everything already chosen. Nothing is charged until you confirm.', variant: 'caption' },
+        { block: 'button', label: 'Start the {{plan.name}} plan', href: '{{billingUrl}}' },
+        { block: 'text', text: 'Sign in or create your account with this email address, and Billing opens with everything already chosen. Nothing is charged until you confirm.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because the {{brand.productName}} team invited ' +
