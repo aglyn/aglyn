@@ -1060,7 +1060,7 @@ async function main() {
     done()
   } catch (error) {
     failedStep = step
-    console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
+    console.log(`FAILED at ${step}: ${String(error).slice(0, 2000)}`)
   }
 
   const consoleSite = new URL(CONSOLE).hostname.split('.').slice(-2).join('.')
@@ -1206,7 +1206,7 @@ async function main() {
       outcome = await walk(page, db, auth, identity, created)
     } catch (error) {
       legFailedStep = step
-      console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
+      console.log(`FAILED at ${step}: ${String(error).slice(0, 2000)}`)
     } finally {
       await context?.close().catch(() => undefined)
     }
