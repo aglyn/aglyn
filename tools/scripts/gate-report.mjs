@@ -157,6 +157,27 @@ let wrote = 0
 let anyRed = 0
 const lines = []
 
+/**
+ * Writes one commit status, trying again after a short wait when the API call
+ * fails. A green gate once landed nowhere because a single POST came back with
+ * an empty body ("unexpected end of JSON input"), and the report then failed
+ * the run, so a passing gate showed red. Writing the same status twice is
+ * harmless, since the newest status for a context wins. Only after every try
+ * fails does the caller treat it as red.
+ */
+function writeStatusWithRetry(args, delaysMs = [2000, 5000, 10000]) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      execFileSync('gh', args, { stdio: 'pipe' })
+      return
+    } catch (err) {
+      if (attempt >= delaysMs.length) throw err
+      console.error(`gate-report: status write failed (try ${attempt + 1}), retrying: ${String(err.stderr || err.message).trim()}`)
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delaysMs[attempt])
+    }
+  }
+}
+
 for (const { key, result, verified } of jobs) {
   const verdict = decide(result, verified)
   const state = stateFor(verdict)
@@ -170,17 +191,13 @@ for (const { key, result, verified } of jobs) {
     continue
   }
   try {
-    execFileSync(
-      'gh',
-      [
-        'api', '-X', 'POST', `repos/${repo}/statuses/${sha}`,
-        '-f', `state=${state}`,
-        '-f', `context=${CONTEXTS[key]}`,
-        '-f', `description=${description}`,
-        ...(runUrl ? ['-f', `target_url=${runUrl}`] : []),
-      ],
-      { stdio: 'pipe' },
-    )
+    writeStatusWithRetry([
+      'api', '-X', 'POST', `repos/${repo}/statuses/${sha}`,
+      '-f', `state=${state}`,
+      '-f', `context=${CONTEXTS[key]}`,
+      '-f', `description=${description}`,
+      ...(runUrl ? ['-f', `target_url=${runUrl}`] : []),
+    ])
     console.log(`wrote ${CONTEXTS[key]} = ${state} on ${sha.slice(0, 9)}`)
     wrote++
   } catch (err) {
