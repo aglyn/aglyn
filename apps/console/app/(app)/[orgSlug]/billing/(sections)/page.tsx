@@ -37,6 +37,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
   type AglynOrgBilling,
+  type AiTierId,
   type LockdownRefusalNotice,
   type OrgPlan,
 } from '@aglyn/aglyn'
@@ -302,17 +303,20 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const [bundleAddons, setBundleAddons] = useState<BundleAddons>({})
   /**
    * The checkout body for a set of add-ons: the map, and the Aglyn AI tier
-   * the link named (`?ai=boost`, or `ai:boost` in `addons=`, AGL-3965) when
-   * the AI add-on is in it. The quote's AI switch is worded and priced as
-   * that tier, so the tier the link preselected is the one quoted and paid.
+   * when the AI add-on is in it. The tier starts on the one the link named
+   * (`?ai=boost`, or `ai:boost` in `addons=`, AGL-3965) and the owner can
+   * change it beside the quote's AI switch (AGL-4025); the switch is worded
+   * and priced as that tier, so the tier chosen is the one quoted and paid.
    */
   const linkAiTier = planIntent?.aiTier ?? null
+  const [aiTier, setAiTier] = useState<AiTierId | null>(linkAiTier)
+  useEffect(() => setAiTier(linkAiTier), [linkAiTier])
   const withAiTier = useCallback(
     (addons: BundleAddons) => ({
       addons,
-      ...((addons.aiAddon ?? 0) > 0 && linkAiTier ? { aiTier: linkAiTier } : {}),
+      ...((addons.aiAddon ?? 0) > 0 && aiTier ? { aiTier } : {}),
     }),
-    [linkAiTier],
+    [aiTier],
   )
   const intentAddonsKey = bundleAddonsParam(intentAddons(planIntent))
   useEffect(() => {
@@ -1621,7 +1625,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         onAppliedCodeChange={setAppliedPromotionCode}
                         addons={bundleAddons}
                         onAddonsChange={setBundleAddons}
-                        aiTier={linkAiTier}
+                        aiTier={aiTier}
+                        onAiTierChange={setAiTier}
                         initialCoupon={planIntent?.coupon ?? null}
                         linkNotice={bundleLinkNotice}
                         onQuoted={onQuoted}
@@ -2184,7 +2189,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           plan={collectingForPlan}
           interval={interval}
           addons={bundleAddons}
-          aiTier={linkAiTier}
+          aiTier={aiTier}
           orgId={orgId}
           profile={billingProfile}
           canManage={can('billing.manage')}

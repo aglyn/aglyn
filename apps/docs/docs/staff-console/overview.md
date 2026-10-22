@@ -361,8 +361,10 @@ at any step: staff take none of a workspace's seats.
    **Hand off**. Enter the client's email,
    choose whether you **Stay on as an admin after the handoff** or **Leave after the
    handoff**, and pick the bundle: the plan, its add-ons (Site Care is on to start;
-   every add-on the plan sells is offered, such as Aglyn AI, the Event Calendar and
-   extra sites), **Yearly** or **Monthly**, and an optional coupon code and note.
+   every add-on the plan sells is offered, such as Aglyn AI, the Event Calendar, extra
+   sites and POS registers, and one the plan does not include, like POS registers on
+   Starter, shows disabled with the plan it needs), the **Aglyn AI tier** when Aglyn AI
+   is on, **Yearly** or **Monthly**, and an optional coupon code and note.
    For a workspace made with **Build for a client**, the dialog opens on what the
    build recorded: its plan, Site Care, monthly billing, and the domain from its
    Domain step. Change any of it before you send.
@@ -453,6 +455,11 @@ dialog, so the QR you show matches what the hand-off proposes. When the owner al
 has a domain, the card says so under the domain fields: connect it with them on the
 site's **Custom Domain** page, since the link carries no domain to buy.
 
+- **Choose the Aglyn AI tier.** Turning on **Aglyn AI** shows an **Aglyn AI tier** field
+  beside it, listing every tier with its price and the credits it adds a month. It starts
+  on the tier matched to the plan (Spark on Starter, Boost on Pro, up to Studio on
+  Agency), and the link, the QR and the hand-off carry the tier you pick. The owner's Billing page opens on that tier, and they can
+  change it or turn Aglyn AI off before paying.
 - **Coupons are applied, never created here.** Make the code on the staff Coupons page
   first, then type it in. An expired or unknown code is left off on the owner's page
   with a note.

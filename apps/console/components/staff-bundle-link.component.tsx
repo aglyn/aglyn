@@ -391,6 +391,7 @@ export function StaffBundleLinkActions(props: StaffBundleLinkActionsProps) {
           addons: payload.intent?.addons ?? null,
           interval: payload.intent?.interval ?? null,
           coupon: payload.intent?.coupon ?? null,
+          aiTier: payload.intent?.aiTier ?? null,
         }),
         domainLine: payload.domain ? bundleDomainLine(payload.domain) : null,
       }

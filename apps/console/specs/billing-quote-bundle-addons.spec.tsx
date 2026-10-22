@@ -26,8 +26,10 @@
  * the code is never blamed on it.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
 import type { BundleAddons } from '@aglyn/aglyn/app-utils/bundle-intent'
+import { AI_TIERS, defaultAiTierForPlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AiTierId } from '@aglyn/aglyn'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -176,6 +178,66 @@ describe('the bundle’s add-ons on the quote (AGL-3955)', () => {
     mount({ linkNotice: 'Banana is not something Billing sells, so it was left off.' })
     await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
     expect(screen.getByText(/Banana is not something Billing sells/)).toBeTruthy()
+  })
+})
+
+describe('the owner can change the Aglyn AI tier the link chose (AGL-4025)', () => {
+  /** The page's part: it holds the add-ons and the tier, as Billing does. */
+  function Billing(props: { addons: BundleAddons; aiTier?: AiTierId; interval?: 'month' | 'year' }) {
+    const [addons, setAddons] = useState<BundleAddons>(props.addons)
+    const [aiTier, setAiTier] = useState<AiTierId | null>(props.aiTier ?? null)
+    return (
+      <BillingPlanQuoteComponent
+        orgId="org-1"
+        plan="starter"
+        interval={props.interval ?? 'month'}
+        canManage
+        appliedCode=""
+        onAppliedCodeChange={() => undefined}
+        addons={addons}
+        onAddonsChange={setAddons}
+        aiTier={aiTier}
+        onAiTierChange={setAiTier}
+      />
+    )
+  }
+  const tierField = () => screen.queryByRole('combobox', { name: 'Aglyn AI tier' })
+
+  it('opens on the link’s tier beside the switch, and a new tier re-quotes as that tier', async () => {
+    render(<Billing addons={{ siteCare: 1, aiAddon: 1 }} aiTier="boost" />)
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    expect(tierField()!.textContent).toBe(`Boost — $${AI_TIERS.boost.monthlyUsd}/mo`)
+    expect(posted[0]).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' })
+    fireEvent.mouseDown(tierField()!)
+    fireEvent.click(
+      within(await screen.findByRole('listbox')).getByRole('option', { name: /^Max — / }),
+    )
+    await waitFor(() => expect(posted.at(-1)).toMatchObject({ aiTier: 'max' }))
+    expect(posted.at(-1)).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 } })
+    expect(tierField()!.textContent).toBe(`Max — $${AI_TIERS.max.monthlyUsd}/mo`)
+  })
+
+  it('a link with no tier opens on the plan’s default, and yearly billing prices it yearly', async () => {
+    render(<Billing addons={{ aiAddon: 1 }} interval="year" />)
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    const tier = AI_TIERS[defaultAiTierForPlan('starter')!]
+    expect(tierField()!.textContent).toBe(`${tier.label} — $${tier.yearlyUsd}/yr`)
+  })
+
+  it('turning Aglyn AI off removes it and its tier from the quote', async () => {
+    render(<Billing addons={{ siteCare: 1, aiAddon: 1 }} aiTier="plus" />)
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    fireEvent.click(screen.getByRole('switch', { name: /^Aglyn AI/ }))
+    await waitFor(() => expect(posted.at(-1)?.['addons']).toEqual({ siteCare: 1 }))
+    expect(posted.at(-1)?.['aiTier']).toBeUndefined()
+    expect(tierField()).toBeNull()
+  })
+
+  it('CONTROL: without onAiTierChange the switch names the tier and no picker shows', async () => {
+    mount({ addons: { aiAddon: 1 }, aiTier: 'studio', onAddonsChange: () => undefined })
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    expect(tierField()).toBeNull()
+    expect(screen.getByText(/Aglyn AI Studio/)).toBeTruthy()
   })
 })
 
