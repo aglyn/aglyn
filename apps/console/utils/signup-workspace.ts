@@ -26,6 +26,7 @@ import {
   type MaybeTokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import { firstTouchField } from './account-acquisition'
+import { firstSiteWorkspaceFallbackSlug } from './first-site-workspace'
 
 /**
  * The workspace a sign-up asked for, held until the address is proven
@@ -232,23 +233,40 @@ export interface SignUpWorkspaceOutcome {
  * first verified session of an account that had to wait. One routine, so the
  * two cannot disagree about what a refusal means.
  *
- * A 409 means the address was taken and the workspace was NOT created, so the
- * caller falls through to the chooser; inventing a suffix here would hand
- * somebody a workspace URL they never chose.
+ * A 409 means the address was taken and the workspace was NOT created. For a
+ * name the person TYPED, the caller falls through to the chooser, which offers
+ * the name back (AGL-1523); inventing a suffix would hand them a workspace URL
+ * they never chose.
+ *
+ * A DERIVED name (a Google display name, the backstop's personal workspace)
+ * was chosen by nobody, so its address is tried once more under a suffix, as
+ * the empty console's first-site door and the server's own provisioning
+ * already do (AGL-4024). Without it, two people who share a Google display
+ * name collide and the second one is left with no workspace at all.
  */
 export async function createSignUpWorkspace(
   user: MaybeTokenSource,
   name: string,
+  { derived = false }: { derived?: boolean } = {},
 ): Promise<SignUpWorkspaceOutcome> {
   try {
-    const response = await authorizedFetch(user, '/api/orgs/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The first touch rides along for the server's acquisition backstop:
-      // the workspace copies its creator's record, and this is the one
-      // request every sign-up's workspace is born from.
-      body: JSON.stringify({ name: name.trim(), ...firstTouchField() }),
-    })
+    const attempt = (slug?: string) =>
+      authorizedFetch(user, '/api/orgs/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The first touch rides along for the server's acquisition backstop:
+        // the workspace copies its creator's record, and this is the one
+        // request every sign-up's workspace is born from.
+        body: JSON.stringify({
+          name: name.trim(),
+          ...(slug ? { slug } : {}),
+          ...firstTouchField(),
+        }),
+      })
+    let response = await attempt()
+    if (derived && response.status === 409) {
+      response = await attempt(firstSiteWorkspaceFallbackSlug(name.trim()))
+    }
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
       console.error('sign-up org create failed', payload?.error)
