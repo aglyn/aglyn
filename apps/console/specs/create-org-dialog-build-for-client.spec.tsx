@@ -49,7 +49,7 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: jest.fn(),
   trackEventBeforeNavigation: jest.fn(async () => undefined),
 }))
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => mockIsStaff,
   useStaffRole: () => (mockIsStaff ? 'staff' : null),

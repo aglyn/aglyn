@@ -34,8 +34,8 @@
 
 import { act, render } from '@testing-library/react'
 import React from 'react'
-import { ACCOUNT_SECTIONS } from '../constants/account-sections'
-import { buildRoute, Route } from '../constants/route-links'
+import { ACCOUNT_SECTIONS } from '@aglyn/aglyn/app-utils/console/account-sections'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 const mockReplace = jest.fn()
 /** Where the server index redirected. */

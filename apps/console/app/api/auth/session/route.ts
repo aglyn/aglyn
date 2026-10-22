@@ -52,7 +52,7 @@ import {
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
 import { readCookie, requestIsHttps } from '../read-cookie'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import {
   hostnameOf,
   isWorkspaceDomainHost,
@@ -70,7 +70,7 @@ import {
   claimSecondsToMs,
   deviceRevocationRefuses,
 } from '../../_lib/device-revocation'
-import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
+import { enforceSanctionsGeo } from '@aglyn/aglyn/app-utils/console/sanctions-geo'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { announceNewAccount } from '../../_lib/growth-announcements'
 

@@ -40,7 +40,7 @@
  * in-memory map.
  */
 
-import { lockdownPausesSiteMoneyByDefault } from '../constants/subscription-cancel'
+import { lockdownPausesSiteMoneyByDefault } from '@aglyn/aglyn/app-utils/console/subscription-cancel'
 import {
   registerRecurringChargeSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'

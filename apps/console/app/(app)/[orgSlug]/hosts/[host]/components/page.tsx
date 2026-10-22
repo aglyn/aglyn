@@ -37,7 +37,7 @@ import AuthenticatedLayout from '../../../../../../components/layouts/authentica
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
-import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useOrgScope, { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import componentCreateSeed from '../../../../../../utils/component-create-seed'

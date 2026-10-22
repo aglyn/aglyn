@@ -67,7 +67,7 @@ import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,

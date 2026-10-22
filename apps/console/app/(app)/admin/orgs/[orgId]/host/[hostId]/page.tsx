@@ -16,7 +16,7 @@
  */
 
 import { redirect } from 'next/navigation'
-import { buildRoute, Route } from '../../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /**
  * The site's staff page moved out from under its organization (AGL-3378): a

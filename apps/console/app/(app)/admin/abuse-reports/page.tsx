@@ -140,9 +140,9 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
 import {
   ABUSE_REPORT_FILTER_FIELDS,
   ABUSE_REPORT_FILTER_HEADERS,

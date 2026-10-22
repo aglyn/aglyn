@@ -99,7 +99,7 @@ jest.mock('../app/api/_lib/growth-announcements', () => ({
   announceNewWorkspace: async () => undefined,
 }))
 
-jest.mock('../constants/sanctions-geo', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/sanctions-geo', () => ({
   __esModule: true,
   enforceSanctionsGeo: () => null,
 }))

@@ -42,7 +42,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListQuery from '../hooks/use-staff-list-query'
+import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
 import {
   ERASURE_COLUMN_SORTS,
   ERASURE_FILTER_FIELDS,

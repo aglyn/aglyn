@@ -75,7 +75,7 @@ import ListTable, {
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from './artifacts/artifact-delete-confirm.component'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'

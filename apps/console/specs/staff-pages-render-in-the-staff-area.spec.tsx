@@ -106,7 +106,7 @@ jest.mock('../hooks/use-org-nav-tabs', () => ({
   __esModule: true,
   default: () => ORG_TABS,
 }))
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   default: () => true,
   useIsStaff: () => true,
@@ -129,7 +129,7 @@ jest.mock('../components/console-plugins-gate.component', () => ({
 }))
 
 import AdminStaffPluginPage from '../app/(app)/admin/[staffPage]/page'
-import adminNavTabItems from '../constants/admin-nav-tabs'
+import adminNavTabItems from '@aglyn/aglyn/app-utils/console/admin-nav-tabs'
 import {
   markStaffPluginsSettled,
   resetStaffPluginsSettledForTests,

@@ -16,7 +16,7 @@
  */
 
 import type { DocsHelpAnchor } from './docs-links'
-import { buildRoute, Route } from './route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 export interface NotificationSection {
   /** The section's key, which the rail and the specs match on. */

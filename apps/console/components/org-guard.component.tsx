@@ -19,7 +19,7 @@
 import { Box, CircularProgress } from '@mui/material'
 import { notFound, usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
-import { useOrgLastActivity } from '../hooks/use-org-last-activity'
+import { useOrgLastActivity } from '@aglyn/tenant-feature-instance/hooks/console/use-org-last-activity'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
 import { collaboratorRedirect } from '../utils/collaborator-navigation'

@@ -68,7 +68,7 @@ jest.mock('next/navigation', () => {
 import * as nextNavigation from 'next/navigation'
 import * as tenantInstance from '@aglyn/tenant-feature-instance'
 import StaffOnly from '../components/staff-only.component'
-import { resetStaffClaimReconciliation } from '../hooks/use-is-staff'
+import { resetStaffClaimReconciliation } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 
 /** The factory's state, reached through the namespace — `__state` exists on
  *  the mock only, so it is not on the real module's type. */

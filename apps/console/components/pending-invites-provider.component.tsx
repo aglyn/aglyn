@@ -23,7 +23,7 @@ import {
   usePendingInvitesSource,
   type InviteReviewState,
   type InviteReviewTarget,
-} from '../hooks/use-pending-invites'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
 import InviteResponseDialog from './invite-response-dialog.component'
 
 /**

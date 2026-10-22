@@ -58,7 +58,7 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
-import { checkOrgQuota } from '../../../../../../constants/entitlements'
+import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import ListTable, {
   ListRowActions,
@@ -98,7 +98,7 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../../components/plugin-widget-slot.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
-import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import {

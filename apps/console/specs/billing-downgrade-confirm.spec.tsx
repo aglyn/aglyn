@@ -128,6 +128,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'u1', getIdToken: async () => 'token' } }),
 }))
 
+// The billing profile hook lives in the instance lib and reads the user from
+// the module that declares it, which the index mock above does not reach.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  useFirestore: () => jest.requireMock('@aglyn/tenant-feature-instance').useFirestore(),
+  useUser: () => jest.requireMock('@aglyn/tenant-feature-instance').useUser(),
+}))
+
 // The over-limit summary (AGL-483/2154) runs before every confirm. Counting
 // zero of everything keeps the confirm copy about the ASYMMETRY, which is what
 // this file measures; the warning wording has its own spec.
@@ -195,7 +202,7 @@ jest.mock('../hooks/use-org-permissions', () => ({
     loaded: true,
   }),
 }))
-jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))

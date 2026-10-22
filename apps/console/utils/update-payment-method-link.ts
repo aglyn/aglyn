@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /**
  * THE "UPDATE PAYMENT METHOD" BUTTON, AND EVERY LINK THAT POINTS AT IT

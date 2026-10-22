@@ -26,7 +26,7 @@ import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import {
   isSubscriptionCancelWhen,
   normalizeSubscriptionCancelReason,
-} from '../../../../../constants/subscription-cancel'
+} from '@aglyn/aglyn/app-utils/console/subscription-cancel'
 import {
   auditOrgSubscriptionCancel,
   cancellationComment,

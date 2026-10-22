@@ -32,7 +32,7 @@
  * least able to check it.
  */
 
-import { buildScreenSeoUpdate } from '../constants/screen-seo'
+import { buildScreenSeoUpdate } from '@aglyn/aglyn/app-utils/console/screen-seo'
 
 describe('buildScreenSeoUpdate', () => {
   it('carries untouched keys forward', () => {

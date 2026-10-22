@@ -32,7 +32,7 @@
 //   REAL, loaded from the shipped console modules through `jiti`, never
 //   re-implemented (re-implementing them would prove nothing, because they
 //   ARE the fix):
-//     - `STARTER_TEMPLATES`            (apps/console/constants/starter-templates.ts)
+//     - `STARTER_TEMPLATES`            (libs/aglyn/src/lib/app-utils/console/starter-templates.ts)
 //     - `buildStarterTemplateDocs`     (       "                "                 )
 //     - `withBundleRootScreen`         (components/templates/create-page-from-template.ts)
 //     - `resolveTemplateSlug`          (       "                "                 )
@@ -144,7 +144,7 @@ for (const [key, [target]] of Object.entries(tsPaths)) {
 }
 const jiti = createJiti(import.meta.url, { alias, interopDefault: true })
 const { STARTER_TEMPLATES, buildStarterTemplateDocs } = await jiti.import(
-  resolve(repoRoot, 'apps/console/constants/starter-templates.ts'),
+  resolve(repoRoot, 'libs/aglyn/src/lib/app-utils/console/starter-templates.ts'),
 )
 const { withBundleRootScreen, resolveTemplateSlug } = await jiti.import(
   resolve(repoRoot, 'apps/console/components/templates/create-page-from-template.ts'),
@@ -545,8 +545,8 @@ console.log('\n=== C. PRE-FIX CONTROL: the same starters BEFORE a40d3efa4 ===')
 {
   const preRoot = join(repoRoot, 'tmp', 'agl1575-prefix')
   const files = [
-    'apps/console/constants/starter-templates.ts',
-    'apps/console/constants/screen-publishing.ts',
+    'libs/aglyn/src/lib/app-utils/console/starter-templates.ts',
+    'libs/aglyn/src/lib/app-utils/console/screen-publishing.ts',
     'apps/console/components/templates/create-page-from-template.ts',
   ]
   for (const relative of files) {

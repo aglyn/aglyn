@@ -34,7 +34,7 @@
  */
 
 import type { SupportCommitment } from '@aglyn/aglyn'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 export type SupportSurface = 'tickets' | 'forum'
 

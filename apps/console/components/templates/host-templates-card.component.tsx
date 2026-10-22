@@ -82,9 +82,9 @@ import ListTable, {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
-import { checkOrgQuota } from '../../constants/entitlements'
+import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
-import { buildRoute, Route } from '../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useHostSubdomain } from '../host-id-provider'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -108,11 +108,11 @@ import createPageFromTemplate, {
   templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
-import { releaseDefaultHomeRoot } from '../../constants/screen-publishing'
+import { releaseDefaultHomeRoot } from '@aglyn/aglyn/app-utils/console/screen-publishing'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
-import useStarterPages from './use-starter-pages'
+import useStarterPages from '@aglyn/tenant-feature-instance/hooks/console/use-starter-pages'
 import {
   TEMPLATE_SOURCE_OPTIONS,
   templateSourceBadge,

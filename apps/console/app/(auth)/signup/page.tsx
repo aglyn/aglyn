@@ -81,7 +81,7 @@ import { AuthConsentCheckbox } from '../../../components/auth-legal-consent.comp
 import { AuthMarketingOptIn } from '../../../components/auth-marketing-opt-in.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
-import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
+import useGoogleRedirectResult from '@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result'
 import { LEGAL_DOCUMENT_VERSION } from '../../../constants/legal-documents'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import {

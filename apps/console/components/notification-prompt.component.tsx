@@ -30,7 +30,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
-import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
+import useNotificationAlertPrefs from '@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs'
 import {
   desktopNotificationPermission,
   requestDesktopNotifications,

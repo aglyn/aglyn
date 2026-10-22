@@ -23,7 +23,7 @@ import {
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
 import { announceNewWorkspace } from '../../_lib/growth-announcements'
-import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
+import { enforceSanctionsGeo } from '@aglyn/aglyn/app-utils/console/sanctions-geo'
 import {
   consumeRateLimit,
   createOrganization,

@@ -33,7 +33,7 @@ import {
   STAFF_REFUND_CAP_CENTS,
   STAFF_REFUND_DAILY_CAP_CENTS,
   STAFF_REFUND_WINDOW_MAX_ENTRIES,
-} from '../constants/refund-authority'
+} from '@aglyn/aglyn/app-utils/console/refund-authority'
 
 describe('which roles carry a ceiling', () => {
   it('leaves only super uncapped', () => {

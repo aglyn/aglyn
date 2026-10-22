@@ -22,7 +22,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { Route } from '../constants/route-links'
+import { Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /**
  * A BILLING LOCK MUST NOT LOCK OUT PAYMENT (AGL-2430).

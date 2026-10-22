@@ -68,7 +68,7 @@ import {
   reportSuccessfulRead,
 } from '@aglyn/aglyn/app-utils/console/session-health'
 import { watchSessionHeal } from '../../utils/session-heal'
-import useCrossTabSessionHeal from '../../hooks/use-cross-tab-session-heal'
+import useCrossTabSessionHeal from '@aglyn/tenant-feature-instance/hooks/console/use-cross-tab-session-heal'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,

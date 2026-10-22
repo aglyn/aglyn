@@ -41,7 +41,7 @@
 import { render, screen } from '@testing-library/react'
 
 let mockIsStaff: boolean | null = null
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => mockIsStaff,
 }))

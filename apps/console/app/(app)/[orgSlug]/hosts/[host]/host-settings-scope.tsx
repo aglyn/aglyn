@@ -71,7 +71,7 @@ import {
 } from '../../../../../components/host-id-provider'
 import type { ThemeEditorProposedDraft } from '../../../../../components/theme-editor/theme-editor.component'
 import { docsHelp } from '../../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useHostActivityLogger from '../../../../../hooks/use-host-activity-logger'

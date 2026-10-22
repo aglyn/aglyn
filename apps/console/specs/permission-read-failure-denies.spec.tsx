@@ -329,7 +329,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-confirmed-doc', () => ({
   __esModule: true,
   default: () => ({ data: undefined }),
 }))
-jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false, ready: true }),
 }))

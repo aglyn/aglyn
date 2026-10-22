@@ -101,7 +101,7 @@ import {
   type SignupCanaryCheck,
 } from '@aglyn/aglyn/server'
 
-import { PUBLISH_OUTBOX_COLLECTION } from '../../../../constants/publish-outbox'
+import { PUBLISH_OUTBOX_COLLECTION } from '@aglyn/aglyn/app-utils/console/publish-outbox'
 import {
   createJourneyHealth,
   publishAnnounceHealth,

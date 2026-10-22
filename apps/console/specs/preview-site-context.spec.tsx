@@ -81,7 +81,7 @@ jest.mock('firebase/firestore', () => ({
   query: jest.fn(),
 }))
 
-jest.mock('../constants/preview-state', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/preview-state', () => ({
   __esModule: true,
   previewStateKey: () => 'k',
   readPreviewState: () => ({ nodes: {}, theme: undefined }),

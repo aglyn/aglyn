@@ -141,7 +141,7 @@ describe('console: every host-document write goes through the door', () => {
    */
   const EXEMPT: Record<string, string> = {
     'apps/console/utils/host-document-writes.ts': 'The door itself.',
-    'apps/console/constants/screen-publishing.ts':
+    'libs/aglyn/src/lib/app-utils/console/screen-publishing.ts':
       'Writes only the routing map, in the same batch as a publish outbox ' +
       'entry, and announces the exact addresses it changed — narrower than ' +
       'the whole-site drop the door would add.',

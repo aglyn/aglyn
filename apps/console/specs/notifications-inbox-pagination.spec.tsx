@@ -154,14 +154,14 @@ jest.mock('../hooks/use-firestore-collection', () => {
   }
   return { __esModule: true, default: useFirestoreCollection, useFirestoreCollection }
 })
-jest.mock('../hooks/use-host-index-entries', () => ({ __esModule: true, default: () => new Map() }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-index-entries', () => ({ __esModule: true, default: () => new Map() }))
 let mockTabBadge = false
-jest.mock('../hooks/use-notification-prefs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs', () => ({
   __esModule: true,
   default: () => [{ sound: false, desktop: false, tabBadge: mockTabBadge }],
 }))
-jest.mock('../hooks/use-org-hosts', () => ({ __esModule: true, default: () => ({ hosts: [] }) }))
-jest.mock('../hooks/use-pending-invites', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ __esModule: true, default: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
   __esModule: true,
   useInviteReview: () => ({ review: jest.fn() }),
   usePendingInvites: () => ({ refresh: jest.fn() }),

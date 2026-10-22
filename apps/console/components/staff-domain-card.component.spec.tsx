@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 jest.mock('firebase/firestore', () => ({ doc: () => ({}) }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
-jest.mock('../constants/entitlements', () => ({ hasEntitlement: () => true }))
+jest.mock('@aglyn/aglyn/app-utils/console/entitlements', () => ({ hasEntitlement: () => true }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'starter' }, ready: true, orgId: 'org-1' }),
@@ -71,7 +71,7 @@ jest.mock('../hooks/use-current-org', () => ({
 // Only the CLAIM is doubled. `staff-super-only.component` itself is real, so
 // the gate around Re-attach is the shipped one rather than a stand-in — a
 // mocked gate would let a card that forgot to wrap the button pass.
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useStaffRole: () => mockRole,
   useIsStaff: () => mockRole !== null,

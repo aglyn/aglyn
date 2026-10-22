@@ -79,7 +79,7 @@ jest.mock('../components/staff-only.component', () => ({
 }))
 
 let mockRole = 'super'
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
   useStaffRole: () => mockRole,

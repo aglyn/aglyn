@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { billingHrefFor } from './billing-entry'
 import { resolveOrgEntry } from '@aglyn/aglyn/app-utils/console/org-entry'
 import { resolveSupportEntry, supportHrefFor } from './support-entry'

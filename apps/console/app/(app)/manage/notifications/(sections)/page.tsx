@@ -41,14 +41,14 @@ import { getDocsBounded, STALE_READ_NOTICE } from '@aglyn/tenant-feature-instanc
 import NotificationsTable from '../../../../../components/notifications-table.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../../../../constants/shared'
-import useHostIndexEntries from '../../../../../hooks/use-host-index-entries'
+import useHostIndexEntries from '@aglyn/tenant-feature-instance/hooks/console/use-host-index-entries'
 import {
   markAllNotificationsReadFor,
   markNotificationRead,
-} from '../../../../../hooks/use-notification-feed'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-notification-feed'
 import { isNotificationRead } from '@aglyn/aglyn/app-utils/console/notification-feed'
-import useOrgHosts from '../../../../../hooks/use-org-hosts'
-import { useInviteReview } from '../../../../../hooks/use-pending-invites'
+import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
+import { useInviteReview } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import {
   normalizeNotificationLink,

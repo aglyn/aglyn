@@ -52,7 +52,7 @@ export async function staffSources() {
   const health = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/platform-health.ts'))
   const maintenance = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/maintenance-jobs.ts'))
   const lockdown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/lockdown.ts'))
-  const cancel = await jiti.import(join(ROOT, 'apps/console/constants/subscription-cancel.ts'))
+  const cancel = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/console/subscription-cancel.ts'))
   const options = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }))
   // The AI plugin declares the AI levers the Locks screen lists beside the core ones.
   await jiti.import(join(ROOT, 'libs/plugins/ai/src/lib/declarations.ts'))

@@ -54,7 +54,7 @@ export const COLLECTION_TEMPLATE_SCREEN_FIELDS = [
  * `pdpScreenId` renders `/products/{slug}` and `collectionScreenId` renders
  * `/collections/{slug}`, both of which are templates in exactly the same sense.
  *
- * NOT yet mirrored in `apps/console/constants/collection-templates.ts`, which
+ * NOT yet mirrored in `libs/aglyn/src/lib/app-utils/console/collection-templates.ts`, which
  * re-declares the collection fields for its `'use client'` readers: publishing a
  * PDP template still toasts the author a route it does not have (the AGL-1269
  * half of AGL-1270). Widening it is a console change and belongs with that file.

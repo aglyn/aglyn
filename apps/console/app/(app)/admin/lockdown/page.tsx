@@ -48,9 +48,9 @@ import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
 } from '../../../../components/staff-super-only.component'
-import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import {
   lockLogLines,
@@ -60,7 +60,7 @@ import {
 import {
   lockdownCancelsBillingByDefault,
   lockdownPausesSiteMoneyByDefault,
-} from '../../../../constants/subscription-cancel'
+} from '@aglyn/aglyn/app-utils/console/subscription-cancel'
 
 /** Mirrors the route's server-side type-to-confirm — both must be typed. */
 const PLATFORM_CONFIRM_PHRASE = PLATFORM_LOCK_CONFIRM_PHRASE

@@ -262,7 +262,7 @@ describe('a created screen serves nothing until somebody publishes it', () => {
 
     // The one door that publishes a screen, read from its own source so this
     // spec applies the write it actually makes rather than a paraphrase.
-    const publisher = readRepo('apps/console/constants/screen-publishing.ts')
+    const publisher = readRepo('libs/aglyn/src/lib/app-utils/console/screen-publishing.ts')
     const publish = publisher.slice(
       publisher.indexOf('export async function publishScreenRoute('),
       publisher.indexOf('export async function syncScreenRouteEntries('),

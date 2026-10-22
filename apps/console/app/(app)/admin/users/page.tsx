@@ -58,13 +58,13 @@ import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
 } from '../../../../components/staff-super-only.component'
-import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
+import { useStaffListPagination } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-pagination'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   type ListFilterClause,

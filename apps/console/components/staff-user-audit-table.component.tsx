@@ -39,7 +39,7 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { Chip, Stack } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useMemo, useState } from 'react'
-import { useStaffListQuery } from '../hooks/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
 import {
   ADMIN_AUDIT_SORT,
   USER_AUDIT_LIST_FIELDS,

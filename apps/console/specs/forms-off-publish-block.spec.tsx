@@ -41,7 +41,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
 
-import useFormsPublishBlock from '../hooks/use-forms-publish-block'
+import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
 
 const REPO_ROOT = join(__dirname, '../../..')
 const read = (path: string) => readFileSync(join(REPO_ROOT, path), 'utf8')

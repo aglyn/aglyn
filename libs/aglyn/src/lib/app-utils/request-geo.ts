@@ -22,7 +22,7 @@
  * endpoint reads the identical signal the sanctions gate does — two geo
  * layers would eventually disagree about the same request. The sanctions
  * POLICY (embargo sets, verdicts, the 451) stays in
- * `apps/console/constants/sanctions-geo.ts`; this is only the signal.
+ * `libs/aglyn/src/lib/app-utils/console/sanctions-geo.ts`; this is only the signal.
  */
 
 /**

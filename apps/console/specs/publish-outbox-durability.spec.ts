@@ -113,12 +113,12 @@ import {
   PUBLISH_OUTBOX_OPTIONAL_FIELDS,
   PUBLISH_OUTBOX_MAX_PATHS,
   sanitizePublishOutboxPaths,
-} from '../constants/publish-outbox'
+} from '@aglyn/aglyn/app-utils/console/publish-outbox'
 import {
   publishScreenRoute,
   syncScreenRouteEntries,
   unpublishScreenRoute,
-} from '../constants/screen-publishing'
+} from '@aglyn/aglyn/app-utils/console/screen-publishing'
 
 const user = { getIdToken: async () => 'token' }
 const firestore = {} as never

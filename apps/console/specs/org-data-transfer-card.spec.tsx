@@ -45,7 +45,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { $id: 'org-1', plan: 'starter', enabledPlugins: ['commerce'] }, orgId: 'org-1', ready: true }),
 }))
-jest.mock('../hooks/use-org-hosts', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
   useOrgHosts: () => ({ hosts: [{ $id: 'host-1', name: 'Shop', subdomain: 'shop' }] }),
 }))
 // A member holding "Manage data": the packages are theirs (AGL-3554).

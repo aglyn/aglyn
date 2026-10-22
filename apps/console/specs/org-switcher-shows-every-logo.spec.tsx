@@ -46,7 +46,7 @@ jest.mock('../hooks/use-org-scope', () => ({
     loadMoreOrgs: jest.fn(),
   }),
 }))
-jest.mock('../hooks/use-pinned-orgs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: jest.fn() }),
 }))

@@ -24,7 +24,7 @@ import {
 import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { Alert } from '@mui/material'
 import { type ReactElement } from 'react'
-import { useStaffRole } from '../hooks/use-is-staff'
+import { useStaffRole } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 
 export { SUPER_STAFF_ONLY_REASON }
 export type { StaffRoleGate }

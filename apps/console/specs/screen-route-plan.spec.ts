@@ -25,7 +25,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { changedRoutePaths, planScreenRouteWrite } from '../constants/screen-route-plan'
+import { changedRoutePaths, planScreenRouteWrite } from '@aglyn/aglyn/app-utils/console/screen-route-plan'
 
 describe('planScreenRouteWrite', () => {
   const state = { screens: { home: '/', about: 'about' }, defaultHomeScreenId: 'home' }

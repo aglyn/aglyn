@@ -23,7 +23,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 const mockSetAlertPrefs = jest.fn()
-jest.mock('../hooks/use-notification-prefs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-notification-prefs', () => ({
   __esModule: true,
   default: () => [{ sound: false, desktop: false, tabBadge: true }, mockSetAlertPrefs],
 }))

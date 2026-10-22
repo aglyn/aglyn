@@ -16,8 +16,8 @@
  */
 
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
-import type { PreviewKind } from '../constants/preview-state'
-import { buildRoute, Route } from '../constants/route-links'
+import type { PreviewKind } from '@aglyn/aglyn/app-utils/console/preview-state'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /*
  * WHERE A STAFF VIEW OF A SITE LINKS TO (AGL-3378).
