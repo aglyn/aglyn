@@ -14,8 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { useSyncExternalStore } from 'react'
-
 /**
  * A sign-up that is still landing holds the auth layout's redirect
  * (AGL-3578).
@@ -86,19 +84,12 @@ export function isSignUpLandingHeld(): boolean {
   return holds.size > 0
 }
 
-function subscribe(listener: () => void): () => void {
+/** Calls `listener` whenever a hold is raised or released; returns the unsubscribe. */
+export function subscribeSignUpLandingHold(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
   }
-}
-
-/**
- * {@link isSignUpLandingHeld} as React state, so a layout re-runs its
- * redirect effect the moment the last hold is released.
- */
-export function useSignUpLandingHeld(): boolean {
-  return useSyncExternalStore(subscribe, isSignUpLandingHeld, () => false)
 }
 
 /**

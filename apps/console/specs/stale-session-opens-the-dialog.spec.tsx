@@ -83,9 +83,11 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
-  usePasskeysSupported: () => false,
   signInWithPasskey: jest.fn(),
   describePasskeySignInFailure: (error: unknown) => error,
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
+  usePasskeysSupported: () => false,
 }))
 
 /** The layout renders the watcher above the dialog; so does this. */

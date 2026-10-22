@@ -175,6 +175,8 @@ jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
 jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
   describePasskeySignInFailure: () => null,
   signInWithPasskey: jest.fn(),
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
   usePasskeysSupported: () => false,
 }))
 jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({

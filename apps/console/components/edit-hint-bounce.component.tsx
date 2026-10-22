@@ -25,8 +25,8 @@ import { emailGateWouldRefuse } from '@aglyn/aglyn/app-utils/console/email-verif
 import {
   isSignUpLandingHeld,
   markLeavingConsole,
-  useSignUpLandingHeld,
 } from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
+import { useSignUpLandingHeld } from '@aglyn/tenant-feature-instance/hooks/console/use-sign-up-landing-held'
 
 /**
  * The `*.aglyn.app` half of the editor-presence hint (AGL-1842).

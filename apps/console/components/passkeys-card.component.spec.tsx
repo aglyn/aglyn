@@ -99,8 +99,10 @@ jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
     if (mockRemoveThrows) return Promise.reject(new Error('nope'))
     return Promise.resolve({ removed: true, label: 'x' })
   },
-  usePasskeysSupported: () => true,
   PasskeyRequestError: class extends Error {},
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
+  usePasskeysSupported: () => true,
 }))
 
 import { PasskeysCard } from './passkeys-card.component'

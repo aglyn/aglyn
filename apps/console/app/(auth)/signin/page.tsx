@@ -80,8 +80,8 @@ import { aimAuthAtPool } from '@aglyn/aglyn/app-utils/console/pooled-custom-toke
 import {
   describePasskeySignInFailure,
   signInWithPasskey,
-  usePasskeysSupported,
 } from '@aglyn/aglyn/app-utils/console/passkeys'
+import { usePasskeysSupported } from '@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported'
 import guardPopupLoading from '@aglyn/aglyn/app-utils/console/popup-loading-guard'
 
 // Built through the shared factory so the account chooser is forced on

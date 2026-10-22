@@ -33,7 +33,6 @@ import {
   type Auth,
   type User,
 } from 'firebase/auth'
-import { useEffect, useState } from 'react'
 import { markInteractiveSignIn } from './interactive-signin'
 import { signInWithPooledCustomToken } from './pooled-custom-token'
 
@@ -48,19 +47,6 @@ import { signInWithPooledCustomToken } from './pooled-custom-token'
 
 export function passkeysSupported(): boolean {
   return browserSupportsWebAuthn()
-}
-
-/**
- * Hydration-safe support check: the server always renders "unsupported",
- * and the button appears in an effect — a support check must never cause a
- * hydration mismatch on the sign-in page.
- */
-export function usePasskeysSupported(): boolean {
-  const [supported, setSupported] = useState(false)
-  useEffect(() => {
-    setSupported(browserSupportsWebAuthn())
-  }, [])
-  return supported
 }
 
 /** A server refusal with the machine-readable reason the routes emit. */

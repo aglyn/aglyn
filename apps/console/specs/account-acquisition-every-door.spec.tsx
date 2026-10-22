@@ -211,6 +211,8 @@ jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
 jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
   describePasskeySignInFailure: () => null,
   signInWithPasskey: jest.fn(),
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported', () => ({
   usePasskeysSupported: () => false,
 }))
 jest.mock('../utils/hard-navigate', () => ({

@@ -50,8 +50,8 @@ import { createAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-provide
 import {
   describePasskeySignInFailure,
   signInWithPasskey,
-  usePasskeysSupported,
 } from '@aglyn/aglyn/app-utils/console/passkeys'
+import { usePasskeysSupported } from '@aglyn/tenant-feature-instance/hooks/console/use-passkeys-supported'
 import {
   reauthRefusal,
   reauthRefusalText,

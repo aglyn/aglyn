@@ -28,8 +28,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 import {
   isSignUpLandingHeld,
-  useSignUpLandingHeld,
 } from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
+import { useSignUpLandingHeld } from '@aglyn/tenant-feature-instance/hooks/console/use-sign-up-landing-held'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { emailGateWouldRefuse } from '@aglyn/aglyn/app-utils/console/email-verification-gate'
 import { mintSession } from '@aglyn/aglyn/app-utils/console/session-mint'
