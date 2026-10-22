@@ -271,7 +271,7 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
                   slotProps={{
                     htmlInput: { min: 0, max: addonMaxForPlan(kind, value.plan), step: 1 },
                   }}
-                  sx={{ width: (theme) => theme.spacing(18.75) }}
+                  sx={{ width: (theme) => theme.spacing(18) }}
                 />
               )
             })}
