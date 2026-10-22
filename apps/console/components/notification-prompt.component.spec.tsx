@@ -30,7 +30,7 @@ jest.mock('../hooks/use-notification-prefs', () => ({
 
 let mockPermission: string
 let mockRequestResult: string
-jest.mock('../utils/notification-alerts', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/notification-alerts', () => ({
   desktopNotificationPermission: () => mockPermission,
   requestDesktopNotifications: () => Promise.resolve(mockRequestResult),
 }))

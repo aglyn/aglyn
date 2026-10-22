@@ -35,8 +35,8 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
-import { selectCronChunk } from '../../../../utils/cron-chunk'
-import { previousMonth, rollupIsFinal } from '../../../../utils/billing-month'
+import { selectCronChunk } from '@aglyn/aglyn/app-utils/console/cron-chunk'
+import { previousMonth, rollupIsFinal } from '@aglyn/aglyn/app-utils/console/billing-month'
 import {
   isEmailConfigured,
   rateLimitedRetryAtMs,
@@ -63,7 +63,7 @@ import { isAccountMailWithheld } from '@aglyn/tenant-data-admin/server/account-m
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller.
 
-// `previousMonth` is shared (AGL-2219) — see `utils/billing-month.ts`.
+// `previousMonth` is shared (AGL-2219) — see `@aglyn/aglyn/app-utils/console/billing-month`.
 
 function formatUsd(costUsd: number) {
   return `$${costUsd.toFixed(2)}`

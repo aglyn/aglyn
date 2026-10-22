@@ -56,14 +56,14 @@ import {
   resolveExtensionEntitlement,
   resolveUpgradeNoticeAnchor,
   upgradeNoticeMessage,
-} from '../../../../../../utils/extension-entitlement'
+} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 import {
   composeExtensionPermissions,
   refusedExtensionNotice,
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '../../../../../../utils/extension-permission'
-import { hubRedirectTarget, resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
+} from '@aglyn/aglyn/app-utils/console/extension-permission'
+import { hubRedirectTarget, resolveHubSections } from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
 import { useConsoleRoutePlugins } from '../../../../../../hooks/use-console-plugins'
 import { useFilledZones } from '../../../../../../hooks/use-filled-zones'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'

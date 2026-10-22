@@ -50,7 +50,7 @@ const mockRevalidateLivePages = jest.fn(
       settleAnnounce = resolve
     }),
 )
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: (...args: unknown[]) => (mockRevalidateLivePages as any)(...args),
   revalidateLivePages: (...args: unknown[]) =>

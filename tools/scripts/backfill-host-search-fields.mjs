@@ -21,7 +21,7 @@
  * whose search keys are missing or no longer match it (AGL-3378).
  *
  * The staff Sites list (`/admin/sites`) filters and searches `hosts` on its
- * Firestore query (`apps/console/utils/staff-site-list-query.ts`): the search
+ * Firestore query (`libs/aglyn/src/lib/app-utils/console/staff-site-list-query.ts`): the search
  * by `array-contains` on `searchTokens`, Site "is" by equality on `nameLower`,
  * Custom domain by equality on `hasCustomDomain`. `syncHostProjectionForMembers`
  * stamps all three whenever a site is created, renamed, or connects or

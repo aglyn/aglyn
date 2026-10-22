@@ -54,7 +54,7 @@ import {
   getReleaseFlagDefinition,
   parseReleaseFlagValue,
 } from '@aglyn/aglyn/app-utils/release-flags'
-import { UPLOAD_TYPES } from '../utils/media-upload-limits'
+import { UPLOAD_TYPES } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import {
   videoUploadPausedRefusal,
   videoUploadsOpenForOrg,

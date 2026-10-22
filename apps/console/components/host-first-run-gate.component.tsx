@@ -27,7 +27,7 @@ import useCurrentOrg from '../hooks/use-current-org'
 import { useHost } from '../hooks/use-host'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { buildRoute, Route } from '../constants/route-links'
-import { hostIsBlankSite, hostLiveUrl, requestStarterSite } from '../utils/host-first-run'
+import { hostIsBlankSite, hostLiveUrl, requestStarterSite } from '@aglyn/aglyn/app-utils/console/host-first-run'
 import { useHostId, useHostSubdomain } from './host-id-provider'
 import PluginWidgetSlot from './plugin-widget-slot.component'
 

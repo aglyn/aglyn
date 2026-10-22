@@ -40,10 +40,10 @@ import AuthErrorAlertComponent from '../../../components/auth-error-alert.compon
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
 import { currentFirstTouch } from '../../../utils/account-acquisition'
-import { markInteractiveSignIn } from '../../../utils/interactive-signin'
+import { markInteractiveSignIn } from '@aglyn/aglyn/app-utils/console/interactive-signin'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { createAuthProvider } from '../../../utils/oauth-providers'
-import { describeSsoError } from '../../../utils/sso-errors'
+import { createAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
+import { describeSsoError } from '@aglyn/aglyn/app-utils/console/sso-errors'
 
 // Enterprise SSO (AGL-1101): the SAML redirect leaves and returns here, so the
 // tenant is stashed across the hop and restored before getRedirectResult.

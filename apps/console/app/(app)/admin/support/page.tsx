@@ -53,7 +53,7 @@ import {
   SUPPORT_TICKET_FILTER_FIELDS,
   SUPPORT_TICKET_FILTER_HEADERS,
   SUPPORT_TICKET_FILTER_OPTIONS,
-} from '../../../../utils/support-ticket-list-query'
+} from '@aglyn/aglyn/app-utils/console/support-ticket-list-query'
 
 interface StaffTicket {
   $id: string

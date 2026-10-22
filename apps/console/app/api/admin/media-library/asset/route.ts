@@ -31,7 +31,7 @@ import {
   staffMediaScopeBase,
   staffMediaScopeFrom,
   staffRightsConfirmation,
-} from '../../../../../utils/staff-media-library'
+} from '@aglyn/aglyn/app-utils/console/staff-media-library'
 import {
   recordStaffMediaView,
   staffMediaRowFrom,

@@ -62,12 +62,12 @@ import {
   ORG_ACTIVITY_SELECT_FIELDS,
   SUBJECT_ACTIVITY_QUERY,
   SUBJECT_ACTIVITY_SORTS,
-} from '../utils/activity-list-query'
+} from '@aglyn/aglyn/app-utils/console/activity-list-query'
 import {
   ACTIVITY_LIST_FILTER_FIELDS,
   ACTIVITY_LIST_FILTER_HEADERS,
-} from '../utils/list-filters'
-import { formatWireTimestamp } from '../utils/staff-timestamps'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
+import { formatWireTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /** The organization's own activity log — the card's default surface. */
 const ORG_ACTIVITY_HELP = docsHelp('inviteTeammates', {
@@ -137,7 +137,7 @@ interface OrgActivityFacets {
  *
  * Every clause in the grid's Filters panel and the search word go to the
  * route, which puts them all on its query (AGL-3321, see
- * `utils/activity-list-query.ts`): Action, and on the org-wide log Who and
+ * `@aglyn/aglyn/app-utils/console/activity-list-query`): Action, and on the org-wide log Who and
  * Where, from pickers, When as a date or a range, and the search over the
  * written `searchTokens`. What the route could not put on the query it says,
  * and the card shows (`ListQueryNotices`) rather than narrowing the page. A

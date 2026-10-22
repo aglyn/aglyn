@@ -72,8 +72,8 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { overLimitSummary as computeOverLimitSummary } from '../../../../../utils/over-limit-summary'
-import { stripeOtherModeInvoiceNotice } from '../../../../../utils/stripe-mode-notice'
+import { overLimitSummary as computeOverLimitSummary } from '@aglyn/aglyn/app-utils/console/over-limit-summary'
+import { stripeOtherModeInvoiceNotice } from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
   TOGGLE_ADDON_KINDS,
@@ -112,9 +112,9 @@ import { finishPendingCharge } from '../../../../../utils/finish-pending-charge'
 import {
   carriedAiAddonSentence,
   prorationQuote,
-} from '../../../../../utils/proration-quote'
-import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
-import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
+} from '@aglyn/aglyn/app-utils/console/proration-quote'
+import { purchaseConfirmQuote } from '@aglyn/aglyn/app-utils/console/purchase-confirm-quote'
+import { subscriptionPeriodNotice } from '@aglyn/aglyn/app-utils/console/subscription-period-notice'
 import {
   PAYMENT_METHOD_UPDATE_FLOW,
   UPDATE_PAYMENT_METHOD_ANCHOR,

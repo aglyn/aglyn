@@ -55,13 +55,13 @@ import {
   resolveExtensionEntitlement,
   resolveUpgradeNoticeAnchor,
   upgradeNoticeMessage,
-} from '../../../../utils/extension-entitlement'
+} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 import {
   composeExtensionPermissions,
   refusedExtensionNotice,
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '../../../../utils/extension-permission'
+} from '@aglyn/aglyn/app-utils/console/extension-permission'
 import { resolveOrgMount } from '../../../../utils/org-mount'
 import {
   orgPluginScopedNotice,
@@ -72,7 +72,7 @@ import {
   hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
-} from '../../../../utils/plugin-hub-sections'
+} from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
 
 /** `children` behind `flag`, or plain when the surface declares no flag. */
 function wrapInGate(

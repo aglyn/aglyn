@@ -47,7 +47,7 @@ interface MockBatch {
 /** Every batch the door opened, in order, with what it staged. */
 const mockBatches: MockBatch[] = []
 
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: (...args: unknown[]) => mockRevalidateLivePages(...args),
   revalidateLivePages: (...args: unknown[]) => mockRevalidateLivePages(...args),

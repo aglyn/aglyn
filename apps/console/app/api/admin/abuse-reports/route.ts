@@ -24,7 +24,7 @@
  * finally have an input for.
  *
  * `GET` answers three reads, each served by its own query
- * (`utils/abuse-report-list-query.ts`, AGL-3321):
+ * (`@aglyn/aglyn/app-utils/console/abuse-report-list-query`, AGL-3321):
  *
  *   (default)                one page of reports — the staff list wire,
  *                            Status and Category on the query, cursor-paged
@@ -139,7 +139,7 @@ import {
   COUNTER_NOTICE_OVERDUE_READ_MAX,
   URGENT_ABUSE_CATEGORIES,
   counterNoticeOverdueBefore,
-} from '../../../../utils/abuse-report-list-query'
+} from '@aglyn/aglyn/app-utils/console/abuse-report-list-query'
 import {
   readStaffListQuery,
   runStaffListQuery,

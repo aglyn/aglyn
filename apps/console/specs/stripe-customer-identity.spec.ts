@@ -31,7 +31,7 @@
 import {
   checkoutCustomerParams,
   stripeCustomerIdentityParams,
-} from '../utils/stripe-customer-identity'
+} from '@aglyn/aglyn/app-utils/console/stripe-customer-identity'
 
 describe('stripeCustomerIdentityParams (AGL-941)', () => {
   it('names the customer after the workspace, and tags it both ways', () => {

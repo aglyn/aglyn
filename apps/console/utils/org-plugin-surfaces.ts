@@ -24,11 +24,11 @@ import { buildRoute, Route } from '../constants/route-links'
 import {
   resolveExtensionEntitlement,
   resolveUpgradeNoticeAnchor,
-} from './extension-entitlement'
+} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from './extension-permission'
+} from '@aglyn/aglyn/app-utils/console/extension-permission'
 
 /**
  * The shell's rules for plugin surfaces mounted at the ORGANIZATION level

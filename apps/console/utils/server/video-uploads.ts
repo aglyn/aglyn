@@ -21,7 +21,7 @@ import {
   VIDEO_UPLOADS_PAUSED_CODE,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
   VIDEO_UPLOADS_RELEASE_FLAG,
-} from '../media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 
 /**
  * Whether this org may store a new video (AGL-2830).

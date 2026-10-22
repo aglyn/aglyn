@@ -80,7 +80,7 @@ jest.mock('../constants/docs-links', () => ({
 }))
 
 const mockRevalidate = jest.fn(async () => null)
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   revalidateLivePages: (...args: unknown[]) => mockRevalidate(...(args as [])),
   default: (...args: unknown[]) => mockRevalidate(...(args as [])),

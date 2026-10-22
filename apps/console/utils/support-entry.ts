@@ -38,7 +38,7 @@ import {
   type OrgEntryDestination,
   type OrgEntryOrg,
   resolveOrgEntry,
-} from './org-entry'
+} from '@aglyn/aglyn/app-utils/console/org-entry'
 
 /** The support umbrella for one workspace, for the picker's links. */
 export function supportHrefFor(orgSlug: string): string {

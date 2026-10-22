@@ -69,10 +69,10 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../../../../../../../../../../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import resolveComponentDefinition, {
   isComponentDefinitionRefusal,
-} from '../../../../../../../../../../utils/component-definition-write'
+} from '@aglyn/aglyn/app-utils/console/component-definition-write'
 import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'

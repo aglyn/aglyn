@@ -35,7 +35,7 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import {
   taxFilingJurisdiction,
   TX_JURISDICTION,
-} from '../../../../utils/tax-jurisdictions'
+} from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
 import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-store'
 import { readTaxablePurchases } from '../../../../utils/server/taxable-purchases-store'
 import { taxFindingListRows } from '../../../../utils/tax-findings-list'

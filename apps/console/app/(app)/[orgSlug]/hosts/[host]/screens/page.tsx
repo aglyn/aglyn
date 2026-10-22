@@ -144,7 +144,7 @@ import {
   unpublishScreenRoute,
 } from '../../../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
-import createScreenDraft from '../../../../../../utils/create-screen-draft'
+import createScreenDraft from '@aglyn/aglyn/app-utils/console/create-screen-draft'
 import {
   ceilingedWindow,
   hostArtifactQuery,

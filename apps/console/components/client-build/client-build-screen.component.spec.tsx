@@ -59,7 +59,7 @@ jest.mock('../../hooks/use-host', () => ({
   __esModule: true,
   useHost: () => ({ doc: { data: mockSite, status: 'success' } }),
 }))
-jest.mock('../../utils/host-first-run', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/host-first-run', () => ({
   __esModule: true,
   requestStarterSiteOutcome: (...args: unknown[]) => mockStarter(...(args as [])),
 }))

@@ -2003,7 +2003,7 @@ export interface ConsoleWidgetEntitlementProps {
  * console shell. Declarative — the shell owns rendering and applies the
  * feature-flag gate, so extensions cannot bypass entitlements.
  *
- * That sentence describes `apps/console/utils/extension-entitlement.ts`,
+ * That sentence describes `libs/aglyn/src/lib/app-utils/console/extension-entitlement.ts`,
  * which the plugin route and `PluginWidgetSlot` both call before they mount
  * anything an extension registered (AGL-2484). It was an aspiration until
  * then: the route resolved the entitlement and handed it to the extension as

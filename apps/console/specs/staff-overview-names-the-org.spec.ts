@@ -155,7 +155,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { GET } from '../app/api/admin/overview/route'
-import { previousMonth } from '../utils/billing-month'
+import { previousMonth } from '@aglyn/aglyn/app-utils/console/billing-month'
 
 const overview = (token = 'staff-token') =>
   GET(

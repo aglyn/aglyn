@@ -36,11 +36,11 @@ import {
 import {
   ACTIVITY_LIST_FILTER_FIELDS,
   ACTIVITY_LIST_FILTER_HEADERS,
-} from '../utils/list-filters'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
 import {
   ACTIVITY_LIST_SORT,
   ACTIVITY_SEARCH_HINT,
-} from '../utils/activity-list-query'
+} from '@aglyn/aglyn/app-utils/console/activity-list-query'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -48,7 +48,7 @@ import { Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ActivityTable from './activity-table.component'
 import { staffActivityLinks } from '../utils/activity-details'
-import { formatWireTimestamp } from '../utils/staff-timestamps'
+import { formatWireTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 export interface ActorActivityEntry {

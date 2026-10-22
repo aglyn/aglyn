@@ -26,17 +26,17 @@ import {
 import {
   probePublicRead,
   type PublicReadProbe,
-} from '../utils/probe-public-read'
+} from '@aglyn/aglyn/app-utils/console/probe-public-read'
 import {
   subscribeSessionHealth,
   type SessionHealthState,
-} from '../utils/session-health'
+} from '@aglyn/aglyn/app-utils/console/session-health'
 import {
   captureReauthIdentity,
   clearSessionReauth,
   getSessionReauth,
   requestSessionReauth,
-} from '../utils/session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 
 /**
  * The stale-session watcher (AGL-1063, AGL-1143, AGL-2486).

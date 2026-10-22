@@ -126,7 +126,7 @@ import ScreenSocialImageField, {
 } from '../../../../../../../../../../components/screen-social-image-field.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../../../../../../../../../../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'

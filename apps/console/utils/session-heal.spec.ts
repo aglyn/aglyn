@@ -40,7 +40,7 @@ import {
   dismissSessionReauth,
   reopenSessionReauth,
   requestSessionReauth,
-} from './session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 
 describe('watchSessionHeal (AGL-1066)', () => {
   let heals: number

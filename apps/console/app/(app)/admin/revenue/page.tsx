@@ -101,7 +101,7 @@ import {
   usdMoney,
   type SourceAttributionView,
   type RevenuePayload,
-} from '../../../../utils/revenue-view'
+} from '@aglyn/aglyn/app-utils/console/revenue-view'
 import StaffTableHead from '../../../../components/staff-table-head.component'
 
 /**

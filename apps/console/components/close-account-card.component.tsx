@@ -45,7 +45,7 @@ import {
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { createAuthProvider } from '../utils/oauth-providers'
+import { createAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
 
 /**
  * Close your own account (AGL-1140).

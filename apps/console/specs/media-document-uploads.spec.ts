@@ -246,7 +246,7 @@ import { POST } from '../app/api/media/upload/route'
 import {
   isAllowedUploadType,
   signedUploadMaxBytes,
-} from '../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 
 /** The four office formats the allowlist has to carry, plus their siblings. */
 const DOCUMENT_TYPES: ReadonlyArray<[string, string]> = [

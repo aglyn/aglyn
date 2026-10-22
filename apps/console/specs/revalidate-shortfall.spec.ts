@@ -37,7 +37,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 import revalidateLivePages, {
   describeRevalidateShortfall,
   type RevalidateLivePagesResult,
-} from '../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 
 const result = (
   over: Partial<RevalidateLivePagesResult> = {},

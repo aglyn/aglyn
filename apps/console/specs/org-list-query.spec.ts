@@ -19,7 +19,7 @@
  * The staff organization lists' filters and search are on their query, and
  * every shape that query can take has its index (AGL-3321).
  *
- * Two staff surfaces read `orgs` (`utils/org-list-query.ts` names them). Each
+ * Two staff surfaces read `orgs` (`@aglyn/aglyn/app-utils/console/org-list-query` names them). Each
  * is pinned here against the index file the project deploys: a clause the
  * plan puts on a query with no composite behind it throws
  * FAILED_PRECONDITION for every reader, so it fails here instead.
@@ -42,7 +42,7 @@ import {
   ORG_LIST_QUERY,
   ORG_MARGIN_FILTER_FIELDS,
   ORG_MARGIN_QUERY,
-} from '../utils/org-list-query'
+} from '@aglyn/aglyn/app-utils/console/org-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

@@ -173,7 +173,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-1577 and AGL-2963. PROSE, not a host. One occurrence sits inside a `reason` string explaining why an unprovisioned @aglyn.com address cannot be verified by test send — the default routing rule accepts mail for a non-existent address and suppresses the bounce, so the operator has to confirm the Google Group exists instead. The other two sit in the Wistia row's `purpose`, which restates the published Subprocessors page: the platform's own films play on its marketing site, aglyn.com, and load with the page there only for a visitor whose privacy choices on aglyn.com permit analytics. All three are English sentences in documentation fields; nothing parses, fetches or resolves them, and a self-hoster's deployment reaches nothing because of them.",
   },
   {
-    file: 'apps/console/utils/stripe-dunning-schedule.ts',
+    file: 'libs/aglyn/src/lib/app-utils/console/stripe-dunning-schedule.ts',
     count: 1,
     reason:
       'AGL-2430. A documentation constant recording the exact URL a human pastes into the LIVE Stripe Dashboard so card-failure emails reach a page where the card can be changed. Grepped for importers: there are none — it never executes, and a self-host operator resolves nothing from it. It names `app.` deliberately, not the apex, which is the fact being recorded.',

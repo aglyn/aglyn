@@ -43,7 +43,7 @@ import {
 } from '@aglyn/shared-util-http/authorized-token'
 import AuthFormComponent from '../../../components/auth-form.component'
 import hardNavigate from '../../../utils/hard-navigate'
-import { verifiedContinueTarget } from '../../../utils/verified-continue-target'
+import { verifiedContinueTarget } from '@aglyn/aglyn/app-utils/console/verified-continue-target'
 
 // How often we silently re-check verification while the user is on this page —
 // so clicking the emailed link in another tab lets them straight through here

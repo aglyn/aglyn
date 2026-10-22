@@ -44,7 +44,7 @@ import {
   activityActorBase,
   activityTargetBase,
   splitWhereClause,
-} from '../../../../utils/activity-list-query'
+} from '@aglyn/aglyn/app-utils/console/activity-list-query'
 import { withActivityLabels } from '../../../../utils/server/activity-row-labels'
 import { applyListQuery } from '../../../../utils/server/list-filter'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -106,7 +106,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  * Every mode reads `filters` (a JSON list of `{ field, op, value }`) and
  * `search`, and puts all of it on its query through `planListQuery`
- * (AGL-3321) — see `utils/activity-list-query.ts` for the declarations and
+ * (AGL-3321) — see `@aglyn/aglyn/app-utils/console/activity-list-query` for the declarations and
  * the indexes. What the plan could not put there comes back as `refused`,
  * with `notices` about what it did, and is NOT applied: the page says so
  * rather than narrowing some rows and not others.

@@ -38,7 +38,7 @@ import {
   bandwidthGbFromPageViews,
   billsEmailSendOverage,
   pageViewsFromBandwidthGb,
-} from '../../../../utils/usage-metering'
+} from '@aglyn/aglyn/app-utils/console/usage-metering'
 import {
   resolveStorageCap,
   scopeBillsStorageOverage,
@@ -59,7 +59,7 @@ import {
   type UsageAlertCadence,
   type UsageAlertGuard,
   type UsageAlertGuardEntry,
-} from '../../../../utils/usage-alert-notice'
+} from '@aglyn/aglyn/app-utils/console/usage-alert-notice'
 import {
   measureScreenCaps,
   screenCapReading,
@@ -80,7 +80,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   billingAutoLockEnabled,
   shouldAutoLockOrgForBilling,
-} from '../../../../utils/billing-auto-lock'
+} from '@aglyn/aglyn/app-utils/console/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 import { sendLockdownOwnerNotice } from '../../../../utils/server/lockdown-owner-notice'
 import {

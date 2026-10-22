@@ -85,8 +85,8 @@ jest.mock('../components/auth-form.component', () => ({
 
 import NativeHandoff from '../app/auth/native/page'
 import SignOut from '../app/(auth)/signout/page'
-import { endConsoleSession } from '../utils/end-console-session'
-import { consumeInteractiveSignOut } from '../utils/interactive-signin'
+import { endConsoleSession } from '@aglyn/aglyn/app-utils/console/end-console-session'
+import { consumeInteractiveSignOut } from '@aglyn/aglyn/app-utils/console/interactive-signin'
 
 jest.mock('../components/layouts/authenticating.layout', () => ({
   __esModule: true,

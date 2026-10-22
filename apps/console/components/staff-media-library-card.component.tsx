@@ -37,7 +37,7 @@ import {
   type StaffMediaRow,
   staffMediaSizeLabel,
   staffMediaTypeLabel,
-} from '../utils/staff-media-library'
+} from '@aglyn/aglyn/app-utils/console/staff-media-library'
 import StaffListPaginationControls from './staff-list-pagination.component'
 import StaffMediaAssetDialog from './staff-media-asset-dialog.component'
 

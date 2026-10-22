@@ -37,8 +37,8 @@ import {
   readStaffListQuery,
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
-import { ORG_MARGIN_QUERY } from '../../../../utils/org-list-query'
-import { marginFleetView } from '../../../../utils/margin-fleet-view'
+import { ORG_MARGIN_QUERY } from '@aglyn/aglyn/app-utils/console/org-list-query'
+import { marginFleetView } from '@aglyn/aglyn/app-utils/console/margin-fleet-view'
 
 /**
  * REALISED BAND UTILIZATION, PER ORGANIZATION.

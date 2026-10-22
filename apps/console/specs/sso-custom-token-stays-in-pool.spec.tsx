@@ -55,7 +55,7 @@ import {
   adoptRestoredPool,
   aimAuthAtPool,
   signInWithPooledCustomToken,
-} from '../utils/pooled-custom-token'
+} from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
 import { StaffGuard } from '../components/staff-guard.component'
 
 /**

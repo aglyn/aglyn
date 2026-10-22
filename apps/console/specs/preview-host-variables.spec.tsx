@@ -236,7 +236,7 @@ jest.mock('firebase/firestore', () => ({
   query: jest.fn((path: string) => path),
 }))
 
-jest.mock('../utils/firestore-one-shot-retry', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/firestore-one-shot-retry', () => ({
   __esModule: true,
   default: (run: () => unknown) => Promise.resolve().then(run),
 }))

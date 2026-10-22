@@ -56,7 +56,7 @@ import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 import { onlyInScheme } from '@aglyn/shared-ui-theme/util/scheme-visibility'
-import { arrangeWorkspaces } from '../utils/workspace-list'
+import { arrangeWorkspaces } from '@aglyn/aglyn/app-utils/console/workspace-list'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 

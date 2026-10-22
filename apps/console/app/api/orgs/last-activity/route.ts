@@ -36,7 +36,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 /**
  * `POST { orgId }` — a member of the organization is using the console in it
  * now. Stamps `orgs/{orgId}.lastActivityAt` at most once per
- * `ORG_LAST_ACTIVITY_INTERVAL_MS` (`utils/org-list-query.ts` says what the
+ * `ORG_LAST_ACTIVITY_INTERVAL_MS` (`@aglyn/aglyn/app-utils/console/org-list-query` says what the
  * field is and who reads it).
  *
  * The org shell calls it on real input, throttled per tab to the same

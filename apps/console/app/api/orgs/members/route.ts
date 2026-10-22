@@ -64,7 +64,7 @@ import {
   ORG_MEMBER_FILTER_FIELDS,
   ORG_MEMBER_LIST_PAGE,
   ORG_MEMBER_LIST_QUERY,
-} from '../../../../utils/org-member-list-query'
+} from '@aglyn/aglyn/app-utils/console/org-member-list-query'
 import {
   auditLogSearchWords,
   readAuditLogFilters,

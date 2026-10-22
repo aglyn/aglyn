@@ -93,7 +93,7 @@ import {
   postLegalAcceptance,
 } from '../../../utils/legal-consent'
 import hardNavigate from '../../../utils/hard-navigate'
-import { markInteractiveSignIn } from '../../../utils/interactive-signin'
+import { markInteractiveSignIn } from '@aglyn/aglyn/app-utils/console/interactive-signin'
 import {
   clearMarketingOptIn,
   consumeMarketingOptIn,
@@ -105,19 +105,19 @@ import {
   personalWorkspaceName,
   rememberPendingSignUpWorkspace,
 } from '../../../utils/signup-workspace'
-import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
-import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
+import { rememberOnboardingPlanIntent } from '@aglyn/aglyn/app-utils/console/onboarding-plan-intent'
+import { rememberSignUpCampaign } from '@aglyn/aglyn/app-utils/console/signup-campaign'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
-import { consumeConsentBounce } from '../../../utils/consent-bounce'
+import { consumeConsentBounce } from '@aglyn/aglyn/app-utils/console/consent-bounce'
 import {
   holdSignUpLanding,
   isRedirectLandingInFlight,
   releaseSignUpLanding,
-} from '../../../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
-import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
-import guardPopupLoading from '../../../utils/popup-loading-guard'
+import { createGoogleOAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
+import { aimAuthAtPool } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
+import guardPopupLoading from '@aglyn/aglyn/app-utils/console/popup-loading-guard'
 import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
 // Chooser forced on (AGL-1415): signing UP is the worst place to silently

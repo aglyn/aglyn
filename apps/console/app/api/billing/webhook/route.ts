@@ -74,7 +74,7 @@ import {
   INTERNAL_TRAFFIC_VALUE,
 } from '../../../../utils/internal-traffic'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
-import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
+import { stripeCustomerIdentityParams } from '@aglyn/aglyn/app-utils/console/stripe-customer-identity'
 import {
   addonQuantitiesFromItems,
   aiTierFromItems,

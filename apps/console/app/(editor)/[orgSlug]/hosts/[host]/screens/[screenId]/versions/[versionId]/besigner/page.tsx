@@ -162,7 +162,7 @@ import EntityPickerProvider from '../../../../../../../../../../components/entit
 import LinkTargetSearchProvider from '../../../../../../../../../../components/link-target-search-provider.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../../../../../../../../../../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'

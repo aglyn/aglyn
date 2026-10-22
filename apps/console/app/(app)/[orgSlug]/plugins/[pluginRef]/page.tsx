@@ -42,7 +42,7 @@ import useCurrentOrg from '../../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { useOrgPluginSwitchboard } from '../../../../../hooks/use-plugin-switchboard'
-import { resolveExtensionEntitlement } from '../../../../../utils/extension-entitlement'
+import { resolveExtensionEntitlement } from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 
 /**
  * A plugin installation, as its own page (AGL-1007).

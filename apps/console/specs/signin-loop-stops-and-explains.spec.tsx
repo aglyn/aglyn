@@ -44,8 +44,8 @@ import AuthenticatedLayout from '../components/layouts/authenticated.layout'
 import {
   __resetSessionReauth,
   getSessionReauth,
-} from '../utils/session-reauth'
-import { SIGNIN_BOUNCE_LIMIT } from '../utils/signin-bounce'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
+import { SIGNIN_BOUNCE_LIMIT } from '@aglyn/aglyn/app-utils/console/signin-bounce'
 
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({

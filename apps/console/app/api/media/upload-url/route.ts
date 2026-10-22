@@ -69,12 +69,12 @@ import {
   signedUploadMaxBytes,
   SIGNED_UPLOAD_TYPES_MESSAGE,
   storageContentHash,
-} from '../../../../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import {
   AUDIO_RIGHTS_FIELD,
   audioRightsRefusal,
   audioRightsVerdict,
-} from '../../../../utils/media-audio-rights'
+} from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000

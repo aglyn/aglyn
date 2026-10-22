@@ -37,7 +37,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { isAuthFailure } from '../utils/auth-failure'
+import { isAuthFailure } from '@aglyn/aglyn/app-utils/console/auth-failure'
 import { currentWorkspaceSlug } from '../constants/workspace-domain'
 import { consolePathFor, hostOrgSlugFor, resolveNavSection } from './nav-section'
 import { useAuthRecovery } from './use-auth-recovery'

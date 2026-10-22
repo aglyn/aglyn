@@ -31,7 +31,7 @@ import {
 import type { ReactNode } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
-import { formatStaffActivity } from '../utils/staff-timestamps'
+import { formatStaffActivity } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /**
  * A person resolved server-side by `/api/admin/org-detail` (AGL-938) —
@@ -108,7 +108,7 @@ export interface StaffOrgSummaryCardProps {
     /** Staff overrides; carries the plan comp (AGL-3034). */
     entitlements?: Record<string, unknown> | null
     createdAt?: { seconds?: number } | null
-    /** When any member last used the console here (`utils/org-list-query.ts`). */
+    /** When any member last used the console here (`@aglyn/aglyn/app-utils/console/org-list-query`). */
     lastActivityAt?: { seconds?: number } | null
   } | null
   /** The resolved owner, when the detail endpoint could name one. */

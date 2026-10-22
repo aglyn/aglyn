@@ -31,7 +31,7 @@ import {
   storedPhotoLinkBytes,
   type PhotoLinkRefusal,
 } from '@aglyn/tenant-data-admin'
-import { normalizeUploadContentType } from '../../../../../utils/media-upload-limits'
+import { normalizeUploadContentType } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import { ingestMedia } from '../../../../../utils/server/media-ingest'
 
 /**

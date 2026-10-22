@@ -65,11 +65,11 @@ import MaintenanceJobCard from '../../../../components/maintenance-job-card.comp
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { MAINTENANCE_JOBS } from '../../../../utils/maintenance-jobs'
+import { MAINTENANCE_JOBS } from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
 import {
   readHealthResponse,
   type HealthCheckLine,
-} from '../../../../utils/platform-health'
+} from '@aglyn/aglyn/app-utils/console/platform-health'
 
 const AdminMaintenance: NextPageWithLayout<Record<string, never>> = () => {
   const [checks, setChecks] = useState<HealthCheckLine[]>([])

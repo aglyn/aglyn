@@ -29,7 +29,7 @@ import {
   readStaffListQuery,
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
-import { STAFF_SITE_LIST_QUERY } from '../../../../utils/staff-site-list-query'
+import { STAFF_SITE_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
 import { homeScreenId } from '../../../../utils/staff-site-links'
 import {
   LAPSED_SUSPENSIONS_NOTICE,

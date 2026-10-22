@@ -30,8 +30,8 @@ import {
 import {
   parseHandoffFragment,
   stripHandoffFragment,
-} from '../../../utils/handoff-fragment'
-import { signInWithPooledCustomToken } from '../../../utils/pooled-custom-token'
+} from '@aglyn/aglyn/app-utils/console/handoff-fragment'
+import { signInWithPooledCustomToken } from '@aglyn/aglyn/app-utils/console/pooled-custom-token'
 
 /**
  * `/auth/handoff` — the landing page on a CUSTOM CONSOLE DOMAIN (AGL-1902).

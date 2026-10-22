@@ -19,7 +19,7 @@
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../../../../../../../../../../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,

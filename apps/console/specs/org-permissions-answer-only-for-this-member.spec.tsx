@@ -138,8 +138,8 @@ import useOrgPermissions, {
   OrgPermissionsProvider,
 } from '../hooks/use-org-permissions'
 import { OrgScopeProvider } from '../hooks/use-org-scope'
-import { resolveExtensionPermission } from '../utils/extension-permission'
-import { resolveOrgCrmAccess } from '../utils/org-crm-access'
+import { resolveExtensionPermission } from '@aglyn/aglyn/app-utils/console/extension-permission'
+import { resolveOrgCrmAccess } from '@aglyn/aglyn/app-utils/console/org-crm-access'
 import { orgPluginNavTabItems } from '../utils/org-plugin-surfaces'
 
 /**

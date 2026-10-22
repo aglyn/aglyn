@@ -141,7 +141,7 @@ describe('the internal-traffic override (AGL-2065)', () => {
     // Two levels, and both are needed. The raw API is gone from this file
     // entirely — `page_title` wanted it too, from a DIFFERENT effect, which
     // is a collision no per-effect discipline can see — so every write goes
-    // through the merging owner in `utils/analytics-default-params.ts`
+    // through the merging owner in `@aglyn/aglyn/app-utils/console/analytics-default-params`
     // (pinned by `analytics-default-params.spec.ts`). Within this effect the
     // parameter still has exactly one call site, so a fourth branch inherits
     // the override rule rather than restating it.

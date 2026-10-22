@@ -20,7 +20,7 @@
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useEffect, useRef } from 'react'
-import { ORG_LAST_ACTIVITY_INTERVAL_MS } from '../utils/org-list-query'
+import { ORG_LAST_ACTIVITY_INTERVAL_MS } from '@aglyn/aglyn/app-utils/console/org-list-query'
 
 /** Real input — not a mouse drifting across an idle window. */
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
@@ -60,7 +60,7 @@ export function orgActivityBeatDue(
 /**
  * Tells the server a member is using the console in `orgId`, so the staff
  * Organizations list can say when each workspace was last active
- * (`lastActivityAt`, `utils/org-list-query.ts`).
+ * (`lastActivityAt`, `@aglyn/aglyn/app-utils/console/org-list-query`).
  *
  * On mount (opening the workspace is activity) and on real input, at most
  * once per `ORG_LAST_ACTIVITY_INTERVAL_MS` per browser — sibling tabs share

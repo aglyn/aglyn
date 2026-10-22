@@ -33,7 +33,7 @@ import {
 import {
   STAFF_SITE_CONTENT_LISTS,
   type StaffSiteContentTab,
-} from '../utils/staff-site-content-list-query'
+} from '@aglyn/aglyn/app-utils/console/staff-site-content-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '../../../cloud/firebase-firestore.indexes.json'), 'utf8'),

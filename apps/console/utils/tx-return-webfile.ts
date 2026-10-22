@@ -69,7 +69,7 @@ import {
   taxFilingJurisdiction,
   TX_JURISDICTION,
   type TaxFilingJurisdiction,
-} from './tax-jurisdictions'
+} from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
 
 export { centsToDollars, TAX_REGISTRATION_UNSET, TX_JURISDICTION }
 

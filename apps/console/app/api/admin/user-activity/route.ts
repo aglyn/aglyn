@@ -30,7 +30,7 @@ import {
   auditLogSearchWords,
   readAuditLogFilters,
 } from '../../../../utils/server/audit-log-filter'
-import { ACTIVITY_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
+import { ACTIVITY_LIST_FILTER_FIELDS } from '@aglyn/aglyn/app-utils/console/list-filters'
 import { withScopeNames } from '../../../../utils/server/audit-names'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of

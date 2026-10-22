@@ -41,7 +41,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import {
   HOST_ANALYTICS_WIDGET_ID,
   isDashboardWidgetHidden,
-} from '../../../../../utils/dashboard-widgets'
+} from '@aglyn/aglyn/app-utils/console/dashboard-widgets'
 
 /**
  * The dashboard body, inside the arrangement provider so the header's

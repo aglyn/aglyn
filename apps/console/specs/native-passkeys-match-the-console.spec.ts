@@ -43,7 +43,7 @@ const read = (path: string) => readFileSync(join(__dirname, '../../..', path), '
 const screens = (JSON.parse(read('libs/native/screens/account.screens.json')) as { screens: Array<{ id: string; blocks: Block[] }> }).screens
 const blocks = screens.find((screen) => screen.id === 'core.account.security')?.blocks ?? []
 const card = read('apps/console/components/passkeys-card.component.tsx')
-const client = read('apps/console/utils/passkeys.ts')
+const client = read('libs/aglyn/src/lib/app-utils/console/passkeys.ts')
 const server = read('apps/console/app/api/_lib/passkeys.ts')
 
 const add = (blocks.find((block) => block.when === 'user.canAddPasskey')?.items as Action[]).find((one) => one.id === 'addPasskey') as Action

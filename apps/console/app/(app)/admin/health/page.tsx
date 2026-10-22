@@ -96,7 +96,7 @@ import {
   CSP_FILTER_HEADERS,
   CSP_LIST_SORT,
   CSP_SEARCH_HINT,
-} from '../../../../utils/csp-report-list-query'
+} from '@aglyn/aglyn/app-utils/console/csp-report-list-query'
 import {
   HEALTH_PROBES,
   readCspReport,
@@ -107,7 +107,7 @@ import {
   type CspReportView,
   type HealthProbeResult,
   type HealthVerdict,
-} from '../../../../utils/platform-health'
+} from '@aglyn/aglyn/app-utils/console/platform-health'
 
 const VERDICT_COLOR: Record<
   HealthVerdict,
@@ -129,7 +129,7 @@ const CSP_WINDOWS = [7, 14, 30, 60]
 /*
  * What the violations table filters and searches by — every clause and the
  * search on the route's query beneath the Window (AGL-3321;
- * `utils/csp-report-list-query.ts`). App and Directive are picked from the
+ * `@aglyn/aglyn/app-utils/console/csp-report-list-query`). App and Directive are picked from the
  * values the window's rollup holds — the collector records whatever a
  * browser reports, so there is no fixed catalog to offer instead.
  */

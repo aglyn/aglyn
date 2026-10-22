@@ -103,7 +103,7 @@ import {
   DENY_SEARCH_PATHS,
   denyListRow,
   type QuarantineRecord,
-} from '../utils/media-quarantine-list-query'
+} from '@aglyn/aglyn/app-utils/console/media-quarantine-list-query'
 import { answerStaffCompleteList } from '../utils/server/staff-complete-list'
 import { readStaffListQuery } from '../utils/server/staff-list-query'
 

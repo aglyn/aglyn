@@ -38,7 +38,7 @@
  */
 
 import { buildRoute, Route } from '../constants/route-links'
-import { type OrgEntryOrg, resolveOrgEntry } from './org-entry'
+import { type OrgEntryOrg, resolveOrgEntry } from '@aglyn/aglyn/app-utils/console/org-entry'
 
 /** One workspace the signed-in account can reach, as the picker needs it. */
 export type BillingEntryOrg = OrgEntryOrg

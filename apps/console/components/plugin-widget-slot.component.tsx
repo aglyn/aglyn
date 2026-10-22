@@ -42,7 +42,7 @@ import {
   entitlementPurchasable,
   lockedPreviewPlanLabel,
   resolveExtensionEntitlement,
-} from '../utils/extension-entitlement'
+} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 import {
   PlanLockedWidget,
   type PlanLockedWidgetContent,
@@ -50,11 +50,11 @@ import {
 import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '../utils/extension-permission'
+} from '@aglyn/aglyn/app-utils/console/extension-permission'
 import {
   isDashboardWidgetHidden,
   orderDashboardWidgets,
-} from '../utils/dashboard-widgets'
+} from '@aglyn/aglyn/app-utils/console/dashboard-widgets'
 
 /**
  * The gap a console page puts between two of its cards, in theme spacing

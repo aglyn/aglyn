@@ -31,7 +31,7 @@ import { useAuth } from '@aglyn/tenant-feature-instance'
 import {
   beginRedirectLanding,
   endRedirectLanding,
-} from '../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 
 /**
  * Credentials already handed to an `onCredential` (AGL-4021). A page that

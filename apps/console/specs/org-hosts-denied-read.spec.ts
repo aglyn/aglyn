@@ -91,7 +91,7 @@ import { useOrgHosts } from '../hooks/use-org-hosts'
 import {
   __resetSessionHealth,
   getSessionHealth,
-} from '../utils/session-health'
+} from '@aglyn/aglyn/app-utils/console/session-health'
 
 const { getDocsFromServer } = jest.requireMock('firebase/firestore')
 

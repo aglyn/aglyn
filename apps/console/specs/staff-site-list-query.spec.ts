@@ -35,7 +35,7 @@ import {
   STAFF_SITE_LIST_FILTER_FIELDS,
   STAFF_SITE_LIST_QUERY,
   STAFF_SITE_LIST_SORT,
-} from '../utils/staff-site-list-query'
+} from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

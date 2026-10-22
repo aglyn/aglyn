@@ -24,7 +24,7 @@ import { darken, lighten } from '@mui/material/styles'
 import { useEffect } from 'react'
 import useBranding from '../hooks/use-branding'
 import { dropTitleBrand, renameTitleSubject } from '../app/entity-page-title'
-import { stripUnreadBadge } from '../utils/notification-alerts'
+import { stripUnreadBadge } from '@aglyn/aglyn/app-utils/console/notification-alerts'
 import { useDocumentSubject } from './document-subject'
 
 /**

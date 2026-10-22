@@ -44,20 +44,20 @@ import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import {
   markInteractiveSignIn,
   markInteractiveSignOut,
-} from '../utils/interactive-signin'
+} from '@aglyn/aglyn/app-utils/console/interactive-signin'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
-import { createAuthProvider } from '../utils/oauth-providers'
+import { createAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
 import {
   describePasskeySignInFailure,
   signInWithPasskey,
   usePasskeysSupported,
-} from '../utils/passkeys'
+} from '@aglyn/aglyn/app-utils/console/passkeys'
 import {
   reauthRefusal,
   reauthRefusalText,
   standDownRefusedReauth,
-} from '../utils/reauth-identity-guard'
-import { clearSignInBounces } from '../utils/signin-bounce'
+} from '@aglyn/aglyn/app-utils/console/reauth-identity-guard'
+import { clearSignInBounces } from '@aglyn/aglyn/app-utils/console/signin-bounce'
 import {
   clearSessionReauth,
   dismissSessionReauth,
@@ -66,7 +66,7 @@ import {
   reopenSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
-} from '../utils/session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 
 /**
  * "Sign in again to verify your device" (AGL-664).

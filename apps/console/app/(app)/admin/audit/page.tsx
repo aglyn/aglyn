@@ -82,7 +82,7 @@ import {
   ADMIN_AUDIT_LIST_QUERY,
   ADMIN_AUDIT_LIST_SELECT_FIELDS,
   ADMIN_AUDIT_SORT,
-} from '../../../../utils/admin-audit-list-query'
+} from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
 
 /**
  * THE ARCHIVE, GIVEN A DOOR (AGL-2324).

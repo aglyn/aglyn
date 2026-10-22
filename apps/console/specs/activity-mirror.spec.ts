@@ -18,7 +18,7 @@
 import {
   type MirrorCandidate,
   withoutMirroredCopies,
-} from '../utils/activity-mirror'
+} from '@aglyn/aglyn/app-utils/console/activity-mirror'
 
 const row = (
   id: string,

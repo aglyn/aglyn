@@ -72,7 +72,7 @@ import {
   HOST_MEMBER_LIST_COLUMN_SORTS,
   HOST_MEMBER_LIST_QUERY,
   hostMemberListRequest,
-} from '../utils/host-member-filters'
+} from '@aglyn/aglyn/app-utils/console/host-member-filters'
 import MemberAvatar from './member-avatar.component'
 import {
   pluginGridColumns,
@@ -200,7 +200,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
    * page is therefore a page of the filtered roster, never the rows on screen
    * narrowed, and whatever the plan cannot put on the query is refused by
    * name above the grid rather than applied to some rows. See
-   * `utils/host-member-filters.ts` for the index each shape reads. A new
+   * `@aglyn/aglyn/app-utils/console/host-member-filters` for the index each shape reads. A new
    * filter is a new walk, and the pager starts over.
    */
   const gridFilter = useListGridFilter({ selectFields: ['role'] })

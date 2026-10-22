@@ -939,7 +939,7 @@ describe('the platform fee follows the sale, not the tender (AGL-2111)', () => {
 
   it('keys the accrual by the UTC billing month the sweep reads', async () => {
     await post({ payment: 'cash', cashReceivedCents: 400 })
-    // The same expression `apps/console/utils/billing-month.ts` uses. A
+    // The same expression `libs/aglyn/src/lib/app-utils/console/billing-month.ts` uses. A
     // local-time key would strand every sale rung in the offset window on a
     // document no sweep ever opens.
     const month = new Date().toISOString().slice(0, 7)

@@ -56,7 +56,7 @@ import {
   lockLogLines,
   resendLogLines,
   type LockdownLogLine,
-} from '../../../../utils/lockdown-log-lines'
+} from '@aglyn/aglyn/app-utils/console/lockdown-log-lines'
 import {
   lockdownCancelsBillingByDefault,
   lockdownPausesSiteMoneyByDefault,

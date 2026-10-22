@@ -25,7 +25,7 @@ import {
   buildMcpTools,
   buildToolRequest,
   MCP_BODY_ARGUMENT,
-} from '../utils/mcp-tools'
+} from '@aglyn/aglyn/app-utils/console/mcp-tools'
 
 /**
  * The tools are DERIVED, so the thing worth asserting is the derivation

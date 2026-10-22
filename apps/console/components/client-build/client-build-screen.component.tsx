@@ -63,7 +63,7 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import { useHost } from '../../hooks/use-host'
 import { useIsStaff } from '../../hooks/use-is-staff'
 import { useOrgScope } from '../../hooks/use-org-scope'
-import { requestStarterSiteOutcome } from '../../utils/host-first-run'
+import { requestStarterSiteOutcome } from '@aglyn/aglyn/app-utils/console/host-first-run'
 import {
   PhotoLinkCode,
   type PhotoLinkRow,

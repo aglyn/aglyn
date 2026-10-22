@@ -34,7 +34,7 @@ import {
   type Firestore,
   type WriteBatch,
 } from 'firebase/firestore'
-import revalidateLivePages from '../utils/revalidate-live-pages'
+import revalidateLivePages from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import { PUBLISH_OUTBOX_COLLECTION } from './publish-outbox'
 import { changedRoutePaths, planScreenRouteWrite } from './screen-route-plan'
 

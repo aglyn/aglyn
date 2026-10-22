@@ -156,7 +156,7 @@ jest.mock('../hooks/use-google-redirect-result', () => ({
 jest.mock('../utils/auth-delegation', () => ({
   authSignInHost: () => 'auth.aglyn.com',
 }))
-jest.mock('../utils/interactive-signin', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))
@@ -168,20 +168,20 @@ jest.mock('../utils/legal-consent', () => ({
   isNewAccount: () => false,
   sendToConsentGate: jest.fn(),
 }))
-jest.mock('../utils/oauth-providers', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
   createAuthProvider: () => ({}),
   createGoogleOAuthProvider: () => ({}),
 }))
-jest.mock('../utils/passkeys', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
   describePasskeySignInFailure: () => null,
   signInWithPasskey: jest.fn(),
   usePasskeysSupported: () => false,
 }))
-jest.mock('../utils/popup-loading-guard', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))
-jest.mock('../utils/sso-errors', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/sso-errors', () => ({
   describeSsoError: () => ({ code: 'sso-failed', message: 'failed' }),
 }))
 

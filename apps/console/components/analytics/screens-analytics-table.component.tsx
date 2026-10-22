@@ -48,7 +48,7 @@ import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { recentDayIds } from '../../utils/analytics-day-cache'
+import { recentDayIds } from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
 import {
   aggregateScreenDays,
   referrerLabel,

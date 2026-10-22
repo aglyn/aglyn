@@ -17,7 +17,7 @@
 
 /**
  * The billing month a non-card POS fee accrues into (AGL-2111): `YYYY-MM` in
- * **UTC**, byte-identical to the key `apps/console/utils/billing-month.ts`
+ * **UTC**, byte-identical to the key `libs/aglyn/src/lib/app-utils/console/billing-month.ts`
  * mints and to the twelve other month counters on the platform
  * (`orgs/{id}/apiUsage/*`, `orgs/{id}/assistUsage/*`, the per-host counters).
  *

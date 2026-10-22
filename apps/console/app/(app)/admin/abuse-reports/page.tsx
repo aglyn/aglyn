@@ -147,11 +147,11 @@ import {
   ABUSE_REPORT_FILTER_FIELDS,
   ABUSE_REPORT_FILTER_HEADERS,
   ABUSE_REPORT_FILTER_OPTIONS,
-} from '../../../../utils/abuse-report-list-query'
+} from '@aglyn/aglyn/app-utils/console/abuse-report-list-query'
 import {
   ownerNoticeCaption,
   type RiskNoticeOwnerDelivery,
-} from '../../../../utils/risk-notice-owner-caption'
+} from '@aglyn/aglyn/app-utils/console/risk-notice-owner-caption'
 
 /**
  * The statutory block, exactly as the route hands it over. `signature` is the

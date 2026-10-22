@@ -164,9 +164,9 @@ describe('nothing hand-rolls the guard off session-health (AGL-1449)', () => {
    * written down, not that the list is short.
    */
   const EXEMPT: Record<string, string> = {
-    'apps/console/utils/session-health.ts':
+    'libs/aglyn/src/lib/app-utils/console/session-health.ts':
       'Defines the verdict. The module that computes `staleSession` from the accumulated denial evidence necessarily names its own accessor.',
-    'apps/console/utils/firestore-one-shot-retry.ts':
+    'libs/aglyn/src/lib/app-utils/console/firestore-one-shot-retry.ts':
       'PRODUCES the evidence rather than consuming it: it reads `deniedCollections` to decide whether a retry budget was spent on a dead session, and reports denials in. It writes nothing to Firestore.',
     'apps/console/components/layouts/firebase-app.layout.tsx':
       'The registration seam itself (AGL-1358). `setStaleSessionCheck(() => getSessionHealth().staleSession)` at module scope is the ONLY way this console signal reaches a guard that lives in the library.',

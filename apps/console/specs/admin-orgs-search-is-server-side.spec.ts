@@ -30,7 +30,7 @@
  * never give wrongly, and it gets quietly more wrong as the platform grows.
  *
  * So every clause of the Filters panel and the search word are planned onto
- * ONE Firestore query (`ORG_LIST_QUERY`, `utils/org-list-query.ts`) and the
+ * ONE Firestore query (`ORG_LIST_QUERY`, `@aglyn/aglyn/app-utils/console/org-list-query`) and the
  * route matches nothing afterwards. The search is an `array-contains` over
  * `nameTokens` — every prefix of every WORD — so it finds "Acme Coffee" by
  * "coffee". What it cannot do is match MID-word, and a multi-word query

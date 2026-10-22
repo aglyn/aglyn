@@ -68,7 +68,7 @@ import {
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import revalidateLivePages, {
   describeRevalidateShortfall,
-} from '../../utils/revalidate-live-pages'
+} from '@aglyn/aglyn/app-utils/console/revalidate-live-pages'
 import {
   ENTRY_LIST_DEFAULT_SORT,
   entryListBase,

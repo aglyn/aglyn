@@ -25,7 +25,7 @@ import {
   reopenSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
-} from '../utils/session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 
 /**
  * Route-group gate for the whole staff console (AGL-847). Mounted by the

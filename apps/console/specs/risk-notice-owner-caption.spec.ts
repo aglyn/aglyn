@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ownerNoticeCaption } from '../utils/risk-notice-owner-caption'
+import { ownerNoticeCaption } from '@aglyn/aglyn/app-utils/console/risk-notice-owner-caption'
 
 /**
  * The abuse queue's "were the owners told" line (AGL-3441).

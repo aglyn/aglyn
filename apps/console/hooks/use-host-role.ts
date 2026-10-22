@@ -29,7 +29,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 
 import useHostOrgId from './use-host-org-id'
-import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
+import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
 
 export interface HostRoleState {
   /** The member's effective role on this site, or null for no access. */

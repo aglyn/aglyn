@@ -29,8 +29,8 @@
  * exactly as much as the threshold the prompt uses.
  */
 
-import { __resetSessionHealth } from '../utils/session-health'
-import { firestoreOneShotRetry } from '../utils/firestore-one-shot-retry'
+import { __resetSessionHealth } from '@aglyn/aglyn/app-utils/console/session-health'
+import { firestoreOneShotRetry } from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
 
 const denied = () => Object.assign(new Error('nope'), { code: 'permission-denied' })
 

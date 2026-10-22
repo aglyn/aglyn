@@ -29,7 +29,7 @@ import {
   STRANDED_AFTER_MS,
   claimQuerySort,
   splitClaimTimeClauses,
-} from '../../../../utils/idempotency-claims-list-query'
+} from '@aglyn/aglyn/app-utils/console/idempotency-claims-list-query'
 import {
   readStaffListQuery,
   runStaffListQuery,
@@ -57,7 +57,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  * `GET` answers the card's list: every Filters-panel clause on one query
  * over `status == 'pending'`, oldest claim first, paged by a cursor in that
- * order (`utils/idempotency-claims-list-query.ts`). Age and State are ranges
+ * order (`@aglyn/aglyn/app-utils/console/idempotency-claims-list-query`). Age and State are ranges
  * over `createdAtMs`, the field the list is ordered by, so they stand beside
  * any other clause; the equalities merge with that order through composites
  * the index file carries. Nothing is matched over rows already read.

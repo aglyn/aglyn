@@ -22,7 +22,7 @@ import {
   recordedUsageLines,
   staffOrgUsageRowView,
   type StaffOrgUsageMonth,
-} from '../utils/staff-org-usage-view'
+} from '@aglyn/aglyn/app-utils/console/staff-org-usage-view'
 
 const row = (patch: Partial<StaffOrgUsageMonth> = {}): StaffOrgUsageMonth => ({
   month: '2026-08',

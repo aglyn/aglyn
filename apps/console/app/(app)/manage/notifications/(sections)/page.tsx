@@ -46,7 +46,7 @@ import {
   markAllNotificationsReadFor,
   markNotificationRead,
 } from '../../../../../hooks/use-notification-feed'
-import { isNotificationRead } from '../../../../../utils/notification-feed'
+import { isNotificationRead } from '@aglyn/aglyn/app-utils/console/notification-feed'
 import useOrgHosts from '../../../../../hooks/use-org-hosts'
 import { useInviteReview } from '../../../../../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -54,14 +54,14 @@ import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
   resolveNotificationWorkspace,
-} from '../../../../../utils/notification-links'
+} from '@aglyn/aglyn/app-utils/console/notification-links'
 import {
   NOTIFICATION_FILTER_FIELDS,
   NOTIFICATION_FILTER_HEADERS,
   NOTIFICATION_FILTER_OPTIONS,
   NOTIFICATION_DEFAULT_SORT,
   planNotificationFilters,
-} from '../../../../../utils/notification-filters'
+} from '@aglyn/aglyn/app-utils/console/notification-filters'
 
 /**
  * The notifications feed (AGL-260): the full, cursor-paginated list behind

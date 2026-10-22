@@ -57,14 +57,14 @@ import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
   ACTIVITY_LIST_FILTER_FIELDS,
   ACTIVITY_LIST_FILTER_HEADERS,
-} from '../utils/list-filters'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
 import {
   ACTIVITY_LIST_SORT,
   ACTIVITY_SEARCH_HINT,
   SUBJECT_ACTIVITY_QUERY,
   SUBJECT_ACTIVITY_SORTS,
-} from '../utils/activity-list-query'
-import { formatStaffTimestamp } from '../utils/staff-timestamps'
+} from '@aglyn/aglyn/app-utils/console/activity-list-query'
+import { formatStaffTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /*
  * What the log's Filters panel and search box offer (AGL-3317, AGL-3321):

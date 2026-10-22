@@ -37,7 +37,7 @@ import { useCallback, useState } from 'react'
 import AccountIdentitiesCard from '../account-identities-card.component'
 import { docsHelp } from '../../constants/docs-links'
 import useAccountSignInMethods from '../../hooks/use-account-sign-in-methods'
-import { createGoogleOAuthProvider } from '../../utils/oauth-providers'
+import { createGoogleOAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
 
 /** Firebase providerId → a name a person recognizes (AGL-852). */
 const PROVIDER_LABELS: Record<string, string> = {

@@ -155,7 +155,15 @@ if (!baseRef || !refExists(baseRef)) {
 const baseSources = {}
 const headSources = {}
 for (const spec of WATCHED) {
-  baseSources[spec.path] = showAtRef(baseRef, spec.path)
+  // A watched file that has moved is read at its earlier path on a base ref
+  // that predates the move (`previousPaths`), so the two refs compare the same
+  // constants rather than reporting the file as gone.
+  let base = showAtRef(baseRef, spec.path)
+  for (const earlier of spec.previousPaths ?? []) {
+    if (base) break
+    base = showAtRef(baseRef, earlier)
+  }
+  baseSources[spec.path] = base
   headSources[spec.path] = readWorktree(spec.path)
 }
 
