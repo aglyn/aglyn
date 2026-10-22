@@ -95,13 +95,13 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   buildRoute,
   Route,
-} from '../../../../../../../../../../constants/route-links'
-import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
-import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
+} from '@aglyn/aglyn/app-utils/console/route-links'
+import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
 import { isPreviewKind } from '../../../../../../../../../../utils/staff-site-links'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '../../../../../../../../../../hooks/use-screen-link-routes'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
@@ -112,7 +112,7 @@ import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/us
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
-import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(

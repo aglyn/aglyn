@@ -43,7 +43,7 @@
  * carrier doc so the route's read-back is real.
  */
 
-import { lockdownCancelsBillingByDefault } from '../constants/subscription-cancel'
+import { lockdownCancelsBillingByDefault } from '@aglyn/aglyn/app-utils/console/subscription-cancel'
 import {
   installStripeDouble,
   subscription,

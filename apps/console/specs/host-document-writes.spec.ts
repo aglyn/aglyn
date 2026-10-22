@@ -104,7 +104,7 @@ import {
   PUBLISH_OUTBOX_COLLECTION,
   PUBLISH_OUTBOX_FIELDS,
   PUBLISH_OUTBOX_OPTIONAL_FIELDS,
-} from '../constants/publish-outbox'
+} from '@aglyn/aglyn/app-utils/console/publish-outbox'
 
 const OK = { revalidated: 12, pathsDropped: 0, scanTruncated: false, reason: 'ok' }
 const firestore = {} as never

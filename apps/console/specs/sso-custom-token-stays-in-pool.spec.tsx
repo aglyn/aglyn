@@ -41,7 +41,7 @@ jest.mock('firebase/auth', () => ({
 }))
 
 let mockIsStaff: boolean | null = null
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   useIsStaff: () => mockIsStaff,
 }))
 const mockNotFound = jest.fn(() => {

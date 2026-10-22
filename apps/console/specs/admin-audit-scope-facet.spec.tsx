@@ -98,7 +98,7 @@ jest.mock('../constants/docs-links', () => ({
   docsHelp: () => undefined,
 }))
 
-jest.mock('../constants/route-links', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
   __esModule: true,
   buildRoute: () => '/admin/audit',
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_AUDIT: 'ADMIN_AUDIT' },

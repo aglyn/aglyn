@@ -36,7 +36,7 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
+import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '@aglyn/aglyn/app-utils/console/collection-templates'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   announceCollectionChange,

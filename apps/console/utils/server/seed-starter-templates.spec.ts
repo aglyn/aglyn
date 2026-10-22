@@ -20,7 +20,7 @@ import {
   buildStarterTemplateDocs,
   starterTemplateDocId,
   STARTER_TEMPLATES,
-} from '../../constants/starter-templates'
+} from '@aglyn/aglyn/app-utils/console/starter-templates'
 import materializeStarterTemplate, {
   type SeedFirestore,
 } from './seed-starter-templates'

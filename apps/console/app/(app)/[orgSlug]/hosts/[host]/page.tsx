@@ -34,7 +34,7 @@ import DashboardWidgetPrefsProvider, {
 } from '../../../../../components/dashboard-widget-prefs.context'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
 import SiteCareRequestButton from '../../../../../components/site-care/site-care-request-button.component'
-import { buildRoute, Route } from '../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'

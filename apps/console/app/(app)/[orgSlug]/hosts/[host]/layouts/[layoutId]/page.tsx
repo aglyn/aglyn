@@ -57,7 +57,7 @@ import HostDisplayNameComponent from '../../../../../../../components/host-displ
 import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
 import DocumentPresenceLive from '../../../../../../../components/document-presence-live.component'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
-import { buildRoute, Route } from '../../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../constants/docs-links'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'

@@ -55,7 +55,7 @@ import {
   PUBLISH_OUTBOX_FIELDS,
   PUBLISH_OUTBOX_MAX_ATTEMPTS,
   PUBLISH_OUTBOX_STALE_MS,
-} from '../constants/publish-outbox'
+} from '@aglyn/aglyn/app-utils/console/publish-outbox'
 import {
   createJourneyHealth,
   publishAnnounceHealth,

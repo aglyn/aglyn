@@ -32,7 +32,7 @@
  * part of the answer shows up as the deleted id in some frame.
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
-import useHostResolution, { type HostResolution } from './use-host-resolution'
+import useHostResolution, { type HostResolution } from '@aglyn/tenant-feature-instance/hooks/console/use-host-resolution'
 
 const mockGetDocs = jest.fn()
 const mockGetDocsFromServer = jest.fn()

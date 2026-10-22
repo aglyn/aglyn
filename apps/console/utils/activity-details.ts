@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 import type { ActivityDescription } from '@aglyn/aglyn/app-utils/activity-labels'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /** The anchor of the staff "Aglyn AI requests" card, which a job link opens. */
 export const AI_REQUESTS_ANCHOR = 'aglyn-ai-requests'

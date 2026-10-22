@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import adminNavTabItems from '../constants/admin-nav-tabs'
+import adminNavTabItems from '@aglyn/aglyn/app-utils/console/admin-nav-tabs'
 import {
   registerConsoleExtension,
   unregisterConsoleExtension,
 } from '@aglyn/aglyn'
-import hostNavTabItems from '../constants/host-nav-tabs'
-import manageNavTabItems from '../constants/manage-nav-tabs'
-import orgNavTabItems from '../constants/org-nav-tabs'
-import { buildRoute, Route } from '../constants/route-links'
+import hostNavTabItems from '@aglyn/aglyn/app-utils/console/host-nav-tabs'
+import manageNavTabItems from '@aglyn/aglyn/app-utils/console/manage-nav-tabs'
+import orgNavTabItems from '@aglyn/aglyn/app-utils/console/org-nav-tabs'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import {
   isAddressableSection,
   resolveActiveTab,
@@ -31,7 +31,7 @@ import {
   urlNamesOrg,
 } from '../hooks/use-secondary-nav'
 import { consolePathFor } from '../hooks/use-url-names-org'
-import { orgScopedPathname } from '../constants/console-routes'
+import { orgScopedPathname } from '@aglyn/aglyn/app-utils/console/console-routes'
 
 /**
  * The secondary app bar is mounted once in the `(app)` layout and derives its

@@ -377,7 +377,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration',
   __esModule: true,
   default: () => undefined,
 }))
-jest.mock('../hooks/use-collection-templates', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-collection-templates', () => ({
   __esModule: true,
   default: () => ({
     templateScreenIds: new Set<string>(),
@@ -422,26 +422,26 @@ jest.mock('../hooks/use-current-org', () => {
 // At the owner's answer unless a case says otherwise: none of these saves is
 // gated by the host role, and the owner's standing leaves the routing map the
 // only thing deciding. The author cases below prove the first half.
-jest.mock('../hooks/use-host-role', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
   __esModule: true,
   default: () => mockHostRole.current,
 }))
 jest.mock('../constants/app-setup', () => ({}))
-jest.mock('../constants/preview-state', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/preview-state', () => ({
   previewWindowName: () => 'preview',
   writePreviewState: () => undefined,
 }))
-jest.mock('../constants/screen-publishing', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/screen-publishing', () => ({
   syncScreenRouteEntries: jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('../constants/tenant-links', () => ({
   resolveScreenLiveUrl: () => ({ url: undefined, unavailableReason: undefined }),
 }))
-jest.mock('../constants/collection-templates', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/collection-templates', () => ({
   collectionTemplatePublishMessage: () => '',
   collectionTemplateRoutesSummary: () => '',
 }))
-jest.mock('../constants/route-links', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
   buildRoute: () => '/x',
   Route: {
     SCREEN_DETAILS: 'screen-details',

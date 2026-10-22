@@ -159,7 +159,7 @@ jest.mock('../hooks/use-delegate-workspace-signin', () => ({
   __esModule: true,
   default: () => 'off',
 }))
-jest.mock('../hooks/use-google-redirect-result', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result', () => ({
   __esModule: true,
   default: (
     _event: string,

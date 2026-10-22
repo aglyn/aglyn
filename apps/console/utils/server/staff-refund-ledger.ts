@@ -20,7 +20,7 @@ import {
   STAFF_REFUND_WINDOW_MAX_ENTRIES,
   STAFF_REFUND_WINDOW_MS,
   type RefundAuthorityVerdict,
-} from '../../constants/refund-authority'
+} from '@aglyn/aglyn/app-utils/console/refund-authority'
 import { createHash } from 'crypto'
 
 /**

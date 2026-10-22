@@ -56,7 +56,7 @@ import {
   useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useHostComponentDefinitions from '@aglyn/tenant-feature-instance/hooks/use-host-component-definitions'
 import useHostFormDesigns from '@aglyn/tenant-feature-instance/hooks/use-host-form-designs'

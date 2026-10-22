@@ -16,7 +16,7 @@
  */
 
 import type { ConsolePluginOrgMount } from '@aglyn/aglyn'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /** A host document as `useOrgHosts` hands it back — the two fields the mount reads off it. */
 export interface OrgMountHostDoc {

@@ -104,7 +104,7 @@ const SIGN_IN_DOORS = [
     emits: 2,
   },
   {
-    file: 'apps/console/hooks/use-google-redirect-result.tsx',
+    file: 'libs/tenant/feature/instance/src/lib/hooks/console/use-google-redirect-result.tsx',
     what: 'the mobile Google redirect door',
     methods: ['google_redirect'],
     emits: 1,

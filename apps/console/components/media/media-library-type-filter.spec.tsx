@@ -184,7 +184,7 @@ jest.mock('../../hooks/use-current-org', () => ({
   useCurrentOrg: () => mockCurrentOrg,
 }))
 
-jest.mock('../../hooks/use-org-hosts', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
   __esModule: true,
   default: () => mockOrgHosts,
   useOrgHosts: () => mockOrgHosts,

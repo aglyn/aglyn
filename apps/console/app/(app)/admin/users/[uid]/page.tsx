@@ -63,7 +63,7 @@ import StaffUserEmailHistoryCard, {
 } from '../../../../../components/staff-user-email-history-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'

@@ -60,7 +60,7 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import {
   STAFF_CANCELLATION_COMMENT_MARKER,
   type SubscriptionCancelWhen,
-} from '../../constants/subscription-cancel'
+} from '@aglyn/aglyn/app-utils/console/subscription-cancel'
 
 /**
  * The statuses a subscription never leaves. Everything else — live, in

@@ -106,7 +106,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { POST } from '../app/api/screens/revalidate/route'
-import { announceLiveScreenChange } from '../constants/screen-live-announce'
+import { announceLiveScreenChange } from '@aglyn/aglyn/app-utils/console/screen-live-announce'
 
 /** Each drop the tenant was asked for, as its request body. */
 const tenantDrops: Array<Record<string, unknown>> = []

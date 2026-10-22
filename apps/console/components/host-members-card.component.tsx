@@ -63,8 +63,8 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
-import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
-import { buildRoute, Route } from '../constants/route-links'
+import { checkHostCollaboratorSeatQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
   HOST_MEMBER_FILTER_FIELDS,

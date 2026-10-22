@@ -54,7 +54,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'pro' }, ready: true }),
 }))
-jest.mock('../constants/entitlements', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/entitlements', () => ({
   hasEntitlement: () => true,
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({

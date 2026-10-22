@@ -26,7 +26,7 @@ import {
   resolveNavSection,
   segmentsOf,
   urlNamesOrg,
-} from './nav-section'
+} from '@aglyn/tenant-feature-instance/hooks/console/nav-section'
 import { useOrgScope } from './use-org-scope'
 
 /**

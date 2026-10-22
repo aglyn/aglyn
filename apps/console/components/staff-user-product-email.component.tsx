@@ -21,7 +21,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import type { PlatformMarketingReach } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
 import { Chip, Stack, Typography } from '@mui/material'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { formatStaffTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /** What `/api/admin/users/detail` answers under `marketing` (AGL-3292). */

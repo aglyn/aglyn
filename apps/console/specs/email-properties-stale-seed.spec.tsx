@@ -269,13 +269,13 @@ jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 // The picker provider loads the plugins whose list sources share an entity's
 // fields (AGL-3080); this spec's registry has none to fetch.
 jest.mock('../hooks/use-console-plugins', () => ({ useConsoleSlotPlugins: () => true }))
-jest.mock('../hooks/use-is-staff', () => ({ useIsStaff: () => true }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({ useIsStaff: () => true }))
 jest.mock('../constants/app-setup', () => ({}))
 jest.mock('../constants/console-plugin-loader', () => ({
   consolePluginLoader: { ensure: () => Promise.resolve() },
   pluginDeclarationsReady: Promise.resolve(),
 }))
-jest.mock('../constants/route-links', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
   buildRoute: () => '/x',
   Route: {
     ADMIN_EMAILS: 'admin-emails',

@@ -32,7 +32,7 @@
  * URL a scoped member is shown.
  */
 
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /** The `hostMemberships` fields the landing decision needs. */
 export interface CollaboratorSite {

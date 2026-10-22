@@ -85,9 +85,9 @@ import {
 } from '../../../../components/revenue-charts.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import {
   answeredRevenueSources,
   defaultRevenuePeriod,

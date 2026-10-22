@@ -64,7 +64,7 @@ into a queue is a control people route around.
 
 Neither number is a target. $500 a day is far above any plausible day of support volume,
 and it exists to bound what a mistake or a compromised session can give away. Raise it
-as volume grows — it lives in one place, `apps/console/constants/refund-authority.ts`,
+as volume grows — it lives in one place, `libs/aglyn/src/lib/app-utils/console/refund-authority.ts`,
 and the console reads the same numbers the server enforces.
 
 ### You see your limit before you type {#you-see-your-limit}

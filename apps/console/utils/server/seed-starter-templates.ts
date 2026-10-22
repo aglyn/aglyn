@@ -20,7 +20,7 @@ import { encodeStoredNodes } from '@aglyn/aglyn/server'
 import {
   buildAllStarterTemplateDocs,
   type StarterTemplateDoc,
-} from '../../constants/starter-templates'
+} from '@aglyn/aglyn/app-utils/console/starter-templates'
 
 /**
  * Starter-template materialization (AGL-687).

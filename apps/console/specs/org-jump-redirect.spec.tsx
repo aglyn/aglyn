@@ -48,7 +48,7 @@ const mockFirestore = {}
 
 // The reader's workspace pins (AGL-3762) are a read of their own account
 // document; none of these assertions is about them.
-jest.mock('../hooks/use-pinned-orgs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
   default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
@@ -85,7 +85,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => '',
 }))
 
-jest.mock('../hooks/use-pending-invites', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 

@@ -52,7 +52,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useAuth: () => auth,
 }))
 
-import useGoogleRedirectResult from '../hooks/use-google-redirect-result'
+import useGoogleRedirectResult from '@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result'
 import { isRedirectLandingInFlight as isGoogleRedirectLandingInFlight } from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 
 const credential = (): UserCredential =>

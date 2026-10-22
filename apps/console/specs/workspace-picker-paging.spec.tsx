@@ -41,7 +41,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import {
   useWorkspacePage,
   WORKSPACE_PAGE_SIZE,
-} from '../hooks/use-workspace-page'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-workspace-page'
 
 const REPO = join(__dirname, '..', '..', '..')
 const read = (path: string) => readFileSync(join(REPO, path), 'utf8')

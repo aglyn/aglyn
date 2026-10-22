@@ -101,7 +101,7 @@ import {
   RouteRemovalRefusedError,
   syncScreenRouteEntries,
   unpublishScreenRoute,
-} from '../constants/screen-publishing'
+} from '@aglyn/aglyn/app-utils/console/screen-publishing'
 
 const user = { getIdToken: async () => 'token' }
 const firestore = {} as never

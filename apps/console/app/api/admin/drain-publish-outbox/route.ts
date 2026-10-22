@@ -27,7 +27,7 @@ import {
   PUBLISH_OUTBOX_MAX_PATHS,
   PUBLISH_OUTBOX_STALE_MS,
   sanitizePublishOutboxPaths,
-} from '../../../../constants/publish-outbox'
+} from '@aglyn/aglyn/app-utils/console/publish-outbox'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {

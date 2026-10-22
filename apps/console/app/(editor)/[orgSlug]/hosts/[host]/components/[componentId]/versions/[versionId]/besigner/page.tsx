@@ -102,12 +102,12 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   buildRoute,
   Route,
-} from '../../../../../../../../../../constants/route-links'
-import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
-import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
+} from '@aglyn/aglyn/app-utils/console/route-links'
+import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '../../../../../../../../../../hooks/use-screen-link-routes'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
@@ -119,9 +119,9 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
-import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
 import useComponentEditorSurface from '../../../../../../../../../../hooks/use-component-editor-surface'
-import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
+import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 

@@ -96,19 +96,19 @@ import '../../../../../../../../../../constants/app-setup'
 import {
   buildRoute,
   Route,
-} from '../../../../../../../../../../constants/route-links'
-import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
-import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
+} from '@aglyn/aglyn/app-utils/console/route-links'
+import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '../../../../../../../../../../hooks/use-screen-link-routes'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
-import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
+import useFormsPublishBlock from '@aglyn/tenant-feature-instance/hooks/console/use-forms-publish-block'
 import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'

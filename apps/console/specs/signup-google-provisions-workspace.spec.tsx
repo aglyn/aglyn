@@ -219,7 +219,7 @@ jest.mock('../hooks/use-delegate-workspace-signin', () => ({
 }))
 // Capture the mobile door's completion callback so the redirect round-trip
 // can be driven the way Google drives it.
-jest.mock('../hooks/use-google-redirect-result', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result', () => ({
   __esModule: true,
   default: (
     _event: unknown,

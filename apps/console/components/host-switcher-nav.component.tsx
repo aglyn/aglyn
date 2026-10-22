@@ -48,7 +48,7 @@ import {
   useSwitcherCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { hostDisplayDomain } from '../constants/tenant-links'
 import { useHostId, useHostSubdomain } from '../components/host-id-provider'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
@@ -56,7 +56,7 @@ import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { siteListStaysPut } from '../utils/collaborator-navigation'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import { usePinnedHosts } from '../hooks/use-pinned-hosts'
+import { usePinnedHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-hosts'
 import CreateHostDialog from './create-host-dialog.component'
 import HostIcon from './host-icon.component'
 import SwitcherSearchField from './switcher-search-field.component'

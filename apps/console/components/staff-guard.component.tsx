@@ -19,7 +19,7 @@
 import { Alert, Box, Button, CircularProgress } from '@mui/material'
 import { notFound } from 'next/navigation'
 import { type ReactNode, useEffect, useState } from 'react'
-import { useIsStaff } from '../hooks/use-is-staff'
+import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import {
   getSessionReauth,
   reopenSessionReauth,

@@ -30,7 +30,7 @@ import {
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { formatStaffActivity } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 /**

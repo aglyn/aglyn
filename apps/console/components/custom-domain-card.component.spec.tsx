@@ -57,7 +57,7 @@ jest.mock('firebase/firestore', () => ({ doc: () => ({}) }))
 
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
 
-jest.mock('../constants/entitlements', () => ({ hasEntitlement: () => true }))
+jest.mock('@aglyn/aglyn/app-utils/console/entitlements', () => ({ hasEntitlement: () => true }))
 
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,

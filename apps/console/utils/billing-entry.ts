@@ -37,7 +37,7 @@
  * an extraction is churn in the files that were already correct.
  */
 
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { type OrgEntryOrg, resolveOrgEntry } from '@aglyn/aglyn/app-utils/console/org-entry'
 
 /** One workspace the signed-in account can reach, as the picker needs it. */

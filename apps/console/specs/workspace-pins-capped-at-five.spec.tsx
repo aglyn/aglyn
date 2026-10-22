@@ -60,7 +60,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
 }))
 
-import { usePinnedOrgs } from '../hooks/use-pinned-orgs'
+import { usePinnedOrgs } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs'
 import {
   PinnedFullDialog,
   PinnedOrgsKeepPrompt,
