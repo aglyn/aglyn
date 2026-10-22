@@ -209,6 +209,10 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
             <FormControlLabel
               key={kind}
               disabled={disabled || !!unsold}
+              // The column below zeroes its rows' margins; the AI row nests
+              // the label in a row of its own, so zero them here too, or its
+              // switch sits 11px left of the others.
+              sx={{ m: 0 }}
               control={
                 <Switch
                   size="small"
