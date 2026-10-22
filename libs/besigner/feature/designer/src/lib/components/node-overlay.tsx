@@ -28,8 +28,9 @@ import {
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useMemo, useState } from 'react'
-import NodeOutline from './node-outline'
+import NodeOutline, { RepeatMemberOutline } from './node-outline'
 import { isInlineEditWithin } from '../utils/inline-text-edit.store'
+import { repeatCopyElementsOf } from '../utils/repeat-copy'
 import NodeQuickActions from './node-quick-actions'
 
 /**
@@ -117,6 +118,55 @@ export function serializeRect(rect: DOMRect): any {
   return JSON.parse(JSON.stringify(rect || DEFAULT_RECT))
 }
 
+/**
+ * What the overlay draws: the element's own fragments, or — for an element a
+ * repeat draws copies of — one box round the element AND its copies, with the
+ * element's own box as `member`.
+ */
+type OverlayGeometry = ElementFragmentRects & {
+  member?: ElementFragmentRects['union']
+}
+
+/**
+ * The element and every copy a repeat draws of it, as one group (AGL-3111).
+ *
+ * Pointing at a copy (Sam, Jordan) targets the element it draws, and the
+ * outline used to wrap that element alone — so the pointer sat on one row
+ * while the box lit up another, which reads as the canvas aiming at the wrong
+ * thing. The box now wraps the whole group, the element inside it is marked
+ * as the one that is edited, and the copies keep their own dashed grey.
+ */
+function withRepeatGroup(
+  el: Element,
+  id: string | undefined,
+  own: ElementFragmentRects,
+): OverlayGeometry {
+  const copies = id ? repeatCopyElementsOf(el, id) : []
+  if (!copies.length) return own
+  let { left, top } = own.union
+  let right = own.union.left + own.union.width
+  let bottom = own.union.top + own.union.height
+  for (const copy of copies) {
+    const box = copy.getBoundingClientRect()
+    left = Math.min(left, box.left)
+    top = Math.min(top, box.top)
+    right = Math.max(right, box.right)
+    bottom = Math.max(bottom, box.bottom)
+  }
+  const union = {
+    ...own.union,
+    left,
+    top,
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    right,
+    bottom,
+  }
+  return { fragments: [union], union, first: own.first, member: own.union }
+}
+
 const DEFAULT_GEOMETRY: ElementFragmentRects = {
   fragments: [DEFAULT_RECT as any],
   union: DEFAULT_RECT as any,
@@ -138,8 +188,8 @@ const DEFAULT_GEOMETRY: ElementFragmentRects = {
  * jitter cannot churn a render on its own. This is strictly less per-event
  * work than the single-rect code did, not more.
  */
-function fingerprintGeometry(geometry: ElementFragmentRects): string {
-  return geometry.fragments
+function fingerprintGeometry(geometry: OverlayGeometry): string {
+  return [...geometry.fragments, ...(geometry.member ? [geometry.member] : [])]
     .map(
       (rect) =>
         `${Math.round(rect.left)},${Math.round(rect.top)},` +
@@ -186,10 +236,18 @@ const NodeOverlay = observer(
      * reason — the in-place surface must look exactly as it renders.
      */
     const isBeingEdited = isInlineEditWithin(elementRef?.current ?? null)
-    const isOpen = Boolean(elementRef?.current) && !isBeingEdited
+    // The SELECTION's outline stays through an edit: it is what says which
+    // element is being typed into, and with it gone the author lost track of
+    // the element once the toolbar opened. Only its fill and its chip stand
+    // down — see `editing` below. The hover chrome stands down whole: a
+    // second outline on the text under the caret says nothing new.
+    const isOpen =
+      Boolean(elementRef?.current) &&
+      (variant === 'selected' || !isBeingEdited)
+    const editing = isBeingEdited
     const [geometry, setGeometry] =
-      useState<ElementFragmentRects>(DEFAULT_GEOMETRY)
-    const { union: rect, fragments, first } = geometry
+      useState<OverlayGeometry>(DEFAULT_GEOMETRY)
+    const { union: rect, fragments, first, member } = geometry
     // Found once the overlay is in the document; memoised so the popper is
     // not rebuilt on every geometry commit.
     const [canvasViewport, setCanvasViewport] = useState<Element | null>(null)
@@ -216,7 +274,7 @@ const NodeOverlay = observer(
        */
       let committed = ''
       const update = () => {
-        const next = getElementFragmentRects(el)
+        const next = withRepeatGroup(el, $id, getElementFragmentRects(el))
         const fingerprint = fingerprintGeometry(next)
         if (fingerprint === committed) return
         committed = fingerprint
@@ -261,7 +319,7 @@ const NodeOverlay = observer(
       // "shift up"/"shift down"). Reordering moves the same DOM element to a
       // new position without resizing it, so ResizeObserver won't catch it —
       // this dependency forces a rect recompute when sibling order changes.
-    }, [elementRef, nodeIndex])
+    }, [elementRef, nodeIndex, $id])
 
     // Popper types its anchor rect as a full `DOMRect`; the measured rects
     // are plain geometry and carry no `toJSON`, which popper never calls.
@@ -335,11 +393,28 @@ const NodeOverlay = observer(
                 width: fragment.width,
                 height: fragment.height,
               }}
+              editing={editing}
             />
           ))}
+          {member ? (
+            // The element inside its repeat group, marked as the one an edit
+            // changes — see `RepeatMemberOutline`.
+            <RepeatMemberOutline
+              style={{
+                left: member.left - rect.left,
+                top: member.top - rect.top,
+                right: 'auto',
+                bottom: 'auto',
+                width: member.width,
+                height: member.height,
+              }}
+            />
+          ) : null}
 
           <MuiPopper
-            open={isOpen}
+            // The editor's own toolbar sits where the chip and the quick
+            // actions would.
+            open={isOpen && !editing}
             anchorEl={anchorElement}
             placement={variant === 'hovered' ? 'top-start' : undefined}
             modifiers={innerModifiers}

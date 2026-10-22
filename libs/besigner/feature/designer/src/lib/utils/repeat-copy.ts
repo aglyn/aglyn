@@ -59,3 +59,27 @@ export function repeatOriginalAt(
   if (!id?.startsWith(REPEAT_NODE_ID_PREFIX)) return null
   return canvas.getNode(repeatTemplateIdOf(id)) ?? null
 }
+
+/**
+ * Every drawn copy of the node `id` in the canvas `element` lives in: the
+ * copies a repeat draws of it, at any depth — a Typography inside a repeated
+ * card has a copy inside each copy of the card.
+ *
+ * Read off the rendered stamps (`leaf:rep__…__<id>`), because the copies are
+ * pictures, not canvas nodes: the refs registry has no entry for them.
+ */
+export function repeatCopyElementsOf(element: Element, id: string): Element[] {
+  const root = element.getRootNode() as ParentNode | null
+  if (!root?.querySelectorAll || !id) return []
+  const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id
+  return Array.from(
+    root.querySelectorAll(
+      `[data-aglyn^="leaf:${REPEAT_NODE_ID_PREFIX}"][data-aglyn$="__${escaped}"]`,
+    ),
+  ).filter(
+    (copy) =>
+      repeatTemplateIdOf(
+        copy.getAttribute('data-aglyn')?.slice('leaf:'.length) ?? '',
+      ) === id,
+  )
+}
