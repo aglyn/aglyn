@@ -48,6 +48,7 @@ import {
   defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
+  isAiTierId,
   PLAN_LABELS,
   parseAiTierAddonKey,
   PLAN_PRICING,
@@ -182,6 +183,19 @@ export function addonMaxForPlan(kind: AddonKind, plan: OrgPlan): number {
 /** Whether a plan sells an add-on at all: priced, with a ceiling above zero. */
 export function planSellsAddon(kind: AddonKind, plan: OrgPlan): boolean {
   return addonUnitUsd(kind, plan) != null && addonMaxForPlan(kind, plan) > 0
+}
+
+/**
+ * The first of `plans` (listed smallest first) that sells an add-on kind, or
+ * null when none does: the plan a picker names beside an add-on the chosen
+ * plan does not sell, so it shows as "needs Pro or higher" rather than
+ * vanishing (AGL-4025). POS registers need a plan with the point of sale.
+ */
+export function firstPlanSellingAddon(
+  kind: AddonKind,
+  plans: readonly OrgPlan[],
+): OrgPlan | null {
+  return plans.find((plan) => planSellsAddon(kind, plan)) ?? null
 }
 
 /** Quantities by kind, absent kinds meaning none. */
@@ -380,6 +394,21 @@ export function bundleAddonsParam(
       return quantity > 1 ? `${BUNDLE_ADDON_TOKENS[kind]}:${quantity}` : BUNDLE_ADDON_TOKENS[kind]
     })
     .join(',')
+}
+
+/**
+ * The Aglyn AI tier a bundle sells (AGL-4025): the tier named, or the plan's
+ * default (`defaultAiTierForPlan`) when none is; null when the bundle has no
+ * Aglyn AI or the plan sells no tier. A picker shows this tier as chosen, the
+ * link writes it as `ai:<tier>`, and checkout charges it, so the three agree.
+ */
+export function bundleAiTier(
+  addons: BundleAddons | null | undefined,
+  plan: OrgPlan,
+  tier?: AiTierId | null,
+): AiTierId | null {
+  if (!((addons?.aiAddon ?? 0) > 0) || !planSellsAiTiers(plan)) return null
+  return isAiTierId(tier) ? tier : defaultAiTierForPlan(plan)
 }
 
 /** Whether any add-on is asked for. */
