@@ -18,6 +18,7 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Box, Typography } from '@mui/material'
+import { docsHelp } from '../constants/docs-links'
 import type { PendingInvite } from '../hooks/use-pending-invites'
 
 /**
@@ -35,6 +36,7 @@ export function WorkspaceAccessPending({ invite }: { invite: PendingInvite }) {
       <CardDisplay
         header={`Your access to ${name} is almost ready`}
         subheader={'You have been invited, and nothing is needed from you.'}
+        help={docsHelp('inviteTeammates', { anchor: '#joining-from-an-invite' })}
         contentGutterX
         contentGutterY
       >
