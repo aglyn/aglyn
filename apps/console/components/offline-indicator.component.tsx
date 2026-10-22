@@ -19,7 +19,7 @@
 import { mdiWifiOff } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Box, Chip, Tooltip } from '@mui/material'
-import useOnlineStatus from '../hooks/use-online-status'
+import useOnlineStatus from '@aglyn/shared-ui-jsx/hooks/use-online-status'
 
 /**
  * The connection indicator in the app bar (AGL-1056).

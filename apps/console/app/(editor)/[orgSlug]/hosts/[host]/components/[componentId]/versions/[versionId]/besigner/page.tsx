@@ -63,7 +63,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
-import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'

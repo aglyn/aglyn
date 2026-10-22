@@ -55,7 +55,7 @@ import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
 import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
-import { onlyInScheme } from '../utils/scheme-visibility'
+import { onlyInScheme } from '@aglyn/shared-ui-theme/util/scheme-visibility'
 import { arrangeWorkspaces } from '../utils/workspace-list'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'

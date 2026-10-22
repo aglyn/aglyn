@@ -112,7 +112,7 @@ jest.mock('../components/auth-form.component', () => ({
 jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
 }))
-jest.mock('../utils/is-mobile-browser', () => ({
+jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   __esModule: true,
   default: () => mockIsMobile,
 }))
