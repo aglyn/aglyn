@@ -20,7 +20,7 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { describeApiV1Resources } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
-import { buildCustomerApiOpenApi } from '../utils/api-v1-openapi'
+import { buildCustomerApiOpenApi } from '@aglyn/tenant-data-admin/server/console/api-v1-openapi'
 import {
   buildMcpTools,
   buildToolRequest,

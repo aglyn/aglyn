@@ -25,11 +25,11 @@
  * `TransferUploadRequest`; answer: `TransferUploadResponse`.
  */
 
-// lockdown-423: via apps/console/utils/server/transfer-gate.ts
+// lockdown-423: via libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts
 
 import type { TransferCsvDelimiter, TransferFormat, TransferUploadResponse } from '@aglyn/aglyn/data-transfer'
 import { uploadTransferSource } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { transferErrorResponse, transferGate } from '../../../../utils/server/transfer-gate'
+import { transferErrorResponse, transferGate } from '@aglyn/tenant-data-admin/server/console/transfer-gate'
 
 const optionalNumber = (value: unknown): number | undefined =>
   value === undefined || value === null ? undefined : Number(value)

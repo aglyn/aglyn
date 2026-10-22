@@ -52,7 +52,7 @@ import {
   validateConsoleDomain,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
+import { revalidateOrgHosts } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 
 /**
  * Org settings mutations (AGL-236). Rename goes through the API rather

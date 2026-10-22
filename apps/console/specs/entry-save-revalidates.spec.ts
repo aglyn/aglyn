@@ -47,7 +47,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { nodesRenderCollection } from '@aglyn/aglyn/server'
-import { screenIdsUsingCollectionDeep } from '../utils/server/scan-artifact-usage'
+import { screenIdsUsingCollectionDeep } from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
 
 const SLUG = 'blog'
 

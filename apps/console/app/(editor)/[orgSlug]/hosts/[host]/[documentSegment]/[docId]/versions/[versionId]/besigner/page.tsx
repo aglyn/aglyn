@@ -98,7 +98,7 @@ import {
 } from '@aglyn/aglyn/app-utils/console/route-links'
 import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
 import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
-import { isPreviewKind } from '../../../../../../../../../../utils/staff-site-links'
+import { isPreviewKind } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 import useScreenLinkRoutes, {
   screenLinkLabels,
 } from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'

@@ -118,6 +118,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   }
 })
 
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useFirestore() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
+  },
+  get useAuth() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useAuth
+  },
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter', () => ({
+  ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter'),
+  get subscribeFirestoreSessionHeal() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').subscribeFirestoreSessionHeal
+  },
+}))
+
 /**
  * A HEALTHY org read. This suite is about host resolution; the org side has
  * the same latch and the same cure, pinned where it lives (`useOrgScope`).

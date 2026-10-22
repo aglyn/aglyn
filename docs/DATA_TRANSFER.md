@@ -441,7 +441,7 @@ per item, so neither has a field policy.
 
 `@aglyn/tenant-data-admin/server/transfer-jobs` runs an import as a durable
 job; the eight console routes are wiring over it, behind one gate
-(`apps/console/utils/server/transfer-gate.ts`): `POST`, a verified Bearer ID
+(`libs/tenant/data/admin/src/lib/server/console/transfer-gate.ts`): `POST`, a verified Bearer ID
 token, a per-member rate limit per route (`rate-limit-store`), the
 workspace's lockdown verdict (`status`, `fields` and `export` ask with a read intent, so a read-only lock still lets a workspace take its data out), and
 the member's access for the route's intent (`data-transfer/access.ts`,

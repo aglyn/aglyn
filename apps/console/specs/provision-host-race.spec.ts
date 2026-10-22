@@ -67,7 +67,7 @@ import {
   claimHostForOrg,
   findSubdomainConflict,
   provisionStarterSite,
-} from '../utils/server/provision-host'
+} from '@aglyn/tenant-data-admin/server/console/provision-host'
 
 const mockDocs = new Map<string, Record<string, unknown>>()
 let mockRegisterCalls: Array<[string, string, string]> = []
@@ -251,6 +251,21 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: {
       FieldValue: { serverTimestamp: () => 'NOW', increment: (n: number) => n },
     },
+  },
+}))
+
+// The moved server routines import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
+  get registerOrgHost() {
+    return jest.requireMock('@aglyn/tenant-data-admin').registerOrgHost
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
+  get firebaseAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
   },
 }))
 

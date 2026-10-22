@@ -47,7 +47,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ActivityTable from './activity-table.component'
-import { staffActivityLinks } from '../utils/activity-details'
+import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
 import { formatWireTimestamp } from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 

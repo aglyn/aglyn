@@ -25,8 +25,8 @@ import {
   lockdownRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
-import { scopeBillsStorageOverage } from '../../../../utils/storage-overage'
+import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+import { scopeBillsStorageOverage } from '@aglyn/tenant-data-admin/server/console/storage-overage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** The library a band request names, and the org whose pool it reads. */

@@ -66,7 +66,7 @@ import {
   type StaffSiteRow,
   staffSiteLiveUrl,
 } from '../../../../../components/staff-site-row-actions.component'
-import { homeScreenId, staffSitePreviewHref } from '../../../../../utils/staff-site-links'
+import { homeScreenId, staffSitePreviewHref } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 import { staffLeavingNoticeLabel } from '@aglyn/aglyn/app-utils/console/staff-leaving-notice'
 
 /**

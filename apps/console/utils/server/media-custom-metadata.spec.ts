@@ -35,7 +35,7 @@ import {
   CUSTOM_METADATA_MAX_PAIRS,
   customMetadataStorageMap,
   sanitizeCustomMetadata,
-} from './media-scope'
+} from '@aglyn/tenant-data-admin/server/console/media-scope'
 
 describe('sanitizeCustomMetadata', () => {
   it('coerces values to strings and trims keys', () => {

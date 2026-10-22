@@ -150,7 +150,7 @@ describe('the customer-facing portal is confined to dunning recovery and the pay
   it('the route opens no portal flow but the payment-method one', () => {
     const source = read(SUBSCRIPTION_ROUTE)
     expect(source).toContain("flow !== PAYMENT_METHOD_UPDATE_FLOW")
-    expect(read('apps/console/utils/update-payment-method-link.ts')).toContain(
+    expect(read('libs/aglyn/src/lib/app-utils/console/update-payment-method-link.ts')).toContain(
       "PAYMENT_METHOD_UPDATE_FLOW = 'payment_method_update'",
     )
   })

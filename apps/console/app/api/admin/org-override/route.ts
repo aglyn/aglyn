@@ -178,7 +178,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
+import { revalidateOrgHosts } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 import { FieldValue } from 'firebase-admin/firestore'
 import { setAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 

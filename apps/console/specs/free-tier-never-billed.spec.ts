@@ -101,7 +101,7 @@ import {
   estimateMonthlyUsageCost,
   METERED_UNIT_RATES_USD,
 } from '@aglyn/aglyn/app-utils/console/usage-metering'
-import { mediaStorageGate } from '../utils/storage-overage'
+import { mediaStorageGate } from '@aglyn/tenant-data-admin/server/console/storage-overage'
 import {
   BANDWIDTH_ABUSE_CEILING_FLOOR,
   bandwidthCapEngaged,

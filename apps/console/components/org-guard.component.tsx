@@ -22,7 +22,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useOrgLastActivity } from '@aglyn/tenant-feature-instance/hooks/console/use-org-last-activity'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
-import { collaboratorRedirect } from '../utils/collaborator-navigation'
+import { collaboratorRedirect } from '@aglyn/aglyn/app-utils/console/collaborator-navigation'
 
 function GuardSpinner() {
   return (

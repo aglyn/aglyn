@@ -24,7 +24,7 @@ import { advanceDueConsentGroupChanges, getOrgDoc } from '@aglyn/tenant-data-adm
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
-import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
+import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
 
 /**
  * EVERY CONSENT GROUP CHANGE IN FLIGHT, FINISHED (AGL-3320):

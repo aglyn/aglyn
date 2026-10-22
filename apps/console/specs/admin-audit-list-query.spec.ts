@@ -40,7 +40,7 @@ import {
   USER_AUDIT_LIST_QUERY,
   userAuditKindBase,
 } from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
-import { userAuditHalves } from '../utils/server/user-audit'
+import { userAuditHalves } from '@aglyn/tenant-data-admin/server/console/user-audit'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

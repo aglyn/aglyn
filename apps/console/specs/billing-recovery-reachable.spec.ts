@@ -215,7 +215,7 @@ describe('the org-agnostic entry point Stripe can link to', () => {
   it('never filters a workspace out of the answer for being suspended or delinquent', () => {
     for (const path of [
       PAGE,
-      'apps/console/utils/billing-entry.ts',
+      'libs/aglyn/src/lib/app-utils/console/billing-entry.ts',
       // The resolver itself moved here when `/support` needed the same
       // three cases (AGL-3265). A sweep that kept naming only the wrapper
       // would have gone on passing while the predicate it exists to forbid

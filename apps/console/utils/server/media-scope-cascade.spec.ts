@@ -28,7 +28,7 @@
  * has to mean "start over", never "skip ahead".
  */
 
-import { scopeCascadeSlice } from './media-scope'
+import { scopeCascadeSlice } from '@aglyn/tenant-data-admin/server/console/media-scope'
 
 const BATCH = 500
 const slice = (total: number, chunkStart?: unknown, chunkSize?: unknown) =>

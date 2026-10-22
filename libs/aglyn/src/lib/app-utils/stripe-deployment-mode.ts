@@ -18,7 +18,7 @@
 /**
  * Which Stripe world THIS deployment lives in (AGL-2040, shared in AGL-2486).
  *
- * Lifted out of `apps/console/utils/server/stripe-livemode.ts` verbatim so a
+ * Lifted out of `libs/tenant/data/admin/src/lib/server/console/stripe-livemode.ts` verbatim so a
  * LIBRARY can ask the question too — `org-billing.ts` now keys the stored
  * Stripe customer id by mode, and a lib cannot import from an app. That file
  * re-exports this one, so the webhook's livemode gate and its spec are

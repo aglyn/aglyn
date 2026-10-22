@@ -30,7 +30,7 @@ import {
   fetchPlatformMarketingConsentStatus,
   type PlatformMarketingConsentStatus,
   postPlatformMarketingConsent,
-} from '../../utils/marketing-opt-in'
+} from '@aglyn/tenant-data-admin/server/console/marketing-opt-in'
 
 /**
  * The day a decision was recorded, in the reader's locale, or null.

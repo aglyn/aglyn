@@ -18,7 +18,7 @@
 
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Button } from '@mui/material'
-import { supportSurfaceRoute, type SupportSurface } from '../../utils/support-surfaces'
+import { supportSurfaceRoute, type SupportSurface } from '@aglyn/aglyn/app-utils/console/support-surfaces'
 
 /**
  * The way from one Support channel to the other (AGL-1158).

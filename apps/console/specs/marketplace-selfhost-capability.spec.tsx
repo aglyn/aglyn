@@ -41,7 +41,7 @@ import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 import { releaseFlagForNavTab } from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { platformPaymentsConfigured } from '../utils/server/payments-platform'
+import { platformPaymentsConfigured } from '@aglyn/tenant-data-admin/server/console/payments-platform'
 
 /** The alert MUI renders, by severity class (`MuiAlert-colorInfo` etc). */
 const alertOfSeverity = (severity: 'info' | 'warning' | 'error') =>

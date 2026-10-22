@@ -29,7 +29,7 @@ import {
   auditLogRow,
   type AuditLogRow,
 } from '@aglyn/aglyn/app-utils/console/admin-audit-view'
-import { readStaffListQuery, runStaffListQuery } from '../../../../utils/server/staff-list-query'
+import { readStaffListQuery, runStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**
  * The staff audit log for the apps (AGL-3667): `adminAudit`, newest first, with

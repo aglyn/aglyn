@@ -22,7 +22,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { evaluateEmailHealth } from '../../../../utils/server/email-health'
+import { evaluateEmailHealth } from '@aglyn/tenant-data-admin/server/console/email-health'
 
 /**
  * Email provisioning health (AGL-709). Answers "can this deployment send

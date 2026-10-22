@@ -52,7 +52,7 @@ import {
   STORAGE_CAP_FALLBACK_USD,
   usageAlertThreshold,
   USAGE_ALERT_BANDS,
-} from '../utils/storage-overage'
+} from '@aglyn/tenant-data-admin/server/console/storage-overage'
 import { estimateMonthlyUsageCost } from '@aglyn/aglyn/app-utils/console/usage-metering'
 import { PLAN_ENTITLEMENTS, planMetersInfraOverage } from '@aglyn/aglyn/server'
 

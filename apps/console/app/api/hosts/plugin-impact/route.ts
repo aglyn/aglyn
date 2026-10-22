@@ -29,7 +29,7 @@ import {
   scanPluginPlacements,
   type ImpactedPage,
   type PluginPlacement,
-} from '../../../../utils/server/scan-artifact-usage'
+} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** What uninstalling would do to one site. */

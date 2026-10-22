@@ -118,7 +118,7 @@ import { subscriptionPeriodNotice } from '@aglyn/aglyn/app-utils/console/subscri
 import {
   PAYMENT_METHOD_UPDATE_FLOW,
   UPDATE_PAYMENT_METHOD_ANCHOR,
-} from '../../../../../utils/update-payment-method-link'
+} from '@aglyn/aglyn/app-utils/console/update-payment-method-link'
 import {
   clearSubscribeCheckoutPending,
   markSubscribeCheckoutPending,

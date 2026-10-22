@@ -44,8 +44,8 @@ import {
   scopeBillsStorageOverage,
   usageAlertThreshold,
   USAGE_ALERT_BANDS,
-} from '../../../../utils/storage-overage'
-import { orgMediaAllowanceMb } from '../../../../utils/server/media-storage-band'
+} from '@aglyn/tenant-data-admin/server/console/storage-overage'
+import { orgMediaAllowanceMb } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
 import {
   formatBandwidthGb,
   formatCount,

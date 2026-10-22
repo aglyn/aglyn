@@ -41,7 +41,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   announceCollectionChange,
   collectionLivePaths,
-} from '../../../../utils/server/announce-collection-change'
+} from '@aglyn/tenant-data-admin/server/console/announce-collection-change'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 // `author` (AGL-2334) manages the collection's SHAPE — creating one, naming

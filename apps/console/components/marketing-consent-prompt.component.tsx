@@ -27,7 +27,7 @@ import {
   fetchPlatformMarketingConsentStatus,
   type PlatformMarketingConsentAnswer,
   postPlatformMarketingConsent,
-} from '../utils/marketing-opt-in'
+} from '@aglyn/tenant-data-admin/server/console/marketing-opt-in'
 
 /**
  * The one-time ask for accounts that were never asked (AGL-3185).

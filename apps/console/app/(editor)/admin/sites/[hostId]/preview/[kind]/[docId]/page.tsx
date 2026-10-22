@@ -25,7 +25,7 @@ import { Suspense, useEffect, useState } from 'react'
 import '../../../../../../../../constants/app-setup'
 import DocumentPreview from '../../../../../../../../components/document-preview.component'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
-import { isPreviewKind } from '../../../../../../../../utils/staff-site-links'
+import { isPreviewKind } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 
 /**
  * The site's own plugin set, resolved from the site and its organization

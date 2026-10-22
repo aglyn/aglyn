@@ -23,7 +23,7 @@ import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_MOUNT,
   CUSTOMER_API_VERSION,
-} from '../../../utils/api-v1-openapi'
+} from '@aglyn/tenant-data-admin/server/console/api-v1-openapi'
 import {
   describePluginApiV1Resources,
   dispatchResource,

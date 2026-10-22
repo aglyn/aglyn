@@ -89,7 +89,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import { type OrgHost, useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
-import { resolveOrgMount } from '../../../../utils/org-mount'
+import { resolveOrgMount } from '@aglyn/aglyn/app-utils/console/org-mount'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import {
   describeHostStatus,

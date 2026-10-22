@@ -65,12 +65,12 @@ import {
 } from '@aglyn/aglyn/app-utils/console/csp-report-list-query'
 // From the leaf, as `staff-list-query.ts` does.
 import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
-import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
+import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
 import {
   planStaffListQuery,
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 

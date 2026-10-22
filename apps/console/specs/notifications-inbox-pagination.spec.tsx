@@ -136,6 +136,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   const user = { data: { uid: 'u-1' } }
   return { __esModule: true, useUser: () => user, useFirestore: () => firestore }
 })
+
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+  get useFirestore() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
+  },
+}))
 /* A live listener over the fake, as the shared hook is. */
 jest.mock('../hooks/use-firestore-collection', () => {
   const firestore = jest.requireMock('firebase/firestore')

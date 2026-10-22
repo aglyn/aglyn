@@ -80,7 +80,7 @@
  * and left it unscoped would produce a record that is correctly consented and
  * still cannot be mailed — a fix reported as complete and observable only as
  * an audience that is short. `['org']` is the stamp, matching
- * `apps/console/utils/server/backfill-scope.ts`, whose `needsScopeStamp` rule
+ * `libs/tenant/data/admin/src/lib/server/console/backfill-scope.ts`, whose `needsScopeStamp` rule
  * this repeats: an EMPTY array is a written "visible to nobody" and is left
  * alone, because rewriting one would widen a resource somebody hid.
  *

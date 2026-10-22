@@ -82,7 +82,7 @@ const SUBSTITUTION =
  * is ever created and nothing needs the default. A survivor added here has
  * to be a write in the same sense, with its reason beside it.
  *
- * `apps/console/utils/server/backfill-scope.ts` is worth naming for its
+ * `libs/tenant/data/admin/src/lib/server/console/backfill-scope.ts` is worth naming for its
  * absence. AGL-1484 expected it here, and a looser pattern did flag it — but
  * only by spanning from `needsScopeStamp`'s `!Array.isArray(data.visibleTo)`
  * across forty lines to an unrelated `[ORG_SCOPE_TOKEN]`. The file writes the

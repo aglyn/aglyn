@@ -27,7 +27,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import type { PreviewKind } from '@aglyn/aglyn/app-utils/console/preview-state'
 import { buildScreenLiveUrl } from '../constants/tenant-links'
-import { staffSitePreviewHref } from '../utils/staff-site-links'
+import { staffSitePreviewHref } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 import {
   STAFF_SITE_CONTENT_LISTS,
   type StaffSiteContentTab,

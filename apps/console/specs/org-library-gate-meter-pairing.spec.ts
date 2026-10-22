@@ -69,7 +69,7 @@
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
-} from '../utils/storage-overage'
+} from '@aglyn/tenant-data-admin/server/console/storage-overage'
 import { billsOrgLibraryStorage } from '@aglyn/aglyn/app-utils/console/usage-metering'
 import { PLAN_ENTITLEMENTS, planMetersInfraOverage } from '@aglyn/aglyn/server'
 

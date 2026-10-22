@@ -67,7 +67,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({}) },
 }))
 
-jest.mock('../utils/remote-server-bundles', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/remote-server-bundles', () => ({
   __esModule: true,
   ensureRemoteServerBundles: jest.fn(async () => undefined),
 }))

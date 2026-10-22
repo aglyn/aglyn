@@ -61,7 +61,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('@aglyn/tenant-data-admin/server/account-acquisition', () => ({
   recordSignUpAcquisition: async () => undefined,
 }))
-jest.mock('../utils/server/provision-host', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/provision-host', () => ({
   claimHostForOrg: (input: Record<string, unknown>) => mockClaim(input),
   findSubdomainConflict: async () => null,
   resumeUnfinishedCreate: async () => null,

@@ -31,6 +31,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'user-ada' } }),
 }))
 
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
+
 const mockSelectOrg = jest.fn()
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ selectOrg: mockSelectOrg }),

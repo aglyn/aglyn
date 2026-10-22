@@ -39,10 +39,10 @@ import {
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { directUploadMaxBytes, normalizeUploadContentType } from '@aglyn/aglyn/app-utils/console/media-upload-limits'
-import { mediaStorageGate, scopeBillsStorageOverage } from '../storage-overage'
-import { embeddedMetadataAtIngress } from './media-embedded'
-import { resolveOrgMediaBand } from './media-storage-band'
-import { folderStoragePath, mediaCdnPathUpdate, resolveMediaScope } from './media-scope'
+import { mediaStorageGate, scopeBillsStorageOverage } from '@aglyn/tenant-data-admin/server/console/storage-overage'
+import { embeddedMetadataAtIngress } from '@aglyn/tenant-data-admin/server/console/media-embedded'
+import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+import { folderStoragePath, mediaCdnPathUpdate, resolveMediaScope } from '@aglyn/tenant-data-admin/server/console/media-scope'
 
 /**
  * This app's implementation of `core.media-ingest` (AGL-3660): a picture a

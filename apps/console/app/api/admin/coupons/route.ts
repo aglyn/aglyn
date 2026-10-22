@@ -39,8 +39,8 @@ import {
   PROMOTION_CODE_READ_BOUND,
   STRIPE_LIST_PAGE,
 } from '@aglyn/aglyn/app-utils/console/coupon-list-query'
-import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
-import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
+import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
+import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**
  * Staff coupon management (AGL-1105). Coupons live in Stripe — the source of

@@ -108,7 +108,7 @@ import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
-import { applyUserLockdown } from '../../../../utils/server/user-lockdown'
+import { applyUserLockdown } from '@aglyn/tenant-data-admin/server/console/user-lockdown'
 import {
   LOCKDOWN_RESEND_MAX_TARGETS,
   type LockdownNoticeEffects,
