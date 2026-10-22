@@ -101,6 +101,8 @@ const {
   mintBundleLink,
   readBundleLinkDomain,
 } = require('./bundle-links') as typeof import('./bundle-links')
+const { parseOnboardingPlanIntent } =
+  require('@aglyn/aglyn/app-utils/onboarding-deep-link') as typeof import('@aglyn/aglyn/app-utils/onboarding-deep-link')
 
 const ORG = 'org-1'
 const NOW = 1_800_000_000_000
@@ -179,6 +181,45 @@ describe('minting a bundle link (AGL-3955)', () => {
     )
     expect(minted.intent).toMatchObject({ addons: { aiAddon: 1, siteCare: 1 }, aiTier: 'studio' })
     expect(links()[0]).toMatchObject({ intent: { aiTier: 'studio' } })
+  })
+
+  it('writes the tier staff picked as `ai:<tier>`, and Billing reads it back (AGL-4025)', async () => {
+    // The staff card posts its switches as a map and the tier beside them.
+    const minted = await mint({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'plus' })
+    expect(minted.url).toBe(
+      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:plus,siteCare&coupon=BOOTH25',
+    )
+    expect(minted.intent).toEqual({
+      plan: 'starter',
+      addons: { aiAddon: 1, siteCare: 1 },
+      interval: 'year',
+      coupon: 'BOOTH25',
+      aiTier: 'plus',
+    })
+    expect(links()[0]).toMatchObject({ intent: { aiTier: 'plus' } })
+    expect(audits()[0]).toMatchObject({ after: { intent: { aiTier: 'plus' } } })
+    // What the owner's Billing page parses off that link: the same tier.
+    expect(parseOnboardingPlanIntent(new URL(minted.url).searchParams)).toMatchObject({
+      plan: 'starter',
+      interval: 'year',
+      ai: true,
+      aiTier: 'plus',
+      addons: { siteCare: 1, aiAddon: 1 },
+      coupon: 'BOOTH25',
+    })
+  })
+
+  it('the picked tier wins over an `ai:<tier>` entry; an unknown one or no AI add-on carries none (AGL-4025)', async () => {
+    expect((await mint({ addons: 'siteCare,ai:studio', aiTier: 'boost' })).intent.aiTier).toBe('boost')
+    // Not a tier: the entry's tier stands, and without one the link sells the default.
+    expect((await mint({ addons: 'siteCare,ai:studio', aiTier: 'gold' })).intent.aiTier).toBe('studio')
+    const unnamed = await mint({ addons: 'siteCare,ai', aiTier: 'gold' })
+    expect(unnamed.intent.aiTier).toBeUndefined()
+    expect(unnamed.url).toContain('addons=ai,siteCare')
+    // A tier with Aglyn AI switched off is not sold.
+    const off = await mint({ addons: { siteCare: 1 }, aiTier: 'plus' })
+    expect(off.intent.aiTier).toBeUndefined()
+    expect(off.url).toContain('addons=siteCare&')
   })
 
   it('refuses a plan nobody buys through checkout, and a workspace that already pays', async () => {

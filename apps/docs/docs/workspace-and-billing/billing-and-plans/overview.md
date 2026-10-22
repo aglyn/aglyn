@@ -628,7 +628,9 @@ and see it applied before you confirm.
 When you arrive from a link the Aglyn team gave you (a QR code at an event, or the
 button in a handoff email), the card comes first on the page with everything the link
 chose: the plan, monthly or yearly billing, each add-on as a switch you can turn off,
-and the promotion code already applied. The button in the card's header shows the total,
+and the promotion code already applied. When the link includes Aglyn AI, an **Aglyn AI
+tier** field beside its switch shows the tier chosen for you; pick another tier there,
+or turn the switch off, and the total updates before you pay. The button in the card's header shows the total,
 and pressing it pays with the card on file. If you have no card or billing address yet,
 it asks for them first. An add-on your plan does not include, or a code that has
 expired, is left off with a one-line note instead of an error.

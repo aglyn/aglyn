@@ -17,13 +17,15 @@
 
 'use client'
 
-import type { OrgPlan } from '@aglyn/aglyn'
+import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
 import {
   ADDON_KINDS,
   addonMaxForPlan,
   addonUnitUsd,
   BUNDLE_COUPON_MAX,
   bundleAddonLabel,
+  bundleAiTier,
+  firstPlanSellingAddon,
   fitBundleAddonsToPlan,
   normalizeBundleCoupon,
   parseBundleAddons,
@@ -45,6 +47,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import { AiTierSelect } from './billing/ai-tier-select.component'
 
 /** What staff choose for a bundle (AGL-3955, AGL-3956). */
 export interface BundleDraft {
@@ -52,6 +55,11 @@ export interface BundleDraft {
   addons: BundleAddons
   interval: 'month' | 'year'
   coupon: string
+  /**
+   * The Aglyn AI tier chosen beside the AI switch (AGL-4025); absent, the
+   * plan's default tier (`bundleAiTier`), which the picker shows as chosen.
+   */
+  aiTier?: AiTierId | null
 }
 
 /**
@@ -65,19 +73,28 @@ export const DEFAULT_BUNDLE_DRAFT: BundleDraft = {
   coupon: '',
 }
 
-/** The draft as the routes take it: add-ons fitted, an empty coupon left out. */
+/**
+ * The draft as the routes take it: add-ons fitted, an empty coupon left out,
+ * and the Aglyn AI tier the picker shows whenever the AI add-on is on
+ * (AGL-4025), so the link is written with `ai:<tier>` and the proposal
+ * stores the tier staff saw.
+ */
 export function bundleDraftBody(draft: BundleDraft): {
   plan: OrgPlan
   addons: BundleAddons
   interval: 'month' | 'year'
   coupon?: string
+  aiTier?: AiTierId
 } {
   const coupon = draft.coupon.trim()
+  const addons = fitBundleAddonsToPlan(draft.addons, draft.plan).addons
+  const aiTier = bundleAiTier(addons, draft.plan, draft.aiTier)
   return {
     plan: draft.plan,
-    addons: fitBundleAddonsToPlan(draft.addons, draft.plan).addons,
+    addons,
     interval: draft.interval,
     ...(coupon ? { coupon } : {}),
+    ...(aiTier ? { aiTier } : {}),
   }
 }
 
@@ -96,8 +113,8 @@ export function bundleDraftFromClientBuildIntent(intent: ClientBuildIntent): Bun
   }
 }
 
-function priceLabel(kind: AddonKind, plan: OrgPlan): string {
-  const unit = addonUnitUsd(kind, plan)
+function priceLabel(kind: AddonKind, plan: OrgPlan, aiTier?: AiTierId | null): string {
+  const unit = addonUnitUsd(kind, plan, aiTier)
   if (unit == null) return ''
   const each = (TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind) ? '' : ' each'
   return `$${unit}/mo${each}`
@@ -112,15 +129,30 @@ export interface StaffBundleFieldsProps {
 /**
  * The bundle picker staff fill in on the hand-off dialog, the Ask to upgrade
  * dialog and the bundle link card: the plan, every add-on that plan sells
- * (Site Care, Aglyn AI, the Event Calendar, extra sites and seats), the
- * cadence, and an optional coupon. A coupon is applied only — codes are
- * minted on the staff Coupons page.
+ * (Site Care, Aglyn AI, the Event Calendar, extra sites and seats, POS
+ * registers), the Aglyn AI tier beside its switch (AGL-4025), the cadence,
+ * and an optional coupon. An add-on a bigger plan sells is listed too,
+ * disabled with the plan it needs (POS registers on Starter), rather than
+ * left off. A coupon is applied only — codes are minted on the staff
+ * Coupons page.
+ *
+ * Designed in the Figma file "Aglyn Console (web)" (gSzLG5uHiuBFJ5AK1Mr6KE),
+ * page "Staff · Organization page", frame 5:2 (the bundle link card).
  */
 export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFieldsProps) {
   const set = (patch: Partial<BundleDraft>) => onChange({ ...value, ...patch })
-  const sold = ADDON_KINDS.filter((kind) => planSellsAddon(kind, value.plan))
-  const toggles = sold.filter((kind) => (TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind))
-  const counted = sold.filter((kind) => !(TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind))
+  // The plan an add-on needs when the chosen one does not sell it: the
+  // smallest bigger plan that does, or null when none does.
+  const biggerPlans = UPGRADE_PROPOSAL_PLANS.slice(UPGRADE_PROPOSAL_PLANS.indexOf(value.plan) + 1)
+  const needs = (kind: AddonKind): OrgPlan | null =>
+    planSellsAddon(kind, value.plan) ? null : firstPlanSellingAddon(kind, biggerPlans)
+  const needsLabel = (kind: AddonKind): string | null => {
+    const plan = needs(kind)
+    return plan ? `Needs ${PLAN_LABELS[plan]} or higher` : null
+  }
+  const listed = ADDON_KINDS.filter((kind) => planSellsAddon(kind, value.plan) || needs(kind))
+  const toggles = listed.filter((kind) => (TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind))
+  const counted = listed.filter((kind) => !(TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind))
   const setQuantity = (kind: AddonKind, quantity: number) => {
     const addons = { ...value.addons }
     if (quantity > 0) addons[kind] = Math.min(quantity, addonMaxForPlan(kind, value.plan))
@@ -167,47 +199,82 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
         <Typography variant="overline" color="text.secondary">
           {'Add-ons'}
         </Typography>
-        {toggles.map((kind) => (
-          <FormControlLabel
-            key={kind}
-            disabled={disabled}
-            control={
-              <Switch
-                size="small"
-                checked={(value.addons[kind] ?? 0) > 0}
-                onChange={(event) => setQuantity(kind, event.target.checked ? 1 : 0)}
-              />
-            }
-            label={
-              <Typography variant="body2">
-                {bundleAddonLabel(kind)}
-                <Typography component="span" variant="body2" color="text.secondary">
-                  {` · ${priceLabel(kind, value.plan)}`}
+        {toggles.map((kind) => {
+          const on = (value.addons[kind] ?? 0) > 0
+          const unsold = needsLabel(kind)
+          // With Aglyn AI on, its tier picker beside the switch names the
+          // tier and its price, so the switch says only what it adds.
+          const tierPicked = kind === 'aiAddon' && on
+          const toggle = (
+            <FormControlLabel
+              key={kind}
+              disabled={disabled || !!unsold}
+              // The column below zeroes its rows' margins; the AI row nests
+              // the label in a row of its own, so zero them here too, or its
+              // switch sits 11px left of the others.
+              sx={{ m: 0 }}
+              control={
+                <Switch
+                  size="small"
+                  checked={on}
+                  onChange={(event) => setQuantity(kind, event.target.checked ? 1 : 0)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  {bundleAddonLabel(kind)}
+                  {tierPicked ? null : (
+                    <Typography component="span" variant="body2" color="text.secondary">
+                      {` · ${unsold ?? priceLabel(kind, value.plan, kind === 'aiAddon' ? value.aiTier : null)}`}
+                    </Typography>
+                  )}
                 </Typography>
-              </Typography>
-            }
-          />
-        ))}
+              }
+            />
+          )
+          return tierPicked ? (
+            <Stack
+              key={kind}
+              direction="row"
+              useFlexGap
+              spacing={1.5}
+              sx={{ alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}
+            >
+              {toggle}
+              <AiTierSelect
+                plan={value.plan}
+                value={bundleAiTier(value.addons, value.plan, value.aiTier)}
+                onChange={(aiTier) => set({ aiTier })}
+                disabled={disabled}
+              />
+            </Stack>
+          ) : (
+            toggle
+          )
+        })}
         {counted.length ? (
           <Stack direction="row" useFlexGap spacing={1.5} sx={{ flexWrap: 'wrap', pt: 1 }}>
-            {counted.map((kind) => (
-              <TextField
-                key={kind}
-                size="small"
-                type="number"
-                label={bundleAddonLabel(kind)}
-                helperText={priceLabel(kind, value.plan)}
-                value={value.addons[kind] ?? 0}
-                disabled={disabled}
-                onChange={(event) =>
-                  setQuantity(kind, Math.max(0, Math.floor(Number(event.target.value) || 0)))
-                }
-                slotProps={{
-                  htmlInput: { min: 0, max: addonMaxForPlan(kind, value.plan), step: 1 },
-                }}
-                sx={{ width: 150 }}
-              />
-            ))}
+            {counted.map((kind) => {
+              const unsold = needsLabel(kind)
+              return (
+                <TextField
+                  key={kind}
+                  size="small"
+                  type="number"
+                  label={bundleAddonLabel(kind)}
+                  helperText={unsold ?? priceLabel(kind, value.plan)}
+                  value={unsold ? 0 : (value.addons[kind] ?? 0)}
+                  disabled={disabled || !!unsold}
+                  onChange={(event) =>
+                    setQuantity(kind, Math.max(0, Math.floor(Number(event.target.value) || 0)))
+                  }
+                  slotProps={{
+                    htmlInput: { min: 0, max: addonMaxForPlan(kind, value.plan), step: 1 },
+                  }}
+                  sx={{ width: (theme) => theme.spacing(18.75) }}
+                />
+              )
+            })}
           </Stack>
         ) : null}
       </Stack>

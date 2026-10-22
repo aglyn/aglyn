@@ -22,7 +22,9 @@ import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
 import {
   ADDON_KINDS,
   addonUnitUsd,
+  bundleAddonLabel,
   bundleAddonsParam,
+  bundleAiTier,
   describeBundleAddon,
   fitBundleAddonsToPlan,
   planSellsAddon,
@@ -47,6 +49,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../lockdown-notice.component'
+import { AiTierSelect } from './ai-tier-select.component'
 import { taxExplanation } from '../../utils/tax-explanation'
 
 /** What `/api/billing/checkout` `action: 'preview'` answers with. */
@@ -101,11 +104,18 @@ export interface BillingPlanQuoteProps {
   /** Present when the add-ons can be changed here: the switches render. */
   onAddonsChange?: (next: BundleAddons) => void
   /**
-   * The Aglyn AI tier the link named (AGL-3965): the AI switch is worded and
-   * priced as that tier, and the quote prices it, so the total shown is the
-   * tier the purchase sends. Absent, the plan's default tier.
+   * The Aglyn AI tier the link named (AGL-3965), or the one the owner picked
+   * since: the AI switch is worded and priced as that tier, and the quote
+   * prices it, so the total shown is the tier the purchase sends. Absent,
+   * the plan's default tier.
    */
   aiTier?: AiTierId | null
+  /**
+   * Present when the tier can be changed here (AGL-4025): with Aglyn AI on,
+   * its tier picker renders beside the switch, as the cadence toggle and the
+   * add-on switches let the owner change the rest of what a link chose.
+   */
+  onAiTierChange?: (tier: AiTierId) => void
   /**
    * A promotion code the link carried (AGL-3955), tried on the first quote.
    * One that Stripe refuses is left off with a one-line notice, never an
@@ -182,6 +192,7 @@ export default function BillingPlanQuoteComponent({
   addons,
   onAddonsChange,
   aiTier,
+  onAiTierChange,
   initialCoupon,
   linkNotice,
   footer,
@@ -349,7 +360,10 @@ export default function BillingPlanQuoteComponent({
         </Typography>
         {addonKinds.map((kind) => {
           const quantity = quotedAddons[kind] ?? 0
-          return (
+          // With Aglyn AI on and its tier open to change (AGL-4025), the
+          // picker beside the switch names the tier and its price.
+          const tierPicked = kind === 'aiAddon' && quantity > 0 && !!onAiTierChange
+          const toggle = (
             <FormControlLabel
               key={kind}
               disabled={busy || !canManage}
@@ -366,14 +380,38 @@ export default function BillingPlanQuoteComponent({
                 />
               }
               label={
-                <Typography variant="body2">
-                  {describeBundleAddon(kind, Math.max(1, quantity), undefined, aiTier)}
-                  <Typography component="span" variant="body2" color="text.secondary">
-                    {` · ${addonPrice(kind, knownPlan, interval, aiTier)}`}
+                tierPicked ? (
+                  <Typography variant="body2">{bundleAddonLabel(kind)}</Typography>
+                ) : (
+                  <Typography variant="body2">
+                    {describeBundleAddon(kind, Math.max(1, quantity), undefined, aiTier)}
+                    <Typography component="span" variant="body2" color="text.secondary">
+                      {` · ${addonPrice(kind, knownPlan, interval, aiTier)}`}
+                    </Typography>
                   </Typography>
-                </Typography>
+                )
               }
             />
+          )
+          return tierPicked ? (
+            <Stack
+              key={kind}
+              direction="row"
+              useFlexGap
+              spacing={1.5}
+              sx={{ alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}
+            >
+              {toggle}
+              <AiTierSelect
+                plan={knownPlan}
+                value={bundleAiTier(quotedAddons, knownPlan, aiTier)}
+                interval={interval}
+                onChange={onAiTierChange}
+                disabled={busy || !canManage}
+              />
+            </Stack>
+          ) : (
+            toggle
           )
         })}
       </Stack>
