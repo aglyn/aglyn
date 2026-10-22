@@ -17,6 +17,7 @@ content on the marketing site and is written separately.
 
 - **handoff:** a completed handoff emails the new owner and the previous owner (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
 - **billing:** staff pick the Aglyn AI tier a bundle link carries, and POS registers show on every plan ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **billing:** What you will pay always shows a total, switches cadence, and counts the link's add-ons ([AGL-4026](https://linear.app/aglyn/issue/AGL-4026))
 
 ### Fixed
 
@@ -29,6 +30,7 @@ content on the marketing site and is written separately.
 
 - **billing:** the bundle link's Aglyn AI tier, and POS registers on the staff bundle ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
 - **console:** name the Figma frames of the bundle link card and the tier field ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **billing:** What you will pay lists only the link's add-ons, with counts, cadence and a total before tax ([AGL-4026](https://linear.app/aglyn/issue/AGL-4026))
 
 ### Tests
 
