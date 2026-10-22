@@ -21,14 +21,25 @@ import OrgInvitesBanner from './org-invites-banner.component'
 import PendingInvitesProvider from './pending-invites-provider.component'
 
 /**
- * The invitation banner and its accept/decline dialog (AGL-3402): the shell
- * copy shows on any page and steps aside for a page that renders the
+ * Invitations take effect on their own (AGL-4023): nobody is shown a banner
+ * or asked to accept, and a join the workspace refuses is not shown to the
+ * invitee at all (its sender is told).
+ *
+ * The banner and its accept/decline dialog (AGL-3402) remain only for a
+ * staff impersonation session, which never joins on the account holder's
+ * behalf: there the shell copy steps aside for a page that renders the
  * invitation itself, Decline asks before answering, and a notification that
  * outlived its invitation says so rather than offering a choice.
  */
 
+let mockClaims: Record<string, unknown> = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useUser: () => ({ data: { uid: 'user-ada' } }),
+  useUser: () => ({
+    data: {
+      uid: 'user-ada',
+      getIdTokenResult: () => Promise.resolve({ claims: mockClaims }),
+    },
+  }),
 }))
 
 const mockSelectOrg = jest.fn()
@@ -39,6 +50,7 @@ jest.mock('../hooks/use-org-scope', () => ({
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  usePathname: () => '/',
 }))
 
 const mockSnackbar = jest.fn()
@@ -54,12 +66,22 @@ const INVITE = {
   role: 'admin',
 }
 let mockPending: Array<typeof INVITE>
+let mockRefuse = false
 const mockPost = jest.fn()
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (_user: unknown, url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
       const body = JSON.parse(String(init.body))
       mockPost(body)
+      if (mockRefuse) {
+        return {
+          ok: false,
+          json: async () => ({
+            error: 'Your access is still being set up.',
+            blocked: true,
+          }),
+        }
+      }
       mockPending = mockPending.filter((invite) => invite.$id !== body.inviteId)
       return { ok: true, json: async () => ({ ok: true }) }
     }
@@ -78,88 +100,129 @@ function OpenReview({ inviteId }: { inviteId: string }) {
 beforeEach(() => {
   jest.clearAllMocks()
   mockPending = [INVITE]
+  mockRefuse = false
+  mockClaims = {}
 })
 
-it('shows the invitation in the shell banner', async () => {
-  render(
-    <PendingInvitesProvider>
-      <OrgInvitesBanner placement="shell" />
-    </PendingInvitesProvider>,
-  )
-  expect(
-    await screen.findByText("You've been invited to Ready To Roll as admin."),
-  ).toBeTruthy()
+describe('an ordinary session (AGL-4023)', () => {
+  it('joins the invitation with no click and no banner, and opens the workspace', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OrgInvitesBanner placement="shell" />
+      </PendingInvitesProvider>,
+    )
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'accept', inviteId: 'invite-1' }),
+      ),
+    )
+    // From the console home, the joined workspace opens.
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/ready-to-roll'))
+    expect(mockSelectOrg).toHaveBeenCalledWith('org-rtr')
+    expect(screen.queryByText(/You've been invited/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
+
+  it('shows the invitee nothing when the workspace refuses the join', async () => {
+    mockRefuse = true
+    render(
+      <PendingInvitesProvider>
+        <OrgInvitesBanner placement="shell" />
+      </PendingInvitesProvider>,
+    )
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
+    expect(mockSnackbar).not.toHaveBeenCalled()
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(screen.queryByText(/You've been invited/)).toBeNull()
+  })
 })
 
-it('steps the shell banner aside while a page renders the invitation inline', async () => {
-  render(
-    <PendingInvitesProvider>
-      <OrgInvitesBanner placement="shell" />
-      <OrgInvitesBanner placement="inline" />
-    </PendingInvitesProvider>,
-  )
-  await screen.findByText("You've been invited to Ready To Roll as admin.")
-  expect(
-    screen.getAllByText("You've been invited to Ready To Roll as admin."),
-  ).toHaveLength(1)
-})
+describe('a staff impersonation session, which never joins on its own', () => {
+  beforeEach(() => {
+    mockClaims = { impersonatedBy: 'staff-uid' }
+  })
 
-it('accepts, then opens the joined workspace', async () => {
-  render(
-    <PendingInvitesProvider>
-      <OrgInvitesBanner placement="shell" />
-    </PendingInvitesProvider>,
-  )
-  fireEvent.click(await screen.findByRole('button', { name: 'Accept' }))
-  await waitFor(() =>
-    expect(mockPost).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'accept', inviteId: 'invite-1' }),
-    ),
-  )
-  await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/ready-to-roll'))
-  expect(mockSelectOrg).toHaveBeenCalledWith('org-rtr')
-  await waitFor(() =>
-    expect(screen.queryByText(/You've been invited/)).toBeNull(),
-  )
-})
+  it('shows the invitation in the shell banner', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OrgInvitesBanner placement="shell" />
+      </PendingInvitesProvider>,
+    )
+    expect(
+      await screen.findByText("You've been invited to Ready To Roll as admin."),
+    ).toBeTruthy()
+  })
 
-it('asks before declining, and declines only on confirmation', async () => {
-  render(
-    <PendingInvitesProvider>
-      <OrgInvitesBanner placement="shell" />
-    </PendingInvitesProvider>,
-  )
-  fireEvent.click(await screen.findByRole('button', { name: 'Decline' }))
-  expect(
-    await screen.findByText('Decline the invitation to Ready To Roll?'),
-  ).toBeTruthy()
-  expect(mockPost).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }))
-  await waitFor(() =>
-    expect(mockPost).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'decline', inviteId: 'invite-1' }),
-    ),
-  )
-  expect(mockPush).not.toHaveBeenCalled()
-})
+  it('steps the shell banner aside while a page renders the invitation inline', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OrgInvitesBanner placement="shell" />
+        <OrgInvitesBanner placement="inline" />
+      </PendingInvitesProvider>,
+    )
+    await screen.findByText("You've been invited to Ready To Roll as admin.")
+    expect(
+      screen.getAllByText("You've been invited to Ready To Roll as admin."),
+    ).toHaveLength(1)
+  })
 
-it('opens accept/decline for a reviewed invitation (the notification path)', async () => {
-  render(
-    <PendingInvitesProvider>
-      <OpenReview inviteId="invite-1" />
-    </PendingInvitesProvider>,
-  )
-  expect(await screen.findByText('Join Ready To Roll?')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
-})
+  it('accepts, then opens the joined workspace', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OrgInvitesBanner placement="shell" />
+      </PendingInvitesProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept' }))
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'accept', inviteId: 'invite-1' }),
+      ),
+    )
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/ready-to-roll'))
+    expect(mockSelectOrg).toHaveBeenCalledWith('org-rtr')
+    await waitFor(() =>
+      expect(screen.queryByText(/You've been invited/)).toBeNull(),
+    )
+  })
 
-it('says so when the invitation is no longer pending', async () => {
-  render(
-    <PendingInvitesProvider>
-      <OpenReview inviteId="invite-withdrawn" />
-    </PendingInvitesProvider>,
-  )
-  expect(await screen.findByText('Invitation no longer pending')).toBeTruthy()
-  expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  it('asks before declining, and declines only on confirmation', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OrgInvitesBanner placement="shell" />
+      </PendingInvitesProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }))
+    expect(
+      await screen.findByText('Decline the invitation to Ready To Roll?'),
+    ).toBeTruthy()
+    expect(mockPost).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Decline invitation' }))
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'decline', inviteId: 'invite-1' }),
+      ),
+    )
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('opens accept/decline for a reviewed invitation (the notification path)', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OpenReview inviteId="invite-1" />
+      </PendingInvitesProvider>,
+    )
+    expect(await screen.findByText('Join Ready To Roll?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
+  })
+
+  it('says so when the invitation is no longer pending', async () => {
+    render(
+      <PendingInvitesProvider>
+        <OpenReview inviteId="invite-withdrawn" />
+      </PendingInvitesProvider>,
+    )
+    expect(await screen.findByText('Invitation no longer pending')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
 })

@@ -43,8 +43,10 @@ import { usePendingInvites } from '../hooks/use-pending-invites'
  * server keeps every check it already makes: the address must be confirmed
  * and be one of the account's, the seat quota is charged in the same
  * transaction, and an owner hand-off still runs the single sign-on lockout
- * check. A refusal leaves the invitation pending, with the reason shown, for
- * the banner or the workspace page to answer by hand.
+ * check. Every one of those is asked when the invitation is sent, to the
+ * person sending it; a refusal that still happens here (the workspace changed
+ * in between) is recorded on the invitation and told to the sender, never
+ * shown to the invitee, whose next visit tries again.
  *
  * Never during a staff impersonation session: that is staff looking at an
  * account, and joining a workspace is the account holder's own act.
@@ -88,7 +90,7 @@ export function InviteAutoAcceptProvider({ children }: { children: ReactNode }) 
       attempted.current.add(invite.$id)
       setStatuses((current) => ({ ...current, [invite.$id]: 'joining' }))
       const navigate = autoJoinOpensWorkspace(pathnameRef.current, invite.orgSlug)
-      void respond(invite, 'accept', { navigate }).then((accepted) => {
+      void respond(invite, 'accept', { navigate, quiet: true }).then((accepted) => {
         setStatuses((current) => ({
           ...current,
           [invite.$id]: accepted ? 'joined' : 'failed',
