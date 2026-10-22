@@ -24,9 +24,7 @@ content on the marketing site and is written separately.
 
 ### Changed
 
-- **console:** 56 server routines move into tenant-data-admin, 9 helpers into the core; repair the specs #1897 left red
-- **console:** 28 console hooks move into tenant-feature-instance, 23 constants into the core
-- **console:** 124 console utilities move into the core lib's app-utils/console ([AGL-52](https://linear.app/aglyn/issue/AGL-52))
+- **console:** the app→libs sweep slices 3–5 (#1896, #1897, #1898) landed on `main` and were reverted by #1899, so nothing from them ships in this release ([AGL-52](https://linear.app/aglyn/issue/AGL-52))
 
 2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
 
