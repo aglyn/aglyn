@@ -627,18 +627,13 @@ describe('emailText copy a sender composed (AGL-3367)', () => {
     expect(html).toContain(`color:${PLATFORM_EMAIL_ACCENT.link}`)
   })
 
-  it('links a bare email address in the link color, and leaves the period to the prose', () => {
+  it('leaves a bare email address as text, never a mailto link to its domain', () => {
     const { html } = renderEmailHtml({
       nodes: textNodes('owner@example.com created it. Ask help@a.test.'),
       sanitize: SANITIZE,
     })
-    expect(html).toContain(
-      '<a href="mailto:owner@example.com" target="_blank" ' +
-        `style="color:${PLATFORM_EMAIL_ACCENT.link};text-decoration:underline;word-break:break-word;">` +
-        'owner@example.com</a> created it.',
-    )
-    expect(html).toContain('<a href="mailto:help@a.test" ')
-    expect(html).toContain('help@a.test</a>.')
+    expect(html).toContain('owner@example.com created it. Ask help@a.test.')
+    expect(html).not.toContain('mailto:')
   })
 
   it('keeps an address inside a URL part of that URL', () => {
