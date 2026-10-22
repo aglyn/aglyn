@@ -119,10 +119,10 @@ import {
   MenuItem,
   Stack,
   TextField,
-  type Theme,
   Tooltip,
   Typography,
   useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import {
   collection,
@@ -791,7 +791,10 @@ function BesignerPage(props) {
   )
   // Below `md` the editor is a phone or a narrow tablet, where every line the
   // banners take is a line of canvas gone.
-  const compact = useMediaQuery<Theme>((theme) => theme.breakpoints.down('md'), {
+  // `useTheme` rather than a theme callback, as the workspace does: it falls
+  // back to MUI's default theme where no provider is mounted.
+  const theme = useTheme()
+  const compact = useMediaQuery(theme.breakpoints.down('md'), {
     noSsr: true,
   })
 
