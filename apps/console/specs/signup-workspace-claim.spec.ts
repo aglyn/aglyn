@@ -238,6 +238,49 @@ describe('AGL-2590 · creating the workspace', () => {
     })
   })
 
+  it('tries a TYPED name once: a taken address is offered back, not suffixed', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'That workspace URL is taken' }),
+    })
+    await createSignUpWorkspace({} as any, 'Acme Inc')
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('AGL-4024 · retries a DERIVED name once under a suffixed address', async () => {
+    // Two people with the same Google display name: the second one's derived
+    // address is taken, and nobody chose it, so a suffix costs nobody anything.
+    mockAuthorizedFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'That workspace URL is taken' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ orgId: 'o-2', slug: 'acme-inc-x1y2' }),
+      })
+    expect(
+      await createSignUpWorkspace({} as any, 'Acme Inc', { derived: true }),
+    ).toEqual({ slug: 'acme-inc-x1y2', error: null })
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(2)
+    const retry = JSON.parse(mockAuthorizedFetch.mock.calls[1][2].body)
+    expect(retry.name).toBe('Acme Inc')
+    expect(retry.slug).toMatch(/^acme-inc-[0-9a-z]{4}$/)
+  })
+
+  it('does not retry a derived name for any refusal other than a taken address', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: 'Too many workspaces' }),
+    })
+    await createSignUpWorkspace({} as any, 'Acme Inc', { derived: true })
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('reports a thrown request as a failure, not an exception', async () => {
     mockAuthorizedFetch.mockRejectedValue(new Error('offline'))
     expect(await createSignUpWorkspace({} as any, 'Acme Inc')).toEqual({

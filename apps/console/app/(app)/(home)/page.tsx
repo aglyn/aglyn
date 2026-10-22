@@ -451,7 +451,11 @@ function OrgJump() {
         if (active) setProvisionSettled(true)
         return
       }
-      const { slug, error } = await createSignUpWorkspace(user, name)
+      // Only a typed name is offered back on the chooser; any other address
+      // is tried once more under a suffix (AGL-4024).
+      const { slug, error } = await createSignUpWorkspace(user, name, {
+        derived: !pending?.nameWasTyped,
+      })
       if (!slug) releaseSignUpLanding(PROVISION_HOLD_KEY)
       if (slug) {
         // Activation (AGL-1561), counted where the workspace is actually
