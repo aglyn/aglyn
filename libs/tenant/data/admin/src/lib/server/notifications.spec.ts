@@ -530,7 +530,7 @@ describe('the notification email is a system email (AGL-3367)', () => {
     )
     expect(sends).toHaveLength(1)
     expect(sends[0]['replyTo']).toBe('maria@example.com')
-    expect(String(sends[0]['html'])).toContain('Reply to this email to answer <a href="mailto:maria@example.com"')
+    expect(String(sends[0]['html'])).toContain('Reply to this email to answer maria@example.com')
   })
 
   it('never sets a reply address on a staff email', async () => {

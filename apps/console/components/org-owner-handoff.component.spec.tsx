@@ -29,7 +29,14 @@
  */
 
 import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
+import type { AiTierId } from '@aglyn/aglyn'
 import { planSellsAddon } from '@aglyn/aglyn/app-utils/bundle-intent'
+import {
+  AI_TIER_IDS,
+  AI_TIERS,
+  defaultAiTierForPlan,
+  POS_REGISTER_ADDON_MONTHLY_USD,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 
 const mockSnackbar = jest.fn()
@@ -60,7 +67,11 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   },
 }))
 
-import { bundleDraftFromClientBuildIntent, DEFAULT_BUNDLE_DRAFT } from './staff-bundle-fields.component'
+import {
+  bundleDraftBody,
+  bundleDraftFromClientBuildIntent,
+  DEFAULT_BUNDLE_DRAFT,
+} from './staff-bundle-fields.component'
 import {
   bundleDomainFromClientBuildIntent,
   EMPTY_BUNDLE_DOMAIN,
@@ -267,6 +278,8 @@ describe('the staff org page’s bundle link card (AGL-3995)', () => {
       addons: { siteCare: 1, aiAddon: 1 },
       interval: 'month',
       coupon: 'BOOTH25',
+      // The tier the picker shows: the plan's default until staff pick one (AGL-4025).
+      aiTier: defaultAiTierForPlan('pro'),
       domain: { name: 'harborplumbing.com', firstYearCents: 1125, renewalCents: 1899, hostId: 'host-1' },
     })
   })
@@ -299,6 +312,109 @@ describe('the staff org page’s bundle link card (AGL-3995)', () => {
     // The page reads the same build again: an equal record changes nothing.
     view.rerender(<StaffBundleLinkCard orgId="org-1" sites={[...SITES]} build={{ ...BUILD, intent: { ...REGISTER } }} />)
     expect(value(card(), 'Coupon code (optional)')).toBe('DOOR10')
+  })
+})
+
+describe('the Aglyn AI tier beside the staff bundle’s AI switch (AGL-4025)', () => {
+  const card = () => screen.getByRole('button', { name: 'Copy bundle link' }).closest('.MuiCard-root') as HTMLElement
+  const tierField = (scope: HTMLElement) => within(scope).queryByRole('combobox', { name: 'Aglyn AI tier' })
+  const pickTier = async (scope: HTMLElement, tier: AiTierId) => {
+    fireEvent.mouseDown(tierField(scope)!)
+    const listbox = await screen.findByRole('listbox')
+    const { label, monthlyUsd } = AI_TIERS[tier]
+    fireEvent.click(within(listbox).getByRole('option', { name: new RegExp(`^${label} — \\$${monthlyUsd}/mo`) }))
+  }
+
+  it('shows no tier until Aglyn AI is on, then every tier with its price, on the plan’s default', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
+    await act(async () => undefined)
+    expect(checked(card(), /^Aglyn AI/)).toBe(false)
+    expect(tierField(card())).toBeNull()
+    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
+    const field = tierField(card())!
+    const starter = AI_TIERS[defaultAiTierForPlan('starter')!]
+    expect(field.textContent).toBe(`${starter.label} — $${starter.monthlyUsd}/mo`)
+    fireEvent.mouseDown(field)
+    const options = within(await screen.findByRole('listbox')).getAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual(
+      AI_TIER_IDS.map(
+        (tier) =>
+          `${AI_TIERS[tier].label} — $${AI_TIERS[tier].monthlyUsd}/mo` +
+          `+${AI_TIERS[tier].credits.toLocaleString()} credits a month`,
+      ),
+    )
+  })
+
+  it('the tier staff pick is the one the link is minted with', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
+    await act(async () => undefined)
+    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
+    await pickTier(card(), 'plus')
+    expect(tierField(card())!.textContent).toBe(`Plus — $${AI_TIERS.plus.monthlyUsd}/mo`)
+    expect(await mintedBy(card())).toMatchObject({
+      plan: 'starter',
+      addons: { siteCare: 1, aiAddon: 1 },
+      interval: 'year',
+      aiTier: 'plus',
+    })
+    // The QR's summary names the tier the link carries.
+    await act(async () => {
+      fireEvent.click(within(card()).getByRole('button', { name: 'QR' }))
+    })
+    expect(screen.getByText('Starter with Aglyn AI Plus and Site Care, billed yearly')).toBeTruthy()
+  })
+
+  it('a tier with Aglyn AI switched off again goes nowhere', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
+    await act(async () => undefined)
+    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
+    await pickTier(card(), 'max')
+    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
+    expect(tierField(card())).toBeNull()
+    const body = await mintedBy(card())
+    expect(body).not.toHaveProperty('aiTier')
+    expect(body['addons']).toEqual({ siteCare: 1 })
+  })
+
+  it('the hand-off proposes the tier staff pick', async () => {
+    render(<StaffOrgOwnerHandoff orgId="org-1" sites={SITES} build={{ intent: REGISTER, hostId: 'host-1' }} />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Hand off' }))
+    })
+    const dialog = screen.getByRole('dialog')
+    await pickTier(dialog, 'ultra')
+    expect(await mintedBy(dialog)).toMatchObject({ plan: 'pro', aiTier: 'ultra' })
+    expect(bundleDraftBody({ ...DEFAULT_BUNDLE_DRAFT, addons: { aiAddon: 1 }, aiTier: 'ultra' })).toEqual({
+      plan: 'starter',
+      addons: { aiAddon: 1 },
+      interval: 'year',
+      aiTier: 'ultra',
+    })
+  })
+})
+
+describe('POS registers on the staff bundle (AGL-4025)', () => {
+  const card = () => screen.getByRole('button', { name: 'Copy bundle link' }).closest('.MuiCard-root') as HTMLElement
+  const registers = () => within(card()).getByLabelText('POS register') as HTMLInputElement
+
+  it('show on Starter, disabled with the plan they need, rather than left off', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
+    await act(async () => undefined)
+    expect(combobox(card(), 'Plan')).toBe('Starter')
+    expect(registers().disabled).toBe(true)
+    expect(within(card()).getByText('Needs Pro or higher')).toBeTruthy()
+    expect((await mintedBy(card()))['addons']).toEqual({ siteCare: 1 })
+  })
+
+  it('on Pro they are priced, and the count staff enter is on the link', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
+    await act(async () => undefined)
+    fireEvent.mouseDown(within(card()).getByRole('combobox', { name: 'Plan' }))
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Pro' }))
+    expect(registers().disabled).toBe(false)
+    expect(within(card()).getByText(`$${POS_REGISTER_ADDON_MONTHLY_USD}/mo each`)).toBeTruthy()
+    fireEvent.change(registers(), { target: { value: '2' } })
+    expect(await mintedBy(card())).toMatchObject({ plan: 'pro', addons: { siteCare: 1, posRegisters: 2 } })
   })
 })
 

@@ -686,6 +686,7 @@ async function handler(request: Request): Promise<Response> {
             addons: proposalInput['addons'],
             interval: proposalInput['interval'],
             coupon: proposalInput['coupon'],
+            aiTier: proposalInput['aiTier'],
             actor: { uid: decoded.uid, email: decoded.email ?? null },
           })
           // Checked before anything is written, and again in the transaction.
