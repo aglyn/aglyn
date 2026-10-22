@@ -80,7 +80,10 @@ export class DndManager {
       if (node && !canvas.nodeAcceptsChildren(node)) return node.parent
       return this.drop
     }
-    return canvas.getNode(this.drop.$id).parent
+    // The target can be gone by the time this is read — undone, or removed
+    // by a co-editor mid-drag. Nothing to resolve against, rather than a
+    // throw out of the drag's end that would leave its state painted.
+    return canvas.getNode(this.drop.$id)?.parent ?? null
   }
 
   public get hasDragTarget(): boolean {
@@ -265,9 +268,29 @@ export class DndManager {
     return this
   }
   public onDragEnd() {
-    if (!this.drop || !this.drag) return
-    if (this.dropIsInsideDrag) return
-    if (!this.isValidLinealRelationship) return
+    // Every drag ends by clearing, landed, refused or thrown. A drag that
+    // left its state set kept painting it — the dragged node's wash, the
+    // ring on the target and every ancestor of it, the hierarchy row that
+    // stops taking drops while it is dragged — until the next drag began.
+    try {
+      this.landDrop()
+    } finally {
+      this.clearDndStatus()
+    }
+  }
+
+  /** Commits the pending drop, or does nothing when it would be refused. */
+  private landDrop() {
+    if (
+      !this.drop ||
+      !this.drag ||
+      // Gone since the pointer got there: there is no slot left to name.
+      !canvas.getNode(this.drop.$id) ||
+      this.dropIsInsideDrag ||
+      !this.isValidLinealRelationship
+    ) {
+      return
+    }
 
     const dragNode = this.drag
     const dropNode = this.drop
@@ -306,10 +329,7 @@ export class DndManager {
     // it would deepen the same hole. `reparentNode` refuses this outright
     // now (AGL-1405); catch it here so a drag ends quietly instead of
     // throwing out of the pointer handler.
-    if (!parent || !canvas.nodeAcceptsChildren(parent)) {
-      this.clearDndStatus()
-      return
-    }
+    if (!parent || !canvas.nodeAcceptsChildren(parent)) return
 
     if (dragNode.type === NodeType.PRESET) {
       canvas.addNodeFromPreset(dragNode as Aglyn.PresetSchema<any>, parent, position)
@@ -363,8 +383,6 @@ export class DndManager {
         if (!Number.isNaN(position)) position += 1
       }
     }
-
-    this.clearDndStatus()
   }
 }
 

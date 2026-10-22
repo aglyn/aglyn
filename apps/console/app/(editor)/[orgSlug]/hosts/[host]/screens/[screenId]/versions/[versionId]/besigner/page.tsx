@@ -121,6 +121,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import {
   collection,
@@ -767,7 +769,34 @@ function BesignerPage(props) {
       | undefined,
     enabled: screenDialog,
   })
-  const chromeContextValue = useMemo(() => ({ chromeCanvas }), [chromeCanvas])
+  const layoutEditHref = layoutVersionId
+    ? buildRoute(Route.LAYOUT_BESIGNER, {
+        orgSlug,
+        host,
+        layoutId,
+        versionId: layoutVersionId,
+      })
+    : undefined
+  const layoutName = layoutResult?.data?.displayName
+  const chromeContextValue = useMemo(
+    () => ({
+      chromeCanvas,
+      // What a click on one of the layout's elements on the canvas offers
+      // (see LayoutPartMenu): its name, and its own editor in a new tab.
+      layout: layoutId
+        ? { id: layoutId, name: layoutName, editHref: layoutEditHref }
+        : undefined,
+    }),
+    [chromeCanvas, layoutId, layoutName, layoutEditHref],
+  )
+  // Below `md` the editor is a phone or a narrow tablet, where every line the
+  // banners take is a line of canvas gone.
+  // `useTheme` rather than a theme callback, as the workspace does: it falls
+  // back to MUI's default theme where no provider is mounted.
+  const theme = useTheme()
+  const compact = useMediaQuery(theme.breakpoints.down('md'), {
+    noSsr: true,
+  })
 
   const handleProtectionSave = useCallback(async () => {
     if (protectPassword == null) return
@@ -2301,15 +2330,56 @@ function BesignerPage(props) {
                           target={{ type: 'screen', id: screenId }}
                           sx={{ position: 'relative', zIndex: 'appBar' }}
                         />
+                        {/* Around the layout banner as well as the canvas: the
+                            banner's restyle picker lists the layout's
+                            elements from this context, and outside it the
+                            picker found none and stayed disabled. */}
+                        <LayoutChromeContext.Provider
+                          value={chromeContextValue}
+                        >
                         {layoutId ? (
                           <Alert
                             severity="info"
-                            sx={{
+                            // One line on a phone: the layout's name and the
+                            // two ways into it. The sentence wrapped to four
+                            // lines there, over the canvas it describes, and
+                            // the layout's own elements now offer the same
+                            // two things when tapped.
+                            icon={compact ? false : undefined}
+                            sx={(theme) => ({
                               borderRadius: 0,
                               // Stack above the canvas selection overlays.
                               position: 'relative',
                               zIndex: 'appBar',
-                            }}
+                              ...(compact
+                                ? {
+                                    py: 0,
+                                    px: 1.5,
+                                    alignItems: 'center',
+                                    // The console theme puts an Alert's
+                                    // actions on a line of their own below
+                                    // `sm`. Two short words fit beside the
+                                    // name, which gives way instead.
+                                    [theme.breakpoints.down('sm')]: {
+                                      flexWrap: 'nowrap',
+                                    },
+                                    '& .MuiAlert-message': {
+                                      py: 0.75,
+                                      flex: '1 1 auto',
+                                      minWidth: 0,
+                                    },
+                                    '& .MuiAlert-action': {
+                                      pt: 0,
+                                      mr: 0,
+                                      alignItems: 'center',
+                                      [theme.breakpoints.down('sm')]: {
+                                        flexBasis: 'auto',
+                                        flexShrink: 0,
+                                      },
+                                    },
+                                  }
+                                : {}),
+                            })}
                             action={
                               <Stack direction="row" spacing={0.5}>
                                 {/* The page may restyle the layout's elements
@@ -2317,7 +2387,8 @@ function BesignerPage(props) {
                                     layout's. */}
                                 <LayoutStylePickerButton
                                   layoutId={layoutId}
-                                  layoutName={layoutResult?.data?.displayName}
+                                  layoutName={layoutName}
+                                  label={compact ? 'Restyle' : undefined}
                                 />
                                 <Button
                                   color="inherit"
@@ -2325,31 +2396,25 @@ function BesignerPage(props) {
                                   component={AppLink}
                                   componentVariant="naked"
                                   nativeButton={false}
-                                  disabled={!layoutVersionId}
-                                  href={
-                                    layoutVersionId
-                                      ? buildRoute(Route.LAYOUT_BESIGNER, {
-                                          orgSlug,
-                                          host,
-                                          layoutId,
-                                          versionId: layoutVersionId,
-                                        })
-                                      : undefined
-                                  }
+                                  disabled={!layoutEditHref}
+                                  href={layoutEditHref}
                                 >
-                                  {'Edit layout'}
+                                  {compact ? 'Edit' : 'Edit layout'}
                                 </Button>
                               </Stack>
                             }
                           >
-                            {`Shared layout "${
-                              layoutResult?.data?.displayName ?? layoutId
-                            }" frames this page — its content is locked here, but you can restyle its elements for this page.`}
+                            {compact ? (
+                              <Typography variant="body2" noWrap>
+                                {`Layout "${layoutName ?? layoutId}"`}
+                              </Typography>
+                            ) : (
+                              `Shared layout "${
+                                layoutName ?? layoutId
+                              }" frames this page — its content is locked here, but you can restyle its elements for this page, or click one to edit the layout in a new tab.`
+                            )}
                           </Alert>
                         ) : null}
-                        <LayoutChromeContext.Provider
-                          value={chromeContextValue}
-                        >
                           <WorkspaceEditorComponent>
                             <ViewportRootComponent>
                               <ViewportCanvasComponent />
