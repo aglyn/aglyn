@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.279 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.278...v1.0.0-beta.279)
+
+### Added
+
+- **invites:** invitations take effect on their own, no Accept step (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **legal:** pin Legal v19, Syria leaves Terms §3.6 and the console geo-block
+
+### Fixed
+
+- **auth:** signing in keeps the page's query string ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+### Changed
+
+- **console:** 56 server routines move into tenant-data-admin, 9 helpers into the core; repair the specs #1897 left red
+- **console:** 28 console hooks move into tenant-feature-instance, 23 constants into the core
+- **console:** 124 console utilities move into the core lib's app-utils/console ([AGL-52](https://linear.app/aglyn/issue/AGL-52))
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.278 — 2026-10-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.277...v1.0.0-beta.278)
