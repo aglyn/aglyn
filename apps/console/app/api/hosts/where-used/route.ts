@@ -37,7 +37,7 @@ import {
   scanScreenUsage,
   type CollectionCandidate,
   type UsageCandidate,
-} from '../../../../utils/server/scan-artifact-usage'
+} from '@aglyn/tenant-data-admin/server/console/scan-artifact-usage'
 import {
   readSystemEmailUsageCandidates,
   readUsageCandidates,

@@ -50,7 +50,7 @@ import {
   rowBelongsTo,
   type GlobalSearchEntityDef,
 } from '../../../components/global-search/global-search-scope'
-import { buildRoute, Route } from '../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 /**
  * THE ONE BOX, ON THE SERVER (AGL-3943): what `GET /api/search` answers the

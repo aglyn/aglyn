@@ -79,7 +79,7 @@ import MainLayout from '../components/layouts/main.layout'
 import {
   isNativeAppWebView,
   markNativeAppWebView,
-} from '../utils/besigner-entry'
+} from '@aglyn/aglyn/app-utils/console/besigner-entry'
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 

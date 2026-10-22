@@ -45,7 +45,7 @@ import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
 } from '../../../../utils/internal-traffic'
-import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
+import { configuredPriceFault } from '@aglyn/aglyn/app-utils/console/stripe-price-fault'
 import {
   ADDON_KINDS,
   addonMaxForPlan,

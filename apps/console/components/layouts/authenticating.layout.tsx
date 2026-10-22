@@ -29,10 +29,10 @@ import { useEffect, useRef } from 'react'
 import {
   isSignUpLandingHeld,
   useSignUpLandingHeld,
-} from '../../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
-import { emailGateWouldRefuse } from '../../utils/email-verification-gate'
-import { mintSession } from '../../utils/session-mint'
+import { emailGateWouldRefuse } from '@aglyn/aglyn/app-utils/console/email-verification-gate'
+import { mintSession } from '@aglyn/aglyn/app-utils/console/session-mint'
 import { VisitorConsentPill } from '../visitor-consent.component'
 
 export interface AuthenticatingLayoutProps

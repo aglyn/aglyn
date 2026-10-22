@@ -30,14 +30,14 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import { type StaffListPage, useStaffListPagination } from '../hooks/use-staff-list-pagination'
+import { type StaffListPage, useStaffListPagination } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-pagination'
 import {
   STAFF_MEDIA_COLUMN_SORTS,
   STAFF_MEDIA_SORT,
   type StaffMediaRow,
   staffMediaSizeLabel,
   staffMediaTypeLabel,
-} from '../utils/staff-media-library'
+} from '@aglyn/aglyn/app-utils/console/staff-media-library'
 import StaffListPaginationControls from './staff-list-pagination.component'
 import StaffMediaAssetDialog from './staff-media-asset-dialog.component'
 

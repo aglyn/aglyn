@@ -27,14 +27,14 @@ import {
   PUBLISH_OUTBOX_MAX_PATHS,
   PUBLISH_OUTBOX_STALE_MS,
   sanitizePublishOutboxPaths,
-} from '../../../../constants/publish-outbox'
+} from '@aglyn/aglyn/app-utils/console/publish-outbox'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   postTenantRevalidate,
   wholeHostPaths,
-} from '../../../../utils/server/tenant-revalidate'
-import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
+} from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
 
 /**
  * DRAIN THE PUBLISH OUTBOX (AGL-2575).

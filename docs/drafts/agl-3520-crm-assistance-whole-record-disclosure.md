@@ -148,7 +148,7 @@ flag-off behavior; the whole-record text they take on is in §7.
    `apps/console/constants/subprocessor-inventory-plugins.spec.ts`; bump the acceptance-pinned
    legal label in `apps/console/constants/legal-documents.ts`.
 3. Put the §7 text into the docs, and take the flag out of `FLAGS_WITHOUT_DOCS` in
-   `apps/console/constants/docs-release-flags.ts` (or declare it in
+   `libs/aglyn/src/lib/app-utils/console/docs-release-flags.ts` (or declare it in
    `PUBLISHED_ON_IN_PRODUCTION` if the default stays off).
 4. Promote, then turn the flag on — one organization through its override first, then
    everyone.

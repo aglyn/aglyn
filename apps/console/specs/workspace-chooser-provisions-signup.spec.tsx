@@ -35,6 +35,7 @@
 
 import { act, render, screen } from '@testing-library/react'
 import React from 'react'
+import * as signUpLandingHoldModule from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 
 const mockReplace = jest.fn()
 const mockNavigate = jest.fn()
@@ -54,7 +55,7 @@ let mockScope: {
 
 // The reader's workspace pins (AGL-3762) are a read of their own account
 // document; none of these assertions is about them.
-jest.mock('../hooks/use-pinned-orgs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
   default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
@@ -80,7 +81,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
   useOrgSlug: () => '',
 }))
-jest.mock('../hooks/use-pending-invites', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 jest.mock('firebase/firestore', () => ({
@@ -226,7 +227,7 @@ describe('AGL-2590 · the first verified session gets the workspace', () => {
     // The bounce's navigation keeps this document alive until the other host
     // answers. A claim started in that gap cleared the held name, and the
     // create never left the page, so the canary landed on "0 workspaces".
-    const leave = require('../utils/sign-up-landing-hold')
+    const leave = signUpLandingHoldModule
     mockStoredUserDoc = { pendingSignUpWorkspace: held() }
     leave.markLeavingConsole()
     try {

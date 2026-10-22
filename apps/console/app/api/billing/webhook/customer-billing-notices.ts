@@ -17,8 +17,8 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import { PLAN_LABELS, readOrgPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { updatePaymentMethodHref } from '../../../../utils/update-payment-method-link'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import { updatePaymentMethodHref } from '@aglyn/aglyn/app-utils/console/update-payment-method-link'
 
 /**
  * WHAT THE BILLING WEBHOOK TELLS A WORKSPACE'S ADMINS (AGL-3432).

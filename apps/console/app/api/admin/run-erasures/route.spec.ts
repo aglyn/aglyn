@@ -90,7 +90,7 @@ jest.mock('../../_lib/render-system-email', () => ({
 
 // The person queue has its own spec; here it is empty, so the workspace
 // batch is what the assertions see.
-jest.mock('../../../../utils/server/run-person-erasures', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/run-person-erasures', () => ({
   runPersonErasures: async () => ({ erased: [], failed: [], scanned: 0 }),
   countPendingPersonErasures: async () => ({ pending: 0, truncated: false, maxPerRun: 25 }),
 }))

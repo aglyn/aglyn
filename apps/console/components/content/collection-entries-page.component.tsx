@@ -108,7 +108,7 @@ import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-so
 import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
-import { buildRoute, Route } from '../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { fetchArtifactUsage } from '../artifacts/artifact-delete-confirm.component'
 import type { ArtifactUsageScan } from '../artifacts/artifact-usage-copy'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
@@ -116,7 +116,7 @@ import CollectionDeleteDialog from './collection-delete-dialog.component'
 import {
   AVATAR_HINT,
   SOCIAL_IMAGE_HINT,
-} from '../../constants/media-size-hints'
+} from '@aglyn/aglyn/app-utils/console/media-size-hints'
 import {
   MEDIA_ALT_MAX_LENGTH,
   inheritedMediaAlt,
@@ -152,7 +152,7 @@ import {
 import {
   ENTRY_LIST_FILTER_FIELDS,
   ENTRY_LIST_FILTER_HEADERS,
-} from '../../utils/list-filters'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
 
 /**
  * Entries tab id (AGL-2486); `?tab=entries` deep links land here. The value

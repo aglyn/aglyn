@@ -78,7 +78,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SITE_LOGO_HINT } from '../../../../../constants/media-size-hints'
+import { SITE_LOGO_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -91,7 +91,7 @@ import { usePluginListColumns } from '../../../../../components/plugin-list-colu
 import MainLayout from '../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
-import { buildRoute, Route } from '../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffSiteDoorFlags from '../../../../../components/staff-site-door-flags.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
@@ -117,13 +117,13 @@ import StaffOrgUsageTable, {
 import StaffOrgSummaryCard, {
   type StaffPerson,
 } from '../../../../../components/staff-org-summary-card.component'
-import { fetchAllPages } from '../../../../../utils/fetch-all-pages'
+import { fetchAllPages } from '@aglyn/aglyn/app-utils/console/fetch-all-pages'
 import {
   staffBillingCustomerChipLabel,
   staffBillingHistoryEmptyState,
-} from '../../../../../utils/stripe-mode-notice'
+} from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
-import { useIsStaff } from '../../../../../hooks/use-is-staff'
+import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
 import AccountAvatar from '../../../../../components/account-avatar.component'

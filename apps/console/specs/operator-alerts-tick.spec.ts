@@ -91,7 +91,40 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
   }
 })
-jest.mock('../utils/server/email-health', () => ({
+
+// The moved server routines import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-data-admin/server/operator-health', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/operator-health'),
+  get healthStateOfBody() {
+    return jest.requireMock('@aglyn/tenant-data-admin').healthStateOfBody
+  },
+  get HEALTH_SERVICE_LABELS() {
+    return jest.requireMock('@aglyn/tenant-data-admin').HEALTH_SERVICE_LABELS
+  },
+  get recordHealthState() {
+    return jest.requireMock('@aglyn/tenant-data-admin').recordHealthState
+  },
+  get escalateStillDegradedHealth() {
+    return jest.requireMock('@aglyn/tenant-data-admin').escalateStillDegradedHealth
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/operator-alerts', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/operator-alerts'),
+  get raiseOperatorAlert() {
+    return jest.requireMock('@aglyn/tenant-data-admin').raiseOperatorAlert
+  },
+  get sendOperatorAlertDigest() {
+    return jest.requireMock('@aglyn/tenant-data-admin').sendOperatorAlertDigest
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
+  get firebaseAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/console/email-health', () => ({
   evaluateEmailHealth: async () => ({ healthy: true }),
 }))
 
@@ -101,7 +134,7 @@ import {
   runOperatorAlertsTick,
   runSupportSlaSweep,
   TENANT_HEALTH_PATHS,
-} from '../utils/server/operator-alerts-tick'
+} from '@aglyn/tenant-data-admin/server/console/operator-alerts-tick'
 
 /** What the sweep reads of a response: its status and its JSON. */
 function answer(status: number, body: unknown) {

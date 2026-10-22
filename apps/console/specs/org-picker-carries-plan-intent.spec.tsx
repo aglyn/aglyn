@@ -48,7 +48,7 @@ let capturedDestination: ((orgSlug: string) => string) | undefined
 
 // The reader's workspace pins (AGL-3762) are a read of their own account
 // document; none of these assertions is about them.
-jest.mock('../hooks/use-pinned-orgs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
   default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
@@ -83,7 +83,7 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => mockScope,
   useOrgSlug: () => '',
 }))
-jest.mock('../hooks/use-pending-invites', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 jest.mock('firebase/firestore', () => ({
@@ -94,6 +94,17 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
   useUser: () => ({ data: { uid: 'u-1' } }),
+}))
+
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useFirestore() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useFirestore
+  },
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
 }))
 jest.mock('../components/layouts/dashboard.layout', () => ({
   __esModule: true,

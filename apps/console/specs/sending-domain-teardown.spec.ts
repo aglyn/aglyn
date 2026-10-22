@@ -105,6 +105,15 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+// The moved server routines import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/firebase-admin'),
+  get firebaseAdmin() {
+    return jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin
+  },
+}))
+
 import { teardownSendingDomain } from '../utils/server/provision-sending-domain'
 import { sharedSendingPool } from '@aglyn/shared-util-email'
 

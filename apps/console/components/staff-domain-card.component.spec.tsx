@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 jest.mock('firebase/firestore', () => ({ doc: () => ({}) }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
-jest.mock('../constants/entitlements', () => ({ hasEntitlement: () => true }))
+jest.mock('@aglyn/aglyn/app-utils/console/entitlements', () => ({ hasEntitlement: () => true }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'starter' }, ready: true, orgId: 'org-1' }),
@@ -71,7 +71,7 @@ jest.mock('../hooks/use-current-org', () => ({
 // Only the CLAIM is doubled. `staff-super-only.component` itself is real, so
 // the gate around Re-attach is the shipped one rather than a stand-in — a
 // mocked gate would let a card that forgot to wrap the button pass.
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useStaffRole: () => mockRole,
   useIsStaff: () => mockRole !== null,
@@ -143,7 +143,7 @@ describe('the staff card reports the live verdict, not just the name', () => {
   })
 
   it('says the SAME words the customer is reading (AGL-2011)', async () => {
-    // The whole point of sharing `utils/domain-status.ts` rather than writing
+    // The whole point of sharing `@aglyn/aglyn/app-utils/console/domain-status` rather than writing
     // a second vocabulary. Reword either surface independently and this fails.
     serveStatus({ ...SERVING, state: 'dns-misconfigured' })
     const staff = render(<StaffDomainCard hostId="host-1" host={host()} />)

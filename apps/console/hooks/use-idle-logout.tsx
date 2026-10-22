@@ -19,11 +19,11 @@
 import { signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
-import { markInteractiveSignOut } from '../utils/interactive-signin'
+import { markInteractiveSignOut } from '@aglyn/aglyn/app-utils/console/interactive-signin'
 import {
   captureReauthIdentity,
   requestSessionReauth,
-} from '../utils/session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 
 const IDLE_TIMEOUT_MINUTES = Number(
   process.env.NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES ?? '120',

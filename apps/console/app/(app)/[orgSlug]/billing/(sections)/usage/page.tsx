@@ -38,10 +38,10 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../../components/plugin-widget-slot.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useConfirmedDoc from '@aglyn/tenant-feature-instance/hooks/use-confirmed-doc'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
-import { useOrgHosts } from '../../../../../../hooks/use-org-hosts'
+import { useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 

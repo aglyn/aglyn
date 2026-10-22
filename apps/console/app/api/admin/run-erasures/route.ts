@@ -37,18 +37,18 @@ import { teardownSendingDomain } from '../../../../utils/server/provision-sendin
 import {
   countPendingPersonErasures,
   runPersonErasures,
-} from '../../../../utils/server/run-person-erasures'
+} from '@aglyn/tenant-data-admin/server/console/run-person-erasures'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   ERASURE_LIST_QUERY,
   ERASURE_LIST_SORT,
   erasureQuerySort,
   splitErasureStateClauses,
-} from '../../../../utils/pending-erasures-list-query'
+} from '@aglyn/aglyn/app-utils/console/pending-erasures-list-query'
 import {
   readStaffListQuery,
   runStaffListQuery,
-} from '../../../../utils/server/staff-list-query'
+} from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -189,7 +189,7 @@ async function handler(request: Request): Promise<Response> {
        * the runner takes them in — and paged by a cursor in that order
        * (AGL-3321). `orderBy` on the field is what limits the read to
        * organizations that HAVE a request. State is a range over that same
-       * field, read now (`utils/pending-erasures-list-query.ts`). Nothing is
+       * field, read now (`@aglyn/aglyn/app-utils/console/pending-erasures-list-query`). Nothing is
        * matched over rows already read, and what the plan could not apply
        * comes back in `refused`.
        */

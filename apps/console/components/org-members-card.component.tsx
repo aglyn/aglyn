@@ -70,19 +70,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
-import { checkOrgSeatQuota } from '../constants/entitlements'
-import { buildRoute, Route } from '../constants/route-links'
+import { checkOrgSeatQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
-import useIsStaff from '../hooks/use-is-staff'
-import { useOrgHosts } from '../hooks/use-org-hosts'
+import useIsStaff from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
+import { useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import {
   ORG_MEMBER_FILTER_FIELDS,
   ORG_MEMBER_FILTER_HEADERS,
   ORG_MEMBER_FILTER_OPTIONS,
   ORG_MEMBER_SELECT_FIELDS,
-} from '../utils/org-member-list-query'
+} from '@aglyn/aglyn/app-utils/console/org-member-list-query'
 import MemberAvatar from './member-avatar.component'
 import {
   OWNER_HANDOFF_HINT,
@@ -132,7 +132,7 @@ const HOST_ROLE_HINTS: Record<HostAccessRole | 'none', string> = {
 /*
  * What the roster grid's Filters panel and quick search offer (AGL-3317,
  * AGL-3321): Role, Access and a search of the name, address and job title —
- * each served by the roster's QUERY (`utils/org-member-list-query.ts`),
+ * each served by the roster's QUERY (`@aglyn/aglyn/app-utils/console/org-member-list-query`),
  * never matched over the roster the card holds.
  */
 /** How many pages of matches the card follows before it stops asking. */
@@ -247,7 +247,7 @@ export function OrgMembersCard() {
    *
    * FILTERED BY THE ROSTER'S QUERY (AGL-3321). A Filters clause or a search
    * word is not matched over `members`: the route plans them onto its query
-   * (`utils/org-member-list-query.ts`) and the card lists every member that
+   * (`@aglyn/aglyn/app-utils/console/org-member-list-query`) and the card lists every member that
    * query answers, following its cursor, and says what it could not take.
    */
   const gridFilter = useListGridFilter({ selectFields: ORG_MEMBER_SELECT_FIELDS })

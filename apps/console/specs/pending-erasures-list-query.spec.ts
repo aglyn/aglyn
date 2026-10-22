@@ -39,7 +39,7 @@ import {
   splitErasureStateClauses,
   ERASURE_COLUMN_SORTS,
   erasureQuerySort,
-} from '../utils/pending-erasures-list-query'
+} from '@aglyn/aglyn/app-utils/console/pending-erasures-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

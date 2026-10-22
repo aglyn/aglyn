@@ -32,7 +32,7 @@ import {
   planInvoiceQuery,
   readInvoiceQueryParams,
   stripeInvoiceSearchQuery,
-} from '../utils/billing-invoice-query'
+} from '@aglyn/aglyn/app-utils/console/billing-invoice-query'
 
 export {}
 

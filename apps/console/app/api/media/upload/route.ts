@@ -32,13 +32,13 @@ import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
-} from '../../../../utils/storage-overage'
-import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
-import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
-import { scheduleMediaDeliveryCopies } from '../../../../utils/server/media-delivery-copies'
-import { videoUploadFields } from '../../../../utils/server/media-video-fields'
-import { embeddedMetadataAtIngress } from '../../../../utils/server/media-embedded'
-import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
+} from '@aglyn/tenant-data-admin/server/console/storage-overage'
+import { resolveOrgMediaBand } from '@aglyn/tenant-data-admin/server/console/media-storage-band'
+import { resolveUploadSite } from '@aglyn/tenant-data-admin/server/console/media-upload-site'
+import { scheduleMediaDeliveryCopies } from '@aglyn/tenant-data-admin/server/console/media-delivery-copies'
+import { videoUploadFields } from '@aglyn/tenant-data-admin/server/console/media-video-fields'
+import { embeddedMetadataAtIngress } from '@aglyn/tenant-data-admin/server/console/media-embedded'
+import { videoUploadPausedRefusal } from '@aglyn/tenant-data-admin/server/console/video-uploads'
 import {
   deleteMediaWithTombstone,
   emailUnverifiedResponse,
@@ -54,7 +54,7 @@ import {
   mediaObjectPath,
   resolveMediaScope,
   mediaCdnPathUpdate,
-} from '../../../../utils/server/media-scope'
+} from '@aglyn/tenant-data-admin/server/console/media-scope'
 
 import {
   directUploadMaxBytes,
@@ -63,12 +63,12 @@ import {
   normalizeUploadContentType,
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
-} from '../../../../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import {
   AUDIO_RIGHTS_FIELD,
   audioRightsRefusal,
   audioRightsVerdict,
-} from '../../../../utils/media-audio-rights'
+} from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
@@ -102,7 +102,7 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
+    // lockdown-423: via libs/tenant/data/admin/src/lib/server/console/media-scope.ts — the scope
     // resolver runs the verdict on the org/host docs it already reads and
     // hands the 423 refusal back as `error.response`. This is an INGRESS
     // route, so it also passes the UPLOADS feature gate (AGL-1510).

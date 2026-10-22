@@ -39,12 +39,12 @@ import FeatureGate from '../../../../components/feature-gate.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import PluginHubRail from '../../../../components/plugin-hub-rail.component'
 import { resolveDocsHelpTarget } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useConsoleRoutePlugins } from '../../../../hooks/use-console-plugins'
 import { useFilledZones } from '../../../../hooks/use-filled-zones'
 import useCurrentOrg from '../../../../hooks/use-current-org'
-import useOrgHosts from '../../../../hooks/use-org-hosts'
+import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { useOrgReach } from '../../../../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -55,24 +55,24 @@ import {
   resolveExtensionEntitlement,
   resolveUpgradeNoticeAnchor,
   upgradeNoticeMessage,
-} from '../../../../utils/extension-entitlement'
+} from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 import {
   composeExtensionPermissions,
   refusedExtensionNotice,
   requiredExtensionPermissions,
   resolveExtensionPermission,
-} from '../../../../utils/extension-permission'
-import { resolveOrgMount } from '../../../../utils/org-mount'
+} from '@aglyn/aglyn/app-utils/console/extension-permission'
+import { resolveOrgMount } from '@aglyn/aglyn/app-utils/console/org-mount'
 import {
   orgPluginScopedNotice,
   resolveOrgPluginReach,
-} from '../../../../utils/org-plugin-surfaces'
+} from '@aglyn/aglyn/app-utils/console/org-plugin-surfaces'
 import {
   hubLandingHref,
   hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
-} from '../../../../utils/plugin-hub-sections'
+} from '@aglyn/aglyn/app-utils/console/plugin-hub-sections'
 
 /** `children` behind `flag`, or plain when the surface declares no flag. */
 function wrapInGate(

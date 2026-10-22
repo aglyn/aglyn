@@ -103,7 +103,10 @@ export const WATCHED = Object.freeze([
     ]),
   }),
   Object.freeze({
-    path: 'apps/console/utils/usage-metering.ts',
+    path: 'libs/aglyn/src/lib/app-utils/console/usage-metering.ts',
+    // Where it lived before it moved into the core lib, for a base ref older
+    // than the move — read there, a rename is a move, never "the rates went".
+    previousPaths: Object.freeze(['apps/console/utils/usage-metering.ts']),
     records: Object.freeze([]),
     rateTables: Object.freeze(['METERED_UNIT_RATES_USD']),
     scalars: Object.freeze([]),

@@ -35,7 +35,7 @@ import { describeStaffAudit } from '@aglyn/aglyn/app-utils/activity-labels'
 import ActivityDetailsDialog, {
   type ActivityDetails,
 } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
-import { staffActivityLinks } from '../../../../utils/activity-details'
+import { staffActivityLinks } from '@aglyn/aglyn/app-utils/console/activity-details'
 import {
   type ListFilterClause,
   type ListFilterOption,
@@ -67,7 +67,7 @@ import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,
@@ -82,7 +82,7 @@ import {
   ADMIN_AUDIT_LIST_QUERY,
   ADMIN_AUDIT_LIST_SELECT_FIELDS,
   ADMIN_AUDIT_SORT,
-} from '../../../../utils/admin-audit-list-query'
+} from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
 
 /**
  * THE ARCHIVE, GIVEN A DOOR (AGL-2324).

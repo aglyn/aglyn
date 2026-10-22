@@ -113,7 +113,7 @@ jest.mock('../utils/hard-navigate', () => ({
 jest.mock('../utils/console-landing', () => ({
   currentConsoleLandingHref: (url: string) => mockLanding(url),
 }))
-jest.mock('../utils/host-first-run', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/host-first-run', () => ({
   requestStarterSite: (...args: unknown[]) => mockStarter(...(args as [])),
 }))
 jest.mock('../components/host-first-run-gate.component', () => ({

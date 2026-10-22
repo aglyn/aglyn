@@ -27,8 +27,8 @@ import {
   resolveAccountAddresses,
 } from '@aglyn/tenant-data-admin/server/account-addresses'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
-import { readStaffListQuery } from '../../../../../utils/server/staff-list-query'
-import { readUserAuditPage } from '../../../../../utils/server/user-audit'
+import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
+import { readUserAuditPage } from '@aglyn/tenant-data-admin/server/console/user-audit'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // staff acts a lockdown investigation reads.

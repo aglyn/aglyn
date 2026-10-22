@@ -55,7 +55,21 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   reportFirestoreSessionHeal: () => mockHeal(),
 }))
 
-import { useCrossTabSessionHeal } from '../hooks/use-cross-tab-session-heal'
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useAuth() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useAuth
+  },
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter', () => ({
+  ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/firestore-denial-reporter'),
+  get reportFirestoreSessionHeal() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').reportFirestoreSessionHeal
+  },
+}))
+
+import { useCrossTabSessionHeal } from '@aglyn/tenant-feature-instance/hooks/console/use-cross-tab-session-heal'
 
 const emit = (uid: string | null) => mockEmit?.(uid ? { uid } : null)
 

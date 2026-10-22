@@ -54,8 +54,8 @@ import {
   type DownloadTokenRotationResult,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
-import { revalidateEntireHost } from './tenant-revalidate'
-import { SUSPENDED_FIELD, suspensionInForce } from './suspended-flag'
+import { revalidateEntireHost } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
+import { SUSPENDED_FIELD, suspensionInForce } from '@aglyn/tenant-data-admin/server/console/suspended-flag'
 
 /**
  * Revocation fan-out bound. An org roster larger than this still locks —

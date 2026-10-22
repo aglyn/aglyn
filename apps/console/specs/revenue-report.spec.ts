@@ -28,7 +28,7 @@ import {
   revenueGap,
   subscriptionSettledSummary,
   totalEarnedCents,
-} from '../utils/server/revenue-report'
+} from '@aglyn/tenant-data-admin/server/console/revenue-report'
 
 /**
  * The revenue report's arithmetic (AGL-2486).

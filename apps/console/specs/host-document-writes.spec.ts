@@ -47,7 +47,7 @@ interface MockBatch {
 /** Every batch the door opened, in order, with what it staged. */
 const mockBatches: MockBatch[] = []
 
-jest.mock('../utils/revalidate-live-pages', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/revalidate-live-pages', () => ({
   __esModule: true,
   default: (...args: unknown[]) => mockRevalidateLivePages(...args),
   revalidateLivePages: (...args: unknown[]) => mockRevalidateLivePages(...args),
@@ -104,7 +104,7 @@ import {
   PUBLISH_OUTBOX_COLLECTION,
   PUBLISH_OUTBOX_FIELDS,
   PUBLISH_OUTBOX_OPTIONAL_FIELDS,
-} from '../constants/publish-outbox'
+} from '@aglyn/aglyn/app-utils/console/publish-outbox'
 
 const OK = { revalidated: 12, pathsDropped: 0, scanTruncated: false, reason: 'ok' }
 const firestore = {} as never

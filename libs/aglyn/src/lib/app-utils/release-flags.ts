@@ -148,7 +148,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   // Ingress only, and with no staff preview on the server: a video a staff
   // session uploads into a customer's library serves on that customer's pages
   // like any other, so a grant goes to the org through its override.
-  // `apps/console/utils/server/video-uploads.ts` holds the gate.
+  // `libs/tenant/data/admin/src/lib/server/console/video-uploads.ts` holds the gate.
   {
     key: 'release_video_uploads',
     label: 'Video uploads',

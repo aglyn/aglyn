@@ -45,7 +45,7 @@ const mockCloseRiskNotice = jest.fn(async (..._args: unknown[]) => ({
   error: null,
 }))
 const mockRevalidateEntireHost = jest.fn(async (..._args: unknown[]) => ({ attempted: true }))
-jest.mock('../utils/server/tenant-revalidate', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
   __esModule: true,
   revalidateEntireHost: (...args: unknown[]) => mockRevalidateEntireHost(...args),
 }))

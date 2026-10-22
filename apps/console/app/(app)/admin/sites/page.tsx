@@ -51,9 +51,9 @@ import {
   StaffSiteRowActions,
 } from '../../../../components/staff-site-row-actions.component'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH, TABLE_ROW_HEIGHT } from '../../../../constants/shared'
-import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
 import {
   STAFF_SITE_LIST_COLUMN_SORTS,
   STAFF_SITE_LIST_FILTER_FIELDS,
@@ -61,7 +61,7 @@ import {
   STAFF_SITE_LIST_FILTER_OPTIONS,
   STAFF_SITE_LIST_QUERY,
   STAFF_SITE_LIST_SORT,
-} from '../../../../utils/staff-site-list-query'
+} from '@aglyn/aglyn/app-utils/console/staff-site-list-query'
 
 /**
  * The filterable fields that get a column of their own. The rest of

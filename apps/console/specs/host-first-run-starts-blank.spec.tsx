@@ -78,8 +78,8 @@ jest.mock('next/navigation', () => ({
   useParams: () => ({ orgSlug: 'acme', host: 'host-1' }),
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
 }))
-jest.mock('../utils/host-first-run', () => ({
-  ...jest.requireActual('../utils/host-first-run'),
+jest.mock('@aglyn/aglyn/app-utils/console/host-first-run', () => ({
+  ...jest.requireActual('@aglyn/aglyn/app-utils/console/host-first-run'),
   requestStarterSite: (...args: unknown[]) => mockRequestStarter(...args),
 }))
 jest.mock('../hooks/use-current-org', () => ({

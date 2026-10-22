@@ -75,6 +75,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
 }))
+
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
 // The layout renders its header here, unlike the pass-through the sibling
 // suites use: the page title is one of the three surfaces that must name the
 // jurisdiction, so a mock that dropped it would leave that claim untested.
@@ -97,7 +105,7 @@ jest.mock('../components/staff-only.component', () => ({
   __esModule: true,
   default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
 }))
@@ -105,7 +113,7 @@ jest.mock('../constants/docs-links', () => ({
   __esModule: true,
   docsHelp: () => undefined,
 }))
-jest.mock('../constants/route-links', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
   __esModule: true,
   buildRoute: () => '/admin',
   Route: {

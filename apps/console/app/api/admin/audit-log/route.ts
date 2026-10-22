@@ -22,14 +22,14 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { ADMIN_AUDIT_LIST_QUERY } from '../../../../utils/admin-audit-list-query'
+import { ADMIN_AUDIT_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
 import {
   AUDIT_EXPORT_CEILING,
   auditLogCsv,
   auditLogRow,
   type AuditLogRow,
-} from '../../../../utils/admin-audit-view'
-import { readStaffListQuery, runStaffListQuery } from '../../../../utils/server/staff-list-query'
+} from '@aglyn/aglyn/app-utils/console/admin-audit-view'
+import { readStaffListQuery, runStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /**
  * The staff audit log for the apps (AGL-3667): `adminAudit`, newest first, with

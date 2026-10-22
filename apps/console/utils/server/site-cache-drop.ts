@@ -17,8 +17,8 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { PluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
-import { announceLivePaths } from './announce-live-paths'
-import { dropSiteCaches } from './tenant-revalidate'
+import { announceLivePaths } from '@aglyn/tenant-data-admin/server/console/announce-live-paths'
+import { dropSiteCaches } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 
 /**
  * This app's implementation of `core.site-cache` (AGL-3080), in its own file

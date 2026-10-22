@@ -46,6 +46,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
 }))
 
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
+
 const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
@@ -77,7 +85,7 @@ jest.mock('../components/layouts/dashboard.layout', () => ({
   default: ({ children }: any) => <div>{children}</div>,
 }))
 
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
   useStaffRole: () => 'super',
@@ -90,7 +98,7 @@ jest.mock('../constants/docs-links', () => ({
 
 // The route's parser is used to answer the page below; the Admin SDK half
 // of its module is not.
-jest.mock('../utils/server/list-filter', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/list-filter', () => ({
   __esModule: true,
   applyListQuery: jest.fn(),
 }))
@@ -100,9 +108,9 @@ import {
   COUPON_FILTER_FIELDS,
   COUPON_SEARCH_PATHS,
   couponListRow,
-} from '../utils/coupon-list-query'
-import { answerStaffCompleteList } from '../utils/server/staff-complete-list'
-import { readStaffListQuery } from '../utils/server/staff-list-query'
+} from '@aglyn/aglyn/app-utils/console/coupon-list-query'
+import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
+import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 /** Every non-GET body the page sent to `/api/admin/coupons`. */
 let writes: any[]

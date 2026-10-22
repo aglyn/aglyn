@@ -31,7 +31,7 @@
  *
  * The violation is **transitive**, which is the whole difficulty. AGL-1349
  * broke `main` through a module that is in neither `app/` nor a client
- * component: `apps/console/utils/usage-metering.ts` imported `@aglyn/aglyn`,
+ * component: `libs/aglyn/src/lib/app-utils/console/usage-metering.ts` imported `@aglyn/aglyn`,
  * and three App Routes import `usage-metering`. Nothing about that file looks
  * server-side, it typechecks clean, and no unit test observes a module graph —
  * so it surfaced only at `nx build`, i.e. at promotion time.

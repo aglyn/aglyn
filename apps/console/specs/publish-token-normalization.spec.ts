@@ -45,7 +45,7 @@ import { Bytes } from 'firebase/firestore'
 import { compress, decompress } from '@aglyn/aglyn'
 import rewriteStoredBindingTokens, {
   storedBindingTokenNeeds,
-} from '../utils/rewrite-stored-binding-tokens'
+} from '@aglyn/aglyn/app-utils/console/rewrite-stored-binding-tokens'
 
 /** A legacy-token page, exactly as the besigner would have authored it. */
 const NODES = {

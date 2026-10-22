@@ -37,12 +37,12 @@ import PluginDisableCascadeDialog from '../../../../../components/plugin-disable
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { docsHelp } from '../../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
-import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
+import { useOrgHosts } from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { useOrgPluginSwitchboard } from '../../../../../hooks/use-plugin-switchboard'
-import { resolveExtensionEntitlement } from '../../../../../utils/extension-entitlement'
+import { resolveExtensionEntitlement } from '@aglyn/aglyn/app-utils/console/extension-entitlement'
 
 /**
  * A plugin installation, as its own page (AGL-1007).

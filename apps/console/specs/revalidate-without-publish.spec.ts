@@ -38,7 +38,7 @@ import postTenantRevalidate, {
   dropSiteCaches,
   revalidateEntireHost,
   revalidateOrgHosts,
-} from '../utils/server/tenant-revalidate'
+} from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 
 const OLD_ENV = process.env['REVALIDATE_SECRET']
 

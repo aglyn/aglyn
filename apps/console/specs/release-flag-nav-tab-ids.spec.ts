@@ -48,6 +48,7 @@ const REPO_ROOT = resolve(__dirname, '../../..')
 /** Where a nav item can legitimately be declared. */
 const SOURCE_ROOTS = [
   join(REPO_ROOT, 'apps/console/constants'),
+  join(REPO_ROOT, 'libs/aglyn/src/lib/app-utils/console'),
   join(REPO_ROOT, 'libs/plugins'),
 ]
 

@@ -20,7 +20,7 @@
  * shape that query can take has its index (AGL-3321).
  *
  * The Audit log page and an account's two audit tables plan every clause and
- * the search word through `planListQuery` (`utils/admin-audit-list-query.ts`).
+ * the search word through `planListQuery` (`@aglyn/aglyn/app-utils/console/admin-audit-list-query`).
  * Each is pinned here against the index file the project deploys: a clause
  * the plan puts on a query with no composite behind it throws
  * FAILED_PRECONDITION for every reader, so it fails here instead.
@@ -39,8 +39,8 @@ import {
   USER_AUDIT_HALF_PATHS,
   USER_AUDIT_LIST_QUERY,
   userAuditKindBase,
-} from '../utils/admin-audit-list-query'
-import { userAuditHalves } from '../utils/server/user-audit'
+} from '@aglyn/aglyn/app-utils/console/admin-audit-list-query'
+import { userAuditHalves } from '@aglyn/tenant-data-admin/server/console/user-audit'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),

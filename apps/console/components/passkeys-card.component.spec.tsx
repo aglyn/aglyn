@@ -92,7 +92,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
 
-jest.mock('../utils/passkeys', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/passkeys', () => ({
   registerPasskey: jest.fn(),
   removePasskey: (...args: unknown[]) => {
     mockRemoveCalls.push(args)

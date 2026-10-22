@@ -35,7 +35,7 @@
  */
 
 const mockPostTenantRevalidate = jest.fn()
-jest.mock('../utils/server/tenant-revalidate', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/tenant-revalidate', () => ({
   __esModule: true,
   postTenantRevalidate: (...args: unknown[]) =>
     (mockPostTenantRevalidate as any)(...args),
@@ -44,7 +44,7 @@ jest.mock('../utils/server/tenant-revalidate', () => ({
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { listPluginHostResources } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
-import { announceLivePaths } from '../utils/server/announce-live-paths'
+import { announceLivePaths } from '@aglyn/tenant-data-admin/server/console/announce-live-paths'
 
 /** A host document with a subdomain, and optionally an attached domain. */
 const hostDoc = (fields: Record<string, unknown>) => ({

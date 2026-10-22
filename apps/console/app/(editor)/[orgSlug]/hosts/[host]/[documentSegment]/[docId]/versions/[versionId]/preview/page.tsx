@@ -23,7 +23,7 @@ import '../../../../../../../../../../constants/app-setup'
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import DocumentPreview from '../../../../../../../../../../components/document-preview.component'
 import { useHostId } from '../../../../../../../../../../components/host-id-provider'
-import { isPreviewKind } from '../../../../../../../../../../utils/staff-site-links'
+import { isPreviewKind } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 
 /**
  * A plugin document's version, rendered the way the site will (AGL-1203).

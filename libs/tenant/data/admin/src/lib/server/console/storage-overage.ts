@@ -1,0 +1,496 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  checkQuota,
+  planMetersInfraOverage,
+  UNLIMITED,
+  type AglynOrgBilling,
+} from '@aglyn/aglyn/server'
+import {
+  billsOrgLibraryStorage,
+  METERED_BILLED_RATES_USD,
+} from '@aglyn/aglyn/app-utils/console/usage-metering'
+
+/**
+ * Metered storage: what bills, what warns, and what a customer may cap
+ * (AGL-1886, corrected 2026-08-18).
+ *
+ * ## THE TWO RULES THIS MODEL SERVES
+ *
+ * On a metered plan, storage past the included band **bills** rather than
+ * being refused: refusing it loses revenue and stops a customer's product
+ * working to save them from a bill they agreed to pay. The ceiling that stops
+ * the bill is the END USER's control, set by whoever wants one.
+ *
+ * On free, the opposite: it **hard-caps**, so that it always actually stays
+ * free.
+ *
+ * Neither is in tension with the condition metered billing shipped under:
+ * overage protection and usage alerts, so that customers do not get a surprise
+ * bill. That protection is **being told**, not being stopped.
+ *
+ * ## WHY NOT AN ACKNOWLEDGEMENT GATE
+ *
+ * Requiring an **acknowledgement before a metered org may store a byte past
+ * its band** is a soft cap whose opt-in is a gate, and it fails closed: the
+ * route that writes that acknowledgement had no caller at all until AGL-1957,
+ * so no org could opt in, no org could store, and there was no revenue for
+ * capacity Aglyn would happily sell. It satisfies "no surprise bill" by
+ * satisfying "no bill".
+ *
+ * It is also a churn event of its own. Bill shock churns; so does a product
+ * that silently stops accepting uploads. That design trades one for the other
+ * and calls the trade protection.
+ *
+ * ## THE MODEL, corrected
+ *
+ * The standard metered shape, and the whole of it:
+ *
+ *   1. Inside the included allowance — upload, no charge. Unchanged.
+ *   2. **Past it on a metered plan — ALLOWED, and billed.** No consent step
+ *      stands between a paying customer and the service they are using. This
+ *      is the inversion; `report-usage` was already billing stored bytes and
+ *      never consulted the acknowledgement, so the ingress refusal was the
+ *      only thing between a metered org and an invoice line. Now the two
+ *      agree: bytes that land are bytes that bill.
+ *   3. **Alerts are what prevent the surprise** — `usage-alerts` warns on
+ *      approach (75%, 80% and 90%) and again at the band (100%), in-product
+ *      and by email. A warning, not a wall.
+ *   4. **A cap is the customer's option, never our default.** An org that
+ *      wants a hard ceiling sets one in Billing; uploads past it are refused
+ *      citing *their* limit, not ours. Off unless they choose it: the ceiling
+ *      is the end user's control, not the platform's.
+ *
+ * ## WHAT STILL HARD-BANDS, AND WHY IT MUST
+ *
+ * A plan that does **not** meter infrastructure overage has no way to bill
+ * for the bytes, so accepting them is pure cost with nothing to invoice
+ * against. Free/hobby therefore keeps the hard band exactly where it was, and
+ * that is the point of the second sentence: free "always actually stays
+ * free" — no metered price, no invoice line, no cap to configure.
+ *
+ * The hard band here is the *braces*. The **belt** is structural and lives in
+ * `plan-entitlements`: free carries `meteredInfraPassThrough: false` and a
+ * `null` overage rate on every billable dimension, so
+ * `estimateMonthlyUsageCost` returns `billableCostUsd: 0` and each
+ * `check*Quota` returns `overageMonthlyUsd: 0` — by arithmetic, not by a
+ * runtime check. A free org that somehow blew past every band would still
+ * invoice exactly zero. See `specs/free-tier-never-billed.spec.ts`, which
+ * decomposes that claim per dimension rather than asserting it in aggregate.
+ *
+ * Enterprise resolves `UNLIMITED` and never reaches a band at all.
+ */
+
+/**
+ * The usage bands a quota is announced at: 75%, 80%, 90% and 100% of the
+ * allowance (AGL-3431, after AGL-1886's 80 and 100).
+ *
+ * FOUR STEPS, because the allowances are big numbers. Between 80% of 50,000
+ * emails or 100 GB of storage and the band itself lies most of a month, and a
+ * single warning at the start of that stretch is a warning nobody remembers
+ * by its end. 75 is the early heads-up, 80 and 90 the closing distance, 100
+ * the band — where a refusing quota stops and a metered one starts billing,
+ * and therefore the last moment a customer can act with no charge attached.
+ *
+ * ONE NOTICE PER STEP, and only the HIGHEST step reached is sent: a reading
+ * that jumps from 70% to 95% sends one 90% notice, not 75, 80 and 90 at once,
+ * and a small limit (6 pages per site) moving from 4 to 5 sends one 80%
+ * notice. How often a step may repeat is `usageAlertGuardDecision`'s
+ * question, not this one.
+ *
+ * NOT CONFIGURABLE. `USAGE_ALERT_APPROACH_PCT` used to move the single
+ * approach warning; with a fixed ladder there is no one number for it to
+ * move, and it was set nowhere.
+ */
+export const USAGE_ALERT_BANDS = [75, 80, 90, 100] as const
+export type UsageAlertBand = (typeof USAGE_ALERT_BANDS)[number]
+/** The band itself — the last step, where the allowance is used up. */
+export const USAGE_ALERT_CAP_PCT = 100
+
+/**
+ * The highest band a usage reading has reached, or 0 for none.
+ *
+ * Shared by every quota in `usage-alerts` so the storage warning and the
+ * bandwidth warning cannot drift apart, and so the percentages are testable
+ * without standing up a cron. Compared as `used × 100 ≥ band × limit` rather
+ * than through a ratio, so 9 of 10 is exactly 90% and never 89.999…%.
+ */
+export function usageAlertThreshold(
+  used: number,
+  limit: number,
+): 0 | UsageAlertBand {
+  if (!Number.isFinite(limit) || limit <= 0) return 0
+  if (!Number.isFinite(used) || used < 0) return 0
+  for (let index = USAGE_ALERT_BANDS.length - 1; index >= 0; index -= 1) {
+    const band = USAGE_ALERT_BANDS[index]
+    if (used * 100 >= band * limit) return band
+  }
+  return 0
+}
+
+/**
+ * The monthly spend cap this org CHOSE, if it chose one.
+ *
+ * The cap is the customer's control and nothing else: it is absent by
+ * default, it is never required to store or to be billed, and setting one is
+ * the only thing that can make an upload refuse on a metered plan.
+ *
+ * `monthlyCapUsd` is `null` when no cap is set — deliberately `null` rather
+ * than `Infinity`, because this value is serialised into the ingress routes'
+ * JSON responses and `JSON.stringify(Infinity)` is `null` anyway. One
+ * spelling for "no cap", on both sides of the wire.
+ *
+ * ## Two directions this must not fail in, and they pull opposite ways
+ *
+ * - A cap the customer SET must never read as "no cap" because the stored
+ *   number was corrupt. That would bill someone who asked not to be billed.
+ *   So an enabled-but-unusable cap falls back to
+ *   `STORAGE_CAP_FALLBACK_USD` — low, and recoverable by editing the field.
+ * - A cap the customer never set must never be invented, or the default is a
+ *   block again and we are back to the design this replaced.
+ *
+ * ## The legacy acknowledgement
+ *
+ * Orgs written by the pre-2026-08-18 route carry
+ * `{ acknowledgedAt, monthlyCeilingUsd }`. That ceiling was the bound on a
+ * consent, and the customer typed it — so it is honoured as a cap rather than
+ * discarded. Reading it as "no cap" would silently raise a limit somebody
+ * chose; reading it as a cap keeps their number in force and lets them clear
+ * it from the same card. (In practice the acknowledgement surface shipped
+ * hours before this correction and reached no production org, so this branch
+ * is defensive rather than load-bearing.)
+ */
+export const STORAGE_CAP_FALLBACK_USD = 25
+
+export interface StorageCap {
+  /** Whether the customer has chosen a ceiling at all. */
+  capSet: boolean
+  /** The ceiling in force, or `null` when uncapped. */
+  monthlyCapUsd: number | null
+}
+
+export function resolveStorageCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): StorageCap {
+  const raw = (org as any)?.storageOverage
+  // `capUsd` is the field this file's route writes now; `acknowledgedAt` +
+  // `monthlyCeilingUsd` is the legacy pair. Either counts as "the customer
+  // chose a ceiling"; neither being present means uncapped.
+  const explicit = Number(raw?.capUsd)
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return { capSet: true, monthlyCapUsd: explicit }
+  }
+  const legacy = Number(raw?.monthlyCeilingUsd)
+  const hasLegacyConsent = Boolean(raw?.acknowledgedAt)
+  if (hasLegacyConsent || (Number.isFinite(legacy) && legacy > 0)) {
+    return {
+      capSet: true,
+      monthlyCapUsd:
+        Number.isFinite(legacy) && legacy > 0 ? legacy : STORAGE_CAP_FALLBACK_USD,
+    }
+  }
+  // `capUsd` present but unusable (blank, negative, NaN, Infinity) with no
+  // legacy pair to fall back on: the customer asked for A cap, so give them
+  // the conservative one rather than none.
+  if (raw != null && 'capUsd' in raw) {
+    return { capSet: true, monthlyCapUsd: STORAGE_CAP_FALLBACK_USD }
+  }
+  return { capSet: false, monthlyCapUsd: null }
+}
+
+/**
+ * One metered GB-month at the price a customer actually pays, markup included.
+ *
+ * The refusal message below, the Billing card's quoted rate (AGL-1957) and the
+ * invoice all have to name the SAME number — a card advertising one price
+ * while the rollup bills another is the surprise bill wearing a disclosure.
+ */
+export function storageOveragePricePerGbUsd(): number {
+  return METERED_BILLED_RATES_USD.storagePerGbMonth
+}
+
+/** What an upload past the allowance would cost the customer for the month. */
+export function storageOverageUsd(overageMb: number): number {
+  if (!Number.isFinite(overageMb) || overageMb <= 0) return 0
+  return (overageMb / 1024) * METERED_BILLED_RATES_USD.storagePerGbMonth
+}
+
+export interface StorageCapVerdict {
+  allowed: boolean
+  /** Machine code for the console; null when allowed. */
+  code: 'storage_cap_reached' | null
+  /** Customer-facing sentence; null when allowed. */
+  message: string | null
+  /** Projected monthly overage charge if this upload lands. */
+  projectedOverageUsd: number
+  /** The customer's ceiling, or `null` when they have not set one. */
+  monthlyCapUsd: number | null
+}
+
+/**
+ * Whether one upload may land on a METERED plan, given what the scope holds.
+ *
+ * Callers screen for the metered case first — an unmetered plan never reaches
+ * here, because there is no billable outcome for it to choose between.
+ *
+ * `allowanceMb` is the scope's included storage (`storagePerHostMb`), and
+ * `usedMb` INCLUDES the incoming file — the same convention
+ * `api/media/upload-url` already computes for its quota check, so the two
+ * cannot disagree about whether a file fits.
+ *
+ * The ONLY refusal here is the customer's own cap. Past the included band
+ * with no cap set, the answer is yes-and-billed: that is the corrected model,
+ * and the assertion that fails if the opt-in gate is ever restored.
+ */
+export function checkStorageCap(input: {
+  org: Partial<AglynOrgBilling> | null | undefined
+  usedMb: number
+  allowanceMb: number
+}): StorageCapVerdict {
+  const { org, usedMb, allowanceMb } = input
+  const cap = resolveStorageCap(org)
+  const overageMb = Math.max(0, usedMb - allowanceMb)
+  const projectedOverageUsd = storageOverageUsd(overageMb)
+  if (overageMb <= 0) {
+    return {
+      allowed: true,
+      code: null,
+      message: null,
+      projectedOverageUsd: 0,
+      monthlyCapUsd: cap.monthlyCapUsd,
+    }
+  }
+  // `capSet` AND a usable number, spelled out rather than leaned on: with
+  // `strictNullChecks` off the compiler will not stop `projected > null` from
+  // being written, and `x > null` coerces to `x > 0` — which would refuse
+  // every overage upload on the platform. The explicit `!= null` is the guard.
+  if (cap.capSet && cap.monthlyCapUsd != null && projectedOverageUsd > cap.monthlyCapUsd) {
+    return {
+      allowed: false,
+      code: 'storage_cap_reached',
+      message:
+        `This upload would take your storage overage to about ` +
+        `$${projectedOverageUsd.toFixed(2)} this month, past the ` +
+        `$${cap.monthlyCapUsd.toFixed(2)} monthly storage cap you set. ` +
+        'Raise or remove the cap in Billing, or delete some files.',
+      projectedOverageUsd,
+      monthlyCapUsd: cap.monthlyCapUsd,
+    }
+  }
+  return {
+    allowed: true,
+    code: null,
+    message: null,
+    projectedOverageUsd,
+    monthlyCapUsd: cap.monthlyCapUsd,
+  }
+}
+
+export interface MediaStorageGateResult {
+  allowed: boolean
+  status: number
+  error: string | null
+  code: StorageCapVerdict['code'] | 'plan_limit_reached'
+  limitMb: number
+  /**
+   * TRUE when these bytes land past the included band on a metered plan — i.e.
+   * when accepting them creates an invoice line.
+   *
+   * This is the field that makes ingress and `report-usage` tell the same
+   * story: `report-usage` bills stored bytes over the band on exactly the
+   * plans where `planMetersInfraOverage` is true, and this flag is that same
+   * predicate evaluated at the moment the bytes are accepted. If one is ever
+   * true where the other is false, that is the bug.
+   */
+  billed: boolean
+  projectedOverageUsd: number
+  /** The customer's chosen ceiling, or `null` when they have not set one. */
+  monthlyCapUsd: number | null
+}
+
+/**
+ * The ONE storage decision every media ingress route makes (AGL-1886,
+ * inverted 2026-08-18).
+ *
+ * Used by `api/media/upload-url` (twice), `api/media/upload` and
+ * `api/media/replace`, so the four cannot answer the same question
+ * differently — which is how a customer ends up blocked on one upload path
+ * and billed on another.
+ *
+ * `usedMb` INCLUDES the incoming bytes, and the caller passes the same
+ * `Math.ceil(usedMb) - 1` convention it always did (AGL-471's off-by-one:
+ * exactly up to the integer MB cap and no further).
+ *
+ * ## The three outcomes past the band
+ *
+ * - **Unmetered plan (free/hobby) → REFUSED.** There is no metered price to
+ *   attach, so accepting the bytes would be cost with no invoice. This is the
+ *   band the requirement was to keep so free "always actually stays free", and it is
+ *   unchanged from the original design.
+ * - **Metered plan, no customer cap → ALLOWED AND BILLED.** The default. No
+ *   consent step, because `report-usage` bills these bytes and the customer
+ *   is warned by `usage-alerts` before and at the band.
+ * - **Metered plan, past the customer's own cap → REFUSED**, citing their
+ *   number. The one refusal a paying org can hit, and only because it asked
+ *   for it.
+ * - **Metered plan, but the SCOPE has no meter behind it → REFUSED**
+ *   (AGL-2003). The first rule applied to a second way of having no price to
+ *   attach: see `billsOverage`.
+ *
+ * Enterprise resolves `UNLIMITED` and never reaches any of the three.
+ */
+export function mediaStorageGate(input: {
+  org: Partial<AglynOrgBilling> | null | undefined
+  /** Total usage including the incoming file, in MB. */
+  usedMb: number
+  /**
+   * The band `usedMb` is measured against, in MB (AGL-2075).
+   *
+   * ALWAYS the ORG-WIDE band — `resolveOrgMediaBand` computes it as
+   * `hostLimit × storagePerHostMb`, the same arithmetic
+   * `meteredIncludedAllowance` uses to size what the invoice subtracts. It is
+   * optional only so this function keeps a defined answer for a caller that
+   * has not been given a pool to measure; that fallback is the PER-SCOPE band,
+   * which was the bug — `resolveMediaScope` serves a site library AND the org
+   * library, each with its own counter, so a per-scope band handed a free org
+   * 250 MB twice. Every ingress route passes this; nothing should rely on the
+   * fallback.
+   */
+  allowanceMb?: number
+  /**
+   * Whether the SCOPE these bytes land in reaches an invoice this month
+   * (AGL-2003). Defaults to `true`; pass `scopeBillsStorageOverage(...)`.
+   *
+   * The plan can meter infra overage while the particular counter being
+   * written to is excluded from the rollup. That is exactly the org library
+   * today: ingress pools its bytes into the org-wide band (AGL-2075) and
+   * `report-usage` drops them from `billedEstimate` until
+   * `BILL_ORG_LIBRARY_STORAGE_FROM` names a month. So a customer could
+   * consent to metered storage, be shown a projected charge, be allowed past
+   * the band, and be invoiced nothing — an undercharge with a paper trail
+   * saying they expected to pay.
+   *
+   * `billed` already documents the invariant this restores: it "is that same
+   * predicate evaluated at the moment the bytes are accepted. If one is ever
+   * true where the other is false, that is the bug." Nothing asserted the
+   * pairing, so the two halves diverged silently.
+   *
+   * Refusing is the same call the unmetered-plan arm already makes for the
+   * same reason — no metered price to attach means accepting the bytes is
+   * cost with no invoice — and it loses no revenue, because the revenue was
+   * never being collected. It is also self-healing: the day the env var names
+   * a month this returns true and the gate opens on its own, with no code
+   * change and no second decision to remember.
+   */
+  billsOverage?: boolean
+}): MediaStorageGateResult {
+  const { org, usedMb } = input
+  // Explicit `!== false` rather than `?? true`: with `strictNullChecks` off,
+  // a caller that forgets the field must keep today's behaviour, and only a
+  // deliberate `false` may close the gate.
+  const billsOverage = input.billsOverage !== false
+  // The historical convention, kept verbatim so this is not also a rounding
+  // change: `usedMb` includes the incoming file and the cap is inclusive.
+  const perScope = checkQuota(org as any, 'storagePerHostMb', Math.ceil(usedMb) - 1)
+  const limit = input.allowanceMb ?? perScope.limit
+  const quota = {
+    limit,
+    allowed: Math.ceil(usedMb) - 1 < limit,
+  }
+  if (quota.allowed) {
+    return {
+      allowed: true,
+      status: 200,
+      error: null,
+      code: null,
+      limitMb: quota.limit,
+      billed: false,
+      projectedOverageUsd: 0,
+      monthlyCapUsd: resolveStorageCap(org).monthlyCapUsd,
+    }
+  }
+  // An UNLIMITED band that still refused is a contradiction; refuse rather
+  // than reason about it. (`checkQuota` cannot return `allowed: false` for
+  // `Infinity`, so this is unreachable by construction and stays as the
+  // fail-closed floor.)
+  //
+  // The `planMetersInfraOverage` arm is the free/hobby hard band. It is
+  // deliberately the SECOND thing checked and not folded into the cap logic
+  // below: an unmetered plan must never reach code that can return
+  // `billed: true`, whatever a forged `storageOverage` field says. The
+  // `billsOverage` arm rides with it for the identical reason — a scope with
+  // no meter behind it must not reach code that can return `billed: true`
+  // either (AGL-2003).
+  if (quota.limit === UNLIMITED || !planMetersInfraOverage(org) || !billsOverage) {
+    return {
+      allowed: false,
+      status: 403,
+      // Verbatim, so the four ingress routes' fallback strings and every
+      // existing client match keep working.
+      error: `Storage limit reached (${quota.limit} MB)`,
+      code: 'plan_limit_reached',
+      limitMb: quota.limit,
+      billed: false,
+      projectedOverageUsd: 0,
+      monthlyCapUsd: null,
+    }
+  }
+  const verdict = checkStorageCap({
+    org,
+    usedMb,
+    allowanceMb: quota.limit,
+  })
+  return {
+    allowed: verdict.allowed,
+    status: verdict.allowed ? 200 : 403,
+    error: verdict.message,
+    code: verdict.code,
+    limitMb: quota.limit,
+    // Allowed, metered, and past the band: an invoice line exists for this.
+    billed: verdict.allowed && verdict.projectedOverageUsd > 0,
+    projectedOverageUsd: verdict.projectedOverageUsd,
+    monthlyCapUsd: verdict.monthlyCapUsd,
+  }
+}
+
+/**
+ * Whether the media SCOPE receiving these bytes reaches an invoice this month
+ * (AGL-2003) — the value to hand `mediaStorageGate` as `billsOverage`.
+ *
+ * One expression, in one place, so the four ingress routes cannot disagree
+ * about it the way they could disagree about the band before AGL-2075. It
+ * reads the same env var through the same `billsOrgLibraryStorage` the rollup
+ * calls, so the fail-closed month parsing cannot fork — `usage-config` already
+ * takes that shape for the same reason.
+ *
+ * `hosts` is unconditionally true: site media has been in `billedEstimate`
+ * since it existed. `orgs` is the org library, which is not.
+ *
+ * Both non-defaults are parameters rather than reads so a test can drive the
+ * pairing directly. The env default is a default PARAMETER, evaluated per
+ * call, so setting the var mid-process takes effect without a module reload.
+ */
+export function scopeBillsStorageOverage(
+  collection: 'orgs' | 'hosts' | string | null | undefined,
+  month: string = new Date().toISOString().slice(0, 7),
+  configuredStart: string | null | undefined = process.env
+    .BILL_ORG_LIBRARY_STORAGE_FROM,
+): boolean {
+  if (collection !== 'orgs') return true
+  return billsOrgLibraryStorage(month, configuredStart)
+}

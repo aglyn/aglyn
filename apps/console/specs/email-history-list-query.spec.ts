@@ -40,7 +40,7 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { emailDeliverySearchTokens } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
-import { EMAIL_HISTORY_QUERY } from '../utils/email-history-list-query'
+import { EMAIL_HISTORY_QUERY } from '@aglyn/aglyn/app-utils/console/email-history-list-query'
 
 interface Where {
   field: string

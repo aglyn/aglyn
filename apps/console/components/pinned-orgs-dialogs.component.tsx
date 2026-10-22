@@ -33,10 +33,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
-import usePinnedOrgs from '../hooks/use-pinned-orgs'
+import usePinnedOrgs from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs'
 import useOrgScope from '../hooks/use-org-scope'
 import { PINNED_HOSTS_PER_WORKSPACE } from '@aglyn/aglyn/app-utils/account-preferences'
-import { PINNED_ORGS_MAX } from '../utils/workspace-list'
+import { PINNED_ORGS_MAX } from '@aglyn/aglyn/app-utils/console/workspace-list'
 
 /** A pinned workspace, or a pinned site, as a dialog names it. */
 export interface PinnedOrgEntry {

@@ -69,7 +69,7 @@ jest.mock('../components/layouts/dashboard.layout', () => ({
 
 import Layout from '../app/(app)/manage/notifications/(sections)/layout'
 import { NOTIFICATION_SECTIONS } from '../constants/notification-sections'
-import manageNavTabItems from '../constants/manage-nav-tabs'
+import manageNavTabItems from '@aglyn/aglyn/app-utils/console/manage-nav-tabs'
 
 const trail = () => screen.getByTestId('trail').textContent
 const helpAnchor = () => screen.getByTestId('help').textContent

@@ -38,12 +38,12 @@ import {
   findMaintenanceJob,
   refuseStaffRun,
   type StaffRunRequest,
-} from '../../../../utils/maintenance-jobs'
+} from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
 import {
   reverifyOutcome,
   summariseReverify,
   type ReverifyEntry,
-} from '../../../../utils/server/reverify-plugin-versions'
+} from '@aglyn/tenant-data-admin/server/console/reverify-plugin-versions'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**

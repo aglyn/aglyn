@@ -33,7 +33,7 @@ import {
   planScopeStamp,
   scopeDrift,
   SCOPED_COLLECTIONS,
-} from '../../../../utils/server/backfill-scope'
+} from '@aglyn/tenant-data-admin/server/console/backfill-scope'
 
 /** Orgs per invocation; resume with `?afterOrg=<lastOrgId>`. */
 const ORGS_PER_RUN = 25

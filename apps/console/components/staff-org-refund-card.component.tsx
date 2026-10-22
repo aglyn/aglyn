@@ -37,13 +37,13 @@ import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.compon
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
-import { useStaffRole } from '../hooks/use-is-staff'
+import { useStaffRole } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import {
   checkRefundAuthority,
   describeRefundAllowance,
   formatRefundCap,
   refundCapCentsForRole,
-} from '../constants/refund-authority'
+} from '@aglyn/aglyn/app-utils/console/refund-authority'
 import {
   normalizeRefundReason,
   REFUND_NOTE_MAX,
@@ -51,7 +51,7 @@ import {
   REFUND_REASON_LABELS,
   refundReasonNeedsNote,
   type RefundReasonCode,
-} from '../constants/refund-reasons'
+} from '@aglyn/aglyn/app-utils/console/refund-reasons'
 import StaffTableHead from './staff-table-head.component'
 
 /** One refundable Stripe charge, as `/api/admin/org-refund` describes it. */

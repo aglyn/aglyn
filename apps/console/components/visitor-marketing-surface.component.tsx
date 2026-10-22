@@ -17,7 +17,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { resolveNavSection } from '../hooks/nav-section'
+import { resolveNavSection } from '@aglyn/tenant-feature-instance/hooks/console/nav-section'
 import PlatformAdvertisingTags from './advertising-tags.component'
 import VisitorConsent from './visitor-consent.component'
 

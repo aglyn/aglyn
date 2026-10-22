@@ -37,14 +37,14 @@ import {
   matchListFilter,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
+import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import {
   accountLastActiveAt,
   userListSort,
   USER_LIST_FILTER_FIELDS,
   USER_LIST_SORT_VALUES,
-} from '../../../../utils/list-filters'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
 
 /**
  * How many accounts a filtered request may read. Past it the directory is

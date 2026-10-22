@@ -220,7 +220,7 @@ import {
   resetPluginPersonErasersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
-import { runPersonErasures } from '../utils/server/run-person-erasures'
+import { runPersonErasures } from '@aglyn/tenant-data-admin/server/console/run-person-erasures'
 
 const ORG = 'org1'
 const EMAIL = 'jane@example.com'

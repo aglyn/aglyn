@@ -39,7 +39,7 @@ import {
   missingListQueryIndexes,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { MAIL_GATEWAY_LEDGER_LIST_QUERY } from '../utils/mail-gateway-ledger-list-query'
+import { MAIL_GATEWAY_LEDGER_LIST_QUERY } from '@aglyn/aglyn/app-utils/console/mail-gateway-ledger-list-query'
 
 // A module, not a script — see `admin-csp-reports.spec.ts`.
 export {}

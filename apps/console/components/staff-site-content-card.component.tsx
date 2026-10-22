@@ -25,13 +25,13 @@ import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-act
 import { Stack, Tab, Tabs } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import type { PreviewKind } from '../constants/preview-state'
+import type { PreviewKind } from '@aglyn/aglyn/app-utils/console/preview-state'
 import { buildScreenLiveUrl } from '../constants/tenant-links'
-import { staffSitePreviewHref } from '../utils/staff-site-links'
+import { staffSitePreviewHref } from '@aglyn/aglyn/app-utils/console/staff-site-links'
 import {
   STAFF_SITE_CONTENT_LISTS,
   type StaffSiteContentTab,
-} from '../utils/staff-site-content-list-query'
+} from '@aglyn/aglyn/app-utils/console/staff-site-content-list-query'
 import {
   chipsColumn,
   nameColumn,

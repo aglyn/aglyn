@@ -38,10 +38,10 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { docsHelp } from '../../../../constants/docs-links'
-import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import { useStaffListQuery } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
 
 /** The list takes no filter or search; it pages every record, newest change first. */
 const NO_CLAUSES: never[] = []

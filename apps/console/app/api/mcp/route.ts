@@ -23,7 +23,7 @@ import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_MOUNT,
   CUSTOMER_API_VERSION,
-} from '../../../utils/api-v1-openapi'
+} from '@aglyn/tenant-data-admin/server/console/api-v1-openapi'
 import {
   describePluginApiV1Resources,
   dispatchResource,
@@ -34,8 +34,8 @@ import {
   MCP_PROTOCOL_VERSION,
   type JsonRpcMessage,
   type JsonRpcResponse,
-} from '../../../utils/mcp-protocol'
-import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
+} from '@aglyn/aglyn/app-utils/console/mcp-protocol'
+import { buildMcpTools, buildToolRequest } from '@aglyn/aglyn/app-utils/console/mcp-tools'
 
 /**
  * THE MCP ENDPOINT (AGL-3091).

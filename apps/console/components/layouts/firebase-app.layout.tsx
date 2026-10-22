@@ -52,23 +52,23 @@ import TransferLauncherProvider from '../transfer-launcher-provider.component'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
-import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
+import { buildOrgUserProperties } from '@aglyn/aglyn/app-utils/console/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
 import useCrossPoolTabRecovery from '../../hooks/use-cross-pool-tab-recovery'
 import useSessionCookie from '../../hooks/use-session-cookie'
 import {
   buildConsolePageTitle,
   buildConsolePageViewParams,
-} from '../../utils/page-view-params'
-import { setAnalyticsDefaultParams } from '../../utils/analytics-default-params'
+} from '@aglyn/aglyn/app-utils/console/page-view-params'
+import { setAnalyticsDefaultParams } from '@aglyn/aglyn/app-utils/console/analytics-default-params'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 import {
   getSessionHealth,
   reportDeniedRead,
   reportSuccessfulRead,
-} from '../../utils/session-health'
+} from '@aglyn/aglyn/app-utils/console/session-health'
 import { watchSessionHeal } from '../../utils/session-heal'
-import useCrossTabSessionHeal from '../../hooks/use-cross-tab-session-heal'
+import useCrossTabSessionHeal from '@aglyn/tenant-feature-instance/hooks/console/use-cross-tab-session-heal'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
@@ -440,7 +440,7 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     // not enough once a second concern wants the same API — `page_title`
     // does, from the `page_view` effect below — because the collision is
     // between effects, not within one. The owner in
-    // `utils/analytics-default-params.ts` keeps the composed set and re-sends
+    // `@aglyn/aglyn/app-utils/console/analytics-default-params` keeps the composed set and re-sends
     // all of it, so neither concern can drop the other's keys, and a third
     // cannot either.
     const stamp = (internal: boolean) =>
@@ -549,7 +549,7 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // added here would have silently dropped the `traffic_type` stamp set by the
   // effect above — un-excluding our own traffic from metrics no data filter
   // can repair afterwards. One owner composes both keys into one object; see
-  // `utils/analytics-default-params.ts`.
+  // `@aglyn/aglyn/app-utils/console/analytics-default-params`.
   //
   // Refreshed here rather than in an effect of its own because this one
   // already runs on mount and on every route change, which is when the title

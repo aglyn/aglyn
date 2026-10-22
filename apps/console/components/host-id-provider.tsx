@@ -37,8 +37,8 @@ import {
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../hooks/use-host'
 import { hostBrandKey, HostSiteKeyContext } from '@aglyn/shared-ui-theme'
-import { useAuthRecovery } from '../hooks/use-auth-recovery'
-import { useHostResolution } from '../hooks/use-host-resolution'
+import { useAuthRecovery } from '@aglyn/tenant-feature-instance/hooks/console/use-auth-recovery'
+import { useHostResolution } from '@aglyn/tenant-feature-instance/hooks/console/use-host-resolution'
 import { useOrgScope } from '../hooks/use-org-scope'
 
 /** The resolved host DOC ID — the internal key for all host data reads. */

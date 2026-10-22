@@ -67,7 +67,7 @@ const mockDocs = new Map<string, Record<string, unknown>>()
 
 // The reader's workspace pins (AGL-3762) are a read of their own account
 // document; none of these assertions is about them.
-jest.mock('../hooks/use-pinned-orgs', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
   default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
@@ -118,10 +118,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useAuth: () => auth,
   }
 })
-// `useOrgPlans` lives in the lib and reads `useFirestore` from this module
-// directly, so the stable instance above is handed to it here as well.
+// `useOrgPlans` and the moved console hooks live in the lib and read these from
+// this module directly, so the stable instances above are handed to them here.
 jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
   useFirestore: () => jest.requireMock('@aglyn/tenant-feature-instance').useFirestore(),
+  useUser: () => jest.requireMock('@aglyn/tenant-feature-instance').useUser(),
+  useAuth: () => jest.requireMock('@aglyn/tenant-feature-instance').useAuth(),
 }))
 
 let mockParams: Record<string, string> = { orgSlug: 'client-1' }

@@ -63,8 +63,8 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
-import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
-import { buildRoute, Route } from '../constants/route-links'
+import { checkHostCollaboratorSeatQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
   HOST_MEMBER_FILTER_FIELDS,
@@ -72,7 +72,7 @@ import {
   HOST_MEMBER_LIST_COLUMN_SORTS,
   HOST_MEMBER_LIST_QUERY,
   hostMemberListRequest,
-} from '../utils/host-member-filters'
+} from '@aglyn/aglyn/app-utils/console/host-member-filters'
 import MemberAvatar from './member-avatar.component'
 import {
   pluginGridColumns,
@@ -200,7 +200,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
    * page is therefore a page of the filtered roster, never the rows on screen
    * narrowed, and whatever the plan cannot put on the query is refused by
    * name above the grid rather than applied to some rows. See
-   * `utils/host-member-filters.ts` for the index each shape reads. A new
+   * `@aglyn/aglyn/app-utils/console/host-member-filters` for the index each shape reads. A new
    * filter is a new walk, and the pager starts over.
    */
   const gridFilter = useListGridFilter({ selectFields: ['role'] })

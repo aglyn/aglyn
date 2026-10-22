@@ -36,7 +36,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockStaffRole = { value: 'super' as string | null }
 
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useStaffRole: () => mockStaffRole.value,
   useIsStaff: () => true,

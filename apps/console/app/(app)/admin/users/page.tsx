@@ -58,13 +58,13 @@ import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
 } from '../../../../components/staff-super-only.component'
-import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useIsStaff } from '@aglyn/tenant-feature-instance/hooks/console/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
+import { useStaffListPagination } from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-pagination'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   type ListFilterClause,
@@ -82,7 +82,7 @@ import type {
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { displayWindow } from '../../../../utils/display-window'
+import { displayWindow } from '@aglyn/aglyn/app-utils/console/display-window'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
@@ -92,12 +92,12 @@ import {
   USER_LIST_DEFAULT_SORT,
   USER_LIST_FILTER_HEADERS,
   USER_LIST_FILTER_OPTIONS,
-} from '../../../../utils/list-filters'
-import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
+} from '@aglyn/aglyn/app-utils/console/list-filters'
+import { collapseAdminUserRows } from '@aglyn/aglyn/app-utils/console/collapse-admin-user-rows'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
-} from '../../../../utils/staff-timestamps'
+} from '@aglyn/aglyn/app-utils/console/staff-timestamps'
 
 interface AdminUser {
   uid: string

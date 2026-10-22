@@ -98,8 +98,8 @@
 
 import { readFileSync } from 'node:fs'
 
-const SCHEDULE_FILE = 'apps/console/utils/stripe-dunning-schedule.ts'
-const AUTO_LOCK_FILE = 'apps/console/utils/billing-auto-lock.ts'
+const SCHEDULE_FILE = 'libs/aglyn/src/lib/app-utils/console/stripe-dunning-schedule.ts'
+const AUTO_LOCK_FILE = 'libs/aglyn/src/lib/app-utils/console/billing-auto-lock.ts'
 
 /** Env files that may carry a Stripe secret, most specific first. */
 const KEY_SOURCES = [

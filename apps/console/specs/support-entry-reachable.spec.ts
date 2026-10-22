@@ -18,12 +18,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RESERVED_SUBDOMAINS } from '@aglyn/aglyn/app-utils/host-naming'
-import { Route } from '../constants/route-links'
+import { Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import {
   APEX_PATH_SEGMENTS,
   CONSOLE_TOP_LEVEL_SEGMENTS,
   orgScopedPathname,
-} from '../constants/console-routes'
+} from '@aglyn/aglyn/app-utils/console/console-routes'
 
 /**
  * `/support` IS A LITERAL SEGMENT IN AN ORG-SCOPED NAMESPACE (AGL-3265).

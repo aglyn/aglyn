@@ -416,7 +416,7 @@ jest.mock('../utils/screen-cap-reconciliation', () => ({
 }))
 
 import { POST } from '../app/api/billing/usage-alerts/route'
-import { pageViewsFromBandwidthGb } from '../utils/usage-metering'
+import { pageViewsFromBandwidthGb } from '@aglyn/aglyn/app-utils/console/usage-metering'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
 import { ORIGIN_MEDIA_BANDWIDTH_WEIGHT } from '@aglyn/aglyn/app-utils/plan-entitlements'
 

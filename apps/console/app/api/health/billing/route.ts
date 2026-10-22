@@ -107,7 +107,7 @@ import {
   LIVE_EVENT_COLLECTION,
   TEST_EVENT_COLLECTION,
   deploymentLivemode,
-} from '../../../../utils/server/stripe-livemode'
+} from '@aglyn/tenant-data-admin/server/console/stripe-livemode'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
 

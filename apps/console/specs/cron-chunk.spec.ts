@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { selectCronChunk } from '../utils/cron-chunk'
+import { selectCronChunk } from '@aglyn/aglyn/app-utils/console/cron-chunk'
 
 describe('selectCronChunk', () => {
   const ids = ['e', 'a', 'd', 'b', 'c']

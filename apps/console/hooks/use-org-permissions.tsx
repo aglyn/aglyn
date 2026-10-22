@@ -41,7 +41,7 @@ import {
 } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useOrgScope from './use-org-scope'
-import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
+import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
 
 export type { OrgPermissions }
 

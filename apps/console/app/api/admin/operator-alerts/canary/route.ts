@@ -27,8 +27,8 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../../utils/cron-auth'
-import { raiseConsoleOperatorAlert } from '../../../../../utils/server/raise-operator-alert'
-import { canaryAlertFromBody } from '../../../../../utils/server/prod-canary-alert'
+import { raiseConsoleOperatorAlert } from '@aglyn/tenant-data-admin/server/console/raise-operator-alert'
+import { canaryAlertFromBody } from '@aglyn/tenant-data-admin/server/console/prod-canary-alert'
 
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)

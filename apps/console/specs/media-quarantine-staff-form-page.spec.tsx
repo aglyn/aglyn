@@ -45,6 +45,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
 }))
 
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
+
 const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
@@ -79,7 +87,7 @@ jest.mock('../components/staff-only.component', () => ({
 }))
 
 let mockRole = 'super'
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
   useStaffRole: () => mockRole,

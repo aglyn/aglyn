@@ -22,10 +22,10 @@ import {
   inheritedMediaAlt,
 } from '@aglyn/aglyn/app-utils/media-metadata'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
-import { SOCIAL_IMAGE_HINT } from '../constants/media-size-hints'
+import { SOCIAL_IMAGE_HINT } from '@aglyn/aglyn/app-utils/console/media-size-hints'
 import { useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
-import type { ScreenSocialImageDraft } from '../constants/screen-seo'
+import type { ScreenSocialImageDraft } from '@aglyn/aglyn/app-utils/console/screen-seo'
 
 /**
  * Re-exported for the surfaces that already import the draft type from here.

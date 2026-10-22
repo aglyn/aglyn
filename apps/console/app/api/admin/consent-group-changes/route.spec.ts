@@ -61,7 +61,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-jest.mock('../../../../utils/server/raise-operator-alert', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/raise-operator-alert', () => ({
   __esModule: true,
   raiseConsoleOperatorAlert: async (type: string, options: Record<string, any> = {}) => {
     mockAlerts.push({ type, options })

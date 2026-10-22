@@ -60,19 +60,19 @@ import EmptyState from '../../../components/empty-state.component'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import PlatformMarketingConsentPrompt from '../../../components/marketing-consent-prompt.component'
 import OrgInvitesBanner from '../../../components/org-invites-banner.component'
-import { buildRoute, Route } from '../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgPlans } from '@aglyn/tenant-feature-instance/hooks/use-org-plans'
 import { useOrgScope } from '../../../hooks/use-org-scope'
-import { usePinnedOrgs } from '../../../hooks/use-pinned-orgs'
+import { usePinnedOrgs } from '@aglyn/tenant-feature-instance/hooks/console/use-pinned-orgs'
 import {
   PinnedFullDialog,
   type PinnedOrgEntry,
 } from '../../../components/pinned-orgs-dialogs.component'
-import { useWorkspacePage } from '../../../hooks/use-workspace-page'
+import { useWorkspacePage } from '@aglyn/tenant-feature-instance/hooks/console/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
-import { usePendingInvites } from '../../../hooks/use-pending-invites'
-import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
+import { usePendingInvites } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
+import { consumeOnboardingPlanIntent } from '@aglyn/aglyn/app-utils/console/onboarding-plan-intent'
 import {
   claimPendingSignUpWorkspace,
   createSignUpWorkspace,
@@ -83,7 +83,7 @@ import {
   holdSignUpLanding,
   isLeavingConsole,
   releaseSignUpLanding,
-} from '../../../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
 import { currentConsoleLandingHref } from '../../../utils/console-landing'
 import { createFirstSiteWorkspace } from '../../../utils/first-site-workspace'
@@ -94,7 +94,7 @@ import {
   WORKSPACE_FILTER_HEADERS,
   WORKSPACE_FILTER_OPTIONS,
   type WorkspaceRow,
-} from '../../../utils/workspace-list'
+} from '@aglyn/aglyn/app-utils/console/workspace-list'
 
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */

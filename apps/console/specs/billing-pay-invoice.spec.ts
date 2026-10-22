@@ -40,6 +40,7 @@
 export {}
 
 import { stripTypeScriptComments } from '@aglyn/aglyn/foundation/definitions/write-deny-coverage.util'
+import * as stripeDunningScheduleModule from '@aglyn/aglyn/app-utils/console/stripe-dunning-schedule'
 
 const mockVerifyIdToken = jest.fn()
 const mockReadOrgBilling = jest.fn()
@@ -376,8 +377,7 @@ describe('where the dunning email sends people', () => {
     const {
       DUNNING_EMAIL_RETURN_PATH,
       dunningEmailReturnUrl,
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-    } = require('../utils/stripe-dunning-schedule')
+    } = stripeDunningScheduleModule
     expect(DUNNING_EMAIL_RETURN_PATH).toBe('/billing')
     expect(dunningEmailReturnUrl('https://app.aglyn.com')).toBe(
       'https://app.aglyn.com/billing',

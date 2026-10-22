@@ -44,7 +44,7 @@ import {
   __resetSessionHealth,
   getSessionHealth,
   reportDeniedRead,
-} from '../utils/session-health'
+} from '@aglyn/aglyn/app-utils/console/session-health'
 
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 const mockEnqueueSnackbar = jest.fn()

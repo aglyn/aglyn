@@ -164,7 +164,7 @@ jest.mock('../hooks/use-delegate-workspace-signin', () => ({
   __esModule: true,
   default: () => 'off',
 }))
-jest.mock('../hooks/use-google-redirect-result', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-google-redirect-result', () => ({
   __esModule: true,
   default: (
     _event: string,
@@ -175,10 +175,10 @@ jest.mock('../hooks/use-google-redirect-result', () => ({
     mockRedirectCallback = onCredential
   },
 }))
-jest.mock('../utils/oauth-providers', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/oauth-providers', () => ({
   createGoogleOAuthProvider: () => ({}),
 }))
-jest.mock('../utils/popup-loading-guard', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))
@@ -186,7 +186,7 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   __esModule: true,
   default: () => mockMobile,
 }))
-jest.mock('../utils/interactive-signin', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/interactive-signin', () => ({
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))

@@ -80,7 +80,7 @@ jest.mock('../constants/docs-links', () => ({
   resolveDocsHelpTopic: () => undefined,
 }))
 
-jest.mock('../constants/route-links', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/route-links', () => ({
   __esModule: true,
   Route: {
     ADMIN_OVERVIEW: '/admin',
@@ -96,7 +96,7 @@ jest.mock('../constants/route-links', () => ({
 // The shared staff page reads the viewer's ROLE to hand it to a plugin
 // (AGL-3080). Not this file's subject, and reaching the real hook would drag
 // the Firebase provider into a spec about a document title.
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   default: () => true,
   useIsStaff: () => true,

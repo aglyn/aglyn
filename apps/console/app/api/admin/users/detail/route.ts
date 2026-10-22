@@ -29,7 +29,7 @@ import {
 import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
-import { accountLastActiveAt } from '../../../../../utils/list-filters'
+import { accountLastActiveAt } from '@aglyn/aglyn/app-utils/console/list-filters'
 import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'
 // From the LEAF: the barrel above reaches the admin SDK and is mocked wholesale
 // by route specs, and a mocked-away reader renders an empty email history that

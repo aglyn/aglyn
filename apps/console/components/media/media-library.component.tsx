@@ -148,8 +148,8 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
-import useOrgHosts from '../../hooks/use-org-hosts'
-import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
+import useOrgHosts from '@aglyn/tenant-feature-instance/hooks/console/use-org-hosts'
+import firestoreOneShotRetry from '@aglyn/aglyn/app-utils/console/firestore-one-shot-retry'
 import {
   getDocBounded,
   getDocsBounded,
@@ -158,7 +158,7 @@ import { settleMediaPageRead } from './media-page-read'
 import { imageEditCopyName } from '@aglyn/aglyn/app-utils/image-edit'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
-import { probeVideoFile } from '../../utils/video-probe'
+import { probeVideoFile } from '@aglyn/aglyn/app-utils/console/video-probe'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
 import { MediaFileInfo } from './media-file-info.component'
 import {
@@ -166,7 +166,7 @@ import {
   recentDayIds,
   sumAssetUsage,
   type MediaDayMedia,
-} from '../../utils/analytics-day-cache'
+} from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import {
   isAllowedUploadType,
@@ -184,14 +184,14 @@ import {
   uploadTypesMessage,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
   VIDEO_UPLOADS_RELEASE_FLAG,
-} from '../../utils/media-upload-limits'
-import { buildRoute, Route } from '../../constants/route-links'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
-import { useMediaQuarantine } from './use-media-quarantine'
+import { useMediaQuarantine } from '@aglyn/tenant-feature-instance/hooks/console/use-media-quarantine'
 import { MediaAudioRightsDialog } from './media-audio-rights-dialog.component'
-import { AUDIO_RIGHTS_FIELD } from '../../utils/media-audio-rights'
+import { AUDIO_RIGHTS_FIELD } from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 import { confirmMediaDelete } from './media-delete-confirm.component'
 import {
   deletedMediaMessage,
@@ -234,7 +234,7 @@ import {
   mediaSortFromModel,
   mediaSortModel,
 } from './media-list-view.component'
-import { useMediaLibraryView } from './use-media-library-view'
+import { useMediaLibraryView } from '@aglyn/tenant-feature-instance/hooks/console/use-media-library-view'
 import {
   EMPTY_MEDIA_SELECTION,
   forgetMediaSelection,

@@ -45,7 +45,7 @@ import {
   dismissSessionReauth,
   getSessionReauth,
   requestSessionReauth,
-} from '../utils/session-reauth'
+} from '@aglyn/aglyn/app-utils/console/session-reauth'
 
 const CTA = <button type="button">{'Create site'}</button>
 

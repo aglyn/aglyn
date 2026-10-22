@@ -1,0 +1,374 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import type { HostAccessRole } from '@aglyn/aglyn'
+import {
+  collection,
+  type Firestore,
+  getDocsFromServer,
+  limit,
+  query,
+  where,
+} from 'firebase/firestore'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { isAuthFailure } from '@aglyn/aglyn/app-utils/console/auth-failure'
+
+/**
+ * Every host role, as a value (AGL-1145).
+ *
+ * `/hosts/{hostId}` is gated per document on `memberRoles.{uid}` and Firestore
+ * refuses to run a LIST that could return a denied document, so this filter is
+ * mandatory — and it must name ALL the roles, or a member silently cannot see
+ * a site they hold.
+ *
+ * Declared here rather than imported as a value: the `@aglyn/aglyn` barrel
+ * pulls the whole library in, which these hooks do not otherwise need. The
+ * `Record` keeps it honest anyway — adding a role to `HostAccessRole` fails to
+ * compile here, exactly as it does at the shared `HOST_ACCESS_ROLES`.
+ */
+const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
+  admin: true,
+  editor: true,
+  author: true,
+  viewer: true,
+}
+const HOST_ACCESS_ROLES = Object.keys(HOST_ACCESS_ROLE_KEYS) as HostAccessRole[]
+
+/**
+ * Retry schedule (AGL-1200). Doubling, capped — NOT a flat delay.
+ *
+ * A flat 400 ms × 8 spent every attempt inside the first 3.2 s of page load,
+ * which is precisely the window this read is most likely to fail in: on a cold
+ * load the Firestore connection is not up yet, so the `getDocsFromServer`
+ * confirmation below throws `unavailable` until it is. The heavier the route,
+ * the longer that takes — which is why a cold hit on the besigner failed while
+ * the same URL reached in-app worked, and why the light `(app)` pages usually
+ * got away with it.
+ *
+ * Doubling to a 3.2 s cap spans ~12.4 s in SEVEN requests, where the flat
+ * schedule spanned 3.2 s in nine. A wider window and less hammering, because
+ * the thing being waited on is a warm-up, not a coin flip.
+ */
+const RETRY_BASE_DELAY_MS = 400
+const RETRY_MAX_DELAY_MS = 3200
+/**
+ * Exported because the org-membership listen shares the budget (AGL-1260):
+ * it fails in the same cold-load window for the same reason, so the schedule
+ * that was tuned here is the schedule, not a coincidence to keep in sync.
+ */
+export const MAX_RETRIES = 6
+
+/** 400, 800, 1600, 3200, 3200, 3200 — see {@link RETRY_BASE_DELAY_MS}. */
+export function retryDelayMs(attempt: number): number {
+  return Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS)
+}
+
+export interface HostResolution {
+  /** The resolved host doc id for the current org, or null (spinner/404/redirect). */
+  hostId: string | null
+  /** Resolution has settled (true off host routes). */
+  ready: boolean
+  /** Resolution gave up after retries — show retry, never a false 404 (AGL-813). */
+  error: boolean
+  /**
+   * The failure behind `error` was the SESSION, not the network.
+   *
+   * Always false while `error` is false. Two things hang on it: the guard's
+   * copy (a stale token is not "check your connection"), and
+   * `useAuthRecovery`, which re-runs resolution by itself when the session
+   * comes back. A network fault deliberately gets neither — nothing tells
+   * the page a connection returned, so its manual retry stays the honest
+   * recovery. See `@aglyn/aglyn/app-utils/console/auth-failure` for the discriminator.
+   */
+  authError: boolean
+  /**
+   * Re-runs resolution from scratch (AGL-1200).
+   *
+   * `error` is otherwise terminal: the effect's deps do not change after it
+   * latches, so nothing retries. The guard's "Try again" used to call
+   * `window.location.reload()`, which re-entered the same cold-load window and
+   * failed identically every time — a recovery action that recreates the
+   * conditions it is recovering from is not a recovery action.
+   */
+  retry: () => void
+}
+
+/**
+ * Resolution state tagged with the subdomain it was computed for (AGL-894).
+ *
+ * `retry` is deliberately NOT part of the state: it is a stable callback the
+ * hook derives, not something a read can produce, and putting it in state
+ * would mean every `setState` had to carry it around.
+ */
+interface ResolutionState extends Omit<HostResolution, 'retry'> {
+  /** The `subdomain` argument this state describes; null off host routes. */
+  for: string | null
+}
+
+/**
+ * Resolve a URL subdomain to a host doc id within the current org (AGL-844),
+ * replacing the whole-`hosts`-list scan the provider used to do. Two bounded
+ * reads instead of the org's entire site list, BOTH answered by the server
+ * (AGL-3596) — see "Why never the cache" below:
+ *
+ * 1. The user's own projection: `users/{uid}/hostMemberships where subdomain==…
+ *    and orgId==…` — one doc for the sites they can reach in this org.
+ * 2. Fallback for legacy hosts whose projection wasn't backfilled: the
+ *    authoritative membership-scoped `hosts` query (today's mechanism), so a
+ *    pre-projection site never false-404s.
+ *
+ * A miss (neither finds it) settles `ready` with `hostId: null`; the provider's
+ * cross-org redirect + the HostGuard's 404 handle it exactly as before. Errors
+ * retry with backoff and only then set `error`, preserving the AGL-813/827
+ * "never 404 an unconfirmed empty" contract.
+ *
+ * ## Why never the cache
+ *
+ * The answer decides which site every page under `[host]` reads and writes,
+ * so an answer the server has not given is not an answer. The persistent
+ * IndexedDB cache outlives the site it describes: after a site is deleted,
+ * and even after its subdomain is taken by a NEW site, a cached projection
+ * row still maps the subdomain to the deleted id. Resolving from it mounted
+ * the deleted site's pages over its cached screens and layouts while every
+ * live listener underneath was refused. Both reads therefore go to the
+ * server, and a read that cannot reach it takes the retry/error path — a
+ * spinner and then "check your connection", never cached data.
+ *
+ * `ready` is derived DURING RENDER from the subdomain the state was computed
+ * for, never left standing across a subdomain change (AGL-894). Effects run
+ * after paint, so a plain `ready` boolean in state stayed true for one render
+ * after a client-side navigation onto a host route — and `hostId` was still
+ * null — which is exactly the `ready && !hostId` shape HostGuard 404s on. That
+ * one render is why picking a site in the switcher landed on "This page isn't
+ * here" while a hard refresh of the same URL worked.
+ *
+ * ## Re-entering a site is instant (AGL-3718)
+ *
+ * The guard holds EVERYTHING under `[host]` until this settles, so each round
+ * trip here is spinner time added to every page, and the answer used to be
+ * thrown away whenever the route left the site — Site → Sites list → the same
+ * site, or switching sites and back, paid the full server wait again each
+ * time. Two changes, neither of which reads the cache:
+ *
+ * - Each SERVER-confirmed answer is remembered for the life of this hook
+ *   instance (the root `HostIdProvider`'s, so: this tab). Coming back to a
+ *   site renders at once from that answer and re-asks the server in the
+ *   background; a different answer replaces it (a recreated or renamed site,
+ *   or a miss the guard turns into "doesn't exist anymore"), and a failed
+ *   re-check keeps it rather than erroring a page that is already showing.
+ *   This is memory, never IndexedDB, so it cannot outlive the tab the way
+ *   AGL-3596's cached mapping did. `retry()` forgets every answer, so the
+ *   guard's Try again and the provider's host-gone recheck always go to the
+ *   server and hold the spinner, exactly as before.
+ * - The projection and the authoritative query start TOGETHER. The projection
+ *   still wins when it has a row; a miss no longer pays a second serial round
+ *   trip before the authoritative answer — which is the whole wait on the way
+ *   to "This site doesn't exist anymore".
+ */
+export function useHostResolution(
+  firestore: Firestore,
+  subdomain: string | null,
+  uid: string | undefined,
+  orgId: string | undefined,
+): HostResolution {
+  const [state, setState] = useState<ResolutionState>({
+    for: null,
+    hostId: null,
+    ready: false,
+    error: false,
+    authError: false,
+  })
+  // Bumping this re-runs the effect below, which is the whole mechanism
+  // behind `retry` (AGL-1200).
+  const [attempt, setAttempt] = useState(0)
+  // Server-confirmed answers for this tab (AGL-3718), keyed by who asked,
+  // in which org, for which address.
+  const confirmedRef = useRef<Map<string, string>>(new Map())
+  const retry = useCallback(() => {
+    // A retry is a request for the SERVER's answer: the guard's Try again,
+    // or the provider re-checking a site that went away underneath it.
+    confirmedRef.current.clear()
+    setAttempt((value) => value + 1)
+  }, [])
+  const confirmedKey =
+    subdomain && uid && orgId ? confirmationKey(uid, orgId, subdomain) : null
+
+  useEffect(() => {
+    // Off a host route there is nothing to resolve.
+    if (!subdomain) {
+      setState({
+        for: null,
+        hostId: null,
+        ready: true,
+        error: false,
+        authError: false,
+      })
+      return
+    }
+    // Hold (spinner) until we know the user and their current org.
+    if (!uid || !orgId) {
+      setState({
+        for: subdomain,
+        hostId: null,
+        ready: false,
+        error: false,
+        authError: false,
+      })
+      return
+    }
+
+    let cancelled = false
+    let retried = 0
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const key = confirmationKey(uid, orgId, subdomain)
+    const confirmed = confirmedRef.current
+    // An answer the server already gave this tab: render on it now, and let
+    // the reads below re-check it without ever turning it into an error.
+    const known = confirmed.get(key) ?? null
+    const revalidating = known !== null
+
+    const settle = (hostId: string | null) => {
+      if (hostId) confirmed.set(key, hostId)
+      else confirmed.delete(key)
+      setState({
+        for: subdomain,
+        hostId,
+        ready: true,
+        error: false,
+        authError: false,
+      })
+    }
+
+    const resolve = async () => {
+      // Both reads start now (AGL-3718). The projection is a fast-path
+      // optimization, not the source of truth — if it is unavailable
+      // (rules/index still rolling out, or a transient error) it counts as no
+      // row and the authoritative query decides. Only the authoritative read
+      // (which the rules always allow, no special index) drives retry/error,
+      // so routing never breaks on the projection.
+      const projectionRead = getDocsFromServer(
+        query(
+          collection(firestore, 'users', uid, 'hostMemberships'),
+          where('subdomain', '==', subdomain),
+          where('orgId', '==', orgId),
+          limit(1),
+        ),
+      ).then(
+        (projection) => projection.docs[0]?.id ?? null,
+        () => null,
+      )
+      // Legacy / not-yet-backfilled / projection-unavailable: the
+      // authoritative membership query (today's mechanism).
+      //
+      // Server-only in BOTH directions: a cached hit can name a deleted
+      // site (AGL-3596), and a cached empty can be a stale `noDocument`
+      // tombstone for a live one (AGL-813/827). A server error falls
+      // through to the retry/error path below.
+      const authoritativeRead = getDocsFromServer(
+        query(
+          collection(firestore, 'hosts'),
+          where(`memberRoles.${uid}`, 'in', HOST_ACCESS_ROLES),
+          where('subdomain', '==', subdomain),
+          limit(1),
+        ),
+      )
+      // Observed below only when the projection misses; a projection hit must
+      // not leave its failure unhandled.
+      authoritativeRead.catch(() => undefined)
+
+      try {
+        const projected = await projectionRead
+        if (cancelled) return
+        if (projected) {
+          settle(projected)
+          return
+        }
+        const authoritative = await authoritativeRead
+        if (cancelled) return
+        const host = authoritative.docs[0]
+        // Only resolve if it belongs to the CURRENT org; a match in another
+        // org is left for the provider's cross-org redirect (hostId stays null).
+        settle(host && host.get('orgId') === orgId ? host.id : null)
+      } catch (caught) {
+        if (cancelled) return
+        // A background re-check that could not reach the server leaves the
+        // answer it was checking standing: the page is already open on it,
+        // and the host listener under the guard reports the site going away.
+        if (revalidating) return
+        if (retried < MAX_RETRIES) {
+          timer = setTimeout(resolve, retryDelayMs(retried))
+          retried += 1
+        } else {
+          // The LAST failure is the one still standing, so it is the one
+          // the user is being told about and the one the recovery is keyed
+          // on. A streak that started `unavailable` and ended
+          // `permission-denied` is a session fault by the time it latches.
+          setState({
+            for: subdomain,
+            hostId: null,
+            ready: true,
+            error: true,
+            authError: isAuthFailure(caught),
+          })
+        }
+      }
+    }
+    setState({
+      for: subdomain,
+      hostId: known,
+      ready: known !== null,
+      error: false,
+      authError: false,
+    })
+    void resolve()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [firestore, subdomain, uid, orgId, attempt])
+
+  // State from a previous subdomain describes a different route, so it cannot
+  // stand in for this one: until the effect re-runs, the honest answer is "not
+  // ready" (a spinner), never a settled miss the guard would 404 (AGL-894) —
+  // unless the server already named this site to this tab (AGL-3718).
+  if (state.for !== subdomain) {
+    const known = confirmedKey ? confirmedRef.current.get(confirmedKey) : null
+    return {
+      hostId: known ?? null,
+      ready: !subdomain || Boolean(known),
+      error: false,
+      authError: false,
+      retry,
+    }
+  }
+  return {
+    hostId: state.hostId,
+    ready: state.ready,
+    error: state.error,
+    authError: state.authError,
+    retry,
+  }
+}
+
+/** One remembered answer per user, org and address (AGL-3718). */
+function confirmationKey(uid: string, orgId: string, subdomain: string) {
+  return `${uid}\u0000${orgId}\u0000${subdomain}`
+}
+
+export default useHostResolution

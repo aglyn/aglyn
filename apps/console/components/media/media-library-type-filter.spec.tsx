@@ -29,7 +29,7 @@ import { join } from 'node:path'
 import {
   uploadAcceptAttribute,
   uploadAcceptForPickerKind,
-} from '../../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MediaLibraryComponent } from './media-library.component'
 
@@ -184,7 +184,7 @@ jest.mock('../../hooks/use-current-org', () => ({
   useCurrentOrg: () => mockCurrentOrg,
 }))
 
-jest.mock('../../hooks/use-org-hosts', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({
   __esModule: true,
   default: () => mockOrgHosts,
   useOrgHosts: () => mockOrgHosts,
@@ -234,7 +234,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
 }))
 
 // jsdom has no decoder; the probe's own no-decoder answer, without its timers.
-jest.mock('../../utils/video-probe', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/video-probe', () => ({
   __esModule: true,
   probeVideoFile: async () => ({ reason: 'no browser video decoder available' }),
 }))

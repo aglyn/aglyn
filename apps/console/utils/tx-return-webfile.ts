@@ -18,7 +18,7 @@
 /**
  * The return, as a person sits down to file it (AGL-1900).
  *
- * `apps/console/utils/server/tx-return.ts` computes the figures; this module
+ * `libs/tenant/data/admin/src/lib/server/console/tx-return.ts` computes the figures; this module
  * is the half that had no surface — turning one `/api/admin/tax-return`
  * response into the three things the filing seat actually needs:
  *
@@ -61,7 +61,7 @@ import type {
 import type {
   TaxReturnRowFinding,
   TaxReturnSummary,
-} from './server/tx-return'
+} from '@aglyn/tenant-data-admin/server/console/tx-return'
 import type { TaxablePurchasesEntry } from './taxable-purchases'
 import {
   TAX_REGISTRATION_UNSET,
@@ -69,7 +69,7 @@ import {
   taxFilingJurisdiction,
   TX_JURISDICTION,
   type TaxFilingJurisdiction,
-} from './tax-jurisdictions'
+} from '@aglyn/aglyn/app-utils/console/tax-jurisdictions'
 
 export { centsToDollars, TAX_REGISTRATION_UNSET, TX_JURISDICTION }
 

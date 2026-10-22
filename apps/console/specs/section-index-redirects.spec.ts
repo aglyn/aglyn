@@ -39,7 +39,7 @@ import { join } from 'node:path'
 import {
   sectionIndexTarget,
   type SearchParams,
-} from '../utils/section-index-redirect'
+} from '@aglyn/aglyn/app-utils/console/section-index-redirect'
 
 const APP = join(__dirname, '../app')
 

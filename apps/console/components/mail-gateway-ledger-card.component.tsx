@@ -41,14 +41,14 @@ import { Alert, AlertTitle, Button, Chip, Stack, Typography } from '@mui/materia
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import useStaffListQuery from '../hooks/use-staff-list-query'
+import useStaffListQuery from '@aglyn/tenant-feature-instance/hooks/console/use-staff-list-query'
 import {
   MAIL_GATEWAY_LEDGER_COLUMN_SORTS,
   MAIL_GATEWAY_LEDGER_FILTER_FIELDS,
   MAIL_GATEWAY_LEDGER_FILTER_HEADERS,
   MAIL_GATEWAY_LEDGER_LIST_QUERY,
   MAIL_GATEWAY_LEDGER_LIST_SORT,
-} from '../utils/mail-gateway-ledger-list-query'
+} from '@aglyn/aglyn/app-utils/console/mail-gateway-ledger-list-query'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 /**

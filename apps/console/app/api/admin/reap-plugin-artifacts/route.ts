@@ -29,12 +29,12 @@ import {
   findMaintenanceJob,
   refuseStaffRun,
   type StaffRunRequest,
-} from '../../../../utils/maintenance-jobs'
+} from '@aglyn/aglyn/app-utils/console/maintenance-jobs'
 import {
   ArtifactObject,
   artifactClaimKey,
   planArtifactReap,
-} from '../../../../utils/server/reap-plugin-artifacts'
+} from '@aglyn/tenant-data-admin/server/console/reap-plugin-artifacts'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**

@@ -34,7 +34,7 @@
  * empty log search stops being ambiguous between "healthy" and "never called".
  */
 
-import postTenantRevalidate from '../utils/server/tenant-revalidate'
+import postTenantRevalidate from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 
 const OLD_SECRET = process.env['REVALIDATE_SECRET']
 const OLD_FETCH = global.fetch

@@ -25,7 +25,7 @@ import {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback } from 'react'
-import supportRequest from '../utils/support-request'
+import supportRequest from '@aglyn/aglyn/app-utils/console/support-request'
 import useCurrentOrg from './use-current-org'
 
 /**

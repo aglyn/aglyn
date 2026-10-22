@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import * as impersonationReasonModule from '@aglyn/aglyn/app-utils/console/impersonation-reason'
+
 /**
  * Staff impersonation records WHY (AGL-2125).
  *
@@ -173,7 +175,7 @@ describe('staff impersonation records why (AGL-2125)', () => {
     const {
       IMPERSONATION_MIN_REASON_LENGTH,
     } = require('../components/staff-impersonation-dialog.component')
-    expect(require('../utils/impersonation-reason').IMPERSONATION_MIN_REASON_LENGTH).toBe(
+    expect(impersonationReasonModule.IMPERSONATION_MIN_REASON_LENGTH).toBe(
       IMPERSONATION_MIN_REASON_LENGTH,
     )
     expect(IMPERSONATION_MIN_REASON_LENGTH).toBeGreaterThan(1)

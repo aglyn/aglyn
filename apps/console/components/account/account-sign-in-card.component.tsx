@@ -36,8 +36,8 @@ import { linkWithPopup, unlink } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import AccountIdentitiesCard from '../account-identities-card.component'
 import { docsHelp } from '../../constants/docs-links'
-import useAccountSignInMethods from '../../hooks/use-account-sign-in-methods'
-import { createGoogleOAuthProvider } from '../../utils/oauth-providers'
+import useAccountSignInMethods from '@aglyn/tenant-feature-instance/hooks/console/use-account-sign-in-methods'
+import { createGoogleOAuthProvider } from '@aglyn/aglyn/app-utils/console/oauth-providers'
 
 /** Firebase providerId → a name a person recognizes (AGL-852). */
 const PROVIDER_LABELS: Record<string, string> = {

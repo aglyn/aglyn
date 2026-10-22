@@ -26,7 +26,7 @@ import {
   PAGE_VIEW_PUBLISHED_PRICE_USD,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { MEDIA_BANDWIDTH_DAY_FIELD } from '@aglyn/aglyn/app-utils/media-bandwidth'
-import { METERED_BILLED_RATES_USD } from '../utils/usage-metering'
+import { METERED_BILLED_RATES_USD } from '@aglyn/aglyn/app-utils/console/usage-metering'
 
 /**
  * VIDEO AND FILES ON THE INVOICE, DRIVEN THROUGH THE ROUTE THAT CHARGES

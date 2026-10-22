@@ -33,7 +33,7 @@ import {
   percentChange,
   recordedUsageLines,
   type StaffOrgUsageMonth,
-} from '../utils/staff-org-usage-view'
+} from '@aglyn/aglyn/app-utils/console/staff-org-usage-view'
 import {
   PluginListColumnCells,
   PluginListColumnHeaders,

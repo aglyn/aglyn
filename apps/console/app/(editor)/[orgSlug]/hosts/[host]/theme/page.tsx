@@ -21,7 +21,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
-import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /**

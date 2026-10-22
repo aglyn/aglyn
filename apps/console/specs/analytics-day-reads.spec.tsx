@@ -37,7 +37,7 @@
  */
 import { render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { resetAnalyticsDayCache } from '../utils/analytics-day-cache'
+import { resetAnalyticsDayCache } from '@aglyn/aglyn/app-utils/console/analytics-day-cache'
 import ScreenAnalyticsCard from '../components/analytics/screen-analytics-card.component'
 
 const mockGetDoc = jest.fn()
@@ -54,7 +54,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'pro' }, ready: true }),
 }))
-jest.mock('../constants/entitlements', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/entitlements', () => ({
   hasEntitlement: () => true,
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({

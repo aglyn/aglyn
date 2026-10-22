@@ -39,14 +39,14 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { buildRoute, Route } from '../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { firstTouchField } from '../utils/account-acquisition'
 import { currentConsoleLandingHref } from '../utils/console-landing'
 import hardNavigate from '../utils/hard-navigate'
-import { requestStarterSite } from '../utils/host-first-run'
+import { requestStarterSite } from '@aglyn/aglyn/app-utils/console/host-first-run'
 import {
   SITE_START_LIVE_VALUE,
   SITE_START_PARAM,

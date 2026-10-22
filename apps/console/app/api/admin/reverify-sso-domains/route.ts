@@ -92,7 +92,7 @@ import {
   driftStaffTitle,
   summariseSsoDrift,
   type SsoDomainDriftEntry,
-} from '../../../../utils/server/sso-domain-drift'
+} from '@aglyn/tenant-data-admin/server/console/sso-domain-drift'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /** A ceiling on time and DNS traffic, not on truth. */

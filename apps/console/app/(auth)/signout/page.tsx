@@ -23,7 +23,7 @@ import { useEffect } from 'react'
 import { useAuth } from '@aglyn/tenant-feature-instance'
 import AuthFormComponent from '../../../components/auth-form.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
-import { endConsoleSession } from '../../../utils/end-console-session'
+import { endConsoleSession } from '@aglyn/aglyn/app-utils/console/end-console-session'
 
 function SignOut() {
   const firebaseAuth = useAuth()

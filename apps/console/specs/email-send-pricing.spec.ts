@@ -63,7 +63,7 @@ import {
   METERED_MARKUP,
   METERED_OVERAGE_COST_USD,
   METERED_UNIT_RATES_USD,
-} from '../utils/usage-metering'
+} from '@aglyn/aglyn/app-utils/console/usage-metering'
 import {
   ENTERPRISE_EMAIL_SENDS_PER_MONTH,
   ORG_COGS_UNIT_RATES_USD,

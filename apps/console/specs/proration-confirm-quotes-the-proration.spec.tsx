@@ -41,7 +41,8 @@
  * Asserted on the NUMBER and on the field read, never on the prose.
  */
 
-import { prorationQuote } from '../utils/proration-quote'
+import { prorationQuote } from '@aglyn/aglyn/app-utils/console/proration-quote'
+import * as taxExplanationModule from '@aglyn/aglyn/app-utils/console/tax-explanation'
 
 /**
  * The AGL-535 fixture, reused deliberately: the switch costs $30.00 and the
@@ -235,8 +236,7 @@ describe('the tax on a mid-cycle change', () => {
     // reverse-charge wording here must be the SAME string the plan quote uses.
     const {
       taxExplanation,
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-    } = require('../utils/tax-explanation')
+    } = taxExplanationModule
     const shared = taxExplanation({
       taxComplete: true,
       taxCents: 0,

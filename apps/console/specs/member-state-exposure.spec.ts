@@ -39,7 +39,7 @@ import {
   memberStateExposure,
   resolveSubjectCountry,
   supervisoryAuthorityFor,
-} from '../utils/server/member-state-exposure'
+} from '@aglyn/tenant-data-admin/server/console/member-state-exposure'
 
 describe('deviceLocationCountry', () => {
   it('takes the country off a "City, Region, Country" sign-in location', () => {

@@ -36,12 +36,12 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
+import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '@aglyn/aglyn/app-utils/console/collection-templates'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   announceCollectionChange,
   collectionLivePaths,
-} from '../../../../utils/server/announce-collection-change'
+} from '@aglyn/tenant-data-admin/server/console/announce-collection-change'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 // `author` (AGL-2334) manages the collection's SHAPE — creating one, naming

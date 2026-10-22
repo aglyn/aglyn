@@ -26,7 +26,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import { AUDIO_RIGHTS_STATEMENT } from '../../utils/media-audio-rights'
+import { AUDIO_RIGHTS_STATEMENT } from '@aglyn/aglyn/app-utils/console/media-audio-rights'
 
 export interface MediaAudioRightsDialogProps {
   /** The audio files about to be uploaded, by name; empty closes the dialog. */

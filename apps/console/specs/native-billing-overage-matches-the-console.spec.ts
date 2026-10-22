@@ -22,7 +22,7 @@ import {
   orgSubscriptionState,
   resolvePlanPricing,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { billsOrgLibraryStorage, METERED_BILLED_RATES_USD } from '../utils/usage-metering'
+import { billsOrgLibraryStorage, METERED_BILLED_RATES_USD } from '@aglyn/aglyn/app-utils/console/usage-metering'
 
 /**
  * The native "Past your plan" screen prices a month past the plan's bands from the entitlements route's quotas and

@@ -25,7 +25,7 @@ import {
   mediaObjectPath,
   resolveMediaScope,
   scopeAllows,
-} from '../../../../utils/server/media-scope'
+} from '@aglyn/tenant-data-admin/server/console/media-scope'
 import {
   HOSTS_PER_SCAN,
   type MediaScanHost,
@@ -66,7 +66,7 @@ async function handler(request: Request): Promise<Response> {
       return emailUnverifiedResponse()
     }
     const firestore = firebaseAdmin.app().firestore()
-    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
+    // lockdown-423: via libs/tenant/data/admin/src/lib/server/console/media-scope.ts — the scope
     // resolver runs the verdict on the org/host docs it already reads and
     // hands the 423 refusal back as `error.response`.
     const { scope, error } = await resolveMediaScope(body, query, decoded.uid, {

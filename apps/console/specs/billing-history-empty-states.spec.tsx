@@ -58,7 +58,7 @@ import {
   staffBillingCustomerChipLabel,
   staffBillingHistoryEmptyState,
   stripeOtherModeInvoiceNotice,
-} from '../utils/stripe-mode-notice'
+} from '@aglyn/aglyn/app-utils/console/stripe-mode-notice'
 
 export {}
 
@@ -146,11 +146,11 @@ jest.mock('../hooks/use-org-permissions', () => ({
     loaded: true,
   }),
 }))
-jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))
-jest.mock('../utils/fetch-seat-counts', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
 }))

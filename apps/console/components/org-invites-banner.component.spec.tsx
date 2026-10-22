@@ -16,7 +16,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
-import { useInviteReview } from '../hooks/use-pending-invites'
+import { useInviteReview } from '@aglyn/tenant-feature-instance/hooks/console/use-pending-invites'
 import OrgInvitesBanner from './org-invites-banner.component'
 import PendingInvitesProvider from './pending-invites-provider.component'
 
@@ -29,6 +29,14 @@ import PendingInvitesProvider from './pending-invites-provider.component'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'user-ada' } }),
+}))
+
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
 }))
 
 const mockSelectOrg = jest.fn()

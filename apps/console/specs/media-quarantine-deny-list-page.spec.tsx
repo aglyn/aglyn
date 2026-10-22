@@ -49,9 +49,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
 }))
 
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
+}))
+
 // The route's parser answers the table below; the Admin SDK half of its
 // module is not needed.
-jest.mock('../utils/server/list-filter', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/console/list-filter', () => ({
   __esModule: true,
   applyListQuery: jest.fn(),
 }))
@@ -90,7 +98,7 @@ jest.mock('../components/staff-only.component', () => ({
 }))
 
 let mockRole = 'super'
-jest.mock('../hooks/use-is-staff', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
   useStaffRole: () => mockRole,
@@ -103,9 +111,9 @@ import {
   DENY_SEARCH_PATHS,
   denyListRow,
   type QuarantineRecord,
-} from '../utils/media-quarantine-list-query'
-import { answerStaffCompleteList } from '../utils/server/staff-complete-list'
-import { readStaffListQuery } from '../utils/server/staff-list-query'
+} from '@aglyn/aglyn/app-utils/console/media-quarantine-list-query'
+import { answerStaffCompleteList } from '@aglyn/tenant-data-admin/server/console/staff-complete-list'
+import { readStaffListQuery } from '@aglyn/tenant-data-admin/server/console/staff-list-query'
 
 const SHA_KEY = `hash--${'a'.repeat(64)}`
 const LEGACY_KEY = 'hash--0123456789abcdef'

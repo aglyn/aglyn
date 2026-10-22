@@ -21,12 +21,12 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useRef } from 'react'
 import { editorHintCookieDomain } from './editor-hint-cookie.component'
-import { emailGateWouldRefuse } from '../utils/email-verification-gate'
+import { emailGateWouldRefuse } from '@aglyn/aglyn/app-utils/console/email-verification-gate'
 import {
   isSignUpLandingHeld,
   markLeavingConsole,
   useSignUpLandingHeld,
-} from '../utils/sign-up-landing-hold'
+} from '@aglyn/aglyn/app-utils/console/sign-up-landing-hold'
 
 /**
  * The `*.aglyn.app` half of the editor-presence hint (AGL-1842).

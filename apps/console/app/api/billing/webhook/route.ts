@@ -68,13 +68,13 @@ import {
   invoiceNotice,
   invoiceNoticeLink,
 } from './customer-billing-notices'
-import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
+import { revalidateOrgHosts } from '@aglyn/tenant-data-admin/server/console/tenant-revalidate'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
 } from '../../../../utils/internal-traffic'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
-import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
+import { stripeCustomerIdentityParams } from '@aglyn/aglyn/app-utils/console/stripe-customer-identity'
 import {
   addonQuantitiesFromItems,
   aiTierFromItems,
@@ -85,11 +85,11 @@ import {
   backfillMeteredItem,
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
-import { refreshScheduleTargetPhase } from '../../../../utils/server/billing-schedule'
+import { refreshScheduleTargetPhase } from '@aglyn/tenant-data-admin/server/console/billing-schedule'
 import {
   heldUpdateApplied,
   stripeCallWithKey,
-} from '../../../../utils/server/immediate-charge'
+} from '@aglyn/tenant-data-admin/server/console/immediate-charge'
 import {
   invoiceClosedBeforeFirstPayment,
   platformInvoiceRevenue,
@@ -105,12 +105,12 @@ import {
 import {
   billingIntervalFromInvoice,
   selectSubscriptionLine,
-} from '../../../../utils/server/billing-interval'
+} from '@aglyn/tenant-data-admin/server/console/billing-interval'
 // Signature verification lives in `utils/server/stripe-signature` so it can be
 // driven directly by spec — it is the security boundary this whole route sits
 // behind, and it must handle the MULTIPLE `v1` signatures a secret roll sends
 // (AGL-1552).
-import { verifyStripeSignature } from '../../../../utils/server/stripe-signature'
+import { verifyStripeSignature } from '@aglyn/tenant-data-admin/server/console/stripe-signature'
 // The ENVIRONMENT gate (AGL-2040). Signature verification proves an event came
 // from Stripe; it says nothing about WHICH Stripe. Both destinations point
 // here on purpose (AGL-547), so this route must ask separately.
@@ -118,7 +118,7 @@ import {
   deploymentLivemode,
   eventLivemode,
   livemodeDecision,
-} from '../../../../utils/server/stripe-livemode'
+} from '@aglyn/tenant-data-admin/server/console/stripe-livemode'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { recordSiteCareProjectPayment } from '@aglyn/tenant-data-admin/server/site-care-projects'
 // The leaf, not the barrel: the webhook's specs substitute the barrel, and

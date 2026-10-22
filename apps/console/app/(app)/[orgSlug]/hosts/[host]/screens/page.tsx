@@ -128,10 +128,10 @@ import {
   type ScreenHierarchyRow,
   type ScreenMoveRequest,
 } from '../../../../../../components/screens-hierarchy-table.component'
-import { checkOrgQuota } from '../../../../../../constants/entitlements'
+import { checkOrgQuota } from '@aglyn/aglyn/app-utils/console/entitlements'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
 import PageHoldChips from '../../../../../../components/page-holds/page-hold-chips.component'
@@ -142,19 +142,19 @@ import { resolveScreenLiveUrl } from '../../../../../../constants/tenant-links'
 import {
   syncScreenRouteEntries,
   unpublishScreenRoute,
-} from '../../../../../../constants/screen-publishing'
+} from '@aglyn/aglyn/app-utils/console/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
-import createScreenDraft from '../../../../../../utils/create-screen-draft'
+import createScreenDraft from '@aglyn/aglyn/app-utils/console/create-screen-draft'
 import {
   ceilingedWindow,
   hostArtifactQuery,
 } from '../../../../../../utils/host-artifact-queries'
-import useCollectionTemplates from '../../../../../../hooks/use-collection-templates'
+import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
-import useHostRole from '../../../../../../hooks/use-host-role'
+import useHostRole from '@aglyn/tenant-feature-instance/hooks/console/use-host-role'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {

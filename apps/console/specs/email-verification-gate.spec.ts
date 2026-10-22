@@ -28,7 +28,7 @@
 import {
   claimsFailEmailGate,
   emailGateWouldRefuse,
-} from '../utils/email-verification-gate'
+} from '@aglyn/aglyn/app-utils/console/email-verification-gate'
 
 const userWithClaims = (claims: Record<string, unknown>) => ({
   getIdTokenResult: async () => ({ claims }),

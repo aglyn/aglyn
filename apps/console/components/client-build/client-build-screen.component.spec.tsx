@@ -46,7 +46,7 @@ const mockUserObject = { uid: 'staff-1' }
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockSnackbar }),
 }))
-jest.mock('../../hooks/use-is-staff', () => ({ __esModule: true, useIsStaff: () => true }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-is-staff', () => ({ __esModule: true, useIsStaff: () => true }))
 jest.mock('../../hooks/use-org-scope', () => ({
   __esModule: true,
   useOrgScope: () => ({ currentOrg: { $id: 'org-1', slug: 'harbor' } }),
@@ -59,7 +59,7 @@ jest.mock('../../hooks/use-host', () => ({
   __esModule: true,
   useHost: () => ({ doc: { data: mockSite, status: 'success' } }),
 }))
-jest.mock('../../utils/host-first-run', () => ({
+jest.mock('@aglyn/aglyn/app-utils/console/host-first-run', () => ({
   __esModule: true,
   requestStarterSiteOutcome: (...args: unknown[]) => mockStarter(...(args as [])),
 }))

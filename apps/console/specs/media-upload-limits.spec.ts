@@ -35,7 +35,7 @@ import {
   VIDEO_UPLOADS_PAUSED_CODE,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
   VIDEO_UPLOADS_RELEASE_FLAG,
-} from '../utils/media-upload-limits'
+} from '@aglyn/aglyn/app-utils/console/media-upload-limits'
 
 /**
  * AGL-1317: the org DAM 413'd brand-kit files because the base64-JSON
@@ -177,7 +177,7 @@ describe('one upload allowlist, three layers (AGL-1465)', () => {
 
     it('both routes still resolve types and ceilings through the shared module', () => {
       for (const route of [directRoute, signedRoute]) {
-        expect(route).toContain("utils/media-upload-limits'")
+        expect(route).toContain("app-utils/console/media-upload-limits'")
         expect(route).toContain('normalizeUploadContentType')
       }
       expect(signedRoute).toContain('signedUploadMaxBytes(contentType)')

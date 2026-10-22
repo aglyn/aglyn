@@ -87,12 +87,12 @@ import AuthenticatedLayout from '../../../../../../../../components/layouts/auth
 import BesignerWordmark from '../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../constants/app-setup'
-import { buildRoute, Route } from '../../../../../../../../constants/route-links'
-import useCollectionTemplates from '../../../../../../../../hooks/use-collection-templates'
-import useOpenPreview from '../../../../../../../../hooks/use-open-preview'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
+import useCollectionTemplates from '@aglyn/tenant-feature-instance/hooks/console/use-collection-templates'
+import useOpenPreview from '@aglyn/tenant-feature-instance/hooks/console/use-open-preview'
 import useScreenLinkRoutes, {
   screenLinkLabels,
-} from '../../../../../../../../hooks/use-screen-link-routes'
+} from '@aglyn/tenant-feature-instance/hooks/console/use-screen-link-routes'
 import { useHostId, useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../hooks/use-firestore-collection'

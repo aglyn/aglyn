@@ -30,7 +30,7 @@ import {
   readOrgEmailSendWindow,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import type { OrgEmailSendCeiling } from '../../../../utils/email-send-ceiling'
+import type { OrgEmailSendCeiling } from '@aglyn/aglyn/app-utils/console/email-send-ceiling'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — read feeding the self-serve billing usage section,

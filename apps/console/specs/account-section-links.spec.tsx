@@ -34,8 +34,8 @@
 
 import { act, render } from '@testing-library/react'
 import React from 'react'
-import { ACCOUNT_SECTIONS } from '../constants/account-sections'
-import { buildRoute, Route } from '../constants/route-links'
+import { ACCOUNT_SECTIONS } from '@aglyn/aglyn/app-utils/console/account-sections'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console/route-links'
 
 const mockReplace = jest.fn()
 /** Where the server index redirected. */
@@ -76,6 +76,14 @@ let mockUser: { providerData: Array<{ providerId: string }>; tenantId: string | 
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
+}))
+
+// The moved hooks import these modules directly, which the index mock
+// above does not reach; each hands back the index mock's value.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  get useUser() {
+    return jest.requireMock('@aglyn/tenant-feature-instance').useUser
+  },
 }))
 
 // The section's own card is not what is under test here, and left real it

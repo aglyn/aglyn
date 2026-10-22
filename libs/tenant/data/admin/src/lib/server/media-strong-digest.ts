@@ -108,7 +108,7 @@ import { createHash } from 'node:crypto'
  * The largest object this path will digest.
  *
  * Deliberately equal to the largest non-video `signedMaxBytes` in
- * `apps/console/utils/media-upload-limits.ts` (ZIP, `.pptx`). Raising it
+ * `libs/aglyn/src/lib/app-utils/console/media-upload-limits.ts` (ZIP, `.pptx`). Raising it
  * only ever adds video; lowering it silently strips the strong key off a
  * document type that has one today, which is why the spec asserts the
  * number instead of trusting it.

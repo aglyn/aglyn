@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { stripeAddressDivergence } from '../utils/stripe-address-divergence'
+import { stripeAddressDivergence } from '@aglyn/aglyn/app-utils/console/stripe-address-divergence'
 
 describe('stripeAddressDivergence', () => {
   it('is quiet after a successful push', () => {

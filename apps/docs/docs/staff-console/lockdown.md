@@ -1830,7 +1830,7 @@ live subscriptions exist. Every run names the mode it read, because a green run
 against a test key says nothing whatsoever about live.
 
 The mode-tagged constants, and the probe evidence above, live in one place:
-`apps/console/utils/stripe-dunning-schedule.ts`.
+`libs/aglyn/src/lib/app-utils/console/stripe-dunning-schedule.ts`.
 
 ### What the live Dashboard did say, once someone opened it (AGL-2430)
 

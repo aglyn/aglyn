@@ -238,7 +238,7 @@ jest.mock('../hooks/use-current-org', () => ({
  * It also states the case the POS narrowing is really about: somebody who
  * runs this site completely, and still may not open the till.
  */
-jest.mock('../hooks/use-host-role', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/console/use-host-role', () => ({
   __esModule: true,
   default: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
   useHostRole: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
