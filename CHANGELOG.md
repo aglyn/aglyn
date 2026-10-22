@@ -20,6 +20,8 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **admin:** lazy-load the hand-off emails to break an import cycle ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **email:** platform mail replies to the support mailbox; addresses stay text ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **signup:** retry a derived sign-up workspace address under a suffix on 409 ([AGL-4024](https://linear.app/aglyn/issue/AGL-4024))
 
 ### Tests
 
