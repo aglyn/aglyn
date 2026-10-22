@@ -97,21 +97,25 @@ public func recordRecentOrg(_ recent: [String], _ orgID: String) -> [String] {
   return Array(([orgID] + idList(recent).filter { $0 != orgID }).prefix(values.recentOrgsMax))
 }
 
-/// The rail for one account: up to five pinned, a divider, up to three recent, then "All workspaces (N)"; an account
-/// with eight workspaces or fewer sees them all and no All tile. `orgIDs` is every membership, in the switcher's order.
+/// The rail for one account, the same however few workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
+/// pinned, a divider, up to three recent, a divider, then "All workspaces (N)", which opens the switcher where pins are
+/// edited (Zach, 2026-10-19). `rest` is always empty. `orgIDs` is every membership, in the switcher's order.
 public func railWorkspaces(_ orgIDs: [String], pinned: [String], recent: [String]) -> RailWorkspaces {
   let members = idList(orgIDs)
   let belongs = Set(members)
   let pins = effectivePinnedOrgs(pinned).filter { belongs.contains($0) }
   let pinnedSet = Set(pins)
-  if members.count <= values.railAllWorkspacesAtMost {
-    return RailWorkspaces(
-      allTile: false, pinned: pins, recent: [], rest: members.filter { !pinnedSet.contains($0) }, total: members.count)
-  }
   return RailWorkspaces(
-    allTile: true, pinned: pins,
+    allTile: !members.isEmpty, pinned: pins,
     recent: Array(idList(recent).filter { belongs.contains($0) && !pinnedSet.contains($0) }.prefix(values.railRecentOrgs)),
     rest: [], total: members.count)
+}
+
+/// The one letter a workspace tile without a logo shows (Figma Rail/Workspace tile, Type=Initial): the first letter or
+/// digit of its name, upper-cased; "?" for a name with neither.
+public func workspaceInitial(_ name: String) -> String {
+  guard let first = name.first(where: { $0.isLetter || $0.isNumber }) else { return "?" }
+  return String(first).uppercased()
 }
 
 // MARK: Starred and recent items

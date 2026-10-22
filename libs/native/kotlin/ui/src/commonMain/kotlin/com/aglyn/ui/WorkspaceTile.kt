@@ -51,6 +51,8 @@ internal const val LogoSlotInset = 0.15f
 /**
  * A workspace's picture: its logo when it has one, else its initials on its color (the person's pick, its brand color, a
  * color taken from its logo, else the brand slate). [selected] rings it; [badge] shows a count of what waits there.
+ * [initials] are the letters drawn without a logo: a workspace's one initial (the contract's `workspaceInitial`, Figma
+ * Rail/Workspace tile, Type=Initial); a site's tile leaves them to [workspaceInitials], two letters.
  */
 @Composable
 fun WorkspaceTile(
@@ -70,14 +72,23 @@ fun WorkspaceTile(
   ringRadius: Dp? = null,
   /** The initials' size; proportional to the tile when not given. */
   initialSize: androidx.compose.ui.unit.TextUnit? = null,
+  initials: String? = null,
+  /** Whether the tile keeps its ring's box when it is not selected, so a column of tiles keeps one rhythm (the rail). */
+  reserveRing: Boolean = false,
+  /** The badge's cut-out ring, in the ground it sits on (Figma Badge: 2 in bg/rail), and where it sits off the corner. */
+  badgeRing: Color? = null,
+  badgeOffset: androidx.compose.ui.unit.DpOffset = androidx.compose.ui.unit.DpOffset.Zero,
 ) {
   val shell = shellColors
   val radius = cornerRadius ?: (size * 0.28f)
   val shape = RoundedCornerShape(radius)
   val shown = (if (isSystemInDarkTheme()) darkLogoUrl else null) ?: logoUrl
   val image = rememberRemoteBitmap(shown)
-  val fill = color ?: LocalAglynPalette.current.tertiary.main
-  Box(modifier.size(if (selected) ringBox else size), contentAlignment = Alignment.Center) {
+  // A workspace with no color of its own: the brand slate (#404C5C) in light and dark alike, as Figma's Rail draws it,
+  // never the dark palette's light slate, which glared on the dark rail (AGL-4000).
+  val fill = color ?: AglynTokens.light.tertiary.main
+  val letters = initials ?: workspaceInitials(name)
+  Box(modifier.size(if (selected || reserveRing) ringBox else size), contentAlignment = Alignment.Center) {
     // Selected: a 2 dp ring clear of the tile (the rail adds its 3 dp bar at the edge).
     if (selected) Box(Modifier.size(ringBox).border(2.dp, shell.ring, RoundedCornerShape(ringRadius ?: (radius + 4.dp))))
     // A logo sits on Figma's paper plate (Rail/Workspace tile, Type=Logo: 5:47 / 97:899): white in light and dark, a 1 dp
@@ -93,21 +104,30 @@ fun WorkspaceTile(
         Image(image, contentDescription = null, modifier = Modifier.size(size).padding(size * LogoSlotInset), contentScale = ContentScale.Fit)
       } else {
         Text(
-          workspaceInitials(name),
+          letters,
           color = readableOn(fill),
           fontWeight = FontWeight.SemiBold,
-          fontSize = initialSize ?: (size.value * if (workspaceInitials(name).length > 1) 0.36f else 0.42f).sp,
+          fontSize = initialSize ?: (size.value * if (letters.length > 1) 0.36f else 0.42f).sp,
           maxLines = 1,
         )
       }
     }
     if (badge > 0) {
+      // With a cut-out (the rail's), the ring is 2 dp OUTSIDE a fill of [badgeSize] (Figma Badge: the fill is 14 on the
+      // desktop, 18 on tablets, and the cut-out is extra), so the ring's box is what [badgeOffset] places.
       Box(
-        Modifier.align(Alignment.TopEnd).sizeIn(minWidth = badgeSize, minHeight = badgeSize)
-          .clip(CircleShape).background(shell.badge).padding(horizontal = 4.dp),
+        Modifier.align(Alignment.TopEnd).offset(badgeOffset.x, badgeOffset.y)
+          .then(if (badgeRing != null) Modifier.clip(CircleShape).background(badgeRing).padding(2.dp) else Modifier)
+          .sizeIn(minWidth = badgeSize, minHeight = badgeSize)
+          .clip(CircleShape).background(shell.badge)
+          .padding(horizontal = if (badgeRing != null) badgeSize * 0.2f else 4.dp),
         contentAlignment = Alignment.Center,
       ) {
-        Text(if (badge > 99) "99+" else badge.toString(), color = shell.onBadge, fontSize = (badgeSize.value * 0.6f).sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        // Figma Label/Badge: 10 bold on both sizes (the rail's); elsewhere it scales with the badge.
+        Text(
+          if (badge > 99) "99+" else badge.toString(), color = shell.onBadge,
+          fontSize = if (badgeRing != null) 10.sp else (badgeSize.value * 0.6f).sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+        )
       }
     }
   }

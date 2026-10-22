@@ -85,26 +85,31 @@ fun recordRecentOrg(recent: List<String>, orgId: String): List<String> {
 }
 
 /**
- * The rail for one account: up to five pinned, a divider, up to three recent, then an "All workspaces (N)" tile; an
- * account with eight workspaces or fewer sees them all and no All tile. [orgIds] is every membership in the switcher's
- * order; an id the person no longer belongs to is ignored.
+ * The rail for one account, the same however few workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
+ * pinned, a divider, up to three recent, a divider, then "All workspaces (N)", which opens the switcher where pins are
+ * edited (Zach, 2026-10-19). `rest` is always empty. [orgIds] is every membership in the switcher's order; an id the
+ * person no longer belongs to is ignored.
  */
 fun railWorkspaces(orgIds: List<String>, pinned: List<String>, recent: List<String>): RailWorkspaces {
   val members = idList(orgIds)
   val belongs = members.toSet()
   val pins = effectivePinnedOrgs(pinned).filter { it in belongs }
   val pinnedSet = pins.toSet()
-  if (members.size <= Contracts.railAllWorkspacesAtMost) {
-    return RailWorkspaces(allTile = false, pinned = pins, recent = emptyList(), rest = members.filter { it !in pinnedSet }, total = members.size.toLong())
-  }
   return RailWorkspaces(
-    allTile = true,
+    allTile = members.isNotEmpty(),
     pinned = pins,
     recent = idList(recent).filter { it in belongs && it !in pinnedSet }.take(Contracts.railRecentOrgs.toInt()),
     rest = emptyList(),
     total = members.size.toLong(),
   )
 }
+
+/**
+ * The one letter a workspace tile without a logo shows (Figma Rail/Workspace tile, Type=Initial): the first letter or
+ * digit of its name, upper-cased; "?" for a name with neither.
+ */
+fun workspaceInitial(name: String): String = name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
+
 
 // ── Starred and recent items ────────────────────────────────────────────────
 

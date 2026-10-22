@@ -60,9 +60,6 @@ export const RECENT_ORGS_MAX = 8
 /** How many recent workspaces the rail shows below the pins. */
 export const RAIL_RECENT_ORGS = 3
 
-/** An account with this many workspaces or fewer sees them all on the rail. */
-export const RAIL_ALL_WORKSPACES_AT_MOST = 8
-
 /** `users/{uid}` field holding the person's starred screens and records. */
 export const STARRED_FIELD = 'starred'
 
@@ -183,7 +180,8 @@ export const DEFAULT_APP_THEME: AppThemePrefs = {
   accent: 'theme',
   density: 'comfortable',
   textSize: 'system',
-  sidebarStyle: 'tinted',
+  // Plain: a sidebar keeps the theme's neutral ground unless the person picks Tinted (AGL-3990).
+  sidebarStyle: 'plain',
   appIcon: 'aglyn',
   useWorkspaceBrand: true,
 }
@@ -457,20 +455,28 @@ export interface RailWorkspaces {
   pinned: string[]
   /** Below the divider: recently opened and not pinned, at most {@link RAIL_RECENT_ORGS}. */
   recent: string[]
-  /** Every other workspace, for an account small enough to list them all. */
+  /**
+   * Workspaces listed on the rail beyond the pins and the recents. Always
+   * empty: every account reaches the rest through the All tile (Zach,
+   * 2026-10-19). The field stays so the apps that read it need no change.
+   */
   rest: string[]
-  /** Whether the last tile is "All workspaces", opening the searchable switcher. */
+  /** Whether the last tile is "All workspaces", opening the searchable switcher: whenever there is a workspace. */
   allTile: boolean
   /** How many workspaces the person belongs to, shown under the All tile. */
   total: number
 }
 
 /**
- * The rail for one account: up to five pinned, a divider, up to three recent,
- * then an "All workspaces (N)" tile. An account with
- * {@link RAIL_ALL_WORKSPACES_AT_MOST} workspaces or fewer sees them all and
- * no All tile, since there is nothing to hide. `orgIds` is every membership,
- * in the switcher's order; an id the person no longer belongs to is ignored.
+ * The rail for one account, the same for every account however few
+ * workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
+ * pinned, a divider, up to three recent under "Recent", a divider, then the
+ * "All workspaces" tile with the total, which opens the switcher where pins
+ * are edited. Zach, 2026-10-19, on a six-workspace account that saw every
+ * tile in one unlabeled column: "we are missing all orgs buttons and the
+ * ability to open that dialog that edits pins and we are missing the recents
+ * label and divider". `orgIds` is every membership, in the switcher's order;
+ * an id the person no longer belongs to is ignored.
  */
 export function railWorkspaces(
   orgIds: readonly string[],
@@ -481,24 +487,26 @@ export function railWorkspaces(
   const belongs = new Set(members)
   const pins = effectivePinnedOrgs(pinned).filter((id) => belongs.has(id))
   const pinnedSet = new Set(pins)
-  if (members.length <= RAIL_ALL_WORKSPACES_AT_MOST) {
-    return {
-      pinned: pins,
-      recent: [],
-      rest: members.filter((id) => !pinnedSet.has(id)),
-      allTile: false,
-      total: members.length,
-    }
-  }
   return {
     pinned: pins,
     recent: idList(recent)
       .filter((id) => belongs.has(id) && !pinnedSet.has(id))
       .slice(0, RAIL_RECENT_ORGS),
     rest: [],
-    allTile: true,
+    allTile: members.length > 0,
     total: members.length,
   }
+}
+
+/**
+ * The one letter a workspace tile without a logo shows (Figma Rail/Workspace
+ * tile, Type=Initial): the first letter or digit of its name, upper-cased;
+ * "?" for a name with neither. One letter, not two: the tile's color, picked
+ * per workspace, tells two workspaces with the same letter apart.
+ */
+export function workspaceInitial(name: string): string {
+  const first = /[\p{L}\p{N}]/u.exec(name ?? '')
+  return first ? first[0].toUpperCase() : '?'
 }
 
 // ── Starred and recent items ────────────────────────────────────────────────

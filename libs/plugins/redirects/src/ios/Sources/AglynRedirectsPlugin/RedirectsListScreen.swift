@@ -73,7 +73,7 @@ struct RedirectsListScreen: View {
         "No redirects yet", systemImage: RedirectsSymbols.rule,
         message: "Send an old address to a new one so visitors and search engines find it."
       ) {
-        Button("Add redirect") { editor?.add() }.buttonStyle(.borderedProminent)
+        Button("Add redirect") { editor?.add() }.buttonStyle(.aglynProminent)
       }
     } else if selectable {
       List(model.rows) { row in

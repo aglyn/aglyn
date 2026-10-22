@@ -227,13 +227,13 @@ struct EmailDetail: View {
         if canSend {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack {
-              if send.canSendNow { Button("Send now") { sheet = .sendNow }.buttonStyle(.borderedProminent).accessibilityIdentifier("email-send-now") }
-              if send.canFollowUp { Button("Send to more") { sheet = .followUp }.buttonStyle(.borderedProminent) }
-              if send.canCompose { Button("Edit") { sheet = .edit }.buttonStyle(.bordered).accessibilityIdentifier("email-edit") }
-              if send.canCompose { Button("Send a test") { sheet = .test }.buttonStyle(.bordered).accessibilityIdentifier("email-test") }
-              if send.canStop { Button("Stop sending", role: .destructive) { sheet = .cancel }.buttonStyle(.bordered) }
-              if send.canCancel { Button("Cancel send", role: .destructive) { sheet = .cancel }.buttonStyle(.bordered) }
-              Button("Rename") { sheet = .rename }.buttonStyle(.bordered)
+              if send.canSendNow { Button("Send now") { sheet = .sendNow }.buttonStyle(.aglynProminent).accessibilityIdentifier("email-send-now") }
+              if send.canFollowUp { Button("Send to more") { sheet = .followUp }.buttonStyle(.aglynProminent) }
+              if send.canCompose { Button("Edit") { sheet = .edit }.buttonStyle(.aglynSecondary).accessibilityIdentifier("email-edit") }
+              if send.canCompose { Button("Send a test") { sheet = .test }.buttonStyle(.aglynSecondary).accessibilityIdentifier("email-test") }
+              if send.canStop { Button("Stop sending", role: .destructive) { sheet = .cancel }.buttonStyle(.aglynSecondary) }
+              if send.canCancel { Button("Cancel send", role: .destructive) { sheet = .cancel }.buttonStyle(.aglynSecondary) }
+              Button("Rename") { sheet = .rename }.buttonStyle(.aglynSecondary)
             }
           }
         }

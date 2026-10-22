@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,6 +52,7 @@ import com.aglyn.core.WorkspaceState
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.BrandPicture
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WorkspaceTile
 import kotlinx.coroutines.launch
 
@@ -206,7 +206,7 @@ private fun WorkspaceRow(
     detail = orgDetail(org, workspace),
     selected = org.id == workspace.org?.id,
     tag = "picker-org-${org.id}",
-    leading = { WorkspaceTile(org.name, light, dark, color, size = 36.dp) },
+    leading = { WorkspaceTile(org.name, light, dark, color, size = 36.dp, initials = com.aglyn.contracts.workspaceInitial(org.name)) },
     trailing = {
       TextButton(
         onClick = { if (isPinned) services.accountPrefs.unpin(org.id) else if (services.accountPrefs.pin(org.id) == PinAnswer.FULL) onPinFull(org.id) },

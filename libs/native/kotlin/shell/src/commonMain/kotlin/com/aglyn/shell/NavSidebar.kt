@@ -107,7 +107,6 @@ internal fun NavSidebar(
   content: SidebarContent,
   selectedKey: String,
   starred: List<StarredItem>,
-  tint: Color?,
   onRow: (NavItem) -> Unit,
   onStar: (StarredItem) -> Unit,
   modifier: Modifier = Modifier,
@@ -125,8 +124,9 @@ internal fun NavSidebar(
     else -> 0
   }
   val scene = SidebarScene("${mode?.raw}|${workspace.site?.id}|${workspace.org?.id}", depth, content, workspace)
-  // One flush, full-height column under the toolbar (no inset card).
-  Column(modifier.width(m.sidebarWidth).fillMaxHeight().background(tint ?: shell.sidebar).testTag("nav-sidebar")) {
+  // One flush, full-height column under the toolbar (no inset card), on the theme's own sidebar ground: a workspace's
+  // color never washes it (AGL-4000).
+  Column(modifier.width(m.sidebarWidth).fillMaxHeight().background(shell.sidebar).testTag("nav-sidebar")) {
     AnimatedContent(
       targetState = scene,
       contentKey = { it.key },
@@ -307,7 +307,7 @@ private fun WorkspaceHeaderRow(services: ShellServices, workspace: WorkspaceStat
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    WorkspaceTile(org.name, light, dark, color, size = m.workspaceLogo, cornerRadius = m.workspaceLogoRadius, initialSize = m.rowText * 0.8f)
+    WorkspaceTile(org.name, light, dark, color, size = m.workspaceLogo, cornerRadius = m.workspaceLogoRadius, initialSize = m.rowText * 0.8f, initials = com.aglyn.contracts.workspaceInitial(org.name))
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text(
         org.name,
@@ -552,6 +552,9 @@ internal fun NavGroupsList(
   Box(Modifier.fillMaxWidth().onGloballyPositioned { origin = it }) {
     SelectionPillLayer(pill, dense, reduce)
     CompositionLocalProvider(LocalSelectionPill provides pill, LocalPillOrigin provides origin) {
+      // Opening a destination opens its own group if the person had folded it, and leaves every other group as it is.
+      val currentGroup = groups.firstOrNull { g -> g.foldable && g.dynamic != "starred" && g.rows.any { selectedKey in it.keys } }?.id
+      androidx.compose.runtime.LaunchedEffect(listId, selectedKey, currentGroup) { currentGroup?.let { chrome.reveal(listId, it) } }
       Column(Modifier.fillMaxWidth()) {
         // The workspace's header has a hairline under it (Figma Sidebar, Scope = Workspace).
         if (dense && listId == com.aglyn.contracts.NativeNavListId.WORKSPACE && query.isEmpty()) NavDivider(Modifier.padding(vertical = 1.dp))

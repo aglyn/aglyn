@@ -64,7 +64,7 @@ public struct AglynFormCard<Content: View>: View {
         Button(action: onSave) {
           if busy { ProgressView().controlSize(.small) } else { Text("Save") }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(!dirty || !canSave || busy)
         .accessibilityIdentifier("card-save-\(title)")
       }

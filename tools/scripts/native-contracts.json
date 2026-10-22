@@ -846,7 +846,6 @@
         "RECENT_ORGS_FIELD",
         "RECENT_ORGS_MAX",
         "RAIL_RECENT_ORGS",
-        "RAIL_ALL_WORKSPACES_AT_MOST",
         "STARRED_FIELD",
         "STARRED_MAX",
         "RECENTS_FIELD",
@@ -928,6 +927,7 @@
         "THEME_PALETTES",
         "THEME_ACCENTS",
         "THEME_ACCENT_SWATCHES",
+        "THEME_RETIRED_ACCENTS",
         "THEME_DENSITIES",
         "THEME_PREVIEWS",
         "THEME_DARK_RAIL_SEEDS",
@@ -26528,6 +26528,63 @@
           ],
           [],
           []
+        ],
+        [
+          [
+            "w1",
+            "w2",
+            "w3",
+            "w4",
+            "w5",
+            "w6"
+          ],
+          [
+            "w6"
+          ],
+          [
+            "w6",
+            "w2"
+          ]
+        ],
+        [
+          [
+            "w1",
+            "w2"
+          ],
+          [],
+          []
+        ]
+      ]
+    },
+    "workspaceInitial": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "Juniper Street Co."
+        ],
+        [
+          "elevated concepts"
+        ],
+        [
+          "EDR Construction"
+        ],
+        [
+          "  42 Studio"
+        ],
+        [
+          "Ölstudio Berlin"
+        ],
+        [
+          "— Aglyn"
+        ],
+        [
+          "🌿 Fern & Fig"
+        ],
+        [
+          ""
+        ],
+        [
+          "—"
         ]
       ]
     },

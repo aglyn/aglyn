@@ -18,12 +18,27 @@ class AppThemesTest {
       for (dark in listOf(false, true)) {
         val page = if (dark) Color(0xFF1E262E) else Color.White
         val accent = deriveAccent(raw, dark)
-        assertTrue(contrastRatio(accent.onFill, accent.fill) >= 4.5f, "fill of $raw")
+        // White on every fill (AGL-3990), at the large-text bar at least: the console's own pairing for a brand color.
+        assertEquals(Color.White.toHex(), accent.onFill.toHex(), "on of $raw")
+        assertTrue(contrastRatio(accent.onFill, accent.fill) >= 2.4f, "fill of $raw")
         assertTrue(contrastRatio(accent.text, page) >= 4.5f, "text of $raw on dark=$dark")
         assertTrue(accent.fillPressed.luminance() <= accent.fillHover.luminance() && accent.fillHover.luminance() <= accent.fill.luminance())
         assertEquals(raw.toHex(), accent.ring.toHex())
       }
     }
+  }
+
+  @Test
+  fun theBrandBlueIsTheConsolesPrimary() {
+    // #00B0FF under white; #0077AD as text on light, #4DC8FF on dark (AGL-3990, the console's primary.dark).
+    val light = deriveAccent(Color(0xFF00B0FF), false)
+    val dark = deriveAccent(Color(0xFF00B0FF), true)
+    assertEquals(Color(0xFF00B0FF).toHex(), light.fill.toHex())
+    assertEquals(Color.White.toHex(), light.onFill.toHex())
+    assertEquals(Color(0xFF0077AD).toHex(), light.text.toHex())
+    assertEquals(Color(0xFF4DC8FF).toHex(), dark.text.toHex())
+    // An accent saved from the retired #0073AE swatch reads as the brand blue.
+    assertEquals(light, deriveAccent(Color(0xFF0073AE), false))
   }
 
   @Test

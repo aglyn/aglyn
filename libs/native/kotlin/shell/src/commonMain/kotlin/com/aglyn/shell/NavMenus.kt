@@ -30,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -58,6 +57,7 @@ import com.aglyn.contracts.NativeNavListId
 import com.aglyn.core.AuthUser
 import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WorkspaceTile
 import com.aglyn.ui.colorOfHex
 import com.aglyn.ui.shellColors
@@ -85,7 +85,7 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
     val (light, dark) = orgLogoUrls(workspace, org.id, services.api.origin)
     val (color) = rememberWorkspaceColor(org.id, workspace, prefs, services.api.origin)
     Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      WorkspaceTile(org.name, light, dark, color, size = 40.dp)
+      WorkspaceTile(org.name, light, dark, color, size = 40.dp, initials = com.aglyn.contracts.workspaceInitial(org.name))
       Column(Modifier.weight(1f)) {
         Text(org.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(workspaceAddress(services, org.slug), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -284,7 +284,7 @@ internal fun KeepPinsDialog(services: ShellServices, workspace: WorkspaceState, 
 
 /**
  * Workspace colors: the pick for one workspace, saved on the account. Automatic uses the brand color, then a color taken
- * from the logo; a pick shows on the rail tile and as a light tint while you are in it. Only you see your pick.
+ * from the logo; a pick shows on the workspace's tile only, never as a tint over the app (AGL-4000). Only you see it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -302,7 +302,7 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-          WorkspaceTile(org.name, light, dark, current, size = 40.dp)
+          WorkspaceTile(org.name, light, dark, current, size = 40.dp, initials = com.aglyn.contracts.workspaceInitial(org.name))
           Column {
             Text(org.name, style = MaterialTheme.typography.titleSmall)
             Text(
