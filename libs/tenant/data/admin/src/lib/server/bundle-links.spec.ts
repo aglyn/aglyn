@@ -20,7 +20,10 @@
  * and the one-time waiver of the domains plugin's invoice-age gate it gives.
  */
 
-export {}
+// Static, not a deferred require: a first-party specifier deferred in a spec
+// registers a dynamic nx graph edge (aglyn/no-dynamic-first-party-import). The
+// module is not mocked here, so nothing needs it loaded after the mocks.
+import { parseOnboardingPlanIntent } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
 
 type Doc = Record<string, unknown>
 
@@ -101,8 +104,6 @@ const {
   mintBundleLink,
   readBundleLinkDomain,
 } = require('./bundle-links') as typeof import('./bundle-links')
-const { parseOnboardingPlanIntent } =
-  require('@aglyn/aglyn/app-utils/onboarding-deep-link') as typeof import('@aglyn/aglyn/app-utils/onboarding-deep-link')
 
 const ORG = 'org-1'
 const NOW = 1_800_000_000_000
