@@ -3,6 +3,8 @@ package com.aglyn.plugins.commerce.pos
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import com.aglyn.hardware.deviceReaders
+import com.aglyn.ui.OutlinedButton
+import com.aglyn.ui.TextButton
 import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -25,10 +27,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -105,7 +105,7 @@ private fun PaidSummary(state: CheckoutState, step: CheckoutStep.Receipt, fmt: (
     Icon(AglynIcons.named("check_circle"), null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
     Text(fmt(state.sale.totalCents), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
     if (step.changeCents > 0) {
-      Text("Change due ${fmt(step.changeCents)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("pos-change"))
+      Text("Change due ${fmt(step.changeCents)}", style = MaterialTheme.typography.titleLarge, color = com.aglyn.ui.aglynAccentText, modifier = Modifier.testTag("pos-change"))
     }
   }
 }
@@ -551,7 +551,7 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
       Text(
         it,
         style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
+        color = com.aglyn.ui.aglynAccentText,
         textAlign = TextAlign.Center,
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("pos-reader-prompt"),
       )

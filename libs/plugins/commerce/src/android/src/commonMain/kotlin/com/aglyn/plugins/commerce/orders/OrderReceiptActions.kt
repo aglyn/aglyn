@@ -3,7 +3,6 @@ package com.aglyn.plugins.commerce.orders
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +29,7 @@ import com.aglyn.plugins.commerce.pos.ReceiptLayoutOptions
 import com.aglyn.plugins.commerce.pos.layoutReceipt
 import com.aglyn.plugins.commerce.pos.readPosContext
 import com.aglyn.plugins.commerce.pos.receiptDataFromOrder
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException

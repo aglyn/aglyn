@@ -20,7 +20,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -51,6 +50,7 @@ import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.AglynLogo
 import com.aglyn.ui.AglynTheme
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space

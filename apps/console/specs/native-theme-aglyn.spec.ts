@@ -27,6 +27,7 @@
 import { darken, decomposeColor, hslToRgb, lighten } from '@mui/material/styles'
 import { getConsoleTheme } from '@aglyn/shared-ui-theme/console.theme'
 import {
+  deriveAccent,
   THEME_CONSOLE_FIELDS,
   THEME_PALETTES,
   type ThemeColors,
@@ -94,5 +95,17 @@ describe('the native Aglyn theme is the console’s scheme', () => {
     expect(Object.keys(expected).sort()).toEqual([...THEME_CONSOLE_FIELDS].sort())
     const actual = Object.fromEntries(THEME_CONSOLE_FIELDS.map((field) => [field, aglyn?.[mode][field as keyof ThemeColors]]))
     expect(actual).toEqual(expected)
+  })
+
+  // The brand accent IS the console's primary (AGL-3990): the fill and the
+  // white on it, the accent-text shade (`primary.dark`, AGL-1186) per scheme,
+  // and the light hover fill (`primary.hover`, AGL-3465).
+  it.each(['light', 'dark'] as const)('wears the console’s %s primary as its accent', (mode) => {
+    const primary = getConsoleTheme(mode).palette.primary as { main: string; dark: string; contrastText: string; hover?: string }
+    const accent = deriveAccent(aglyn?.accent ?? '')
+    expect(accent?.fill).toBe(primary.main.toLowerCase())
+    expect(accent?.on).toBe(primary.contrastText.toLowerCase())
+    expect(mode === 'light' ? accent?.textLight : accent?.textDark).toBe(primary.dark.toLowerCase())
+    if (mode === 'light') expect(accent?.hover).toBe(primary.hover?.toLowerCase())
   })
 })

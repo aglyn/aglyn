@@ -51,10 +51,13 @@ export const AUTH_COLORS = {
   infoBackground: pair('#E3F0FB', '#132C42'),
   /** accent/ring: a focused field. */
   focusRing: pair('#00B0FF'),
-  /** brand/primary-dark: the primary button (5.2:1 under white, both appearances). */
-  primary: pair('#0073AE'),
-  primaryHover: pair('#00669B'),
-  primaryPressed: pair('#005884'),
+  /**
+   * accent/fill: the primary button, the brand blue under white as the console's contained button draws it (AGL-3990;
+   * #0073AE is retired). Hover is the console's `primary.hover`.
+   */
+  primary: pair('#00B0FF'),
+  primaryHover: pair('#0077AD'),
+  primaryPressed: pair('#006999'),
   onPrimary: pair('#FFFFFF'),
   secondaryFill: pair('#FFFFFF', '#1E262E'),
   secondaryHover: pair('#EEF1F5', '#2A343E'),

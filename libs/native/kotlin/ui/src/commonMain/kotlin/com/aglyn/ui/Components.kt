@@ -301,7 +301,16 @@ fun StatusChip(label: String, tone: StatusTone = StatusTone.NEUTRAL, modifier: M
     StatusTone.INFO -> palette.info.main.copy(alpha = 0.14f) to palette.info.text
     StatusTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
   }
-  Surface(modifier, shape = CircleShape, color = background, contentColor = foreground) {
+  // On a selected row the chip is the paper with a 1 ring in the secondary text, so it stands off the selection's wash
+  // (Figma List/Order row Selected 11:343, AGL-3990).
+  val selected = LocalRowSelected.current
+  Surface(
+    modifier,
+    shape = CircleShape,
+    color = if (selected) LocalThemeSurfaces.current?.surface ?: MaterialTheme.colorScheme.surfaceContainerLowest else background,
+    contentColor = foreground,
+    border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant) else null,
+  ) {
     Text(
       label,
       Modifier.padding(horizontal = 10.dp, vertical = 4.dp),

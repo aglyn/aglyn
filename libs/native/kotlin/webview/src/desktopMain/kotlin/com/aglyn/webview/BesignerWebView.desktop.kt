@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -24,6 +23,7 @@ import com.aglyn.pluginhost.BesignerEntry
 import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.webview.webview2.NavigationVerdict
 import com.aglyn.webview.webview2.WEBVIEW2_RUNTIME_DOWNLOAD
 import com.aglyn.webview.webview2.WebView2Listener
