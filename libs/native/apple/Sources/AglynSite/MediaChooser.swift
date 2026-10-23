@@ -166,7 +166,7 @@ private struct MediaChooserGrid: View {
           message: model.search.isEmpty && canUpload ? "Upload a file from this device to choose it." : nil)
         {
           if model.search.isEmpty && canUpload {
-            Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.borderedProminent)
+            Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.aglynProminent)
           }
         }
       case .ready(let items):

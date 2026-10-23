@@ -1,7 +1,11 @@
 package com.aglyn.ui
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -21,7 +25,8 @@ import com.aglyn.contracts.themePalette
  * Whole-app theming (AGL-3946 Phase 4). The palettes, named accents, swatches and densities are the contract's
  * (native-themes.ts, AGL-3950: Figma's Native App variables, Ocean and Warm derived from their previews), and so is the
  * accent derivation; this file only turns them into Compose colors. The brand's own theme's palette comes from the
- * console's scheme; its "Theme" accent stays the console's primary, so the default look is the console's.
+ * console's scheme, and its "Theme" accent IS the console's primary (#00B0FF under white, #0077AD / #4DC8FF as text),
+ * so the default look is the console's.
  */
 
 /** A theme's grounds, lines, inks and status pairs, for one appearance. */
@@ -84,6 +89,33 @@ fun themeSurfaces(theme: AppThemeName, dark: Boolean): ThemeSurfaces? {
   val (light, darkSurfaces) = surfacesById[palette.id] ?: return null
   return if (dark || palette.alwaysDark == true) darkSurfaces else light
 }
+
+private val phoneBoldPair: Pair<ThemeSurfaces, ThemeSurfaces> by lazy {
+  Contracts.themePhoneAglyn.light.toSurfaces() to Contracts.themePhoneAglyn.dark.toSurfaces()
+}
+
+/**
+ * The Aglyn theme's grounds on a PHONE (the contract's THEME_PHONE_AGLYN, Figma Theme mode 223:0, AGL-3990): a sky-tinted
+ * ground under white panels in light, navy in dark. Only [PhoneTheme] draws them.
+ */
+fun phoneBoldSurfaces(dark: Boolean): ThemeSurfaces = if (dark) phoneBoldPair.second else phoneBoldPair.first
+
+/**
+ * Whether [theme] with [accentHex] (the accent in force, null for the theme's own) is the brand's look the phone's bold
+ * grounds belong to: the Aglyn theme in the brand blue. A picked accent or a white-label brand keeps the console's grounds,
+ * since the bold ones are tinted with the brand blue.
+ */
+fun isBrandLook(theme: AppThemeName, accentHex: String?): Boolean {
+  if (themePalette(theme.raw).id != ThemePaletteId.AGLYN) return false
+  val raw = accentHex?.lowercase() ?: return true
+  return (Contracts.themeRetiredAccents[raw] ?: raw) == Contracts.themePhoneBoldAccent.lowercase()
+}
+
+/** Whether the app draws the brand's own look (see [isBrandLook]); set by [AglynTheme]. */
+val LocalBrandLook = staticCompositionLocalOf { false }
+
+/** Whether the phone's bold brand look is on: set by [PhoneTheme], read by the shared phone pieces. */
+val LocalPhoneBold = staticCompositionLocalOf { false }
 
 /** Whether [theme] is dark whatever the appearance says (Night). */
 fun themeIsAlwaysDark(theme: AppThemeName): Boolean = themePalette(theme.raw).alwaysDark == true
@@ -166,6 +198,20 @@ val LocalThemeSurfaces = staticCompositionLocalOf<ThemeSurfaces?> { null }
 
 /** The accent in effect. */
 val LocalAccent = staticCompositionLocalOf<AccentColors?> { null }
+
+/**
+ * The accent AS TEXT on the page: a link, a text or outlined button's label, a tab's label (AGL-3990). It is the
+ * console's `primary.dark` per scheme (#0077AD light, #4DC8FF dark for the brand blue, AGL-1186), never the fill:
+ * Material's `primary` is the brand blue #00B0FF, a fill and an indicator, 2.43:1 as text on white.
+ */
+val aglynAccentText: Color
+  @Composable @ReadOnlyComposable get() = LocalAccent.current?.text ?: MaterialTheme.colorScheme.primary
+
+/**
+ * Whether the row a view sits in is selected. A tile or a status chip on the selection's wash takes the paper with a
+ * ring so it stands off the wash (Figma List/Order row Selected 11:343, AGL-3990).
+ */
+val LocalRowSelected = compositionLocalOf { false }
 
 // ── On Material 3 ───────────────────────────────────────────────────────────
 

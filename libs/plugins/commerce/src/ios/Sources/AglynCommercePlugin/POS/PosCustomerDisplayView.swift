@@ -476,7 +476,7 @@ struct PosDevicePairingView: View {
         .accessibilityIdentifier("pairing-entry")
       if let error { AglynNotice(error, tone: .error).frame(maxWidth: 360) }
       Button(busy ? "Pairing…" : "Pair \(noun)") { onPair(code) }
-        .buttonStyle(.borderedProminent).controlSize(.large)
+        .buttonStyle(.aglynProminent).controlSize(.large)
         .disabled(code.count != 6 || busy)
         .accessibilityIdentifier("pairing-submit")
       Spacer(minLength: 0)

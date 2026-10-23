@@ -744,8 +744,11 @@ internal fun NavLine(
     // takes the accent (as Figma draws the sidebar).
     val ink = MaterialTheme.colorScheme.onSurface
     val iconSize = if (dense) m.rowIcon else 20.dp
+    // The phone's Menu in the bold look: the icon on an accent tile, a dot in the tile's 30 dp slot (AGL-3990).
+    val tile = !dense && com.aglyn.ui.LocalPhoneBold.current
     when {
-      dot != null -> Box(Modifier.size(iconSize + 2.dp), contentAlignment = Alignment.Center) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+      dot != null -> Box(Modifier.size(if (tile) 30.dp else iconSize + 2.dp), contentAlignment = Alignment.Center) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+      icon != null && tile -> com.aglyn.ui.PhoneRowTile(icon, Modifier.testTag("$tag-icon"))
       icon != null -> Icon(AglynIcons.named(icon), null, Modifier.size(iconSize).testTag("$tag-icon"), tint = if (selected) MaterialTheme.colorScheme.primary else ink)
     }
     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

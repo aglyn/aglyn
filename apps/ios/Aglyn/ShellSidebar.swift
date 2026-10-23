@@ -482,9 +482,7 @@ struct SidebarList: View {
     } else if !rows.isEmpty {
       if push && group.id == "more" && group.foldable && filter.isEmpty {
         // More is a row of its own on the phone too (Figma 22:176, "··· More ›"), opening its rows under it.
-        PhoneMenuRow(title: "More", action: { toggle(group) }) {
-          Image(systemName: "ellipsis").font(.system(size: 18)).foregroundStyle(AglynColor.accentIcon)
-        }
+        PhoneMenuRow(title: "More", action: { toggle(group) }) { AglynPhoneRowIcon(systemName: "ellipsis") }
         .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityIdentifier("sidebar-group-more")
       } else if push {
@@ -559,7 +557,7 @@ struct SidebarList: View {
   private func rowView(_ row: NativeNavRow, indent: Int = 0) -> some View {
     if push {
       PhoneMenuRow(title: row.label, action: { activate(ShellScope.target(of: row)) }) {
-        Image(systemName: row.appleIcon).font(.system(size: 18)).foregroundStyle(AglynColor.accentIcon)
+        AglynPhoneRowIcon(systemName: row.appleIcon)
       }
       .contextMenu { starMenu(row) }
       .accessibilityIdentifier("sidebar-\(row.id)")
@@ -682,8 +680,8 @@ struct SidebarBrandHeader: View {
   }
 }
 
-/// A row of the phone's Menu (Figma Phone/List row): a 22-point line icon, the label at 17 points and a chevron, 52
-/// points tall across the screen.
+/// A row of the phone's Menu (Figma Phone/List row): a 22-point line icon (in the bold look a 30-point accent tile,
+/// `AglynPhoneRowIcon`), the label at 17 points and a chevron, 52 points tall across the screen.
 struct PhoneMenuRow<Leading: View>: View {
   let title: String
   let action: () -> Void
@@ -691,8 +689,8 @@ struct PhoneMenuRow<Leading: View>: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 14) {
-        leading().frame(width: 22, height: 22)
+      HStack(spacing: AglynThemeRuntime.shared.phoneBold ? 12 : 14) {
+        leading().frame(minWidth: AglynThemeRuntime.shared.phoneBold ? 30 : 22, minHeight: 22)
         Text(title).font(.system(size: 17)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
         Spacer(minLength: 8)
         Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold))
