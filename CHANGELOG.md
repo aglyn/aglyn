@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.281 — 2026-10-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.280...v1.0.0-beta.281)
+
+### Fixed
+
+- **functions:** run Cloud Functions on Node 20 while Google's Node 22 base image fails to start ([AGL-4028](https://linear.app/aglyn/issue/AGL-4028))
+- **e2e:** the signup canary prints its whole failure, trace included ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **e2e:** the signup canary says what the page shows when the account step stalls ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** raise the Linear id ceiling to AGL-4028, read from the workspace ([AGL-4028](https://linear.app/aglyn/issue/AGL-4028))
+
+</details>
+
 ## v1.0.0-beta.280 — 2026-10-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.279...v1.0.0-beta.280)
