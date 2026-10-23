@@ -18,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -114,7 +113,7 @@ fun BarcodeScanSheet(
       Text(
         status ?: "Point the camera at a barcode. Scanned items are added one after another.",
         style = if (status == null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
-        color = if (status == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+        color = if (status == null) MaterialTheme.colorScheme.onSurfaceVariant else aglynAccentText,
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("barcode-scan-last"),
       )
       TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Done") }

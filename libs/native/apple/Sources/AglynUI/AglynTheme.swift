@@ -100,6 +100,8 @@ extension AglynColor {
   /// Text on a primary fill (a prominent button), the console's `primary.contrastText`.
   public static let primaryContrast = accent(\.contrastText)
   public static let divider = themed { AglynThemeRuntime.shared.surfaces(dark: $0).border }
+  /// A control's outline (Figma border/strong): a secondary button's border, from the theme. Never white in dark.
+  public static let borderStrong = themed { AglynThemeRuntime.shared.surfaces(dark: $0).borderStrong }
   /// The window's title bar.
   public static let titlebar = themed { AglynThemeRuntime.shared.surfaces(dark: $0).titlebar }
   /// A recessed field's ground.

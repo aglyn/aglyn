@@ -20,9 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -67,11 +65,13 @@ import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.MetricCard
 import com.aglyn.ui.MonthGrid
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.TimeGrid
 import com.aglyn.ui.TimeSlotPicker
 import com.aglyn.ui.WidthClass
@@ -349,7 +349,7 @@ private fun AgendaList(
             formatLocalDay(row.startsAtMs, "EEEE, MMMM d"),
             Modifier.padding(start = space(2f), end = space(2f), top = space(2f), bottom = space(0.5f)).semantics { heading() },
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = com.aglyn.ui.aglynAccentText,
           )
         }
       }
