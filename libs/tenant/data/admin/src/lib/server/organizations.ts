@@ -2766,6 +2766,7 @@ export async function acceptOwnerHandoff(
   const db = firestore()
   let move: OwnershipMove | null = null
   let ownerEmail: string | null = null
+  let ownerName: string | null = null
   await db.runTransaction(async (tx) => {
     const orgRef = db.collection('orgs').doc(orgId)
     const orgSnapshot = await tx.get(orgRef)
@@ -2794,6 +2795,7 @@ export async function acceptOwnerHandoff(
     const invitee = inviteeSnapshot.data() as Partial<AglynOrgMember> | undefined
     const owner = ownerSnapshot.data() as Partial<AglynOrgMember> | undefined
     ownerEmail = typeof owner?.email === 'string' ? owner.email : null
+    ownerName = typeof owner?.displayName === 'string' ? owner.displayName : null
     await assertOwnerHandoffSeat({
       orgRef,
       org,
@@ -2846,6 +2848,18 @@ export async function acceptOwnerHandoff(
       : `Took over the workspace; ${ownerEmail ?? 'the previous owner'} left it`,
     { type: 'member', id: uid, name: email },
   )
+  // Both sides hear it from the platform (AGL-4023), by email, whichever
+  // way the handoff completed. Loaded here rather than at the top: the
+  // email renderer's consent module imports this file, and a static import
+  // closed that cycle, so a module reading these exports mid-load saw them
+  // uninitialized.
+  const { sendOwnerHandoffEmails } = await import('./owner-handoff-emails')
+  await sendOwnerHandoffEmails({
+    orgId,
+    newOwner: { email, displayName: displayName ?? null },
+    previousOwner: { email: ownerEmail, displayName: ownerName },
+    previousOwnerStays: settled.previousOwner === 'stay',
+  })
   return {
     previousOwnerUid: settled.fromUid,
     previousOwner: settled.previousOwner,

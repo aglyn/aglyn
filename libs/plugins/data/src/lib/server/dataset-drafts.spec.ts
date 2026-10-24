@@ -93,23 +93,44 @@ function docRef(path: string): Record<string, unknown> {
 
 function collectionRef(path: string): Record<string, unknown> {
   const counted = { kind: 'count', get: async () => ({ data: () => ({ count: childrenOf(path).length }) }) }
-  return { path, doc: (id: string) => docRef(`${path}/${id}`), count: () => counted }
+  // A records query by their `order`, as the late photo pass's revision asks (AGL-3988).
+  const where = (field: string, op: string, values: unknown[]) => ({
+    kind: 'query',
+    get: async () => ({
+      docs: childrenOf(path)
+        .filter((child) => op === 'in' && values.includes(store.get(child)?.[field]))
+        .map((child) => ({ ...snapshotOf(child), ref: docRef(child) })),
+    }),
+  })
+  return { path, doc: (id: string) => docRef(`${path}/${id}`), count: () => counted, where }
 }
 
 const firestore = {
   collection: (name: string) => collectionRef(name),
   runTransaction: async (body: (tx: unknown) => Promise<unknown>) => {
     const creates: Array<[string, Record<string, unknown>]> = []
+    const updates: Array<[string, Record<string, unknown>]> = []
     const result = await body({
       get: async (target: { kind: string; path: string; get: () => Promise<unknown> }) =>
         target.kind === 'doc' ? snapshotOf(target.path) : target.get(),
       create: (ref: { path: string }, data: Record<string, unknown>) => {
         creates.push([ref.path, data])
       },
+      update: (ref: { path: string }, data: Record<string, unknown>) => {
+        updates.push([ref.path, data])
+      },
     })
     for (const [path, data] of creates) {
       if (store.has(path)) throw new Error(`6 ALREADY_EXISTS: ${path}`)
       store.set(path, data)
+    }
+    for (const [path, data] of updates) {
+      const next = { ...(store.get(path) ?? {}) }
+      for (const [key, value] of Object.entries(data)) {
+        if (value && typeof value === 'object' && value.constructor?.name === 'DeleteTransform') delete next[key]
+        else next[key] = value
+      }
+      store.set(path, next)
     }
     return result
   },
@@ -405,5 +426,93 @@ describe('the Image field type (AGL-3616)', () => {
     }
     expect(DATASET_IMAGE_FIELD.baseType).toBe('text')
     expect(DATASET_IMAGE_FIELD.name).toBe(DATASET_IMAGE_FIELD_TYPE)
+  })
+})
+
+/*
+ * The AI site start's late photo pass (AGL-3988): the beta.271 Laurel Fork
+ * "Gallery collections" covers were written on starters before the job had
+ * copied any photo, and are given the job's own photos before the site goes
+ * live.
+ */
+describe('the dataset writer changes a seeded record’s photo (AGL-3988)', () => {
+  const GALLERY = {
+    fields: [{ name: 'Title' }, { name: 'Category' }, { name: 'Image', type: 'image' }, { name: 'Image description' }],
+    records: [
+      { Title: 'Mountain elopements', Category: 'Weddings and elopements', Image: '/_static/starter/hero-team.jpg', 'Image description': 'A small team at a table' },
+      { Title: 'Golden hour families', Category: 'Family portraits', Image: '/_static/starter/gallery-desk.jpg', 'Image description': 'A tidy desk' },
+    ],
+  }
+  const seeded = () => writer.write(request({ name: 'Gallery collections', content: GALLERY }))
+  const revise = (records: unknown, patch: Record<string, unknown> = {}) =>
+    (writer.reviseRecords as NonNullable<typeof writer.reviseRecords>)({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      uid: 'uid-1',
+      org: STARTER as Record<string, unknown>,
+      now: NOW,
+      id: 'job-1-d0',
+      records: records as never,
+      ...patch,
+    })
+  const byOrder = () => [...records()].sort((a, b) => Number(a['order']) - Number(b['order']))
+
+  it('writes the photo and its words where the record still holds the starter, with its filter index, and keeps the rest', async () => {
+    await seeded()
+    const result = await revise([
+      {
+        order: 0,
+        values: { image: '/api/media/cdn/host-1/couple01', image_description: 'A couple at a wedding' },
+        where: { image: '/_static/starter/hero-team.jpg' },
+      },
+    ])
+    expect(result).toEqual({ ok: true, changed: 1 })
+    const [first, second] = byOrder()
+    expect(first?.values).toEqual({
+      title: 'Mountain elopements',
+      category: 'Weddings and elopements',
+      image: '/api/media/cdn/host-1/couple01',
+      image_description: 'A couple at a wedding',
+    })
+    expect((first?.['filterValues'] as Record<string, unknown>)['image']).toBe('/api/media/cdn/host-1/couple01')
+    expect(first?.['updatedAt']).toBe(NOW)
+    expect(second?.values['image']).toBe('/_static/starter/gallery-desk.jpg')
+  })
+
+  it('leaves a record a member changed since, a value no photo field takes, and a field the list does not have', async () => {
+    await seeded()
+    const LATER = new Date('2026-10-10T15:05:00.000Z')
+    const result = await revise(
+      [
+        { order: 0, values: { image: '/api/media/cdn/host-1/couple01' }, where: { image: '/_static/starter/gallery-desk.jpg' } },
+        { order: 1, values: { image: 'a family on a hill' } },
+        { order: 1, values: { nickname: 'x' } },
+      ],
+      { now: LATER },
+    )
+    // None of them is written: the first is a member's now, the second's value no photo field takes, the third's field is not the list's.
+    expect(result).toEqual({ ok: true, changed: 0 })
+    const [first, second] = byOrder()
+    expect(first?.['updatedAt']).toBe(NOW)
+    expect(second?.['updatedAt']).toBe(NOW)
+    expect(first?.values['image']).toBe('/_static/starter/hero-team.jpg')
+    expect(second?.values).not.toHaveProperty('nickname')
+    expect(second?.values['image']).toBe('/_static/starter/gallery-desk.jpg')
+  })
+
+  it('refuses as its write does, and answers a dataset that is gone', async () => {
+    await seeded()
+    member = { role: 'viewer', canManageData: false, member: { role: 'viewer' } }
+    expect(await revise([{ order: 0, values: { image: '/api/media/cdn/host-1/couple01' } }])).toEqual({
+      ok: false,
+      status: 403,
+      error: DATASET_DRAFT_ROLE_REFUSAL,
+    })
+    member = { role: 'editor', canManageData: true, member: { role: 'editor' } }
+    expect(await revise([{ order: 0, values: { image: '/api/media/cdn/host-1/couple01' } }], { id: 'job-1-gone' })).toMatchObject({
+      ok: false,
+      status: 404,
+    })
+    expect(await revise([])).toEqual({ ok: true, changed: 0 })
   })
 })

@@ -136,6 +136,13 @@ describe('/api/admin/bundle-link: staff mint the link (AGL-3955)', () => {
     })
   })
 
+  it('passes the Aglyn AI tier staff picked to the mint (AGL-4025)', async () => {
+    await mint({ plan: 'starter', addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' })
+    expect(mockMint).toHaveBeenCalledWith(
+      expect.objectContaining({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' }),
+    )
+  })
+
   it('a domain that is not an object is no domain line', async () => {
     await mint({ plan: 'starter', domain: 'acme.com' })
     expect(mockMint).toHaveBeenCalledWith(expect.objectContaining({ domain: null }))

@@ -381,7 +381,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#usage-budget': 'A usage budget is a monthly amount you choose, plus the percentages of it you want to hear about — the same shape as a Google Cloud billing budget.',
     '#usage-card': 'The Usage card on Billing → Usage shows every quota on your plan as a meter — sites, team seats, storage, bandwidth, CRM records, campaign emails and the rest — with what you have used against what the plan includes.',
     '#usage-history': 'The Usage history card charts the last twelve months of your workspace\'s usage, one bar per month, so you can tell whether this month is unusual.',
-    '#what-you-will-pay': 'The What you will pay card appears on the Plan tab once you pick a plan to move to, and quotes that plan\'s total for the billing interval you chose, tax included, straight from Stripe.',
+    '#what-you-will-pay': 'The What you will pay card appears on the Plan tab once you pick a plan to move to, and quotes that plan\'s total for the billing interval you chose: with tax, straight from Stripe, once your billing address is on…',
     '#who-is-generating-what': 'Beneath the meters on Billing → Usage, a table lists each member\'s AI credits for a month — their share of the workspace\'s spend, requests, and how often the assistant refused them — dearest first, with the kinds of…',
   },
   bindings: {
@@ -637,6 +637,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#ai-usage': 'Each member\'s page carries an AI usage card: their AI credits this month and last, their share of the workspace\'s pool, their requests, the kinds of request they mostly made, and the split by site.',
     '#help-a-teammate-who-is-locked-out': 'When a teammate cannot sign in, open them from the Team page and use the Password card to email them a reset link — or, when their account belongs to your organization alone, to set a password for them.',
     '#invite-someone': 'Open the organization\'s Team page and choose Add or invite.',
+    '#joining-from-an-invite': 'If you\'re the one being invited, sign up or sign in with the address the invite was sent to, or with any address you\'ve confirmed on your account.',
     '#member-access': 'The Member card sets this person\'s organization role and job title and, for an editor or viewer, which sites they can reach.',
     '#member-activity': 'Activity by this member lists everything this person has done in the organization — on its sites as well as at organization level — newest first.',
     '#member-changes': 'Changes to this member lists what other people changed about this person, such as role and site-access edits, newest first, with who made each change and when.',
@@ -883,6 +884,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   screens: {
     '#basic-details-card': 'The Basic Details card is the page\'s record: its Page ID, Display name and Description, and when it was created, published and last updated.',
+    '#name-and-description-card': 'The page\'s Display name is what it is called across the console: the Pages list, the page switcher and search.',
     '#page-detail': 'View details opens one page\'s settings without opening its design: its basic details, publishing, who can see it, what links to it, its SEO, versions, traffic and recent activity.',
     '#raw-json': 'The Raw JSON card shows the page document exactly as it is stored — a read-only view for developers checking what a page holds.',
     '#slug': 'A page\'s Slug is the path it is served at — / for the home page, about for /about — up to 60 characters.',
@@ -1052,7 +1054,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#where-a-template-came-from': 'Every template shows a badge: Saved here — you created it on this site',
   },
   textEditing: {
-    '#text-field-read-only': 'Once an element carries formatted text, the Text field goes read-only and says so: > This text is formatted — double-click the element on the canvas to edit it.',
+    '#text-field-formatting': 'On an element that takes rich text, the Text field shows your text with its formatting — bold reads as bold, links as links.',
     '#the-text-attribute': 'The Text field in the right-hand panel and double-clicking on the canvas edit the same value.',
   },
   transferHub: {

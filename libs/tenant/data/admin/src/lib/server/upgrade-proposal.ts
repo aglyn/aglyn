@@ -87,6 +87,11 @@ export interface ProposeOrgUpgradeOptions {
   addons?: unknown
   interval?: unknown
   coupon?: unknown
+  /**
+   * The Aglyn AI tier chosen with the AI add-on (AGL-4025); an `ai:<tier>`
+   * entry in `addons` names one too, and this wins when both do.
+   */
+  aiTier?: unknown
   /** The staff member proposing. */
   actor: { uid: string; email?: string | null }
   /** The console origin the email's link is built on. */
@@ -134,7 +139,10 @@ export async function proposeOrgUpgrade(
  * (AGL-3956). Nothing is read or written.
  */
 export function buildUpgradeProposal(
-  options: Pick<ProposeOrgUpgradeOptions, 'plan' | 'note' | 'addons' | 'interval' | 'coupon' | 'actor'> & {
+  options: Pick<
+    ProposeOrgUpgradeOptions,
+    'plan' | 'note' | 'addons' | 'interval' | 'coupon' | 'aiTier' | 'actor'
+  > & {
     now?: number
   },
 ): OrgUpgradeProposal {

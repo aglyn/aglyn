@@ -27,6 +27,7 @@ import {
 import { resolvePageLocale, siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { sendGa4SitePublished } from '@aglyn/tenant-data-admin/server/ga4-measurement-protocol'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
@@ -44,7 +45,9 @@ import { aiSiteSeoProposalForInputs } from '../model/ai-site-start-seo'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
 import { aiLayoutWithMenuChanges, aiNoMenuChanges } from '../model/ai-layout-menus'
 import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
-import { updateAiDraftNodes } from './ai-job-drafts'
+import { readAiDraftNodes, updateAiDraftNodes } from './ai-job-drafts'
+import { aiSiteIsStarterSrc } from '../model/ai-site-photos'
+import type { AiLayoutPicturePhoto } from '../layout-language/ai-layout-pictures'
 
 /**
  * A store's links a build drafted into the site's own layout (AGL-3676): the
@@ -416,6 +419,77 @@ export async function aiRestoreGuidedBlogEntry(
 }
 
 /**
+ * Whether a site's share image is the publish's to set (AGL-3988): it has
+ * none, or still the starter photo every new site is created with. An image
+ * its owner picked is theirs, whatever it is.
+ */
+export function aiSiteShareImageOpen(seo: unknown): boolean {
+  const image = (seo as { image?: unknown } | null | undefined)?.image
+  if (image === undefined || image === null) return true
+  return typeof image === 'string' && (!image.trim() || aiSiteIsStarterSrc(image))
+}
+
+/** The library photos a stored page shows, in document order, each once, with whether it sits in the page's first section. */
+function libraryPhotosOf(nodes: NodesMap | null): Array<AiLayoutPicturePhoto & { lead: boolean }> {
+  if (!nodes) return []
+  const map = nodes as unknown as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
+  const firstSection = map[CANVAS_ROOT_ELEMENT_ID]?.nodes?.[0] ?? null
+  const out: Array<AiLayoutPicturePhoto & { lead: boolean }> = []
+  const seen = new Set<string>()
+  const visit = (id: string, lead: boolean) => {
+    if (seen.has(id)) return
+    seen.add(id)
+    const node = map[id]
+    if (!node) return
+    if (node.componentId === 'image') {
+      const src = node.props?.['src']
+      const width = Number(node.props?.['intrinsicWidth'])
+      const height = Number(node.props?.['intrinsicHeight'])
+      if (typeof src === 'string' && src.startsWith('media:') && width > 0 && height > 0) {
+        const alt = typeof node.props?.['alt'] === 'string' ? (node.props['alt'] as string).trim() : ''
+        out.push({ src, width, height, ...(alt ? { alt } : {}), lead })
+      }
+    }
+    for (const child of node.nodes ?? []) visit(child, lead || child === firstSection)
+  }
+  visit(CANVAS_ROOT_ELEMENT_ID, false)
+  return out
+}
+
+/**
+ * The photo a published site's share image is set from (AGL-3988): its home
+ * page's hero — the first library photo of its first section — else the
+ * widest photo its pages show, a wide one first. `null` where they show no
+ * library photo. The beta.271 Laurel Fork start shared an office team on a
+ * wedding photographer's every link: nothing set the share image from what
+ * the start built, so it kept the starter the site was created with. Pure.
+ */
+export function aiSiteSharePhoto(home: NodesMap | null, pages: ReadonlyArray<NodesMap | null>): AiLayoutPicturePhoto | null {
+  const hero = libraryPhotosOf(home).find((photo) => photo.lead)
+  const pick = (photo: AiLayoutPicturePhoto & { lead?: boolean }): AiLayoutPicturePhoto => ({
+    src: photo.src,
+    width: photo.width,
+    height: photo.height,
+    ...(photo.alt ? { alt: photo.alt } : {}),
+  })
+  if (hero) return pick(hero)
+  const all = [home, ...pages].flatMap(libraryPhotosOf)
+  const wide = (photo: AiLayoutPicturePhoto) => photo.width / photo.height >= 1.3
+  const [best] = [...all].sort((a, b) => Number(wide(b)) - Number(wide(a)) || b.width - a.width)
+  return best ? pick(best) : null
+}
+
+/** The host fields the share image is written in, as the Social image card writes them (AGL-3988). */
+export function aiSiteShareImageUpdates(photo: AiLayoutPicturePhoto): Record<string, unknown> {
+  return {
+    'seo.image': photo.src,
+    'seo.imageWidth': photo.width,
+    'seo.imageHeight': photo.height,
+    'seo.imageAlt': photo.alt?.trim() ?? '',
+  }
+}
+
+/**
  * A retry's publish merged into the start's first (AGL-3730): the pages it
  * put live join the published list, a page it published leaves the drafts,
  * and a page it left a draft is reported with its newest reason.
@@ -647,8 +721,25 @@ export async function aiPublishGuidedSite(
     aiSiteSeoProposalForInputs(job.inputs, input.language ?? null, siteName),
   )
   Object.assign(hostUpdates, listing)
+  // The site's share image (AGL-3988), where it has none or the starter it
+  // was created with: its home hero's photo, else its widest. Every page's
+  // `og:image` falls back to it, so it asks for the whole site too.
+  // A retry's home page is the one already live at the site's address.
+  const homeId = home?.id ?? Object.entries(before).find(([id, path]) => path === SCREEN_ROOT_PATH && id !== starter)?.[0] ?? null
+  const share = aiSiteShareImageOpen(host.get('seo'))
+    ? await aiSiteSharePhotoOf(firestore, hostId, accepted, homeId).catch((error: unknown) => {
+        console.error('ai site publish: the share image could not be read', { hostId, jobId: job.$id, error })
+        return null
+      })
+    : null
+  const shareImage = share ? aiSiteShareImageUpdates(share) : {}
+  Object.assign(hostUpdates, shareImage)
   const entireHost =
-    layoutWrites.length > 0 || language !== null || Object.keys(entity).length > 0 || Object.keys(listing).length > 0
+    layoutWrites.length > 0 ||
+    language !== null ||
+    Object.keys(entity).length > 0 ||
+    Object.keys(listing).length > 0 ||
+    Object.keys(shareImage).length > 0
   batch.update(hostRef, hostUpdates)
   for (const page of accepted) {
     batch.set(
@@ -692,6 +783,21 @@ export async function aiPublishGuidedSite(
   // announced once: a retry's pages join a site already announced (AGL-3730).
   if (!input.retry) await sendSitePublished({ hostId, firstPublish: isFirstPublishedRoute(before, placeholder) })
   return result
+}
+
+/** The share image's photo, read off the pages going live (AGL-3988). */
+async function aiSiteSharePhotoOf(
+  firestore: Firestore,
+  hostId: string,
+  pages: ReadonlyArray<{ id: string }>,
+  homeId: string | null,
+): Promise<AiLayoutPicturePhoto | null> {
+  const read = async (id: string) => (await readAiDraftNodes(firestore, { kind: 'screen', hostId, id }))?.nodes ?? null
+  const [home, ...others] = await Promise.all([
+    homeId ? read(homeId) : Promise.resolve(null),
+    ...pages.filter((page) => page.id !== homeId).map((page) => read(page.id)),
+  ])
+  return aiSiteSharePhoto(home ?? null, others)
 }
 
 interface LayoutWrite {

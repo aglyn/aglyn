@@ -387,7 +387,7 @@ async function accept(projectId: string, extra: Record<string, unknown> = {}, st
 
 beforeEach(() => {
   store = new FakeStore()
-  store.docs.set('orgs/org-1', { name: 'Ready to Roll', ownerUid: 'owner-1' })
+  store.docs.set('orgs/org-1', { name: 'Acme Builders', ownerUid: 'owner-1' })
   store.docs.set('orgs/org-1/members/owner-1', { email: 'owner@example.com' })
   clock = T0
   emails = []

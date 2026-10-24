@@ -431,7 +431,7 @@ describe('buildLlmsTxt — escaping', () => {
 describe('buildLlmsTxt — pages served one per record (AGL-3475)', () => {
   it('links a group to its listing page when the site publishes one', () => {
     const out = buildLlmsTxt({
-      siteName: 'EDR Construction',
+      siteName: 'Acme Builders',
       origin: ORIGIN,
       pageGroups: [{ name: 'Services', base: 'services', count: 12, hasListing: true }],
     })
@@ -442,7 +442,7 @@ describe('buildLlmsTxt — pages served one per record (AGL-3475)', () => {
 
   it('sends a group with no listing to the sitemap rather than to an address that serves nothing', () => {
     const out = buildLlmsTxt({
-      siteName: 'EDR Construction',
+      siteName: 'Acme Builders',
       origin: ORIGIN,
       pageGroups: [{ name: 'Locations', base: 'service-areas', count: 1 }],
     })
@@ -453,7 +453,7 @@ describe('buildLlmsTxt — pages served one per record (AGL-3475)', () => {
 
   it('names no group that has no pages yet', () => {
     const out = buildLlmsTxt({
-      siteName: 'EDR Construction',
+      siteName: 'Acme Builders',
       origin: ORIGIN,
       pageGroups: [{ name: 'Team', base: 'team', count: 0 }],
     })

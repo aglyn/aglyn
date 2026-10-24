@@ -59,20 +59,24 @@ which is how you spot a typo rather than shipping a blank.
 
 The canvas draws the copies from your real records, the same ones the
 published page will render, in the same order. A **repeat badge** in the
-corner of the element names what it repeats over and how many records it
-found.
+top-right corner of the repeating element names what it repeats over and how
+many records it found — for example **⟳ Repeats Team · 3 records**.
 
 When no record matches — the dataset is empty, or the filter rules every
-record out — the badge turns amber and says the element is **hidden on the
-live site**. The canvas still shows your design so you can keep editing it,
-but the published page renders no copies at all rather than a card full of
-`{{item.name}}` placeholders.
+record out — the badge turns amber and says **no records match · not shown on
+your site**. The canvas still shows your design so you can keep editing it, with
+each `{{item.*}}` drawn as a named chip, but the published page renders no copies
+at all rather than a card full of `{{item.name}}` placeholders.
+
+Hover a badge to read what it means and how to fix it. Click it and the
+repeating element is selected, with **Repeat over dataset** opened in the
+Attributes panel.
 
 The first copy is the element you edit. Change a color, retype a heading,
 drag something in — every copy changes with it, because there is only ever one
-design. The copies beside it are pictures: they can't be selected, dragged or
-edited, and nothing you do to them is saved, because there is nothing there to
-save.
+design. The copies beside it are pictures: hovering one says so, and clicking
+one selects the element it copies. Pointing at either outlines the whole group —
+the element you edit and its copies — with the element itself marked inside it.
 
 ## Bound what renders
 
@@ -115,7 +119,8 @@ A repeat stores the dataset's **id**, so renaming the dataset never breaks it.
 
 If the dataset is deleted, or stops being shared with this site, the element
 renders **no copies** on the published page, and its badge on the canvas says
-the dataset was not found. A published page never goes down because its data
+**not available · not shown on your site**. Click the badge to choose another
+dataset. A published page never goes down because its data
 went away, and it never shows visitors raw `{{item.*}}` placeholders either. See
 [who a dataset is shared with](../../content-and-data/datasets/overview.md#who-a-dataset-is-shared-with).
 

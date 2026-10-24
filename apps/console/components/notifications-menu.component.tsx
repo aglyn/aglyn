@@ -65,7 +65,7 @@ import {
   useNotificationFeed,
 } from '../hooks/use-notification-feed'
 import useOrgHosts from '../hooks/use-org-hosts'
-import { useInviteReview, usePendingInvites } from '../hooks/use-pending-invites'
+import { usePendingInvites } from '../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import {
   playNotificationChime,
@@ -91,7 +91,6 @@ export function NotificationsMenu() {
   const router = useRouter()
   const uid = (user as any)?.uid as string | undefined
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
-  const { review: reviewInvite } = useInviteReview()
   const { refresh: refreshInvites } = usePendingInvites()
   // Inbox = unread, Archive = already read (AGL-874) — a click marks-read,
   // moving a notification from Inbox to Archive.
@@ -230,22 +229,16 @@ export function NotificationsMenu() {
     [orgSlug, slugByOrgId, subdomainByHostId, indexedHosts],
   )
 
-  // Where a notification goes when opened. An invitee's own invitation
-  // (AGL-3402) opens the accept/decline dialog instead of a page: its link is
-  // only the fallback for a client that predates the dialog.
+  // Where a notification goes when opened. An invitee's own invitation used
+  // to open an accept/decline dialog (AGL-3402); invitations now take effect
+  // on their own (AGL-4023), so it opens the workspace, which shows
+  // "Joining …" for the moment that takes.
   const followNotification = useCallback(
     (notification: AglynNotification) => {
-      if (notification.inviteId && notification.orgId) {
-        reviewInvite({
-          orgId: notification.orgId,
-          inviteId: notification.inviteId,
-        })
-        return
-      }
       const target = resolveLink(notification)
       if (target) void router.push(target)
     },
-    [reviewInvite, resolveLink, router],
+    [resolveLink, router],
   )
 
   // Detect arrivals by DIFFING DOCUMENT IDS, not by watching the count.

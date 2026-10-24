@@ -344,6 +344,18 @@ and no figure). The versions so far: `COCDoTk7vn` → `W4VceCRSjF` →
 price, look at it: a shop, a menu, a checkout or a pricing table in a
 screenshot is a price on the page.
 
+### 2026-10-20, later — the films' players show frames with no caption (AGL-3998)
+
+The two film players on `/managed` showed their films' library posters before
+anyone pressed play, and each poster has the film's caption burned in. Version
+`MuMb5a8jki`, live since 2026-10-20 00:41Z, changes only the two players'
+posters, each to a frame of the same film with no caption and no figure in it:
+film A's to `xF-YhRAiu2` (Marlow Bakery live on its own domain, 28.4 s) and
+film D's to `VV9BJUsgaS` (Ridgeline Outfitters in the editor, 17.767 s). The
+library posters `v2sbemHaD1` and `opiiHe6jgz` stay as they are for the film
+band and the other pages that play the films. The versions so far:
+`COCDoTk7vn` → `W4VceCRSjF` → `4EvGpOyRjG` → `IO02sEaW0U` → `MuMb5a8jki`.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

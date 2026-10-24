@@ -26,6 +26,7 @@ import {
   type MaybeTokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import { firstTouchField } from './account-acquisition'
+import { firstSiteWorkspaceFallbackSlug } from './first-site-workspace'
 
 /**
  * The workspace a sign-up asked for, held until the address is proven
@@ -232,23 +233,40 @@ export interface SignUpWorkspaceOutcome {
  * first verified session of an account that had to wait. One routine, so the
  * two cannot disagree about what a refusal means.
  *
- * A 409 means the address was taken and the workspace was NOT created, so the
- * caller falls through to the chooser; inventing a suffix here would hand
- * somebody a workspace URL they never chose.
+ * A 409 means the address was taken and the workspace was NOT created. For a
+ * name the person TYPED, the caller falls through to the chooser, which offers
+ * the name back (AGL-1523); inventing a suffix would hand them a workspace URL
+ * they never chose.
+ *
+ * A DERIVED name (a Google display name, the backstop's personal workspace)
+ * was chosen by nobody, so its address is tried once more under a suffix, as
+ * the empty console's first-site door and the server's own provisioning
+ * already do (AGL-4024). Without it, two people who share a Google display
+ * name collide and the second one is left with no workspace at all.
  */
 export async function createSignUpWorkspace(
   user: MaybeTokenSource,
   name: string,
+  { derived = false }: { derived?: boolean } = {},
 ): Promise<SignUpWorkspaceOutcome> {
   try {
-    const response = await authorizedFetch(user, '/api/orgs/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The first touch rides along for the server's acquisition backstop:
-      // the workspace copies its creator's record, and this is the one
-      // request every sign-up's workspace is born from.
-      body: JSON.stringify({ name: name.trim(), ...firstTouchField() }),
-    })
+    const attempt = (slug?: string) =>
+      authorizedFetch(user, '/api/orgs/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The first touch rides along for the server's acquisition backstop:
+        // the workspace copies its creator's record, and this is the one
+        // request every sign-up's workspace is born from.
+        body: JSON.stringify({
+          name: name.trim(),
+          ...(slug ? { slug } : {}),
+          ...firstTouchField(),
+        }),
+      })
+    let response = await attempt()
+    if (derived && response.status === 409) {
+      response = await attempt(firstSiteWorkspaceFallbackSlug(name.trim()))
+    }
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
       console.error('sign-up org create failed', payload?.error)
@@ -265,4 +283,50 @@ export async function createSignUpWorkspace(
     console.error('sign-up org create failed', error)
     return { slug: null, error: null }
   }
+}
+
+/**
+ * The personal workspace name for an account whose door collected none
+ * (AGL-1942): display name, else the email local part, exactly as
+ * `ensureOrgForUser` derives it server-side, so the two cannot disagree.
+ */
+export function personalWorkspaceName(account: {
+  displayName?: string | null
+  email?: string | null
+}): string {
+  return (
+    account.displayName?.trim() || account.email?.split('@')[0]?.trim() || ''
+  )
+}
+
+/** How long after sign-up the console still provisions a missing workspace. */
+export const SIGN_UP_WORKSPACE_BACKSTOP_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Should the console create this account's first workspace itself
+ * (AGL-4021)?
+ *
+ * Every sign-up door is meant to leave a verified account inside a workspace.
+ * When a door dies on the way (a phone Google redirect that was pushed away
+ * before `/api/orgs/create`, three of them on 2026-10-20/21), the account
+ * reaches the console with no workspace and no held name, and the chooser
+ * offered only "Create your first site". This is the backstop for that: a
+ * verified account, young enough that no workspace can only mean a door
+ * failed, gets the personal workspace its door would have made.
+ *
+ * Young on purpose. An older account with no workspaces has left or been
+ * removed from the ones it had, and handing it a new one is a decision it
+ * did not make.
+ */
+export function needsBackstopWorkspace(
+  account: {
+    emailVerified: boolean
+    metadata: { creationTime?: string }
+  },
+  nowMs = Date.now(),
+): boolean {
+  if (!account.emailVerified) return false
+  const createdMs = Date.parse(account.metadata.creationTime ?? '')
+  if (!Number.isFinite(createdMs)) return false
+  return nowMs - createdMs < SIGN_UP_WORKSPACE_BACKSTOP_MS
 }

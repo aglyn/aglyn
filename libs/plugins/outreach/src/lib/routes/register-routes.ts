@@ -35,6 +35,11 @@ import {
 import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
 import { createOutreachLinkDomainsRoute, type OutreachLinkDomainRouteDeps } from './link-domain-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
+import {
+  createOutreachEnrollmentReplyRoute,
+  createOutreachEnrollmentThreadRoute,
+  type OutreachReplyDeps,
+} from './reply-routes'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes } from './sequence-routes'
 import { createOutreachSettingsRoute } from './settings-routes'
@@ -136,6 +141,24 @@ export function defaultOutreachStepTestDeps(): OutreachStepTestDeps {
   }
 }
 
+/**
+ * The answer's reach (AGL-4020): the enrollment's mailbox through the same
+ * door every send uses, the platform's rate limit, and the short links a
+ * step's email would mint (AGL-4022).
+ */
+export function defaultOutreachReplyDeps(): OutreachReplyDeps {
+  return {
+    openMailbox: (mailboxId) => openOutreachMailboxClient(firebaseAdmin.app().firestore(), { mailboxId }),
+    consumeRateLimit: async (key, options) =>
+      (await import('@aglyn/tenant-data-admin/server/rate-limit-store')).consumeRateLimit(key, options),
+    // The short links an answer carries on a tracked sequence (AGL-4022), minted as a step's are.
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId, trackingOrigin }),
+    clickLinkOrigin: async ({ orgId, senderAddress }) =>
+      (await platform()).resolveTrackingLinkOrigin(firebaseAdmin.app().firestore(), orgId, senderAddress),
+  }
+}
+
 export function registerOutreachRoutes(
   deps: OutreachEnrollRouteDeps = defaultOutreachRouteDeps(),
 ): void {
@@ -157,6 +180,16 @@ export function registerOutreachRoutes(
   registerPluginApiRoute(
     OUTREACH_API_ROUTES.enrollmentsGateway,
     { web: createOutreachEnrollmentGatewayRoute(deps) },
+    orgSubject,
+  )
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.enrollmentsThread,
+    { web: createOutreachEnrollmentThreadRoute(deps, defaultOutreachReplyDeps()) },
+    orgSubject,
+  )
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.enrollmentsReply,
+    { web: createOutreachEnrollmentReplyRoute(deps, defaultOutreachReplyDeps()) },
     orgSubject,
   )
   registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)

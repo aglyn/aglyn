@@ -84,6 +84,7 @@ import {
   emailStaffAlert,
 } from '../../_lib/usage-alert-email'
 import {
+  driftOrgEmailNotice,
   driftOrgEmailText,
   driftOrgNotificationBody,
   driftStaffAlertText,
@@ -277,6 +278,7 @@ async function handler(request: Request): Promise<Response> {
           orgId: entry.orgId,
           subject: title,
           text,
+          ...driftOrgEmailNotice(entry, origin),
           context: 'sso-domain-drift',
         })
         // A discarded send result is a bug (AGL-2234): "we notified them" is

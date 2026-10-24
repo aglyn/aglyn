@@ -502,19 +502,35 @@ function ScreenDetails() {
    */
   const { data: user } = useUser()
 
-  // --- Edit details dialog ---------------------------------------------
-  const [editor, setEditor] = useState<{
+  // --- Name & description card ---------------------------------------
+  /**
+   * What the author has typed into the Name & description card, or null while
+   * it shows the stored values. Kept apart from the stored screen, so a save
+   * from another tab cannot overwrite what is being typed here.
+   */
+  const [detailsDraft, setDetailsDraft] = useState<{
     displayName: string
     description: string
   } | null>(null)
+  const storedDetails = {
+    displayName: screen?.displayName ?? '',
+    description: screen?.description ?? '',
+  }
+  const detailsShown = detailsDraft ?? storedDetails
+  const editDetails =
+    (field: 'displayName' | 'description') =>
+    (event: { target: { value: string } }) => {
+      const value = event.target.value
+      setDetailsDraft((prev) => ({ ...(prev ?? storedDetails), [field]: value }))
+    }
   const handleEditSave = useCallback(async () => {
-    if (!editor?.displayName.trim()) return
+    if (!detailsDraft?.displayName.trim()) return
     /**
      * Refuse a rename whose seed the server never confirmed (AGL-1358).
      *
      * `description` is written on every save, seeded from the listener, so a
-     * pure rename against a cached read rolls it back. The dialog only ever
-     * opens on the stored screen, so there is no create path to exempt.
+     * pure rename against a cached read rolls it back. The card only ever
+     * edits the stored screen, so there is no create path to exempt.
      *
      * The guard WRAPS the write — an early return is a shape you can keep
      * while losing the protection.
@@ -527,12 +543,12 @@ function ScreenDetails() {
       },
       async () => {
         await updateDoc(screenRef, {
-          displayName: editor.displayName.trim(),
+          displayName: detailsDraft.displayName.trim(),
           // Keep the name keys in sync on rename (AGL-835, AGL-3321) so the
           // switcher's prefix query and the screen lists' search find the
           // screen under its new name.
-          ...artifactRenameListKeys('screens', editor.displayName.trim()),
-          description: editor.description.trim(),
+          ...artifactRenameListKeys('screens', detailsDraft.displayName.trim()),
+          description: detailsDraft.description.trim(),
           updatedAt: Timestamp.now(),
         })
           .then(() => {
@@ -543,9 +559,9 @@ function ScreenDetails() {
             logActivity('Updated screen details', {
               type: 'screen',
               id: screenId,
-              name: editor.displayName.trim(),
+              name: detailsDraft.displayName.trim(),
             })
-            setEditor(null)
+            setDetailsDraft(null)
             // Not internal-only: the live page's `<title>` falls back to the
             // name, and its meta description to the description, whenever
             // the screen's SEO leaves them blank.
@@ -562,7 +578,7 @@ function ScreenDetails() {
           )
       },
     )
-    // A refusal keeps the dialog open with both typed values.
+    // A refusal keeps both typed values in the card.
     if (!verdict.ok) {
       return void enqueueSnackbar(verdict.message, {
         variant: 'warning',
@@ -570,7 +586,7 @@ function ScreenDetails() {
       })
     }
   }, [
-    editor,
+    detailsDraft,
     screenRef,
     enqueueSnackbar,
     logActivity,
@@ -1319,6 +1335,24 @@ function ScreenDetails() {
     </Button>
   )
 
+  /** The Name & description card's save, in its header like Save SEO. */
+  const detailsSaveButton = (
+    <Button
+      size="small"
+      variant="outlined"
+      color="primary"
+      disabled={
+        !detailsDraft?.displayName.trim() ||
+        (detailsDraft.displayName === storedDetails.displayName &&
+          detailsDraft.description === storedDetails.description)
+      }
+      onClick={handleEditSave}
+      sx={{ alignSelf: 'flex-start' }}
+    >
+      {'Save details'}
+    </Button>
+  )
+
   const details = [
     {
       key: 'id',
@@ -1398,7 +1432,7 @@ function ScreenDetails() {
         //
         // Unlike the other four detail pages, this one's version comes
         // straight from the route, so the room it watches is exactly the one
-        // Open Besigner opens — no resolution, no guess.
+        // Edit in Besigner opens — no resolution, no guess.
         headerRight={
           <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
             <DocumentPresenceLive
@@ -1417,28 +1451,30 @@ function ScreenDetails() {
               >
                 {'View'}
               </AppLink>
-            ) : liveUnavailableReason ? (
-              <Tooltip title={liveUnavailableReason}>
-                {/* span: a disabled button emits no events for the tooltip */}
+            ) : (
+              // Not on the site, so nothing to View — but there is always
+              // this version to look at, the way the Versions card and the
+              // besigner's own Preview show it. Why it is not live, when the
+              // page knows, rides along as the tooltip.
+              <Tooltip title={liveUnavailableReason ?? ''}>
                 <span>
-                  <Button size="small" variant="outlined" disabled>
-                    {'View'}
-                  </Button>
+                  <AppLink
+                    componentVariant="button"
+                    size="small"
+                    variant="outlined"
+                    href={buildRoute(Route.SCREEN_PREVIEW, {
+                      orgSlug,
+                      host,
+                      screenId,
+                      versionId,
+                    })}
+                    newTab
+                  >
+                    {'Preview'}
+                  </AppLink>
                 </span>
               </Tooltip>
-            ) : null}
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() =>
-                setEditor({
-                  displayName: screen?.displayName ?? '',
-                  description: screen?.description ?? '',
-                })
-              }
-            >
-              {'Edit'}
-            </Button>
+            )}
             <Button
               size="small"
               variant="outlined"
@@ -1456,13 +1492,13 @@ function ScreenDetails() {
                 screenId,
                 versionId,
               })}
-              title={'Open with besigner'}
+              title={'Edit in Besigner'}
               disabled={!screen}
               startIcon={
                 <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
               }
             >
-              Open Besigner
+              {'Edit in Besigner'}
             </AppLink>
           </Stack>
         }
@@ -1860,6 +1896,47 @@ function ScreenDetails() {
               {
                 size: CARD_WIDE,
                 children: (
+                  // The page's name and description, edited where they are
+                  // read. They were behind an "Edit" button in the header,
+                  // which beside the way into the editor read as the way into
+                  // the editor.
+                  <CardDisplay
+                    header={'Name & description'}
+                    help={docsHelp('screens', {
+                      anchor: '#name-and-description-card',
+                      excerpt:
+                        'The name this page goes by in the console, and a description of it.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                    HeaderProps={{ action: detailsSaveButton }}
+                  >
+                    <Stack spacing={2}>
+                      <TextField
+                        label="Display name"
+                        value={detailsShown.displayName}
+                        onChange={editDetails('displayName')}
+                        error={detailsDraft ? !detailsDraft.displayName.trim() : false}
+                        size="small"
+                        fullWidth
+                      />
+                      <TextField
+                        label="Description"
+                        value={detailsShown.description}
+                        onChange={editDetails('description')}
+                        size="small"
+                        multiline
+                        minRows={2}
+                        fullWidth
+                      />
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: CARD_WIDE,
+                children: (
                   <CardDisplay
                     header={'SEO'}
                     help={docsHelp('seo', { anchor: '#per-screen-seo', excerpt: 'Per-page search title, description, and social share image \u2014 overrides the site defaults.' })}
@@ -2207,53 +2284,6 @@ function ScreenDetails() {
           />
         </Container>
       </DashboardLayout>
-      <Dialog
-        open={Boolean(editor)}
-        onClose={() => setEditor(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{'Edit page'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-        >
-          <TextField
-            label="Display name"
-            value={editor?.displayName ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, displayName: event.target.value } : prev,
-              )
-            }
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-          />
-          <TextField
-            label="Description"
-            value={editor?.description ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, description: event.target.value } : prev,
-              )
-            }
-            size="small"
-            multiline
-            minRows={2}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!editor?.displayName.trim()}
-            onClick={handleEditSave}
-          >
-            {'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
       <Dialog
         open={Boolean(scheduler)}
         onClose={() => setScheduler(null)}

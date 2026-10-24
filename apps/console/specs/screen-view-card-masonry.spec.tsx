@@ -102,6 +102,9 @@ const EXPECTED: Array<[string, string]> = [
   // about the record — what it belongs to, and what depends on it — and
   // neither is something an author came to this page to change.
   ['Campaigns', 'CARD_NARROW'],
+  // The page's name and description, edited in place: it heads the wide
+  // column, right above SEO, which says the same things to search engines.
+  ['Name & description', 'CARD_WIDE'],
   ['SEO', 'CARD_WIDE'],
   ['Versions', 'CARD_WIDE'],
   // Traffic sits ABOVE Page Activity: what the page is doing outranks who

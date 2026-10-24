@@ -58,8 +58,8 @@ import {
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
-import useHostComponentDefinitions from '../hooks/use-host-component-definitions'
-import useHostFormDesigns from '../hooks/use-host-form-designs'
+import useHostComponentDefinitions from '@aglyn/tenant-feature-instance/hooks/use-host-component-definitions'
+import useHostFormDesigns from '@aglyn/tenant-feature-instance/hooks/use-host-form-designs'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 

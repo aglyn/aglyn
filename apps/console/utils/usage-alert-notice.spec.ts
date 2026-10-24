@@ -18,7 +18,9 @@
 import {
   formatStorageMb,
   listNames,
+  usageAlertDetails,
   usageAlertGuardDecision,
+  usageAlertNote,
   usagePhrase,
   workspacePhrases,
 } from './usage-alert-notice'
@@ -120,7 +122,7 @@ describe('the words a notice is built from', () => {
   })
 
   it('names the workspace, or says "your workspace" when it has no name', () => {
-    expect(workspacePhrases('Ready To Roll').subject).toBe('The Ready To Roll workspace')
+    expect(workspacePhrases('Acme Builders').subject).toBe('The Acme Builders workspace')
     expect(workspacePhrases('  ').object).toBe('your workspace')
   })
 
@@ -129,5 +131,42 @@ describe('the words a notice is built from', () => {
     expect(formatStorageMb(2048)).toBe('2 GB')
     expect(formatStorageMb(10_752)).toBe('10.5 GB')
     expect(listNames(['a', 'b', 'c'])).toBe('a, b and c')
+  })
+})
+
+describe('the usage email\'s details and caption (AGL-4019)', () => {
+  it('names the workspace, the limit and the figures as rows', () => {
+    expect(
+      usageAlertDetails({
+        workspaceName: 'Acme',
+        label: 'pages on a site',
+        used: 5,
+        limit: 6,
+        usedText: '5',
+        limitText: '6',
+        cadence: 'crossing',
+      }).split('\n'),
+    ).toEqual(['Workspace: Acme', 'Limit: Pages on a site', 'Used: 5 of 6 (83%)'])
+  })
+
+  it('keeps the units it is given, and says when a monthly meter resets', () => {
+    expect(
+      usageAlertDetails({
+        workspaceName: '  ',
+        label: 'monthly bandwidth',
+        used: 9.2,
+        limit: 10,
+        usedText: '9.2 GB',
+        limitText: '10 GB',
+        cadence: 'monthly',
+      }).split('\n'),
+    ).toEqual(['Limit: Monthly bandwidth', 'Used: 9.2 GB of 10 GB (92%)', 'Resets: On the 1st of next month'])
+  })
+
+  it('says when these alerts are sent', () => {
+    expect(usageAlertNote('crossing', [75, 80, 90, 100])).toBe(
+      'Usage alerts go out at 75%, 80%, 90% and 100% of a limit, once each, and again only if usage drops back below that step.',
+    )
+    expect(usageAlertNote('monthly', [75, 80, 90, 100])).toContain('at most once each a month')
   })
 })
