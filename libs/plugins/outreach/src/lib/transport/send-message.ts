@@ -16,6 +16,7 @@
  */
 
 import type { ComposedOutreachEmail } from '../engine/compose'
+import type { OutreachManualReply } from '../engine/manual-reply'
 import type { OutreachMailClient } from './mail-client'
 import { listUnsubscribeHeaders } from '@aglyn/shared-util-email/list-unsubscribe'
 import {
@@ -87,6 +88,37 @@ export async function sendOutreachMessage(
     messageId: reported || built.messageId,
     subject: built.subject,
   }
+}
+
+/**
+ * Sends a member's answer to a person who wrote back (AGL-4020), as the
+ * engine wrote it (`composeOutreachManualReply`): into the provider thread of
+ * the message it answers, with `In-Reply-To` that message's `Message-ID` and
+ * `References` the whole chain, so it threads in both mailboxes — by thread
+ * id in Gmail's, and by the headers in Exchange's and the person's. Plain
+ * text, and no `List-Unsubscribe`: it is a one-to-one answer, not a
+ * sequence's email.
+ */
+export function sendOutreachReply(
+  client: Pick<OutreachMailClient, 'sendMessage'>,
+  reply: Pick<OutreachManualReply, 'to' | 'subject' | 'text' | 'threadId' | 'inReplyTo' | 'references'>,
+  sender: OutreachMailAddress,
+  options: Omit<SendOutreachMessageOptions, 'threadId'> = {},
+): Promise<OutreachSentMessage> {
+  return sendOutreachMessage(
+    client,
+    {
+      from: sender,
+      to: reply.to,
+      subject: reply.subject,
+      text: reply.text,
+      headers: {
+        'In-Reply-To': reply.inReplyTo,
+        References: reply.references.length ? reply.references.join(' ') : null,
+      },
+    },
+    { ...options, threadId: reply.threadId },
+  )
 }
 
 /**

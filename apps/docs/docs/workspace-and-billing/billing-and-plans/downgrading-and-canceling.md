@@ -172,6 +172,17 @@ Unlike an organization deletion there's no hold, so **export a backup first**
 (Setup → Backup & restore) if you might want it back. Your other sites and the
 organization are unaffected.
 
+Deleting a site also deletes what is the site's own:
+
+- **Datasets shared with this site only**, with all their records. The
+  **Delete site** card lists them, with how many records each holds, before you
+  confirm. A dataset the site shares with other sites stays, and the site is
+  removed from its sharing. A dataset shared with **All sites** isn't affected.
+- **The site's AI jobs, AI insights and Assist conversations.**
+
+To keep a dataset, share it with another site, or with **All sites**, from its
+**Sharing** control on the **Data** page before you delete the site.
+
 A site in a [consent group](../../marketing-and-automation/email-campaigns/overview.md#consent-groups)
 can't be deleted while it's in the group, because the group's other sites
 honor the unsubscribes it holds. [Remove it from the group](../../marketing-and-automation/email-campaigns/overview.md#consent-group-leave)

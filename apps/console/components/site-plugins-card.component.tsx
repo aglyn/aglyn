@@ -40,7 +40,7 @@ import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useSitePluginSwitchboard } from '../hooks/use-plugin-switchboard'
-import { useSiteMarketplacePlugins } from '../hooks/use-site-marketplace-plugins'
+import { useSiteMarketplacePlugins } from '@aglyn/tenant-feature-instance/hooks/use-site-marketplace-plugins'
 import { useHostSubdomain } from './host-id-provider'
 
 /**

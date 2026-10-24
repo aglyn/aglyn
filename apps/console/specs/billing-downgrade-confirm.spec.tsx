@@ -183,7 +183,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: ORG, orgId: ORG.$id, ready: true }),
 }))
-jest.mock('../hooks/use-confirmed-doc', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-confirmed-doc', () => ({
   __esModule: true,
   default: () => ({ data: undefined }),
 }))

@@ -149,7 +149,11 @@ below that.
 | **Disconnected** | The mailbox was disconnected. Nothing sends from it until it is connected again. |
 
 **Health** shows the last seven days: messages sent, bounces and replies. A
-mailbox that has never sent shows zeros and **No sends yet**.
+mailbox that has never sent shows zeros and **No sends yet**. Under it, **Tests
+today** counts the [tests of a step](#send-a-test) sent today and, once a
+member has answered someone, **Answers to replies today** counts the
+[answers](#answer-a-reply) sent from the mailbox — neither counts against the
+daily cap.
 
 **Sender readiness** shows SPF, DKIM and DMARC for the domain of the address
 the mailbox sends as, and whether they align with it — the records receivers
@@ -769,7 +773,9 @@ a comment or a message to point a teammate at one person. The page has three par
 
 - **The header** — their name and address, a **Lead** or **Contact** chip that
   opens their CRM record, their status, the step they're on and when the next
-  one sends, with the same actions as the row's menu. A person held because
+  one sends, with the same actions as the row's menu. A person who wrote back
+  has **Reply in thread** as the header's button — see
+  [Answer a reply](#answer-a-reply). A person held because
   their [mail gateway](#mail-gateways) refused you shows why, and **Resume and
   send** sends the email anyway. Under it, five numbers: emails sent, clicks,
   links followed, scanner clicks (which aren't counted) and replies — and, on a
@@ -788,9 +794,10 @@ and **Open thread in Gmail** opens the conversation in the sending mailbox.
 It holds when they were enrolled and by whom, each email with its subject as sent (and
 whether it was their [curated](#curate) copy), each link they followed with the full
 address and the email it came from, scanner visits with why they were read as a
-scanner, each open and each machine open with why it wasn't counted, replies, bounces
-with what the receiving server said, holds, pauses, resumes and stops with who did it
-and why.
+scanner, each open and each machine open with why it wasn't counted, each reply and
+automatic answer with what they wrote, each [answer you sent](#answer-a-reply) with
+your words and who sent it, bounces with what the receiving server said, holds,
+pauses, resumes and stops with who did it and why.
 
 Clicks are listed one at a time from the release that added this page. Clicks
 before it were kept only as a count, the times of the first and last, and the
@@ -872,8 +879,8 @@ Each connected mailbox is read every 15 minutes for what came back:
 
 | What happens | What it does |
 | --- | --- |
-| **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline with a line saying the sequence stopped, and gives the rep the task **Reply from** *their name*. |
-| **An out-of-office reply** | Keeps the sequence going, and moves the next step to at least five business days after the reply. |
+| **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline with a line saying the sequence stopped, gives the rep the task **Reply from** *their name*, and keeps what they wrote on the enrollment so you can [answer it in the thread](#answer-a-reply). |
+| **An out-of-office reply** | Keeps the sequence going, moves the next step to at least five business days after the reply, and keeps the reply on the enrollment. |
 | **They ask not to be emailed** — a reply such as "no" or "unsubscribe", or, when the sequence adds the [mail-client unsubscribe button](#unsubscribe), that button's link or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
 | **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. When the bounce says the recipient's mail gateway refused it rather than that the address is unknown, the whole [domain](#do-not-contact-domains) goes on the list too, and the enrollment says so. |
 | **A check refuses them before the next email** — a customer now, a member of your workspace, on a suppression list | Stops the sequence, saying which check. |
@@ -896,6 +903,69 @@ The sequence's own turns are on the record's **Activity** as well, signed
 the campaigns the enrollment filed them under, and *stopped: they replied*
 or *stopped: they opted out* under the last email it sent. A bounce adds no
 line of its own — the sent email already reads **Bounced**.
+
+## Answer a reply {#answer-a-reply}
+
+When someone writes back — a reply, or an automatic answer such as an
+out-of-office — answer them from Aglyn, in the same email thread, from the
+mailbox that wrote to them.
+
+1. Open the person: select their row on the sequence's **Enrollments** tab, or
+   open their lead or contact in the CRM.
+2. Select **Reply in thread**. On their enrollment it is the header's button,
+   and it is in the row's menu on the **Enrollments** tab. On their lead's or
+   contact's page it reads **Reply in thread from** *the mailbox's address* and
+   sits before **Send email**.
+3. Read what they wrote. The dialog shows the address your answer goes from,
+   who it goes to and its subject — **Re:** their subject — above the
+   conversation so far: their messages, any earlier answers, and the
+   sequence's emails by subject.
+4. Write your answer in **Your answer**, then select **Send answer**.
+
+Your answer:
+
+- **Goes from the enrollment's own mailbox, in the same thread** — in your
+  Gmail or Outlook and in theirs — as plain text, with their message quoted
+  beneath it. **Send email** on a CRM record writes a new message from your
+  site's sending address instead, which is why a person in a sequence thread
+  is offered **Reply in thread** first.
+- **Is kept with the person.** Their page's **Activity** lists it as
+  **Answered in the thread**, with your words and who sent it, and their CRM
+  record's timeline lists it as an email from the mailbox.
+- **Carries tracked links, on a sequence that
+  [counts link clicks](#sequence-sending-settings).** The links you write
+  become the same short links the sequence's emails carry, on your
+  [link domain](#link-domains) when you've set one up. A click on one shows
+  on the person's **Activity** as *From an answer in the thread*. The message
+  you're answering, quoted beneath yours, is left as they wrote it. On a
+  sequence that doesn't count clicks, your links go out as you wrote them.
+- **Leaves the sequence where it is.** A replied enrollment stays **Replied**.
+  One still running after an out-of-office keeps its next step, and that step
+  answers in the same thread.
+- **Isn't one of the sequence's emails.** It doesn't count against the
+  mailbox's [daily cap](#daily-cap), doesn't count toward the bounce rate that
+  [pauses a mailbox](#auto-pause), and isn't in the sequence's results —
+  nor are clicks on its links, which count for the person alone. The
+  mailbox's card counts them on their own, as **Answers to replies today**.
+
+The rules for cold emails — the [allowed countries](#allowed-countries) and
+the company-address check — don't apply here: the person wrote to you first.
+These still stop an answer, and the dialog says which before you write
+anything:
+
+- **The address or its domain is on your
+  [do-not-contact list](#do-not-contact-domains).** Take it off the list on
+  the **Compliance** page to answer them.
+- **They asked not to be emailed, or their address bounced.** **Reply in
+  thread** isn't offered for them at all.
+- **The mailbox is paused or needs reconnecting.** Resume it, or connect it
+  again, on the **Mailboxes** page.
+- **The mailbox isn't yours.** Only the member who connected it, or an owner
+  or admin of the organization, can answer from it.
+
+A reply that arrived before Sequences kept what people wrote back is read from
+the mailbox the first time the mailbox's member — or an owner or admin — opens
+the person's page or **Reply in thread**, and is kept from then on.
 
 ## Unsubscribe {#unsubscribe}
 

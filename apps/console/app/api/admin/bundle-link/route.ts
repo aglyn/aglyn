@@ -80,6 +80,8 @@ async function handler(request: Request): Promise<Response> {
       addons: body?.addons,
       interval: body?.interval,
       coupon: body?.coupon,
+      // The Aglyn AI tier staff chose (AGL-4025), written as `ai:<tier>`.
+      aiTier: body?.aiTier,
       domain: body?.domain && typeof body.domain === 'object' ? body.domain : null,
     })
     return Response.json({ ok: true, ...minted }, { status: 200 })

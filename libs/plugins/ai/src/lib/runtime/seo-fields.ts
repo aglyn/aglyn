@@ -18,15 +18,17 @@
 import type { SeoListingFieldKey } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import type { AiSeoFieldValues } from '../model/ai-seo'
 import type { AiStepKind } from '../providers/catalog'
-import type { AiProvider } from '../providers/contract'
+import { aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiRouteSettings, type AiPluginSettings } from '../providers/routing'
 import {
   AI_SEO_FIELDS_TOOL_NAME,
   aiSeoFieldsTool,
   checkAiSeoFields,
+  fitAiSeoFieldLengths,
   orderedSeoListingFields,
 } from '../tools/ai-seo-tool'
 import { runValidatedGeneration, type AiValidatedGeneration } from './ai-doctrine'
+import type { AiDoctrineViolation } from './ai-doctrine-validators'
 import type { AiSystemBlock } from './ai-runtime'
 
 /**
@@ -52,6 +54,14 @@ import type { AiSystemBlock } from './ai-runtime'
  * page's text, its current listing, the site's name and the target keywords
  * ride in the user turn, so no byte of a site sits inside the cached prefix,
  * and no site inventory is sent: a listing is written from its page.
+ *
+ * ## A length is fitted, not failed (AGL-4016)
+ *
+ * An answer is asked for once and re-asked once with the faults named. When
+ * the re-ask still breaks nothing but a length, the fields that ran over are
+ * cut to their limits (`aiFitSeoText`) and the whole check runs again, so a
+ * title five characters long no longer fails the listing. Any other fault, a
+ * numbered rule, or an answer cut off at its ceiling still ends `needs_input`.
  */
 
 /* ------------------------------------------------------------------------ *
@@ -273,9 +283,10 @@ export const AI_SEO_DEFAULT_FIELDS: readonly SeoListingFieldKey[] = ['title', 'd
  * page it builds (`fields: ['title', 'description']`), and the `seo` job
  * calls it for a page's or a product's whole listing. It asks the routing
  * table's `job.seo` model through the doctrine's generation call and resolves
- * to its result — `ok` with the values, `needs_input` when the answer could
- * not be held to the editor after one re-ask, `refused` when the model
- * declined. It writes nothing.
+ * to its result — `ok` with the values (a re-ask that still ran past a
+ * length fitted to it, AGL-4016), `needs_input` when the answer could not be
+ * held to the editor after one re-ask, `refused` when the model declined. It
+ * writes nothing.
  */
 export async function generateSeoFields(
   input: GenerateSeoFieldsInput,
@@ -286,7 +297,9 @@ export async function generateSeoFields(
   )
   const keywords = input.keywords ?? []
   const step = input.step ?? 'job.seo'
-  return runValidatedGeneration('seo-fields', {
+  const check = (answer: Record<string, unknown>) =>
+    checkAiSeoFields(answer, { fields, hasImage, keywords, otherTitles: input.otherTitles })
+  const generation = await runValidatedGeneration('seo-fields', {
     step,
     // The row's thinking and effort (AGL-3781): a listing's ceiling holds the
     // answer alone.
@@ -303,12 +316,40 @@ export async function generateSeoFields(
     maxTokens: input.maxTokens ?? AI_SEO_FIELDS_MAX_TOKENS,
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.provider ? { provider: input.provider } : {}),
-    check: (answer) =>
-      checkAiSeoFields(answer, {
-        fields,
-        hasImage,
-        keywords,
-        otherTitles: input.otherTitles,
-      }),
+    check,
   })
+  return aiFitSeoOverrun('seo-fields', generation, (answer) => fitAiSeoFieldLengths(answer, fields), check)
+}
+
+/**
+ * A generation that ended `needs_input` over lengths alone, ended `ok` with
+ * those lengths fitted (AGL-4016); any other outcome as it came.
+ *
+ * The last answer is fitted only when no numbered rule was broken and the
+ * answer was not cut off at its ceiling (a cut-off answer is refused whatever
+ * its prefix reads as, AGL-3143), and it is kept only when the whole check
+ * then passes: a fault other than a length is still there after fitting, so
+ * the generation stays `needs_input` with its own reasons. Nothing is asked
+ * again and nothing more is spent.
+ */
+export function aiFitSeoOverrun<T>(
+  kind: string,
+  generation: AiValidatedGeneration<T>,
+  fit: (answer: Record<string, unknown>) => Record<string, unknown> | null,
+  check: (answer: Record<string, unknown>) => { value: T | null; violations: readonly AiDoctrineViolation[] },
+): AiValidatedGeneration<T> {
+  if (generation.status !== 'needs_input' || !generation.answer) return generation
+  if (aiStoppedAtCeiling(generation.stopReason)) return generation
+  if (generation.violations.some((violation) => violation.rule !== null)) return generation
+  const fitted = fit(generation.answer)
+  if (!fitted) return generation
+  const checked = check(fitted)
+  if (checked.value === null || checked.violations.length) return generation
+  console.info('ai seo answer fitted to its lengths', {
+    kind,
+    model: generation.model,
+    faults: generation.violations.map((violation) => violation.code),
+  })
+  const { attempts, usage, estCostUsd, model, stopReason, effort } = generation
+  return { attempts, usage, estCostUsd, model, stopReason, effort, status: 'ok', value: checked.value }
 }

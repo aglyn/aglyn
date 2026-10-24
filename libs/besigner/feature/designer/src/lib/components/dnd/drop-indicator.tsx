@@ -15,36 +15,33 @@
  * limitations under the License.
  */
 
-import * as Besigner from '@aglyn/besigner'
 import { generateComponentClassKeys } from '@aglyn/shared-ui-theme'
 import { _isEqualitySameType } from '@aglyn/shared-util-tools'
-import { type ClientRect } from '@dnd-kit/core'
 import { Portal, styled } from '@mui/material'
 import clsx from 'clsx'
-import { motion } from 'framer-motion'
 import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
+import {
+  DROP_HANDLE_WIDTH,
+  DROP_LINE_WIDTH,
+  type DropIndicatorBox,
+} from './drop-indicator-geometry'
 
 const classes = generateComponentClassKeys('DropIndicator', [
   'root',
   'line',
   'handle',
+  'rejected',
 ])
 
-type IndicatorProps = ComponentProps<typeof motion.div> & {
+type IndicatorProps = ComponentProps<'div'> & {
   variant?: 'vertical' | 'horizontal'
-  // framer-motion's HTML prop types omit className; MUI styled() accepts it.
-  className?: string
 }
 
-const lineW = 6
-const handleW = lineW + lineW * 1.27
-const handleHalf = handleW / 2
-
-const Indicator = styled(motion.div, {
+const Indicator = styled('div', {
   name: 'DropIndicator',
   shouldForwardProp: (propName) =>
-    !_isEqualitySameType(propName, null, 'variant', 'visible'),
+    !_isEqualitySameType(propName, null, 'variant'),
 })<IndicatorProps>(({ theme, variant }) => {
   const vertical = variant === 'vertical'
   // In CSS vars mode, theme.palette.* is always the static light values.
@@ -52,7 +49,11 @@ const Indicator = styled(motion.div, {
   const tv = (theme as any).vars || theme
 
   return {
-    position: 'absolute',
+    // Viewport px, like the rectangles it is placed from.
+    position: 'fixed',
+    // Drawn over the pointer, and must never be what the pointer is over:
+    // the drop target is hit-tested by what is painted under the pointer.
+    pointerEvents: 'none',
     display: 'flex',
     flexDirection: vertical ? 'column' : 'row',
     alignItems: 'center',
@@ -62,85 +63,76 @@ const Indicator = styled(motion.div, {
     [`& .${classes.line}`]: {
       // Slate, not the accent (AGL-1194): the indicator is drawn over the
       // user's design and must not read as part of it.
-      border: `${lineW / 2}px solid ${tv.palette.tertiary.main}`,
+      border: `${DROP_LINE_WIDTH / 2}px solid ${tv.palette.tertiary.main}`,
       flexGrow: 1,
-      width: !vertical ? undefined : lineW,
-      height: !vertical ? lineW : undefined,
+      width: !vertical ? undefined : DROP_LINE_WIDTH,
+      height: !vertical ? DROP_LINE_WIDTH : undefined,
       display: 'block',
       content: '""',
     },
     [`& .${classes.handle}`]: {
       backgroundColor: tv.palette.surface.main,
-      borderRadius: handleW,
+      borderRadius: DROP_HANDLE_WIDTH,
       border: `1px solid ${tv.palette.tertiary.dark}`,
-      width: handleW,
-      height: handleW,
+      width: DROP_HANDLE_WIDTH,
+      height: DROP_HANDLE_WIDTH,
+      flexShrink: 0,
       display: 'block',
       content: '""',
+    },
+    // A drop here would be refused (an element that can't hold children, a
+    // parent the element isn't allowed in). Said before the drop, rather
+    // than by a warning after a marker that looked like any other.
+    [`&.${classes.rejected} .${classes.line}`]: {
+      borderColor: tv.palette.error.main,
+    },
+    [`&.${classes.rejected} .${classes.handle}`]: {
+      borderColor: tv.palette.error.dark,
     },
   }
 })
 
-export interface DropIndicatorProps extends ComponentProps<typeof Indicator> {
-  visible?: boolean
-  rect: ClientRect
-  region: Besigner.DropRegion
-  // framer-motion's HTML prop types omit className; MUI styled() accepts it.
-  className?: string
+export interface DropIndicatorProps extends ComponentProps<'div'> {
+  /** Where to draw, from `dropIndicatorBox`; null hides the marker. */
+  box: DropIndicatorBox | null
+  /** The drop this marks would be refused. */
+  rejected?: boolean
 }
 
+/**
+ * The line that says where a dragged element will land.
+ *
+ * Placed, not animated. It used to tween each move over framer-motion's
+ * default duration, so it trailed the pointer and swept across the canvas
+ * from one target to the next; it now sits exactly where the drop resolves.
+ */
 export const DropIndicator = forwardRef<HTMLDivElement, DropIndicatorProps>(
   (props, ref) => {
-    const { visible, region, rect, className, ...rest } = props
-
-    const styles = {
-      [Besigner.DropRegion.LEFT]: {
-        left: rect.left - handleHalf,
-        top: rect.top - handleHalf,
-        height: rect.height + handleW,
-        width: undefined,
-      },
-      [Besigner.DropRegion.TOP]: {
-        left: rect.left - handleHalf,
-        top: rect.top - handleHalf,
-        width: rect.width + handleW,
-        height: undefined,
-      },
-      [Besigner.DropRegion.RIGHT]: {
-        left: rect.left + rect.width - handleHalf,
-        top: rect.top - handleHalf,
-        height: rect.height + handleW,
-        width: undefined,
-      },
-      [Besigner.DropRegion.BOTTOM]: {
-        left: rect.left - handleHalf,
-        top: rect.top + rect.height - handleHalf,
-        width: rect.width + handleW,
-        height: undefined,
-      },
-      [Besigner.DropRegion.CHILDREN]: {
-        left: rect.left + handleHalf,
-        top: rect.top + rect.height / 2 - handleHalf,
-        width: rect.width - handleW,
-        height: undefined,
-      },
-    }
-
-    const vertical =
-      region === Besigner.DropRegion.LEFT ||
-      region === Besigner.DropRegion.RIGHT
+    const { box, rejected, className, style, ...rest } = props
 
     return (
       <Portal>
         <Indicator
           ref={ref}
-          className={clsx(classes.root, className)}
-          variant={vertical ? 'vertical' : 'horizontal'}
-          animate={{
-            ...styles[region],
-            visibility: visible ? 'visible' : 'hidden',
+          aria-hidden
+          className={clsx(
+            classes.root,
+            { [classes.rejected]: Boolean(rejected) },
+            className,
+          )}
+          variant={box?.vertical ? 'vertical' : 'horizontal'}
+          style={{
+            ...style,
+            ...(box
+              ? {
+                  left: box.left,
+                  top: box.top,
+                  width: box.width,
+                  height: box.height,
+                }
+              : {}),
+            visibility: box ? 'visible' : 'hidden',
           }}
-          transition={{ type: 'keyframes' }}
           {...rest}
         >
           <div className={classes.handle} />

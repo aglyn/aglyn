@@ -37,6 +37,8 @@ function configure(apiKey: string | null, from: string | null) {
   else process.env.RESEND_API_KEY = apiKey
   if (from === null) delete process.env.USAGE_EMAIL_FROM
   else process.env.USAGE_EMAIL_FROM = from
+  // The platform's default Reply-To; the tests that want it set it.
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
 }
 
 function mockFetch(response: Partial<Response> & { json?: () => unknown }) {
@@ -252,6 +254,61 @@ describe('sendEmail', () => {
         tags: [{ name: 'hostId', value: 'host_1' }],
         reply_to: 'hello@aglyn.com',
       })
+    })
+
+    it("answers platform mail at the operator's support mailbox", async () => {
+      configure('re_test', FROM)
+      process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@example.com'
+      const fetchMock = mockFetch({})
+
+      await sendEmail({ to: 'a@example.com', subject: 'Hi', text: 'Body' })
+
+      expect(lastBody(fetchMock).reply_to).toBe('support@example.com')
+    })
+
+    it("keeps a caller's own reply-to over the support mailbox", async () => {
+      configure('re_test', FROM)
+      process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@example.com'
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        text: 'Body',
+        replyTo: 'owner@example.com',
+      })
+
+      expect(lastBody(fetchMock).reply_to).toBe('owner@example.com')
+    })
+
+    it("never points a site's own mail at the platform's support mailbox", async () => {
+      configure('re_test', FROM)
+      process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@example.com'
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        text: 'Body',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(lastBody(fetchMock).reply_to).toBeUndefined()
+    })
+
+    it('sends no reply-to when the support mailbox is unset', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({ to: 'a@example.com', subject: 'Hi', text: 'Body' })
+
+      expect(lastBody(fetchMock).reply_to).toBeUndefined()
     })
 
     /*

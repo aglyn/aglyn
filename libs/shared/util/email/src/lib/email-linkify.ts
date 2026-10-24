@@ -56,23 +56,13 @@ const URL_TRAILING_PUNCTUATION = /[.,!?'"]+$/
  */
 const BARE_URL = /https?:\/\/[^\s<>"]+/g
 
-/**
- * Bare email addresses, linked as `mailto:`.
- *
- * Apple Mail, Gmail and Outlook detect an address in text and link it
- * themselves, in their own link color rather than the theme's. Linking it
- * here paints it the same accent-text shade as every other link. The domain
- * must end in a letters-only label, so a sentence's closing period stays
- * prose.
+/*
+ * Bare email addresses stay text. Linking them as `mailto:` painted them in
+ * the theme's link color, but a notification that names someone puts a link
+ * to THEIR domain in our mail, and a link whose domain is not the sender's
+ * is a spam-filter signal (Resend's insights flag every one). Apple Mail,
+ * Gmail and Outlook still detect the address and link it themselves.
  */
-const BARE_EMAIL =
-  /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/
-
-/**
- * A URL or an address, URL first: an address inside a URL's query string
- * belongs to that URL.
- */
-const BARE_LINK = new RegExp(`${BARE_URL.source}|${BARE_EMAIL.source}`, 'g')
 
 function anchor(href: string, label: string, color: string): string {
   return (
@@ -83,7 +73,7 @@ function anchor(href: string, label: string, color: string): string {
 }
 
 /**
- * Links the bare URLs and email addresses in one escaped line.
+ * Links the bare URLs in one escaped line.
  *
  * Balanced closing parens and brackets are kept, because a URL can genuinely
  * end in one and a wrapping "(see https://…/a_(b))" is the rarer case.
@@ -94,8 +84,7 @@ export function linkifyEscapedText(
   /** The link color: the sender's accent text shade, the platform's by default. */
   color = PLATFORM_EMAIL_ACCENT.link,
 ): string {
-  return escaped.replace(BARE_LINK, (match) => {
-    if (!/^https?:\/\//.test(match)) return anchor(`mailto:${match}`, match, color)
+  return escaped.replace(BARE_URL, (match) => {
     let url = match.replace(URL_TRAILING_PUNCTUATION, '')
     // `)` and `]` alike: a token's value dropped into "[{{brand.supportUrl}}]"
     // closes on a bracket the URL never opened.

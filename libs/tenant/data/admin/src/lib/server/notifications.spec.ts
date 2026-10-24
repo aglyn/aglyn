@@ -271,8 +271,8 @@ describe('notifyHostManagers names the site (AGL-3432)', () => {
   it('fills {site} in the title and body with the site name', async () => {
     hostDocs.set('hosts/host-1', {
       orgId: 'org-1',
-      displayName: 'Ready To Roll',
-      subdomain: 'ready-to-roll',
+      displayName: 'Northwind Coffee',
+      subdomain: 'northwind-coffee',
       memberRoles: { 'uid-a': 'admin' },
     })
     await notifyHostManagers('host-1', {
@@ -280,8 +280,8 @@ describe('notifyHostManagers names the site (AGL-3432)', () => {
       title: 'New order on {site}',
       body: 'A $42.00 order came in on {site}.',
     })
-    expect(written[0].data['title']).toBe('New order on Ready To Roll')
-    expect(written[0].data['body']).toBe('A $42.00 order came in on Ready To Roll.')
+    expect(written[0].data['title']).toBe('New order on Northwind Coffee')
+    expect(written[0].data['body']).toBe('A $42.00 order came in on Northwind Coffee.')
   })
 
   it('falls back to the address, then the id, when the site has no name', async () => {
@@ -300,7 +300,7 @@ describe('notifyHostManagers names the site (AGL-3432)', () => {
 
   it('leaves a payload with no placeholder exactly as written', async () => {
     hostDocs.set('hosts/host-1', {
-      displayName: 'Ready To Roll',
+      displayName: 'Northwind Coffee',
       memberRoles: { 'uid-a': 'admin' },
     })
     await notifyHostManagers('host-1', { type: 'content.booking', title: 'New booking' })
@@ -530,7 +530,7 @@ describe('the notification email is a system email (AGL-3367)', () => {
     )
     expect(sends).toHaveLength(1)
     expect(sends[0]['replyTo']).toBe('maria@example.com')
-    expect(String(sends[0]['html'])).toContain('Reply to this email to answer <a href="mailto:maria@example.com"')
+    expect(String(sends[0]['html'])).toContain('Reply to this email to answer maria@example.com')
   })
 
   it('never sets a reply address on a staff email', async () => {
