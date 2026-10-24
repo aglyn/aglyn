@@ -157,6 +157,7 @@ export const DOCS_HELP_EXCERPTS = {
   longFormMarkdown: 'Put a whole policy, terms or handbook page on the canvas as one Markdown element, and let a Table of contents element build the "On this page" list from its headings.',
   maintenance: 'The staff maintenance jobs — whether each scheduled job is still running, what a run would do, and how to run one by hand without firing an irreversible sweep by accident.',
   maintenanceMode: 'Temporarily take your site offline behind a designed 503 page.',
+  makeYourSitePrivate: 'Hide your whole site or keep it to your team, a password or signed-in members, and which setting does each.',
   manageAccount: 'Your personal account — email, sign-in methods, avatar, name, and password.',
   manifestAndEnvs: 'The plugin manifest schema, the marketplace listing/version documents, the trust state machine, and every PLUGIN_* environment variable.',
   marketingOverlays: 'Site-wide announcement bars and promotional popups with triggers, scheduling, and email capture.',
