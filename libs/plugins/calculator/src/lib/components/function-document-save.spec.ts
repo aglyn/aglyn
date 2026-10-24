@@ -42,17 +42,17 @@ function page() {
       </section>
     </main>
     <footer id="footer">Footer</footer>`
-  document.title = 'Pricing | Ready To Roll'
+  document.title = 'Pricing | Acme Builders'
   return document.getElementById('doc') as HTMLElement
 }
 
 describe('fillDocumentTitle', () => {
-  const values: Record<string, string> = { number: 'RTR-1001', customer: 'Pat Miller', empty: '' }
+  const values: Record<string, string> = { number: 'ACME-1001', customer: 'Pat Miller', empty: '' }
   const read = (name: string) => values[name] ?? ''
 
   it('fills names in braces from the calculator', () => {
-    expect(fillDocumentTitle('Receipt {number} {customer}', read)).toBe('Receipt RTR-1001 Pat Miller')
-    expect(fillDocumentTitle('Receipt { number }', read)).toBe('Receipt RTR-1001')
+    expect(fillDocumentTitle('Receipt {number} {customer}', read)).toBe('Receipt ACME-1001 Pat Miller')
+    expect(fillDocumentTitle('Receipt { number }', read)).toBe('Receipt ACME-1001')
   })
 
   it('fills an unknown or empty name with nothing and drops the dangling separator', () => {
@@ -83,13 +83,13 @@ describe('printFunctionDocument', () => {
       }
     })
 
-    expect(printFunctionDocument(target, { title: 'Receipt RTR-1001', paper: 'a4', margin: 6 })).toBe(true)
+    expect(printFunctionDocument(target, { title: 'Receipt ACME-1001', paper: 'a4', margin: 6 })).toBe(true)
 
     expect(duringPrint).not.toBeNull()
     const seen = duringPrint as unknown as { hidden: string[]; title: string; style: string; target: boolean }
     // Every sibling along the way up is left out; the ancestors stay.
     expect(seen.hidden.sort()).toEqual(['footer', 'header', 'inputs', 'intro', 'save'].sort())
-    expect(seen.title).toBe('Receipt RTR-1001')
+    expect(seen.title).toBe('Receipt ACME-1001')
     expect(seen.target).toBe(true)
     expect(seen.style).toContain('size: A4')
     expect(seen.style).toContain('margin: 6mm')
@@ -100,7 +100,7 @@ describe('printFunctionDocument', () => {
     expect(document.querySelectorAll(`[${PRINT_HIDE_ATTRIBUTE}]`)).toHaveLength(0)
     expect(target.hasAttribute(PRINT_TARGET_ATTRIBUTE)).toBe(false)
     expect(document.getElementById('aglyn-function-document-print')).toBeNull()
-    expect(document.title).toBe('Pricing | Ready To Roll')
+    expect(document.title).toBe('Pricing | Acme Builders')
   })
 
   it('uses Letter with a normal margin when none is given, and no size for the printer’s own', () => {
@@ -124,7 +124,7 @@ describe('printFunctionDocument', () => {
     })
     expect(printFunctionDocument(target, { title: 'Receipt' })).toBe(false)
     expect(document.querySelectorAll(`[${PRINT_HIDE_ATTRIBUTE}]`)).toHaveLength(0)
-    expect(document.title).toBe('Pricing | Ready To Roll')
+    expect(document.title).toBe('Pricing | Acme Builders')
   })
 })
 

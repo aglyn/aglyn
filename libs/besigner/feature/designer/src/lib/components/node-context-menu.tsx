@@ -432,7 +432,13 @@ export const NodeContextMenu = observer(
                   ? 'It will be on the page from the first paint'
                   : 'For a menu panel or drawer. To hide it outright, use the eye on its Hierarchy row'
               }
-              slotProps={{ secondary: { sx: { whiteSpace: 'normal' } } }}
+              // Both lines wrap. A MenuItem is `nowrap`, and this is the one
+              // item whose name is longer than the menu is wide, so with only
+              // the description wrapping the name ran off the right edge.
+              slotProps={{
+                primary: { sx: { whiteSpace: 'normal' } },
+                secondary: { sx: { whiteSpace: 'normal' } },
+              }}
             >
               {hiddenOnSite
                 ? 'Do not start hidden'

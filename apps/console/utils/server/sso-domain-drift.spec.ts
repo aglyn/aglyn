@@ -16,6 +16,7 @@
  */
 
 import {
+  driftOrgEmailNotice,
   driftStaffAlertText,
   driftStaffNotificationBody,
   driftStaffTitle,
@@ -58,5 +59,33 @@ describe('the staff side of an SSO drift report counts its domains (AGL-3432)', 
     expect(text.split('\n')[0]).toBe('2 SSO domains no longer prove ownership by DNS.')
     expect(text).toContain('  acme.com (Acme Co, org o1) — 3 consecutive failures over 21 days')
     expect(text).toContain('  beta.io (org o2) — 3 consecutive failures over 21 days')
+  })
+})
+
+describe('the org admins\' SSO drift email draws its own parts (AGL-4019)', () => {
+  it('gives the designed email a lead, the facts, a button and a caption', () => {
+    const notice = driftOrgEmailNotice(drifted('acme.com', 'o1'), 'https://app.aglyn.com')
+    expect(notice.lead).toContain('Single sign-on for acme.com is still working')
+    expect(notice.lead).toContain('nothing will be turned off automatically')
+    expect(notice.lead).not.toContain('https://')
+    expect(notice.details.split('\n')).toEqual([
+      'Domain: acme.com',
+      'Record: DNS TXT ownership record',
+      'Failed checks in a row: 3',
+      'Failing for: 21 days',
+      'What we saw: No TXT record at that name',
+    ])
+    expect(notice.url).toBe('https://app.aglyn.com/settings/sso')
+    expect(notice.urlLabel).toBe('Open SSO settings')
+    expect(notice.note).toBeTruthy()
+  })
+
+  it('says what it saw instead, and leaves out a run with no start', () => {
+    const notice = driftOrgEmailNotice(
+      { ...drifted('acme.com', 'o1'), records: ['v=spf1 -all'], daysFailing: null },
+      'https://app.aglyn.com',
+    )
+    expect(notice.details).toContain('What we saw: Other TXT records, but not the ownership record')
+    expect(notice.details).not.toContain('Failing for')
   })
 })

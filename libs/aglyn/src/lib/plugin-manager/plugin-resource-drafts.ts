@@ -152,6 +152,27 @@ export type PluginDraftWrite =
   | (PluginDraftRecord & { ok: true; replayed: boolean })
   | (PluginDraftRefusal & { ok: false })
 
+/**
+ * A change to the records a draft was seeded with (AGL-3988): each record by
+ * its place among them, each value by the field's id the writer's facts
+ * report. Values not named are kept. A record whose `where` values are no
+ * longer what it holds — a member changed it since — is left as it is.
+ */
+export interface PluginDraftRecordsRevision extends PluginDraftContext {
+  /** The draft, by the id it was written under. */
+  id: string
+  records: ReadonlyArray<{
+    /** Its place among the records the draft was seeded with, from 0. */
+    order: number
+    values: Readonly<Record<string, unknown>>
+    where?: Readonly<Record<string, unknown>>
+  }>
+}
+
+export type PluginDraftRecordsRevise =
+  | { ok: true; changed: number }
+  | (PluginDraftRefusal & { ok: false })
+
 export interface PluginResourceDraftWriter {
   /** Whether this member may create one on this site now; `null` admits. */
   refusal(context: PluginDraftContext): Promise<PluginDraftRefusal | null>
@@ -164,6 +185,14 @@ export interface PluginResourceDraftWriter {
   read(context: { hostId: string; id: string }): Promise<PluginDraftRecord | null>
   /** Makes the draft; a refusal is returned, never thrown. */
   write(request: PluginDraftRequest): Promise<PluginDraftWrite>
+  /**
+   * Changes values of the records the draft was seeded with (AGL-3988), for a
+   * resource whose drafts are seeded with records: the AI site start's late
+   * photo pass gives a list's covers photos once its pages are built. Held
+   * to the same member rules as `write`; a refusal is returned, never thrown.
+   * Absent on a writer whose drafts have no records.
+   */
+  reviseRecords?(request: PluginDraftRecordsRevision): Promise<PluginDraftRecordsRevise>
 }
 
 export const PLUGIN_RESOURCE_DRAFTS =

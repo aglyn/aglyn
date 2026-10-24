@@ -25,7 +25,7 @@ import {
   recordDelegationBounce,
   shouldDelegateSignIn,
 } from '../utils/auth-delegation'
-import isMobileBrowser from '../utils/is-mobile-browser'
+import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
 import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 
 /**

@@ -72,13 +72,13 @@ import getHost from '../utils/get-host'
 
 const mockGetHost = getHost as jest.MockedFunction<typeof getHost>
 
-const BASE = 'https://edr.test'
+const BASE = 'https://shop.test'
 
 const fetchXml = async (path: string) =>
   (
     await GET(
-      new Request(`${BASE}${path || '/sitemap.xml'}?host=edr`, {
-        headers: { host: 'edr.test' },
+      new Request(`${BASE}${path || '/sitemap.xml'}?host=shop`, {
+        headers: { host: 'shop.test' },
       }),
     )
   ).text()
@@ -112,7 +112,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   resetPluginSitemapReadersForTests()
   mockGetHost.mockResolvedValue({
-    host: { $id: 'host-1', cname: 'edr.test', seo: {}, screens: { home: '' } },
+    host: { $id: 'host-1', cname: 'shop.test', seo: {}, screens: { home: '' } },
     nextPageToken: '',
     error: null,
   } as never)

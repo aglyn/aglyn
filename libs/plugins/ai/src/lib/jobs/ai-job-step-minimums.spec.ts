@@ -36,6 +36,7 @@
  */
 
 import { AI_SITE_LOOK_BUDGET } from './ai-job-site-look'
+import { AI_SITE_LATE_PHOTOS_MINIMUM_MS } from './ai-site-late-photos'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AiBuildPlanCreate } from '../model/ai-build-plan'
@@ -453,6 +454,11 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
     // A scaffold with nothing left to build spends nothing; a page pass's time covers it.
     expect(aiJobNextStepMinimumMs({ ...job, outputs })).toBe(aiJobStepMinimumMs('site', 'generate'))
     expect(aiJobStepMinimumMs('site', 'generate')).toBe(aiJobStepMinimumMs('page', 'generate'))
+    // One that left a picture on a starter needs its late photo pass's time (AGL-3988), which a beat can give.
+    const starters = { pages: [{ screen: 'drftPage00', slots: [{ image: 'img-1', words: 'A dog', role: 'hero' as const, aspect: 2 }] }], lists: [] }
+    expect(aiJobNextStepMinimumMs({ ...job, outputs, sitePhotos: starters })).toBe(AI_SITE_LATE_PHOTOS_MINIMUM_MS)
+    expect(AI_SITE_LATE_PHOTOS_MINIMUM_MS).toBeGreaterThan(aiJobStepMinimumMs('site', 'generate'))
+    expect(AI_SITE_LATE_PHOTOS_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_STEP_MAX_MINIMUM_MS)
   })
 
   it('gives a build’s units the time of the step that builds each, by its item ledger (AGL-3616)', () => {

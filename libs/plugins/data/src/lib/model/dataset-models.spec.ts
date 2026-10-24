@@ -124,7 +124,7 @@ describe('coerceDocumentValues', () => {
 })
 
 /**
- * List values (AGL-3496). The EDR Services dataset stored its `categories` as
+ * List values (AGL-3496). A client's Services dataset stored its `categories` as
  * `["[\"Residential\"", "\"Commercial\"]"]`: a JSON array arrived as a
  * string and was split on its commas, so no repeat filter ever matched it.
  */

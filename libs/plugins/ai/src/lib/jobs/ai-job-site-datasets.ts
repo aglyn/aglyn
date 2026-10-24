@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { mediaRefFromCdnPath } from '@aglyn/aglyn/app-utils/media-ref'
 import { checkDatasetQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
@@ -52,9 +53,11 @@ import {
   aiLayoutSeedNumber,
   aiLayoutStarterPhotos,
   type AiLayoutPicturePhoto,
+  type AiLayoutPictureReport,
   type AiLayoutPictureSlot,
 } from '../layout-language/ai-layout-pictures'
 import { aiSiteWords } from '../model/ai-site-job'
+import { aiSiteIsStarterSrc, type AiSitePhotos, type AiSiteStarterList, type AiStockRefusedPicks } from '../model/ai-site-photos'
 import type { AiJobAdmissionContext } from './ai-job-admission'
 import { aiOriginJobId } from './ai-job-draft-ids'
 import { aiSiteProductPhotoSrc } from './ai-job-site-content'
@@ -352,6 +355,13 @@ export interface AiSiteDatasetRecordPhoto {
   /** The library photo's size, where it is one (AGL-3988): what a page the library fails reuses it at. */
   width?: number
   height?: number
+  /**
+   * The picks the library's image hosts refused for a record left on a
+   * starter (AGL-3988), which the site start's late photo pass asks again.
+   */
+  refused?: AiStockRefusedPicks
+  /** A starter on a site with no stock library (AGL-3988): it keeps it, and no late pass fills it. */
+  noLibrary?: true
 }
 
 /**
@@ -398,6 +408,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
   }))
   const seed = `${job.$id}:records`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
+  /** The picks the image hosts refused, by record (AGL-3988). */
+  const report: AiLayoutPictureReport = { refused: new Map() }
   /** Whether the site has a stock library: its records then never take a starter that shows another business (AGL-3988). */
   let library = false
   try {
@@ -417,7 +429,7 @@ export async function aiSiteDatasetRecordPhotos(input: {
       { budgetMs: AI_SITE_DATASET_PHOTOS_BUDGET_MS },
     )
     library = Boolean(source)
-    if (source) found = await source(slots)
+    if (source) found = await source(slots, report)
   } catch (error) {
     console.warn('ai site dataset: the stock photos failed; the job’s own photos or starters fill them', { error: String(error) })
   }
@@ -450,7 +462,14 @@ export async function aiSiteDatasetRecordPhotos(input: {
         height: photo.height,
       }
     }
-    return { src: aiSiteProductPhotoSrc(starters[index]?.src, hostId), placed: null, alt: starters[index]?.alt?.trim() || null }
+    const refused = report.refused.get(slots[index] as AiLayoutPictureSlot)
+    return {
+      src: aiSiteProductPhotoSrc(starters[index]?.src, hostId),
+      placed: null,
+      alt: starters[index]?.alt?.trim() || null,
+      ...(refused ? { refused } : {}),
+      ...(library ? {} : { noLibrary: true as const }),
+    }
   })
 }
 
@@ -470,14 +489,34 @@ export async function aiSiteDatasetRecordPhotos(input: {
  * photo the list shows. Never the photo of the record beside it while
  * another fits, the least shown first, the seed picking among equals. A
  * record no photo fits keeps none, and takes a starter. Pure.
+ *
+ * `besideLast` is the site start's late photo pass (AGL-3988): there the
+ * other choice is a starter photo of another business, so a record every
+ * photo sits beside takes the photo beside it rather than none.
  */
 export function aiSiteDatasetRecordsFromOwn(
   records: ReadonlyArray<{ name: string; category?: string | null }>,
   photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
   seed: string,
+  /**
+   * The photos the job copied for its pages (AGL-3988), which the site
+   * start's late photo pass offers a list whose own photos were all refused:
+   * filed under no category, so each is taken by the people it shows.
+   */
+  others: readonly AiLayoutPicturePhoto[] = [],
+  options: { besideLast?: boolean } = {},
 ): Array<AiLayoutPicturePhoto | null> {
-  const own = photos.flatMap((photo, index) => (photo?.src ? [{ photo, index }] : []))
+  const listed = photos.flatMap((photo, index) => (photo?.src ? [{ photo, index }] : []))
+  const shownHere = new Set(listed.map((entry) => entry.photo.src))
+  const own = [
+    ...listed,
+    ...others
+      .filter((photo, at, all) => photo.src && !shownHere.has(photo.src) && all.findIndex((one) => one.src === photo.src) === at)
+      .map((photo, at) => ({ photo, index: records.length + at })),
+  ]
   if (!own.length) return [...photos]
+  /** Every place a photo is ranked from: the list's records, then the job's other photos. */
+  const span = records.length + own.length - listed.length
   const category = (index: number) => records[index]?.category?.replace(/\s+/g, ' ').trim().toLowerCase() ?? ''
   const turn = aiLayoutSeedNumber(seed)
   /** Whether a photo's words name the people a record's moment shows, and none it never shows. */
@@ -503,10 +542,12 @@ export function aiSiteDatasetRecordsFromOwn(
       const apart = (entry: { photo: AiLayoutPicturePhoto }) => !beside.has(entry.photo.src)
       const same = own.filter((entry) => category(index) && category(entry.index) === category(index))
       const subject = own.filter((entry) => shows(entry.photo, record))
-      const pool = [same.filter(apart), subject.filter(apart), same, subject, own.filter(apart)].find((list) => list.length)
+      const pool = [same.filter(apart), subject.filter(apart), same, subject, own.filter(apart), options.besideLast ? own : []].find(
+        (list) => list.length,
+      )
       if (!pool) continue
       const uses = (src: string) => filled.filter((photo) => photo?.src === src).length
-      const rank = (at: number) => (((at - turn) % records.length) + records.length) % records.length
+      const rank = (at: number) => (((at - turn) % span) + span) % span
       const [pick] = [...pool].sort((a, b) => uses(a.photo.src) - uses(b.photo.src) || rank(a.index) - rank(b.index))
       if (pick) filled[index] = { ...pick.photo }
     }
@@ -837,7 +878,66 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       sparseFields: aiDatasetSparseFields(generation.value, facts.fields ?? []),
       ...aiSiteDatasetGroupsOf(category, facts.fields ?? [], generation.value),
     }
-    return { ...spent, outputs: [output(result.id, result.name, proposal, facts.records ?? generation.value.records.length)] }
+    // Its records left on a starter, which the site start's late photo pass fills (AGL-3988).
+    const starters = aiSiteDatasetStarterList({
+      dataset: result.id,
+      hostId: job.hostId,
+      imageField: facts.imageField ?? null,
+      fields: facts.fields ?? [],
+      people: input.pictures === 'people',
+      names: generation.value.records.map((values) => values[0] ?? ''),
+      categories: category?.values ?? [],
+      photos,
+    })
+    return {
+      ...spent,
+      outputs: [output(result.id, result.name, proposal, facts.records ?? generation.value.records.length)],
+      ...(starters ? { sitePhotos: { pages: [], lists: [starters] } satisfies AiSitePhotos } : {}),
+    }
+  }
+}
+
+/**
+ * A pictured list's records as the late photo pass reads them (AGL-3988),
+ * where any of them holds a starter on a site with a stock library: each
+ * record's name, category and photo
+ * value in order, the library photo it shows as a media reference with its
+ * size and words, and the picks the image hosts refused it. `null` where
+ * every record shows a library photo, or the list keeps no photo field.
+ */
+export function aiSiteDatasetStarterList(input: {
+  dataset: string
+  hostId: string
+  imageField: string | null
+  fields: readonly AiLayoutListingField[]
+  people: boolean
+  names: readonly string[]
+  categories: ReadonlyArray<string | null>
+  photos: readonly AiSiteDatasetRecordPhoto[]
+}): AiSiteStarterList | null {
+  // A site with no stock library keeps its starters, as it always has.
+  if (!input.imageField || !input.photos.some((photo) => aiSiteIsStarterSrc(photo.src) && !photo.noLibrary)) return null
+  const altField = input.fields.find((field) => field.name.trim().toLowerCase() === AI_SITE_DATASET_IMAGE_ALT_FIELD.toLowerCase())?.id
+  return {
+    dataset: input.dataset,
+    imageField: input.imageField,
+    ...(altField ? { altField } : {}),
+    ...(input.people ? { people: true } : {}),
+    records: input.names.map((name, index) => {
+      const photo = input.photos[index]
+      const value = photo?.src ?? ''
+      const src = aiSiteIsStarterSrc(value) ? null : photo?.placed || mediaRefFromCdnPath(value) || null
+      const category = input.categories[index]?.trim()
+      return {
+        name,
+        ...(category ? { category } : {}),
+        value,
+        ...(src && photo?.width && photo.height
+          ? { photo: { src, width: photo.width, height: photo.height, ...(photo.alt ? { alt: photo.alt } : {}) } }
+          : {}),
+        ...(photo?.refused ? { refused: photo.refused } : {}),
+      }
+    }),
   }
 }
 

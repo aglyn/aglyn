@@ -116,6 +116,96 @@ export function determineSiblingRegion(rect: DroppableClientRect, x: number, y: 
   return y < top + height / 2 ? DropRegion.TOP : DropRegion.BOTTOM
 }
 
+/**
+ * The direction a target's siblings run in. It decides which two edges of the
+ * target mean "before" and "after": in a column those are its top and bottom,
+ * in a row its left and right. The other two edges mean nothing — dropping on
+ * the left edge of a card in a column still lands above or below it.
+ */
+export type DropAxis = 'vertical' | 'horizontal'
+
+/** The widest an edge band of a container gets, in px. The rest is inside. */
+export const DROP_EDGE_BAND_MAX = 12
+
+/**
+ * How far past its boundary the pointer has to go before a before/after
+ * region it was already in lets go, in px (a leaf's halves hold the same
+ * way). Without it, a pointer resting on the line between two regions flips
+ * between them on every pixel of hand tremor.
+ */
+export const DROP_REGION_HYSTERESIS = 4
+
+export interface ResolveDropRegionOptions {
+  rect: DroppableClientRect
+  x: number
+  y: number
+  /** The way the target's siblings run. A column unless said otherwise. */
+  axis?: DropAxis
+  /**
+   * False for a leaf (self-closing / text-editable): it has no inside, so it
+   * splits into a before half and an after half (AGL-575 parallel).
+   */
+  acceptsChildren?: boolean
+  /** False for the document root: it has no siblings, so all of it is inside. */
+  acceptsSiblings?: boolean
+  /**
+   * False where the after edge would be drawn somewhere the drop does not
+   * land. An expanded container in the hierarchy is the case: its bottom edge
+   * is the top of its first child's row, while "after it" is past its whole
+   * subtree. That space is inside instead.
+   */
+  allowAfter?: boolean
+  /** Where the same target resolved last time, which it holds onto. */
+  previous?: DropRegion | null
+}
+
+/**
+ * The region a point over a drop target names, for a target whose siblings
+ * run along `axis`.
+ *
+ * A container has a thin before band and a thin after band along that axis
+ * (a quarter of its length, at most {@link DROP_EDGE_BAND_MAX}) and is inside
+ * everywhere else. A leaf is all before and after, split at its middle.
+ */
+export function resolveDropRegion(options: ResolveDropRegionOptions): DropRegion {
+  const {
+    rect,
+    x,
+    y,
+    axis = 'vertical',
+    acceptsChildren = true,
+    acceptsSiblings = true,
+    allowAfter = true,
+    previous = null,
+  } = options
+  if (!acceptsSiblings) return DropRegion.CHILDREN
+
+  const horizontal = axis === 'horizontal'
+  const before = horizontal ? DropRegion.LEFT : DropRegion.TOP
+  const after = horizontal ? DropRegion.RIGHT : DropRegion.BOTTOM
+  const start = (horizontal ? rect?.left : rect?.top) || 0
+  const size = Math.max(0, (horizontal ? rect?.width : rect?.height) || 0)
+  const at = (horizontal ? x : y) - start
+
+  if (!acceptsChildren) {
+    const stick = Math.min(DROP_REGION_HYSTERESIS, size / 4)
+    let middle = size / 2
+    if (previous === before) middle += stick
+    if (previous === after) middle -= stick
+    return at < middle ? before : after
+  }
+
+  const band = Math.min(size / 4, DROP_EDGE_BAND_MAX)
+  // An edge band holds on once the pointer is in it, but never shrinks to
+  // hold inside: in a 28px hierarchy row it is only 7px to begin with, and
+  // halving it on the way in made "above this row" a target few could hit.
+  const stick = Math.min(DROP_REGION_HYSTERESIS, band / 2)
+  const held = (region: DropRegion) => (previous === region ? stick : 0)
+  if (at < band + held(before)) return before
+  if (allowAfter && at > size - band - held(after)) return after
+  return DropRegion.CHILDREN
+}
+
 export function determineDropRegion(
   clientRect: DroppableClientRect,
   x: number,

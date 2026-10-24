@@ -48,3 +48,50 @@ export function richTextCommandGroups(
   const declared = schema?.richTextCommands
   return new Set(declared?.length ? declared : EVERY_GROUP)
 }
+
+/**
+ * The formatting tools, each tagged with the group that has to be allowed
+ * for it to appear (AGL-2557).
+ *
+ * The toolbar used to render this list whole, which is why rich text could
+ * only ever be offered by a component that could hold all of it — a
+ * `<button>` cannot hold a list, so Accordion Summary and Button were left
+ * with no formatting at all rather than with the half that is safe in them.
+ */
+export const RICH_COMMANDS: Array<{
+  command: string
+  label: string
+  title: string
+  group: Aglyn.RICH_TEXT_COMMANDS
+}> = [
+  {
+    command: 'bold',
+    label: 'B',
+    title: 'Bold',
+    group: RICH_TEXT_COMMANDS.EMPHASIS,
+  },
+  {
+    command: 'italic',
+    label: 'I',
+    title: 'Italic',
+    group: RICH_TEXT_COMMANDS.EMPHASIS,
+  },
+  {
+    command: 'underline',
+    label: 'U',
+    title: 'Underline',
+    group: RICH_TEXT_COMMANDS.EMPHASIS,
+  },
+  {
+    command: 'insertUnorderedList',
+    label: '•',
+    title: 'Bulleted list',
+    group: RICH_TEXT_COMMANDS.LIST,
+  },
+  {
+    command: 'insertOrderedList',
+    label: '1.',
+    title: 'Numbered list',
+    group: RICH_TEXT_COMMANDS.LIST,
+  },
+]

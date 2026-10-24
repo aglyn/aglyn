@@ -489,7 +489,7 @@ describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
 
 /**
  * The manifest a link unfurler reads (AGL-3382). Measured on production for
- * `ready-to-roll.aglyn.app`: `short_name` was `Ready To Rol`, cut mid-word by
+ * a client site with a three-word name: `short_name` was cut mid-word by
  * this route itself, and a site whose only mark was a favicon installed with
  * no icon at all.
  */
@@ -497,16 +497,16 @@ describe('link-preview manifest fields (AGL-3382)', () => {
   beforeEach(() => jest.clearAllMocks())
 
   const SITE = {
-    $id: 'ZG22ootbN-',
-    displayName: 'Ready To Roll',
-    subdomain: 'ready-to-roll',
+    $id: 'Hb7nQe2Ws-',
+    displayName: 'Acme Home Builders',
+    subdomain: 'acme-builders',
   }
-  const ORIGIN = 'https://ready-to-roll.aglyn.app/api/media/cdn/'
+  const ORIGIN = 'https://acme-builders.aglyn.app/api/media/cdn/'
 
   it('cuts short_name at a word, never inside one', async () => {
     mockGetHost.mockResolvedValue({ host: SITE })
-    const { body } = await manifestFor('ready-to-roll')
-    expect(body.short_name).toBe('Ready To')
+    const { body } = await manifestFor('acme-builders')
+    expect(body.short_name).toBe('Acme Home')
   })
 
   it('draws the whole set from the app icon when the site has one', async () => {
@@ -514,32 +514,32 @@ describe('link-preview manifest fields (AGL-3382)', () => {
       host: {
         ...SITE,
         seo: {
-          appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0',
-          favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA',
+          appIcon: 'media:org:Xr4kPa9Lm-/nAppIc0nQ7',
+          favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa',
         },
       },
     })
-    const { body } = await manifestFor('ready-to-roll')
+    const { body } = await manifestFor('acme-builders')
     const sources = new Set(
       body.icons.map((icon: { src: string }) => sourceOf(icon.src)),
     )
-    expect([...sources]).toEqual([`${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/mKeulwfbL0`])
+    expect([...sources]).toEqual([`${ORIGIN}org:Xr4kPa9Lm-:Hb7nQe2Ws-/nAppIc0nQ7`])
   })
 
   it('installs a favicon-only site with its favicon', async () => {
     mockGetHost.mockResolvedValue({
-      host: { ...SITE, seo: { favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA' } },
+      host: { ...SITE, seo: { favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa' } },
     })
-    const { body } = await manifestFor('ready-to-roll')
+    const { body } = await manifestFor('acme-builders')
     const sources = new Set(
       body.icons.map((icon: { src: string }) => sourceOf(icon.src)),
     )
-    expect([...sources]).toEqual([`${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA`])
+    expect([...sources]).toEqual([`${ORIGIN}org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa`])
   })
 
   it('still lists no icons, and nothing of ours, for a site with neither', async () => {
     mockGetHost.mockResolvedValue({ host: SITE })
-    const { body } = await manifestFor('ready-to-roll')
+    const { body } = await manifestFor('acme-builders')
     expect(body).not.toHaveProperty('icons')
     expect(JSON.stringify(body)).not.toMatch(/_static|brand/)
   })
@@ -554,13 +554,13 @@ describe('the derived manifest (AGL-3484)', () => {
   beforeEach(() => jest.clearAllMocks())
 
   const SITE = {
-    $id: 'ZG22ootbN-',
-    displayName: 'EDR Construction',
-    subdomain: 'edr-construction',
+    $id: 'Hb7nQe2Ws-',
+    displayName: 'Northwind Coffee',
+    subdomain: 'northwind-coffee',
     seo: {
-      title: 'EDR Construction Services',
-      description: 'Commercial and residential builds in Austin.',
-      favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA',
+      title: 'Northwind Coffee Roasters',
+      description: 'Small-batch coffee, roasted every morning.',
+      favicon: 'media:org:Xr4kPa9Lm-/k3-fvIcoNa',
     },
     defaultLocale: 'es',
     theme: {
@@ -573,15 +573,15 @@ describe('the derived manifest (AGL-3484)', () => {
     },
   }
   const SRC =
-    'https://edr-construction.aglyn.app/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA'
+    'https://northwind-coffee.aglyn.app/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa'
 
   it('derives every field from the site’s settings', async () => {
     mockGetHost.mockResolvedValue({ host: SITE })
-    const { body } = await manifestFor('edr')
+    const { body } = await manifestFor('northwind')
     expect(body).toMatchObject({
-      name: 'EDR Construction Services',
-      short_name: 'EDR', // ≤12 at a word boundary
-      description: 'Commercial and residential builds in Austin.',
+      name: 'Northwind Coffee Roasters',
+      short_name: 'Northwind', // ≤12 at a word boundary
+      description: 'Small-batch coffee, roasted every morning.',
       lang: 'es',
       start_url: '/',
       scope: '/',
@@ -606,12 +606,12 @@ describe('the derived manifest (AGL-3484)', () => {
     mockIconFacts.mockResolvedValue(
       new Map([
         [
-          '/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA',
+          '/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa',
           { contentType: 'image/png', contentHash: 'h4sh' },
         ],
       ]),
     )
-    const { body } = await manifestFor('edr')
+    const { body } = await manifestFor('northwind')
     expect(body.icons).toEqual([
       ...[48, 72, 96, 128, 144, 152, 192, 256, 384, 512].map((size) => ({
         src: `${SRC}?icon=png-${size}&v=h4sh`,
@@ -634,12 +634,12 @@ describe('the derived manifest (AGL-3484)', () => {
     mockIconFacts.mockResolvedValue(
       new Map([
         [
-          '/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA',
+          '/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa',
           { contentType: 'image/svg+xml', contentHash: 'h4sh' },
         ],
       ]),
     )
-    const { body } = await manifestFor('edr')
+    const { body } = await manifestFor('northwind')
     expect(body.icons.at(-1)).toEqual({
       src: SRC,
       sizes: 'any',
@@ -651,10 +651,10 @@ describe('the derived manifest (AGL-3484)', () => {
 
   it('reads the facts of the one source the set is drawn from', async () => {
     mockGetHost.mockResolvedValue({ host: SITE })
-    await manifestFor('edr')
+    await manifestFor('northwind')
     expect(mockIconFacts).toHaveBeenCalledWith({
-      hostId: 'ZG22ootbN-',
-      srcs: ['/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA'],
+      hostId: 'Hb7nQe2Ws-',
+      srcs: ['/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/k3-fvIcoNa'],
     })
   })
 
@@ -662,13 +662,13 @@ describe('the derived manifest (AGL-3484)', () => {
     mockGetHost.mockResolvedValue({
       host: {
         ...SITE,
-        logoUrl: 'media:org:Ok7uFGMCC-/logo',
+        logoUrl: 'media:org:Xr4kPa9Lm-/logo',
         seo: { appIcon: '', favicon: '' },
       },
     })
-    const { body } = await manifestFor('edr')
+    const { body } = await manifestFor('northwind')
     expect(sourceOf(body.icons[0].src)).toBe(
-      'https://edr-construction.aglyn.app/api/media/cdn/org:Ok7uFGMCC-:ZG22ootbN-/logo',
+      'https://northwind-coffee.aglyn.app/api/media/cdn/org:Xr4kPa9Lm-:Hb7nQe2Ws-/logo',
     )
   })
 })

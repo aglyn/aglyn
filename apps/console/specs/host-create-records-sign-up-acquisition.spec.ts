@@ -53,7 +53,7 @@ function mockSubcollection(path: string): unknown {
   }
 }
 
-const ORG = { $id: 'org-1', slug: 'dongare', name: 'Dongare Enterprises', plan: 'free' }
+const ORG = { $id: 'org-1', slug: 'northwind', name: 'Northwind Coffee', plan: 'free' }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -142,7 +142,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
       host: 'app.aglyn.com',
     },
   }),
-  resolveIdpDisplayName: () => 'Dongare Enterprises',
+  resolveIdpDisplayName: () => 'Northwind Coffee',
   checkQuota: () => ({ allowed: true, limit: 1 }),
   createResourceUid: () => 'host-new',
   isBlockedSubdomain: () => false,

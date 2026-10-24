@@ -53,6 +53,7 @@ import {
 } from '@aglyn/aglyn/app-utils/bundle-intent'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { onboardingDestination } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
+import { isAiTierId } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   isUpgradeProposalPlan,
   normalizeUpgradeProposalBundle,
@@ -146,6 +147,11 @@ export interface MintBundleLinkOptions {
   addons?: unknown
   interval?: unknown
   coupon?: unknown
+  /**
+   * The Aglyn AI tier staff chose (AGL-4025), kept with the AI add-on; an
+   * `ai:<tier>` entry in `addons` names one too, and this wins when both do.
+   */
+  aiTier?: unknown
   /** The chosen domain, quoted from the registrar's search; optional. */
   domain?: {
     name?: unknown
@@ -197,8 +203,9 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     addons: fitted.addons,
     interval: options.interval,
     coupon: options.coupon,
-    // The tier an `ai:<tier>` entry named (AGL-3965), kept with the AI add-on.
-    aiTier: parsed.aiTier,
+    // The tier staff chose (AGL-4025), or the one an `ai:<tier>` entry named
+    // (AGL-3965), kept with the AI add-on.
+    aiTier: isAiTierId(options.aiTier) ? options.aiTier : parsed.aiTier,
   })
   const intent: BundleLinkDoc['intent'] = { plan, ...bundle }
 

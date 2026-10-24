@@ -27,7 +27,7 @@ import {
   consumeInteractiveSignIn,
   consumeInteractiveSignOut,
 } from '../utils/interactive-signin'
-import clearServiceWorkerCaches from '../utils/clear-service-worker-caches'
+import clearServiceWorkerCaches from '@aglyn/shared-util-dom/clear-service-worker-caches'
 import { mintSession } from '../utils/session-mint'
 
 // Lives in a module of its own so the auth layout can share it without this

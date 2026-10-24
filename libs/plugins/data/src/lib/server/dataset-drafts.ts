@@ -24,11 +24,13 @@ import {
   type PluginDraftCheck,
   type PluginDraftContext,
   type PluginDraftRecord,
+  type PluginDraftRecordsRevise,
   type PluginDraftRefusal,
   type PluginDraftWrite,
   type PluginResourceDraftWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { dataStorageRefusal } from '@aglyn/tenant-data-admin/server/data-storage-gate'
 import {
   memberHasOrgPermission,
@@ -40,6 +42,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   coerceDocumentValues,
   datasetIntegrityFields,
+  datasetIntegrityUpdate,
   defaultDatasetFieldId,
   validateDocument,
   type DatasetFieldType,
@@ -453,6 +456,51 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
       if (!orgId) return null
       const dataset = await firestore().collection('orgs').doc(orgId).collection('datasets').doc(id).get()
       return dataset.exists ? recordOf(dataset) : null
+    },
+
+    // The late photo pass of an AI site start (AGL-3988): a list's covers
+    // given photos once its pages are built. Only what a person could type
+    // in the record's card is stored, under the same member rules as `write`.
+    reviseRecords: async (request): Promise<PluginDraftRecordsRevise> => {
+      const refused = await early(request)
+      if (refused) return { ok: false, ...refused }
+      const orders = [...new Set(request.records.map((record) => record.order))]
+        .filter((order) => Number.isInteger(order) && order >= 0)
+        .slice(0, DATASET_DRAFT_RECORDS_MAX)
+      if (!orders.length) return { ok: true, changed: 0 }
+      const db = firestore()
+      const datasetRef = db.collection('orgs').doc(request.orgId).collection('datasets').doc(request.id)
+      return db.runTransaction(async (tx): Promise<PluginDraftRecordsRevise> => {
+        const dataset = await tx.get(datasetRef)
+        const model = dataset.get('model') as DatasetModel | undefined
+        if (!dataset.exists || !model?.order) return { ok: false, status: 404, error: 'The dataset is no longer there' }
+        const rows = await tx.get(datasetRef.collection('records').where('order', 'in', orders))
+        let changed = 0
+        for (const revision of request.records) {
+          const row = rows.docs.find((doc) => doc.get('order') === revision.order)
+          if (!row) continue
+          const stored = (row.get('values') ?? {}) as Record<string, unknown>
+          // A member changed it since: theirs stands.
+          if (Object.entries(revision.where ?? {}).some(([id, value]) => stored[id] !== value)) continue
+          // Only the list's own fields are changed; a revision naming none of them changes nothing.
+          const named = Object.entries(revision.values).filter(([id]) => model.fields[id])
+          if (!named.length) continue
+          const input: Record<string, unknown> = { ...stored }
+          for (const [id, value] of named) input[id] = seedValue(value)
+          const values = coerceDocumentValues(model, input)
+          for (const [id, value] of Object.entries(values)) {
+            if (value === '' || value === null || value === undefined || (Array.isArray(value) && !value.length)) delete values[id]
+          }
+          const errors = validateDocument(model, values)
+          const badPhoto = Object.entries(values).some(
+            ([id, value]) => model.fields[id]?.customType === DATASET_IMAGE_FIELD_TYPE && !isDatasetImageValue(value),
+          )
+          if (Object.keys(errors).length || badPhoto) continue
+          tx.update(row.ref, { values, ...datasetIntegrityUpdate(model, values, FieldValue.delete()), updatedAt: request.now })
+          changed += 1
+        }
+        return { ok: true, changed }
+      })
     },
 
     write: async (request): Promise<PluginDraftWrite> => {

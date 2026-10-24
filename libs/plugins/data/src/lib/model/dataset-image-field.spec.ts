@@ -28,11 +28,11 @@ describe('a record’s photo (AGL-3616)', () => {
     for (const value of [
       'media:host-1/m-1',
       // The organization library: its scope holds a colon.
-      'media:org:fiL5LrShn9/abc123',
+      'media:org:pK8vTz3Rq1/abc123',
       // …narrowed to one site.
-      'media:org:fiL5LrShn9:host-1/abc123',
+      'media:org:pK8vTz3Rq1:host-1/abc123',
       // A content pin rides after `@`.
-      'media:org:fiL5LrShn9/abc123@f00d',
+      'media:org:pK8vTz3Rq1/abc123@f00d',
       'media:host-1/m-1@f00d',
     ]) {
       expect(isDatasetImageValue(value)).toBe(true)
@@ -41,7 +41,7 @@ describe('a record’s photo (AGL-3616)', () => {
   })
 
   it('takes a CDN path and an https link', () => {
-    expect(isDatasetImageValue('/api/media/cdn/org:fiL5LrShn9/abc123')).toBe(true)
+    expect(isDatasetImageValue('/api/media/cdn/org:pK8vTz3Rq1/abc123')).toBe(true)
     expect(isDatasetImageValue('https://images.example.com/a.jpg')).toBe(true)
   })
 

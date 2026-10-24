@@ -620,7 +620,23 @@ async function walk(page, db, auth, identity, created) {
   // refuses the signup.
   await page.check('input[type="checkbox"]')
   await page.click('button[type="submit"]')
-  await page.waitForURL(/\/verify-email/, { timeout: 45_000 })
+  try {
+    await page.waitForURL(/\/verify-email/, { timeout: 45_000 })
+  } catch (error) {
+    // Say what the page shows instead (AGL-4023): a timeout that names only
+    // the URL it waited for sent this investigation the long way round.
+    const shown = await page
+      .$$eval('[role="alert"], .MuiAlert-message, .MuiFormHelperText-root.Mui-error', (nodes) =>
+        nodes.map((n) => n.textContent.trim()).filter(Boolean).join(' | '),
+      )
+      .catch(() => '(unreadable)')
+    const trace = (page.walkTrace ?? []).slice(-12).join('\n    ')
+    throw new Error(
+      `no /verify-email after submit — at ${page.url()}; on screen: ${shown || '(nothing)'}` +
+        (trace ? `\n  trace:\n    ${trace}` : ''),
+      { cause: error },
+    )
+  }
   const user = await auth.getUserByEmail(email)
   created.uid = user.uid
   if (user.emailVerified) throw new Error('a new account arrived pre-verified')
@@ -1044,7 +1060,7 @@ async function main() {
     done()
   } catch (error) {
     failedStep = step
-    console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
+    console.log(`FAILED at ${step}: ${String(error).slice(0, 2000)}`)
   }
 
   const consoleSite = new URL(CONSOLE).hostname.split('.').slice(-2).join('.')
@@ -1170,6 +1186,13 @@ async function main() {
         }
         if (u.pathname === '/api/orgs/create' || u.pathname.startsWith('/api/edit-hint/')) {
           page.walkTrace.push(`${response.request().method()} ${u.host}${u.pathname} → ${response.status()}`)
+        } else if (
+          response.status() >= 400 &&
+          (u.pathname.startsWith('/api/') || /googleapis\.com$/.test(u.host))
+        ) {
+          // Any other refused API call: a sign-up that stalls after submit
+          // usually stalls on one of these.
+          page.walkTrace.push(`${request.method()} ${u.host}${u.pathname} → ${response.status()}`)
         }
       })
       page.on('framenavigated', (frame) => {
@@ -1183,7 +1206,7 @@ async function main() {
       outcome = await walk(page, db, auth, identity, created)
     } catch (error) {
       legFailedStep = step
-      console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
+      console.log(`FAILED at ${step}: ${String(error).slice(0, 2000)}`)
     } finally {
       await context?.close().catch(() => undefined)
     }

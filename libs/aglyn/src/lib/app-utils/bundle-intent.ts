@@ -48,6 +48,7 @@ import {
   defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
+  isAiTierId,
   PLAN_LABELS,
   parseAiTierAddonKey,
   PLAN_PRICING,
@@ -182,6 +183,19 @@ export function addonMaxForPlan(kind: AddonKind, plan: OrgPlan): number {
 /** Whether a plan sells an add-on at all: priced, with a ceiling above zero. */
 export function planSellsAddon(kind: AddonKind, plan: OrgPlan): boolean {
   return addonUnitUsd(kind, plan) != null && addonMaxForPlan(kind, plan) > 0
+}
+
+/**
+ * The first of `plans` (listed smallest first) that sells an add-on kind, or
+ * null when none does: the plan a picker names beside an add-on the chosen
+ * plan does not sell, so it shows as "needs Pro or higher" rather than
+ * vanishing (AGL-4025). POS registers need a plan with the point of sale.
+ */
+export function firstPlanSellingAddon(
+  kind: AddonKind,
+  plans: readonly OrgPlan[],
+): OrgPlan | null {
+  return plans.find((plan) => planSellsAddon(kind, plan)) ?? null
 }
 
 /** Quantities by kind, absent kinds meaning none. */
@@ -380,6 +394,51 @@ export function bundleAddonsParam(
       return quantity > 1 ? `${BUNDLE_ADDON_TOKENS[kind]}:${quantity}` : BUNDLE_ADDON_TOKENS[kind]
     })
     .join(',')
+}
+
+/**
+ * The Aglyn AI tier a bundle sells (AGL-4025): the tier named, or the plan's
+ * default (`defaultAiTierForPlan`) when none is; null when the bundle has no
+ * Aglyn AI or the plan sells no tier. A picker shows this tier as chosen, the
+ * link writes it as `ai:<tier>`, and checkout charges it, so the three agree.
+ */
+export function bundleAiTier(
+  addons: BundleAddons | null | undefined,
+  plan: OrgPlan,
+  tier?: AiTierId | null,
+): AiTierId | null {
+  if (!((addons?.aiAddon ?? 0) > 0) || !planSellsAiTiers(plan)) return null
+  return isAiTierId(tier) ? tier : defaultAiTierForPlan(plan)
+}
+
+/**
+ * What a bundle costs at list price, in cents, before tax and any promotion
+ * code (AGL-4026): the plan at its price for the cadence (the annual monthly
+ * price × 12 yearly, the monthly price monthly), plus every add-on the plan
+ * sells at its unit price × quantity, × 12 yearly as every add-on bills.
+ *
+ * The figure Billing shows while Stripe cannot price the bundle with tax —
+ * no billing address yet, the preview still on its way, or a preview that
+ * failed — so the owner always sees what the bundle costs and sees it move
+ * as they change it. Never shown in place of Stripe's taxed total.
+ */
+export function bundleListPriceCents(bundle: {
+  plan: OrgPlan
+  interval: 'month' | 'year'
+  addons?: BundleAddons | null
+  aiTier?: AiTierId | null
+}): number {
+  const pricing = PLAN_PRICING[bundle.plan]
+  const yearly = bundle.interval === 'year'
+  const base = yearly ? pricing.basePriceAnnualMonthlyUsd * 12 : pricing.basePriceMonthlyUsd
+  let cents = Math.round(base * 100)
+  const addons = fitBundleAddonsToPlan(bundle.addons, bundle.plan).addons
+  for (const kind of ADDON_KINDS) {
+    const quantity = addons[kind] ?? 0
+    const unit = addonUnitUsd(kind, bundle.plan, kind === 'aiAddon' ? bundle.aiTier : null)
+    if (quantity > 0 && unit != null) cents += Math.round(unit * 100) * quantity * (yearly ? 12 : 1)
+  }
+  return cents
 }
 
 /** Whether any add-on is asked for. */

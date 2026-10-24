@@ -106,7 +106,7 @@ beforeEach(() => {
   mockVerifyIdToken.mockResolvedValue({ uid: 'owner-1', email: 'owner@example.com', email_verified: true })
   mockResolveOrgMembership.mockResolvedValue({ orgId: 'org-1', member: { role: 'owner' } })
   mockMemberHasOrgPermission.mockResolvedValue(true)
-  mockOrg = { $id: 'org-1', name: 'Ready to Roll' }
+  mockOrg = { $id: 'org-1', name: 'Acme Builders' }
   mockHasSiteCare = true
   mockOpen.mockResolvedValue({ ticketId: 'ticket-1', dueAtMs: Date.UTC(2026, 9, 21, 15) })
 })
