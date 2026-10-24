@@ -136,6 +136,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 const {
+  buildUpgradeProposal,
   proposeOrgUpgrade,
   settleSubscriptionStart,
   UpgradeProposalError,
@@ -227,6 +228,37 @@ describe('proposing an upgrade (AGL-3466)', () => {
     expect(mockActivity.map((row) => row.action)).toEqual([
       'Proposed the Starter plan (Starter with Aglyn AI and Site Care, billed yearly, code BOOTH25)',
     ])
+  })
+
+  it('keeps the Aglyn AI tier staff picked, and sends Billing with it chosen (AGL-4025)', async () => {
+    seedTrial()
+    const result = await proposeOrgUpgrade({
+      orgId: ORG,
+      plan: 'starter',
+      addons: { siteCare: 1, aiAddon: 1 },
+      interval: 'year',
+      aiTier: 'max',
+      actor: { uid: 'staff', email: 'zed@aglyn.test' },
+      origin: 'https://app.aglyn.test',
+    })
+    expect(result.proposal).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'max' })
+    expect(org()['upgradeProposal']).toMatchObject({ aiTier: 'max' })
+    expect(String(mockSent[0]['text'])).toContain(
+      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:max,siteCare',
+    )
+    expect(mockActivity.map((row) => row.action)).toEqual([
+      'Proposed the Starter plan (Starter with Aglyn AI Max and Site Care, billed yearly)',
+    ])
+  })
+
+  it('the hand-off’s proposal keeps the tier too, and only with Aglyn AI (AGL-4025)', () => {
+    const actor = { uid: 'staff' }
+    expect(
+      buildUpgradeProposal({ plan: 'pro', addons: { aiAddon: 1 }, aiTier: 'ultra', actor }),
+    ).toMatchObject({ addons: { aiAddon: 1 }, aiTier: 'ultra' })
+    expect(
+      buildUpgradeProposal({ plan: 'pro', addons: { siteCare: 1 }, aiTier: 'ultra', actor }),
+    ).not.toHaveProperty('aiTier')
   })
 
   it('refuses a plan the workspace cannot buy itself, writing nothing', async () => {

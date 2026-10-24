@@ -295,7 +295,7 @@ describe('tenant `<link rel="icon">` (AGL-1421)', () => {
   /**
    * The sizes, typed and measured (AGL-3484).
    *
-   * EDR Construction's favicon is a 512×512 PNG, and every tab downloaded all
+   * A client site's favicon was a 512×512 PNG, and every tab downloaded all
    * 63 KB of it to draw 16 pixels. A CDN-served favicon is now one PNG per
    * tab size, each declaring the `type` and `sizes` it really has.
    */

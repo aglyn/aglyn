@@ -34,6 +34,12 @@ export type LayoutChromeContextValue = {
    * the screen renders bare (today's behavior).
    */
   chromeCanvas?: Aglyn.CanvasManager
+  /**
+   * The bound layout, for what a click on one of its elements offers: its
+   * name, and the address of its own editor when there is a published
+   * version to open there.
+   */
+  layout?: { id: string; name?: string; editHref?: string }
 }
 
 export const LayoutChromeContext = createContext<LayoutChromeContextValue>({})

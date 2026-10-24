@@ -96,9 +96,9 @@ const FUNCTIONS = {
 } as unknown as Record<string, Aglyn.HostFunction>
 
 const SITE: Aglyn.HostTokenSource = {
-  displayName: 'edr-construction',
-  subdomain: 'edr-construction',
-  seo: { entity: { name: 'EDR Construction' } },
+  displayName: 'acme-builders',
+  subdomain: 'acme-builders',
+  seo: { entity: { name: 'Acme Builders' } },
 }
 
 /** The header as the layout stores it: every token kind a prop can hold. */
@@ -224,7 +224,7 @@ describe('the layout chrome draws site variables as the published page resolves 
     expect(publishedProps(HEADER_PROPS)).toEqual({
       children: 'Call (555) 010-2030',
       title: 'Built right, the first time',
-      ariaLabel: 'EDR Construction — (555) 010-2030',
+      ariaLabel: 'Acme Builders — (555) 010-2030',
       subtitle: 'From $200',
     })
   })

@@ -158,6 +158,16 @@ describe('what a commit subject becomes', () => {
     )
   })
 
+  it('drops a CI directive, and the citation it trailed', () => {
+    // v1.0.0-beta.272's published entry carried "… (AGL-4005) [skip ci]":
+    // since 10/20 a PR that rides the promotion's one CI pass lands with it.
+    assert.equal(
+      cleanSummary('pin sites the way workspaces are pinned (AGL-4005) [skip ci]'),
+      'pin sites the way workspaces are pinned',
+    )
+    assert.equal(cleanSummary('keep the job [CI SKIP] whole (AGL-4015)'), 'keep the job whole')
+  })
+
   it('keeps an issue id that is part of the sentence', () => {
     // The published beta.107 entry carries this line verbatim. Stripping ids
     // anywhere left "raise the Linear ceiling to , read from the workspace".

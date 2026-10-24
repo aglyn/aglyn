@@ -455,6 +455,40 @@ describe('renderSystemEmail', () => {
       expect(mockVersionGet).toHaveBeenCalledTimes(1)
     })
 
+    // AGL-4019: the usage alerts sent `workspace-notice` with its subject
+    // and body only, and every other declared token stayed a literal `{{…}}`
+    // through the render — so its details panel and button were drawn, then
+    // blanked: a heading over an empty bar and a button with no words.
+    it('leaves out the blocks of a declared token the send did not supply', async () => {
+      mockGet.mockResolvedValue(snapshot(null))
+      const loaded = await loadSystemEmail('workspace-notice')
+      const button = /<a href="[^"]*" target="_blank" style="display:inline-block;padding:12px 28px/
+
+      const bare = renderLoadedSystemEmail(loaded!, {
+        'notice.subject': 'You’re above 80% of your pages on a site quota',
+        'org.name': 'Acme',
+      })
+      expect(bare?.html).toContain('You’re above 80% of your pages on a site quota')
+      expect(bare?.html).not.toMatch(button)
+      expect(bare?.html).not.toContain('{{')
+      expect(bare?.text).not.toMatch(/: #$/m)
+
+      const full = renderLoadedSystemEmail(loaded!, {
+        'notice.subject': 'You’re above 80% of your pages on a site quota',
+        'notice.lead': 'Your site Shop in the Acme workspace has 5 of the 6 pages your plan includes per site.',
+        'notice.details': 'Workspace: Acme\nLimit: Pages on a site\nUsed: 5 of 6 (83%)',
+        'notice.url': 'https://app.aglyn.com/acme/billing/usage',
+        'notice.action': 'See usage in Billing',
+        'notice.reason': 'You are getting this because you are an owner or admin of Acme.',
+        'org.name': 'Acme',
+      })
+      expect(full?.html).toMatch(button)
+      expect(full?.html).toContain('See usage in Billing')
+      expect(full?.html).toContain('Your site Shop in the Acme workspace has 5 of the 6 pages')
+      expect(full?.text).toContain('Used')
+      expect(full?.text).toContain('See usage in Billing: https://app.aglyn.com/acme/billing/usage')
+    })
+
     it('loads null for a non-Resend key without reading Firestore', async () => {
       expect(await loadSystemEmail('stripe-receipt')).toBeNull()
       expect(await loadSystemEmail('stripe-card-expiring')).toBeNull()

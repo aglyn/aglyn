@@ -129,7 +129,7 @@ jest.mock('../utils/popup-loading-guard', () => ({
   __esModule: true,
   default: () => () => undefined,
 }))
-jest.mock('../utils/is-mobile-browser', () => ({
+jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   __esModule: true,
   default: () => false,
 }))

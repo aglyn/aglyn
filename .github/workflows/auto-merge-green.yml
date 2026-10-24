@@ -107,7 +107,15 @@ jobs:
                 then (if .status == "COMPLETED" then .conclusion else "PENDING" end)
                 else .state end;
               def name: .name // .context;
-              [.statusCheckRollup[] | {name: name, state: state}] as $checks
+              # The LATEST run of each check decides it. A run superseded on the
+              # same head (an edit and a push in the same second, a re-run)
+              # stays in the rollup as CANCELLED; reading every entry let one
+              # superseded guard hold a green hotfix promotion forever (beta.274,
+              # beta.280). A run still pending counts as the latest.
+              ([.statusCheckRollup[]
+                | {name: name, state: state,
+                   at: (if state == "PENDING" then "9999" else (.completedAt // .startedAt // "") end)}]
+               | group_by(.name) | map(max_by(.at) | {name, state})) as $checks
               | if .isDraft then "skip: draft"
                 elif ([.labels[].name] | index("hold")) then "skip: labeled hold"
                 elif .baseRefName == "main" and (.headRefName | startswith("release/")) then "skip: a release branch"

@@ -19,7 +19,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 // Deep path, keeping the type-only barrel import above erased.
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from './firebase/firebase-services'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import useFirestoreCollection from './use-firestore-collection'

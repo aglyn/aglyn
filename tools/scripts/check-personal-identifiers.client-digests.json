@@ -1,0 +1,150 @@
+{
+  "$comment": "Digests of the client identifiers on a private list kept off this repository. Regenerate with `--digest` (see the header of check-personal-identifiers.mjs). forgivenCommits: full shas of published commits whose message cannot be reworded.",
+  "digests": [
+    {
+      "roll32": "e54be0d5",
+      "sha256": "01fc50edf1d916a79764ef1fb4d463991eafc3a2ddb78ace0716c2247517ae28"
+    },
+    {
+      "roll32": "6871230a",
+      "sha256": "118ba3dc2da7f0687a06386f6855464ba4a9f4daeba39ff7393e905e44ee06c3"
+    },
+    {
+      "roll32": "5ab966f5",
+      "sha256": "151643b16dd78682f8f8a3405797d5394b80c62131b3e22115bd060ae20ba52c"
+    },
+    {
+      "roll32": "8d43224e",
+      "sha256": "1ccccdedcac917540246e00bd08d2b79d4cd087b37fd4d18766bab0a3cf6fc1a"
+    },
+    {
+      "roll32": "b0542dba",
+      "sha256": "2880b87545d3c7384ec44ad81b2bad43e42e03d477790e362167d0fc9a838f6e"
+    },
+    {
+      "roll32": "de7a0ea8",
+      "sha256": "2af9db00e04134c4660de23fe1dc1b29f2ab828c205e5fe46bbf01143e06c3b6"
+    },
+    {
+      "roll32": "71fc2438",
+      "sha256": "2fca53acd2e0a650aa5fb1cf8b6569351b6b5c8b7dd6b0058fe2cf283b9a0447"
+    },
+    {
+      "roll32": "213dc7eb",
+      "sha256": "34de92541d2cdd08df63d5ef2d6afd4ac0b1307e0fca00408ef616787c9c2d8d"
+    },
+    {
+      "roll32": "320a1a72",
+      "sha256": "399ba309c4086f3645329c6d4f7de5c1673d204701a9f41cd265965a747820e6"
+    },
+    {
+      "roll32": "838717cf",
+      "sha256": "45c01d154dc1be5445e20428e7556403bc6af2404d685cf53d7cdfe06b7951aa"
+    },
+    {
+      "roll32": "3a4d47a8",
+      "sha256": "6cec05c718cdc0ddb818724583ac8cccedca772621e0bfae97e992121c041ce7"
+    },
+    {
+      "roll32": "238047a3",
+      "sha256": "7590c8c2fef2301b587c5fa302d665be6b5ce147775b80bbbca43d7d7928ea26"
+    },
+    {
+      "roll32": "f7c7e49c",
+      "sha256": "776ee66b85759d3cf751e05262c124a6b4b1dfa8b7bcf09e869158a208a59036"
+    },
+    {
+      "roll32": "cee34cf0",
+      "sha256": "7d58e6a98031d468b5f61de175faea662af2045b7acd8ec46ebd4405573688b7"
+    },
+    {
+      "roll32": "488d599b",
+      "sha256": "81ae96f65d1a1e8f844fabe5f3ca4d6e8d62c1de82dc3554f8a8603914669436"
+    },
+    {
+      "roll32": "6ce12fcb",
+      "sha256": "89c7f0a1c4b23e528329536ca8bdb40011dfa616cfe82324d3ee0529dccd941f"
+    },
+    {
+      "roll32": "46347675",
+      "sha256": "8b0610243da9ef34604e4c27bad142d7d55a27c4eab33918ef04d1b6e4d0820e"
+    },
+    {
+      "roll32": "7169bf0e",
+      "sha256": "8f24f8290b35255397de1f0e658cfc426cccda094666c5ea065e5d2722dc293a"
+    },
+    {
+      "roll32": "56d1fd37",
+      "sha256": "92648de14bca35ed215543d20ceda69d533145fd609062761f5d089b865903fe"
+    },
+    {
+      "roll32": "f22981ae",
+      "sha256": "92d91a4e1c8244cab1699abbeef70da6eddcddc40cc3fb991fa33dca51b4f2ce"
+    },
+    {
+      "roll32": "23cc292a",
+      "sha256": "95252f3b0aff9b3dea7fbe4a46833e1d697eeac487145eadff5348cc5e2bdc86"
+    },
+    {
+      "roll32": "7242ba9b",
+      "sha256": "96991975d70d18a6e67f50ec00a159e590dc9e2802dcaf63db3a52a497c6d64c"
+    },
+    {
+      "roll32": "84a7c45e",
+      "sha256": "a5ca42d3ac6467d6a89adf28d2d0130ee85e23e0997022ba2cf253b747c00f4d"
+    },
+    {
+      "roll32": "d25f95f1",
+      "sha256": "a61e0c4561ccc5cfc4012b1eaae0ec938767c3f69b7ae7f4ee2ab55a23c87d67"
+    },
+    {
+      "roll32": "1074bbef",
+      "sha256": "bbdf45d5c2b5d5ec92b8f55e627c227d5788d19736b86dabff974d2209d2bd99"
+    },
+    {
+      "roll32": "a6012c02",
+      "sha256": "bd39fe9648dcd48910ca29eed53f64ac0e72af98bddb620c09aae170d9e377a2"
+    },
+    {
+      "roll32": "f9c6224c",
+      "sha256": "c1d1c18f460872cb10654ec0d35702fa6772cea544baf7a02f005be34a1774c3"
+    },
+    {
+      "roll32": "3a4d2281",
+      "sha256": "c2fd6f752090127e1fbb9851477f8d534c11a9e1548e86a825e910926eac2766"
+    },
+    {
+      "roll32": "9b524c53",
+      "sha256": "c35c97ecfb48c656754b2244d5e6beb289bd6d9b977b5c2bc6a22d2023e74268"
+    },
+    {
+      "roll32": "d35987f0",
+      "sha256": "ccf54874c87e3cfc372151f91c7c679d14a199fd96f064824e56be06355a6256"
+    },
+    {
+      "roll32": "9d281083",
+      "sha256": "d276957b9390ba643b3698a0250229f6dca7a9157791ab56054187a02088b4d1"
+    },
+    {
+      "roll32": "2b5c0d02",
+      "sha256": "d9462d17cadad69dd20053b3fbaeebfdc659913e40262d27b48f76547638b075"
+    },
+    {
+      "roll32": "2f542c29",
+      "sha256": "de554aa333d29da289a4b8da78e05a1f581220548e09169a479fc85c1069ee95"
+    },
+    {
+      "roll32": "8ef86207",
+      "sha256": "ef27dfee3536def196ffa818f4dc4c12193c995a0409812eb01a706000adfcfa"
+    },
+    {
+      "roll32": "3d5b860f",
+      "sha256": "f34d802992abd3239dafdfbb7eea56993f0f490bc9da56e912b70eaa29283df5"
+    },
+    {
+      "roll32": "e7fe72b0",
+      "sha256": "f9094f10f0b1aaaf189357297476a21ce858a6cdedf74024cc70cd0afc3ecdbd"
+    }
+  ],
+  "forgivenCommits": []
+}

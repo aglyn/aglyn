@@ -53,6 +53,11 @@ import {
   consentGroupSiteHold,
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
+import {
+  erasePluginSiteResources,
+  previewPluginSiteResources,
+  type PluginSiteResourcePreviewRow,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-resources'
 import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { releasedHostNames } from './host-released-names'
 import { readOrgBilling } from './org-billing'
@@ -231,6 +236,29 @@ async function eraseHostOwnedOrgDocuments(orgId: string, hostId: string): Promis
   return erased
 }
 
+/** What deleting a site takes with it, plugin by plugin (AGL-4003). */
+export interface HostErasePreview {
+  /**
+   * Each plugin's resources shared with the site: the ones that go, with how
+   * many items each holds, and how many stay. `preview: null` is a plugin
+   * that could not answer, so the list is incomplete.
+   */
+  resources: PluginSiteResourcePreviewRow[]
+}
+
+/**
+ * What the Delete site card shows before it asks (AGL-4003): the resources
+ * plugins share with the site alone, which go with it — a dataset and its
+ * records — and how many shared ones stay. Asked of the same erasers
+ * {@link eraseHost} runs, so the list is what the delete does. Reads only.
+ */
+export async function previewHostErase(
+  orgId: string,
+  hostId: string,
+): Promise<HostErasePreview> {
+  return { resources: await previewPluginSiteResources({ orgId, hostId }) }
+}
+
 /**
  * Permanently erase a single site and everything it owns (AGL-488).
  * Unlike deleting the host doc alone (which orphans data), this cleans up
@@ -407,6 +435,10 @@ export async function eraseHost(
       console.error(`eraseHost: projection cleanup failed for ${hostId}`, error)
     })
     await eraseHostOwnedOrgDocuments(orgId, hostId)
+    // What plugins share with this site alone — a dataset and its records —
+    // and this site's place in the sharing of what it shares with others
+    // (AGL-4003). Each plugin's share is isolated and never throws here.
+    await erasePluginSiteResources({ orgId, hostId })
   }
 
   // The host document tree (screens/layouts/versions/counters/products/…).

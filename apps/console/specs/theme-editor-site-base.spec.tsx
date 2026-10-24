@@ -69,7 +69,7 @@ const defaultsShown = () =>
 
 describe('the theme editor’s defaults follow the site (AGL-3068)', () => {
   it('names the tenant default on a customer site', () => {
-    renderFor('ready-to-roll')
+    renderFor('acme-builders')
     const shown = defaultsShown()
     expect(shown).toContain(`default · ${TENANT_PRIMARY}`)
     expect(shown).not.toContain(`default · ${BRAND_PRIMARY}`)

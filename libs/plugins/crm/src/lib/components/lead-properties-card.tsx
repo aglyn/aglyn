@@ -68,6 +68,7 @@ import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { CrmAccountLockChip, CrmEmailGatewayChip } from './crm-email-check'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { CrmRecordEmailActionsZone } from './crm-email-actions-zone'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
@@ -521,6 +522,15 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               link={{ leadId }}
               phone={leadPhone || leadMobile}
               doNotCall={doNotCall}
+            />
+            {/* An answer in a thread another plugin keeps with them (AGL-4020), ahead of a new message. */}
+            <CrmRecordEmailActionsZone
+              hostId={hostId}
+              org={org}
+              kind="lead"
+              recordId={leadId}
+              name={String(lead['name'] ?? '')}
+              email={String(lead['email'] ?? '') || null}
             />
             <CrmSendEmailButton
               hostId={hostId}

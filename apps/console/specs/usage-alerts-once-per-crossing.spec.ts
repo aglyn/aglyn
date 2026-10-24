@@ -85,7 +85,17 @@ let mockNotifications: Array<{
   level?: string
   options?: { skipEmail?: boolean }
 }>
-let mockEmails: Array<{ orgId: string; subject: string; text: string }>
+let mockEmails: Array<{
+  orgId: string
+  subject: string
+  text: string
+  /** The designed email's own parts (AGL-4019). */
+  lead?: string
+  details?: string
+  url?: string
+  urlLabel?: string
+  note?: string
+}>
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -285,11 +295,21 @@ jest.mock('../app/api/_lib/usage-alert-email', () => ({
     orgId: string
     subject: string
     text: string
+    lead?: string
+    details?: string
+    url?: string
+    urlLabel?: string
+    note?: string
   }) => {
     mockEmails.push({
       orgId: input.orgId,
       subject: input.subject,
       text: input.text,
+      lead: input.lead,
+      details: input.details,
+      url: input.url,
+      urlLabel: input.urlLabel,
+      note: input.note,
     })
     return { sent: true }
   },
@@ -304,7 +324,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/bandwidth-cap'),
-  buildRoute: () => '/ready-to-roll/billing/usage',
+  buildRoute: () => '/acme-builders/billing/usage',
   Route: { MANAGE_BILLING_USAGE: 'MANAGE_BILLING_USAGE' },
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -341,10 +361,10 @@ import { pageViewsFromBandwidthGb } from '../utils/usage-metering'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
 
 /**
- * Ready To Roll's pages per site: 6, from the `entitlements` override its org
- * document carries in production (free's table says 5).
+ * A comped workspace's pages per site: 6, from an `entitlements` override on
+ * its org document (free's table says 5).
  */
-const RTR_PAGES = 6
+const COMPED_PAGES = 6
 
 /** Past free's monthly bandwidth band. */
 const OVER_BANDWIDTH = Math.round(
@@ -352,18 +372,18 @@ const OVER_BANDWIDTH = Math.round(
 )
 
 /**
- * A plan-ful free workspace with one site — the Ready To Roll shape.
+ * A plan-ful free workspace with one site — a comped client's shape.
  *
  * `plan` is set so the AGL-2420 first-sweep seed does not apply: this suite is
  * about what happens to an org the sweep already knows.
  */
-function readyToRoll(guards: Record<string, unknown> = {}) {
+function acmeBuilders(guards: Record<string, unknown> = {}) {
   orgStore = {
-    rtr: {
-      name: 'Ready To Roll',
-      slug: 'ready-to-roll',
+    builders: {
+      name: 'Acme Builders',
+      slug: 'acme-builders',
       plan: 'free',
-      entitlements: { screensPerHost: RTR_PAGES },
+      entitlements: { screensPerHost: COMPED_PAGES },
       usageAlerts: {
         // The one site against `hostLimit: 1` sits at 100% of the sites
         // quota, and has since before this shipped: a LEGACY guard from an
@@ -375,10 +395,10 @@ function readyToRoll(guards: Record<string, unknown> = {}) {
   }
   mockHosts = [
     {
-      id: 'host-rtr',
-      orgId: 'rtr',
-      displayName: 'Ready To Roll',
-      subdomain: 'ready-to-roll',
+      id: 'host-builders',
+      orgId: 'builders',
+      displayName: 'Acme Builders',
+      subdomain: 'acme-builders',
     },
   ]
 }
@@ -438,13 +458,13 @@ afterEach(() => {
 
 describe('a count quota is announced once per crossing (AGL-3431)', () => {
   it('announces a site at its page limit on day one — and not on day two, nor next month', async () => {
-    readyToRoll()
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders()
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
 
     await run(DAY_ONE)
     expect(pageNotices()).toHaveLength(1)
     expect(pageEmails()).toHaveLength(1)
-    expect(guardsOf('rtr')['screens']).toEqual({ month: MONTH, threshold: 100 })
+    expect(guardsOf('builders')['screens']).toEqual({ month: MONTH, threshold: 100 })
 
     await run(DAY_TWO)
     // The month guard stopped this. The next one is what it could not stop.
@@ -458,8 +478,8 @@ describe('a count quota is announced once per crossing (AGL-3431)', () => {
   })
 
   it('re-arms when the site drops below, and announces the re-crossing', async () => {
-    readyToRoll()
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders()
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
     await run(DAY_ONE)
     expect(pageNotices()).toHaveLength(1)
 
@@ -468,34 +488,34 @@ describe('a count quota is announced once per crossing (AGL-3431)', () => {
     const dropped = await run(DAY_TWO)
     expect(pageNotices()).toHaveLength(1)
     // Removed with a DELETE inside the delta, and reported as such…
-    expect(guardsOf('rtr')['screens']).toBeUndefined()
+    expect(guardsOf('builders')['screens']).toBeUndefined()
     expect(dropped['rearmed']).toBe(1)
     expect(dropped['rearmedDetails']).toEqual([
-      { orgId: 'rtr', quota: 'screens', threshold: 0 },
+      { orgId: 'builders', quota: 'screens', threshold: 0 },
     ])
     // …without disturbing the keys it did not decide.
-    expect(guardsOf('rtr')['hosts']).toEqual({ month: LAST_MONTH, threshold: 100 })
+    expect(guardsOf('builders')['hosts']).toEqual({ month: LAST_MONTH, threshold: 100 })
 
     // Back at the limit: a new crossing, announced like the first.
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
     await run(DAY_THREE)
     expect(pageNotices()).toHaveLength(2)
     expect(pageEmails()).toHaveLength(2)
   })
 
   it('lowers the guard to the approach band without announcing the drop', async () => {
-    readyToRoll()
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders()
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
     await run(DAY_ONE)
 
     // 5 of 6 is inside the 80% band: already announced on the way up, so
     // nothing is sent — but the 100% step is armed again.
-    mockScreens = { maxBillable: RTR_PAGES - 1, overCapHostIds: [] }
+    mockScreens = { maxBillable: COMPED_PAGES - 1, overCapHostIds: [] }
     await run(DAY_TWO)
     expect(pageNotices()).toHaveLength(1)
-    expect(guardsOf('rtr')['screens']).toEqual({ month: MONTH, threshold: 80 })
+    expect(guardsOf('builders')['screens']).toEqual({ month: MONTH, threshold: 80 })
 
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
     await run(DAY_THREE)
     expect(pageNotices()).toHaveLength(2)
     expect(pageNotices()[1].title).toContain('reached')
@@ -504,15 +524,15 @@ describe('a count quota is announced once per crossing (AGL-3431)', () => {
   it('counts a guard from an earlier month as announced — no re-mail wave on deploy', async () => {
     // What every workspace already at a limit holds today: month-scoped
     // guards from September or before.
-    readyToRoll({ screens: { month: LAST_MONTH, threshold: 100 } })
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders({ screens: { month: LAST_MONTH, threshold: 100 } })
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
 
     await run(DAY_ONE)
 
     expect(mockNotifications).toHaveLength(0)
     expect(mockEmails).toHaveLength(0)
     // …and the guards are left as they were rather than rewritten.
-    expect(guardsOf('rtr')).toEqual({
+    expect(guardsOf('builders')).toEqual({
       hosts: { month: LAST_MONTH, threshold: 100 },
       screens: { month: LAST_MONTH, threshold: 100 },
     })
@@ -520,8 +540,8 @@ describe('a count quota is announced once per crossing (AGL-3431)', () => {
 
   it('still announces the NEXT step past a legacy guard', async () => {
     // Announced at 80% in September; reaching the limit is new.
-    readyToRoll({ screens: { month: LAST_MONTH, threshold: 80 } })
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders({ screens: { month: LAST_MONTH, threshold: 80 } })
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
 
     await run(DAY_ONE)
 
@@ -588,7 +608,7 @@ describe('the four steps — 75, 80, 90, 100 — each once (AGL-3431)', () => {
   })
 
   it('a small limit of 6 sends 80 at 5 pages and 100 at 6 — nothing at 4', async () => {
-    readyToRoll()
+    acmeBuilders()
     atPages(4)
     await run(DAY_ONE)
     // 4 of 6 is 67%: under every step.
@@ -600,6 +620,18 @@ describe('the four steps — 75, 80, 90, 100 — each once (AGL-3431)', () => {
     expect(pageNotices()[0].title).toContain('above 80%')
     // A step on the way is informational; the limit itself is amber (AGL-3437).
     expect(pageNotices()[0].level).toBe('info')
+    // The email draws its own parts (AGL-4019): sent with its subject and
+    // body alone, it arrived as a heading over an empty panel and a button
+    // with no words.
+    const email = pageEmails()[0]
+    expect(email.lead).toBe(pageNotices()[0].body)
+    expect(email.lead).not.toContain('https://')
+    expect(email.details?.split('\n')).toEqual(
+      expect.arrayContaining(['Limit: Pages on a site', 'Used: 5 of 6 (83%)']),
+    )
+    expect(email.url).toMatch(/^https:\/\/app\.aglyn\.com\//)
+    expect(email.urlLabel).toBe('See usage in Billing')
+    expect(email.note).toContain('once each')
 
     atPages(6)
     await run(DAY_THREE)
@@ -638,7 +670,7 @@ describe('the four steps — 75, 80, 90, 100 — each once (AGL-3431)', () => {
 
 describe('a monthly meter still announces the same threshold in a new month', () => {
   it('re-announces bandwidth past the band next month, once', async () => {
-    readyToRoll()
+    acmeBuilders()
     mockHosts[0].pageViews = OVER_BANDWIDTH
     const bandwidthNotices = () =>
       mockNotifications.filter((entry) => /bandwidth/i.test(entry.title))
@@ -652,7 +684,7 @@ describe('a monthly meter still announces the same threshold in a new month', ()
     // The meter reset on the 1st and was crossed again: a new crossing.
     await run(NEXT_MONTH)
     expect(bandwidthNotices()).toHaveLength(2)
-    expect(guardsOf('rtr')['bandwidth']).toEqual({
+    expect(guardsOf('builders')['bandwidth']).toEqual({
       month: '2026-11',
       threshold: 100,
     })
@@ -661,7 +693,7 @@ describe('a monthly meter still announces the same threshold in a new month', ()
 
 describe('a monthly meter steps within the month and starts over the next', () => {
   it('80 then 90 in October, once each, and 80 again in November', async () => {
-    readyToRoll()
+    acmeBuilders()
     const band = pageViewsFromBandwidthGb(PLAN_ENTITLEMENTS.free.bandwidthGb)
     const bandwidthNotices = () =>
       mockNotifications.filter((entry) => /bandwidth/i.test(entry.title))
@@ -688,8 +720,8 @@ describe('a monthly meter steps within the month and starts over the next', () =
 
 describe('one crossing is one email per person', () => {
   it('writes the console notice WITHOUT its per-person email, and sends the one email itself', async () => {
-    readyToRoll()
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders()
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
 
     await run(DAY_ONE)
 
@@ -707,16 +739,16 @@ describe('one crossing is one email per person', () => {
 describe('the body stands on its own (AGL-3431)', () => {
   it('names the quota, the site and the workspace, and says nothing is charged', async () => {
     // The notice a client read as "6 of 6 what? And now I have to pay?".
-    readyToRoll()
-    mockScreens = { maxBillable: RTR_PAGES, overCapHostIds: [] }
+    acmeBuilders()
+    mockScreens = { maxBillable: COMPED_PAGES, overCapHostIds: [] }
 
     await run(DAY_ONE)
 
     const [notice] = pageNotices()
     expect(notice.title).toBe("You've reached your pages on a site limit")
     expect(notice.body).toBe(
-      `Your site Ready To Roll in the Ready To Roll workspace has ` +
-        `${RTR_PAGES} of the ${RTR_PAGES} pages your plan includes per ` +
+      `Your site Acme Builders in the Acme Builders workspace has ` +
+        `${COMPED_PAGES} of the ${COMPED_PAGES} pages your plan includes per ` +
         'site. Every page already there keeps working and nothing is ' +
         'charged — you only need to upgrade in Billing to add more pages.',
     )
@@ -726,31 +758,31 @@ describe('the body stands on its own (AGL-3431)', () => {
   })
 
   it('says the same on the approach, before anything is refused', async () => {
-    readyToRoll()
-    mockScreens = { maxBillable: RTR_PAGES - 1, overCapHostIds: [] }
+    acmeBuilders()
+    mockScreens = { maxBillable: COMPED_PAGES - 1, overCapHostIds: [] }
 
     await run(DAY_ONE)
 
     const [notice] = pageNotices()
     expect(notice.title).toContain('above 80%')
     expect(notice.body).toContain(
-      `Your site Ready To Roll in the Ready To Roll workspace has ` +
-        `${RTR_PAGES - 1} of the ${RTR_PAGES} pages your plan includes per site.`,
+      `Your site Acme Builders in the Acme Builders workspace has ` +
+        `${COMPED_PAGES - 1} of the ${COMPED_PAGES} pages your plan includes per site.`,
     )
     expect(notice.body).toContain('nothing is charged')
     expect(notice.body).not.toMatch(/\bbilled\b|invoice/i)
   })
 
   it('names the workspace on the sites limit, and charges nothing', async () => {
-    readyToRoll()
+    acmeBuilders()
     // No legacy guard this time: the one site IS the limit.
-    orgStore['rtr']['usageAlerts'] = {}
+    orgStore['builders']['usageAlerts'] = {}
 
     await run(DAY_ONE)
 
     const sites = mockNotifications.find((entry) => entry.title.includes('sites'))
     expect(sites?.body).toContain(
-      'The Ready To Roll workspace has 1 of the 1 sites your plan includes.',
+      'The Acme Builders workspace has 1 of the 1 sites your plan includes.',
     )
     expect(sites?.body).toContain('nothing is charged')
     expect(sites?.body).not.toMatch(/\bbilled\b|invoice/i)

@@ -25,6 +25,7 @@ import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-s
 import { registerCustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
 import { registerPluginSitemapReader } from '@aglyn/aglyn/plugin-manager/plugin-sitemap-readers'
 import { registerPluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
+import { registerPluginSiteResourceEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-resources'
 import {
   BUNDLE_ID,
   DATASET_REPEAT_SOURCE_ID,
@@ -74,6 +75,10 @@ import { datasetsSitePackage } from './site-bundle/datasets-package'
  * the reader that lists record pages in the sitemap — declared too
  * (`sitemapReaders`), so a boot that skipped this degrades the sitemap rather
  * than dropping every record page from it.
+ *
+ * And a deleted site's own datasets (AGL-4003): the ones shared with that site
+ * alone go with it, records included, and the ones it shares with others lose
+ * it. The Delete site card lists them first through the same eraser.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -148,6 +153,16 @@ export function registerDataServerDeclarations(): void {
       (await import('./record-pages/record-page-live-paths.server')).recordPageLivePaths(
         request,
       ),
+    { pluginId: BUNDLE_ID },
+  )
+  // A deleted site's own datasets (AGL-4003); the reads load with the first
+  // site delete.
+  const siteErasure = () => import('./server/dataset-site-erasure')
+  registerPluginSiteResourceEraser(
+    {
+      preview: async (request) => (await siteErasure()).previewSiteDatasets(request),
+      erase: async (request) => (await siteErasure()).eraseSiteDatasets(request),
+    },
     { pluginId: BUNDLE_ID },
   )
 }

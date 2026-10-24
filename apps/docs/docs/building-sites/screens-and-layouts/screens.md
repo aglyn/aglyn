@@ -68,7 +68,7 @@ opposite the heading shows how many pages your plan allows — see
 
 **View details** opens one page's settings without opening its design: its basic
 details, publishing, who can see it, what links to it, its SEO, versions, traffic and
-recent activity. **Open Besigner** at the top of the page is where you change how it
+recent activity. **Edit in Besigner** at the top of the page is where you change how it
 looks.
 
 ### Basic Details {#basic-details-card}
@@ -76,7 +76,15 @@ looks.
 The **Basic Details** card is the page's record: its **Page ID**, **Display name** and
 **Description**, and when it was **created**, **published** and **last updated**. The
 published date stays empty until the page goes live. To change the display name or
-description, use **Edit** at the top of the detail view.
+description, use the **Name & description** card.
+
+### Name & description {#name-and-description-card}
+
+The page's **Display name** is what it is called across the console: the Pages list,
+the page switcher and search. Its **Description** is a note about the page. Edit
+either one in place and choose **Save details** in the card's header. The live page
+uses them as a fallback too: its title falls back to the display name, and its meta
+description to the description, wherever the page's own SEO leaves them blank.
 
 ### Used by {#used-by}
 
