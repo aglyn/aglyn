@@ -223,7 +223,11 @@ the extra time and every correction.
 ### When the reconciliation alerts {#site-care-reconciliation}
 
 Once a day each closed request's charge is compared with its Stripe invoice item, and
-each month's total with Stripe's, for this month and the last. The same check compares
+each month's total with Stripe's, for this month and the last. Each request is also
+checked against its own record: the minutes logged, the included time they used and the
+owner's recorded yes must come to the hours billed (every started hour past the included
+time, never fewer than the owner approved), and nothing may bill without that yes unless
+it was absorbed. The same check compares
 each project's invoices with Stripe (see below). A difference raises **Site Care billing
 does not match Stripe** (Should know) for that workspace and month, or for its projects.
 It changes nothing on either side. Open the request or project it names: retry a charge
