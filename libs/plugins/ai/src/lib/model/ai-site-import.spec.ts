@@ -25,6 +25,8 @@ import { AI_MEASURED_IMPORT_CREDITS, AI_MEASURED_PAID_SITE_CREDITS } from './ai-
 import type { AiJobItemLedger } from './ai-jobs.types'
 import {
   AI_SITE_IMPORT_FRAME_SLOT,
+  AI_SITE_IMPORT_LEFT_OUT_COPY,
+  AI_SITE_IMPORT_LEFT_OUT_REASONS,
   AI_SITE_IMPORT_PAGE_CEILING_CREDITS,
   AI_SITE_IMPORT_WAVE_PAGES,
   aiSiteImportCreditRange,
@@ -127,6 +129,21 @@ describe('never past the plan: kept in order until the room is used, the rest le
     const state = inventory({ pages: [listed('/'), listed('/empty', { words: 2, images: 0 })] })
     expect(state.pages.map((page) => page.path)).toEqual(['/'])
     expect(state.leftOut).toContainEqual(expect.objectContaining({ path: '/empty', reason: 'empty' }))
+  })
+
+  it('counts a page bot protection turned away as blocked, apart from one that could not be read, and says how to let AglynBot in', () => {
+    const state = inventory({
+      skipped: [
+        { url: 'https://harbor-dental.com/booking', reason: 'blocked' },
+        { url: 'https://harbor-dental.com/old-page', reason: 'unreadable' },
+      ],
+    })
+    expect(state.leftOutCount).toEqual({ blocked: 1, unreadable: 1 })
+    expect(state.leftOut).toContainEqual(expect.objectContaining({ path: '/booking', reason: 'blocked' }))
+    expect(AI_SITE_IMPORT_LEFT_OUT_REASONS).toContain('blocked')
+    expect(AI_SITE_IMPORT_LEFT_OUT_COPY.blocked).toBe(
+      'The site’s bot protection or firewall turned AglynBot away. Allow AglynBot in your site’s bot or firewall settings, then bring the site in again.',
+    )
   })
 })
 
