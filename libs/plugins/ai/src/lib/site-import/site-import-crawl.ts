@@ -77,8 +77,14 @@ import {
  * (AGL-3983): the operator's own page about it. `SITE_IMPORT_BOT_INFO_URL` on
  * a self-hosted deployment, so its crawler never names Aglyn's address; the
  * literal is only that variable's default.
+ *
+ * Aglyn's is the Bring my site guide, which says what AglynBot reads and how
+ * robots.txt keeps it out. There is no page of its own (Zach, 10/20: "we don't
+ * need a bot page at all"), and the site it reads is the reader's own: an
+ * import starts only once its owner has proved the site is theirs.
  */
-export const AGLYN_BOT_INFO_URL = process.env['SITE_IMPORT_BOT_INFO_URL'] ?? 'https://aglyn.com/bot'
+export const AGLYN_BOT_INFO_URL =
+  process.env['SITE_IMPORT_BOT_INFO_URL'] ?? 'https://docs.aglyn.com/ai/bring-my-site'
 
 /** What every crawler request says it is. */
 export const AGLYN_BOT_USER_AGENT = `AglynBot/1.0 (+${AGLYN_BOT_INFO_URL})`
