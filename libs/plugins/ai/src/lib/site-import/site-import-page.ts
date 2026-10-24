@@ -149,8 +149,14 @@ export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImpo
   }
 }
 
-/** Why the crawler could not read a page, as an import leaves it out. */
-export function siteImportLeftOutReason(reason: SiteImportSkipReason): AiSiteImportLeftOutReason {
+/**
+ * The answers bot protection and firewalls turn a crawler away with: asked to
+ * sign in, refused, or told to slow down. The owner can let AglynBot through.
+ */
+const SITE_IMPORT_BLOCKED_STATUSES: ReadonlySet<number> = new Set([401, 403, 429])
+
+/** Why the crawler could not read a page, as an import leaves it out; `status` is the answer an `http-error` got. */
+export function siteImportLeftOutReason(reason: SiteImportSkipReason, status?: number): AiSiteImportLeftOutReason {
   switch (reason) {
     case 'login-form':
       return 'login-form'
@@ -160,6 +166,8 @@ export function siteImportLeftOutReason(reason: SiteImportSkipReason): AiSiteImp
       return 'too-large'
     case 'off-origin-redirect':
       return 'off-site'
+    case 'http-error':
+      return status !== undefined && SITE_IMPORT_BLOCKED_STATUSES.has(status) ? 'blocked' : 'unreadable'
     default:
       return 'unreadable'
   }
