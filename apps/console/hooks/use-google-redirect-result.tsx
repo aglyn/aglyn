@@ -28,6 +28,18 @@ import {
 } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import { useAuth } from '@aglyn/tenant-feature-instance'
+import {
+  beginRedirectLanding,
+  endRedirectLanding,
+} from '../utils/sign-up-landing-hold'
+
+/**
+ * Credentials already handed to an `onCredential` (AGL-4021). A page that
+ * remounts while the round trip resolves asks Firebase again, and Firebase
+ * answers with the outcome it cached, so the same credential can arrive twice;
+ * the sign-up's handler creates a workspace and must run once.
+ */
+const handledCredentials = new WeakSet<UserCredential>()
 
 /**
  * Completes a `signInWithRedirect` round-trip (AGL-462): mobile browsers
@@ -81,9 +93,20 @@ export function useGoogleRedirectResult(
     if (resolved.current) return
     resolved.current = true
     let active = true
+    let landing = false
     void getRedirectResult(auth)
       .then(async (credential) => {
-        if (!credential || !active) return
+        // NOT gated on `active` (AGL-4021). A cleanup between the call and its
+        // answer (a re-render that changes a dependency, React's dev double
+        // effect) used to drop the credential here, and the effect's re-run
+        // stopped at `resolved` above, so a brand-new phone account got no
+        // acceptance, no acquisition and no workspace, and the layout sent it
+        // to an empty chooser. The account exists whether or not this effect
+        // instance is still current, so its landing has to finish.
+        if (!credential || handledCredentials.has(credential)) return
+        handledCredentials.add(credential)
+        landing = true
+        beginRedirectLanding()
         // `onCredential` is awaited, not fire-and-forget: the callers use it
         // to record an acceptance and to bounce an unconsented new account,
         // and both lose races against the redirect that follows a completed
@@ -127,7 +150,10 @@ export function useGoogleRedirectResult(
           credential: GoogleAuthProvider.credentialFromError(error),
         })
       })
-      .finally(() => onSettled?.())
+      .finally(() => {
+        if (landing) endRedirectLanding()
+        onSettled?.()
+      })
     return () => {
       active = false
     }

@@ -74,6 +74,7 @@ import {
   isNodeHiddenOnSite,
 } from '../utils/canvas-reveal'
 import ComponentIconComponent from './component-icon.component'
+import { DropSurface, dropSurfaceProps } from './dnd/drop-surface'
 import NodeContextMenu from './node-context-menu'
 
 const classKey = generateComponentClassKeys('TreeView', [
@@ -203,6 +204,9 @@ TreeView.displayName = 'TreeView'
 /** Horizontal indent one nesting level adds, in px. */
 export const HIERARCHY_INDENT_STEP = 23
 
+/** Width of the drag grip at the start of every row but the root's, in px. */
+export const HIERARCHY_HANDLE_WIDTH = 23
+
 /** Width of one guide line, in px. */
 export const HIERARCHY_GUIDE_WIDTH = 1
 
@@ -303,7 +307,7 @@ const DragHandle = styled(MuiListItemIcon, {
     return propName !== 'draggingEnabled'
   },
 })<DragHandleProps>(({ theme, draggingEnabled }) => ({
-  minWidth: 23,
+  minWidth: HIERARCHY_HANDLE_WIDTH,
   padding: theme.spacing(0.75),
   paddingLeft: 0,
   borderRadius: '4px',
@@ -405,7 +409,18 @@ const NodeTreeItem = observer(
     const { setNodeRef: setDroppableNodeRef, isOver } = useLeafDrop(
       node,
       undefined,
-      'tree',
+      DropSurface.TREE,
+      {
+        // The drop marker starts where the label it lands beside, or
+        // under, starts — so its indent says which level the drop is on.
+        inset: {
+          sibling: HIERARCHY_HANDLE_WIDTH + hierarchyGutterWidth(depth),
+          child: HIERARCHY_HANDLE_WIDTH + hierarchyGutterWidth(depth + 1),
+        },
+        // An open row's bottom edge is its first child's top edge, so it
+        // cannot also mean "after this row" (see resolveDropRegion).
+        expanded: Boolean(collapseIn && node?.hasNodes),
+      },
     )
 
     /**
@@ -608,7 +623,7 @@ const NodeTreeItem = observer(
               className={classKey.dragHandle}
               draggable
               sx={{
-                minWidth: 23,
+                minWidth: HIERARCHY_HANDLE_WIDTH,
                 padding: 0.75,
                 pl: 0,
                 borderRadius: '4px',
@@ -957,6 +972,7 @@ export const NodeTreeView = observer(
           component="nav"
           id={'aglyn:node-tree-view'}
           aria-label="canvas nodes navigator"
+          {...dropSurfaceProps(DropSurface.TREE)}
           {...rest}
         >
           <TreeView className={classKey.root} {...TreeViewProps}>

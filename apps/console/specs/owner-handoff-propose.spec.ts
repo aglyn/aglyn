@@ -315,6 +315,19 @@ describe('hand off and propose, one act (AGL-3956)', () => {
     )
   })
 
+  it('the proposal keeps the Aglyn AI tier staff picked beside the AI switch (AGL-4025)', async () => {
+    signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)
+    const response = await post(
+      handoffAndPropose({ ...BUNDLE, addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' }),
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).proposal).toMatchObject({
+      addons: { siteCare: 1, aiAddon: 1 },
+      aiTier: 'boost',
+    })
+    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toMatchObject({ aiTier: 'boost' })
+  })
+
   it('a workspace that already pays is handed off alone, and the answer says so', async () => {
     mockStore.set('orgs/org-1', { ...mockStore.get('orgs/org-1'), billingStatus: 'active' })
     signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)

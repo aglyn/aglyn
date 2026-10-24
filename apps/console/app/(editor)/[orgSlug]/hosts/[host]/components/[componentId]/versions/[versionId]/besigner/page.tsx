@@ -63,7 +63,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
-import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
@@ -114,7 +114,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
-import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'

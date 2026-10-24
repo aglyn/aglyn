@@ -15,11 +15,21 @@
  * limitations under the License.
  */
 
-import { AI_TIER_IDS, aiTierAddonKey } from './plan-entitlements'
+import {
+  AI_TIER_IDS,
+  AI_TIERS,
+  aiTierAddonKey,
+  defaultAiTierForPlan,
+  PLAN_PRICING,
+} from './plan-entitlements'
 import {
   ADDON_KINDS,
   addonMaxForPlan,
+  addonUnitUsd,
   bundleAddonsParam,
+  bundleAiTier,
+  bundleListPriceCents,
+  firstPlanSellingAddon,
   bundleDomainLine,
   describeBundle,
   fitBundleAddonsToPlan,
@@ -87,6 +97,52 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
     expect(
       describeBundle({ plan: 'pro', addons: { aiAddon: 1 }, aiTier: 'studio' }, { brand: 'Aglyn' }),
     ).toBe('Pro with Aglyn AI Studio')
+  })
+
+  it('names the tier a bundle sells: the one chosen, else the plan’s default, and none without AI (AGL-4025)', () => {
+    expect(bundleAiTier({ siteCare: 1, aiAddon: 1 }, 'starter', 'plus')).toBe('plus')
+    // Nothing chosen: the plan's default tier, the one checkout would sell.
+    expect(bundleAiTier({ aiAddon: 1 }, 'pro')).toBe(defaultAiTierForPlan('pro'))
+    expect(bundleAiTier({ aiAddon: 1 }, 'pro', 'gold' as never)).toBe(defaultAiTierForPlan('pro'))
+    // A tier without the add-on, or on a plan that sells none, is no tier.
+    expect(bundleAiTier({ siteCare: 1 }, 'starter', 'plus')).toBeNull()
+    expect(bundleAiTier({ aiAddon: 1 }, 'enterprise', 'plus')).toBeNull()
+    // The price a picker shows for it is the tier's own, from AI_TIERS.
+    for (const tier of AI_TIER_IDS) {
+      expect(addonUnitUsd('aiAddon', 'starter', tier)).toBe(AI_TIERS[tier].monthlyUsd)
+    }
+  })
+
+  it('names the smallest plan that sells an add-on, for one the chosen plan does not (AGL-4025)', () => {
+    expect(planSellsAddon('posRegisters', 'starter')).toBe(false)
+    expect(firstPlanSellingAddon('posRegisters', ['starter', 'pro', 'business'])).toBe('pro')
+    expect(firstPlanSellingAddon('posRegisters', ['starter'])).toBeNull()
+    expect(firstPlanSellingAddon('siteCare', ['starter', 'pro'])).toBe('starter')
+  })
+
+  it('prices a bundle at list price before tax, at the cadence chosen (AGL-4026)', () => {
+    const starter = PLAN_PRICING.starter
+    const plus = AI_TIERS.plus
+    const seat = addonUnitUsd('managers', 'starter')!
+    const care = addonUnitUsd('siteCare', 'starter')!
+    expect(bundleListPriceCents({ plan: 'starter', interval: 'month' })).toBe(starter.basePriceMonthlyUsd * 100)
+    expect(bundleListPriceCents({ plan: 'starter', interval: 'year' })).toBe(starter.basePriceAnnualMonthlyUsd * 12 * 100)
+    expect(
+      bundleListPriceCents({
+        plan: 'starter',
+        interval: 'year',
+        addons: { siteCare: 1, aiAddon: 1, managers: 2 },
+        aiTier: 'plus',
+      }),
+    ).toBe((starter.basePriceAnnualMonthlyUsd * 12 + plus.yearlyUsd + care * 12 + seat * 2 * 12) * 100)
+    // Without a tier named, Aglyn AI is the plan's default tier.
+    expect(bundleListPriceCents({ plan: 'pro', interval: 'month', addons: { aiAddon: 1 } })).toBe(
+      (PLAN_PRICING.pro.basePriceMonthlyUsd + AI_TIERS[defaultAiTierForPlan('pro')!].monthlyUsd) * 100,
+    )
+    // What the plan does not sell costs nothing here, as checkout would refuse it.
+    expect(bundleListPriceCents({ plan: 'starter', interval: 'month', addons: { posRegisters: 2 } })).toBe(
+      starter.basePriceMonthlyUsd * 100,
+    )
   })
 
   it('accepts every kind Billing sells, and only those', () => {
@@ -192,5 +248,27 @@ describe('the Billing link carries the bundle (AGL-3955)', () => {
     expect(onboardingPlanQuery(alone!)).toBe('plan=pro&ai=max')
     // `?ai=<tier>` is the explicit statement and wins over a token.
     expect(parseOnboardingPlanIntent(query('plan=pro&ai=plus&addons=ai:max'))?.aiTier).toBe('plus')
+  })
+
+  it('every tier staff can pick reaches Billing preselected, beside Site Care and the cadence (AGL-4025)', () => {
+    for (const tier of AI_TIER_IDS) {
+      const link = onboardingDestination('acme', {
+        plan: 'starter',
+        interval: 'year',
+        intervalStated: true,
+        contactSales: false,
+        ai: true,
+        aiTier: tier,
+        addons: { siteCare: 1, aiAddon: 1 },
+      })
+      expect(link).toBe(`/acme/billing?plan=starter&interval=year&addons=ai:${tier},siteCare`)
+      expect(parseOnboardingPlanIntent(query(link.split('?')[1]))).toMatchObject({
+        plan: 'starter',
+        interval: 'year',
+        ai: true,
+        aiTier: tier,
+        addons: { siteCare: 1, aiAddon: 1 },
+      })
+    }
   })
 })

@@ -8602,6 +8602,20 @@
             "editable": true
           },
           {
+            "key": "org-owner-handoff-new-owner",
+            "name": "Workspace handoff: you own it now",
+            "description": "Sent to the new owner the moment a workspace handoff takes effect (AGL-4023): the workspace is theirs, what that covers, what happened to the previous owner, and the next step, which is the proposed plan on Billing when one was proposed with the handoff.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "org-owner-handoff-previous-owner",
+            "name": "Workspace handoff: done",
+            "description": "Sent to the previous owner the moment a workspace handoff takes effect (AGL-4023): who owns the workspace now, and whether they stayed on as an admin or left.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "org-upgrade-proposal",
             "name": "Upgrade proposal",
             "description": "Sent to a workspace's owner when the platform team proposes a paid plan for it, after the workspace has been evaluated.",
@@ -9323,7 +9337,7 @@
             },
             {
               "name": "signInUrl",
-              "description": "Console URL to sign in and accept",
+              "description": "Console URL to sign in and join",
               "sample": "https://app.aglyn.com"
             },
             {
@@ -9350,12 +9364,12 @@
             },
             {
               "name": "handoff.previousOwner",
-              "description": "What happens to the current owner once the handoff is accepted",
+              "description": "What happens to the current owner once the handoff takes effect",
               "sample": "The current owner stays on as an admin."
             },
             {
               "name": "signInUrl",
-              "description": "Console URL to sign in and accept",
+              "description": "Console URL to sign in and join",
               "sample": "https://app.aglyn.com"
             },
             {
@@ -9382,7 +9396,7 @@
             },
             {
               "name": "handoff.previousOwner",
-              "description": "What happens to the current owner once the handoff is accepted",
+              "description": "What happens to the current owner once the handoff takes effect",
               "sample": "The current owner stays on as an admin."
             },
             {
@@ -9402,8 +9416,102 @@
             },
             {
               "name": "billingUrl",
-              "description": "Billing page with the bundle preselected; signing in with this address shows the invitation to accept first",
+              "description": "Billing page with the bundle preselected; signing in with this address joins the workspace first",
               "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "org-owner-handoff-new-owner": [
+            {
+              "name": "org.name",
+              "description": "The workspace that was handed over",
+              "sample": "Test Org"
+            },
+            {
+              "name": "handoff.previousOwner",
+              "description": "What happened to the previous owner, as one sentence",
+              "sample": "Pat Lee stays on as an admin."
+            },
+            {
+              "name": "nextStep",
+              "description": "What to do now: the proposed plan when one stands, else a look around the workspace",
+              "sample": "Your plan is ready to start: Starter with Site Care, billed yearly. Billing opens with it already chosen, and nothing is charged until you confirm."
+            },
+            {
+              "name": "cta.label",
+              "description": "The button, naming what it opens",
+              "sample": "Start the Starter plan"
+            },
+            {
+              "name": "cta.url",
+              "description": "Billing with the plan chosen, or the workspace",
+              "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "org-owner-handoff-previous-owner": [
+            {
+              "name": "org.name",
+              "description": "The workspace that was handed over",
+              "sample": "Test Org"
+            },
+            {
+              "name": "newOwner.name",
+              "description": "The new owner, by name when the account has one, else their address",
+              "sample": "Jordan Lee"
+            },
+            {
+              "name": "newOwner.email",
+              "description": "The new owner’s address",
+              "sample": "jordan@example.com"
+            },
+            {
+              "name": "previousOwner.role",
+              "description": "Where that leaves the previous owner",
+              "sample": "Admin"
+            },
+            {
+              "name": "previousOwner.outcome",
+              "description": "What that means for them, as one sentence",
+              "sample": "You stay on as an admin, so you can keep helping with the workspace and its sites."
+            },
+            {
+              "name": "cta.label",
+              "description": "The button, naming what it opens",
+              "sample": "Open the team"
+            },
+            {
+              "name": "cta.url",
+              "description": "The workspace’s Team page, or the console home if they left",
+              "sample": "https://app.aglyn.com/test-org/team"
             },
             {
               "name": "brand.productName",
@@ -16734,8 +16842,8 @@
             "label": "Signup volume",
             "path": "/api/health/signup-volume",
             "auth": "public",
-            "meaning": "Three questions about account creation, and the second is the one that used to be missing. Too MANY orgs is a signup wave the per-uid and per-IP limits cannot see. ZERO orgs while the signup page was being served is a drought: people arrived and not one of them got an account, which is exactly what a broken signup looks like from outside. And a blind decision means the account-creation gate could not read the signups lock at all — the lock is unenforceable and Firestore is failing on that path, refusing nobody and therefore invisible to every refusal threshold. Fourth, the outcome: sign-ups that got a workspace and never reached a site (AGL-3725). Every other question here is about workspaces, and a sign-up stranded after its workspace exists answers all of them correctly.",
-            "remedy": "signup-wave: the manual response is the signups feature lock on Staff → Lockdown. signup-drought: try the signup form yourself, then read the refusal split on the same body — the cause names which door closed. signups-lock-unreadable: check Firestore availability from the blocking function, and remember that while this reads non-zero the signups lever cannot be relied on to hold. signups-stranded: the two newest people to sign up in the last twelve hours, each over thirty minutes ago, both never reached the console after their workspace was made; open the newest one's owner in Staff → Users and read where their session ended (AGL-3724 was a 404 on the auth host right after the workspace was made)."
+            "meaning": "Three questions about account creation, and the second is the one that used to be missing. Too MANY orgs is a signup wave the per-uid and per-IP limits cannot see. ZERO orgs while the signup page was being served is a drought: people arrived and not one of them got an account, which is exactly what a broken signup looks like from outside. And a blind decision means the account-creation gate could not read the signups lock at all — the lock is unenforceable and Firestore is failing on that path, refusing nobody and therefore invisible to every refusal threshold. Fourth, the outcome: sign-ups that got a workspace and never reached a site (AGL-3725). Every other question here is about workspaces, and a sign-up stranded after its workspace exists answers all of them correctly. Fifth, the account with no workspace at all (AGL-4021): a door that dies before the workspace is made leaves nothing for the fourth question to grade.",
+            "remedy": "signup-wave: the manual response is the signups feature lock on Staff → Lockdown. signup-drought: try the signup form yourself, then read the refusal split on the same body — the cause names which door closed. signups-lock-unreadable: check Firestore availability from the blocking function, and remember that while this reads non-zero the signups lever cannot be relied on to hold. signups-stranded: the two newest people to sign up in the last twelve hours, each over thirty minutes ago, both never reached the console after their workspace was made; open the newest one's owner in Staff → Users and read where their session ended (AGL-3724 was a 404 on the auth host right after the workspace was made). signups-without-workspace: the two newest verified accounts that accepted the Terms through one sign-up door, in the last thirty-six hours, both have no workspace; that door is broken. Sign up through it yourself on a phone if the door is a redirect one (AGL-4021 was the phone Google redirect handler being cut off before /api/orgs/create)."
           },
           "authDoors": {
             "label": "Ways in",

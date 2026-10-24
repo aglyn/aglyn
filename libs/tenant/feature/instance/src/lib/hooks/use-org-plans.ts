@@ -17,7 +17,7 @@
 'use client'
 
 import { isEnterpriseOrg, resolveEffectivePlan } from '@aglyn/aglyn'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from './firebase/firebase-services'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 

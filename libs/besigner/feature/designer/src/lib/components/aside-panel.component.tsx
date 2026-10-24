@@ -68,6 +68,7 @@ import {
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import AccordionListComponent from './accordion-list.component'
+import ElementInfoDetails from './element-info-details.component'
 import ElementInteractionsForm from './element-interactions-form.component'
 import ComponentAccordionList from './component-accordion-list'
 import ElementPropsForm from './element-props-form.component'
@@ -344,10 +345,23 @@ const ElementPropsFormWithExtras = (props: any) => {
   const inspected = besignerInspected(props.node)
   const extras = inspected ? inspectorExtrasFor(supplied, inspected) : null
   return (
-    <>
-      <ElementPropsForm {...props} />
-      {extras ? <Box sx={{ pt: 2 }}>{extras}</Box> : null}
-    </>
+    <TabPanelInner sx={{ pb: 2 }}>
+      <Box sx={{ px: 2, pt: 2 }}>
+        <ElementPropsForm {...props} />
+      </Box>
+      {/* What this element IS: the component's own description and the
+          node's ids, in two collapsed accordions. They were a tab of their
+          own, which cost every reader a third of the panel's header for
+          reference detail most of them never open. Last, and closed, so they
+          cost nothing until wanted.
+
+          Full width, between the padded form above and the padded extras
+          below, the way the Styles panel lays its accordions out. Inside the
+          form's padding they were the one pair of accordions in the right
+          panel boxed in from both edges. */}
+      <ElementInfoDetails node={props.node} />
+      {extras ? <Box sx={{ px: 2, pt: 2 }}>{extras}</Box> : null}
+    </TabPanelInner>
   )
 }
 
@@ -439,7 +453,9 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           label: 'Attributes',
         },
         panel: {
-          Component: withLastSelectedNode(withTabPanelInner(ElementPropsFormWithExtras)),
+          // Pads its own form and extras, not the whole tab, so the element
+          // info accordions between them can run edge to edge.
+          Component: withLastSelectedNode(ElementPropsFormWithExtras),
         },
       },
       {

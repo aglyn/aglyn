@@ -36,6 +36,7 @@
  */
 
 import {
+  continuePathFor,
   isSafeContinueUrl,
   withContinueUrl,
 } from '@aglyn/shared-util-next'
@@ -118,6 +119,37 @@ describe('a continue URL that leaves the origin is refused', () => {
     ['the workspace apex', 'https://aglyn.com/pricing'],
   ])('allows %s', (_label, url) => {
     expect(isSafeContinueUrl(url)).toBe(true)
+  })
+})
+
+describe('the place a signed-out visitor returns to keeps its query (AGL-4023)', () => {
+  it('keeps a hand-off link’s plan, add-ons and cadence', () => {
+    const path = continuePathFor(
+      '/acme-builders/billing',
+      'plan=starter&interval=year&addons=siteCare',
+    )
+    expect(path).toBe(
+      '/acme-builders/billing?plan=starter&interval=year&addons=siteCare',
+    )
+    // The same value survives the trip to /signin and back.
+    const href = withContinueUrl('/signin', path)
+    expect(
+      new URL(`https://app.aglyn.com${href}`).searchParams.get('continue'),
+    ).toBe(path)
+  })
+
+  it('keeps a bundle link’s id, which carries its domain waiver', () => {
+    expect(continuePathFor('/acme/billing', '?plan=pro&bundle=abc123')).toBe(
+      '/acme/billing?plan=pro&bundle=abc123',
+    )
+  })
+
+  it('is the bare path when there is no query', () => {
+    expect(continuePathFor('/acme/billing', '')).toBe('/acme/billing')
+  })
+
+  it('returns nothing rather than a bare query with no path', () => {
+    expect(continuePathFor('', 'plan=pro')).toBe('')
   })
 })
 

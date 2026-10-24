@@ -29,9 +29,9 @@ import {
 
 /** The chooser as it read before AGL-3762: membership order, not names. */
 const ORGS: UserOrgMembership[] = [
-  { $id: 'org-edr', orgName: 'EDR Construction', slug: 'edr', role: 'owner' },
-  { $id: 'org-rtr', orgName: 'Ready To Roll', slug: 'ready-to-roll', role: 'admin' },
-  { $id: 'org-elv', orgName: 'Elevated Concepts', slug: 'elevated', role: 'editor' },
+  { $id: 'org-ewd', orgName: 'Eastwood Plumbing', slug: 'eastwood', role: 'owner' },
+  { $id: 'org-nwc', orgName: 'Northwind Coffee', slug: 'northwind-coffee', role: 'admin' },
+  { $id: 'org-emb', orgName: 'Ember Studio', slug: 'ember', role: 'editor' },
   { $id: 'org-tst', orgName: 'Test Org', slug: 'test-org', role: 'viewer' },
   { $id: 'org-agl', orgName: 'Aglyn LLC', slug: 'aglyn', role: 'owner' },
 ] as UserOrgMembership[]
@@ -43,9 +43,9 @@ describe('the workspace list order (AGL-3762)', () => {
   it('sorts by name, A to Z, whatever order the memberships arrive in', () => {
     expect(names(arrangeWorkspaces(ORGS))).toEqual([
       'Aglyn LLC',
-      'EDR Construction',
-      'Elevated Concepts',
-      'Ready To Roll',
+      'Eastwood Plumbing',
+      'Ember Studio',
+      'Northwind Coffee',
       'Test Org',
     ])
     expect(names(arrangeWorkspaces([...ORGS].reverse()))).toEqual(
@@ -102,13 +102,13 @@ describe('the workspace list order (AGL-3762)', () => {
   })
 
   it('puts pinned workspaces first, each group still in name order', () => {
-    const rows = arrangeWorkspaces(ORGS, { pinned: ['org-tst', 'org-edr'] })
+    const rows = arrangeWorkspaces(ORGS, { pinned: ['org-tst', 'org-ewd'] })
     expect(names(rows)).toEqual([
-      'EDR Construction',
+      'Eastwood Plumbing',
       'Test Org',
       'Aglyn LLC',
-      'Elevated Concepts',
-      'Ready To Roll',
+      'Ember Studio',
+      'Northwind Coffee',
     ])
     expect(rows.map((row) => row.pinned)).toEqual([true, true, false, false, false])
   })
@@ -125,14 +125,14 @@ describe('the workspace search (AGL-3762)', () => {
   it('finds a workspace by the start of any word of its name or slug', () => {
     const find = (...words: string[]) =>
       names(arrangeWorkspaces(ORGS, { search: words }))
-    expect(find('roll')).toEqual(['Ready To Roll'])
-    expect(find('READY')).toEqual(['Ready To Roll'])
-    expect(find('elev')).toEqual(['Elevated Concepts'])
+    expect(find('coffee')).toEqual(['Northwind Coffee'])
+    expect(find('NORTHWIND')).toEqual(['Northwind Coffee'])
+    expect(find('emb')).toEqual(['Ember Studio'])
     expect(find('test-org')).toEqual([])
     expect(find('test', 'org')).toEqual(['Test Org'])
-    expect(find('e')).toEqual(['EDR Construction', 'Elevated Concepts'])
+    expect(find('e')).toEqual(['Eastwood Plumbing', 'Ember Studio'])
     // A word in the middle of another word is not the start of one.
-    expect(find('oll')).toEqual([])
+    expect(find('offee')).toEqual([])
     expect(find()).toHaveLength(ORGS.length)
   })
 
@@ -166,14 +166,14 @@ describe('the workspace filters (AGL-3762)', () => {
     const rows = arrangeWorkspaces(ORGS, {
       clauses: [{ field: 'role', op: 'equals', value: 'owner' }],
     })
-    expect(names(rows)).toEqual(['Aglyn LLC', 'EDR Construction'])
+    expect(names(rows)).toEqual(['Aglyn LLC', 'Eastwood Plumbing'])
   })
 
   it('narrows by plan, from the plans it is handed', () => {
     const plans = {
-      'org-edr': 'business',
-      'org-rtr': 'free',
-      'org-elv': 'business',
+      'org-ewd': 'business',
+      'org-nwc': 'free',
+      'org-emb': 'business',
       'org-tst': 'free',
       'org-agl': 'enterprise',
     }
@@ -181,7 +181,7 @@ describe('the workspace filters (AGL-3762)', () => {
       plans,
       clauses: [{ field: 'plan', op: 'equals', value: 'business' }],
     })
-    expect(names(rows)).toEqual(['EDR Construction', 'Elevated Concepts'])
+    expect(names(rows)).toEqual(['Eastwood Plumbing', 'Ember Studio'])
     expect(rows.map((row) => row.plan)).toEqual(['business', 'business'])
     expect(needsWorkspacePlans([{ field: 'plan', op: 'equals', value: 'free' }])).toBe(
       true,
@@ -192,7 +192,7 @@ describe('the workspace filters (AGL-3762)', () => {
   })
 
   it('narrows to the pinned workspaces, or to the rest', () => {
-    const pinned = ['org-rtr']
+    const pinned = ['org-nwc']
     expect(
       names(
         arrangeWorkspaces(ORGS, {
@@ -200,7 +200,7 @@ describe('the workspace filters (AGL-3762)', () => {
           clauses: [{ field: 'pinned', op: 'is', value: 'true' }],
         }),
       ),
-    ).toEqual(['Ready To Roll'])
+    ).toEqual(['Northwind Coffee'])
     expect(
       arrangeWorkspaces(ORGS, {
         pinned,
@@ -214,7 +214,7 @@ describe('the workspace filters (AGL-3762)', () => {
       search: ['e'],
       clauses: [{ field: 'role', op: 'equals', value: 'owner' }],
     })
-    expect(names(rows)).toEqual(['EDR Construction'])
+    expect(names(rows)).toEqual(['Eastwood Plumbing'])
   })
 })
 

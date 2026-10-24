@@ -156,6 +156,45 @@ export function driftOrgEmailText(
   ].join('\n')
 }
 
+/**
+ * The designed email's parts for the same notice (AGL-4019): the
+ * `workspace-notice` email draws a lead, a details panel, a button and a
+ * caption, and a send that passes only {@link driftOrgEmailText} draws a
+ * heading over nothing. Same facts, same promise that nothing was turned off.
+ */
+export function driftOrgEmailNotice(
+  entry: SsoDomainDriftEntry,
+  origin: string,
+): { lead: string; details: string; url: string; urlLabel: string; note: string } {
+  return {
+    lead:
+      `Single sign-on for ${entry.domain} is still working, but the DNS ` +
+      `record that proves your organization owns ${entry.domain} is missing. ` +
+      `Nothing has been turned off, and nothing will be turned off ` +
+      `automatically.\n\n` +
+      `The record is how we know your organization still controls ` +
+      `${entry.domain}, which is what stops anyone else routing sign-ins for ` +
+      `it. It usually goes missing during a DNS migration. Restore the TXT ` +
+      `record, or remove the domain in SSO settings if you no longer use it.`,
+    details: [
+      `Domain: ${entry.domain}`,
+      `Record: DNS TXT ownership record`,
+      `Failed checks in a row: ${entry.consecutiveFailures}`,
+      entry.daysFailing === null ? '' : `Failing for: ${entry.daysFailing} days`,
+      `What we saw: ${
+        entry.records.length
+          ? 'Other TXT records, but not the ownership record'
+          : 'No TXT record at that name'
+      }`,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    url: `${origin}/settings/sso`,
+    urlLabel: 'Open SSO settings',
+    note: 'Owners and admins are the people who can change its SSO settings.',
+  }
+}
+
 /** "1 SSO domain no longer proves", "3 SSO domains no longer prove". */
 function driftCountPhrase(count: number): string {
   return count === 1

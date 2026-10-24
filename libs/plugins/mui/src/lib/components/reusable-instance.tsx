@@ -40,6 +40,8 @@ export interface ReusableInstanceProps extends BoxProps {
    * has no use for it, and it is stripped below rather than spread.
    */
   propValues?: Record<string, unknown>
+  /** Formatted text for those props, addressed to the graft as well. */
+  propHtml?: Record<string, unknown>
 }
 
 /**
@@ -72,6 +74,8 @@ const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
       // into the editable canvas), so a strip upstream would fix the
       // published page and leave the editor warning on every render.
       [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: _propValues,
+      // Its formatted text, the same way and for the same reason.
+      [Aglyn.REUSABLE_INSTANCE_PROP_HTML_KEY]: _propHtml,
       children,
       sx,
       ...rest

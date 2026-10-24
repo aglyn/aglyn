@@ -9,7 +9,7 @@ came from (AGL-3960).
 
 | Thing | Where | Id |
 | -- | -- | -- |
-| Landing page `/managed` | `hosts/DXnRbPH4CQ/screens/…`, Landing Pages group, visibility PUBLIC | `qnuMY13VsS`, first version `COCDoTk7vn`, live version `IO02sEaW0U` (since 2026-10-20) |
+| Landing page `/managed` | `hosts/DXnRbPH4CQ/screens/…`, Landing Pages group, visibility PUBLIC | `qnuMY13VsS`, first version `COCDoTk7vn`, live version `MuMb5a8jki` (since 2026-10-20 00:41Z) |
 | Form "Managed" | `hosts/DXnRbPH4CQ/forms/…` | `chjqg6-XOD`, first version `cRbJ2BWB3Q` |
 | Campaign "Managed · Events and door to door" | `orgs/jWmGooWE3L/emailCampaigns/…`, label `managed-2026-10` | `h3Gg7rSecF` |
 

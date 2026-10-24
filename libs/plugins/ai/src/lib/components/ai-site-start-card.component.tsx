@@ -938,15 +938,19 @@ export function AiSiteStartCard({
         </Toolbar>
       </AppBar>
       <DialogContent sx={{ px: { xs: 2, sm: 3 } }} onKeyDown={onStepKeyDown}>
+        {/* The step timeline spans the whole dialog, above the step's own
+            narrower column (AGL-4014): MUI's Stepper as it comes. */}
+        {importing ? null : (
+          <Box sx={{ pt: { xs: 3, sm: 4 } }}>
+            <StartProgress step={step} compact={compact} onStep={started ? undefined : goBackTo} />
+          </Box>
+        )}
         <Container
           maxWidth={choosing || step === 'kind' || step === 'style' ? 'md' : 'sm'}
           disableGutters
           sx={{ py: { xs: 3, sm: 5 } }}
         >
           <Stack spacing={4}>
-            <Box sx={{ maxWidth: (t: Theme) => t.spacing(80), width: '100%', mx: 'auto' }}>
-              {importing ? null : <StartProgress step={step} compact={compact} onStep={started ? undefined : goBackTo} />}
-            </Box>
             <Stack spacing={1} sx={{ textAlign: choosing ? 'center' : 'left' }} data-start-area="heading">
               <Typography
                 ref={headingRef}
