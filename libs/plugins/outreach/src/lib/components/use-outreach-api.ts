@@ -32,6 +32,9 @@ import type {
   OutreachEnrollmentAction,
   OutreachEnrollmentActionResponse,
   OutreachEnrollmentGatewayResponse,
+  OutreachEnrollmentReplyRequest,
+  OutreachEnrollmentReplyResponse,
+  OutreachEnrollmentThreadResponse,
   OutreachEnrollPersonRequest,
   OutreachEnrollPreviewResponse,
   OutreachEnrollResponse,
@@ -128,6 +131,12 @@ export interface OutreachApi {
   ): Promise<OutreachEnrollmentActionResponse>
   /** The mail gateway in front of one enrolled person's domain (AGL-3332). */
   readEnrollmentGateway(enrollmentId: string): Promise<OutreachEnrollmentGatewayResponse>
+  /** What the person wrote back, and where an answer would go (AGL-4020). */
+  readEnrollmentThread(enrollmentId: string): Promise<OutreachEnrollmentThreadResponse>
+  /** Sends a member's answer in the person's thread, from the enrollment's mailbox (AGL-4020). */
+  replyToEnrollment(
+    input: Omit<OutreachEnrollmentReplyRequest, 'orgId'>,
+  ): Promise<OutreachEnrollmentReplyResponse>
   previewEmail(
     input: Omit<OutreachPreviewRequest, 'orgId'>,
   ): Promise<OutreachPreviewResponse>
@@ -274,6 +283,16 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         call(OUTREACH_API_ROUTES.enrollmentsGateway, {
           method: 'POST',
           body: { enrollmentId },
+        }),
+      readEnrollmentThread: (enrollmentId) =>
+        call(OUTREACH_API_ROUTES.enrollmentsThread, {
+          method: 'POST',
+          body: { enrollmentId },
+        }),
+      replyToEnrollment: (input) =>
+        call(OUTREACH_API_ROUTES.enrollmentsReply, {
+          method: 'POST',
+          body: { ...input },
         }),
       previewEmail: (input) =>
         call(OUTREACH_API_ROUTES.preview, {

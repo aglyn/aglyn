@@ -67,12 +67,14 @@ name: Production canary
 # tenant project's own automation bypass with VERCEL_TOKEN (measured present
 # 2026-10-05, created 2026-09-23) and masks it in the log.
 #
-# Optional repository variables:
+# Repository variables:
 #   CANARY_TENANT_HOSTS — the pages to render, `host` or `host/path`, comma or
-#     space separated; replaces the default list in lib/prod-canary.mjs
-#     (ready-to-roll.aglyn.app/, edr-construction.aglyn.app/ /services
-#     /contact, demo.aglyn.app, aglyn.com)
-#   CANARY_CONSOLE_HOST — default app.aglyn.com
+#     space separated; replaces the fallback list in lib/prod-canary.mjs
+#     (Aglyn's own pages: aglyn.com /press /blog /contact /product/commerce,
+#     demo.aglyn.app). Production sets it to the real client pages with
+#     images the canary exists to render. Those addresses live in the
+#     variable and never in this public repository.
+#   CANARY_CONSOLE_HOST — optional, default app.aglyn.com
 
 on:
   deployment_status:

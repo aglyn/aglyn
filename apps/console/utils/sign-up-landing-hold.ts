@@ -131,3 +131,25 @@ export function isLeavingConsole(): boolean {
 export function resetLeavingConsoleForTests(): void {
   leaving = false
 }
+
+/**
+ * How many Google redirect landings are still running their handler
+ * (AGL-4021). The sign-up page raises its landing hold while the consent
+ * marker is pending, but the handler spends that marker in its first line, so
+ * a re-render after that point could no longer tell a landing was under way:
+ * it released the hold and the auth layout pushed the visitor away
+ * mid-sign-up. The page reads this as well.
+ */
+let redirectLandingsInFlight = 0
+
+export function beginRedirectLanding(): void {
+  redirectLandingsInFlight += 1
+}
+
+export function endRedirectLanding(): void {
+  redirectLandingsInFlight = Math.max(0, redirectLandingsInFlight - 1)
+}
+
+export function isRedirectLandingInFlight(): boolean {
+  return redirectLandingsInFlight > 0
+}

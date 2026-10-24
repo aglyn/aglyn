@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { beginInPlaceEdit, findLeafTextElement } from './in-place-edit-surface'
+import {
+  addCaretStops,
+  beginInPlaceEdit,
+  CARET_STOP,
+  findLeafTextElement,
+  withoutCaretStops,
+} from './in-place-edit-surface'
 
 function mount(html: string): HTMLElement {
   const host = document.createElement('div')
@@ -139,5 +145,60 @@ describe('beginInPlaceEdit on the resolved text element', () => {
     surface!.dispose()
     expect(target.getAttribute('contenteditable')).toBeNull()
     expect(target.textContent).toBe('Question?')
+  })
+})
+
+describe('beginInPlaceEdit — pointer and focus ring', () => {
+  it('takes the pointer back and drops the focus ring for the edit, then restores both', () => {
+    const host = document.createElement('div')
+    // An instance draws its component under `pointer-events: none`.
+    host.style.pointerEvents = 'none'
+    const text = document.createElement('span')
+    text.style.outline = '1px dotted'
+    text.textContent = 'Build your website.'
+    host.appendChild(text)
+    document.body.appendChild(host)
+
+    const surface = beginInPlaceEdit(text, (target) => {
+      target.textContent = 'Build your website.'
+    })
+    expect(surface).toBeDefined()
+    // Clicks in the text reach it, so a caret can be placed in it.
+    expect(text.style.pointerEvents).toBe('auto')
+    // No per-line focus ring on an inline run.
+    expect(text.style.outline).toBe('none')
+    // The text cursor over the text being typed into.
+    expect(text.style.cursor).toBe('text')
+
+    surface?.dispose()
+    expect(text.style.pointerEvents).toBe('')
+    expect(text.style.outline).toBe('1px dotted')
+    expect(text.style.cursor).toBe('')
+    host.remove()
+  })
+})
+
+describe('caret stops beside a pill at an edge', () => {
+  const pill = () => {
+    const span = document.createElement('span')
+    span.setAttribute('contenteditable', 'false')
+    span.textContent = 'Name'
+    return span
+  }
+
+  it('gives a lone pill a text position on both sides, and a reader drops them', () => {
+    const surface = document.createElement('span')
+    surface.appendChild(pill())
+    addCaretStops(surface)
+    expect(surface.firstChild?.textContent).toBe(CARET_STOP)
+    expect(surface.lastChild?.textContent).toBe(CARET_STOP)
+    expect(withoutCaretStops(surface.textContent ?? '')).toBe('Name')
+  })
+
+  it('adds nothing where text already holds the caret', () => {
+    const surface = document.createElement('span')
+    surface.append('Hi ', pill(), ' there')
+    addCaretStops(surface)
+    expect(surface.textContent).toBe('Hi Name there')
   })
 })

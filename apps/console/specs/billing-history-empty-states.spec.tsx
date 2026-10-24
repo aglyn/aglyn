@@ -134,7 +134,7 @@ jest.mock('../hooks/use-current-org', () => ({
     ready: true,
   }),
 }))
-jest.mock('../hooks/use-confirmed-doc', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-confirmed-doc', () => ({
   __esModule: true,
   default: () => ({ data: undefined }),
 }))

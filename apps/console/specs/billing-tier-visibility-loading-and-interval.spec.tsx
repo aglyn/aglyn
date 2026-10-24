@@ -164,7 +164,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: mockOrg, orgId: mockOrg?.$id, ready: mockReady }),
 }))
-jest.mock('../hooks/use-confirmed-doc', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-confirmed-doc', () => ({
   __esModule: true,
   default: () => ({ data: mockOrgBilling, ready: mockOrgBillingReady }),
 }))

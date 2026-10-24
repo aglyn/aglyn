@@ -102,6 +102,7 @@ import {
 } from '../../../utils/marketing-opt-in'
 import {
   createSignUpWorkspace,
+  personalWorkspaceName,
   rememberPendingSignUpWorkspace,
 } from '../../../utils/signup-workspace'
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
@@ -110,9 +111,10 @@ import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
 import { consumeConsentBounce } from '../../../utils/consent-bounce'
 import {
   holdSignUpLanding,
+  isRedirectLandingInFlight,
   releaseSignUpLanding,
 } from '../../../utils/sign-up-landing-hold'
-import isMobileBrowser from '../../../utils/is-mobile-browser'
+import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
@@ -281,7 +283,9 @@ async function provisionSignUpOrg(
 ): Promise<string | null> {
   const name = orgName.trim()
   if (!name) return null
-  const { slug } = await createSignUpWorkspace(credential.user, name)
+  const { slug } = await createSignUpWorkspace(credential.user, name, {
+    derived: true,
+  })
   if (!slug) return null
   /*
    * Activation (AGL-1561). The workspace auto-provisioned at signup is a
@@ -317,9 +321,7 @@ async function provisionSignUpOrg(
  * workspace through exactly that helper.
  */
 function derivePersonalOrgName(user: UserCredential['user']): string {
-  return (
-    user.displayName?.trim() || user.email?.split('@')[0]?.trim() || ''
-  )
+  return personalWorkspaceName(user)
 }
 
 /**
@@ -545,7 +547,14 @@ function SignUp() {
   // Not on a delegating host, whose redirect hook is disabled and so would
   // never release it.
   useEffect(() => {
-    if (delegation !== 'off' || !hasPendingLegalConsent()) return void 0
+    // Or a landing already under way (AGL-4021): the handler spends the
+    // consent marker first, so a re-render after that saw nothing pending,
+    // released the hold in its cleanup and never raised it again.
+    if (
+      delegation !== 'off' ||
+      !(hasPendingLegalConsent() || isRedirectLandingInFlight())
+    )
+      return void 0
     holdSignUpLanding(REDIRECT_LANDING_HOLD)
     return () => releaseSignUpLanding(REDIRECT_LANDING_HOLD)
   }, [delegation])

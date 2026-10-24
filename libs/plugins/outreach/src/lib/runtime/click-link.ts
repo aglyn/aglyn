@@ -101,6 +101,14 @@ export interface OutreachClickTarget {
    * `machineClicks`. Its `enrollmentId` is {@link OUTREACH_TEST_LINK_ENROLLMENT}.
    */
   test?: boolean
+  /**
+   * A link in a member's ANSWER to a person who wrote back (AGL-4022): the
+   * `replyKey` of the answer's `manual_reply` step record. Its `stepIndex`
+   * is then the step the enrollment was on, not the step that sent it, and
+   * the click is the person's — on their enrollment — and never the
+   * sequence's, whose figures count only what its steps sent.
+   */
+  answerKey?: string
 }
 
 /** The enrollment a test link names, since a test enrolls nobody. */
@@ -108,6 +116,9 @@ export const OUTREACH_TEST_LINK_ENROLLMENT = 'test'
 
 /** A document id as a token may carry one. */
 const DOCUMENT_ID = /^[A-Za-z0-9_-]{1,160}$/
+
+/** An answer's reply key, as the reply composer mints one (AGL-4020). */
+const ANSWER_KEY = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
 
 const base64url = (text: string): string => Buffer.from(text, 'utf8').toString('base64url')
 
@@ -278,6 +289,7 @@ export function outreachStoredLink(target: OutreachClickTarget, nowMs: number): 
   if (!url) return null
   if (!DOCUMENT_ID.test(target.orgId) || !DOCUMENT_ID.test(target.enrollmentId)) return null
   if (!index(target.stepIndex) || !index(target.linkIndex)) return null
+  if (target.answerKey !== undefined && !ANSWER_KEY.test(target.answerKey)) return null
   return {
     v: 1,
     orgId: target.orgId,
@@ -287,6 +299,7 @@ export function outreachStoredLink(target: OutreachClickTarget, nowMs: number): 
     url,
     createdAtMs: nowMs,
     ...(target.test ? { test: true } : {}),
+    ...(target.answerKey ? { answerKey: target.answerKey } : {}),
   }
 }
 
@@ -307,6 +320,7 @@ export function readOutreachStoredLink(data: unknown): OutreachClickTarget | nul
   if (!url) return null
   if (!DOCUMENT_ID.test(orgId) || !DOCUMENT_ID.test(enrollmentId)) return null
   if (!index(body['stepIndex']) || !index(body['linkIndex'])) return null
+  const answerKey = body['answerKey']
   return {
     orgId,
     enrollmentId,
@@ -314,6 +328,7 @@ export function readOutreachStoredLink(data: unknown): OutreachClickTarget | nul
     linkIndex: body['linkIndex'] as number,
     url,
     ...(body['test'] === true ? { test: true } : {}),
+    ...(typeof answerKey === 'string' && ANSWER_KEY.test(answerKey) ? { answerKey } : {}),
   }
 }
 

@@ -362,7 +362,7 @@ names one; **none** is the arbitrary-sample defect described in §2.
 | `apps/console/components/error-screens-card.component.tsx`:142 | 200 | **none** | unordered |
 | `apps/console/components/interaction-builder-dialog.component.tsx`:371 | 200 | **none** | unordered |
 | `apps/console/components/org-licences-panel.component.tsx`:169 | 200 | ordered |  |
-| `apps/console/hooks/use-host-component-definitions.ts`:70 | 200 | **none** | unordered |
+| `libs/tenant/feature/instance/src/lib/hooks/use-host-component-definitions.ts`:70 | 200 | **none** | unordered |
 | `libs/plugins/commerce/src/lib/components/console/commerce-glance-card.component.tsx`:61 | 200 | **none** | **Fixed** — ordered + ceiling probe, disclosed; orders bounded to the 30 days reported |
 | `libs/plugins/commerce/src/lib/components/console/commerce-glance-card.component.tsx`:67 | 200 | **none** | **Fixed** — ordered + ceiling probe, disclosed; orders bounded to the 30 days reported |
 | `libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx`:69 | 200 | **none** | **Fixed** — ordered on `createdAtMs` desc + probe, disclosed |
@@ -397,8 +397,8 @@ names one; **none** is the arbitrary-sample defect described in §2.
 | `apps/console/components/org-publish-panel.component.tsx`:185 | 100 | **none** | unordered |
 | `apps/console/components/org-publish-panel.component.tsx`:203 | 100 | **none** | unordered |
 | `apps/console/components/site-member-drawer.component.tsx`:205 | 100 | ordered |  |
-| `apps/console/hooks/use-site-marketplace-plugins.ts`:69 | 100 | **none** | unordered |
-| `apps/console/hooks/use-site-marketplace-plugins.ts`:77 | 100 | **none** | unordered |
+| `libs/tenant/feature/instance/src/lib/hooks/use-site-marketplace-plugins.ts`:69 | 100 | **none** | unordered |
+| `libs/tenant/feature/instance/src/lib/hooks/use-site-marketplace-plugins.ts`:77 | 100 | **none** | unordered |
 | `libs/plugins/bookings/src/lib/components/bookings-console-page.tsx`:123 | 100 | **none** | unordered |
 | `libs/plugins/bookings/src/lib/components/bookings-console-page.tsx`:132 | 100 | ordered |  |
 | `libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx`:74 | 100 | **none** | **Fixed** — ordered on `createdAtMs` desc + probe, disclosed |

@@ -74,7 +74,10 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 type FetchAnswer = { status: number; body: Record<string, unknown> }
 let mockCreateAnswer: FetchAnswer
 let mockValidateAnswer: Record<string, unknown>
+// Holds the create's answer back, so the workspace's own read can land first.
+let mockCreateGate: Promise<void> | null
 const mockFetch = jest.fn(async (_user: unknown, url: string, _init?: { body?: string }) => {
+  if (url === '/api/hosts/create' && mockCreateGate) await mockCreateGate
   const answer: FetchAnswer =
     url === '/api/hosts/validate-name'
       ? { status: 200, body: mockValidateAnswer }
@@ -180,7 +183,8 @@ beforeEach(() => {
   mockOrg = { plan: 'business', slug: 'acme' }
   mockCan = true
   mockLanding = (url) => url
-  mockValidateAnswer = { subdomainValid: true, subdomainTaken: false, suggestions: [] }
+  mockCreateGate = null
+  mockValidateAnswer ={ subdomainValid: true, subdomainTaken: false, suggestions: [] }
   mockCreateAnswer = {
     status: 200,
     body: {
@@ -351,6 +355,38 @@ describe('AGL-3761 · what the create would refuse is said first', () => {
       '/acme/billing',
     )
     expect(screen.queryByTestId('start-zone')).toBeNull()
+  })
+
+  it('keeps the start when its own new site uses a one-site plan, before or after the answer (AGL-4017)', async () => {
+    mockOrg = { plan: 'free', slug: 'acme' }
+    const { rerender, onClose } = await openStart()
+    typeName()
+    let release: () => void = () => undefined
+    mockCreateGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let pending: Promise<Record<string, unknown>> | undefined
+    act(() => {
+      pending = mockZone?.pendingSite.create()
+    })
+    // The workspace's read counts the new site before the create answers.
+    mockOrg = { plan: 'free', slug: 'acme', hosts: { 'host-1': true } }
+    rerender(<CreateHostDialog open onClose={onClose} />)
+    await flush()
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+    expect(screen.queryByText(/using all of them/)).toBeNull()
+    await act(async () => {
+      release()
+      await pending
+    })
+    rerender(<CreateHostDialog open onClose={onClose} />)
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+    expect(screen.queryByText(/using all of them/)).toBeNull()
+    expect(mockZone?.pendingSite.created).toEqual({
+      hostId: 'host-1',
+      host: 'royal-styles',
+      orgSlug: 'acme',
+    })
   })
 
   it('says a taken address as it is typed, before anything is created', async () => {

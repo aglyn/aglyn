@@ -20,7 +20,7 @@ import {
   THEME_LIBRARY_COLLECTION,
   type ThemeLibraryEntry,
 } from '@aglyn/aglyn/app-utils/theme-library'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from './firebase/firebase-services'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import useFirestoreCollection from './use-firestore-collection'

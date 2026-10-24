@@ -71,7 +71,7 @@ const SERVICES = {
 }
 const RESIDENTIAL = { ...SERVICES, screenId: 'res-tmpl', base: 'services/residential' }
 
-const HOST = { $id: 'host-1', subdomain: 'edr', seo: { image: 'media:host-1/card' } }
+const HOST = { $id: 'host-1', subdomain: 'acme', seo: { image: 'media:host-1/card' } }
 const ORG = { $id: 'org-1' }
 
 const resolve = (path: string, overrides: Record<string, unknown> = {}) =>

@@ -79,7 +79,6 @@ import {
   mdiLoginVariant,
   mdiLogoutVariant,
   mdiMagnify,
-  mdiMathCompass,
   mdiMenuDown,
   mdiMinus,
   mdiMonitor,
@@ -180,7 +179,8 @@ export const ICON_VARIANT_SHOW_MORE_VERTICAL = mdiDotsVertical
 // Areas + Pages
 export const ICON_VARIANT_APP_PREFERENCES = mdiTune
 export const ICON_VARIANT_APP_SETTINGS = mdiCog
-export const ICON_VARIANT_BESIGNER = mdiMathCompass
+// The vector square, as every other way into the editor already shows it.
+export const ICON_VARIANT_BESIGNER = mdiVectorSquare
 export const ICON_VARIANT_HOME = mdiHomeVariant
 export const ICON_VARIANT_ORGANIZATION = mdiDomain
 export const ICON_VARIANT_PAGES = mdiWeb

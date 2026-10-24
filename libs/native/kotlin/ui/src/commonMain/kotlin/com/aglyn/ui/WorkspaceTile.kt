@@ -1,6 +1,5 @@
 package com.aglyn.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -24,15 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
-/** A workspace's initials: the first letter of its first two words ("Elevated Concepts" → EC), or its first letter. */
+/** A workspace's initials: the first letter of its first two words ("Northwind Coffee" → NC), or its first letter. */
 fun workspaceInitials(name: String): String {
   val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() && it.first().isLetterOrDigit() }
   return when {
@@ -45,7 +44,7 @@ fun workspaceInitials(name: String): String {
 /** Figma's paper plate under a workspace logo (brand/white). */
 internal val LogoPlate = Color.White
 
-/** Each side of the plate around the logo's slot: (40 − 28) / 2 / 40, the same 6 / 40 and 5 / 32 as Figma's. */
+/** Each side of the plate around a mark's slot: (40 − 28) / 2 / 40, the same 6 / 40 and 5 / 32 as Figma's. */
 internal const val LogoSlotInset = 0.15f
 
 /**
@@ -53,6 +52,11 @@ internal const val LogoSlotInset = 0.15f
  * color taken from its logo, else the brand slate). [selected] rings it; [badge] shows a count of what waits there.
  * [initials] are the letters drawn without a logo: a workspace's one initial (the contract's `workspaceInitial`, Figma
  * Rail/Workspace tile, Type=Initial); a site's tile leaves them to [workspaceInitials], two letters.
+ *
+ * The logo follows Figma's Rail/Workspace tile (Components 2:2): a picture (opaque art, or a badge that already fits the
+ * tile's shape) covers the tile (Type=Picture, 109:1419 / 109:1408); a mark on a transparent ground sits on the paper
+ * plate, its ink fitted whole in the slot (Type=Logo, 97:899 / 5:47: 22 on 32, 28 on 40). It is decoded at the pixels it
+ * is drawn at, so it is never minified on screen (AGL-4027).
  */
 @Composable
 fun WorkspaceTile(
@@ -83,7 +87,10 @@ fun WorkspaceTile(
   val radius = cornerRadius ?: (size * 0.28f)
   val shape = RoundedCornerShape(radius)
   val shown = (if (isSystemInDarkTheme()) darkLogoUrl else null) ?: logoUrl
-  val image = rememberRemoteBitmap(shown)
+  // The slot keeps whole points of plate round a mark: 5 on 32, 6 on 40, as Figma draws them.
+  val slot = size.value - 2 * (size.value * LogoSlotInset).roundToInt()
+  val fit = BrandFit.Tile(size.value, (radius / size).coerceIn(0f, 0.5f), slot)
+  val picture = rememberBrandPicture(shown, fit)
   // A workspace with no color of its own: the brand slate (#404C5C) in light and dark alike, as Figma's Rail draws it,
   // never the dark palette's light slate, which glared on the dark rail (AGL-4000).
   val fill = color ?: AglynTokens.light.tertiary.main
@@ -91,18 +98,18 @@ fun WorkspaceTile(
   Box(modifier.size(if (selected || reserveRing) ringBox else size), contentAlignment = Alignment.Center) {
     // Selected: a 2 dp ring clear of the tile (the rail adds its 3 dp bar at the edge).
     if (selected) Box(Modifier.size(ringBox).border(2.dp, shell.ring, RoundedCornerShape(ringRadius ?: (radius + 4.dp))))
-    // A logo sits on Figma's paper plate (Rail/Workspace tile, Type=Logo: 5:47 / 97:899): white in light and dark, a 1 dp
-    // subtle border, the logo fitted in the 70% slot (28 of 40 on a tablet, 22 of 32 on the desktop), so a transparent
-    // mark reads on it at the same size as Apple's.
-    Box(
-      Modifier.size(size).clip(shape)
-        .background(if (image != null) LogoPlate else fill)
-        .then(if (image != null) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape) else Modifier),
-      contentAlignment = Alignment.Center,
-    ) {
-      if (image != null) {
-        Image(image, contentDescription = null, modifier = Modifier.size(size).padding(size * LogoSlotInset), contentScale = ContentScale.Fit)
-      } else {
+    if (picture != null) {
+      val layout = fit.layout(picture.art)
+      // A mark sits on Figma's paper plate: white in light and dark, a 1 dp subtle border.
+      Box(
+        Modifier.size(size).clip(shape)
+          .then(if (layout.plate) Modifier.background(LogoPlate).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape) else Modifier),
+        contentAlignment = Alignment.Center,
+      ) {
+        BrandDrawn(picture, layout, size)
+      }
+    } else {
+      Box(Modifier.size(size).clip(shape).background(fill), contentAlignment = Alignment.Center) {
         Text(
           letters,
           color = readableOn(fill),

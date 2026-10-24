@@ -24,12 +24,14 @@ import {
   type InviteReviewState,
   type InviteReviewTarget,
 } from '../hooks/use-pending-invites'
+import InviteAutoAcceptProvider from './invite-auto-accept-provider.component'
 import InviteResponseDialog from './invite-response-dialog.component'
 
 /**
- * The console shell's pending invitations (AGL-3402): one shared list, and
- * the one accept/decline dialog that the banner and the notification surfaces
- * open by calling `useInviteReview().review`.
+ * The console shell's pending invitations (AGL-3402): one shared list, the
+ * automatic join that answers them (AGL-4023), and the one accept/decline
+ * dialog that the banner and the notification surfaces open by calling
+ * `useInviteReview().review` when an automatic join was refused.
  *
  * Mounted in the authenticated layout, above every route boundary, for the
  * reason the banner is: an invitation has to be answerable from whichever
@@ -53,7 +55,8 @@ export function PendingInvitesProvider({ children }: { children: ReactNode }) {
   return (
     <PendingInvitesContext.Provider value={pending}>
       <InviteReviewContext.Provider value={review}>
-        {children}
+        {/* Invitations take effect on their own (AGL-4023). */}
+        <InviteAutoAcceptProvider>{children}</InviteAutoAcceptProvider>
         <InviteResponseDialog target={target} onClose={() => setTarget(null)} />
       </InviteReviewContext.Provider>
     </PendingInvitesContext.Provider>
