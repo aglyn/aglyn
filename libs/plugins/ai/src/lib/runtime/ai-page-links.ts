@@ -58,8 +58,11 @@ function wordsOf(text: string): string[] {
  * when it names none, or more than one. A name matches a section whose name
  * has the same words in any case and spacing, as "consultation-request-form"
  * matches "consultation request form"; failing that, the one section whose
- * name holds every word of it, as "#consultation-form" names that section. An
- * `href` is read as a fragment, `#` and all.
+ * name holds every word of it, as "#consultation-form" names that section.
+ * When several hold them, the one whose title (the words before its first
+ * `:`) holds them: a plan's "Hero: … a button to the invitation builder"
+ * names the section "#builder" means, "Invitation builder: …", without being
+ * it (AGL-4032). An `href` is read as a fragment, `#` and all.
  */
 export function aiPageLinkSection(text: string, sections: readonly string[]): number | null {
   const words = wordsOf(text.trim().replace(/^#/, ''))
@@ -68,7 +71,12 @@ export function aiPageLinkSection(text: string, sections: readonly string[]): nu
   const exact = named.flatMap((section, index) => (section.join(' ') === words.join(' ') ? [index] : []))
   if (exact.length) return exact.length === 1 ? exact[0] : null
   const holding = named.flatMap((section, index) => (words.every((word) => section.includes(word)) ? [index] : []))
-  return holding.length === 1 ? holding[0] : null
+  if (holding.length === 1) return holding[0]
+  const titled = holding.filter((index) => {
+    const title = wordsOf(sections[index].split(':')[0])
+    return words.every((word) => title.includes(word))
+  })
+  return titled.length === 1 ? titled[0] : null
 }
 
 /** An `href` that is only a fragment: `#consultation-form`, and never `#` alone. */
