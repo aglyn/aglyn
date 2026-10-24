@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v18'
+export const LEGAL_DOCUMENT_VERSION = 'v19'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -943,6 +943,35 @@ export interface LegalDocumentManifestEntry {
  * control: the live privacy page reproduced its `v17` pin (31383 bytes /
  * `4209f2…`) byte for byte before and after publication, and keeps that pin.
  *
+ * v19 (2026-10-22): Syria leaves the comprehensive-embargo list (#1870).
+ *
+ *   - Terms §3.6(a) no longer names Syria among the countries and regions
+ *     under comprehensive U.S. embargo. The U.S. ended the Syria sanctions
+ *     program on July 1, 2025 (EO 14312), OFAC removed the Syrian Sanctions
+ *     Regulations on August 26, 2025, and the State Department rescinded
+ *     Syria's State Sponsor of Terrorism designation on August 24, 2026. What
+ *     remains is list-based, which §3.6(b) already covers. The console's
+ *     geo-block (`sanctions-geo.ts`) drops `SY` in the same change, so the
+ *     list it enforces is still exactly the one §3.6 names.
+ *   - Privacy, Subprocessors, AUP, DMCA, DPA, Cookie Policy, EULA and
+ *     Marketplace Publisher Agreement are unchanged: none names a country.
+ *
+ * Terms and the `/legal` Terms card move "Last updated" to October 22, 2026
+ * (the Terms keep "Effective date: August 5, 2026"), published from the
+ * console's Publish now at 11:09 Central that day. The wording, and
+ * publishing it with re-acceptance, were approved on 2026-10-22; the record
+ * is `Platform Docs/Legal/Proposed/2026-10-22-syria-sanctions/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through
+ * the Docs API, the page was published, the live page confirmed serving the
+ * new text, and only then were the terms captured: 60723 bytes
+ * (`80ef32…`), identical across two requests and a cache-busting query in
+ * two rounds, and differing from the `v18` capture by the date and the one
+ * word alone; archived in `Acceptance-Snapshots/v19` beside an unchanged
+ * copy of the privacy policy. The Privacy Policy did not change, so it was
+ * the control: the live privacy page reproduced its `v18` pin (31383 bytes /
+ * `4209f2…`) byte for byte before and after publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1002,8 +1031,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'd1252340bb0d258b2405c2341b0504ef0d33c9fa11b27e051eb0b4a47821b9bc',
-    bytes: 60730,
+      '80ef324d89028c5fcac29f4a65145b5547e18970ea9a827873aa5ea883354d9f',
+    bytes: 60723,
   },
   {
     key: 'privacy',

@@ -87,7 +87,14 @@ public struct AglynCountBadge: View {
 
 /// One workspace on the rail: its logo, else its initials on its color (the person's pick, its brand color or one taken
 /// from its logo), a ring while it is the one in use, and its unread count.
+///
+/// The logo follows Figma's Rail/Workspace tile (Components 2:2): a picture (opaque art, or a badge that already fits
+/// the tile's shape) covers the tile (Type=Picture, 109:1419 / 109:1408); a mark on a transparent ground sits on the
+/// paper plate, its ink fitted whole in the logo slot (Type=Logo, 97:899 / 5:47: 22 on 32, 28 on 40). Every place a
+/// workspace's picture shows (the rail, the sidebar's header, Home, the switcher, the pin lists) draws this tile, so
+/// they all follow the one rule.
 public struct AglynWorkspaceTile: View {
+  @Environment(\.colorScheme) private var scheme
   let name: String
   let logoURL: URL?
   let darkLogoURL: URL?
@@ -95,10 +102,11 @@ public struct AglynWorkspaceTile: View {
   let selected: Bool
   let unread: Int
   let size: CGFloat
+  let cornerRadius: CGFloat?
 
   public init(
     name: String, logoURL: URL?, darkLogoURL: URL? = nil, colorHex: String?, selected: Bool, unread: Int = 0,
-    size: CGFloat = AglynShellMetrics.tile
+    size: CGFloat = AglynShellMetrics.tile, cornerRadius: CGFloat? = nil
   ) {
     self.name = name
     self.logoURL = logoURL
@@ -107,6 +115,7 @@ public struct AglynWorkspaceTile: View {
     self.selected = selected
     self.unread = unread
     self.size = size
+    self.cornerRadius = cornerRadius
   }
 
   /// The gap between a tile and its selection ring: half the ring box's extra width.
@@ -114,25 +123,21 @@ public struct AglynWorkspaceTile: View {
     size == AglynShellMetrics.tile ? (AglynShellMetrics.ringBox - AglynShellMetrics.tile) / 2 : 3
   }
 
-  /// The rail's tile takes the shell's radius; any other size keeps the same proportion.
+  /// The rail's tile takes the shell's radius; any other size keeps the same proportion unless it is given one.
   private var radius: CGFloat {
-    size == AglynShellMetrics.tile ? AglynShellMetrics.tileRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
+    if let cornerRadius { return cornerRadius }
+    return size == AglynShellMetrics.tile
+      ? AglynShellMetrics.tileRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
   }
 
-  /// A logo's box on the plate (Figma Rail/Workspace tile, Type=Logo: 22 on 32 Compact, 28 on 40 Touch), so a mark keeps
-  /// the plate's margin round it rather than filling the tile; any other size keeps the proportion.
-  private var logoBox: CGFloat { (size * AglynShellMetrics.tileLogo / AglynShellMetrics.tile).rounded() }
+  /// A mark's slot on the plate (Figma Rail/Workspace tile, Type=Logo: 22 on 32 Compact, 28 on 40 Touch), so a mark
+  /// keeps the plate's margin round it rather than filling the tile; any other size keeps the proportion.
+  private var logoBox: CGFloat { size * AglynShellMetrics.tileLogo / AglynShellMetrics.tile }
 
   public var body: some View {
     ZStack(alignment: .topTrailing) {
-      AglynBrandPicture(logoURL, darkURL: darkLogoURL, size: logoBox, cornerRadius: radius * logoBox / size) { initials }
+      picture
         .frame(width: size, height: size)
-        .background(
-          RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(logoURL == nil ? Color.clear : AglynColor.paper))
-        .overlay(
-          RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .strokeBorder(AglynColor.divider, lineWidth: logoURL == nil ? 0 : 1))
         .padding(ringPadding)
         // Selected: a 2-point ring in the accent on the ring box (the rail draws the 3-point bar at its edge).
         .overlay(
@@ -144,6 +149,22 @@ public struct AglynWorkspaceTile: View {
     .accessibilityLabel(name)
     .accessibilityValue(unread > 0 ? "\(unread) unread" : "")
     .accessibilityAddTraits(selected ? [.isSelected, .isButton] : [.isButton])
+  }
+
+  @ViewBuilder
+  private var picture: some View {
+    if let shown = (scheme == .dark ? darkLogoURL : nil) ?? logoURL {
+      AglynBrandLoaded(url: shown, fit: .tile(side: size, cornerRadius: radius, slot: logoBox)) { picture, layout in
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        AglynBrandDrawn(picture: picture, layout: layout, side: size, cornerRadius: radius)
+          .background(shape.fill(layout.plate ? AglynColor.paper : Color.clear))
+          .overlay(shape.strokeBorder(AglynColor.divider, lineWidth: layout.plate ? 1 : 0))
+      } fallback: {
+        initials
+      }
+    } else {
+      initials
+    }
   }
 
   private var initials: some View {

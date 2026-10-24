@@ -187,3 +187,43 @@ export function listNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? ''
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
+
+/**
+ * The usage email's details panel (AGL-4019): which workspace, which limit
+ * and how much of it is used, as the "Label: value" lines the
+ * `workspace-notice` email draws as rows. The figures arrive formatted, as
+ * {@link usagePhrase} takes them, so one panel serves counts, storage and
+ * bandwidth alike.
+ */
+export function usageAlertDetails(input: {
+  workspaceName: string | null | undefined
+  label: string
+  used: number
+  limit: number
+  usedText: string
+  limitText: string
+  cadence: UsageAlertCadence
+}): string {
+  const name = String(input.workspaceName ?? '').trim()
+  const percent = input.limit > 0 ? Math.floor((input.used / input.limit) * 100) : 0
+  return [
+    name ? `Workspace: ${name}` : '',
+    `Limit: ${input.label.charAt(0).toUpperCase()}${input.label.slice(1)}`,
+    `Used: ${input.usedText} of ${input.limitText} (${formatCount(percent)}%)`,
+    input.cadence === 'monthly' ? 'Resets: On the 1st of next month' : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/**
+ * The usage email's caption (AGL-4019): when these alerts are sent, so a
+ * reader can tell one alert per step from a daily nag (AGL-3431). `steps`
+ * are the alert bands, `USAGE_ALERT_BANDS`.
+ */
+export function usageAlertNote(cadence: UsageAlertCadence, steps: readonly number[]): string {
+  const named = listNames(steps.map((step) => `${step}%`))
+  return cadence === 'monthly'
+    ? `Usage alerts go out at ${named} of a monthly allowance, at most once each a month.`
+    : `Usage alerts go out at ${named} of a limit, once each, and again only if usage drops back below that step.`
+}

@@ -152,7 +152,7 @@ describe('scanSeoSite', () => {
  * only main heading is a component's has one.
  */
 describe('scanSeoSite on a page that places components and repeats', () => {
-  const contactHost: SeoSiteHost = { displayName: 'EDR', screens: { home: '/', contact: 'contact' } }
+  const contactHost: SeoSiteHost = { displayName: 'Acme', screens: { home: '/', contact: 'contact' } }
   const contactDocs: Record<string, Doc> = {
     'hosts/h2/screens/home': { displayName: 'Home', versionId: 'v1' },
     'hosts/h2/screens/home/versions/v1': {

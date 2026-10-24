@@ -109,7 +109,7 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
 })
 
 describe('readFreeAiCreditsLeft — a plan step’s own spend, counted once (AGL-3722)', () => {
-  // zachary1748, 2026-10-10: the chat turn's 31 credits were on both meters
+  // A free workspace, 2026-10-10: the chat turn's 31 credits were on both meters
   // (183 used, 117 left) when the build's plan step asked, and the plan's own
   // 46 were not yet — the machine meters a step after it returns.
   const before = {

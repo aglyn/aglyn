@@ -1096,28 +1096,20 @@ be hand-staged is a shot that silently rots.
 - **Alt text:** A heading being edited directly on the canvas, with a small floating
   toolbar above it and no selection outline around it.
 
-### N4. `static/img/besigner/text-field-read-only.png` — ✅ CAPTURED (AGL-2486)
+### N4. `static/img/besigner/text-field-formatting.png` — ✅ CAPTURED (AGL-2486)
 
-- **Docs page:** `building-sites/besigner/text-editing.md` → `#text-field-read-only`
-- **Capture:** on a Typography element, bold a word in place first so it carries
-  formatting, then click away and look at the **Attributes** panel.
-- **Frame:** the **Remove formatting** button, the read-only **Text** field, and its
-  helper line ("This text is formatted — double-click the element on the canvas to
-  edit it. Remove formatting to edit it here."). The helper text is the content of
-  this shot and must be legible.
-- **Alt text:** The Attributes panel showing a read-only Text field explaining that
-  the text is formatted, with a Remove formatting button above it.
-- **Annotate:** ~~call out the **Remove formatting** button~~ — **not done, and the
-  reason is worth keeping.** Cropped to the button, the field and the helper line,
-  the button is the only coloured thing in frame and needs no pointing at; and the
-  outline the harness draws sits 3px proud of the element, which put it straight
-  through the field's `Text` legend a few pixels below. Annotate what a reader would
-  otherwise hunt for, not what the crop already isolates.
-- **Found while capturing:** the row holding this button carries `mb: -1`, sized for
-  a row with only the help icon in it. A full-height Button in the same row drove its
-  label into the outlined field's notch and overprinted the `Text` legend. Fixed in
-  `element-props-form.component.tsx` before the shot was taken — a docs image of a
-  broken control is a bug report nobody filed.
+- **Docs page:** `building-sites/besigner/text-editing.md` → `#text-field-formatting`
+- **Capture:** on a Typography element, format a word in place (italic, since a
+  heading is already bold), click away, then click into the **Attributes** panel's
+  **Text** field so its formatting toolbar opens.
+- **Frame:** the **Remove formatting** button, the toolbar and the **Text** field
+  showing the formatted words. Replaced the read-only field this section used to
+  show, when the field became editable with its formatting (2026-10-22).
+- **Alt text:** The Attributes panel's Text field showing formatted text — an
+  italic and a bold word — with the formatting toolbar above it and Remove
+  formatting at the top.
+- **Annotate:** none — the formatting in the field is the subject, and the crop
+  holds nothing else.
 
 ### N5. `static/img/besigner/element-search-best-matches.png` — ✅ CAPTURED (AGL-2486)
 

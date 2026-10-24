@@ -45,6 +45,11 @@ import type { AiJob } from '../model/ai-jobs.types'
  *
  * The marker is server-only (the rules deny every client), holds ids and
  * instants and nothing a person wrote, and is deleted once it is decided.
+ *
+ * The job itself outlives the site: the erase deletes the site's jobs with
+ * it, and the sweep writes this one back as it was read, plus `siteRemoved`,
+ * so the AI jobs drawer still lists it with Start again and the answers
+ * (AGL-4015).
  */
 
 /** The due markers, top level, one per site, keyed by the site's id. */
@@ -189,7 +194,11 @@ export async function clearAiEmptySiteSweep(firestore: Firestore, hostId: string
 
 /** What the check at due time found. */
 export type AiEmptySiteVerdict =
-  | { kind: 'empty'; name: string | null }
+  /**
+   * Remove it. `job` is the job's document as read, which the erase takes
+   * with the site and the sweep then puts back (AGL-4015).
+   */
+  | { kind: 'empty'; name: string | null; job: FirebaseFirestore.DocumentData }
   /** The job settled again after the marker was written: wait a full grace from then. */
   | { kind: 'later'; dueAt: Date }
   /** The site is kept; the marker is dropped. */
@@ -264,7 +273,7 @@ export async function aiEmptySiteVerdict(
   if (edited) return { kind: 'keep', reason: 'edited' }
 
   const name = host.get('displayName')
-  return { kind: 'empty', name: typeof name === 'string' && name ? name : null }
+  return { kind: 'empty', name: typeof name === 'string' && name ? name : null, job: jobSnapshot.data() ?? {} }
 }
 
 export interface AiEmptySiteSweepResult {
@@ -343,12 +352,17 @@ export async function sweepAiEmptySites(options: SweepAiEmptySitesOptions): Prom
       })
       if (erased.erased) {
         // Said on the job only once the site is gone, so its pages can say so.
+        // The erase takes the site's jobs with it (`aiJobs` is an org
+        // collection the site owns), this one included, so the job is put
+        // back whole: a `siteRemoved` merged alone onto the deleted document
+        // left a stub with no kind, answers, `createdAt` or `expiresAt`,
+        // which no list shows and nothing expires (AGL-4015).
         await options.firestore
           .collection('orgs')
           .doc(marker.orgId)
           .collection(JOBS_COLLECTION)
           .doc(marker.jobId)
-          .set({ siteRemoved: { at: new Date(now()), name: verdict.name } }, { merge: true })
+          .set({ ...verdict.job, siteRemoved: { at: new Date(now()), name: verdict.name } }, { merge: true })
         await doc.ref.delete()
         result.removed += 1
         console.info('ai empty site removed', marker)

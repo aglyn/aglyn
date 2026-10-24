@@ -345,6 +345,12 @@ export function americanize(text) {
 /** A commit subject as the site prints it. */
 export function cleanSummary(summary) {
   const text = summary
+    // A CI directive is an instruction to GitHub, not part of the change.
+    // Since 10/20 a PR that rides the promotion's one CI pass lands with
+    // `[skip ci]` in its commit subject, and v1.0.0-beta.272 published
+    // "pin sites the way workspaces are pinned (AGL-4005) [skip ci]" on
+    // aglyn.com. Dropped first, so the citation it trailed is trailing again.
+    .replace(/\s*\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]/gi, '')
     // A TRAILING citation only: the Linear workspace is private, so the
     // reference is noise to a reader — but an id inside the sentence is the
     // sentence, and cutting it leaves "raise the ceiling to , read from…".

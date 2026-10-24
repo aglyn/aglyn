@@ -43,6 +43,7 @@ import {
   resolveStorageCap,
   scopeBillsStorageOverage,
   usageAlertThreshold,
+  USAGE_ALERT_BANDS,
 } from '../../../../utils/storage-overage'
 import { orgMediaAllowanceMb } from '../../../../utils/server/media-storage-band'
 import {
@@ -50,7 +51,9 @@ import {
   formatCount,
   formatStorageMb,
   listNames,
+  usageAlertDetails,
   usageAlertGuardDecision,
+  usageAlertNote,
   usagePhrase,
   workspacePhrases,
   type UsageAlertCadence,
@@ -229,6 +232,12 @@ interface QuotaAlertCheck {
   label: string
   used: number
   limit: number
+  /**
+   * `used` and `limit` as a person reads them, for the email's details
+   * panel (AGL-4019): `1.2 GB`, not `1228.8`. A plain count when absent.
+   */
+  usedText?: string
+  limitText?: string
   /**
    * How often one threshold may be announced (AGL-3431) — see
    * {@link usageAlertGuardDecision}. `crossing` for what a workspace
@@ -874,10 +883,10 @@ async function handler(request: Request): Promise<Response> {
        * (AGL-3431). An owner of several workspaces reads the body, not the
        * footer, to learn which one this is about.
        */
-      const workspace = workspacePhrases(
+      const workspaceName =
         (orgData['name'] as string | undefined) ||
-          (org.get('slug') as string | undefined),
-      )
+        (org.get('slug') as string | undefined)
+      const workspace = workspacePhrases(workspaceName)
       // Whether data storage past the band BILLS (a plan with a per-GB rate)
       // or is refused (a plan without one) — the same predicate the write
       // gate enforces, so the notice and the refusal cannot disagree.
@@ -1026,6 +1035,8 @@ async function handler(request: Request): Promise<Response> {
           label: 'media storage',
           used: mediaMb,
           limit: mediaBandMb,
+          usedText: formatStorageMb(mediaMb),
+          limitText: formatStorageMb(mediaBandMb),
           cadence: 'crossing',
           outcome: metersInfra ? 'bills' : 'stops',
           lead: () =>
@@ -1166,6 +1177,8 @@ async function handler(request: Request): Promise<Response> {
           label: 'data storage',
           used: dataStorageMb,
           limit: entitlements.dataStorageMbPerOrg,
+          usedText: formatStorageMb(dataStorageMb),
+          limitText: formatStorageMb(entitlements.dataStorageMbPerOrg),
           cadence: 'crossing',
           // A rollup without the figure reads as 0 above; re-arming on that
           // would announce the same band again the day the figure is back.
@@ -1250,6 +1263,8 @@ async function handler(request: Request): Promise<Response> {
           label: 'monthly bandwidth',
           used: bandwidthGb,
           limit: entitlements.bandwidthGb,
+          usedText: formatBandwidthGb(bandwidthGb),
+          limitText: formatBandwidthGb(entitlements.bandwidthGb),
           cadence: 'monthly',
           outcome: metersInfra ? 'bills' : bandwidthPauses ? 'stops' : 'continues',
           lead: () =>
@@ -1397,6 +1412,11 @@ async function handler(request: Request): Promise<Response> {
         // this is the one email a crossing sends. Sequenced AFTER the console
         // write and independently: mail is best-effort, and a Resend outage
         // must degrade to the console notice, not to nothing.
+        //
+        // The designed email draws its own parts (AGL-4019): the notice, the
+        // figures as rows, a button that names where it goes, and when these
+        // alerts come. Without them it was a heading over an empty panel and
+        // a button with no words.
         const emailed = await emailOrgAdmins({
           firestore,
           orgId: org.id,
@@ -1405,6 +1425,19 @@ async function handler(request: Request): Promise<Response> {
             `${alertBody}\n\n` +
             (linksUpgrade ? 'Upgrade for more: ' : 'See your usage and billing: ') +
             `${consoleOrigin()}${alertLink}`,
+          lead: alertBody,
+          details: usageAlertDetails({
+            workspaceName,
+            label: check.label,
+            used: check.used,
+            limit: check.limit,
+            usedText: check.usedText ?? formatCount(check.used),
+            limitText: check.limitText ?? formatCount(check.limit),
+            cadence: check.cadence,
+          }),
+          url: `${consoleOrigin()}${alertLink}`,
+          urlLabel: linksUpgrade ? 'Compare plans in Billing' : 'See usage in Billing',
+          note: usageAlertNote(check.cadence, USAGE_ALERT_BANDS),
           context: 'usage-alert',
         })
         alerted.push({
@@ -1494,6 +1527,31 @@ async function handler(request: Request): Promise<Response> {
           orgId: org.id,
           subject: title,
           text: `${body}\n\nSee your usage and billing: ${consoleOrigin()}${billingLink}`,
+          // The designed email's own parts (AGL-4019), like the quota alerts.
+          lead: body,
+          details: [
+            workspaceName ? `Workspace: ${workspaceName}` : '',
+            `Monthly budget: $${amount.toFixed(0)}`,
+            `Usage so far: $${spend.totalUsd.toFixed(2)} ` +
+              `(${formatCount(Math.floor((spend.totalUsd / amount) * 100))}% of the budget)`,
+            ...(billedLines.length
+              ? [
+                  `Metered usage: $${spend.meteredUsd.toFixed(2)}`,
+                  ...billedLines.map(
+                    (line) =>
+                      `${line.label.charAt(0).toUpperCase()}${line.label.slice(1)}: $${line.usd.toFixed(2)}`,
+                  ),
+                ]
+              : []),
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          url: `${consoleOrigin()}${billingLink}`,
+          urlLabel: 'See usage in Billing',
+          note:
+            'Budget alerts go out at ' +
+            listNames(budget.thresholdPcts.map((pct) => `${pct}%`)) +
+            ' of the budget, at most once each a month.',
           context: 'usage-budget',
         })
         alerted.push({
