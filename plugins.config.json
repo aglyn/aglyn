@@ -1576,6 +1576,7 @@
       "contributes": {
         "console": {
           "slots": [
+            "crmRecordEmailActions",
             "transferResources"
           ],
           "shell": true,

@@ -29,12 +29,26 @@ import {
   substituteRecordTokens,
 } from '@aglyn/aglyn/app-utils/expand-repeatables'
 import { repeatSourceOf } from '@aglyn/aglyn/app-utils/repeat-sources'
-import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
+import {
+  createElement,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from 'react'
 import {
   RepeatRowsContext,
   repeatRowsKey,
 } from '../contexts/repeat-rows-context'
-import { RepeatRecordContext } from '../contexts/repeat-record-context'
+import CanvasChromeThemeContext from '../contexts/canvas-chrome-theme-context'
+import {
+  RepeatRecordContext,
+  RepeatTemplateContext,
+} from '../contexts/repeat-record-context'
+import { tokenPillStyle } from '../components/token-pill.component'
 
 const subscribeToNothing = () => () => undefined
 const noVersion = () => 0
@@ -147,13 +161,16 @@ export function useRepeatPreview(node: unknown): RepeatPreview | undefined {
  * outside a reaction is both a stale value and a missing dependency.
  */
 function subtreeSnapshot(rootId: string): Record<string, any> {
-  const nodes = (canvas.toJSON().nodes ?? {}) as Record<string, any>
   const snapshot: Record<string, any> = {}
   const walk = (id: string) => {
-    const node = nodes[id]
+    // Node by node rather than through the whole canvas's `toJSON()`: read
+    // during a render, this is what the repeating element re-renders on, and
+    // it should re-render for an edit inside what it repeats, not for every
+    // edit on the page.
+    const node = canvas.getNode(id)
     if (!node || snapshot[id]) return
     snapshot[id] = JSON.parse(JSON.stringify(node))
-    for (const childId of (node.nodes ?? []) as string[]) walk(childId)
+    for (const childId of (snapshot[id].nodes ?? []) as string[]) walk(childId)
   }
   walk(rootId)
   return snapshot
@@ -180,12 +197,19 @@ export function useRepeatCopies(
 ): any[] {
   const $id = node?.$id
   const recordCount = preview?.records.length ?? 0
+  // What is repeated, read on every render. The copies are pictures of it, so
+  // an edit to it — retyping the template's text — has to redraw them; keyed
+  // on the records alone, they kept the text from when the page loaded.
+  const subtreeJson =
+    $id && preview && recordCount >= 2
+      ? JSON.stringify(subtreeSnapshot($id))
+      : ''
   const key = preview
-    ? `${$id}\n${preview.scope}\n${JSON.stringify(preview.records)}`
+    ? `${$id}\n${preview.scope}\n${JSON.stringify(preview.records)}\n${subtreeJson}`
     : ''
   return useMemo(() => {
-    if (!$id || !preview || recordCount < 2) return []
-    const snapshot = subtreeSnapshot($id)
+    if (!$id || !preview || recordCount < 2 || !subtreeJson) return []
+    const snapshot = JSON.parse(subtreeJson) as Record<string, any>
     if (!snapshot[$id]) return []
     // A parent the copies can take their place in. The real parent is not in
     // this snapshot — only the subtree is — so a self-scoped repeat is given
@@ -244,15 +268,71 @@ function denormalize(
  */
 export function useNodeWithRepeatRecord<N>(node: N): N {
   const context = useContext(RepeatRecordContext)
+  const template = useContext(RepeatTemplateContext)
+  const theme = useTheme()
+  const chrome = useContext(CanvasChromeThemeContext) ?? theme
   const rendered = node as { props?: Record<string, unknown> } | null | undefined
-  const propsJson = context ? JSON.stringify(rendered?.props ?? null) : ''
+  const propsJson =
+    context || template ? JSON.stringify(rendered?.props ?? null) : ''
   return useMemo(() => {
-    if (!context || !rendered?.props) return node
-    const props = substituteRecordTokens({ ...rendered.props }, context)
-    return { ...rendered, props } as N
+    if (!rendered?.props) return node
+    if (context) {
+      const props = substituteRecordTokens({ ...rendered.props }, context)
+      return { ...rendered, props } as N
+    }
+    const children = rendered.props['children']
+    if (!template || typeof children !== 'string') return node
+    const chipped = itemTokensAsChips(children, chrome)
+    return chipped === children
+      ? node
+      : ({ ...rendered, props: { ...rendered.props, children: chipped } } as N)
     // Observable props: the JSON string keys the copy, as everywhere else.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node, rendered, context, propsJson])
+  }, [node, rendered, context, template, chrome, propsJson])
+}
+
+/** `{{item.<path>}}`, as the page's substitution reads a record field. */
+const ITEM_TOKEN = /\{\{\s*item\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\}\}/g
+
+/** `name` → `Name`, `photo_url` → `Photo url`: a field's key as words. */
+function fieldWords(path: string): string {
+  const last = path.split('.').pop() ?? path
+  const words = last
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * `text` with each `{{item.*}}` token drawn as a chip, or `text` itself when
+ * it holds none. The chip is the editors' own pill look (`tokenPillStyle`),
+ * titled with the raw token so it stays inspectable.
+ */
+export function itemTokensAsChips(text: string, theme: Theme): ReactNode {
+  const parts: ReactNode[] = []
+  let last = 0
+  for (const match of text.matchAll(ITEM_TOKEN)) {
+    const at = match.index ?? 0
+    if (at > last) parts.push(text.slice(last, at))
+    parts.push(
+      createElement(
+        'span',
+        {
+          key: `${at}`,
+          title: match[0],
+          'data-aglyn-token-chip': '',
+          style: { ...tokenPillStyle(theme, 'item'), cursor: 'inherit' },
+        },
+        fieldWords(match[1]),
+      ),
+    )
+    last = at + match[0].length
+  }
+  if (!parts.length) return text
+  if (last < text.length) parts.push(text.slice(last))
+  return parts
 }
 
 export default useRepeatPreview

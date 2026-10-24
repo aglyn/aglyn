@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
@@ -29,8 +30,13 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
 
 /**
@@ -103,40 +109,274 @@ internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
  * A brand picture in a small square: a workspace's logo or a site's favicon, its dark-theme art in dark mode when there
  * is one, and [fallback] (the kit's icon) while there is none, while it loads, or when it fails.
  *
- * Opaque art (a photo, a solid tile) fills the [shape] and loses its corners to it, which costs nothing. Art on a
+ * What is drawn is the art's ink, not its canvas: a logo uploaded off-center or with empty room round it is centered by
+ * its ink and sized by it (AGL-4027). Opaque art (a photo, a solid tile) fills the [shape] and loses its corners to it,
+ * which costs nothing. A badge that already fits the shape (a round seal) is drawn edge to edge. Any other art on a
  * transparent ground (a logo mark) is drawn whole: fitted, and shrunk only as far as the shape needs for every visible
- * pixel to clear its edges ([brandArtScale]). A favicon is drawn edge to edge for a browser tab, so filling a circle
- * with it cuts its corners off.
+ * pixel to clear its edges ([brandArtScale]). The picture is decoded at the pixels it is drawn at, so it is never
+ * minified on screen.
  */
 @Composable
 fun BrandPicture(url: String?, darkUrl: String? = null, size: Dp, shape: Shape, fallback: @Composable () -> Unit) {
   val shown = (if (isSystemInDarkTheme()) darkUrl else null) ?: url
-  val image = rememberRemoteBitmap(shown)
-  if (image != null) {
-    val art = remember(image) { brandArtOf(image) }
-    if (art.opaqueCorners) {
-      Image(image, contentDescription = null, modifier = Modifier.size(size).clip(shape), contentScale = ContentScale.Crop)
-    } else {
-      val corner = shapeCornerFraction(shape, size)
-      val scale = remember(art, corner) { brandArtScale(art.ink, corner) }
-      Box(Modifier.size(size).clip(shape), contentAlignment = Alignment.Center) {
-        Image(image, contentDescription = null, modifier = Modifier.size(size * scale), contentScale = ContentScale.Fit)
-      }
-    }
+  val fit = BrandFit.Badge(size.value, shapeCornerFraction(shape, size))
+  val picture = rememberBrandPicture(shown, fit)
+  if (picture != null) {
+    Box(Modifier.size(size).clip(shape), contentAlignment = Alignment.Center) { BrandDrawn(picture, fit.layout(picture.art), size) }
   } else {
     fallback()
   }
 }
 
+/** A loaded brand picture in its box, as its layout says: covering the box, or whole inside it. */
+@Composable
+internal fun BrandDrawn(picture: BrandImage, layout: BrandLayout, side: Dp) {
+  // Decoded at the pixels it is drawn at (rememberBrandPicture), so this draws it about one to one; the high filter is
+  // the backstop for the rounding between the two.
+  if (layout.fill) {
+    Image(picture.image, contentDescription = null, modifier = Modifier.size(side), contentScale = ContentScale.Crop, filterQuality = FilterQuality.High)
+  } else {
+    Image(picture.image, contentDescription = null, modifier = Modifier.size(layout.inkSide.dp), contentScale = ContentScale.Fit, filterQuality = FilterQuality.High)
+  }
+}
+
+/** How a brand picture is placed: the box it is drawn in, which decides how its art is laid out and its pixels. */
+internal sealed interface BrandFit {
+  /** The box's side, in dp. */
+  val side: Float
+
+  /** A picture in a square of [side] dp whose corner radius is [cornerFraction] of its side ([BrandPicture]). */
+  data class Badge(override val side: Float, val cornerFraction: Float) : BrandFit
+
+  /** A workspace's tile of [side] dp ([WorkspaceTile]), with its logo slot of [slot] dp on the plate. */
+  data class Tile(override val side: Float, val cornerFraction: Float, val slot: Float) : BrandFit
+
+  /** Where [art] goes in this box. */
+  fun layout(art: BrandArt): BrandLayout = when (this) {
+    is Badge -> when {
+      art.opaqueCorners -> BrandLayout(fill = true, inkSide = side * art.fillFactor, plate = false)
+      else -> BrandLayout(fill = false, inkSide = side * (brandBadgeScale(art, cornerFraction) ?: brandArtScale(art.ink, cornerFraction)), plate = false)
+    }
+    is Tile -> {
+      val badge = brandBadgeScale(art, cornerFraction)
+      when {
+        // Figma Rail/Workspace tile, Type=Picture: a picture covers the whole tile.
+        art.opaqueCorners -> BrandLayout(fill = true, inkSide = side * art.fillFactor, plate = false)
+        // A badge already has its own edge, so it takes the whole tile too, with nothing under it.
+        badge != null -> BrandLayout(fill = false, inkSide = side * badge, plate = false)
+        // Type=Logo: a mark sits on the paper plate, its ink fitted whole in the slot, which keeps it clear of the
+        // plate's corners, so it is not shrunk again.
+        else -> BrandLayout(fill = false, inkSide = slot, plate = true)
+      }
+    }
+  }
+}
+
+/** Where a brand picture's art goes: covering its box ([fill]) or whole in it, its ink's longer side [inkSide] dp. */
+internal data class BrandLayout(val fill: Boolean, val inkSide: Float, val plate: Boolean)
+
+/** A decoded brand picture, cut to its ink's box, and where its art has ink. */
+internal class BrandImage(val image: ImageBitmap, val art: BrandArt)
+
+/** Fetched image bytes by URL, so a logo drawn at several sizes is fetched once. */
+private object BrandBytes {
+  private const val CAPACITY = 48
+  private val entries = LinkedHashMap<String, ByteArray>()
+
+  fun get(url: String): ByteArray? = entries.remove(url)?.also { entries[url] = it }
+
+  fun put(url: String, bytes: ByteArray) {
+    entries[url] = bytes
+    while (entries.size > CAPACITY) entries.remove(entries.keys.first())
+  }
+}
+
+/** Each brand picture's art by URL, and each size it is drawn at, decoded once. */
+private object BrandImages {
+  private const val CAPACITY = 240
+  private val arts = LinkedHashMap<String, BrandArt>()
+  private val images = LinkedHashMap<String, BrandImage>()
+
+  fun art(url: String): BrandArt? = arts.remove(url)?.also { arts[url] = it }
+
+  fun putArt(url: String, art: BrandArt) {
+    arts[url] = art
+    while (arts.size > CAPACITY) arts.remove(arts.keys.first())
+  }
+
+  fun get(url: String, pixels: Int): BrandImage? = "$url@$pixels".let { key -> images.remove(key)?.also { images[key] = it } }
+
+  fun put(url: String, pixels: Int, image: BrandImage) {
+    images["$url@$pixels"] = image
+    while (images.size > CAPACITY) images.remove(images.keys.first())
+  }
+}
+
+/** The pixels [fit] draws [art]'s ink box's longer side at, at [density]. */
+private fun brandPixels(fit: BrandFit, art: BrandArt, density: Float): Int =
+  maxOf(1, ceil(fit.layout(art).inkSide * density).toInt())
+
+/**
+ * The brand picture at [url] as [fit] draws it, or null while it loads, with no loader, or when it cannot be read. The
+ * bytes are fetched once per URL and its art read once; each drawn size is cut to the ink and reduced to its pixels by
+ * area averaging ([areaAverage]), so it is never minified on screen. The caches are only touched on the composition's
+ * thread; the decoding runs off it.
+ */
+@Composable
+internal fun rememberBrandPicture(url: String?, fit: BrandFit): BrandImage? {
+  val loader = LocalImageLoader.current
+  val density = LocalDensity.current.density
+  var picture by remember(url, fit, density) {
+    mutableStateOf(url?.let { u -> BrandImages.art(u)?.let { art -> BrandImages.get(u, brandPixels(fit, art, density)) } })
+  }
+  LaunchedEffect(url, fit, density, loader) {
+    if (url == null || loader == null || picture != null) return@LaunchedEffect
+    picture = try {
+      val bytes = BrandBytes.get(url) ?: loader.load(url)?.also { BrandBytes.put(url, it) }
+      val known = BrandImages.art(url)
+      bytes?.let { withContext(Dispatchers.Default) { decodeBrandImage(it, known, fit, density) } }?.also {
+        BrandImages.putArt(url, it.art)
+        BrandImages.put(url, brandPixels(fit, it.art, density), it)
+      }
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Throwable) {
+      null
+    }
+  }
+  return picture
+}
+
+/** [bytes] decoded, its art read (unless [known]), cut to its ink and reduced to the pixels [fit] draws it at. */
+internal fun decodeBrandImage(bytes: ByteArray, known: BrandArt?, fit: BrandFit, density: Float): BrandImage? {
+  val full = bytes.decodeToImageBitmap()
+  val width = full.width
+  val height = full.height
+  if (width <= 0 || height <= 0) return null
+  val argb = IntArray(width * height)
+  full.readPixels(argb)
+  val art = known ?: brandArtOf(width, height) { x, y -> (argb[y * width + x] ushr 24) / 255f }
+  return BrandImage(reduceToInk(argb, width, height, art, brandPixels(fit, art, density)), art)
+}
+
+/** [argb] ([width] × [height]) cut to [art]'s ink box, rounded out to whole pixels, its longer side reduced to [pixels]. */
+internal fun reduceToInk(argb: IntArray, width: Int, height: Int, art: BrandArt, pixels: Int): ImageBitmap {
+  val left = floor(art.left * width).toInt().coerceIn(0, width - 1)
+  val top = floor(art.top * height).toInt().coerceIn(0, height - 1)
+  val right = ceil(art.right * width).toInt().coerceIn(left + 1, width)
+  val bottom = ceil(art.bottom * height).toInt().coerceIn(top + 1, height)
+  val boxWidth = right - left
+  val boxHeight = bottom - top
+  // Never enlarged: a picture smaller than it is drawn keeps its own pixels and is scaled up on screen.
+  val factor = minOf(1f, pixels.toFloat() / maxOf(boxWidth, boxHeight))
+  val outWidth = maxOf(1, (boxWidth * factor).roundToInt())
+  val outHeight = maxOf(1, (boxHeight * factor).roundToInt())
+  return imageBitmapOf(areaAverage(argb, width, left, top, boxWidth, boxHeight, outWidth, outHeight), outWidth, outHeight)
+}
+
+/**
+ * The [boxWidth] × [boxHeight] region of [src] (ARGB, [srcWidth] wide) from [left], [top], reduced to [outWidth] ×
+ * [outHeight] by averaging every source pixel each output pixel covers, weighted by how much of it it covers and by its
+ * opacity, so a clear pixel's color never bleeds into the art's edge. Output is ARGB, not premultiplied. This is the
+ * filter a picture needs to be made smaller than about half its size without aliasing; a GPU's bilinear sampling reads
+ * only four source pixels for each one it draws.
+ */
+internal fun areaAverage(
+  src: IntArray, srcWidth: Int, left: Int, top: Int, boxWidth: Int, boxHeight: Int, outWidth: Int, outHeight: Int,
+): IntArray {
+  val xs = coverage(boxWidth, outWidth)
+  val ys = coverage(boxHeight, outHeight)
+  // Pass 1: each source row in the box, reduced across to outWidth columns of premultiplied (a, r, g, b).
+  val rows = FloatArray(boxHeight * outWidth * 4)
+  for (y in 0 until boxHeight) {
+    val rowStart = (top + y) * srcWidth + left
+    for (ox in 0 until outWidth) {
+      var a = 0f; var r = 0f; var g = 0f; var b = 0f
+      for ((sx, weight) in xs[ox]) {
+        val c = src[rowStart + sx]
+        val alpha = (c ushr 24) / 255f * weight
+        a += alpha
+        r += ((c shr 16) and 0xFF) * alpha
+        g += ((c shr 8) and 0xFF) * alpha
+        b += (c and 0xFF) * alpha
+      }
+      val i = (y * outWidth + ox) * 4
+      rows[i] = a; rows[i + 1] = r; rows[i + 2] = g; rows[i + 3] = b
+    }
+  }
+  // Pass 2: down each column.
+  val out = IntArray(outWidth * outHeight)
+  for (oy in 0 until outHeight) {
+    for (ox in 0 until outWidth) {
+      var a = 0f; var r = 0f; var g = 0f; var b = 0f
+      for ((sy, weight) in ys[oy]) {
+        val i = (sy * outWidth + ox) * 4
+        a += rows[i] * weight
+        r += rows[i + 1] * weight
+        g += rows[i + 2] * weight
+        b += rows[i + 3] * weight
+      }
+      out[oy * outWidth + ox] = if (a <= 0f) {
+        0
+      } else {
+        val alpha = (a * 255f).roundToInt().coerceIn(0, 255)
+        (alpha shl 24) or ((r / a).roundToInt().coerceIn(0, 255) shl 16) or
+          ((g / a).roundToInt().coerceIn(0, 255) shl 8) or (b / a).roundToInt().coerceIn(0, 255)
+      }
+    }
+  }
+  return out
+}
+
+/** For each of [outSize] output pixels, the source pixels of [inSize] it covers and how much of each, summing to 1. */
+private fun coverage(inSize: Int, outSize: Int): Array<List<Pair<Int, Float>>> {
+  val step = inSize.toFloat() / outSize
+  return Array(outSize) { o ->
+    val start = o * step
+    val end = start + step
+    val taps = ArrayList<Pair<Int, Float>>()
+    var s = floor(start).toInt()
+    while (s < end && s < inSize) {
+      val overlap = minOf(end, s + 1f) - maxOf(start, s.toFloat())
+      if (overlap > 0f) taps += s to overlap / step
+      s++
+    }
+    taps
+  }
+}
+
+/** An [ImageBitmap] of [argb] (not premultiplied), [width] × [height]: Android's Bitmap, the desktop's Skia image. */
+internal expect fun imageBitmapOf(argb: IntArray, width: Int, height: Int): ImageBitmap
+
 /** The room a brand mark keeps from its badge's edge, as a fraction of the badge's side. */
 internal const val BRAND_ART_MARGIN = 0.06f
 
 /**
- * Where a brand picture's art has ink. [ink] holds, for each row of pixels that has any, the outer corner of its
- * outermost visible pixel on each side, as `x, y` pairs measured from the picture's center in units of its longer
- * side. The badge's shape is convex and symmetric, so those are the only points that can cross its edge.
+ * How nearly whole art must fit a shape with no room round it to count as a badge in its own right (a round or rounded
+ * seal, which brings its own edge) rather than a mark that wants room round it.
  */
-internal class BrandArt(val ink: FloatArray, val opaqueCorners: Boolean)
+internal const val BRAND_BADGE_FIT = 0.95f
+
+/**
+ * Where a brand picture's art has ink. [left], [top], [right] and [bottom] are the box round the ink, as fractions of
+ * the picture's width and height, and everything else is measured in it: [ink] holds, for each row of pixels that has
+ * any, the outer corner of its outermost visible pixel on each side, as `x, y` pairs measured from the box's center in
+ * units of its longer side. The badge's shape is convex and symmetric, so those are the only points that can cross its
+ * edge. [opaqueCorners] is whether the box's four corners are opaque: a photo or a solid tile rather than a mark.
+ */
+internal class BrandArt(
+  val ink: FloatArray,
+  val opaqueCorners: Boolean,
+  val left: Float = 0f,
+  val top: Float = 0f,
+  val right: Float = 1f,
+  val bottom: Float = 1f,
+  /** The ink box's width over its height. */
+  val aspect: Float = 1f,
+) {
+  /** How much longer the ink box's longer side is than its shorter: covering a square with it takes its shorter side. */
+  val fillFactor: Float get() = if (aspect > 0f) maxOf(aspect, 1f / aspect) else 1f
+}
 
 /** Pixels at or below this opacity are ground, not art: anti-aliasing haze, not a visible edge. */
 private const val INK_ALPHA = 0.06f
@@ -151,25 +391,46 @@ internal fun brandArtOf(image: ImageBitmap): BrandArt = try {
   BrandArt(FloatArray(0), opaqueCorners = true)
 }
 
-/** [BrandArt] of a [width] × [height] picture whose opacity at a pixel is [alphaAt]. */
+/** [BrandArt] of a [width] × [height] picture whose opacity at a pixel is [alphaAt], rows counted from the top. */
 internal fun brandArtOf(width: Int, height: Int, alphaAt: (x: Int, y: Int) -> Float): BrandArt {
   if (width <= 0 || height <= 0) return BrandArt(FloatArray(0), opaqueCorners = false)
-  val opaque = listOf(0 to 0, width - 1 to 0, 0 to height - 1, width - 1 to height - 1).all { (x, y) -> alphaAt(x, y) >= 0.95f }
-  val unit = maxOf(width, height).toFloat()
-  val points = ArrayList<Float>()
+  val rowY = ArrayList<Int>()
+  val rowLeft = ArrayList<Int>()
+  val rowRight = ArrayList<Int>()
   for (y in 0 until height) {
     val left = (0 until width).firstOrNull { alphaAt(it, y) > INK_ALPHA } ?: continue
     val right = (width - 1 downTo left).first { alphaAt(it, y) > INK_ALPHA }
-    // The pixel's edge farthest from the center, on each axis.
-    val top = y / unit - height / (2 * unit)
-    val bottom = (y + 1) / unit - height / (2 * unit)
-    val rowY = maxOf(abs(top), abs(bottom))
-    points += abs(left / unit - width / (2 * unit))
-    points += rowY
-    points += abs((right + 1) / unit - width / (2 * unit))
-    points += rowY
+    rowY += y
+    rowLeft += left
+    rowRight += right + 1
   }
-  return BrandArt(points.toFloatArray(), opaque)
+  // Nothing visible: nothing to fit.
+  if (rowY.isEmpty()) return BrandArt(FloatArray(0), opaqueCorners = false, aspect = width.toFloat() / height)
+  val minX = rowLeft.min()
+  val maxX = rowRight.max()
+  val top = rowY.first()
+  val bottom = rowY.last() + 1
+  val boxWidth = (maxX - minX).toFloat()
+  val boxHeight = (bottom - top).toFloat()
+  val unit = maxOf(boxWidth, boxHeight)
+  val midX = (minX + maxX) / 2f
+  val midY = (top + bottom) / 2f
+  val opaque = listOf(minX to top, maxX - 1 to top, minX to bottom - 1, maxX - 1 to bottom - 1).all { (x, y) -> alphaAt(x, y) >= 0.95f }
+  val points = FloatArray(rowY.size * 4)
+  for (i in rowY.indices) {
+    val y = rowY[i]
+    // The pixel's edge farthest from the center, on each axis.
+    val farY = maxOf(abs(y - midY), abs(y + 1 - midY)) / unit
+    points[i * 4] = abs(rowLeft[i] - midX) / unit
+    points[i * 4 + 1] = farY
+    points[i * 4 + 2] = abs(rowRight[i] - midX) / unit
+    points[i * 4 + 3] = farY
+  }
+  return BrandArt(
+    points, opaque,
+    left = minX.toFloat() / width, top = top.toFloat() / height, right = maxX.toFloat() / width,
+    bottom = bottom.toFloat() / height, aspect = boxWidth / boxHeight,
+  )
 }
 
 /**
@@ -200,6 +461,16 @@ internal fun brandArtScale(ink: FloatArray, cornerFraction: Float, margin: Float
     scale = minOf(scale, limit)
   }
   return scale
+}
+
+/**
+ * The scale [art] is drawn at when it is a badge in its own right: art that fits the shape all but whole with no room
+ * round it (a round seal in a rounded square). Null for a mark, which keeps its room.
+ */
+internal fun brandBadgeScale(art: BrandArt, cornerFraction: Float): Float? {
+  if (art.ink.isEmpty()) return null
+  val whole = brandArtScale(art.ink, cornerFraction, margin = 0f)
+  return if (whole >= BRAND_BADGE_FIT) whole else null
 }
 
 /** [shape]'s corner radius as a fraction of a [size] square's side; an outline that is not a rounded box counts as round. */

@@ -182,6 +182,13 @@ export interface OutreachMailboxDailyHealth {
    * limits, but it is not a person emailed and never moves the daily cap.
    */
   tests?: number
+  /**
+   * Answers a member wrote and sent in a person's thread (AGL-4020). Counted
+   * apart from `sent` for the same reasons as `tests`: a real send, but no
+   * step of a sequence, so it never spends the daily cap, never joins the
+   * sends a bounce rate is judged over, and never pauses the mailbox.
+   */
+  manualReplies?: number
 }
 
 /**
@@ -667,6 +674,12 @@ export interface OutreachClickHistoryEntry {
   human: boolean
   /** Why it was read as a scanner's; `null` for a person's. */
   machineReason: OutreachClickMachineReason | null
+  /**
+   * The link was in a member's answer in the thread (AGL-4022), not in one
+   * of the sequence's emails; `stepIndex` is then the step the enrollment
+   * was on. Absent on a step's link.
+   */
+  answer?: true
 }
 
 /** One member's act on the enrollment. */
@@ -1002,10 +1015,27 @@ export interface OutreachEnrollment extends OutreachTimestamps {
    * or `null` while no run holds one.
    */
   sendClaim?: OutreachSendClaim | null
-  /** Every step the runtime ran, oldest first (AGL-2981). */
+  /**
+   * Every step the runtime ran, oldest first (AGL-2981), and every answer a
+   * member sent in the thread (`manual_reply`, AGL-4020).
+   */
   stepRecords?: OutreachStepRecord[]
   /** Gmail ids of this enrollment's thread messages the sync has handled, the last hundred. */
   syncedMessageIds?: string[]
+  /**
+   * What the person wrote back (AGL-4020): every reply, automatic answer and
+   * opt-out the sync read from them, oldest first, the last
+   * `OUTREACH_INBOUND_MESSAGES_MAX`. Absent until the first one is read —
+   * including on an enrollment whose reply was synced before they were kept,
+   * which the reply composer reads from the mailbox instead.
+   */
+  inboundMessages?: OutreachInboundMessage[]
+  /**
+   * A member's answer being sent (AGL-4020): taken in a transaction before
+   * the send, cleared when it is recorded, so a second click cannot send it
+   * twice. Absent or `null` while none is in flight.
+   */
+  replyClaim?: OutreachReplyClaim | null
   /**
    * What this person did with the links they were sent (AGL-3239). Absent
    * until their first click, which is why the table reads an absence as
@@ -1101,12 +1131,75 @@ export interface OutreachSkippedStep {
   atMs: number
 }
 
-/** One step the runtime ran for an enrollment (AGL-2981). */
+/** The most of a person's messages one enrollment keeps (AGL-4020). */
+export const OUTREACH_INBOUND_MESSAGES_MAX = 20
+
+/** What a message the person wrote is, as the sync classified it (AGL-4020). */
+export const OUTREACH_INBOUND_KINDS = ['reply', 'auto_reply', 'opt_out'] as const
+
+export type OutreachInboundKind = (typeof OUTREACH_INBOUND_KINDS)[number]
+
+/**
+ * One message the person wrote in the enrollment's threads (AGL-4020), kept
+ * so the console can show it and answer it in the same thread.
+ */
+export interface OutreachInboundMessage {
+  /** The provider's id for it. */
+  id: string
+  /** The provider's thread it is in: Gmail's thread id, Graph's conversation id. */
+  threadId: string | null
+  /** Its `Message-ID`, angle brackets included, or `null` when it carried none. */
+  messageId: string | null
+  /** The `Message-ID`s its `References` names, oldest first. */
+  references: string[]
+  /** The sender's address, normalized. */
+  from: string
+  /** The sender's display name, `''` when the `From` named none. */
+  fromName: string
+  /** The `Reply-To` address it asked answers to go to, when one differs from `from`. */
+  replyTo: string | null
+  subject: string
+  /** When the provider received it. */
+  atMs: number
+  kind: OutreachInboundKind
+  /** The plain text they wrote, the quoted history below it trimmed, bounded. */
+  body: string
+}
+
+/** A member's answer in flight (AGL-4020) — see {@link OutreachEnrollment.replyClaim}. */
+export interface OutreachReplyClaim {
+  /** The `Message-ID` the answer goes out with, minted before the send. */
+  messageId: string
+  byUid: string
+  atMs: number
+}
+
+/**
+ * One step the runtime ran for an enrollment (AGL-2981) — or, as
+ * `manual_reply`, one answer a member wrote and sent in the person's thread
+ * (AGL-4020). A `manual_reply` is no step of the sequence: it never moves
+ * `stepIndex`, never counts as a send in the sequence's figures, and every
+ * reader that counts sends reads `kind === 'email'`.
+ */
 export interface OutreachStepRecord {
   stepIndex: number
   stepId: string
-  kind: 'email' | 'task'
+  kind: 'email' | 'task' | 'manual_reply'
   atMs: number
+  /** The member who wrote and sent a `manual_reply`. */
+  byUid?: string
+  /** The address a `manual_reply` went from, and the one it went to. */
+  from?: string
+  to?: string
+  /** A `manual_reply`'s text as sent, bounded. */
+  body?: string
+  /** The `Message-ID` a `manual_reply` answered. */
+  inReplyTo?: string
+  /**
+   * The key the composer minted for a `manual_reply`, which a retry of the
+   * same answer is known by whatever `Message-ID` the provider reported.
+   */
+  replyKey?: string
   /** Gmail's id for the sent message. */
   gmailMessageId?: string
   /** Gmail's thread the message went into. */

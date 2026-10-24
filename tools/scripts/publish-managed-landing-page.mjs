@@ -58,7 +58,9 @@
  * form's section takes its background and the FAQ's takes white, so the bands
  * still alternate. Two deep-dive rows play a product film, placed the way the
  * film band places it and read from a live page that plays it
- * (`lib/marketing-film.mjs`); the third shows a picture. The hero shows a
+ * (`lib/marketing-film.mjs`), each player showing a frame of its film with no
+ * caption in place of the band's poster, which carries the film's burned-in
+ * caption; the third shows a picture. The hero shows a
  * small business's site live on its own domain, never a film's poster frame
  * and never a shop's product grid: its media slot only takes a picture, a
  * poster carries the film's burned-in caption, and a product grid prints a
@@ -222,7 +224,8 @@ const INSTANCES = {
  * A deep-dive row: eyebrow, heading, lede, three bullets, and an image or a
  * film. `was` is the template heading this section must still carry before it
  * is poured. A film is named by its poster frame and the live page that plays
- * it in the film band.
+ * it in the film band; `posterFrame` is the frame this page's player shows
+ * instead of that poster, the same film with no caption and no figure.
  */
 const DEEP_DIVES = [
   {
@@ -248,7 +251,12 @@ const DEEP_DIVES = [
         'You already have a business to run. One email to us replaces an evening with a website builder.',
       ],
     ],
-    film: { poster: 'media:org:jWmGooWE3L/v2sbemHaD1', from: '24LtzlsGi4' }, // film A, from /product/ai
+    // Film A, from /product/ai; its player shows the 28.4 s frame, Marlow Bakery live on its own domain.
+    film: {
+      poster: 'media:org:jWmGooWE3L/v2sbemHaD1',
+      from: '24LtzlsGi4',
+      posterFrame: 'media:org:jWmGooWE3L/xF-YhRAiu2',
+    },
   },
   {
     section: 'Deep-dive · finish it',
@@ -283,7 +291,12 @@ const DEEP_DIVES = [
       ['Redesigns', 'A new look for one page or the whole site, built on the content you already have.'],
       ['Logo or brand kit', 'A logo, colors and fonts for your business, applied across your site.'],
     ],
-    film: { poster: 'media:org:jWmGooWE3L/opiiHe6jgz', from: 'o1Q1hKCS-O' }, // film D, from /product/besigner
+    // Film D, from /product/besigner; its player shows the 17.767 s frame, Ridgeline Outfitters in the editor.
+    film: {
+      poster: 'media:org:jWmGooWE3L/opiiHe6jgz',
+      from: 'o1Q1hKCS-O',
+      posterFrame: 'media:org:jWmGooWE3L/VV9BJUsgaS',
+    },
   },
 ]
 
@@ -590,7 +603,8 @@ for (const dive of DEEP_DIVES) {
         parentId: image.parentId,
         pluginId: image.pluginId,
         componentId: 'video',
-        props: film.props,
+        // The band's props, with the film's caption-free frame as the poster.
+        props: { ...film.props, poster: dive.film.posterFrame },
         sx: { ...image.sx, overflow: 'hidden' },
       }
     }

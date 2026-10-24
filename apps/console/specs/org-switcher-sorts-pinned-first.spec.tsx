@@ -35,9 +35,9 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({
     orgs: [
       { $id: 'org_tst', slug: 'test-org', orgName: 'Test Org' },
-      { $id: 'org_edr', slug: 'edr', orgName: 'EDR Construction' },
+      { $id: 'org_ewd', slug: 'eastwood', orgName: 'Eastwood Plumbing' },
       { $id: 'org_aglyn', slug: 'aglyn-org', orgName: 'Aglyn LLC' },
-      { $id: 'org_rtr', slug: 'ready-to-roll', orgName: 'Ready To Roll' },
+      { $id: 'org_nwc', slug: 'northwind-coffee', orgName: 'Northwind Coffee' },
     ],
     currentOrg: { $id: 'org_aglyn', slug: 'aglyn-org', orgName: 'Aglyn LLC' },
     orgSlug: null,
@@ -57,7 +57,7 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'free' }, ready: true }),
 }))
-jest.mock('../hooks/use-org-plans', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
   useOrgPlans: () => ({}),
   useOrgRows: () => ({}),
 }))
@@ -93,8 +93,8 @@ describe('AGL-3762 · the workspace switcher', () => {
     const menu = await openMenu()
     expect(rowNames(menu)).toEqual([
       expect.stringMatching(/^Aglyn LLC/),
-      expect.stringMatching(/^EDR Construction/),
-      expect.stringMatching(/^Ready To Roll/),
+      expect.stringMatching(/^Eastwood Plumbing/),
+      expect.stringMatching(/^Northwind Coffee/),
       expect.stringMatching(/^Test Org/),
     ])
   })

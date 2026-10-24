@@ -44,12 +44,15 @@
  * not a broader list: Russia and Belarus are under *sectoral* sanctions, not a
  * comprehensive embargo, and §3.6 does not name them. Blocking a country the
  * Terms do not name is a product decision, not a compliance one.
+ *
+ * Syria left both lists together in Legal v19 (October 22, 2026; #1870): the
+ * U.S. ended its Syria sanctions program on July 1, 2025 (EO 14312), and what
+ * remains is list-based, which §3.6(b) and Stripe's payer screening cover.
  */
 export const EMBARGOED_COUNTRIES: ReadonlySet<string> = new Set([
   'CU', // Cuba
   'IR', // Iran
   'KP', // North Korea
-  'SY', // Syria
 ])
 
 /**

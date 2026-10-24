@@ -842,8 +842,8 @@ production alias to serve the deployment and reading the public domains.
 production deployment URL: the query string is not in the ISR key (`?__canary=`
 answered `HIT`), but the request host is (the deployment URL MISSed a page the
 domain served `STALE`) and so is the `[host]` route segment — and
-`normalizeHostAlias` resolves `ReAdy-to-roll.aglyn.app`, `READY-TO-ROLL`,
-`ready-to-roll.aglyn.app.` and `cname--AgLyn.com` to the same site. So every
+`normalizeHostAlias` resolves `AcMe-builders.aglyn.app`, `ACME-BUILDERS`,
+`acme-builders.aglyn.app.` and `cname--AgLyn.com` to the same site. So every
 `page` row names its site with a new spelling (`freshHostSpelling`: letters
 recased by a number, then trailing dots; the custom-domain form recases only)
 and is a guaranteed render of the real page through the ISR path. A `:port`
@@ -860,13 +860,18 @@ retried once:
 | `miss` | `https://<deployment>.vercel.app/__aglyn-canary-<nonce>?tenantHost=<site>` | a never-requested path: the route and the full layout render and return the site's not-found page (404 with a complete document). The row that catches beta.222 — and only proves the layout |
 | `health` | `/api/health` on the deployment, and on the console | the route handler path. The console row on a tenant run is informational and never rolls the tenant back |
 
-Pages by default (`DEFAULT_TENANT_HOSTS` in `tools/scripts/lib/prod-canary.mjs`):
-`ready-to-roll.aglyn.app/` (a dozen images), EDR Construction's `/`,
-`/services` and `/contact` (images, reusable components, repeats, a form),
-`demo.aglyn.app` and `aglyn.com` (one per host-resolution path). The repo
-variable `CANARY_TENANT_HOSTS` replaces the list (`host` or `host/path`, comma
-or space separated). If one of those sites is retired, its rows grade red on
-that one host — `isolated`, never a rollback alone — until it is replaced.
+Pages: the repo variable `CANARY_TENANT_HOSTS` (`host` or `host/path`, comma
+or space separated). Production sets it to real client pages: one client
+site's home page (a dozen images) and another's `/`, `/services` and
+`/contact` (images, reusable components, repeats, a form), then
+`demo.aglyn.app` and `aglyn.com` (one per host-resolution path). Client
+addresses live only in the variable, never in this public repository. Unset,
+the canary falls back to `DEFAULT_TENANT_HOSTS` in
+`tools/scripts/lib/prod-canary.mjs`: Aglyn's own `aglyn.com` pages with
+images and forms, and `demo.aglyn.app`. Two hosts are too few for a red that
+spans hosts, so the fallback alone grades an image-page fault `isolated` and
+never rolls back. If one of the variable's sites is retired, its rows grade red
+on that one host — `isolated`, never a rollback alone — until it is replaced.
 
 Without the bypass, the public-domain rows of AGL-3567: `miss` on
 `https://<host>/__aglyn-canary-<nonce>` and `page` on
@@ -925,7 +930,7 @@ so tick it off to record a candidate's verdict. Locally, read-only:
 ```bash
 AGLYN_PROBE_TOKEN=… node tools/scripts/prod-canary.mjs --project=tenant --dry-run
 AGLYN_PROBE_TOKEN=… node tools/scripts/prod-canary.mjs --project=tenant --dry-run \
-  --deployment=dpl_… --hosts="ready-to-roll.aglyn.app edr-construction.aglyn.app/services"
+  --deployment=dpl_… --hosts="acme-builders.aglyn.app northwind-coffee.aglyn.app/services"
 ```
 
 It reads `VERCEL_TOKEN`, or the Vercel CLI's own login, and the bypass as
@@ -949,8 +954,10 @@ gh api repos/aglyn/aglyn/statuses/<sha> -f state=failure \
 
 The console's render monitor (`/api/admin/render-monitor`, every 5 minutes,
 AGL-3568) renders the same client pages on production between deploys: on
-Aglyn's console it adds `ready-to-roll.aglyn.app` and `edr-construction.aglyn.app`
-to its watched sites, and renders one of each site's pages per run (rotating),
+Aglyn's console its `RENDER_MONITOR_PAGES` environment variable names the two
+client sites' pages (the canary's variable's list; Aglyn's own `aglyn.com`
+pages when unset), adds those sites to its watched sites, and renders one of
+each site's pages per run (rotating),
 fresh, through the tenant's production project domain
 `aglyn-tenant-aglyn.vercel.app` with the same spellings and the same bypass
 (`AGLYN_VERCEL_BYPASS`, else Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`).

@@ -138,6 +138,17 @@ jest.mock('../hooks/use-firestore-collection', () => ({
   default: () => ({ data: mockComponentDocs, status: 'success' }),
 }))
 
+// The site-data hooks moved into the lib read these modules directly, so the
+// fakes above are handed to them here as well.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  useFirestore: () => jest.requireMock('@aglyn/tenant-feature-instance').useFirestore(),
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-firestore-collection', () => {
+  const useFirestoreCollection = (...args: unknown[]) =>
+    jest.requireMock('../hooks/use-firestore-collection').default(...args)
+  return { __esModule: true, default: useFirestoreCollection, useFirestoreCollection }
+})
+
 /**
  * Link context for the Edit-component callback (AGL-1303): the org slug
  * hook is stubbed (its context lives three providers up), while the host

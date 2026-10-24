@@ -354,7 +354,7 @@ jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'shop',
 }))
-jest.mock('../hooks/use-plugin-drawer-registration', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration', () => ({
   __esModule: true,
   default: () => undefined,
 }))
@@ -369,7 +369,7 @@ jest.mock('../hooks/use-firestore-collection', () => ({
   __esModule: true,
   default: () => ({ data: [], status: 'success', fromCache: false }),
 }))
-jest.mock('../hooks/use-host-component-definitions', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-host-component-definitions', () => ({
   __esModule: true,
   default: () => ({ definitions: {}, ready: true }),
 }))

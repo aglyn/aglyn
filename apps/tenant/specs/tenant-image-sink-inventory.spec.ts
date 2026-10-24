@@ -382,6 +382,26 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: SEO by AI's listing request (AGL-2910), whose `generateSeoFields` the `seo` job step (jobs/ai-job-seo-step.ts) calls for a job on the console's AI job doors and from the job beat. The marker is the `Share image:` line of the prompt `aiSeoFieldsPrompt` writes for the model: the image's current description and the page text beside it, as words, never its URL. Nothing here renders a page or emits a URL; what the model returns is a proposal, applied only when a member saves it in the console.",
   },
+  'libs/plugins/ai/src/lib/jobs/ai-site-publish.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "Not a sink, and never on a tenant render: a guided start's publish (AGL-3988), called by the site and build job steps (jobs/ai-job-site-step.ts, jobs/ai-job-build-step.ts) on the console's AI job doors and the job beat. The marker is the `'seo.image'` field path `aiSiteShareImageUpdates` writes onto the host document. The value is the `src` of an image node on the site's own published pages, and `libraryPhotosOf` keeps only a `media:` reference with recorded dimensions, so it is never a string from the model or an outside address. The tenant renders it through resolveSocialImage → absoluteMediaSrc like any other stored seo.image.",
+  },
+  'libs/plugins/ai/src/lib/jobs/fixtures/ai-site-late-photos-laurel-fork.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: production's Laurel Fork Photography start recorded for the late photo pass spec (AGL-3988), imported only by jobs/ai-site-late-photos-agl3988.spec.ts. The marker is the `image: string` field of the covers' TYPE annotation; the values are the platform's own `/_static/starter/` paths production wrote, read by a spec and never rendered.",
+  },
+  'libs/plugins/ai/src/lib/layout-language/ai-layout-pictures.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the layout language's picture placer (AGL-3660, AGL-3988), used by the page and site job steps (jobs/ai-job-page-step.ts, ai-job-site-content.ts, ai-job-site-datasets.ts, ai-site-late-photos.ts, ai-site-publish.ts) on the console's AI job runner. The marker is `image: slot.imageId` in the list of pictures left on a starter photo for the late photo pass: the image NODE's id, not an address. The photos it places are media-library references, rendered through resolveMediaSrc on the page.",
+  },
+  'libs/plugins/ai/src/lib/model/ai-site-photos.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the guided start's photo bookkeeping types (AGL-3988), imported by the AI job steps and, as types only, by model/ai-jobs.types.ts. The marker is the `image: string` field of `AiSiteStarterSlot`, the image NODE's id a starter photo still sits on; no address is held or emitted here.",
+  },
   'libs/aglyn/src/lib/app-utils/author-css.ts': {
     markers: 2,
     guard: 'scheme-guard',

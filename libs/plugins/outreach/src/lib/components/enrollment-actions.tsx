@@ -29,9 +29,11 @@ import {
   TextField,
 } from '@mui/material'
 import { type ReactNode, useState } from 'react'
+import { outreachEnrollmentHasInbound } from '../engine/manual-reply'
 import type { OutreachEnrollmentAction } from '../model/outreach-api'
 import type { OutreachEnrollment, OutreachSequenceStep } from '../model/outreach.types'
 import { OutreachCurateStepDialog, outreachNextEmailStepIndex } from './curate-step-dialog'
+import { OutreachReplyDialog } from './reply-dialog'
 import type { OutreachApi } from './use-outreach-api'
 
 /**
@@ -40,10 +42,15 @@ import type { OutreachApi } from './use-outreach-api'
  * the header of the person's own page (AGL-3332). The same actions, the same
  * words, the same two confirmations — a Stop that asked first in one place
  * and not in the other would be two products.
+ *
+ * REPLY IN THREAD (AGL-4020) is offered once the person wrote back — a
+ * reply, or an automatic answer — and opens the composer that answers them
+ * from the enrollment's own mailbox. Not to a person who opted out or whose
+ * address bounced: nothing would reach them, or they asked for nothing to.
  */
 
-/** The four the action route takes, and curating the next step (AGL-3324). */
-export type OutreachEnrollmentRowAction = OutreachEnrollmentAction | 'curate'
+/** The four the action route takes, curating the next step (AGL-3324), and answering a reply (AGL-4020). */
+export type OutreachEnrollmentRowAction = OutreachEnrollmentAction | 'curate' | 'reply'
 
 /** What a member may do to an enrollment in the status it is in. */
 export function outreachEnrollmentActionsFor(
@@ -51,6 +58,14 @@ export function outreachEnrollmentActionsFor(
   steps: readonly OutreachSequenceStep[],
 ): OutreachEnrollmentRowAction[] {
   const actions: OutreachEnrollmentRowAction[] = []
+  // Answer them in the thread, once they wrote back (AGL-4020).
+  if (
+    outreachEnrollmentHasInbound(enrollment) &&
+    enrollment.status !== 'opted_out' &&
+    enrollment.status !== 'bounced'
+  ) {
+    actions.push('reply')
+  }
   // Rewrite the next email for this one person, while one is still to go.
   if (outreachNextEmailStepIndex(enrollment, steps) !== null) actions.push('curate')
   if (enrollment.status === 'active') actions.push('pause', 'stop')
@@ -60,6 +75,7 @@ export function outreachEnrollmentActionsFor(
 }
 
 export const OUTREACH_ENROLLMENT_ACTION_LABELS: Record<OutreachEnrollmentRowAction, string> = {
+  reply: 'Reply in thread',
   curate: 'Curate next step',
   pause: 'Pause',
   resume: 'Resume',
@@ -99,20 +115,22 @@ const CONFIRM: Partial<Record<OutreachEnrollmentAction, { title: string; body: s
 export interface OutreachEnrollmentActions {
   /** The enrollment an action is running on, if any. */
   busy: string | null
-  /** Runs one action: straight away, after its confirmation, or in the curate dialog. */
+  /** Runs one action: straight away, after its confirmation, or in the curate or reply dialog. */
   choose(enrollment: OutreachEnrollment, action: OutreachEnrollmentRowAction): void
   /** The actions as menu items, the destructive ones marked. */
   menuItems(
     enrollment: OutreachEnrollment,
     only?: (action: OutreachEnrollmentRowAction) => boolean,
   ): RowActionsMenuItem[]
-  /** The confirmation and the curate dialog, rendered once wherever the actions are offered. */
+  /** The confirmation, the curate dialog and the reply composer, rendered once wherever the actions are offered. */
   dialogs: ReactNode
 }
 
 export function useOutreachEnrollmentActions(input: {
   api: OutreachApi
   steps: readonly OutreachSequenceStep[]
+  /** The mailbox's zone, for the times the reply composer shows. */
+  timeZone?: string | null
 }): OutreachEnrollmentActions {
   const { api, steps } = input
   const { enqueueSnackbar } = useSnackbar()
@@ -123,6 +141,7 @@ export function useOutreachEnrollmentActions(input: {
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [curating, setCurating] = useState<OutreachEnrollment | null>(null)
+  const [replying, setReplying] = useState<OutreachEnrollment | null>(null)
 
   const act = async (enrollment: OutreachEnrollment, action: OutreachEnrollmentAction, why?: string) => {
     setBusy(enrollment.id)
@@ -147,6 +166,8 @@ export function useOutreachEnrollmentActions(input: {
   const choose = (enrollment: OutreachEnrollment, action: OutreachEnrollmentRowAction) => {
     if (action === 'curate') {
       setCurating(enrollment)
+    } else if (action === 'reply') {
+      setReplying(enrollment)
     } else if (CONFIRM[action]) {
       setDetail('')
       setConfirming({ enrollment, action })
@@ -172,6 +193,12 @@ export function useOutreachEnrollmentActions(input: {
   const dialogs = (
     <>
       <OutreachCurateStepDialog enrollment={curating} steps={steps} api={api} onClose={() => setCurating(null)} />
+      <OutreachReplyDialog
+        enrollment={replying}
+        api={api}
+        timeZone={input.timeZone}
+        onClose={() => setReplying(null)}
+      />
       <Dialog open={Boolean(confirming)} onClose={() => setConfirming(null)} fullWidth maxWidth="xs">
         {confirming ? (
           <>

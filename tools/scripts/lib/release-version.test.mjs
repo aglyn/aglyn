@@ -539,6 +539,26 @@ describe('renderRelease', () => {
     )
   })
 
+  it('drops a CI directive, and the citation it trailed', () => {
+    const skipped = renderRelease({
+      version: '1.0.0-beta.2',
+      date: '2026-10-20',
+      summary: summarizeCommits([
+        commit(
+          'feat(console): pin sites the way workspaces are pinned (AGL-4005) [skip ci]',
+        ),
+        commit('fix(tools): a quiet change [CI Skip]'),
+      ]),
+    })
+    assert.ok(!/skip/i.test(skipped))
+    assert.ok(
+      skipped.includes(
+        '- **console:** pin sites the way workspaces are pinned ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005))',
+      ),
+    )
+    assert.ok(skipped.includes('- **tools:** a quiet change'))
+  })
+
   it('sections the user-facing work and collapses the quiet types', () => {
     assert.ok(rendered.includes('### Added'))
     assert.ok(rendered.includes('### Fixed'))

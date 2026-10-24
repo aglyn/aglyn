@@ -21,8 +21,12 @@ import { parseLockdownRefusal, type LockdownRefusalNotice } from '@aglyn/aglyn'
 import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
 import {
   ADDON_KINDS,
+  addonMaxForPlan,
   addonUnitUsd,
+  bundleAddonLabel,
   bundleAddonsParam,
+  bundleAiTier,
+  bundleListPriceCents,
   describeBundleAddon,
   fitBundleAddonsToPlan,
   planSellsAddon,
@@ -41,12 +45,15 @@ import {
   Stack,
   Switch,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../lockdown-notice.component'
+import { AiTierSelect } from './ai-tier-select.component'
 import { taxExplanation } from '../../utils/tax-explanation'
 
 /** What `/api/billing/checkout` `action: 'preview'` answers with. */
@@ -101,11 +108,30 @@ export interface BillingPlanQuoteProps {
   /** Present when the add-ons can be changed here: the switches render. */
   onAddonsChange?: (next: BundleAddons) => void
   /**
-   * The Aglyn AI tier the link named (AGL-3965): the AI switch is worded and
-   * priced as that tier, and the quote prices it, so the total shown is the
-   * tier the purchase sends. Absent, the plan's default tier.
+   * The add-ons the link named (AGL-4026): only these get a row, so a link
+   * for Site Care alone does not offer the Event Calendar too. A row stays
+   * once shown, switched off or counted down to zero, so the owner can take
+   * it back. Absent, the add-ons in `addons`.
+   */
+  offered?: readonly AddonKind[]
+  /**
+   * Present when the cadence can be changed here (AGL-4026): Yearly and
+   * Monthly render at the top of the card, and the total follows.
+   */
+  onIntervalChange?: (interval: 'month' | 'year') => void
+  /**
+   * The Aglyn AI tier the link named (AGL-3965), or the one the owner picked
+   * since: the AI switch is worded and priced as that tier, and the quote
+   * prices it, so the total shown is the tier the purchase sends. Absent,
+   * the plan's default tier.
    */
   aiTier?: AiTierId | null
+  /**
+   * Present when the tier can be changed here (AGL-4025): with Aglyn AI on,
+   * its tier picker renders beside the switch, as the cadence toggle and the
+   * add-on switches let the owner change the rest of what a link chose.
+   */
+  onAiTierChange?: (tier: AiTierId) => void
   /**
    * A promotion code the link carried (AGL-3955), tried on the first quote.
    * One that Stripe refuses is left off with a one-line notice, never an
@@ -154,6 +180,17 @@ function money(cents: number, currency: string): string {
  * figures come from Stripe's own invoice preview, and the only thing computed
  * here is which sentence explains them.
  *
+ * ## The total before tax (AGL-4026)
+ *
+ * What the paragraph above rules out is a TAX figure of our own. A total at
+ * list price, labeled before tax, is a different claim: it is the sum of the
+ * prices on /pricing for exactly what is switched on, and the card shows it
+ * whenever Stripe has no figures for the bundle as it stands — no billing
+ * address yet, a quote on its way, a quote that failed — so an owner opening
+ * a link always sees what the bundle costs and sees it move as they change
+ * it. Stripe's figures replace it as soon as they land. Designed in the
+ * Figma file "Aglyn Console (web)" (gSzLG5uHiuBFJ5AK1Mr6KE), frame 6:110.
+ *
  * ## The zero that has four meanings
  *
  * `taxCents: 0` can mean reverse charge applied, the customer is exempt, the
@@ -181,7 +218,10 @@ export default function BillingPlanQuoteComponent({
   onAppliedCodeChange,
   addons,
   onAddonsChange,
+  offered,
+  onIntervalChange,
   aiTier,
+  onAiTierChange,
   initialCoupon,
   linkNotice,
   footer,
@@ -216,9 +256,13 @@ export default function BillingPlanQuoteComponent({
    */
   const [lockdown, setLockdown] = useState<LockdownRefusalNotice | null>(null)
 
+  // The quote asked for last. A count typed digit by digit asks for one
+  // quote per digit, and only the newest answer may land (AGL-4026).
+  const quoteSeq = useRef(0)
   const fetchQuote = useCallback(
     async (promotionCode: string, fromLink = false) => {
       if (!orgId || !plan || !user) return
+      const mine = ++quoteSeq.current
       setBusy(true)
       setFailed(false)
       try {
@@ -238,6 +282,7 @@ export default function BillingPlanQuoteComponent({
           }),
         })
         const payload = await response.json().catch(() => ({}))
+        if (mine !== quoteSeq.current) return
         const locked = parseLockdownRefusal(response.status, payload)
         if (locked) return void setLockdown(locked)
         // The link's code did not resolve: say so in one line and quote
@@ -279,10 +324,11 @@ export default function BillingPlanQuoteComponent({
           onQuoted?.(null)
         }
       } catch {
+        if (mine !== quoteSeq.current) return
         setFailed(true)
         onQuoted?.(null)
       } finally {
-        setBusy(false)
+        if (mine === quoteSeq.current) setBusy(false)
       }
     },
     // `quotedAddons` is keyed by `addonsKey`: a fresh object every render.
@@ -298,6 +344,10 @@ export default function BillingPlanQuoteComponent({
     // comparing two plans cannot burn the key that pays for one. The link's
     // coupon is tried on the first quote only.
     if (!plan) return
+    // Stripe's figures were for the bundle as it was. Until the new ones
+    // land, the card shows the list total for the bundle as it is now.
+    setQuote(null)
+    onQuoted?.(null)
     const fromLink = linkCoupon.current
     linkCoupon.current = null
     if (fromLink && !appliedCode) {
@@ -329,93 +379,169 @@ export default function BillingPlanQuoteComponent({
     ) : null
 
   /*
-   * The add-ons, preselected from the link or the proposal (AGL-3955): every
-   * org-wide add-on the plan sells as a switch, and any counted add-on the
-   * bundle asked for. Turning one off re-quotes, and the purchase sends
-   * exactly what is switched on.
+   * The add-ons the link named (AGL-3955, AGL-4026), and only those: an
+   * org-wide add-on as a switch (Aglyn AI with its tier beside it), a counted
+   * one as a count. A row stays once shown, so switching an add-on off or
+   * counting it down to zero can be undone. Each change re-quotes, and the
+   * purchase sends exactly what is on.
    */
+  const offeredKinds = offered ?? ADDON_KINDS.filter((kind) => (quotedAddons[kind] ?? 0) > 0)
   const addonKinds = knownPlan
-    ? ADDON_KINDS.filter(
-        (kind) =>
-          planSellsAddon(kind, knownPlan) &&
-          (ADDON_ROW_KINDS.includes(kind) || (quotedAddons[kind] ?? 0) > 0),
-      )
+    ? ADDON_KINDS.filter((kind) => offeredKinds.includes(kind) && planSellsAddon(kind, knownPlan))
     : []
+  const toggleKinds = addonKinds.filter((kind) => ADDON_ROW_KINDS.includes(kind))
+  const countedKinds = addonKinds.filter((kind) => !ADDON_ROW_KINDS.includes(kind))
+  const setQuantity = (kind: AddonKind, quantity: number) => {
+    if (!knownPlan || !onAddonsChange) return
+    const next: BundleAddons = { ...quotedAddons }
+    if (quantity > 0) next[kind] = Math.min(quantity, addonMaxForPlan(kind, knownPlan))
+    else delete next[kind]
+    onAddonsChange(next)
+  }
+  const switchRow = (kind: AddonKind, plan: OrgPlan) => {
+    const quantity = quotedAddons[kind] ?? 0
+    // With Aglyn AI on and its tier open to change (AGL-4025), the
+    // picker beside the switch names the tier and its price.
+    const tierPicked = kind === 'aiAddon' && quantity > 0 && !!onAiTierChange
+    const toggle = (
+      <FormControlLabel
+        key={kind}
+        disabled={busy || !canManage}
+        control={
+          <Switch
+            size="small"
+            checked={quantity > 0}
+            onChange={(event) => setQuantity(kind, event.target.checked ? 1 : 0)}
+          />
+        }
+        label={
+          tierPicked ? (
+            <Typography variant="body2">{bundleAddonLabel(kind)}</Typography>
+          ) : (
+            <Typography variant="body2">
+              {describeBundleAddon(kind, Math.max(1, quantity), undefined, aiTier)}
+              <Typography component="span" variant="body2" color="text.secondary">
+                {` · ${addonPrice(kind, plan, interval, aiTier)}`}
+              </Typography>
+            </Typography>
+          )
+        }
+      />
+    )
+    return tierPicked && onAiTierChange ? (
+      <Stack
+        key={kind}
+        direction="row"
+        useFlexGap
+        spacing={1.5}
+        sx={{ alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}
+      >
+        {toggle}
+        <AiTierSelect
+          plan={plan}
+          value={bundleAiTier(quotedAddons, plan, aiTier)}
+          interval={interval}
+          onChange={onAiTierChange}
+          disabled={busy || !canManage}
+        />
+      </Stack>
+    ) : (
+      toggle
+    )
+  }
+  // A count is typed digit by digit, so it is never disabled while a quote
+  // is on its way; the newest quote wins (`quoteSeq`).
+  const countField = (kind: AddonKind, plan: OrgPlan) => (
+    <TextField
+      key={kind}
+      size="small"
+      type="number"
+      label={bundleAddonLabel(kind)}
+      helperText={addonPrice(kind, plan, interval)}
+      value={quotedAddons[kind] ?? 0}
+      disabled={!canManage}
+      onChange={(event) =>
+        setQuantity(kind, Math.max(0, Math.floor(Number(event.target.value) || 0)))
+      }
+      slotProps={{ htmlInput: { min: 0, max: addonMaxForPlan(kind, plan), step: 1 } }}
+      sx={{ width: (theme) => theme.spacing(18) }}
+    />
+  )
   const addonRows =
     knownPlan && onAddonsChange && addonKinds.length ? (
       <Stack spacing={0}>
         <Typography variant="overline" color="text.secondary">
           {'Add-ons'}
         </Typography>
-        {addonKinds.map((kind) => {
-          const quantity = quotedAddons[kind] ?? 0
-          return (
-            <FormControlLabel
-              key={kind}
-              disabled={busy || !canManage}
-              control={
-                <Switch
-                  size="small"
-                  checked={quantity > 0}
-                  onChange={(event) => {
-                    const next: BundleAddons = { ...quotedAddons }
-                    if (event.target.checked) next[kind] = Math.max(1, addons?.[kind] ?? 1)
-                    else delete next[kind]
-                    onAddonsChange(next)
-                  }}
-                />
-              }
-              label={
-                <Typography variant="body2">
-                  {describeBundleAddon(kind, Math.max(1, quantity), undefined, aiTier)}
-                  <Typography component="span" variant="body2" color="text.secondary">
-                    {` · ${addonPrice(kind, knownPlan, interval, aiTier)}`}
-                  </Typography>
-                </Typography>
-              }
-            />
-          )
-        })}
+        {toggleKinds.map((kind) => switchRow(kind, knownPlan))}
+        {countedKinds.length ? (
+          <Stack direction="row" useFlexGap spacing={1.5} sx={{ flexWrap: 'wrap', pt: 1.5 }}>
+            {countedKinds.map((kind) => countField(kind, knownPlan))}
+          </Stack>
+        ) : null}
       </Stack>
     ) : null
+
+  /* Yearly or Monthly, where the total is (AGL-4026). */
+  const cadence = onIntervalChange ? (
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      color="primary"
+      value={interval}
+      onChange={(_event, next) => (next ? onIntervalChange(next) : undefined)}
+      aria-label="Billing cadence"
+    >
+      <ToggleButton value="year">{'Yearly'}</ToggleButton>
+      <ToggleButton value="month">{'Monthly'}</ToggleButton>
+    </ToggleButtonGroup>
+  ) : null
 
   if (lockdown) {
     return <LockdownNotice notice={lockdown} onClose={() => setLockdown(null)} />
   }
 
-  if (failed) {
-    return (
-      <Alert severity="warning">
-        {'We could not price this plan just now. Nothing has been charged.'}
-      </Alert>
-    )
-  }
-
-  if (quote?.needsBillingDetails || quote?.needsBillingAddress) {
-    // Not a total with the tax quietly missing from it. The bundle still
-    // shows, so the owner can see what was chosen before the details.
-    return (
-      <Stack spacing={1.5}>
-        {notices}
-        {addonRows}
-        <Alert severity="info">
-          {'Add your billing address to see what this costs with tax ' +
-            'included. Pay asks for anything missing.'}
-        </Alert>
-        {footer}
-      </Stack>
-    )
-  }
-
-  const preview = quote?.preview
+  const preview = failed ? undefined : quote?.preview
   if (!preview) {
+    // No figures from Stripe for the bundle as it stands: no billing address
+    // yet, the quote still on its way, or a quote that failed. The card still
+    // says what the bundle costs, at list price and labeled before tax
+    // (AGL-4026), and the figure moves with every change.
+    const needsDetails = !!(quote?.needsBillingDetails || quote?.needsBillingAddress)
     return (
       <Stack spacing={1.5}>
         {notices}
+        {cadence}
         {addonRows}
-        <Typography variant="body2" color="text.secondary">
-          {busy ? 'Pricing this plan…' : 'Select a plan to see its total.'}
-        </Typography>
+        {knownPlan ? (
+          <Stack spacing={0.5}>
+            <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {'Total before tax'}
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {money(
+                  bundleListPriceCents({
+                    plan: knownPlan,
+                    interval,
+                    addons: quotedAddons,
+                    aiTier: quotedAiTier,
+                  }),
+                  'usd',
+                ) + (interval === 'year' ? '/yr' : '/mo')}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color={failed ? 'warning.main' : 'text.secondary'}>
+              {failed
+                ? 'We could not get the total with tax from Stripe just now. Nothing has been charged.'
+                : needsDetails
+                  ? 'Add your billing address to see the total with tax; Pay asks for anything missing.'
+                  : busy
+                    ? 'Getting the total with tax from Stripe…'
+                    : 'Tax is added from your billing address when you pay.'}
+            </Typography>
+          </Stack>
+        ) : null}
         {footer}
       </Stack>
     )
@@ -438,6 +564,7 @@ export default function BillingPlanQuoteComponent({
   return (
     <Stack spacing={1.5}>
       {notices}
+      {cadence}
       {addonRows}
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
         <Typography variant="body2">{'Subtotal'}</Typography>

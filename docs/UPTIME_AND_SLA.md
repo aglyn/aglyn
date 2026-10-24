@@ -462,7 +462,9 @@ for most of that day, because five more were created after it was written:
 
 **Marketing site and Published sites watch real pages (AGL-3580).** Marketing site reads
 `https://app.aglyn.com/api/health/pages?site=aglyn.com`, Published sites
-`https://app.aglyn.com/api/health/pages?site=ready-to-roll.aglyn.app,edr-construction.aglyn.app`.
+`https://app.aglyn.com/api/health/pages?site=<client host>,<client host>` with the two
+client sites the render monitor's `RENDER_MONITOR_PAGES` names (the monitor's own
+configuration holds the hosts; this public document does not).
 Until 2026-10-05 they read `/api/health/render/{marketing,site}` on the tenant, which build a
 node tree in a route handler and never draw a page; both stayed at 100% through the two
 outages that day in which every fresh page hung. The pages door publishes the render
@@ -921,11 +923,12 @@ by AGL-3564). Nothing alerted:
    the site no cache holds (the `[host]` segment is in the ISR key and
    `normalizeHostAlias` resolves every case/trailing-dot spelling to one
    site), with the Deployment Protection bypass (`AGLYN_VERCEL_BYPASS`, else
-   Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`). On Aglyn's console it
-   draws `ready-to-roll.aglyn.app/` and EDR Construction's `/`, `/services`,
-   `/contact` — the production canary's pages (RELEASING.md, "The production
-   canary") — and watches those two sites; elsewhere `RENDER_MONITOR_PAGES` +
-   `RENDER_MONITOR_RENDER_ORIGIN`.
+   Vercel's exposed `VERCEL_AUTOMATION_BYPASS_SECRET`). On Aglyn's console
+   `RENDER_MONITOR_PAGES` names one client site's home page and another's
+   `/`, `/services`, `/contact` — the production canary's pages
+   (RELEASING.md, "The production canary") — and it watches those two sites
+   (Aglyn's own `aglyn.com` pages when the variable is unset); elsewhere
+   `RENDER_MONITOR_PAGES` + `RENDER_MONITOR_RENDER_ORIGIN`.
 2. **The render canaries run the document** — `/api/health/render/site` and
    `/api/health/render/marketing` now carry a `document` check beside
    `render`: they call the real site layout (an async Server Component is a
@@ -2877,6 +2880,28 @@ drop-off nine hours earlier. Two fixes:
 Backtest, 2026-09-07 → 2026-10-17 (105 orgs, five-minute steps): the count
 rule was red for 1,125 minutes, 435 of them false. The streak rule was red
 only on 10/11 (AGL-3724). A streak of three missed AGL-3724 altogether.
+
+**A fifth, `signupWorkspace` (AGL-4021, 2026-10-21), asks whether the
+account got a workspace at all.** `signupLanding` grades orgs, so an account
+whose door died before `/api/orgs/create` leaves nothing for it to see. On
+2026-10-20/21 the phone Google redirect handler was cut off mid-landing, and
+three people got a verified account, an acceptance on record and no workspace.
+Every check stayed green, and the activation sweep found it a day later.
+
+It reads accounts by `users/{uid}.acquisition.accountCreatedAt`, from
+thirty-six hours to thirty minutes ago, and grades only the ones that are
+verified and have accepted the Terms. An unverified password account waits
+for verification by design (AGL-2590). A Google account bounced from /signin
+that never accepted the Terms agreed to nothing (AGL-1497). The streak is
+taken **per sign-up door**: it reds (`code: signups-without-workspace`) when
+the two newest graded accounts through any one door both have no workspace
+(the `users/{uid}/orgs` mirror). The three failures sat among healthy popup
+and password sign-ups, so a streak over everyone would have kept resetting.
+Phone sign-ups were 12 h and 5 h apart, so twelve hours would never have held
+two of them; hence thirty-six. Run over production on 10/21, it reads streak 3
+for `signup-google-redirect` and 0–1 for every other door. The three known
+accounts are excluded by a graded-since floor (2026-10-21 23:00Z), because
+their rescue is a held decision and the door is fixed.
 
 **Since 2026-10-18 it reads whether the owner reached the console, not
 whether they made a site.** The streak rule went red at 15:37Z because the two

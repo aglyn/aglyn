@@ -119,6 +119,24 @@ export function beginInPlaceEdit(
   // serializer, or a test) to see.
   element.setAttribute('contenteditable', 'true')
   element.spellcheck = true
+  // Inline styles, put back exactly as found on dispose.
+  const previousPointerEvents = element.style.pointerEvents
+  const previousOutline = element.style.outline
+  const previousCursor = element.style.cursor
+  // The text takes the pointer back for the edit. An instance draws its
+  // component under `pointer-events: none` so a click selects the instance;
+  // inherited by the text being edited, that sent every click in it to the
+  // instance instead, which read as a click away and closed the edit, and
+  // no caret could be placed or word selected.
+  element.style.pointerEvents = 'auto'
+  // No focus ring. The text element is inline, so the browser rings each
+  // line of it separately — one box per line, drawn inside the element's own
+  // outline. The caret and the toolbar already say what is being edited.
+  element.style.outline = 'none'
+  // The text cursor over text being typed into. Canvas elements set
+  // `cursor: initial` so a press reads as "select"; inherited here, it left
+  // an arrow over the very text the caret was in.
+  element.style.cursor = 'text'
 
   let disposed = false
   return {
@@ -128,6 +146,9 @@ export function beginInPlaceEdit(
       if (disposed) return
       disposed = true
       element.removeAttribute(IN_PLACE_EDITING_ATTR)
+      element.style.pointerEvents = previousPointerEvents
+      element.style.outline = previousOutline
+      element.style.cursor = previousCursor
       // `removeAttribute`, not `contentEditable = 'false'`: an explicit
       // `false` would override an editable ancestor, which the element did
       // not do before this edit.
@@ -185,4 +206,31 @@ export function findLeafTextElement(
     return candidate as HTMLElement
   }
   return undefined
+}
+
+/** A zero-width space: room for the caret, and nothing anyone sees or stores. */
+export const CARET_STOP = '\u200B'
+
+/**
+ * Gives the caret somewhere to stand beside a pill at either end of `surface`.
+ *
+ * A pill is `contenteditable="false"`, so text that is only a pill — a lone
+ * `{{item.name}}` — or that ends in one has no text position at that end, and
+ * Chrome draws no caret there at all: typing worked, but nothing blinked, so
+ * the field looked dead. A zero-width space on the open side is the text
+ * position the caret needs. Readers strip it — see {@link withoutCaretStops}.
+ */
+export function addCaretStops(surface: HTMLElement): void {
+  const isPill = (node: Node | null) =>
+    node instanceof Element && node.getAttribute('contenteditable') === 'false'
+  const doc = surface.ownerDocument
+  if (isPill(surface.lastChild)) surface.appendChild(doc.createTextNode(CARET_STOP))
+  if (isPill(surface.firstChild)) {
+    surface.insertBefore(doc.createTextNode(CARET_STOP), surface.firstChild)
+  }
+}
+
+/** `text` with the caret stops {@link addCaretStops} put in taken back out. */
+export function withoutCaretStops(text: string): string {
+  return text.split(CARET_STOP).join('')
 }
