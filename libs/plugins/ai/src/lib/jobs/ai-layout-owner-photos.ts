@@ -140,12 +140,12 @@ export function aiLayoutPagePhotoSource(
   next: AiLayoutPictureSource | null,
 ): AiLayoutPictureSource | null {
   if (!photos.length) return next
-  return async (slots) => {
+  return async (slots, report) => {
     const answers = aiAssignOwnerPhotos(slots, photos)
     if (!next) return answers
     const open = slots.filter((_slot, index) => !answers[index])
     if (!open.length) return answers
-    const found = await next(open)
+    const found = await next(open, report)
     let index = 0
     return answers.map((answer) => answer ?? found[index++] ?? null)
   }
@@ -172,7 +172,7 @@ function aiLayoutOwnerAndStockSource(
   const ingest = (deps.ingest ?? pluginMediaIngest)()
   const list = ingest?.listOwnerPhotos?.bind(ingest)
   if (!list || !input.hostId) return stock
-  return async (slots) => {
+  return async (slots, report) => {
     let photos: PluginMediaAsset[] = []
     try {
       photos = await list({ hostId: input.hostId, limit: deps.limit ?? OWNER_PHOTOS_LIMIT })
@@ -185,7 +185,7 @@ function aiLayoutOwnerAndStockSource(
     if (!open.length) return answers
     // The stock source sees only the slots the owner's photos left, so its
     // own no-repeat rules and search budget are spent on those alone.
-    const found = await stock(open)
+    const found = await stock(open, report)
     let next = 0
     return answers.map((answer) => answer ?? found[next++] ?? null)
   }

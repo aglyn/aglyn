@@ -152,15 +152,14 @@ struct WorkspaceButton: View {
       WorkspaceMenuItems()
     } label: {
       HStack(alignment: .center, spacing: 10) {
-        AglynBrandPicture(
-          model.mediaURL(logo?.light, hostID: nil), darkURL: model.mediaURL(logo?.dark, hostID: nil),
-          size: AglynShellMetrics.workspaceLogo, cornerRadius: AglynShellMetrics.workspaceLogoRadius
-        ) {
-          AglynWorkspaceTile(
-            name: org?.name ?? "Workspace", logoURL: nil, colorHex: model.workspaceColor(org?.id).color, selected: false,
-            size: AglynShellMetrics.workspaceLogo, initials: workspaceInitial(org?.name ?? "Workspace"))
-            .padding(-3)
-        }
+        // The workspace's tile, as the rail draws it (a picture covers it, a mark sits on the plate), so the header and
+        // the rail show one workspace the same way on both platforms.
+        AglynWorkspaceTile(
+          name: org?.name ?? "Workspace", logoURL: model.mediaURL(logo?.light, hostID: nil),
+          darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org?.id).color,
+          selected: false, size: AglynShellMetrics.workspaceLogo, initials: workspaceInitial(org?.name ?? "Workspace"),
+          cornerRadius: AglynShellMetrics.workspaceLogoRadius)
+          .padding(-3)
         // Figma Sidebar/Scope header 98:1023: an 18-point name row with ▾ at the header's trailing edge, 2 points, and
         // an 18-point plan badge.
         VStack(alignment: .leading, spacing: 2) {

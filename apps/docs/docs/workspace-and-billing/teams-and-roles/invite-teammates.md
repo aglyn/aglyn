@@ -21,11 +21,12 @@ Bring collaborators into a site so they can build and manage alongside you.
 2. Enter their email and assign a [role](custom-roles.md).
 3. What happens next depends on whether they already have an Aglyn account:
    **already on Aglyn** — they join right away and see the workspace on their next
-   visit; **new to Aglyn** — we email them an invite to accept.
+   visit; **new to Aglyn** — we email them, and they join the moment they sign up
+   with that address. Nobody has to accept anything.
 
 ### Pending invites
 
-Invites that haven't been accepted are listed with **Resend** (send the email again,
+Invites to people who haven't signed up yet are listed with **Resend** (send the email again,
 for the address that lost it in a spam folder) and **Revoke**. A revoked invite's link
 stops working immediately.
 
@@ -36,41 +37,45 @@ stops working immediately.
   in" — so a workspace with email delivery unavailable never leaves you assuming a
   message was delivered.
 - If the address already belongs to an Aglyn account, that person also gets an
-  **in-app notification**. Clicking it opens the invitation, where they can accept or
-  decline it.
+  **in-app notification**, which opens the workspace.
 - Your workspace's **owner and admins** get an in-app notification when an invite is
   created, and again when it is **accepted** or **declined**, so whoever sent it finds
   out what happened without re-checking the Team page. These appear under
   **Team & access** in the notification bell, and can be muted there like any other
   category.
 
-## Accepting an invite
+## Joining from an invite
 
 If you're the one being invited, sign up or sign in with **the address the invite was
 sent to**, or with any address you've confirmed on your account. That's usually Google,
-if it's the address. A banner at the top of every console page reads **"You've been
-invited to …"** and has **Accept** and **Decline** buttons. When you accept, the
-workspace opens.
+if it's the address. You join the moment you're in the console, with nothing to
+accept: the workspace and its sites appear in your account, and a link from the invite
+email opens the page it pointed to (it shows **Joining …** for a moment while the
+workspace is added).
 
-If you're already signed in and working in another workspace, you don't have to go
-looking: the same banner appears on whatever page you have open, and the invitation
-also shows up in the notification bell. Clicking it there opens a dialog to accept or
-decline.
+If you're already signed in and working in another workspace, you stay where you are;
+the new workspace is added to your list and a message says you joined it.
 
-If the invite is your only workspace, the **Workspaces** page leads with it and also
-offers **Create my own site instead**, so accepting isn't your only option.
+### When joining doesn't go through
 
-### Declining an invite
+Everything that could stop someone joining is checked when the invitation is **sent**,
+and the person sending it is told then: the workspace's free seats (pending invitations
+count against them), an invitation to the address that already owns the workspace, and,
+for a hand-off on a workspace that signs in through single sign-on, whether the new
+owner could be locked out.
 
-**Decline** asks you to confirm, then removes the invitation, and the workspace's
-admins are told you declined. You can't undo a decline. To join later, an admin has
-to invite you again.
+What's left is the workspace changing after the invitation went out — seats removed,
+or a downgrade. Then the person invited isn't asked anything and isn't shown a
+refusal: the page tells them their access is almost ready. The person who sent the
+invitation and the workspace's admins get a notification saying why, the pending row on
+the **Team** page shows **Can't join yet** with the reason, and the invited person
+joins on their next visit once it's fixed.
 
 ### An ordinary invitation never changes who owns the workspace
 
-Accepting an invite normally sets your role to whatever the invite offered. The one
+Joining from an invite normally sets your role to whatever the invite offered. The one
 role it cannot touch is the **owner's**. If an ordinary invitation is sent to the
-address that owns the workspace, accepting it is refused rather than applied —
+address that owns the workspace, joining from it is refused rather than applied —
 otherwise the owner would be quietly stepped down to a viewer or an admin, and only
 the owner can transfer ownership back, so nobody left in the workspace could undo it.
 
@@ -88,20 +93,23 @@ builds the site, then hands it to the client, who may not have an Aglyn account 
 2. Enter the new owner's email, and in **Role** choose **Owner (hand off this
    workspace)**. Only the current owner sees this choice. (Aglyn staff send it from
    the staff console.)
-3. In **Current owner**, choose what happens to you once they accept:
+3. In **Current owner**, choose what happens to you once they take over:
    **Stay on as an admin after the handoff**, or **Leave after the handoff**.
 4. Choose **Send handoff**.
 
-The new owner gets an email saying the workspace is being handed to them, and the
-invitation shows in their console with **Accept** and **Decline**. Nothing changes
-until they accept. When they do, in one step:
+The new owner gets an email saying the workspace is being handed to them. Nothing
+changes until they sign in, or sign up, with that address. Then, in one step and with
+nothing to accept:
 
 - they become the owner of the workspace and every site in it;
 - you stay on as an admin, or leave the workspace, as you chose;
-- the invitation is marked accepted and the activity log records the handoff.
+- the invitation is marked accepted and the activity log records the handoff;
+- you both get an email: they're told the workspace is theirs, with **Start the plan**
+  when one was proposed with the handoff, and you're told who owns it now and
+  whether you stayed on.
 
-They land on the workspace's home, like anyone joining. Accepting does not ask them
-to upgrade or start a subscription.
+They land on the workspace's home, like anyone joining, or on the page the email
+linked to. Taking over does not ask them to upgrade or start a subscription.
 
 Some rules hold for every handoff:
 

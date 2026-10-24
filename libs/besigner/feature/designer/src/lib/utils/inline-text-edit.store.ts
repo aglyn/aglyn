@@ -41,6 +41,21 @@ export interface InlinePropEditTarget {
    * because the editor cannot re-derive it without the definition.
    */
   initialText: string
+  /**
+   * The schema of the element the prop fills — what decides which
+   * formatting commands are offered, as a node's own schema does for it.
+   */
+  schema?: Aglyn.ComponentSchema<any>
+  /**
+   * Whether the edit is formatted text: every element the prop fills draws
+   * markup. One that cannot would show the author bold that never renders.
+   */
+  rich?: boolean
+  /**
+   * The prop's formatted text as the instance stores it, or `''` — the
+   * markup the editor opens with in place of the plain `initialText`.
+   */
+  initialHtml?: string
 }
 
 /**

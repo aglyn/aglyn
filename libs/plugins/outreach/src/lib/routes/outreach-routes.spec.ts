@@ -50,6 +50,12 @@ import {
   createOutreachEnrollmentGatewayRoute,
 } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
+import {
+  createOutreachEnrollmentReplyRoute,
+  createOutreachEnrollmentThreadRoute,
+  OUTREACH_MANUAL_REPLIES_PER_HOUR,
+  type OutreachReplyDeps,
+} from './reply-routes'
 import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes, OUTREACH_SEQUENCE_ACTIVITY } from './sequence-routes'
@@ -2384,5 +2390,315 @@ describe('outreach/curate (AGL-3324)', () => {
     expect(ended).toMatchObject({ status: 409, body: { reason: 'transition-refused' } })
     expect((await post(curate().draft, REP, { enrollmentId })).body.reason).toBe('transition-refused')
     expect((await post(curate().save, REP, { enrollmentId: 'nope', stepIndex: 0, override: null })).status).toBe(404)
+  })
+})
+
+describe('outreach/enrollments/thread and outreach/enrollments/reply (AGL-4020)', () => {
+  const ENROLLMENT = 'seq-1_c-1'
+  const THREAD = 'th-sequence'
+  let gmail: FakeGmail
+  let limited: boolean
+  const replyDeps = (): OutreachReplyDeps => ({
+    openMailbox: async () => ({ ok: true, client: gmail, credential: {} as never }),
+    consumeRateLimit: async () => ({ allowed: !limited }),
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      `${trackingOrigin ?? 'https://console.example.com/api/outreach/l'}/${linkId}`,
+    clickLinkOrigin: async () => 'https://links.example.com',
+  })
+  /** The sequence the enrollment runs through, tracking link clicks or not (AGL-4022). */
+  const sequenceTracking = (trackClicks: boolean) =>
+    docs.set(org('outreachSequences/seq-1'), {
+      ...draft(),
+      status: 'active',
+      settings: { ...draft().settings, trackClicks },
+      createdAtMs: AT - 3 * 86_400_000,
+      updatedAtMs: AT - 3 * 86_400_000,
+    })
+  const thread = () => createOutreachEnrollmentThreadRoute(deps(), replyDeps())
+  const reply = () => createOutreachEnrollmentReplyRoute(deps(), replyDeps())
+  const stored = () => docs.get(org(`outreachEnrollments/${ENROLLMENT}`)) as Data
+  const header = (name: string) =>
+    gmail.sent[0]?.headers.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value ?? ''
+  /** A person who answered the sequence's first email, synced before replies were kept: their reply is an id. */
+  const seed = (fields: Data = {}) =>
+    docs.set(org(`outreachEnrollments/${ENROLLMENT}`), {
+      sequenceId: 'seq-1',
+      target: 'contact',
+      contactId: 'c-1',
+      contactName: 'Casey Morgan',
+      email: 'casey.morgan@example.com',
+      hostId: HOST,
+      mailboxId: MAILBOX,
+      stepIndex: 1,
+      status: 'replied',
+      stopReason: 'reply',
+      stoppedAtMs: AT - 60 * 60_000,
+      nextDueAtMs: null,
+      cold: true,
+      gmailThreadId: THREAD,
+      gmailThreadIds: [THREAD],
+      threadSubject: 'Your second location, Casey',
+      messageIds: ['<step-1@example.com>'],
+      lastSentAtMs: AT - 86_400_000,
+      syncedMessageIds: ['in-old'],
+      stepRecords: [
+        { stepIndex: 0, stepId: 'step-a', kind: 'email', atMs: AT - 86_400_000, messageId: '<step-1@example.com>', gmailThreadId: THREAD, subject: 'Your second location, Casey' },
+      ],
+      createdAtMs: AT - 2 * 86_400_000,
+      updatedAtMs: AT - 60 * 60_000,
+      ...fields,
+    })
+  const theirReply = (fields: Partial<Parameters<FakeGmail['deliver']>[0]> = {}) =>
+    gmail.deliver({
+      threadId: THREAD,
+      from: 'Casey Morgan <casey.morgan@example.com>',
+      to: 'rep@example.com',
+      subject: 'Re: Your second location, Casey',
+      text: 'Sounds good. What would it cost?\n\nOn Mon, Sep 14, 2026, Avery Quinn <rep@example.com> wrote:\n> Saw the second location.',
+      atMs: AT - 60 * 60_000,
+      messageId: '<casey-reply-1@example.com>',
+      headers: { References: '<step-1@example.com>', 'In-Reply-To': '<step-1@example.com>' },
+      ...fields,
+    })
+
+  beforeEach(() => {
+    gmail = new FakeGmail({ self: ['rep@example.com'] })
+    limited = false
+  })
+
+  it('reads a reply synced before replies were kept from the mailbox, keeps it, and says where the answer goes', async () => {
+    seed()
+    theirReply()
+    const { status, body } = await post(thread(), REP, { enrollmentId: ENROLLMENT })
+    expect(status).toBe(200)
+    expect(body.readMailbox).toBe(true)
+    expect(body.inboundMessages).toEqual([
+      expect.objectContaining({
+        from: 'casey.morgan@example.com',
+        fromName: 'Casey Morgan',
+        messageId: '<casey-reply-1@example.com>',
+        references: ['<step-1@example.com>'],
+        kind: 'reply',
+        body: 'Sounds good. What would it cost?',
+        atMs: AT - 60 * 60_000,
+      }),
+    ])
+    expect(body.draft).toMatchObject({
+      to: 'casey.morgan@example.com',
+      subject: 'Re: Your second location, Casey',
+      from: { address: 'rep@example.com', name: 'Avery Quinn', provider: 'google' },
+    })
+    expect(body.refusal).toBeNull()
+    expect(stored().inboundMessages).toHaveLength(1)
+    // Kept: the next open reads nothing from the mailbox.
+    const reads = gmail.calls.length
+    expect((await post(thread(), REP, { enrollmentId: ENROLLMENT })).body.readMailbox).toBe(false)
+    expect(gmail.calls.length).toBe(reads)
+  })
+
+  it('sends the answer in the thread from the enrollment’s mailbox, as a manual_reply that restarts nothing and spends no cap', async () => {
+    seed()
+    theirReply()
+    const { status, body } = await post(reply(), REP, {
+      enrollmentId: ENROLLMENT,
+      body: 'Hi Casey,\n\nIt starts at $49 a month.',
+      replyKey: 'reply-key-0001',
+    })
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ ok: true, sentTo: 'casey.morgan@example.com', subject: 'Re: Your second location, Casey', alreadySent: false })
+    expect(gmail.sent).toHaveLength(1)
+    expect(gmail.sent[0].threadId).toBe(THREAD)
+    expect(header('From')).toContain('rep@example.com')
+    expect(header('To')).toBe('casey.morgan@example.com')
+    expect(header('Subject')).toBe('Re: Your second location, Casey')
+    expect(header('Message-ID')).toBe('<reply-key-0001@example.com>')
+    expect(header('In-Reply-To')).toBe('<casey-reply-1@example.com>')
+    expect(header('References')).toBe('<step-1@example.com> <casey-reply-1@example.com>')
+    expect(header('List-Unsubscribe')).toBe('')
+    expect(gmail.sent[0].body).toContain('It starts at $49 a month.')
+    expect(gmail.sent[0].body).toContain('> Sounds good. What would it cost?')
+
+    const enrollment = stored()
+    expect(enrollment).toMatchObject({
+      status: 'replied',
+      stopReason: 'reply',
+      stepIndex: 1,
+      nextDueAtMs: null,
+      replyClaim: null,
+      lastSentAtMs: AT,
+      messageIds: ['<step-1@example.com>', '<reply-key-0001@example.com>'],
+    })
+    expect((enrollment.stepRecords as Data[]).at(-1)).toEqual({
+      stepIndex: 1,
+      stepId: '',
+      kind: 'manual_reply',
+      atMs: AT,
+      byUid: REP,
+      from: 'rep@example.com',
+      to: 'casey.morgan@example.com',
+      body: 'Hi Casey,\n\nIt starts at $49 a month.',
+      replyKey: 'reply-key-0001',
+      gmailMessageId: expect.any(String),
+      gmailThreadId: THREAD,
+      messageId: '<reply-key-0001@example.com>',
+      subject: 'Re: Your second location, Casey',
+      inReplyTo: '<casey-reply-1@example.com>',
+    })
+    // Counted apart: no cap spent, no send for the bounce window, nothing on the sequence.
+    const mailbox = docs.get(org(`outreachMailboxes/${MAILBOX}`))
+    const day = outreachLocalDay(AT, 'America/Chicago')
+    expect(fieldOf(mailbox, `health.daily.${day}`)).toEqual({ sent: 0, bounces: 0, replies: 0, manualReplies: 1 })
+    expect(fieldOf(mailbox, 'health.sentToday')).toBeUndefined()
+    expect(fieldOf(mailbox, 'health.recentSends')).toBeUndefined()
+    // On the person's CRM record, as an email of theirs from the mailbox.
+    expect(filed).toEqual([
+      expect.objectContaining({
+        kind: 'email',
+        link: { contactId: 'c-1' },
+        byUid: REP,
+        body: 'Hi Casey,\n\nIt starts at $49 a month.',
+        email: expect.objectContaining({
+          direction: 'outbound',
+          from: 'rep@example.com',
+          to: 'casey.morgan@example.com',
+          messageId: '<reply-key-0001@example.com>',
+          inReplyTo: '<casey-reply-1@example.com>',
+        }),
+      }),
+    ])
+
+    // The same answer again is recognised, never sent twice.
+    const again = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi Casey,\n\nIt starts at $49 a month.', replyKey: 'reply-key-0001' })
+    expect(again.body.alreadySent).toBe(true)
+    expect(gmail.sent).toHaveLength(1)
+  })
+
+  it('answers an automatic reply on a running enrollment without moving its step or its next send', async () => {
+    seed({ status: 'active', stopReason: null, stoppedAtMs: null, nextDueAtMs: AT + 86_400_000, syncedMessageIds: [] })
+    theirReply({ subject: 'Automatic reply: Your second location, Casey', headers: { 'Auto-Submitted': 'auto-replied' }, text: 'Out until Monday.' })
+    // The sync kept it, as it does from now on.
+    const read = await post(thread(), REP, { enrollmentId: ENROLLMENT })
+    expect(read.body.inboundMessages).toEqual([])
+    docs.set(org(`outreachEnrollments/${ENROLLMENT}`), {
+      ...stored(),
+      inboundMessages: [
+        { id: 'in-auto', threadId: THREAD, messageId: '<auto@example.com>', references: [], from: 'casey.morgan@example.com', fromName: '', replyTo: null, subject: 'Automatic reply: Your second location, Casey', atMs: AT - 60_000, kind: 'auto_reply', body: 'Out until Monday.' },
+      ],
+    })
+    const { status } = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'No rush — talk Monday.' })
+    expect(status).toBe(200)
+    expect(stored()).toMatchObject({ status: 'active', stepIndex: 1, nextDueAtMs: AT + 86_400_000 })
+    expect(header('In-Reply-To')).toBe('<auto@example.com>')
+  })
+
+  it('answers someone the cold rules would refuse — a personal address, outside any allowed country', async () => {
+    seed({ email: 'casey.morgan@gmail.com' })
+    theirReply({ from: 'Casey <casey.morgan@gmail.com>' })
+    const { status } = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Happy to help.' })
+    expect(status).toBe(200)
+    expect(header('To')).toBe('casey.morgan@gmail.com')
+  })
+
+  it('still refuses for the do-not-contact list, a paused mailbox and a member who may not send from it — saying why', async () => {
+    seed()
+    theirReply()
+    // Another member reads nobody's mailbox: the reply nobody kept stays unread for them.
+    const unread = await post(reply(), 'uid-reader', { enrollmentId: ENROLLMENT, body: 'Hi' })
+    expect(unread).toMatchObject({ status: 409, body: { reason: 'nothing-to-answer' } })
+    expect(gmail.calls.some((call) => call.startsWith('thread:'))).toBe(false)
+    docs.set(org(`outreachDoNotContact/${outreachDoNotContactKey('casey.morgan@example.com')}`), { reason: 'manual' })
+    const listed = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi' })
+    expect(listed).toMatchObject({ status: 409, body: { reason: 'reply-refused' } })
+    expect(listed.body.error).toContain('casey.morgan@example.com is on your do-not-contact list')
+    expect((await post(thread(), REP, { enrollmentId: ENROLLMENT })).body.refusal).toMatchObject({ code: 'do-not-contact' })
+    docs.delete(org(`outreachDoNotContact/${outreachDoNotContactKey('casey.morgan@example.com')}`))
+
+    docs.set(org(`outreachMailboxes/${MAILBOX}`), { ...(docs.get(org(`outreachMailboxes/${MAILBOX}`)) as Data), status: 'paused' })
+    const paused = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi' })
+    expect(paused).toMatchObject({
+      status: 409,
+      body: { reason: 'reply-refused', error: 'rep@example.com is paused. Resume it on the Mailboxes page to answer from it.' },
+    })
+    docs.set(org(`outreachMailboxes/${MAILBOX}`), { ...(docs.get(org(`outreachMailboxes/${MAILBOX}`)) as Data), status: 'connected' })
+
+    // ...and sends from nobody's, once the reply is kept; an owner may.
+    expect(stored().inboundMessages).toHaveLength(1)
+    const other = await post(reply(), 'uid-reader', { enrollmentId: ENROLLMENT, body: 'Hi' })
+    expect(other).toMatchObject({ status: 403, body: { reason: 'permission' } })
+    expect(other.body.error).toBe('Only the member who connected rep@example.com, or an organization owner or admin, can answer from it.')
+    expect(gmail.sent).toHaveLength(0)
+    expect((await post(reply(), OWNER, { enrollmentId: ENROLLMENT, body: 'Hi' })).status).toBe(200)
+  })
+
+  it('refuses an empty answer, one to nobody, one in flight, and past the hourly allowance', async () => {
+    seed()
+    theirReply()
+    expect((await post(reply(), REP, { enrollmentId: ENROLLMENT, body: '   ' })).body.reason).toBe('invalid-request')
+    docs.set(org(`outreachEnrollments/${ENROLLMENT}`), { ...stored(), replyClaim: { messageId: '<other@example.com>', byUid: OWNER, atMs: AT - 1000 } })
+    expect((await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi' })).body.reason).toBe('reply-in-flight')
+    docs.set(org(`outreachEnrollments/${ENROLLMENT}`), { ...stored(), replyClaim: null })
+    limited = true
+    const capped = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi' })
+    expect(capped).toMatchObject({ status: 429, body: { reason: 'rate-limited' } })
+    expect(capped.body.error).toContain(String(OUTREACH_MANUAL_REPLIES_PER_HOUR))
+    expect(gmail.sent).toHaveLength(0)
+
+    seed({ status: 'active', stopReason: null, stoppedAtMs: null, syncedMessageIds: [], gmailThreadIds: ['th-empty'], gmailThreadId: 'th-empty' })
+    expect((await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi' })).body.reason).toBe('nothing-to-answer')
+  })
+
+  it('sends the links in the answer as tracked short links on a sequence that counts clicks — never the quoted ones (AGL-4022)', async () => {
+    seed()
+    sequenceTracking(true)
+    theirReply({ text: 'Sounds good. Our site is https://their-site.example.org — what would it cost?' })
+    const read = await post(thread(), REP, { enrollmentId: ENROLLMENT })
+    expect(read.body.draft).toMatchObject({ tracksLinks: true })
+    const { status, body } = await post(reply(), REP, {
+      enrollmentId: ENROLLMENT,
+      body: 'Pick a time: https://calendar.example.com/book/zach.',
+      replyKey: 'reply-key-0003',
+    })
+    expect(status).toBe(200)
+    const sentBody = gmail.sent[0].body.replace(/=\r\n/g, '')
+    expect(sentBody).not.toContain('https://calendar.example.com/book/zach')
+    expect(sentBody).toMatch(/Pick a time: https:\/\/links\.example\.com\/[A-Za-z0-9]{10}\./)
+    // Their words, quoted, are theirs: never rewritten.
+    expect(sentBody).toContain('> Sounds good. Our site is https://their-site.example.org')
+    const links = [...docs.entries()].filter(([key]) => key.startsWith('outreachLinks/'))
+    expect(links).toHaveLength(1)
+    expect(links[0][1]).toMatchObject({
+      v: 1,
+      orgId: ORG,
+      enrollmentId: ENROLLMENT,
+      stepIndex: 1,
+      linkIndex: 0,
+      url: 'https://calendar.example.com/book/zach',
+      answerKey: 'reply-key-0003',
+    })
+    expect(sentBody).toContain(`https://links.example.com/${links[0][0].slice('outreachLinks/'.length)}`)
+    expect(body.record).toMatchObject({ kind: 'manual_reply', links: ['https://calendar.example.com/book/zach'], replyKey: 'reply-key-0003' })
+    expect(body.record.body).toMatch(/^Pick a time: https:\/\/links\.example\.com\//)
+  })
+
+  it('sends the links as written on a sequence that does not count clicks', async () => {
+    seed()
+    sequenceTracking(false)
+    theirReply()
+    expect((await post(thread(), REP, { enrollmentId: ENROLLMENT })).body.draft).toMatchObject({ tracksLinks: false })
+    const { body } = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Pick a time: https://calendar.example.com/book/zach' })
+    expect(gmail.sent[0].body).toContain('Pick a time: https://calendar.example.com/book/zach')
+    expect([...docs.keys()].some((key) => key.startsWith('outreachLinks/'))).toBe(false)
+    expect(body.record).not.toHaveProperty('links')
+  })
+
+  it('hands the claim back when the send fails, so the answer can be sent again', async () => {
+    seed()
+    theirReply()
+    gmail.failNextSend = gmailApiError(500, { error: { code: 500, message: 'backend error', status: 'INTERNAL' } })
+    const failed = await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi', replyKey: 'reply-key-0002' })
+    expect(failed.status).toBeGreaterThanOrEqual(400)
+    expect(stored().replyClaim).toBeNull()
+    expect((await post(reply(), REP, { enrollmentId: ENROLLMENT, body: 'Hi', replyKey: 'reply-key-0002' })).status).toBe(200)
+    expect(gmail.sent).toHaveLength(1)
   })
 })

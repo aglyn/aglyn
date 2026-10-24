@@ -51,6 +51,8 @@ export function outreachClickHistoryRow(input: {
   stepIndex: number
   human: boolean
   machineReason: OutreachClickMachineReason | null
+  /** A link in a member's answer in the thread (AGL-4022), not a step's. */
+  answer?: boolean
 }): Record<string, unknown> {
   return {
     kind: 'click',
@@ -59,6 +61,7 @@ export function outreachClickHistoryRow(input: {
     stepIndex: input.stepIndex,
     human: input.human,
     machineReason: input.human ? null : input.machineReason,
+    ...(input.answer ? { answer: true } : {}),
   }
 }
 
@@ -138,6 +141,7 @@ export function readOutreachHistoryEntry(
         : (MACHINE_REASONS as readonly unknown[]).includes(reason)
           ? (reason as OutreachClickMachineReason)
           : null,
+      ...(data['answer'] === true ? { answer: true as const } : {}),
     }
   }
   if (data['kind'] === 'open') {

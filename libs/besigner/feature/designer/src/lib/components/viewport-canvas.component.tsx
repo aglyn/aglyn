@@ -24,6 +24,7 @@ import dynamic from 'next/dynamic'
 // import {ZoomablePanningComponent} from '@aglyn/shared-ui-jsx'
 import { ComponentProps, forwardRef, type Ref } from 'react'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import { DropSurface, dropSurfaceProps } from './dnd/drop-surface'
 import type { ViewportFrameComponentProps } from './viewport-frame.component'
 
 const canvasArtboardClassKeys = generateComponentClassKeys(
@@ -125,6 +126,7 @@ export const ViewportCanvasComponent = forwardRef<
     <ViewportCanvas
       ref={ref}
       id="aglyn:viewport-canvas"
+      {...dropSurfaceProps(DropSurface.CANVAS)}
       onMouseDown={(event) => {
         // Clicking empty canvas — the panning surface or the artboard's own
         // background (node clicks stop propagation in DraggableDroppable) —

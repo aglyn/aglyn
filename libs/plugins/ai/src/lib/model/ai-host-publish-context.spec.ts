@@ -20,13 +20,13 @@ import { aiHostPublishContext, aiSiteStatusTable } from './ai-host-publish-conte
 describe('aiHostPublishContext', () => {
   it('reads a starter site as published at its platform address, home first', () => {
     expect(
-      aiHostPublishContext({ subdomain: 'vocation-to-pen', screens: { b: '/about', a: '/' } }, [
+      aiHostPublishContext({ subdomain: 'acme-builders', screens: { b: '/about', a: '/' } }, [
         { publishedAt: '2026-10-07T16:04:03.825Z' },
         { publishedAt: '2026-10-08T10:00:00.000Z', deletedAt: null },
       ]),
     ).toEqual({
       published: true,
-      liveUrl: 'https://vocation-to-pen.aglyn.app',
+      liveUrl: 'https://acme-builders.aglyn.app',
       publishedPages: ['/', '/about'],
       firstPublishedAt: Date.parse('2026-10-07T16:04:03.825Z'),
     })

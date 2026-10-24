@@ -9,12 +9,223 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
-## v1.0.0-beta.272 — 2026-10-19
+## v1.0.0-beta.281 — 2026-10-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.280...v1.0.0-beta.281)
+
+### Fixed
+
+- **functions:** run Cloud Functions on Node 20 while Google's Node 22 base image fails to start ([AGL-4028](https://linear.app/aglyn/issue/AGL-4028))
+- **e2e:** the signup canary prints its whole failure, trace included ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **e2e:** the signup canary says what the page shows when the account step stalls ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** raise the Linear id ceiling to AGL-4028, read from the workspace ([AGL-4028](https://linear.app/aglyn/issue/AGL-4028))
+
+</details>
+
+## v1.0.0-beta.280 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.279...v1.0.0-beta.280)
+
+### Added
+
+- **handoff:** a completed handoff emails the new owner and the previous owner (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **billing:** staff pick the Aglyn AI tier a bundle link carries, and POS registers show on every plan ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **billing:** What you will pay always shows a total, switches cadence, and counts the link's add-ons ([AGL-4026](https://linear.app/aglyn/issue/AGL-4026))
+
+### Fixed
+
+- **ci:** auto-merge reads the latest run of each check; the gate report retries its status write ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **native:** workspace logos drawn crisp and at Figma's tile size, centered by their ink ([AGL-4027](https://linear.app/aglyn/issue/AGL-4027))
+- **admin:** lazy-load the hand-off emails to break an import cycle ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **email:** platform mail replies to the support mailbox; addresses stay text ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **signup:** retry a derived sign-up workspace address under a suffix on 409 ([AGL-4024](https://linear.app/aglyn/issue/AGL-4024))
+- **console:** the Aglyn AI switch lines up with the other add-on switches ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+
+### Changed
+
+- **privacy:** guard client identifiers by digest in files, commit messages and PR text ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **monitoring:** keep real client pages out of the canary and render monitor source ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+### Documentation
+
+- **billing:** the bundle link's Aglyn AI tier, and POS registers on the staff bundle ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **console:** name the Figma frames of the bundle link card and the tier field ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **billing:** What you will pay lists only the link's add-ons, with counts, cadence and a total before tax ([AGL-4026](https://linear.app/aglyn/issue/AGL-4026))
+
+### Tests
+
+- **admin:** import the onboarding deep link statically in the bundle-links spec ([AGL-4025](https://linear.app/aglyn/issue/AGL-4025))
+- **privacy:** replace real client names and ids in fixtures, comments and docs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **email:** two host-email specs expect addresses as text, not mailto links ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **handoff:** neutral fixtures in the handoff and invite specs ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+## v1.0.0-beta.279 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.278...v1.0.0-beta.279)
+
+### Added
+
+- **invites:** invitations take effect on their own, no Accept step (AGL-4023) ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **legal:** pin Legal v19, Syria leaves Terms §3.6 and the console geo-block
+
+### Fixed
+
+- **auth:** signing in keeps the page's query string ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **invites:** a refused join is told to its sender, never the invitee ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **ci:** beta.279's three reds: Syria spec, staff screens, Linear ceiling ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+- **invites:** the access-pending card links its help ([AGL-4023](https://linear.app/aglyn/issue/AGL-4023))
+
+### Changed
+
+- **console:** the app→libs sweep slices 3–5 (#1896, #1897, #1898) landed on `main` and were reverted by #1899, so nothing from them ships in this release ([AGL-52](https://linear.app/aglyn/issue/AGL-52))
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.0.0-beta.278 — 2026-10-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.277...v1.0.0-beta.278)
+
+### Fixed
+
+- **besigner:** rich text everywhere text is edited, and repeats that explain themselves ([AGL-1304](https://linear.app/aglyn/issue/AGL-1304))
+
+### Changed
+
+- **console:** six site-data hooks join tenant-feature-instance
+- **console:** six generic hooks and helpers leave the app for their libs
+
+<details>
+<summary>Also in this release: 1 build</summary>
+
+- **deps-dev:** vitest 4.1.12, clearing two @vitest/mocker advisories
+
+</details>
+
+## v1.0.0-beta.277 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.276...v1.0.0-beta.277)
+
+### Added
+
+- **console:** edit a page's name and description in place; Edit in Besigner; Preview
+- **besigner:** click a part of a shared layout to edit it in a new tab, or restyle it here
+
+### Fixed
+
+- **besigner:** repeat copies sit in the parent's own layout; hover keeps them dashed
+- **preview:** repeated items fill in from their dataset, as on the live page ([AGL-3496](https://linear.app/aglyn/issue/AGL-3496))
+- **besigner:** a click on a repeated copy selects the element it repeats; copies outlined in grey
+- **besigner:** "Start hidden until an interaction shows it" wraps in the element menu
+- **besigner:** the Attributes info sections span the panel; Interactions shares its edges
+- **besigner:** canvas labels stay dark in dark mode, and the action strip centres on phones
+- **besigner:** double-tap text on a phone opens it for editing, with the keyboard
+- **besigner:** the drop marker shows exactly where a drag will land
+- **console:** the Besigner page reads its theme via useTheme; the page-view layout spec knows the Name & description card
+
+### Changed
+
+- **besigner:** the repeat expansion Preview uses lives in the designer lib
+
+## v1.0.0-beta.276 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.275...v1.0.0-beta.276)
+
+### Added
+
+- **outreach:** an answer's links go out as tracked short links (AGL-4022) ([AGL-4022](https://linear.app/aglyn/issue/AGL-4022))
+
+### Fixed
+
+- **signup:** a phone Google sign-up always lands in its workspace (AGL-4021) ([AGL-4021](https://linear.app/aglyn/issue/AGL-4021))
+
+## v1.0.0-beta.275 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/b537dd527...v1.0.0-beta.275)
+
+### Added
+
+- **outreach:** reply in thread from the enrollment's own mailbox (AGL-4020) ([AGL-4020](https://linear.app/aglyn/issue/AGL-4020))
+
+### Fixed
+
+- **crm:** keep the email actions zone token out of the eager bundle (AGL-4020) ([AGL-4020](https://linear.app/aglyn/issue/AGL-4020))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **linear:** raise the citation ceiling to AGL-4020, read off Linear ([AGL-4020](https://linear.app/aglyn/issue/AGL-4020))
+
+</details>
+
+## v1.0.0-beta.274 — 2026-10-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.273...v1.0.0-beta.274)
+
+### Fixed
+
+- **email:** usage, budget and SSO-lapse emails draw their own parts (AGL-4019) ([AGL-4019](https://linear.app/aglyn/issue/AGL-4019), [AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **native-release:** remove the Xcode export staging folder after each upload
+- **console:** a Free first site's own create no longer trips the one-site limit ([AGL-4017](https://linear.app/aglyn/issue/AGL-4017))
+
+## v1.0.0-beta.273 — 2026-10-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.272...v1.0.0-beta.273)
+
+### Added
+
+- **legal:** pin Legal v18, Terms §8.9 Importing a Website ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976), [AGL-3974](https://linear.app/aglyn/issue/AGL-3974))
+- **data:** the dataset draft writer revises a seeded record's values ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+### Fixed
+
+- **release:** the site changelog drops a commit's CI-skip directive ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **ai:** an SEO listing a few characters too long is fitted, not failed ([AGL-4016](https://linear.app/aglyn/issue/AGL-4016))
+- **ai:** the empty-site sweep keeps the AI job it marks ([AGL-4015](https://linear.app/aglyn/issue/AGL-4015))
+- **ai:** the guided start's step timeline spans the whole dialog ([AGL-4014](https://linear.app/aglyn/issue/AGL-4014))
+- **ai:** a site start's page never shows a photo twice; the late pass fills it ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **marketing:** the /managed first-run script gives its films caption-free posters ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed republish gives each film player a caption-free poster ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **ai:** a late photo pass fills a site start's starters before it goes live ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** a guided start's publish sets the site's share image from its home hero ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** a site start's page offers its own photos and records each starter it leaves ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+### Documentation
+
+- **ai:** a new site's page never shows a photo twice while it fills its starters ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** regenerate the Assist docs index after merging main ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **pricing:** /managed version MuMb5a8jki, films with caption-free posters ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **ai:** how a guided start fills its starter photos and sets its Social image ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **tenant:** declare AGL-3988's four image markers in the sink inventory ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **release:** v1.0.0-beta.273 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
+## v1.0.0-beta.272 — 2026-10-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.271...v1.0.0-beta.272)
 
 ### Added
 
+- **console:** pin sites the way workspaces are pinned ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005), [AGL-3762](https://linear.app/aglyn/issue/AGL-3762), [AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **marketing:** the /managed republish shows a site in the hero and separates the FAQ band ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **console:** the Site Care card and Request a change name the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **site-care:** requests arrive at the support address, with no care address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **email:** received mail says when a machine sent it ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **marketing:** a script republishes /managed with no prices, its film poster rows playing the films ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **console:** the bundle link card starts on the client build's bundle too ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **domains:** open Get a domain with the name Billing sends in ?domain= ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** let a staff preclearance stand in for the 72 h payment gate, once ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955))
+- **domains:** answer core.domain-search with the card's own search and prices ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
+- **ai:** a client build's contact details fill the guided start's details ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995), [AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **console:** hand off opens on the client build's bundle ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995), [AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 - **native:** the demo seed carries this month's usage, so meters read real fills ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
 - **apple:** grouped forms fill their column on the Mac, on the content edges ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **apple:** the plan card is a slow carousel of usage meters, the screen's own first ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
@@ -29,6 +240,17 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** the crawler's user agent names the Bring my site guide, not a /bot page ([AGL-3983](https://linear.app/aglyn/issue/AGL-3983))
+- **sites:** deleting a site erases its own datasets, AI insights and Assist chats ([AGL-4003](https://linear.app/aglyn/issue/AGL-4003))
+- **marketing:** the /managed first-run script's hero matches the live page ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed republish puts a live site in the hero, with no prices in it ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed record pours the hero's site and the white FAQ band ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **marketing:** the /managed first-run script carries no figures, and places the films ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **ai:** the client note says only what the review's rows do not ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **ai:** a client build's towns are the place only until an address is given ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **native:** a phone's Menu opens a sectioned area with its section chips ([AGL-3993](https://linear.app/aglyn/issue/AGL-3993))
+- **apple:** two more views could never start their read; the Group sweep sees every shape ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **native:** the plan card fills with Figma's bg/surface, not the theme's grey canvas ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
 - **native:** the plan card never cuts its figures, and reads its meters at once ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
 - **apple:** a brand picture that fails to load is tried again ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991))
 - **apple:** the Automation hub's section column sits on the content edge ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
@@ -48,15 +270,29 @@ content on the marketing site and is written separately.
 - **ai:** the site-import crawler names the operator's bot page, from an env var ([AGL-3983](https://linear.app/aglyn/issue/AGL-3983))
 - **ai:** the "Bring my site" card names the configured brand, not a literal ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
 
+### Changed
+
+- **email:** retire the Site Care sender-not-recognized email ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+
 ### Documentation
 
+- **release:** beta.272 changelog carries #1860 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **release:** beta.272 changelog line for #1859 reads cleanly ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **release:** beta.272 changelog carries #1847 #1851 #1853 #1854 #1855 #1856 #1858 #1859 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **pricing:** /managed version IO02sEaW0U, and a picture can state a price ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **pricing:** /managed is no longer a pricing surface ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+- **site-care:** requests by email arrive at the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
+- **staff-console:** the hand-off and the bundle link card open on the client build's bundle ([AGL-3995](https://linear.app/aglyn/issue/AGL-3995))
+- **release:** beta.272 changelog carries #1850 and #1852 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **ai:** the Start with AI guide's Sites you like section, marked rolling out ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
 - **ai:** re-shoot the Style step with the new cards ([AGL-3985](https://linear.app/aglyn/issue/AGL-3985))
 - **ai:** the import job's resumable wave read and page names, in AI_JOBS.md ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
 
 <details>
-<summary>Also in this release: 3 test, 2 chore</summary>
+<summary>Also in this release: 4 test, 2 chore, 1 ci</summary>
 
+- **tools:** run the marketing film helper's tests ([AGL-3998](https://linear.app/aglyn/issue/AGL-3998))
+- **crm:** email capture never files mail to the support address ([AGL-3997](https://linear.app/aglyn/issue/AGL-3997))
 - **release:** v1.0.0-beta.272 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **native:** production-shaped seed workspace and list tests on both apps ([AGL-3993](https://linear.app/aglyn/issue/AGL-3993))
 - **native:** spell SectionTabs' comment the American way, drop unused tab imports ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))

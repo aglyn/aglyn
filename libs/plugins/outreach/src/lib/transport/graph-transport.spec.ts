@@ -30,6 +30,7 @@ import {
   readMicrosoftIdToken,
 } from './microsoft-oauth'
 import { decodeMimeHeaderValue, gmailApiMessageFromMime } from './mime-message'
+import { sendOutreachReply } from './send-message'
 
 /**
  * The Microsoft Graph side of the provider seam (AGL-3489), against a fake
@@ -282,6 +283,50 @@ describe('the Graph client (AGL-3489)', () => {
     const draft = calls.find((call) => call.url === `${GRAPH_API_BASE}/me/messages`)
     expect(draft?.headers['Content-Type']).toBe('text/plain')
     expect(Buffer.from(draft?.body ?? '', 'base64').toString('utf8')).toContain('Subject: Hi')
+  })
+
+  it('sends a member’s answer as MIME carrying In-Reply-To and References, which is how Exchange threads it (AGL-4020)', async () => {
+    const fetchSend = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? init.body : null, headers: (init?.headers ?? {}) as Record<string, string> })
+      if (url === TOKEN_URL) return new Response(JSON.stringify({ access_token: 'a', expires_in: 3600 }), { status: 200 })
+      if (url === `${GRAPH_API_BASE}/me/messages`) {
+        return new Response(
+          JSON.stringify({ id: 'draft-2', conversationId: 'conv-1', internetMessageId: '<reply-key-2@example.org>' }),
+          { status: 201 },
+        )
+      }
+      if (url === `${GRAPH_API_BASE}/me/messages/draft-2/send`) return new Response(null, { status: 202 })
+      throw new Error(`unscripted ${url}`)
+    }) as typeof fetch
+    const sent = await sendOutreachReply(
+      client({ fetch: fetchSend }),
+      {
+        to: 'casey@example.com',
+        subject: "Re: Example Agency's client sites",
+        text: 'Hi Casey,\n\nHappy to.\n\nOn Tue, Sep 15, 2026, 11:42 AM, casey@example.com wrote:\n> What would that land at?',
+        threadId: 'conv-1',
+        inReplyTo: '<CAProspectReply-p7q8r9@mail.gmail.com>',
+        references: ['<step-1@example.org>', '<CAProspectReply-p7q8r9@mail.gmail.com>'],
+      },
+      { address: 'avery@example.org', name: 'Avery Quinn' },
+      { messageIdLocalPart: 'reply-key-2', messageIdDomain: 'example.org' },
+    )
+    expect(sent).toEqual({
+      gmailMessageId: 'draft-2',
+      threadId: 'conv-1',
+      messageId: '<reply-key-2@example.org>',
+      subject: "Re: Example Agency's client sites",
+    })
+    const draft = calls.find((call) => call.url === `${GRAPH_API_BASE}/me/messages`)
+    const mime = Buffer.from(draft?.body ?? '', 'base64').toString('utf8')
+    expect(mime).toContain('In-Reply-To: <CAProspectReply-p7q8r9@mail.gmail.com>\r\n')
+    expect(mime).toContain('References: <step-1@example.org> <CAProspectReply-p7q8r9@mail.gmail.com>\r\n')
+    expect(mime).toContain("Subject: Re: Example Agency's client sites\r\n")
+    expect(mime).not.toMatch(/^List-Unsubscribe/m)
+    // Exchange threads by the headers; Graph is never handed a conversation to file into.
+    expect(draft?.body).not.toContain('conv-1')
+    expect(calls.some((call) => call.url === `${GRAPH_API_BASE}/me/messages/draft-2/send`)).toBe(true)
   })
 
   it('refreshes once, retries a 401 once with a fresh token, and hands a rotated refresh token back to be stored', async () => {

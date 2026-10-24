@@ -115,6 +115,7 @@ import {
 } from '../model/ai-job-failure-copy'
 import { aiSiteStartInputsOf } from '../model/ai-site-start'
 import { aiSiteImportWire, type AiSiteImportState } from '../model/ai-site-import'
+import type { AiSitePhotos } from '../model/ai-site-photos'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   AI_JOB_CANCELED_ITEM_NOTE,
@@ -1048,6 +1049,8 @@ export interface RecordStepInput {
   item?: AiJobItemRecord
   /** An `import` job's waves after this pass (AGL-3976), kept in this write. */
   siteImport?: AiSiteImportState
+  /** A `site` job's pictures left on a starter after this pass (AGL-3988), kept in this write. */
+  sitePhotos?: AiSitePhotos
 }
 
 /** One `build` pass as its item's row records it (AGL-3616). */
@@ -1241,6 +1244,7 @@ export async function recordStep(
       ...(input.plan ? { plan: input.plan } : {}),
       ...(input.sitePublish ? { sitePublish: input.sitePublish } : {}),
       ...(input.siteImport ? { siteImport: input.siteImport } : {}),
+      ...(input.sitePhotos ? { sitePhotos: input.sitePhotos } : {}),
       ...(items ? { items } : {}),
       ...(input.item?.creditsRefunded
         ? { refundedCredits: (job.refundedCredits ?? 0) + input.item.creditsRefunded }
@@ -2579,6 +2583,7 @@ export async function runAiJobStep(
       ...(review && outcome.input ? { input: outcome.input } : {}),
       ...(outcome.sitePublish ? { sitePublish: outcome.sitePublish } : {}),
       ...(job.kind === 'import' && outcome.siteImport ? { siteImport: outcome.siteImport } : {}),
+      ...(job.kind === 'site' && outcome.sitePhotos ? { sitePhotos: outcome.sitePhotos } : {}),
       ...(aiJobSettlesByItem(job.kind) && outcome.items ? { items: outcome.items } : {}),
       ...(itemRecord ? { item: itemRecord } : {}),
       // A park this call resolves at once (an auto-confirmed plan) or gives

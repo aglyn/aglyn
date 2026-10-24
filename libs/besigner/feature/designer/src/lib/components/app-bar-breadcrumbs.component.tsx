@@ -40,6 +40,7 @@ import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useEffect, useRef } from 'react'
 import useLeafDrop from '../hooks/use-leaf-drop'
+import { DropSurface, dropSurfaceProps } from './dnd/drop-surface'
 
 const breadcrumbItemClassKey = generateComponentClassKeys('BreadcrumbItem', [
   'root',
@@ -161,7 +162,7 @@ const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
   const { setNodeRef: setDroppableNodeRef } = useLeafDrop(
     node,
     undefined,
-    'breadcrumbs',
+    DropSurface.BREADCRUMBS,
   )
 
   const handleClick = useCallback(
@@ -305,6 +306,7 @@ export const AppBarBreadcrumbsComponent = forwardRef<
     <MuiAppBar
       ref={setRefs}
       id="aglyn:besigner-appbar-secondary"
+      {...dropSurfaceProps(DropSurface.BREADCRUMBS)}
       aria-label="secondary app toolbar"
       position="static"
       color="surface"
