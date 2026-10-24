@@ -72,7 +72,7 @@ import {
   type AiGenerationSpend,
   type AiValidatedGeneration,
 } from '../runtime/ai-doctrine'
-import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
+import { AI_SEO_FIELDS_MAX_TOKENS, aiFitSeoOverrun, generateSeoFields } from '../runtime/seo-fields'
 import {
   AI_SEO_FIXES_TOOL_NAME,
   AI_SEO_SITE_TOOL_NAME,
@@ -81,6 +81,7 @@ import {
   aiSeoSiteTool,
   checkAiSeoFixes,
   checkAiSeoSite,
+  fitAiSeoFixLengths,
   type AiSeoBatchAnswer,
   type AiSeoBatchPage,
 } from '../tools/ai-seo-tool'
@@ -790,7 +791,8 @@ async function proposeFixes(
   let answers: Record<string, AiSeoBatchAnswer> = {}
   const notes: string[] = []
   if (pages.length) {
-    const generation = await runValidatedGeneration('seo-fixes', {
+    const check = (answer: Record<string, unknown>) => checkAiSeoFixes(answer, pages, titlesElsewhere)
+    const asked = await runValidatedGeneration('seo-fixes', {
       step: 'job.seo',
       ...aiRouteSettings('job.seo'),
       model,
@@ -801,8 +803,11 @@ async function proposeFixes(
       // inside the least time the step registers.
       maxTokens: aiSeoGenerationMaxTokens(model, AI_SEO_FIXES_MAX_TOKENS),
       ...(signal ? { signal } : {}),
-      check: (answer) => checkAiSeoFixes(answer, pages, titlesElsewhere),
+      check,
     })
+    // A batch the re-ask still left past a length keeps its fixes, fitted
+    // (AGL-4016): one long title used to drop every page's fixes.
+    const generation = aiFitSeoOverrun('seo-fixes', asked, fitAiSeoFixLengths, check)
     spent = spentBy(generation)
     if (generation.status === 'ok') {
       answers = generation.value

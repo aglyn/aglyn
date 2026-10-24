@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn-node-renderer'
 // Deep, not the designer barrel: Preview renders no besigner.
 import { useMediaAssetFactsOverlay } from '@aglyn/besigner-ui/hooks/use-media-asset-facts-overlay'
+import { usePreviewRepeats } from '@aglyn/besigner-ui/hooks/use-preview-repeats'
 import {
   getGoogleFontsUrl,
   SiteSchemeThemesContext,
@@ -70,6 +71,7 @@ import {
 } from '../constants/preview-state'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
+import { BesignerRepeatRowsProvider } from './besigner-repeat-rows-provider.component'
 import { useDeclareDocumentSubject } from './document-subject'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
@@ -220,11 +222,26 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const [formDesigns, setFormDesigns] = useState<
     Record<string, Aglyn.PlacedFormDesign> | undefined
   >(undefined)
-  // The snapshot as composed and denormalized, before the placed assets'
-  // current DAM facts are laid over it (AGL-2849, AGL-2856).
-  const [composed, setComposed] = useState<
+  // The snapshot as grafted, with host tokens filled, before its repeats
+  // are expanded.
+  const [prepared, setPrepared] = useState<
     Record<string, unknown> | undefined
   >(undefined)
+  // Repeats expanded as the published page expands them; `undefined` while
+  // their rows are still being read.
+  const expanded = usePreviewRepeats(prepared)
+  // The snapshot as composed and denormalized, before the placed assets'
+  // current DAM facts are laid over it (AGL-2849, AGL-2856).
+  const composed = useMemo(
+    () =>
+      expanded
+        ? (Aglyn.canvas.processNodesToDenormalized(expanded as any) as Record<
+            string,
+            unknown
+          >)
+        : undefined,
+    [expanded],
+  )
   /**
    * The site document, read once per preview (AGL-2881).
    *
@@ -831,17 +848,15 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         // version in place of the draft this preview exists to show.
         [Aglyn.placedFormPlacement(previewableFormDesigns as any)],
       )
-      setComposed(
-        Aglyn.canvas.processNodesToDenormalized(
-          // Host variables (AGL-2881) resolve over the GRAFTED tree, through
-          // the function the tenant composes with, so a token inside a
-          // component, a form or the layout chrome fills in as the page's
-          // own do — and a field the site has not set renders as nothing,
-          // exactly as it does for a visitor.
-          (hostDoc
-            ? Aglyn.resolveNodesHostTokens(grafted as any, hostDoc)
-            : grafted) as any,
-        ),
+      setPrepared(
+        // Host variables (AGL-2881) resolve over the GRAFTED tree, through
+        // the function the tenant composes with, so a token inside a
+        // component, a form or the layout chrome fills in as the page's
+        // own do — and a field the site has not set renders as nothing,
+        // exactly as it does for a visitor.
+        (hostDoc
+          ? Aglyn.resolveNodesHostTokens(grafted as any, hostDoc)
+          : grafted) as any,
       )
     }
     applyState()
@@ -1166,7 +1181,11 @@ const ObservedDocumentPreviewSurface = observer(DocumentPreviewSurface)
 export function DocumentPreview(props: DocumentPreviewProps) {
   return (
     <BesignerMediaAssetFactsProvider hostId={props.ids?.hostId ?? ''}>
-      <ObservedDocumentPreviewSurface {...props} />
+      {/* The rows a repeat draws, read as the besigner reads them, so
+          Preview's copies are the canvas's and the live page's. */}
+      <BesignerRepeatRowsProvider hostId={props.ids?.hostId ?? ''}>
+        <ObservedDocumentPreviewSurface {...props} />
+      </BesignerRepeatRowsProvider>
     </BesignerMediaAssetFactsProvider>
   )
 }

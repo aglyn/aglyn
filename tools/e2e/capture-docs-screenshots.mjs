@@ -783,7 +783,7 @@ const shots = [
     clip: { x: 316, y: 128, width: 740, height: 240 },
   },
   {
-    out: 'besigner/text-field-read-only.png',
+    out: 'besigner/text-field-formatting.png',
     stagesDocument: true,
     path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
@@ -800,13 +800,17 @@ const shots = [
       { press: 'Shift+Alt+ArrowLeft', settleMs: 800 },
       { click: 'button[title="Italic"]', settleMs: 1200 },
       { click: 'button:has-text("DONE")', settleMs: 3000 },
+      // Into the panel's Text field, which raises its formatting toolbar.
+      { click: '[role="textbox"][aria-multiline="true"]', settleMs: 1200 },
     ],
-    // No callout: the crop holds the button, the field and the helper line
-    // and nothing else, and an outline drawn round the button overprints
-    // the field's `Text` legend a few pixels below it.
+    // No callout: the crop holds the button, the toolbar and the field, and
+    // the field's italic word is the thing to see.
     clipTo: {
       locator: 'text=Remove formatting',
-      include: ['text=This text is formatted'],
+      include: [
+        '[data-aglyn="rich-text-field-toolbar"]',
+        '[role="textbox"][aria-multiline="true"]',
+      ],
     },
   },
   // ── Release documentation (AGL-1950, specs A1–A16) ──────────────────

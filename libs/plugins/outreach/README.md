@@ -27,7 +27,10 @@ Two halves, like the CRM plugin:
 - **Console** (`registerOutreachConsole`, client barrel): the organization-level
   Sequences hub at `/[orgSlug]/outreach/<section>`, declared through
   `ConsoleExtension.orgNavItems`, behind `release_outreach`, the
-  `features.outreach` entitlement and the `outreach.use` permission.
+  `features.outreach` entitlement and the `outreach.use` permission. Behind
+  the same gates, one widget in a zone the CRM hosts: **Reply in thread from**
+  *the mailbox* in a contact's or a lead's header, before Send email
+  (`crmRecordEmailActions`, AGL-4020).
 - **Console API** (`registerOutreachConsoleApi`, `@aglyn/plugins-outreach/server`):
   handlers under the `outreach/` prefix, served by the console's
   `/api/[...pluginApi]` dispatcher.
@@ -90,6 +93,7 @@ pure functions with no I/O, exported from the package root:
 | `mailbox-notice` | the email a mailbox's owner gets when it pauses itself or needs reconnecting |
 | `gateway-block` | whether a hard bounce is the recipient domain's gateway refusing the sender, rather than one unknown address |
 | `do-not-contact-domain` | how a domain on the do-not-contact list is spelled |
+| `manual-reply` | answering a person who wrote back (AGL-4020): what the enrollment keeps of their messages, the in-thread answer (`Re:`, `In-Reply-To`, `References`, their message quoted) and what still refuses it |
 
 `engine/do-not-contact` derives the do-not-contact document id with
 `node:crypto`, so it is not in the barrel: import
@@ -103,7 +107,8 @@ console alone — each run opens a rep's sealed grant:
 | module | does |
 | -- | -- |
 | `runtime/send-job` | `outreach-send`: due enrollments claimed in a transaction that reserves the mailbox's day, gates asked again, the email composed — with the `List-Unsubscribe` header when the sequence turns it on (AGL-3296), and its links' `outreachLinks` documents written first when it tracks clicks (AGL-3297) — and sent, the step recorded and filed on the contact's timeline; task steps file the rep's task |
-| `runtime/sync-job` | `outreach-sync`: replies, out-of-office answers, opt-outs and bounces read with `format=full` and classified by the engine; the mailbox's health evidence and its automatic pause |
+| `runtime/sync-job` | `outreach-sync`: replies, out-of-office answers, opt-outs and bounces read with `format=full` and classified by the engine; what the person wrote kept on the enrollment (AGL-4020); the mailbox's health evidence and its automatic pause |
+| `routes/reply-routes`, `components/reply-dialog` | **Reply in thread** (AGL-4020): `outreach/enrollments/thread` reads what the person wrote — from the mailbox, for a reply synced before replies were kept — and `outreach/enrollments/reply` sends a member's answer from the enrollment's mailbox in the same thread, kept as a `manual_reply` step record and on the CRM timeline, counted on `health.daily.<day>.manualReplies` and never against the cap; on a sequence that tracks clicks its links go out as short links, each a click of the person's and never the sequence's (AGL-4022) |
 | `runtime/unsubscribe-link`, `runtime/unsubscribe-route` | the signed one-click link (`GET` and RFC 8058 `POST /api/outreach/unsubscribe`), a recipient link that outlives a paused rollout, and the `+unsubscribe` mailto |
 | `runtime/click-link`, `runtime/click-route` | click tracking: the short link every send carries (`GET /api/outreach/l/<id>`, resolved through the top-level `outreachLinks` document, AGL-3297) and the signed `GET /api/outreach/click?t=…` link older emails carry; both recipient links, redirect first, then the click counted once per person with scanners kept apart; on the mailbox domain's verified `links.` host as `https://links.<domain>/<id>` (AGL-3306), which the console middleware rewrites to the same route |
 | `routes/link-domain-routes`, `components/link-domains-card` | Sequences → Mailboxes → **Link domains** (AGL-3306): `outreach/link-domains` lists each mailbox domain's `links.` host and sets one up, checks it or removes it through `@aglyn/tenant-data-admin/server/tracking-hosts` — the domain driver attaches it, an HTTPS probe verifies it; set-up and removal are an owner's or admin's |

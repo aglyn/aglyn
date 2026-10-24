@@ -60,6 +60,20 @@ export const REUSABLE_INSTANCE_COMPONENT_ID = 'reusableInstance'
 export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
 
 /**
+ * Prop key on an instance node holding the FORMATTED text of its text props,
+ * keyed by declared prop name: the sanitized markup bold, italic, links and
+ * lists were typed into on the canvas.
+ *
+ * The same split a text node makes between `children` and `html`: the plain
+ * reading stays in {@link REUSABLE_INSTANCE_PROP_VALUES_KEY}, where the
+ * Attributes field, the AI checks and every text walker read it, and the
+ * markup rides beside it for the renderer alone. The graft hands it to each
+ * element the prop fills as that element's own `html` — see
+ * `applyDeclaredProps`. Nested under one key for the reasons the values are.
+ */
+export const REUSABLE_INSTANCE_PROP_HTML_KEY = 'propHtml'
+
+/**
  * `styleOverrides` key addressing the component ROOT (AGL-1306). Persisted
  * in screen documents — never rename. Component-internal node ids key the
  * per-leaf overrides beside it (AGL-1332); the definition root is addressed

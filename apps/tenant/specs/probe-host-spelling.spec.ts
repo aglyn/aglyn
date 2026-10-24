@@ -53,13 +53,13 @@ import { normalizeHostAlias } from '../utils/get-host'
 describe('the probes’ fresh host spellings (AGL-3571)', () => {
   it.each([
     // What both encoders produce for these numbers (pinned in their specs).
-    ['ReAdy-to-roll.aglyn.app', 'ready-to-roll'],
-    ['Ready-to-roll.aglyn.app.', 'ready-to-roll'],
+    ['AcMe-builders.aglyn.app', 'acme-builders'],
+    ['Acme-builders.aglyn.app.', 'acme-builders'],
     ['cname--AGlyn.com', 'cname--aglyn.com'],
-    // Spellings measured rendering the real page on a production deployment
-    // URL as a cache MISS, 2026-10-05.
-    ['rEaDy-To-ROLL.AgLYN.aPp', 'ready-to-roll'],
-    ['EdR-coNstruCTiON.AgLyn.app.', 'edr-construction'],
+    // The shapes of the spellings measured rendering a real client page on a
+    // production deployment URL as a cache MISS, 2026-10-05.
+    ['aCmE-BuIlDERS.AgLYN.aPp', 'acme-builders'],
+    ['NoRthwInD-cOFfee.AgLyn.app.', 'northwind-coffee'],
     ['cname--aglyN.Com', 'cname--aglyn.com'],
   ])('%s resolves to %s', (spelling, site) => {
     expect(normalizeHostAlias(spelling)).toBe(site)
@@ -67,8 +67,8 @@ describe('the probes’ fresh host spellings (AGL-3571)', () => {
 
   it('every spelling the monitor makes of a site resolves to that site', () => {
     for (const [host, site] of [
-      ['ready-to-roll.aglyn.app', 'ready-to-roll'],
-      ['edr-construction.aglyn.app', 'edr-construction'],
+      ['acme-builders.aglyn.app', 'acme-builders'],
+      ['northwind-coffee.aglyn.app', 'northwind-coffee'],
       ['demo.aglyn.app', 'demo'],
       ['aglyn.com', 'cname--aglyn.com'],
     ] as const) {
@@ -85,10 +85,10 @@ describe('the probes’ fresh host spellings (AGL-3571)', () => {
   })
 
   it('a port suffix is NOT a spelling: the route segment keeps it encoded and 404s', () => {
-    // Measured, not resolved here: `?tenantHost=ready-to-roll%3A5` answered 404
+    // Measured, not resolved here: `?tenantHost=<site>%3A5` answered 404
     // on the deployment URL, so neither encoder may ever produce a colon.
     for (const n of [1, 99, 100_000]) {
-      expect(freshHostSpelling('ready-to-roll.aglyn.app', n, 'aglyn.app')).not.toContain(':')
+      expect(freshHostSpelling('acme-builders.aglyn.app', n, 'aglyn.app')).not.toContain(':')
     }
   })
 })

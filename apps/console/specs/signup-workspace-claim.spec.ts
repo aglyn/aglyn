@@ -56,7 +56,10 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 import {
   claimPendingSignUpWorkspace,
   createSignUpWorkspace,
+  needsBackstopWorkspace,
+  personalWorkspaceName,
   rememberPendingSignUpWorkspace,
+  SIGN_UP_WORKSPACE_BACKSTOP_MS,
 } from '../utils/signup-workspace'
 
 /** The account document, as the transaction would find it. */
@@ -235,11 +238,91 @@ describe('AGL-2590 · creating the workspace', () => {
     })
   })
 
+  it('tries a TYPED name once: a taken address is offered back, not suffixed', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'That workspace URL is taken' }),
+    })
+    await createSignUpWorkspace({} as any, 'Acme Inc')
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('AGL-4024 · retries a DERIVED name once under a suffixed address', async () => {
+    // Two people with the same Google display name: the second one's derived
+    // address is taken, and nobody chose it, so a suffix costs nobody anything.
+    mockAuthorizedFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'That workspace URL is taken' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ orgId: 'o-2', slug: 'acme-inc-x1y2' }),
+      })
+    expect(
+      await createSignUpWorkspace({} as any, 'Acme Inc', { derived: true }),
+    ).toEqual({ slug: 'acme-inc-x1y2', error: null })
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(2)
+    const retry = JSON.parse(mockAuthorizedFetch.mock.calls[1][2].body)
+    expect(retry.name).toBe('Acme Inc')
+    expect(retry.slug).toMatch(/^acme-inc-[0-9a-z]{4}$/)
+  })
+
+  it('does not retry a derived name for any refusal other than a taken address', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: 'Too many workspaces' }),
+    })
+    await createSignUpWorkspace({} as any, 'Acme Inc', { derived: true })
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('reports a thrown request as a failure, not an exception', async () => {
     mockAuthorizedFetch.mockRejectedValue(new Error('offline'))
     expect(await createSignUpWorkspace({} as any, 'Acme Inc')).toEqual({
       slug: null,
       error: null,
     })
+  })
+})
+
+describe('the zero-workspace backstop (AGL-4021)', () => {
+  const now = Date.parse('2026-10-21T22:00:00Z')
+  const account = (createdMsAgo: number, emailVerified = true) => ({
+    emailVerified,
+    metadata: { creationTime: new Date(now - createdMsAgo).toUTCString() },
+  })
+
+  it('provisions for a young verified account whose sign-up door died', () => {
+    expect(needsBackstopWorkspace(account(60 * 60 * 1000), now)).toBe(true)
+  })
+
+  it('never provisions for an unverified account, which waits for verification', () => {
+    expect(needsBackstopWorkspace(account(60_000, false), now)).toBe(false)
+  })
+
+  it('leaves an older account with no workspaces alone: it left them', () => {
+    expect(
+      needsBackstopWorkspace(account(SIGN_UP_WORKSPACE_BACKSTOP_MS + 60_000), now),
+    ).toBe(false)
+  })
+
+  it('refuses an account whose creation time cannot be read', () => {
+    expect(
+      needsBackstopWorkspace({ emailVerified: true, metadata: {} }, now),
+    ).toBe(false)
+  })
+
+  it('names the workspace as the sign-up door would have', () => {
+    expect(personalWorkspaceName({ displayName: ' Ashik Ali ', email: 'a@x.io' })).toBe(
+      'Ashik Ali',
+    )
+    expect(personalWorkspaceName({ displayName: null, email: 'sanduc396@gmail.com' })).toBe(
+      'sanduc396',
+    )
   })
 })

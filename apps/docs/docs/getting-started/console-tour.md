@@ -63,7 +63,7 @@ takes you to its sites. With just one workspace you skip this page and go straig
   every device and browser, and nobody else sees them. If you leave a workspace, its
   pin simply stops counting.
 - **Search** — finds a workspace by the start of any word in its name or its address:
-  `rea` and `roll` both find *Ready To Roll*.
+  `nor` and `coffee` both find *Northwind Coffee*.
 - **Filters** — narrows the cards by **Plan** (Free, Starter, Pro and so on), by **Your
   role** in that workspace (Owner, Admin, Editor or Viewer), or by **Pinned**. Each
   filter in force shows as a chip above the cards; remove a chip to drop it.

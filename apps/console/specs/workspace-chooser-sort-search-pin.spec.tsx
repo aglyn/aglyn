@@ -19,8 +19,8 @@
  * The workspace chooser is in name order, pinnable, searchable and filterable
  * (AGL-3762).
  *
- * It listed memberships in the order the listen returned them — EDR
- * Construction, Ready To Roll, Elevated Concepts, Test Org, Aglyn LLC — with
+ * It listed memberships in the order the listen returned them — Eastwood
+ * Plumbing, Northwind Coffee, Ember Studio, Test Org, Aglyn LLC — with
  * no way to find one or keep the one you use first. The ordering rules
  * themselves are `utils/workspace-list.spec.ts`; this is the page wearing
  * them: the cards, the pin in each card's header, the search box, and the
@@ -49,7 +49,7 @@ jest.mock('../hooks/use-pinned-orgs', () => ({
     replace: mockReplace,
   }),
 }))
-jest.mock('../hooks/use-org-plans', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
   __esModule: true,
   useOrgPlans: (ids: string[]) => {
     mockPlanReads(ids)
@@ -120,9 +120,9 @@ const OrgJump = require('../app/(app)/(home)/page').default
 
 /** The five workspaces from the report, in the order the listen gave them. */
 const REPORTED = [
-  { $id: 'org-edr', slug: 'edr', orgName: 'EDR Construction', role: 'owner' },
-  { $id: 'org-rtr', slug: 'ready-to-roll', orgName: 'Ready To Roll', role: 'admin' },
-  { $id: 'org-elv', slug: 'elevated', orgName: 'Elevated Concepts', role: 'editor' },
+  { $id: 'org-ewd', slug: 'eastwood', orgName: 'Eastwood Plumbing', role: 'owner' },
+  { $id: 'org-nwc', slug: 'northwind-coffee', orgName: 'Northwind Coffee', role: 'admin' },
+  { $id: 'org-emb', slug: 'ember', orgName: 'Ember Studio', role: 'editor' },
   { $id: 'org-tst', slug: 'test-org', orgName: 'Test Org', role: 'viewer' },
   { $id: 'org-agl', slug: 'aglyn', orgName: 'Aglyn LLC', role: 'owner' },
 ]
@@ -159,12 +159,12 @@ describe('AGL-3762 · the workspace chooser', () => {
   it('lists the workspaces by name, A to Z', async () => {
     const { container } = render(<OrgJump />)
     await flush()
-    // Red before: edr, ready-to-roll, elevated, test-org, aglyn.
+    // Red before: eastwood, northwind-coffee, ember, test-org, aglyn.
     expect(cardSlugs(container)).toEqual([
       'aglyn',
-      'edr',
-      'elevated',
-      'ready-to-roll',
+      'eastwood',
+      'ember',
+      'northwind-coffee',
       'test-org',
     ])
   })
@@ -176,9 +176,9 @@ describe('AGL-3762 · the workspace chooser', () => {
     expect(cardSlugs(container)).toEqual([
       'test-org',
       'aglyn',
-      'edr',
-      'elevated',
-      'ready-to-roll',
+      'eastwood',
+      'ember',
+      'northwind-coffee',
     ])
     expect(
       screen.getByRole('button', { name: 'Unpin Test Org' }).getAttribute('aria-pressed'),
@@ -191,24 +191,24 @@ describe('AGL-3762 · the workspace chooser', () => {
   it('pins from the card header', async () => {
     render(<OrgJump />)
     await flush()
-    fireEvent.click(screen.getByRole('button', { name: 'Pin Ready To Roll' }))
-    expect(mockToggle).toHaveBeenCalledWith('org-rtr')
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Northwind Coffee' }))
+    expect(mockToggle).toHaveBeenCalledWith('org-nwc')
   })
 
   it('asks which pin a sixth replaces, and replaces the one picked (AGL-3943)', async () => {
-    mockPinned = ['org-edr', 'org-elv', 'org-tst', 'org-agl', 'org-x']
+    mockPinned = ['org-ewd', 'org-emb', 'org-tst', 'org-agl', 'org-x']
     mockFull = true
     mockToggle.mockReturnValueOnce('full')
     render(<OrgJump />)
     await flush()
-    const pin = screen.getByRole('button', { name: 'Pin Ready To Roll' })
+    const pin = screen.getByRole('button', { name: 'Pin Northwind Coffee' })
     // Shown, never hidden: the pin stays enabled and opens the question.
     expect((pin as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(pin)
-    expect(mockToggle).toHaveBeenCalledWith('org-rtr')
+    expect(mockToggle).toHaveBeenCalledWith('org-nwc')
     expect(screen.getByText('Pinned is full. Replace one?')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Replace Test Org' }))
-    expect(mockReplace).toHaveBeenCalledWith('org-tst', 'org-rtr')
+    expect(mockReplace).toHaveBeenCalledWith('org-tst', 'org-nwc')
   })
 
   it('keeps each page the same five workspaces, in order across pages', async () => {
@@ -222,9 +222,9 @@ describe('AGL-3762 · the workspace chooser', () => {
     expect(cardSlugs(container)).toEqual([
       'aglyn',
       'bakery',
-      'edr',
-      'elevated',
-      'ready-to-roll',
+      'eastwood',
+      'ember',
+      'northwind-coffee',
     ])
     fireEvent.click(screen.getByRole('button', { name: /go to next page/i }))
     expect(cardSlugs(container)).toEqual(['test-org', 'zed'])
@@ -236,12 +236,12 @@ describe('AGL-3762 · the workspace chooser', () => {
     const { container } = render(<OrgJump />)
     await flush()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search by name or slug' }), {
-      target: { value: 'roll' },
+      target: { value: 'coffee' },
     })
     await act(async () => {
       jest.advanceTimersByTime(400)
     })
-    expect(cardSlugs(container)).toEqual(['ready-to-roll'])
+    expect(cardSlugs(container)).toEqual(['northwind-coffee'])
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search by name or slug' }), {
       target: { value: 'nothing-like-it' },

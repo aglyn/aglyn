@@ -136,6 +136,10 @@ describeEmulated('the beat removes the empty site a cancelled start left (AGL-39
         hostId,
         kind: 'site',
         status: 'canceled',
+        brief: 'Trading cards and collectibles.',
+        inputs: { siteName: 'Cards', subdomain, siteType: 'store' },
+        createdBy: MEMBER,
+        expiresAt: new Date(settled.getTime() + 180 * 86_400_000),
         steps: [
           { name: 'plan', status: 'pending', creditsSpent: 0, attempts: 0 },
           { name: 'generate', status: 'pending', creditsSpent: 0, attempts: 0 },
@@ -162,8 +166,24 @@ describeEmulated('the beat removes the empty site a cancelled start left (AGL-39
     expect((await db.collection('users').doc(MEMBER).collection('hostMemberships').doc(EMPTY_HOST).get()).exists).toBe(false)
     const org = (await db.collection('orgs').doc(ORG).get()).data() ?? {}
     expect(Object.keys((org['hosts'] as object) ?? {})).toEqual([BUILT_HOST])
+    // The erase takes the site's jobs; the sweep puts this one back whole, not
+    // as a stub holding only `siteRemoved` (AGL-4015).
     const removedJob = (await db.collection('orgs').doc(ORG).collection('aiJobs').doc(`${EMPTY_HOST}-job`).get()).data()
     expect(removedJob?.['siteRemoved']).toMatchObject({ name: 'Cards' })
+    expect(removedJob).toMatchObject({
+      orgId: ORG,
+      hostId: EMPTY_HOST,
+      kind: 'site',
+      status: 'canceled',
+      brief: 'Trading cards and collectibles.',
+      inputs: { siteName: 'Cards', subdomain: 'e2e-empty-site', siteType: 'store' },
+      createdBy: MEMBER,
+    })
+    expect(removedJob?.['createdAt']?.toMillis()).toBe(settled.getTime() - 13_000)
+    expect(removedJob?.['expiresAt']?.toMillis()).toBe(settled.getTime() + 180 * 86_400_000)
+    // The drawer lists the org's jobs newest first, as `listAiJobs` reads them.
+    const listed = await db.collection('orgs').doc(ORG).collection('aiJobs').orderBy('createdAt', 'desc').get()
+    expect(listed.docs.map((doc) => doc.id)).toContain(`${EMPTY_HOST}-job`)
 
     // The twin with a layout is untouched, and its marker is gone too.
     expect((await db.collection('hosts').doc(BUILT_HOST).get()).exists).toBe(true)

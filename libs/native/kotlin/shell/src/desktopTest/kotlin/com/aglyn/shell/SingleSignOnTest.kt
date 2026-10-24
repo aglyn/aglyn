@@ -66,7 +66,7 @@ private class TenantAuth : AuthSession {
 }
 
 private class TenantFirestore : FirestoreReader {
-  private val names = listOf("Juniper Street Co.", "EDR Construction", "Ready To Roll", "Elevated Concepts", "Test Org", "Aglyn LLC")
+  private val names = listOf("Juniper Street Co.", "Eastwood Plumbing", "Northwind Coffee", "Ember Studio", "Test Org", "Aglyn LLC")
   private val orgs = names.mapIndexed { i, name -> FirestoreDoc("o$i", "users/$TENANT_UID/orgs/o$i", mapOf("orgName" to name, "slug" to "o$i", "role" to "owner")) }
   override suspend fun get(path: String): FirestoreDoc? = null
   override suspend fun page(query: FirestoreQuery) = FirestorePage(emptyList(), null)
@@ -134,7 +134,7 @@ class SingleSignOnTest {
     assertEquals(listOf("/api/auth/sso-lookup", "/api/auth/native-handoff/redeem"), calls.take(2))
     waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.orgs.size == 6 }
     assertEquals(
-      setOf("Juniper Street Co.", "EDR Construction", "Ready To Roll", "Elevated Concepts", "Test Org", "Aglyn LLC"),
+      setOf("Juniper Street Co.", "Eastwood Plumbing", "Northwind Coffee", "Ember Studio", "Test Org", "Aglyn LLC"),
       services.workspace.state.value.orgs.map { it.name }.toSet(),
     )
     assertEquals(false, services.workspace.state.value.hasMoreOrgs)

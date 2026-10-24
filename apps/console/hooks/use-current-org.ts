@@ -18,7 +18,7 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useConfirmedDoc from './use-confirmed-doc'
+import useConfirmedDoc from '@aglyn/tenant-feature-instance/hooks/use-confirmed-doc'
 import useOrgScope from './use-org-scope'
 
 /**

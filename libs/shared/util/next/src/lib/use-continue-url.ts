@@ -171,12 +171,34 @@ export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
   }, [continueUrl, pushNext])
 }
 
+/**
+ * The place to come back to after signing in: the path AND its query
+ * (AGL-4023).
+ *
+ * Built from the pathname alone, a signed-out visitor lost everything after
+ * the `?` on the way to `/signin`: a hand-off email's plan, add-ons and
+ * cadence, and a staff bundle link's `bundle` id, which carries its one-time
+ * domain-purchase waiver. Every hop after this one already keeps a query
+ * (`safeSameOriginPath`, the auth host's `continue`, {@link withContinueUrl}),
+ * so this is the only place it was dropped.
+ *
+ * No pathname means no place to return to, so a bare query is never
+ * returned on its own.
+ */
+export function continuePathFor(pathname: string, search: string): string {
+  if (!pathname) return ''
+  const query = search.replace(/^\?/, '')
+  return query ? `${pathname}?${query}` : pathname
+}
+
 export function useContinueUrlEncoded() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const search = searchParams?.toString() ?? ''
 
   return useMemo(() => {
-    return encodeURIComponent(pathname || '')
-  }, [pathname])
+    return encodeURIComponent(continuePathFor(pathname || '', search))
+  }, [pathname, search])
 }
 
 export function useContinueUrl(): UseContinueUrlResponse {

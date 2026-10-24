@@ -18,7 +18,7 @@
 /**
  * Sizes on a page already published, with nothing re-saved (AGL-3485).
  *
- * A tree shaped like edr-construction.aglyn.app's home page, composed the way
+ * A tree shaped like an image-heavy client home page, composed the way
  * the tenant composes it — the reusable card grafted, the repeat expanded, the
  * assets' pixel pairs laid on — and rendered with NO measurement anywhere.
  * Every `sizes` below comes from the tree alone, which is what lets every

@@ -461,10 +461,10 @@ describe('siteEntityJsonLd — a local business (AGL-3383)', () => {
 
 describe('the nested publisher is the standalone entity (AGL-3398)', () => {
   const entity = {
-    name: 'Ready To Roll',
+    name: 'Acme Builders',
     type: '1',
     businessType: 'HomeAndConstructionBusiness',
-    telephone: '+1-512-843-0942',
+    telephone: '+1-555-010-0199',
     logo: 'https://acme.test/logo.png',
   }
 
@@ -474,7 +474,7 @@ describe('the nested publisher is the standalone entity (AGL-3398)', () => {
     expect(publisher).toEqual({
       '@type': 'HomeAndConstructionBusiness',
       '@id': `${ORIGIN}/${SITE_ENTITY_FRAGMENT}`,
-      name: 'Ready To Roll',
+      name: 'Acme Builders',
     })
     expect(publisher?.['@id']).toBe(standalone?.['@id'])
   })
@@ -482,7 +482,7 @@ describe('the nested publisher is the standalone entity (AGL-3398)', () => {
   it('emits no @id without an origin to anchor it', () => {
     expect(hostSeoEntityJsonLd(entity)).toEqual({
       '@type': 'HomeAndConstructionBusiness',
-      name: 'Ready To Roll',
+      name: 'Acme Builders',
     })
   })
 

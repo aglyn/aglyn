@@ -69,7 +69,13 @@
  *     read from, and the run refuses on a poster it does not name;
  *  8. the three deep-dive sections' accessible names were still the
  *     template's ("Deep-dive · describe it", …); each becomes its heading, as
- *     the fair-use and form sections' are.
+ *     the fair-use and form sections' are;
+ *  9. each film's player shows a poster frame with no caption burned in: a
+ *     player takes the band's poster, which carries the film's caption, so
+ *     its `poster` is set to the film's `FILMS` entry's `posterFrame`, a
+ *     frame of the same film with no caption and no figure. The band's poster
+ *     stays the key the film is found by, and the band and the other pages
+ *     that play the film keep theirs.
  *
  * Each value is checked against its current one before it changes. A value
  * already carrying the new one is left alone, so a re-run is a no-op. After
@@ -117,7 +123,7 @@ const SCREEN = 'qnuMY13VsS' // /managed
 const ROUTE = '/managed'
 const HERO_COMPONENT = 'T-RdDkvVLW' // Product detail hero
 
-const VERSION_NAME = 'No prices; films where their posters were; a live site in the hero; FAQ band (AGL-3998)'
+const VERSION_NAME = 'No prices; films with caption-free posters; a live site in the hero; FAQ band (AGL-3998)'
 
 /** A dollar figure, which nothing on the page may state once this has run. */
 const FIGURE = /\$\s?\d/
@@ -226,10 +232,31 @@ const DEEP_DIVES = [
 const DEEP_DIVE_IMAGE = 'Deep-dive image'
 const DEEP_DIVE_VIDEO = 'Deep-dive video'
 
-/** Each film a deep-dive picture may be the poster frame of: the live page that plays it. */
+/**
+ * Each film a deep-dive picture may be the poster frame of, keyed by that
+ * poster (the band's, which carries the film's burned-in caption): the live
+ * page that plays it, and `posterFrame`, the frame this page's player shows
+ * instead, a frame of the same film with no caption and no figure.
+ */
 const FILMS = new Map([
-  [`media:org:${ORG}/v2sbemHaD1`, { screen: '24LtzlsGi4', route: '/product/ai' }], // film A
-  [`media:org:${ORG}/opiiHe6jgz`, { screen: 'o1Q1hKCS-O', route: '/product/besigner' }], // film D
+  [
+    `media:org:${ORG}/v2sbemHaD1`, // film A
+    {
+      screen: '24LtzlsGi4',
+      route: '/product/ai',
+      // 28.4 s: Marlow Bakery live on its own domain, after the caption has faded.
+      posterFrame: `media:org:${ORG}/xF-YhRAiu2`,
+    },
+  ],
+  [
+    `media:org:${ORG}/opiiHe6jgz`, // film D
+    {
+      screen: 'o1Q1hKCS-O',
+      route: '/product/besigner',
+      // 17.767 s: Ridgeline Outfitters open in the editor, between two captions.
+      posterFrame: `media:org:${ORG}/VV9BJUsgaS`,
+    },
+  ],
 ])
 
 // ---- arguments ---------------------------------------------------------------
@@ -537,6 +564,26 @@ for (const picture of pictures) {
 for (const video of placed) {
   already.push(`${video.$id} (${sectionOf(video)?.name}) already plays ${video.props?.src}`)
 }
+// Each film's caption-free frame is a picture in the org's library, a film poster there, the size of the poster it stands in for.
+for (const [poster, { posterFrame }] of FILMS) {
+  const [band, frame] = await Promise.all(
+    [poster, posterFrame].map((ref) => {
+      const [, org, mediaId] = /^media:org:([^/]+)\/(.+)$/.exec(ref) ?? []
+      return firestore.collection('orgs').doc(org).collection('media').doc(mediaId).get()
+    }),
+  )
+  const tags = frame.get('tags') ?? []
+  if (!frame.exists || frame.get('deletedAt') || frame.get('kind') !== 'image') {
+    problems.push(`${posterFrame} is not an image in the org's media library`)
+  } else if (!tags.includes('video') || !tags.includes('poster')) {
+    problems.push(`${posterFrame} (${frame.get('fileName')}) is not tagged a video poster`)
+  } else if (frame.get('width') !== band.get('width') || frame.get('height') !== band.get('height')) {
+    problems.push(
+      `${posterFrame} is ${frame.get('width')} × ${frame.get('height')}, ` +
+        `not the ${band.get('width')} × ${band.get('height')} of the poster ${poster} it stands in for`,
+    )
+  }
+}
 for (const picture of pictures.filter((node) => posters.has(node.$id))) {
   const { screen, route } = FILMS.get(picture.props.src)
   const film = await readFilmVideo({ firestore, hostId: HOST, screenId: screen, poster: picture.props.src })
@@ -557,7 +604,8 @@ for (const picture of pictures.filter((node) => posters.has(node.$id))) {
     parentId: row.$id,
     pluginId: 'mui',
     componentId: 'video',
-    props: film.props,
+    // The band's props, with the film's caption-free frame as the poster (9).
+    props: { ...film.props, poster: FILMS.get(picture.props.src).posterFrame },
     // The picture's place and look in the row; the band clips its player the same way.
     sx: { ...picture.sx, overflow: 'hidden' },
   }
@@ -579,8 +627,16 @@ for (const picture of pictures.filter((node) => posters.has(node.$id))) {
     where: `${where}, read from ${route} (instance ${film.instanceId}, version ${film.versionId})`,
     field: 'new node',
     from: '(none)',
-    to: JSON.stringify({ componentId: 'video', props: film.props, sx: nodes[videoId].sx }),
+    to: JSON.stringify({ componentId: 'video', props: nodes[videoId].props, sx: nodes[videoId].sx }),
   })
+}
+
+// ---- (9) each player already on the page shows its film's caption-free frame --------------------
+for (const video of placed) {
+  const now = video.props?.poster
+  const film = [...FILMS].find(([poster, { posterFrame }]) => now === poster || now === posterFrame)
+  if (!film) problems.push(`${video.$id} (${sectionOf(video)?.name}) shows the poster ${now}, which FILMS does not name`)
+  else setProp(video, 'poster', film[0], film[1].posterFrame, `${sectionOf(video)?.name}, the player's poster`)
 }
 
 // ---- (6) the SEO description ---------------------------------------------------------------

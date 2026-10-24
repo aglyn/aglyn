@@ -67,8 +67,9 @@
  *    is uncached on the canary's first request, and only then;
  *  - the `[host]` route segment is, and `normalizeHostAlias` resolves many
  *    spellings of one site — any letter case, the full `{sub}.aglyn.app` name,
- *    trailing dots. `?tenantHost=ReAdy-to-roll.aglyn.app` rendered the real
- *    home page (200, its images) as a MISS; a second spelling MISSed again.
+ *    trailing dots. A recased `?tenantHost=` spelling of a client site
+ *    rendered its real home page (200, its images) as a MISS; a second
+ *    spelling MISSed again.
  *    (A `:port` suffix does NOT work: the segment keeps it encoded and 404s.)
  *
  * `freshHostSpelling` turns a number into one of those spellings, so every
@@ -112,26 +113,35 @@ export const PROJECTS = {
 }
 
 /**
- * The pages a tenant canary renders, overridden whole by the
- * `CANARY_TENANT_HOSTS` repo variable (same grammar, `parseHostList`).
+ * The pages a tenant canary renders when the `CANARY_TENANT_HOSTS` repo
+ * variable is unset. The variable (same grammar, `parseHostList`) replaces
+ * this list whole.
  *
- * Real client pages first (AGL-3571), because a platform page with no images
- * is exactly what beta.223 spared: `ready-to-roll.aglyn.app/` carries a dozen
- * images, and EDR Construction's home, services and contact pages carry
- * images, reusable components, repeats and a form between them. Then the two
- * platform hosts, which resolve through the two host paths — `aglyn.com` the
- * custom-domain path, `demo.aglyn.app` the `.aglyn.app` subdomain path — so a
- * middleware break that spares one is caught by the other.
+ * Production sets the variable to real client pages (AGL-3571): pages with
+ * images, because a platform page with no images is exactly what beta.223
+ * spared, and pages with reusable components, repeats and a form between
+ * them, on more than one client site. They live in the variable and never
+ * here: this repository is public, and a client's site address is theirs to
+ * publish, not ours.
  *
- * If one of these sites is retired, its rows 404 as a real page and grade
- * `server` on that one host — `isolated`, never a rollback on its own — and
- * the run's summary names it; replace it here or in the variable.
+ * This fallback is Aglyn's own. `aglyn.com/press` carries dozens of images,
+ * `/blog` images and a form, `/contact` a form, `/product/commerce`
+ * images. Then the two platform hosts, which resolve through the two host
+ * paths — `aglyn.com` the custom-domain path, `demo.aglyn.app` the
+ * `.aglyn.app` subdomain path — so a middleware break that spares one is
+ * caught by the other. With two hosts, a fault that fails only pages with
+ * images fails one host, which grades `isolated` and never rolls back on its
+ * own: the variable's client sites are what give a red enough hosts.
+ *
+ * If one of the variable's sites is retired, its rows 404 as a real page and
+ * grade `server` on that one host — `isolated`, never a rollback on its own
+ * — and the run's summary names it; replace it in the variable.
  */
 export const DEFAULT_TENANT_HOSTS = [
-  'ready-to-roll.aglyn.app',
-  'edr-construction.aglyn.app',
-  'edr-construction.aglyn.app/services',
-  'edr-construction.aglyn.app/contact',
+  'aglyn.com/press',
+  'aglyn.com/blog',
+  'aglyn.com/contact',
+  'aglyn.com/product/commerce',
   'demo.aglyn.app',
   'aglyn.com',
 ].join(' ')
@@ -278,7 +288,7 @@ export function projectForEnvironment(environment) {
 }
 
 /**
- * `"demo.aglyn.app, edr-construction.aglyn.app/services https://x.aglyn.app/a"`
+ * `"demo.aglyn.app, northwind-coffee.aglyn.app/services https://x.aglyn.app/a"`
  * → `[{host, paths}]`. Entries split on commas or whitespace; an entry may
  * carry a scheme (dropped) and a path (added to that host's list). Every
  * host is always probed at `/`.

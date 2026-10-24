@@ -27,7 +27,7 @@ import { HostEntityType } from '@aglyn/aglyn/foundation/definitions/platform.typ
 import type { AiSeoFieldValues, AiSeoSiteFormField } from '../model/ai-seo'
 import type { AiTool } from '../providers/contract'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
-import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import { aiClipAtWord, type AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 
 /**
  * The strict tools SEO by AI answers through (AGL-2910), and the checks that
@@ -75,6 +75,45 @@ const collapse = (value: unknown): string =>
   typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
 
 const text = (description: string) => ({ anyOf: [{ type: 'string' }, { type: 'null' }], description })
+
+/* ------------------------------------------------------------------------ *
+ * Fitting an answer that ran past a length (AGL-4016)
+ * ------------------------------------------------------------------------ */
+
+/**
+ * One text held to `max` characters, cut the way the page step cuts the
+ * listing it stores (`aiClipAtWord`, AGL-3813): at a word, with no joining
+ * mark or dangling word left at the end.
+ *
+ * The model is told every length and re-asked once with the count it ran
+ * past, and a fast model still overruns by a few characters: counting
+ * characters is the one thing it reliably does badly. MindFullMe's listing
+ * failed on 2026-10-20 over a 65-character title, twice. So an answer whose
+ * only fault is a length is fitted rather than thrown away.
+ */
+export function aiFitSeoText(value: string, max: number): string {
+  return aiClipAtWord(collapse(value), max)
+}
+
+/**
+ * A listing answer with every text field past its length fitted to it, or
+ * `null` when no field ran over. Nothing else in the answer changes; the
+ * caller runs `checkAiSeoFields` on the result again.
+ */
+export function fitAiSeoFieldLengths(
+  answer: Record<string, unknown>,
+  fields: readonly SeoListingFieldKey[],
+): Record<string, unknown> | null {
+  let fitted: Record<string, unknown> | null = null
+  for (const key of orderedSeoListingFields(fields)) {
+    const raw = answer[key]
+    const { maxLength } = SEO_LISTING_FIELDS[key]
+    if (typeof raw !== 'string' || collapse(raw).length <= maxLength) continue
+    fitted ??= { ...answer }
+    fitted[key] = aiFitSeoText(raw, maxLength)
+  }
+  return fitted
+}
 
 /* ------------------------------------------------------------------------ *
  * One listing, from the editor's field list
@@ -387,6 +426,44 @@ export function checkAiSeoFixes(
     }
   }
   return violations.length ? { value: null, violations, offending: { pages: offending } } : { value, violations: [] }
+}
+
+/**
+ * A batch answer with each page's title, description, heading and image
+ * descriptions fitted to their lengths (AGL-4016), or `null` when nothing
+ * ran over. The caller runs `checkAiSeoFixes` on the result again.
+ */
+export function fitAiSeoFixLengths(answer: Record<string, unknown>): Record<string, unknown> | null {
+  if (!Array.isArray(answer['pages'])) return null
+  let changed = false
+  const fit = (raw: unknown, max: number) => {
+    if (typeof raw !== 'string' || collapse(raw).length <= max) return raw
+    changed = true
+    return aiFitSeoText(raw, max)
+  }
+  const pages = (answer['pages'] as unknown[]).map((raw) => {
+    if (!raw || typeof raw !== 'object') return raw
+    const entry = raw as Record<string, unknown>
+    return {
+      ...entry,
+      title: fit(entry['title'], SEO_LISTING_FIELDS.title.maxLength),
+      description: fit(entry['description'], SEO_LISTING_FIELDS.description.maxLength),
+      h1: fit(entry['h1'], AI_TEXT_LIMITS.headline),
+      ...(Array.isArray(entry['imageAlts'])
+        ? {
+            imageAlts: (entry['imageAlts'] as unknown[]).map((alt) =>
+              alt && typeof alt === 'object'
+                ? {
+                    ...(alt as Record<string, unknown>),
+                    alt: fit((alt as Record<string, unknown>)['alt'], AI_SEO_FIX_ALT_MAX_CHARS),
+                  }
+                : alt,
+            ),
+          }
+        : {}),
+    }
+  })
+  return changed ? { ...answer, pages } : null
 }
 
 /* ------------------------------------------------------------------------ *
