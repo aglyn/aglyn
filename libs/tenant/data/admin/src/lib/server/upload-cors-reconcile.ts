@@ -32,8 +32,8 @@
  * console project's seventeen attached names, exactly one —
  * `https://app.aglyn.com` — was permitted, while five names that serve the
  * console at 200 (`zgover.aglyn.com`, `test-org.aglyn.com`,
- * `aglyn-org.aglyn.com`, `sale-test.aglyn.com`, `zachary1748.aglyn.com`) were
- * refused. AGL-1452 recorded workspace subdomains as latent because none were
+ * `aglyn-org.aglyn.com`, `sale-test.aglyn.com` and one personal workspace's
+ * host) were refused. AGL-1452 recorded workspace subdomains as latent because none were
  * attached at the time; they are attached now.
  *
  * ## Serving names only

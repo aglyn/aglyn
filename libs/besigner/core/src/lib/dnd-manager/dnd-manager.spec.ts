@@ -229,3 +229,73 @@ describe('DndManager same-parent drop indexing (AGL-1405)', () => {
     expect(Aglyn.canvas.canUndo).toBe(false)
   })
 })
+
+/**
+ * A drag that lands nowhere, or is refused, still ends. The outlines on the
+ * canvas and the hierarchy's disabled row read this state, so leaving it set
+ * left the last drag painted on the page until the next one began.
+ */
+describe('DndManager clears every drag it ends', () => {
+  beforeEach(() => {
+    registerSchemas()
+    seedCanvas()
+  })
+
+  it('clears a drag that was released over nothing', () => {
+    const dnd = new DndManager()
+    dnd.setDragNode(Aglyn.canvas.getNode('inner'))
+    dnd.onDragEnd()
+    expect(dnd.drag).toBeNull()
+    expect(dnd.drop).toBeNull()
+  })
+
+  it('clears a drag that was refused for landing inside itself', () => {
+    const dnd = new DndManager()
+    dnd.setDragNode(Aglyn.canvas.getNode('outer'))
+    dnd.setDropNode(Aglyn.canvas.getNode('inner'))
+    dnd.setDropRegion(DropRegion.CHILDREN)
+    dnd.onDragEnd()
+    expect(Aglyn.canvas.getNode('outer')!.parentId).toBe(Aglyn.NODE_ROOT_ID)
+    expect(dnd.drag).toBeNull()
+    expect(dnd.drop).toBeNull()
+    expect(dnd.dropRegion).toBeNull()
+  })
+
+  it('ends quietly when the target is gone by the time the drag ends', () => {
+    // Undone, or removed by a co-editor, while the pointer was on it.
+    const dnd = new DndManager()
+    dnd.setDragNode(Aglyn.canvas.getNode('inner'))
+    dnd.setDropNode({
+      $id: 'gone',
+      parentId: 'outer',
+      type: Aglyn.NodeType.NODE,
+    } as any)
+    dnd.setDropRegion(DropRegion.BOTTOM)
+    expect(dnd.computedDrop).toBeNull()
+    expect(() => dnd.describeDropRejection()).not.toThrow()
+    dnd.onDragEnd()
+    expect(Aglyn.canvas.getNode('outer')!.nodes).toEqual(['leaf', 'inner'])
+    expect(dnd.drag).toBeNull()
+    expect(dnd.drop).toBeNull()
+  })
+
+  it('still clears when landing the drop throws', () => {
+    const reparent = jest
+      .spyOn(Aglyn.canvas, 'reparentNode')
+      .mockImplementation(() => {
+        throw new Error('refused')
+      })
+    try {
+      const dnd = new DndManager()
+      dnd.setDragNode(Aglyn.canvas.getNode('leaf'))
+      dnd.setDropNode(Aglyn.canvas.getNode('inner'))
+      dnd.setDropRegion(DropRegion.CHILDREN)
+      expect(() => dnd.onDragEnd()).toThrow('refused')
+      expect(dnd.drag).toBeNull()
+      expect(dnd.drop).toBeNull()
+      expect(dnd.dropRegion).toBeNull()
+    } finally {
+      reparent.mockRestore()
+    }
+  })
+})

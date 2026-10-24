@@ -159,7 +159,7 @@ jest.mock('../hooks/use-current-org', () => ({
  * renewal, price — are supplied by `mockOrg` below so a single fixture
  * describes the whole workspace.
  */
-jest.mock('../hooks/use-confirmed-doc', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-confirmed-doc', () => ({
   __esModule: true,
   default: () => ({ data: undefined }),
 }))

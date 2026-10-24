@@ -37,6 +37,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import vm from 'vm'
+import clearServiceWorkerCaches from '@aglyn/shared-util-dom/clear-service-worker-caches'
 
 const ORIGIN = 'https://app.aglyn.com'
 const OFFLINE_BODY = '<<offline-page>>'
@@ -195,11 +196,8 @@ describe('cache teardown on sign-out (AGL-1056)', () => {
     ;(global as Record<string, unknown>)['caches'] = realCaches
   })
 
-  /** Loaded lazily so each case can install its own `caches`. */
-  const load = async () => {
-    jest.resetModules()
-    return (await import('../utils/clear-service-worker-caches')).default
-  }
+  /** The helper reads `caches` when called, so each case installs its own first. */
+  const load = async () => clearServiceWorkerCaches
 
   it('deletes every cache for the origin', async () => {
     const deleted: string[] = []

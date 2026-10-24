@@ -102,6 +102,8 @@ export function useCanvasLayoutStyleOverrides(
 export interface LayoutStylePickerButtonProps {
   layoutId: string
   layoutName?: string
+  /** The button's words; a phone's banner has room for one. */
+  label?: string
 }
 
 /**
@@ -113,7 +115,7 @@ export interface LayoutStylePickerButtonProps {
  */
 export const LayoutStylePickerButton = observer(
   (props: LayoutStylePickerButtonProps) => {
-    const { layoutId, layoutName } = props
+    const { layoutId, layoutName, label } = props
     const { chromeCanvas } = useLayoutChromeContext()
     const setPanel = useAglynBesignerSetPanel()
     const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -155,7 +157,7 @@ export const LayoutStylePickerButton = observer(
           aria-haspopup="menu"
           aria-expanded={anchor ? 'true' : undefined}
         >
-          {'Style the layout on this page'}
+          {label ?? 'Style the layout on this page'}
         </Button>
         <Menu
           anchorEl={anchor}

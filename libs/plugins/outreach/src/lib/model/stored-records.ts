@@ -28,12 +28,15 @@ import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membersh
 import { readOutreachSequenceDraft } from './sequence-draft'
 import {
   OUTREACH_ENROLLMENT_STATUSES,
+  OUTREACH_INBOUND_KINDS,
   OUTREACH_SEQUENCE_STATUSES,
   OUTREACH_STEP_OVERRIDE_SOURCES,
   OUTREACH_STOP_REASONS,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
   type OutreachEnrollmentTarget,
+  type OutreachInboundKind,
+  type OutreachInboundMessage,
   type OutreachMailbox,
   type OutreachSequence,
   type OutreachSequenceStats,
@@ -173,6 +176,38 @@ function readOutreachSkippedSteps(value: unknown): OutreachSkippedStep[] {
   return steps
 }
 
+/**
+ * The messages a stored enrollment kept from the person (AGL-4020), oldest
+ * first; one without an id or a sender is dropped, since it could be neither
+ * shown as theirs nor answered.
+ */
+export function readOutreachInboundMessages(value: unknown): OutreachInboundMessage[] {
+  if (!Array.isArray(value)) return []
+  const messages: OutreachInboundMessage[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const raw = entry as Record<string, unknown>
+    const id = text(raw['id'])
+    const from = text(raw['from'])
+    if (!id || !from) continue
+    const kind = raw['kind']
+    messages.push({
+      id,
+      threadId: text(raw['threadId']) || null,
+      messageId: text(raw['messageId']) || null,
+      references: texts(raw['references']),
+      from,
+      fromName: text(raw['fromName']),
+      replyTo: text(raw['replyTo']) || null,
+      subject: text(raw['subject']),
+      atMs: ms(raw['atMs']) ?? 0,
+      kind: (OUTREACH_INBOUND_KINDS as readonly unknown[]).includes(kind) ? (kind as OutreachInboundKind) : 'reply',
+      body: text(raw['body']),
+    })
+  }
+  return messages.sort((a, b) => a.atMs - b.atMs)
+}
+
 /** A stored enrollment in its model shape, or `null` for no document. */
 export function readStoredOutreachEnrollment(
   id: string,
@@ -250,6 +285,11 @@ export function readStoredOutreachEnrollment(
   const skippedSteps = readOutreachSkippedSteps(data['skippedSteps'])
   if (skippedSteps.length) enrollment.skippedSteps = skippedSteps
   else delete enrollment.skippedSteps
+  // What they wrote back (AGL-4020): absent until the sync, or the reply
+  // composer, first read a message of theirs.
+  if (Array.isArray(data['inboundMessages'])) {
+    enrollment.inboundMessages = readOutreachInboundMessages(data['inboundMessages'])
+  } else delete enrollment.inboundMessages
   return enrollment
 }
 

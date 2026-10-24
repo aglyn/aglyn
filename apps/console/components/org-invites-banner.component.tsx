@@ -18,6 +18,7 @@
 
 import { Alert, Button, Stack } from '@mui/material'
 import { useEffect } from 'react'
+import { useInviteAutoAccept } from '../hooks/use-invite-auto-accept'
 import { useInviteResponse } from '../hooks/use-invite-response'
 import {
   useInviteReview,
@@ -64,9 +65,14 @@ export function inviteSentence(invite: PendingInvite): string {
  * once: a declined invitation is gone, and only the org can send another.
  */
 export function OrgInvitesBanner({ placement = 'inline' }: OrgInvitesBannerProps) {
-  const { invites } = usePendingInvites()
+  const { invites: pending } = usePendingInvites()
   const { review, claimInline, inlineClaims } = useInviteReview()
   const { respond, busyId } = useInviteResponse()
+  // Invitations take effect on their own (AGL-4023), so nobody is asked to
+  // accept one. The banner is left only where nothing joins automatically: a
+  // staff impersonation session, which sees what the account holder has.
+  const { enabled: autoJoin } = useInviteAutoAccept()
+  const invites = autoJoin === false ? pending : []
 
   useEffect(
     () => (placement === 'inline' ? claimInline() : undefined),

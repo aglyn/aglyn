@@ -16,18 +16,34 @@
  */
 'use client'
 
-import { Box, CircularProgress } from '@mui/material'
+import { Box, CircularProgress, Typography } from '@mui/material'
 import { notFound, usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
+import { useInviteAutoAccept } from '../hooks/use-invite-auto-accept'
 import { useOrgLastActivity } from '../hooks/use-org-last-activity'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
+import { usePendingInvites } from '../hooks/use-pending-invites'
 import { collaboratorRedirect } from '../utils/collaborator-navigation'
+import WorkspaceAccessPending from './workspace-access-pending.component'
 
-function GuardSpinner() {
+function GuardSpinner({ label }: { label?: string }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        py: 8,
+      }}
+    >
       <CircularProgress />
+      {label ? (
+        <Typography variant="body2" color="text.secondary">
+          {label}
+        </Typography>
+      ) : null}
     </Box>
   )
 }
@@ -38,6 +54,11 @@ function GuardSpinner() {
  * the designed 404 (`notFound()`) — NEVER a sign-out (that was the cross-org
  * logout bug). A definitive answer is required first, so nothing happens while
  * memberships load.
+ *
+ * A non-member with a pending invitation to the org is not shown a 404
+ * (AGL-4023): it is the page their invitation email linked to, and they are
+ * being joined to it as they arrive, so they wait on "Joining…" and the page
+ * opens.
  *
  * It also decides WHICH org pages a member may see (AGL-1032): a site
  * collaborator belongs to the org but not to it — they are redirected into
@@ -63,6 +84,13 @@ export function OrgGuard({ children }: { children?: ReactNode }) {
   const { orgWide, ready: reachReady } = useOrgReach()
   const scoped = Boolean(pathOrgSlug) && known && reachReady && !orgWide
   const { sites, ready: sitesReady } = useReachableSites(scoped)
+  // Someone invited here who is not a member YET (AGL-4023): the invitation
+  // is being joined on its own, so this is a wait, not a 404.
+  const { invites, loading: invitesLoading } = usePendingInvites()
+  const { enabled: autoJoin, statusOf, joinedSlugs } = useInviteAutoAccept()
+  const invite = pathOrgSlug
+    ? invites.find((pending) => pending.orgSlug === pathOrgSlug)
+    : undefined
   const target =
     scoped && sitesReady
       ? collaboratorRedirect(pathname, pathOrgSlug ?? '', sites)
@@ -97,7 +125,26 @@ export function OrgGuard({ children }: { children?: ReactNode }) {
   // stale IndexedDB cache and false-404 a valid workspace. Only 404 once
   // the server has echoed the membership list; a hit renders immediately.
   if (!known && !confirmed) return <GuardSpinner />
-  if (!known) notFound()
+  if (!known) {
+    // Joined in this tab: hold until the membership listener catches up,
+    // rather than flash the 404 between the two.
+    if (pathOrgSlug && joinedSlugs.has(pathOrgSlug)) {
+      return <GuardSpinner label={`Opening ${invite?.orgName ?? 'the workspace'}…`} />
+    }
+    if (invite) {
+      // A join that could not finish (its sender has been told), or a
+      // session that never joins on its own (staff impersonation): a calm
+      // wait, never a refusal or a question for the invitee.
+      return autoJoin === false || statusOf(invite.$id) === 'failed' ? (
+        <WorkspaceAccessPending invite={invite} />
+      ) : (
+        <GuardSpinner label={`Joining ${invite.orgName ?? 'the workspace'}…`} />
+      )
+    }
+    // The invitations are still being read: a 404 now could be wrong.
+    if (invitesLoading) return <GuardSpinner />
+    notFound()
+  }
   // Hold the org page a collaborator is being moved off. The navigation is
   // async, so rendering it meanwhile shows exactly the empty Team/Billing
   // page this issue exists to stop them seeing — briefly, but that is the

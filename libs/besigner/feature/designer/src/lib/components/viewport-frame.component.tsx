@@ -40,7 +40,13 @@ import {
   ThemeProvider,
   useHostThemeDocument,
 } from '@aglyn/shared-ui-theme'
-import { Box, type BoxProps, CssBaseline, GlobalStyles } from '@mui/material'
+import {
+  Box,
+  type BoxProps,
+  CssBaseline,
+  GlobalStyles,
+  useTheme,
+} from '@mui/material'
 import { observer } from 'mobx-react-lite'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
 import {
@@ -49,8 +55,11 @@ import {
   HTMLAttributes,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useState,
 } from 'react'
+import CanvasChromeThemeContext from '../contexts/canvas-chrome-theme-context'
 import { CanvasHostTokensProvider } from '../contexts/canvas-host-tokens-context'
 import CanvasPageRecordContext from '../contexts/canvas-page-record-context'
 import RepeatRecordContext from '../contexts/repeat-record-context'
@@ -69,6 +78,10 @@ import { hoistStateSx } from '../utils/state-sx'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
 import InlineTextEditorComponent from './inline-text-editor.component'
+import LayoutPartMenu, {
+  findLayoutPart,
+  layoutPartMenu,
+} from './layout-part-menu.component'
 import NodeLeaf, { MediaFactsLeaf } from './node-leaf'
 import NodeOverlay from './node-overlay'
 
@@ -199,6 +212,8 @@ const ThemedElementContainer = ({ children }) => {
     devicePreview,
     hostTheme.breakpoints?.values,
   )
+  // The console's own theme, read before the site's replaces it below.
+  const chromeTheme = useTheme()
   const canvasTheme = useMemo(
     () =>
       deviceWidth == null
@@ -274,6 +289,7 @@ const ThemedElementContainer = ({ children }) => {
   )
   return (
     <SiteSchemeThemesContext.Provider value={schemeThemes}>
+      <CanvasChromeThemeContext.Provider value={chromeTheme}>
       <ThemeProvider theme={canvasTheme}>
         <CssBaseline />
         <CanvasRevealContext.Provider value={revealedNodeIds}>
@@ -294,6 +310,7 @@ const ThemedElementContainer = ({ children }) => {
           </CanvasMutedClassesContext.Provider>
         </CanvasRevealContext.Provider>
       </ThemeProvider>
+      </CanvasChromeThemeContext.Provider>
     </SiteSchemeThemesContext.Provider>
   )
 }
@@ -338,6 +355,23 @@ const SiteContainer = observer(
     const { ...rest } = props
     const { chromeCanvas } = useLayoutChromeContext()
     const chromeRoot = chromeCanvas?.getNode(NODE_ROOT_ID)
+    // State, not a ref: the paper mounts inside the shadow root after this
+    // component does, and the listener below has to follow it there.
+    const [paper, setPaper] = useState<HTMLElement | null>(null)
+    useEffect(() => {
+      if (!paper || !chromeCanvas) return
+      // Native, like every canvas listener: React never sees an event from
+      // inside the closed shadow root.
+      const onClick = (event: MouseEvent) => {
+        const part = findLayoutPart(event.target, chromeCanvas)
+        if (!part) return
+        // A link in the layout's nav would otherwise navigate the editor.
+        event.preventDefault()
+        layoutPartMenu.open(part, { left: event.clientX, top: event.clientY })
+      }
+      paper.addEventListener('click', onClick)
+      return () => paper.removeEventListener('click', onClick)
+    }, [paper, chromeCanvas])
     return (
       <SiteShadowDom
         ref={ref}
@@ -359,7 +393,7 @@ const SiteContainer = observer(
               the console's own head, which is the copy that never crossed. */}
           <PluginStyles scope="shadow" />
           <ThemedElementContainer>
-            <FramePaper>
+            <FramePaper ref={setPaper}>
               {chromeRoot ? (
                 <AglynNodeRenderer
                   node={chromeRoot}
@@ -403,6 +437,7 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
       <NodeOverlay data-aglyn="overlay:hovered" variant="hovered" />
       <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
       <CanvasDropIndicator />
+      <LayoutPartMenu />
       <InlineTextEditorComponent />
       <InlineMarkdownEditorComponent />
     </Box>

@@ -209,7 +209,6 @@ describe('every sign-in door reports a login (AGL-2587)', () => {
       'apps/console/utils/interactive-signin.ts',
       'apps/console/utils/signin-bounce.ts',
       'apps/console/utils/legal-consent.ts',
-      'apps/console/utils/is-mobile-browser.ts',
       'apps/console/utils/popup-loading-guard.ts',
       'apps/console/utils/passkeys.ts',
       'apps/console/hooks/use-presence.ts',

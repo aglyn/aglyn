@@ -211,7 +211,7 @@ sends. Someone who signed up through the form reads **Opted in**. See
 
 1. Open **Components** → **Create Component**. Under **Where will you use it?**
    choose **On pages**, name it `Newsletter band`, and choose **Next**. Then
-   **Open Besigner**.
+   **Edit in Besigner**.
 2. Give it two text **properties** so each page can change the words. Choose
    **File → Properties…** → **Add property**:
 

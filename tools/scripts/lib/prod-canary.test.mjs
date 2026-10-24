@@ -113,10 +113,10 @@ test('health: a JSON answer that reports a dependency down is degraded, a crash 
 
 test('host list: commas or spaces, schemes dropped, paths merged per host, root always', () => {
   assert.deepEqual(
-    parseHostList('demo.aglyn.app, https://EDR.aglyn.app/services\nedr.aglyn.app/about/ edr.aglyn.app/services'),
+    parseHostList('demo.aglyn.app, https://SHOP.aglyn.app/services\nshop.aglyn.app/about/ shop.aglyn.app/services'),
     [
       { host: 'demo.aglyn.app', paths: ['/'] },
-      { host: 'edr.aglyn.app', paths: ['/', '/services', '/about'] },
+      { host: 'shop.aglyn.app', paths: ['/', '/services', '/about'] },
     ],
   )
   assert.deepEqual(parseHostList(''), [])
@@ -405,17 +405,17 @@ const resolve = (spelling) => {
 }
 
 test('fresh spellings: literals the tenant resolver spec pins too', () => {
-  assert.equal(freshHostSpelling('ready-to-roll.aglyn.app', 0), 'ready-to-roll.aglyn.app')
-  assert.equal(freshHostSpelling('ready-to-roll.aglyn.app', 5), 'ReAdy-to-roll.aglyn.app')
-  assert.equal(spellingCapacity('ready-to-roll.aglyn.app'), 2 ** 19)
-  assert.equal(freshHostSpelling('ready-to-roll.aglyn.app', 2 ** 19 + 1), 'Ready-to-roll.aglyn.app.')
+  assert.equal(freshHostSpelling('acme-builders.aglyn.app', 0), 'acme-builders.aglyn.app')
+  assert.equal(freshHostSpelling('acme-builders.aglyn.app', 5), 'AcMe-builders.aglyn.app')
+  assert.equal(spellingCapacity('acme-builders.aglyn.app'), 2 ** 20)
+  assert.equal(freshHostSpelling('acme-builders.aglyn.app', 2 ** 20 + 1), 'Acme-builders.aglyn.app.')
   assert.equal(freshHostSpelling('aglyn.com', 3), 'cname--AGlyn.com')
   // The custom-domain form has no dots to spend, so it cycles.
   assert.equal(freshHostSpelling('aglyn.com', 256 + 3), 'cname--AGlyn.com')
 })
 
 test('every fresh spelling names the same site, and no two numbers share one', () => {
-  for (const host of ['ready-to-roll.aglyn.app', 'edr-construction.aglyn.app', 'demo.aglyn.app', 'aglyn.com']) {
+  for (const host of ['acme-builders.aglyn.app', 'northwind-coffee.aglyn.app', 'demo.aglyn.app', 'aglyn.com']) {
     const seen = new Set()
     const limit = Math.min(4 * spellingCapacity(host), 2000)
     for (let n = 0; n < limit; n++) {
@@ -429,12 +429,33 @@ test('every fresh spelling names the same site, and no two numbers share one', (
       if (!host.endsWith('.aglyn.app')) assert.ok(spelling.startsWith('cname--'))
     }
   }
-  assert.equal(siteSpelling('ready-to-roll.aglyn.app'), 'ready-to-roll')
+  assert.equal(siteSpelling('acme-builders.aglyn.app'), 'acme-builders')
   assert.equal(siteSpelling('aglyn.com'), 'cname--aglyn.com')
 })
 
+/**
+ * The shape production's `CANARY_TENANT_HOSTS` variable has: one client site's
+ * home page, another's home, services and contact pages, then the two
+ * platform hosts. Invented hosts; the real ones live only in the variable.
+ */
+const CLIENT_PAGES = [
+  'acme-builders.aglyn.app',
+  'northwind-coffee.aglyn.app',
+  'northwind-coffee.aglyn.app/services',
+  'northwind-coffee.aglyn.app/contact',
+  'demo.aglyn.app',
+  'aglyn.com',
+].join(' ')
+
+test('the fallback page list names only Aglyn\'s own hosts', () => {
+  assert.deepEqual(parseHostList(DEFAULT_TENANT_HOSTS), [
+    { host: 'aglyn.com', paths: ['/', '/press', '/blog', '/contact', '/product/commerce'] },
+    { host: 'demo.aglyn.app', paths: ['/'] },
+  ])
+})
+
 test('the candidate plan renders real pages fresh on the deployment URL, never the public domain', () => {
-  const tenantHosts = parseHostList(DEFAULT_TENANT_HOSTS)
+  const tenantHosts = parseHostList(CLIENT_PAGES)
   const plan = (nonce) =>
     canaryPlan({
       project: PROJECTS.tenant,
@@ -447,12 +468,12 @@ test('the candidate plan renders real pages fresh on the deployment URL, never t
   const tenantRows = rows.filter((row) => row.counts)
   assert.ok(tenantRows.every((row) => row.url.startsWith('https://aglyn-tenant-ayy9d9vq5-aglyn.vercel.app/')))
   const pages = rows.filter((row) => row.kind === 'page')
-  // Every default real page: ready-to-roll's home and EDR's three.
+  // Every listed real page: one site's home and the other's three.
   for (const [host, path] of [
-    ['ready-to-roll.aglyn.app', '/'],
-    ['edr-construction.aglyn.app', '/'],
-    ['edr-construction.aglyn.app', '/services'],
-    ['edr-construction.aglyn.app', '/contact'],
+    ['acme-builders.aglyn.app', '/'],
+    ['northwind-coffee.aglyn.app', '/'],
+    ['northwind-coffee.aglyn.app', '/services'],
+    ['northwind-coffee.aglyn.app', '/contact'],
   ]) {
     const row = pages.find((page) => page.host === host && page.path === path)
     assert.ok(row?.fresh, `${host}${path}`)
@@ -463,7 +484,7 @@ test('the candidate plan renders real pages fresh on the deployment URL, never t
   const spellings = pages.map((row) => new URL(row.url).searchParams.get('tenantHost'))
   // Two paths of one site never share a spelling, and neither does the next round.
   const keys = pages.map((row, i) => `${row.path}|${spellings[i]}`)
-  assert.equal(new Set(spellings.filter((_, i) => pages[i].host === 'edr-construction.aglyn.app')).size, 3)
+  assert.equal(new Set(spellings.filter((_, i) => pages[i].host === 'northwind-coffee.aglyn.app')).size, 3)
   const next = plan('n2').filter((row) => row.kind === 'page').map((row) => `${row.path}|${new URL(row.url).searchParams.get('tenantHost')}`)
   assert.ok(next.every((key) => !keys.includes(key)))
   // The layout row per site, under the spelling its visitors' requests carry.

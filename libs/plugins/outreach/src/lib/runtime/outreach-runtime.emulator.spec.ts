@@ -800,11 +800,23 @@ describeEmulated('the sync job (AGL-2981)', () => {
       dedupeKey: 'reply:<reply-1@mail.example.org>',
     })
     expect((await mailbox()).health.replies).toBe(1)
+    // What they wrote is kept on the enrollment, to show and to answer (AGL-4020).
+    const keptReply = [
+      expect.objectContaining({
+        from: 'person1@example.org',
+        fromName: 'Pat1 Example',
+        messageId: '<reply-1@mail.example.org>',
+        kind: 'reply',
+        body: 'Thanks — can we talk Thursday?',
+      }),
+    ]
+    expect((await enrollment(one.id)).inboundMessages).toEqual(keptReply)
 
     // A second run reads the same thread and does nothing twice.
     await sync()
     expect(filed.tasks.filter((task) => task.dedupeKey === 'reply:<reply-1@mail.example.org>')).toHaveLength(1)
     expect((await mailbox()).health.replies).toBe(1)
+    expect((await enrollment(one.id)).inboundMessages).toEqual(keptReply)
   })
 
   it('postpones the next step on an out-of-office, and keeps the sequence running', async () => {
@@ -827,6 +839,8 @@ describeEmulated('the sync job (AGL-2981)', () => {
     const after = await enrollment(one.id)
     expect(after.status).toBe('active')
     expect(Number(after.nextDueAtMs)).toBeGreaterThan(dueBefore)
+    // Kept as what it is, so the member can answer it (AGL-4020).
+    expect(after.inboundMessages).toEqual([expect.objectContaining({ kind: 'auto_reply', from: 'person1@example.org' })])
     // A working week after the reply, at least.
     expect(Number(after.nextDueAtMs)).toBeGreaterThanOrEqual(clock + 5 * 86_400_000)
     expect(filed.tasks.filter((task) => task.dedupeKey.startsWith('reply:'))).toHaveLength(0)

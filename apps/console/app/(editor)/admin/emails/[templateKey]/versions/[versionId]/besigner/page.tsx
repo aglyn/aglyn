@@ -67,7 +67,7 @@ import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
 import useFirestoreDoc from '../../../../../../../../hooks/use-firestore-doc'
-import useDiscardChangesMenuItem from '../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import { useIsStaff } from '../../../../../../../../hooks/use-is-staff'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(

@@ -83,7 +83,7 @@ jest.mock('../utils/email-verification-gate', () => ({
   emailGateWouldRefuse: async () => false,
 }))
 
-jest.mock('../utils/clear-service-worker-caches', () => ({
+jest.mock('@aglyn/shared-util-dom/clear-service-worker-caches', () => ({
   __esModule: true,
   default: async () => undefined,
 }))
