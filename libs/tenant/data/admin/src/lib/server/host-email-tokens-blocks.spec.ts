@@ -121,10 +121,10 @@ describe('renderHostEmailWithTokens and a placed header (AGL-3287)', () => {
       'booking-confirmed',
       { name: 'Alex' },
     )
-    expect(rendered?.html).toContain(
-      'Acme header: Your booking — write to <a href="mailto:help@northwind.example"',
-    )
-    expect(rendered?.html).toContain('help@northwind.example</a>')
+    // The address stays text: no mailto link to a domain that isn't the
+    // sender's (#1910).
+    expect(rendered?.html).toContain('Acme header: Your booking — write to help@northwind.example')
+    expect(rendered?.html).not.toContain('mailto:')
     expect(rendered?.html).toContain('Hi Alex, see you soon.')
     expect(rendered?.text).toContain('Acme header: Your booking')
     expect(rendered?.subject).toBe('Booked, Alex')

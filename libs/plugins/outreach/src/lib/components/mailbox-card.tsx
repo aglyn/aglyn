@@ -227,10 +227,11 @@ export function MailboxCard(props: MailboxCardProps) {
   const health = summarizeMailboxHealth(mailbox.health, mailbox.timezone, nowMs)
   // Tests of a sequence step sent today (AGL-3325): counted beside the
   // sends, never among them, so the cap and the seven-day sum stay honest.
-  const testsToday = Math.max(
-    0,
-    Number(mailbox.health?.daily?.[outreachLocalDay(nowMs, mailbox.timezone)]?.tests) || 0,
-  )
+  const today = mailbox.health?.daily?.[outreachLocalDay(nowMs, mailbox.timezone)]
+  const testsToday = Math.max(0, Number(today?.tests) || 0)
+  // Answers members sent people who wrote back (AGL-4020): counted apart
+  // like the tests, so they never spend the cap or pause the mailbox.
+  const answersToday = Math.max(0, Number(today?.manualReplies) || 0)
   const needsReconnect = mailbox.status === 'reconnect_required' || mailbox.status === 'disconnected'
   const capCheck = validateDailyCap(draft.dailyCap === '' ? Number.NaN : Number(draft.dailyCap))
   const windowCheck = validateSendWindow(draft.window)
@@ -419,6 +420,11 @@ export function MailboxCard(props: MailboxCardProps) {
           <Typography variant="caption" color="text.secondary" aria-label="Tests today">
             {`Tests today: ${testsToday}`}
           </Typography>
+          {answersToday ? (
+            <Typography variant="caption" color="text.secondary" component="p" aria-label="Answers today">
+              {`Answers to replies today: ${answersToday}, not counted against the daily cap`}
+            </Typography>
+          ) : null}
           <Typography variant="caption" color="text.secondary" component="p" aria-label="Pacing">
             {outreachPacingNote(mailbox, nowMs)}
           </Typography>

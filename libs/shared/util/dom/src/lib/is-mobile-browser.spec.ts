@@ -1,4 +1,7 @@
 /**
+ * @jest-environment jsdom
+ */
+/**
  * @license
  * Copyright 2026 Aglyn LLC
  *

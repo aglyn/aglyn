@@ -24,7 +24,9 @@
 //
 // The budget is seconds on the shared Mac. Only the checks a pushed path can
 // trip run, the file-content guards read only the pushed files, and scripts run
-// four at a time. Exit 1 when a check fails.
+// four at a time. The pushed commits' messages are read for personal and
+// client identifiers, because a message cannot be reworded once it is public.
+// Exit 1 when a check fails.
 //
 // ## What it reads, and why that holds in a shared checkout
 //
@@ -256,6 +258,15 @@ for (const check of checksFor(changed)) {
     detail = `${paths.length} file(s)${leftOut ? `, ${leftOut} with uncommitted changes left out` : ''}`
   }
   tasks.push(() => runScript(check.name, args, detail))
+}
+// The pushed commits' MESSAGES, for personal and client identifiers. Reads git
+// objects, never the disk, so it runs whatever is checked out. This is the
+// last point at which a message can still be reworded: once pushed it is
+// public, and history is never rewritten here.
+for (const { base, head, ref } of ranges) {
+  const script = join(ROOT, 'tools', 'scripts', 'check-personal-identifiers.mjs')
+  const name = ranges.length > 1 ? `commit messages (${ref})` : 'commit messages'
+  tasks.push(() => runScript(name, [script, '--commits', `${base}..${head}`], ''))
 }
 
 let results

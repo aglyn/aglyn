@@ -2725,7 +2725,9 @@ const LISTING_TRAILING_JOINERS = /[\s,;:|/&—–-]+$/
  * past half of `max` is cut at `max` itself, mid-word.
  *
  * The page step clips what it stores with it; `aiSettlePlanSeo` clips a plan
- * with it only where the cut lands on a whole word (AGL-3837).
+ * with it only where the cut lands on a whole word (AGL-3837); and an SEO
+ * listing or audit batch whose re-ask still ran past a length is fitted with
+ * it (`aiFitSeoText`, AGL-4016).
  */
 export function aiClipAtWord(value: string, max: number, language?: string | null): string {
   const text = value.trim()

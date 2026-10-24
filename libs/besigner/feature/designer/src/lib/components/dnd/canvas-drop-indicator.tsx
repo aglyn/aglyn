@@ -16,50 +16,48 @@
  */
 
 import * as Besigner from '@aglyn/besigner'
-import {
-  type ClientRect,
-  type DragCancelEvent,
-  type DragEndEvent,
-  type DragMoveEvent,
-  DragOverEvent,
-  type DragStartEvent,
-  useDndMonitor,
-} from '@dnd-kit/core'
+import { useDndContext } from '@dnd-kit/core'
 import { observer } from 'mobx-react-lite'
-import { useState } from 'react'
 import DropIndicator from './drop-indicator'
+import { dropIndicatorBox } from './drop-indicator-geometry'
+import { DropSurface, visibleSurfaceRect } from './drop-surface'
+import {
+  type DropTargetData,
+  dropTargetRect,
+  insideLandingTarget,
+} from './drop-targeting'
 
-const DEFAULT: { region: Besigner.DropRegion; rect: ClientRect } = {
-  region: Besigner.DropRegion.CHILDREN,
-  rect: {
-    left: 0,
-    top: 0,
-    height: 0,
-    right: 0,
-    bottom: 0,
-    width: 0,
-  },
-}
-
+/**
+ * The drop marker for every besigner drag — canvas, hierarchy and breadcrumbs.
+ *
+ * It reads one source for each half of what it draws: the target from
+ * dnd-kit's live `over`, the region from the dnd store the workspace fills on
+ * every move. It used to keep its own copies, taking the rectangle only when
+ * the target changed and the region from a value the workspace wrote onto
+ * the target — which this component's listener, registered first, read
+ * before the workspace had written it. So the marker showed the region from
+ * one move ago, on a rectangle from whenever the target was entered.
+ */
 export const CanvasDropIndicator = observer(() => {
-  const [visible, setVisible] = useState(false)
-  const [rect, setRect] = useState<ClientRect>(() => ({ ...DEFAULT.rect }))
-  const [region, setRegion] = useState<Besigner.DropRegion>(DEFAULT.region)
+  const { active, over } = useDndContext()
+  const region = Besigner.dnd.dropRegion
+  const rect = active && over && region ? dropTargetRect(over) : null
+  const data = over?.data.current as DropTargetData | undefined
+  const clip = rect ? visibleSurfaceRect(data?.surface, rect) : null
+  const landing =
+    rect &&
+    region === Besigner.DropRegion.CHILDREN &&
+    data?.surface === DropSurface.CANVAS
+      ? insideLandingTarget(data.node)
+      : null
+  const box = landing
+    ? dropIndicatorBox({ ...landing, clip })
+    : rect
+      ? dropIndicatorBox({ region, rect, inset: data?.inset, clip })
+      : null
+  const rejected = Boolean(box) && Besigner.dnd.describeDropRejection() != null
 
-  useDndMonitor({
-    onDragStart: (event: DragStartEvent) => setVisible(true),
-    onDragEnd: (event: DragEndEvent) => setVisible(false),
-    onDragCancel: (event: DragCancelEvent) => setVisible(false),
-    onDragOver(event: DragOverEvent) {
-      setVisible(Boolean(event.over))
-      if (event.over) setRect(event.over?.rect)
-    },
-    onDragMove: (event: DragMoveEvent) => {
-      setRegion(event.over?.data.current.region || DEFAULT.region)
-    },
-  })
-
-  return <DropIndicator rect={rect} visible={visible} region={region} />
+  return <DropIndicator box={box} rejected={rejected} />
 })
 CanvasDropIndicator.displayName = 'CanvasDropIndicator'
 

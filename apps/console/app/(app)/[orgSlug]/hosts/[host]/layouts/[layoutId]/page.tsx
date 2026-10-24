@@ -316,7 +316,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
       // The besigner is what this page exists to reach, so it belongs in
       // the hero like the screen detail page's, not as a text button at
       // the bottom of a card (AGL-702).
-      // Withheld when there is no layout: Open Besigner would mint a
+      // Withheld when there is no layout: Edit in Besigner would mint a
       // version document under an id that has none (AGL-706).
       // Presence sits BESIDE the button that would join the room (AGL-2486).
       // card further down the page. It watches without announcing: a page
@@ -328,7 +328,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
               hostId={hostId}
               docType="layout"
               docId={layoutId}
-              // The version Open Besigner would actually take you to.
+              // The version Edit in Besigner would actually take you to.
               versionId={publishedVersionId ?? versions[0]?.$id}
             />
             <Button
@@ -340,7 +340,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
                 <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
               }
             >
-              {opening ? 'Opening…' : 'Open Besigner'}
+              {opening ? 'Opening…' : 'Edit in Besigner'}
             </Button>
             <RowActionsMenu
               label={definition?.displayName ?? layoutId}

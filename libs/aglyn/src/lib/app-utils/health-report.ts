@@ -1156,6 +1156,123 @@ export function signupLandingHealth(
 }
 
 /**
+ * Did each new verified account end up in a workspace (AGL-4021)?
+ *
+ * {@link SignupLandingCheck} grades orgs, so an account that never got an org
+ * is invisible to it. That is exactly how AGL-4021 hid: every phone Google
+ * sign-up for a day reached the console with no workspace, and nothing went
+ * red. The canary signs up through the password door, and the three failures
+ * sat among healthy desktop and password sign-ups, so a streak over everyone
+ * kept resetting.
+ *
+ * So the streak is taken per sign-up DOOR (`users/{uid}.acquisition.door`):
+ * red when the newest {@link MAX_WORKSPACELESS_SIGNUPS} graded accounts that
+ * came through any one door all have no workspace. A broken door strands
+ * every account it makes. A person who leaves still has the workspace their
+ * door made before they left, so leaving does not count here.
+ *
+ * Graded: verified accounts that accepted the Terms. An unverified password
+ * account gets its workspace on its first verified session (AGL-2590), so it
+ * waits by design. A Google account created from /signin is signed out and
+ * sent to /signup to accept the Terms (AGL-1497), and one that walks away
+ * there never agreed to anything, so it has no workspace by design too.
+ *
+ * Pure. The body carries counts only, never a uid or a door name, because the
+ * endpoint is public.
+ */
+export interface SignupWorkspaceCheck extends HealthCheck {
+  /** Graded accounts in the window with no workspace. Null when the read failed. */
+  workspacelessAccounts: number | null
+  /** The longest per-door streak of newest accounts with no workspace. */
+  workspacelessStreak: number | null
+  /** Graded accounts in the window, the context for the counts above. */
+  gradedInWindow: number | null
+  /** How far back the window reaches. */
+  windowHours: number
+  /** How old an account must be before having no workspace counts. */
+  graceMinutes: number
+  /** The per-door streak at which this goes red. */
+  maxWorkspaceless: number
+}
+
+/** One account the route read for {@link signupWorkspaceHealth}. */
+export interface SignupWorkspaceAccount {
+  /** The sign-up door, or null when the account recorded none. */
+  door: string | null
+  createdAtMs: number | null
+  verified: boolean
+  /** Whether the account has any Terms acceptance on record. */
+  accepted: boolean
+  hasWorkspace: boolean
+}
+
+/** Red when the two newest verified accounts through one door have no workspace. */
+export const MAX_WORKSPACELESS_SIGNUPS = 2
+
+/**
+ * Thirty-six hours of accounts, not the landing check's twelve. A door can be
+ * quiet for longer than twelve hours (AGL-4021's three phone sign-ups were
+ * 12 h and 5 h apart), and a window that never holds two of them can never
+ * see the streak.
+ */
+export const SIGNUP_WORKSPACE_WINDOW_HOURS = 36
+
+export function signupWorkspaceHealth(
+  accounts: SignupWorkspaceAccount[] | null,
+  ms: number,
+  maxWorkspaceless: number = MAX_WORKSPACELESS_SIGNUPS,
+  windowHours: number = SIGNUP_WORKSPACE_WINDOW_HOURS,
+  graceMinutes: number = SIGNUP_LANDING_GRACE_MINUTES,
+): SignupWorkspaceCheck {
+  const shape = { windowHours, graceMinutes, maxWorkspaceless }
+  if (accounts === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'accounts-unavailable',
+      workspacelessAccounts: null,
+      workspacelessStreak: null,
+      gradedInWindow: null,
+      ...shape,
+    }
+  }
+  const graded = accounts.filter(
+    (account) => account.verified === true && account.accepted === true,
+  )
+  const byDoor = new Map<string, SignupWorkspaceAccount[]>()
+  for (const account of graded) {
+    const door = account.door || 'unknown'
+    byDoor.set(door, [...(byDoor.get(door) ?? []), account])
+  }
+  let workspacelessStreak = 0
+  for (const doorAccounts of byDoor.values()) {
+    const newestFirst = [...doorAccounts].sort(
+      (a, b) => (Number(b.createdAtMs) || 0) - (Number(a.createdAtMs) || 0),
+    )
+    let streak = 0
+    while (
+      streak < newestFirst.length &&
+      newestFirst[streak].hasWorkspace !== true
+    ) {
+      streak += 1
+    }
+    workspacelessStreak = Math.max(workspacelessStreak, streak)
+  }
+  const stranded = workspacelessStreak >= maxWorkspaceless
+  return {
+    ok: !stranded,
+    ms,
+    ...(stranded ? { code: 'signups-without-workspace' } : {}),
+    workspacelessAccounts: graded.filter(
+      (account) => account.hasWorkspace !== true,
+    ).length,
+    workspacelessStreak,
+    gradedInWindow: graded.length,
+    ...shape,
+  }
+}
+
+/**
  * Rate-limiter degradation, reduced to a health verdict (AGL-1693).
  *
  * `consumeRateLimit` fails SOFT: when the Firestore counter is unreachable it

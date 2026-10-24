@@ -131,7 +131,20 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       ))}
     </div>
   ),
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  // The header's action slot too: the Name & description card's only save
+  // lives there.
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      {HeaderProps?.action}
+      {children}
+    </div>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
@@ -239,11 +252,10 @@ beforeEach(() => {
 
 describe('Screen rename (AGL-1358)', () => {
   const renameAndSave = () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Display name'), {
       target: { value: 'Plans' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }))
   }
 
   it('REFUSES a rename seeded from an unconfirmed read', async () => {
@@ -297,7 +309,8 @@ describe('Screen SEO (AGL-1358)', () => {
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Pricing and plans' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save SEO' }))
+    // One Save SEO, drawn in the header and at the foot of its card.
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save SEO' })[0])
   }
 
   it('REFUSES an SEO save seeded from an unconfirmed read', async () => {

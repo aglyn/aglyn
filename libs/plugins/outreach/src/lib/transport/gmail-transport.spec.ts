@@ -34,7 +34,8 @@ import { composeOutreachEmail } from '../engine/compose'
 import { outreachThreadMessageFromGmail } from '../engine/thread-message'
 import { backoffDelayMs, retryAfterMs } from './http'
 import { LIST_UNSUBSCRIBE_ONE_CLICK } from './rfc5322'
-import { sendComposedOutreachEmail, sendOutreachMessage } from './send-message'
+import { composeOutreachManualReply } from '../engine/manual-reply'
+import { sendComposedOutreachEmail, sendOutreachMessage, sendOutreachReply } from './send-message'
 
 /**
  * The Gmail REST transport against a fake network (AGL-2978).
@@ -641,5 +642,59 @@ describe('sending the engine’s composed email (AGL-2978)', () => {
     expect(raw).toContain('References: <first@rep.example.com>\r\n')
     // No unsubscribe address was composed, so no unsubscribe header is sent.
     expect(raw).not.toMatch(/^List-Unsubscribe/m)
+  })
+})
+
+describe('a member’s answer to a person who wrote back (AGL-4020)', () => {
+  const SENDER = { address: 'avery@rep.example.com', name: 'Avery Rep' }
+
+  it('goes into the reply’s Gmail thread, In-Reply-To the reply, References the whole chain, and no unsubscribe header', async () => {
+    const { reply } = composeOutreachManualReply({
+      enrollment: { messageIds: ['<first@rep.example.com>'], threadSubject: 'A note on your pipeline' },
+      answering: {
+        id: 'msg-in',
+        threadId: 'thread-new',
+        messageId: '<their-reply@prospect.example.org>',
+        references: ['<first@rep.example.com>'],
+        from: 'jordan@prospect.example.org',
+        fromName: 'Jordan Prospect',
+        replyTo: null,
+        subject: 'Re: A note on your pipeline',
+        atMs: Date.parse('2026-09-15T16:00:00Z'),
+        kind: 'reply',
+        body: 'What does it cost?',
+      },
+      body: 'Hi Jordan,\n\nIt starts at $49 a month.',
+      timeZone: 'America/Chicago',
+    })
+    if (!reply) throw new Error('no reply composed')
+    const network = fakeNetwork({
+      [GOOGLE_OAUTH_ENDPOINTS.token]: [TOKEN_OK],
+      [`${GMAIL_API_BASE}/messages/send`]: [{ status: 200, body: { id: 'msg-3', threadId: 'thread-new' } }],
+    })
+    const sent = await sendOutreachReply(client(network), reply, SENDER, {
+      messageIdLocalPart: 'reply-key-1',
+      messageIdDomain: 'rep.example.com',
+    })
+    expect(sent).toEqual({
+      gmailMessageId: 'msg-3',
+      threadId: 'thread-new',
+      messageId: '<reply-key-1@rep.example.com>',
+      subject: 'Re: A note on your pipeline',
+    })
+    const request = network.calls.find((call) => call.url.endsWith('/messages/send'))
+    const body = JSON.parse(request?.body ?? '{}') as { raw: string; threadId?: string }
+    const raw = Buffer.from(body.raw, 'base64url').toString('utf8')
+    expect(body.threadId).toBe('thread-new')
+    expect(raw).toContain('From: "Avery Rep" <avery@rep.example.com>\r\n')
+    expect(raw).toContain('To: jordan@prospect.example.org\r\n')
+    expect(raw).toContain('Subject: Re: A note on your pipeline\r\n')
+    expect(raw).toContain('Message-ID: <reply-key-1@rep.example.com>\r\n')
+    expect(raw).toContain('In-Reply-To: <their-reply@prospect.example.org>\r\n')
+    expect(raw).toContain('References: <first@rep.example.com> <their-reply@prospect.example.org>\r\n')
+    expect(raw).toContain('Content-Type: text/plain; charset=UTF-8\r\n')
+    expect(raw).not.toMatch(/^List-Unsubscribe/m)
+    expect(raw).toContain('Hi Jordan,')
+    expect(raw).toContain('> What does it cost?')
   })
 })

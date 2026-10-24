@@ -335,8 +335,13 @@ describe('a page’s listing', () => {
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
 
-  it('asks again once in the doctrine’s shape, quoting only what broke, then gives up in its sentence with the whole spend', async () => {
-    const tooLong = { ...listing, title: 'x'.repeat(SEO_LISTING_FIELDS.title.maxLength + 5) }
+  // MindFullMe, 2026-10-20: the fast model wrote a 65-character title on the
+  // ask and again on the re-ask, and the listing failed over it (AGL-4016).
+  const longTitle = 'Brass desk lamps finished by hand in Austin, Texas for quiet reading rooms'
+
+  it('asks again once in the doctrine’s shape, quoting only what broke, then fits a title the re-ask still ran past', async () => {
+    expect(longTitle.length).toBeGreaterThan(SEO_LISTING_FIELDS.title.maxLength)
+    const tooLong = { ...listing, title: longTitle }
     mockRunAiRequest.mockResolvedValue(answer(AI_SEO_FIELDS_TOOL_NAME, tooLong))
     const outcome = await run({ inputs: { target: 'screen', screenId: 'lamps' } })
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
@@ -348,14 +353,37 @@ describe('a page’s listing', () => {
     expect(again[2].content).toContain('breaks these building rules')
     expect(again[2].content).toContain(`"title":"${tooLong.title}"`)
     expect(again[2].content).not.toContain(`"description"`)
-    const { violations } = checkAiSeoFields(tooLong, {
+    // Nothing more is asked or spent: the second answer is fitted and kept.
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome).toMatchObject({ estCostUsd: 0.004 })
+    expect(outcome.usage).toEqual({ inputTokens: 2_000, outputTokens: 600, cacheReadTokens: 1_000, cacheWriteTokens: 0 })
+    const proposal = readAiSeoProposal(outcome.outputs[0].proposal)
+    expect(proposal?.kind === 'fields' ? proposal.values : null).toEqual({
+      ...listing,
+      title: 'Brass desk lamps finished by hand in Austin, Texas for quiet',
+    })
+  })
+
+  it('still gives up in the doctrine’s sentence, with the whole spend, when a fault fitting cannot mend is left', async () => {
+    const broken = { ...listing, title: longTitle, description: null }
+    mockRunAiRequest.mockResolvedValue(answer(AI_SEO_FIELDS_TOOL_NAME, broken))
+    const outcome = await run({ inputs: { target: 'screen', screenId: 'lamps' } })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const { violations } = checkAiSeoFields(broken, {
       fields: ['title', 'description', 'breadcrumb'],
       hasImage: false,
       keywords: [],
     })
-    expect(violations).toHaveLength(1)
+    expect(violations.map((violation) => violation.code)).toEqual(['too-long', 'missing'])
     expect(outcome).toMatchObject({ outputs: [], failure: aiDoctrineNeedsInputMessage(violations), estCostUsd: 0.004 })
     expect(outcome.usage).toEqual({ inputTokens: 2_000, outputTokens: 600, cacheReadTokens: 1_000, cacheWriteTokens: 0 })
+  })
+
+  it('never fits an answer cut off at its ceiling', async () => {
+    mockRunAiRequest.mockResolvedValue({ ...answer(AI_SEO_FIELDS_TOOL_NAME, { ...listing, title: longTitle }), stopReason: 'max_tokens' })
+    const outcome = await run({ inputs: { target: 'screen', screenId: 'lamps' } })
+    expect(outcome.outputs).toEqual([])
+    expect(outcome.failure).toBeDefined()
   })
 
   it('passes a model refusal on as a refusal', async () => {
@@ -491,6 +519,22 @@ describe('the site audit', () => {
       content: [{ kind: 'h1-set', nodeId: 'ah', text: 'About Acme Lamps' }],
       guidance: [],
     })
+  })
+
+  // One title past its length used to drop every page's fixes in the batch (AGL-4016).
+  it('keeps a batch the re-ask still left past a length, fitted, rather than dropping every page’s fixes', async () => {
+    const first = await firstPass()
+    const longTitle = 'Brass desk lamps finished by hand in Austin, Texas for quiet reading rooms'
+    const long = { pages: [{ ...fixes.pages[0], title: longTitle }, fixes.pages[1]] }
+    mockRunAiRequest.mockResolvedValue(answer(AI_SEO_FIXES_TOOL_NAME, long))
+    const second = await run({ inputs: { target: 'site' }, outputs: first.outputs })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(3)
+    const view = aiSeoAuditView([...first.outputs, ...second.outputs] as AiJobOutput[])
+    expect(view?.fixes['lamps']?.values).toEqual({
+      title: 'Brass desk lamps finished by hand in Austin, Texas for quiet',
+      description: 'Brass desk lamps, dimmable and finished by hand.',
+    })
+    expect(view?.fixes['about']?.values).toEqual({ description: 'Who makes Acme lamps, and where.' })
   })
 
   it('records a unit the model declined with a note, and still moves on', async () => {

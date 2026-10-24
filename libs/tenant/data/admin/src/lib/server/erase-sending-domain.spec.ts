@@ -224,10 +224,14 @@ jest.mock('./dns-probe', () => ({
   lookupMx: async () => ({ answered: false, records: [] }),
 }))
 
-import { eraseHost, SiteInConsentGroupError } from './erase'
+import { eraseHost, previewHostErase, SiteInConsentGroupError } from './erase'
 import type { HostSendingDomainTeardown } from './host-sending-domain'
 import { readSendingDomainTeardownByLabel } from './sending-domain-debt'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
+import {
+  registerPluginSiteResourceEraser,
+  resetPluginSiteResourceErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-resources'
 
 const ORG = 'org123'
 const HOST = 'HostAbc'
@@ -672,6 +676,15 @@ describe('the documents a plugin declared as the site’s go with it', () => {
     )
   })
 
+  it('counts the AI insights and Assist conversations among them (AGL-4003)', () => {
+    expect(owned()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'aiInsights', siteField: 'hostId' }),
+        expect.objectContaining({ name: 'assistExchanges', siteField: 'hostId' }),
+      ]),
+    )
+  })
+
   it('deletes each declared collection’s documents naming the site, and only those', async () => {
     seedProvisionedSite()
     for (const declared of owned()) {
@@ -690,5 +703,70 @@ describe('the documents a plugin declared as the site’s go with it', () => {
       expect(store.has(`orgs/${ORG}/${declared.name}/mine/steps/one`)).toBe(false)
       expect(store.has(`orgs/${ORG}/${declared.name}/sibling`)).toBe(true)
     }
+  })
+})
+
+/**
+ * WHAT PLUGINS SHARE WITH THE SITE ALONE GOES WITH IT (AGL-4003).
+ *
+ * A dataset belongs to the organization and is shared with sites by a scope
+ * list, so which ones are the site's is the data plugin's to say, through the
+ * site-resource seam. `eraseHost` runs every registered eraser with the site
+ * and its workspace, and the Delete site card's preview asks the same ones.
+ * The dataset rules themselves are proved in the data plugin
+ * (`dataset-site-erasure.spec.ts`).
+ */
+describe('the site resources plugins erase with it (AGL-4003)', () => {
+  const preview = {
+    noun: ['dataset', 'datasets'] as const,
+    itemNoun: ['record', 'records'] as const,
+    going: [{ id: 'ds-1', name: 'Gallery collections', items: 12 }],
+    staying: 0,
+  }
+  afterEach(() => resetPluginSiteResourceErasersForTests())
+
+  it('runs each plugin’s eraser with the site and its workspace', async () => {
+    seedProvisionedSite()
+    const erase = jest.fn(async () => 1)
+    registerPluginSiteResourceEraser({ preview: async () => preview, erase }, { pluginId: 'data' })
+
+    await eraseHost(HOST, {
+      tearDownSendingDomain: async () => ({ outcome: 'removed', detail: null }),
+    })
+
+    expect(erase).toHaveBeenCalledWith({ orgId: ORG, hostId: HOST })
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+  })
+
+  it('deletes the site even when a plugin’s eraser throws', async () => {
+    seedProvisionedSite()
+    registerPluginSiteResourceEraser(
+      {
+        preview: async () => preview,
+        erase: async () => {
+          throw new Error('offline')
+        },
+      },
+      { pluginId: 'data' },
+    )
+
+    await eraseHost(HOST, {
+      tearDownSendingDomain: async () => ({ outcome: 'removed', detail: null }),
+    })
+
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+  })
+
+  it('previews through the same erasers, and erases nothing', async () => {
+    seedProvisionedSite()
+    const erase = jest.fn(async () => 1)
+    registerPluginSiteResourceEraser({ preview: async () => preview, erase }, { pluginId: 'data' })
+    const before = new Map(store)
+
+    expect(await previewHostErase(ORG, HOST)).toEqual({
+      resources: [{ pluginId: 'data', preview }],
+    })
+    expect(erase).not.toHaveBeenCalled()
+    expect(new Map(store)).toEqual(before)
   })
 })

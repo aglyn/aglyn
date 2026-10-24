@@ -223,6 +223,15 @@ export const AI_STOCK_PHOTO_AVOID_INPUT = 'stockPhotoAvoid'
  */
 export const AI_STOCK_PHOTO_JOB_PHOTOS_INPUT = 'stockPhotoJobPhotos'
 
+/**
+ * The unit job input a guided start's page is built under (AGL-3988): its
+ * site step runs a late photo pass once every page is built, so a picture
+ * the library failed that none of the job's photos fits yet keeps a neutral
+ * starter for that pass to fill, rather than lose its frame, and the page
+ * reports it. A page built by any other job keeps #1831's rule.
+ */
+export const AI_STOCK_PHOTO_LATE_PASS_INPUT = 'stockPhotoLatePass'
+
 /** The job photos a unit input holds ({@link AI_STOCK_PHOTO_JOB_PHOTOS_INPUT}): library photos with a size; anything else is dropped. */
 export function aiStockJobPhotosOf(value: unknown): AiLayoutPicturePhoto[] {
   if (!Array.isArray(value)) return []
@@ -3473,14 +3482,96 @@ export interface AiLayoutStockPhotoDeps {
   provider?: () => StockPhotoProvider | null
   ingest?: () => PluginMediaIngest | null
   budgetMs?: number
+  /** The clock a refusal is dated by (AGL-3988); specs hand in a fixed one. */
+  now?: () => number
 }
 
 /** A slot's choice: the accepted hits it may be filled from, best first, and the query that found them. */
 interface AiStockChoice {
   candidates: StockPhoto[]
   query: string
+  /** The search that answered them, as it was sent (AGL-3988): what the late photo pass asks again. */
+  request: StockPhotoSearchRequest
   /** A photo another slot of the job already shows, reused rather than an off-topic one (AGL-3660). */
   repeat?: boolean
+}
+
+/** The words of a search that only this module reads, never sent to a library. */
+const SEARCH_JUDGMENT_KEYS = [
+  'broad',
+  'subject',
+  'requires',
+  'object',
+  'kin',
+  'lead',
+  'leadWorld',
+  'first',
+  'category',
+  'strict',
+  'refuse',
+  'needs',
+  'allow',
+  'refuseLead',
+  'worldless',
+  'away',
+] as const
+
+/** A search as it is sent to the library: its words and size, none of how its hits are judged. */
+export function aiStockSearchRequest(wanted: AiStockSearch): StockPhotoSearchRequest {
+  const request: Record<string, unknown> = { ...wanted }
+  for (const key of SEARCH_JUDGMENT_KEYS) delete request[key]
+  return request as unknown as StockPhotoSearchRequest
+}
+
+/**
+ * A search as a job keeps it to ask again (AGL-3988): only what a library's
+ * request is made of, so asked again it is the same request, which the
+ * provider's 24-hour cache answers.
+ */
+export function aiStockKeptRequest(request: StockPhotoSearchRequest): StockPhotoSearchRequest {
+  return {
+    query: request.query,
+    ...(request.orientation ? { orientation: request.orientation } : {}),
+    ...(request.minWidth ? { minWidth: request.minWidth } : {}),
+    ...(request.minHeight ? { minHeight: request.minHeight } : {}),
+    ...(request.people ? { people: true } : {}),
+  }
+}
+
+/**
+ * The library's own record of a photo copied into a site (AGL-3923, AGL-3988):
+ * what the media library stores beside the bytes as `stockPhoto`, with the
+ * credit its license asks for. One shape for every copy a job makes, a
+ * page's and the late photo pass's.
+ */
+export function aiStockIngestRequest(
+  provider: Pick<StockPhotoProvider, 'credit'>,
+  input: { hostId: string; uid: string; photo: StockPhoto; bytes: { bytes: Uint8Array; contentType: string }; alt: string; query: string },
+): Parameters<PluginMediaIngest['ingest']>[0] {
+  const { photo, bytes } = input
+  const credit = provider.credit(photo)
+  return {
+    hostId: input.hostId,
+    uid: input.uid,
+    fileName: `${photo.provider}-${photo.id}.${EXTENSIONS[bytes.contentType] ?? 'jpg'}`,
+    contentType: bytes.contentType,
+    bytes: bytes.bytes,
+    alt: input.alt,
+    description: credit.text,
+    stockPhoto: {
+      key: stockPhotoSourceKey(photo),
+      provider: photo.provider,
+      providerLabel: credit.providerLabel,
+      id: photo.id,
+      pageUrl: photo.pageUrl,
+      photographer: photo.photographer,
+      ...(photo.photographerUrl ? { photographerUrl: photo.photographerUrl } : {}),
+      license: credit.license,
+      licenseUrl: credit.licenseUrl,
+      attributionRequired: credit.attributionRequired,
+      query: input.query,
+    },
+  }
 }
 
 /**
@@ -4027,7 +4118,8 @@ export function aiLayoutStockPhotoSource(
   const wider = aiStockWiderTerms(terms, input.kind ?? '')
   const unlisted = aiStockWorldIsUnlisted(terms)
   const proper = aiStockProperWords(input.business)
-  return async (slots) => {
+  const now = deps.now ?? Date.now
+  return async (slots, report) => {
     const timeout = AbortSignal.timeout(
       deps.budgetMs ?? AI_LAYOUT_STOCK_PHOTOS_BUDGET_MS,
     )
@@ -4053,6 +4145,8 @@ export function aiLayoutStockPhotoSource(
     let storing = true
     /** Slots a photo was chosen for and could not be copied into the library (AGL-3923). */
     const uncopied = new Set<AiLayoutPictureSlot>()
+    /** Each slot's picks the image hosts would not hand over, and when (AGL-3988). */
+    const refusedPicks = new Map<AiLayoutPictureSlot, { keys: string[]; at: number }>()
     /** Whether the library answered any search of this page: a slot left empty then found nothing fitting. */
     let answered = false
     const remember = (sourceKey: string, src: string) => {
@@ -4062,23 +4156,7 @@ export function aiLayoutStockPhotoSource(
     }
     /** A search's hits; the same words twice are answered from memory, and `null` once the page's searches are spent. */
     const search = (wanted: AiStockSearch): Promise<StockPhoto[] | null> => {
-      const request: StockPhotoSearchRequest = { ...wanted }
-      delete (request as AiStockSearch).broad
-      delete (request as AiStockSearch).subject
-      delete (request as AiStockSearch).requires
-      delete (request as AiStockSearch).object
-      delete (request as AiStockSearch).kin
-      delete (request as AiStockSearch).lead
-      delete (request as AiStockSearch).leadWorld
-      delete (request as AiStockSearch).first
-      delete (request as AiStockSearch).category
-      delete (request as AiStockSearch).strict
-      delete (request as AiStockSearch).refuse
-      delete (request as AiStockSearch).needs
-      delete (request as AiStockSearch).allow
-      delete (request as AiStockSearch).refuseLead
-      delete (request as AiStockSearch).worldless
-      delete (request as AiStockSearch).away
+      const request = aiStockSearchRequest(wanted)
       const key = JSON.stringify([
         request.query,
         request.orientation,
@@ -4144,35 +4222,18 @@ export function aiLayoutStockPhotoSource(
           // A copy the library would not hand over is otherwise silent (AGL-3923).
           if (!bytes && !signal.aborted) {
             uncopied.add(slot)
+            // Asked for again by the late photo pass, once the burst is over (AGL-3988).
+            const held = refusedPicks.get(slot) ?? { keys: [], at: 0 }
+            if (!held.keys.includes(sourceKey)) held.keys.push(sourceKey)
+            held.at = now()
+            refusedPicks.set(slot, held)
             console.warn('ai layout pictures: a stock photo could not be downloaded', { provider: photo.provider, id: photo.id })
           }
           return null
         }
-        const credit = provider.credit(photo)
-        const stored = await ingest.ingest({
-          hostId: input.hostId,
-          uid: input.uid,
-          fileName: `${photo.provider}-${photo.id}.${EXTENSIONS[bytes.contentType] ?? 'jpg'}`,
-          contentType: bytes.contentType,
-          bytes: bytes.bytes,
-          alt: alt ?? slot.alt,
-          description: credit.text,
-          stockPhoto: {
-            key: sourceKey,
-            provider: photo.provider,
-            providerLabel: credit.providerLabel,
-            id: photo.id,
-            pageUrl: photo.pageUrl,
-            photographer: photo.photographer,
-            ...(photo.photographerUrl
-              ? { photographerUrl: photo.photographerUrl }
-              : {}),
-            license: credit.license,
-            licenseUrl: credit.licenseUrl,
-            attributionRequired: credit.attributionRequired,
-            query,
-          },
-        })
+        const stored = await ingest.ingest(
+          aiStockIngestRequest(provider, { hostId: input.hostId, uid: input.uid, photo, bytes, alt: alt ?? slot.alt, query }),
+        )
         if (stored.ok) {
           remember(sourceKey, stored.src)
           return {
@@ -4434,6 +4495,7 @@ export function aiLayoutStockPhotoSource(
           return {
             candidates: ranked.slice(0, AI_LAYOUT_STOCK_TRIES_PER_SLOT),
             query: request.query,
+            request: aiStockKeptRequest(aiStockSearchRequest(request)),
             ...(repeat ? { repeat: true } : {}),
           }
         }
@@ -4532,6 +4594,14 @@ export function aiLayoutStockPhotoSource(
     )
     for (const [index, choice] of choices.entries())
       if (choice?.repeat) await fill(index)
+    // A slot left without a photo because its picks were refused: what they
+    // were, for the late photo pass to ask for again (AGL-3988).
+    for (const [index, slot] of slots.entries()) {
+      const held = refusedPicks.get(slot)
+      const choice = choices[index]
+      if (photos[index] || !held?.keys.length || !choice) continue
+      report?.refused.set(slot, { request: choice.request, keys: held.keys, at: new Date(held.at).toISOString() })
+    }
     // The library answered and nothing in it fits: no photo rather than a
     // starter that shows another business (AGL-3831). A library that never
     // answered, or a site that refused to store, leaves the starters.

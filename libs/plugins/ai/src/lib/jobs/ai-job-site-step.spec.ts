@@ -86,6 +86,7 @@ import type {
 import {
   AI_SITE_BLOG_MERGED_NOTE,
   AI_SITE_MAX_PASSES,
+  AI_SITE_LATE_PHOTOS_PASSES,
   AI_SITE_NO_PAGE_STEP_COPY,
   AI_SITE_NO_PLAN_COPY,
   AI_SITE_PAGE_NOT_WRITTEN_COPY,
@@ -124,8 +125,11 @@ import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
 import { AI_SITE_EVENT_INPUT, AI_SITE_EVENTS_MAX } from './ai-job-site-events'
 import { AI_SITE_STORE_PAGES_INPUT, type AiSiteStorePagesInput } from './ai-job-site-store-pages'
 import { AI_SITE_STORE_PAGES_LABEL, AI_SITE_STORE_PAGES_NOTE, aiStoreFrameLinksOf } from '../model/ai-site-store-pages'
-import { AI_STOCK_PHOTO_AVOID_INPUT } from './ai-layout-stock-photos'
+import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_LATE_PASS_INPUT } from './ai-layout-stock-photos'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
+import type { AiSitePhotos } from '../model/ai-site-photos'
+import { AI_SITE_LATE_PHOTOS_MINIMUM_MS } from './ai-site-late-photos'
+import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -1958,9 +1962,10 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
 
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
     expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
-    // …and a site's datasets, one pass each (AGL-3616), its first events, one each (AGL-3755), and a store's own pages, one pass (AGL-3676).
+    // …and a site's datasets, one pass each (AGL-3616), its first events, one each (AGL-3755), a store's own pages, one pass (AGL-3676),
+    // and the late photo pass before the publish (AGL-3988).
     expect(AI_SITE_MAX_PASSES).toBe(
-      AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_EVENTS_MAX + AI_SITE_POSTS + 2,
+      AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_EVENTS_MAX + AI_SITE_POSTS + 2 + AI_SITE_LATE_PHOTOS_PASSES,
     )
   })
 })
@@ -2216,6 +2221,11 @@ describe('a site’s datasets (AGL-3616)', () => {
     expect(job.inputs[AI_STOCK_PHOTO_AVOID_INPUT]).toEqual(['media:host-1/m1', 'media:host-1/m2'])
     // A dataset with no photos names none.
     expect(aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, MENU_OUTPUT] }), home, built).inputs).not.toHaveProperty(AI_STOCK_PHOTO_AVOID_INPUT)
+    // A guided start's page is told its pictures are filled again before the site goes live (AGL-3988); a build's is not.
+    expect(job.inputs[AI_STOCK_PHOTO_LATE_PASS_INPUT]).toBe(true)
+    expect(aiSiteUnitJob({ ...siteJob({ plan, outputs: [LOOK, pictured] }), kind: 'build' }, home, built).inputs).not.toHaveProperty(
+      AI_STOCK_PHOTO_LATE_PASS_INPUT,
+    )
   })
 
   it('builds no record template for a dataset that was not made, and the page that lists it without it', async () => {
@@ -2460,5 +2470,148 @@ describe('what every unit is told about the business (AGL-3979)', () => {
       'Site — name: Pipeworks; business: a family plumber.',
       expect.stringContaining('“Pipeworks”'),
     ])
+  })
+})
+
+/*
+ * The beta.271 Laurel Fork start (AGL-3988): its covers and its home page
+ * took starters while Pixabay's image hosts refused downloads in a burst,
+ * and the site was published on the same pass as its last part. The
+ * publish now waits one pass for the late photo pass, sized to wait the
+ * burst out.
+ */
+describe('the late photo pass before the publish (AGL-3988)', () => {
+  const SITE_PUBLISH = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'screen-3', label: 'screen-3', path: '/' }], drafts: [] }
+  const STARTERS: AiSitePhotos = {
+    pages: [
+      {
+        screen: 'screen-3',
+        slots: [
+          {
+            image: 'img-hero',
+            words: 'A groomer with a dog',
+            role: 'hero',
+            aspect: 21 / 9,
+            refused: { request: { query: 'dog groomer', orientation: 'horizontal', minWidth: 1600 }, keys: ['pixabay:1'], at: NOW.toISOString() },
+          },
+        ],
+      },
+    ],
+    lists: [],
+  }
+  const built = (inputs: Record<string, unknown> = { autoConfirm: true }, extra: Partial<AiJob> = {}) =>
+    siteJob({
+      inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: false, ...inputs },
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))],
+      ...extra,
+    })
+
+  it('hands the publish to a pass of its own when the last page left a picture on a starter, and keeps what it left on the job', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const latePhotos = jest.fn()
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')], sitePhotos: STARTERS })) },
+      { publish, latePhotos },
+    )
+    const outcome = await step(context(built()))
+    expect(publish).not.toHaveBeenCalled()
+    expect(latePhotos).not.toHaveBeenCalled()
+    expect(outcome.continue).toBe(true)
+    expect(outcome.item).toMatchObject({ slot: 'p3', status: 'succeeded' })
+    expect(outcome.sitePhotos).toEqual(STARTERS)
+  })
+
+  it('runs the late photo pass once every part is built, then publishes, and clears what the job held', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const latePhotos = jest.fn(async () => ({ photos: null, retried: 1, copied: 1, filled: 1, left: 0 }))
+    // Every page is built: the page step is loaded and never asked.
+    const step = stepWith({ page: fakeRunner([], () => ({})) }, { publish, latePhotos })
+    const job = { ...built(), outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))], sitePhotos: STARTERS }
+    const outcome = await step(context(job))
+    expect(latePhotos).toHaveBeenCalledTimes(1)
+    expect(latePhotos).toHaveBeenCalledWith(
+      expect.objectContaining({ photos: STARTERS, pageIds: ['screen-0', 'screen-1', 'screen-2', 'screen-3'], job }),
+    )
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(outcome.sitePhotos).toEqual({ pages: [], lists: [] })
+    expect(outcome.sitePublish).toEqual(SITE_PUBLISH)
+    expect(outcome.continue).toBeUndefined()
+  })
+
+  it('asks for another pass with what is left where the late pass ran out of time, and publishes nothing yet', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const latePhotos = jest.fn(async () => ({ photos: STARTERS, retried: 0, copied: 0, filled: 0, left: 1 }))
+    // Every page is built: the page step is loaded and never asked.
+    const step = stepWith({ page: fakeRunner([], () => ({})) }, { publish, latePhotos })
+    const job = { ...built(), outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))], sitePhotos: STARTERS }
+    const outcome = await step(context(job))
+    expect(publish).not.toHaveBeenCalled()
+    expect(outcome).toMatchObject({ continue: true, sitePhotos: { ...STARTERS, latePasses: 1 } })
+  })
+
+  it('publishes on the last late pass the bound gives, whatever the pictures hold, so the passes never run out first', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const latePhotos = jest.fn(async () => ({ photos: STARTERS, retried: 0, copied: 0, filled: 0, left: 1 }))
+    const step = stepWith({ page: fakeRunner([], () => ({})) }, { publish, latePhotos })
+    const job = {
+      ...built(),
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))],
+      sitePhotos: { ...STARTERS, latePasses: AI_SITE_LATE_PHOTOS_PASSES - 2 },
+    }
+    const outcome = await step(context(job))
+    expect(latePhotos).toHaveBeenCalledTimes(1)
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(outcome.continue).toBeUndefined()
+    expect(outcome.sitePhotos).toEqual({ pages: [], lists: [] })
+    // The hand-off pass and two late passes: the passes the bound adds.
+    expect(AI_SITE_LATE_PHOTOS_PASSES).toBe(3)
+  })
+
+  it('waits for the late pass after a last part that failed while a list is on starters; a failed page’s own pictures owe nothing', async () => {
+    const LIST: AiSitePhotos = {
+      pages: [],
+      lists: [{ dataset: 'ds-1', imageField: 'image', records: [{ name: 'Full groom', value: '/_static/starter/hero-team.jpg' }] }],
+    }
+    const failing = (job: AiJob) => {
+      const publish = jest.fn(async () => SITE_PUBLISH)
+      const latePhotos = jest.fn()
+      const step = stepWith(
+        { page: fakeRunner([], () => ({ outputs: [], failure: 'The page could not be written.', sitePhotos: STARTERS })) },
+        { publish, latePhotos },
+      )
+      return { publish, latePhotos, run: () => step(context(job)) }
+    }
+    // The failed page is never published: its starters are not waited for.
+    const alone = failing(built())
+    const published = await alone.run()
+    expect(published.item).toMatchObject({ slot: 'p3', status: 'failed' })
+    expect(alone.publish).toHaveBeenCalledTimes(1)
+    expect(published.continue).toBeUndefined()
+    // A list's covers still on starters are: the publish waits a pass.
+    const covers = failing(built({ autoConfirm: true }, { sitePhotos: LIST }))
+    const waited = await covers.run()
+    expect(waited.item).toMatchObject({ slot: 'p3', status: 'failed' })
+    expect(covers.publish).not.toHaveBeenCalled()
+    expect(waited).toMatchObject({ continue: true, sitePhotos: { lists: LIST.lists } })
+  })
+
+  it('publishes on the last part’s own pass where no picture is on a starter, as before', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const latePhotos = jest.fn()
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')], sitePhotos: { pages: [{ screen: 'screen-3', slots: [] }], lists: [] } })) },
+      { publish, latePhotos },
+    )
+    const outcome = await step(context(built()))
+    expect(latePhotos).not.toHaveBeenCalled()
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(outcome.sitePhotos).toEqual({ pages: [], lists: [] })
+  })
+
+  it('gives the late pass, and the publish after it, the time the late pass needs', () => {
+    const job = { ...built(), outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))] }
+    expect(aiSiteJobRunMinimumMs(job)).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+    expect(aiSiteJobRunMinimumMs({ ...job, sitePhotos: STARTERS })).toBe(Math.max(AI_JOB_PAGE_STEP_MINIMUM_MS, AI_SITE_LATE_PHOTOS_MINIMUM_MS))
+    expect(aiSiteJobRunMinimumMs({ ...job, sitePhotos: { pages: [], lists: [] } })).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
   })
 })

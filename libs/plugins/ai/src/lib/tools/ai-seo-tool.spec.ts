@@ -32,6 +32,7 @@ import { seoPageFacts } from '@aglyn/aglyn/app-utils/seo-page-facts'
 import {
   AI_SEO_ENTITY_TYPE_VALUES,
   AI_SEO_FIELDS_TOOL_NAME,
+  aiFitSeoText,
   aiSeoFieldsTool,
   aiSeoFixImages,
   aiSeoFixesTool,
@@ -39,6 +40,8 @@ import {
   checkAiSeoFields,
   checkAiSeoFixes,
   checkAiSeoSite,
+  fitAiSeoFieldLengths,
+  fitAiSeoFixLengths,
   type AiSeoBatchPage,
 } from './ai-seo-tool'
 
@@ -328,5 +331,68 @@ describe('checkAiSeoSite', () => {
     const schema = aiSeoSiteTool().inputSchema as unknown as Schema
     expect(schema.required).toEqual(Object.keys(schema.properties))
     expect(schema.additionalProperties).toBe(false)
+  })
+})
+
+describe('an answer that ran past a length is fitted to it (AGL-4016)', () => {
+  const TITLE = SEO_LISTING_FIELDS.title.maxLength
+  const DESCRIPTION = SEO_LISTING_FIELDS.description.maxLength
+
+  // MindFullMe, 2026-10-20: a 65-character title, written twice, failed the listing.
+  it('cuts a title at the last word that fits', () => {
+    const title = 'MindFullMe | Calm Stress Relief for Students and Busy People Today'
+    expect(title.length).toBeGreaterThan(TITLE)
+    expect(aiFitSeoText(title, TITLE)).toBe('MindFullMe | Calm Stress Relief for Students and Busy People')
+  })
+
+  it('never ends on a joining mark or a dangling word, as the page step’s cut never does', () => {
+    expect(aiFitSeoText('Calm Stress Relief for Students — MindFullMe Wellness Shop', 34)).toBe(
+      'Calm Stress Relief for Students',
+    )
+    // The last whole word inside 155 characters is "and", so it goes too.
+    const kept = 'A gentle shop for students and busy people who want to feel less stressed, with calming services, breathing practices and quiet sleep products'
+    const description = `${kept} and wholehearted rest.`
+    expect(description.length).toBeGreaterThan(DESCRIPTION)
+    expect(aiFitSeoText(description, DESCRIPTION)).toBe(kept)
+  })
+
+  it('cuts a text with no space in it at the limit, and leaves a text that fits alone', () => {
+    expect(aiFitSeoText('x'.repeat(TITLE + 5), TITLE)).toBe('x'.repeat(TITLE))
+    expect(aiFitSeoText('  Brass   desk lamps ', TITLE)).toBe('Brass desk lamps')
+  })
+
+  it('fits only the listing fields that ran over, and says when none did', () => {
+    const answer = {
+      title: 'Brass desk lamps, dimmable and finished by hand in Austin for every reading nook',
+      description: 'Brass desk lamps.',
+      breadcrumb: 'Lamps',
+    }
+    const fitted = fitAiSeoFieldLengths(answer, ['title', 'description', 'breadcrumb'])
+    expect((fitted?.['title'] as string).length).toBeLessThanOrEqual(TITLE)
+    expect(fitted).toMatchObject({ description: 'Brass desk lamps.', breadcrumb: 'Lamps' })
+    expect(answer.title.length).toBeGreaterThan(TITLE)
+    expect(fitAiSeoFieldLengths({ title: 'Lamps', description: 'Lamps.', breadcrumb: 'Lamps' }, ['title'])).toBeNull()
+    const checked = checkAiSeoFields(fitted ?? {}, { fields: ['title', 'description', 'breadcrumb'], hasImage: false })
+    expect(checked.violations).toEqual([])
+  })
+
+  it('fits each page of a batch, and says when nothing ran over', () => {
+    const answer = {
+      pages: [
+        {
+          screenId: 'lamps',
+          title: 'Brass desk lamps, dimmable and finished by hand in Austin for every reading nook',
+          description: null,
+          h1: null,
+          imageAlts: [],
+        },
+        { screenId: 'about', title: 'About Acme', description: null, h1: null, imageAlts: [] },
+      ],
+    }
+    const fitted = fitAiSeoFixLengths(answer) as { pages: Array<{ title: string }> }
+    expect(fitted.pages[0].title.length).toBeLessThanOrEqual(TITLE)
+    expect(fitted.pages[1].title).toBe('About Acme')
+    expect(fitAiSeoFixLengths({ pages: [answer.pages[1]] })).toBeNull()
+    expect(fitAiSeoFixLengths({})).toBeNull()
   })
 })

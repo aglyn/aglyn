@@ -46,6 +46,7 @@ import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
 import { useBookingDoor } from './crm-booking-zone'
+import { CrmRecordEmailActionsZone } from './crm-email-actions-zone'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
@@ -387,6 +388,15 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 phone={record.phone || record.mobilePhone}
                 doNotCall={record.doNotCall}
                 suiteLocked={!suiteIncluded}
+              />
+              {/* An answer in a thread another plugin keeps with them (AGL-4020), ahead of a new message. */}
+              <CrmRecordEmailActionsZone
+                hostId={siteHostId}
+                org={org}
+                kind="contact"
+                recordId={id}
+                name={record.name}
+                email={record.email || null}
               />
               <CrmSendEmailButton
                 hostId={siteHostId}

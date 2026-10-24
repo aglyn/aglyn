@@ -76,6 +76,15 @@ describe('outreach plugin (AGL-2974)', () => {
     ]).toEqual(['outreach', 'outreach', 'outreach.use', '/outreach'])
   })
 
+  it('draws Reply in thread in the CRM record header’s zone, and in no other (AGL-4020)', () => {
+    registerOutreachConsole()
+    const widgets = registered()?.widgets ?? []
+    expect(widgets.map((widget) => [widget.slot, widget.widgetId, widget.title])).toEqual([
+      ['crmRecordEmailActions', 'outreach-record-reply', 'Reply in thread'],
+    ])
+    expect(widgets[0].Component).toBeDefined()
+  })
+
   it('declares All sequences, Mailboxes and Compliance, from the one list the page switches on', () => {
     registerOutreachConsole()
     const sections = registered()?.orgNavItems?.[0]?.sections

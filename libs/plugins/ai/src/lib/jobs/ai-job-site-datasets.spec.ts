@@ -703,7 +703,8 @@ describe('a dataset whose records carry photos (AGL-3616)', () => {
     await aiSiteDatasetRecordPhotos({ job: studioJob(), name: 'Team members', names: ['Studio manager'], pictures: 'people', stockPhotos })
     expect(asked[0]).toBe('ceramic artist studio manager')
     const none = await aiSiteDatasetRecordPhotos({ job: studioJob(), name: 'Pieces', names: ['Bowl'], pictures: 'things', stockPhotos: () => null })
-    expect(none[0]).toEqual({ src: expect.stringMatching(/^\//), placed: null, alt: expect.any(String) })
+    // A starter it keeps for good: no late photo pass fills it (AGL-3988).
+    expect(none[0]).toEqual({ src: expect.stringMatching(/^\//), placed: null, alt: expect.any(String), noLibrary: true })
   })
 
   it('writes the pieces with their photos, tells the pages which field holds them, and which photos not to place again', async () => {

@@ -102,6 +102,19 @@ describe('asking a workspace to upgrade (AGL-3466)', () => {
     })
   })
 
+  it('the bundle rides along with the Aglyn AI tier staff picked (AGL-4025)', async () => {
+    await post({
+      action: 'propose',
+      plan: 'starter',
+      addons: { siteCare: 1, aiAddon: 1 },
+      interval: 'year',
+      aiTier: 'plus',
+    })
+    expect(mockPropose).toHaveBeenCalledWith(
+      expect.objectContaining({ addons: { siteCare: 1, aiAddon: 1 }, interval: 'year', aiTier: 'plus' }),
+    )
+  })
+
   it('staff withdraw it', async () => {
     const response = await post({ action: 'withdraw' })
     expect(await response.json()).toEqual({ ok: true, withdrawn: true })
