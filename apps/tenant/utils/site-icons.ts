@@ -149,8 +149,8 @@ export const MANIFEST_SHORT_NAME_MAX = 12
  * The manifest's `short_name`: the longest run of whole leading words that
  * fits in {@link MANIFEST_SHORT_NAME_MAX} characters.
  *
- * Never a mid-word cut — `Ready To Roll` becomes `Ready To`, not
- * `Ready To Rol`. When even the first word is too long it is kept whole: the
+ * Never a mid-word cut — `Acme Home Builders` becomes `Acme Home`, not
+ * `Acme Home Bu`. When even the first word is too long it is kept whole: the
  * OS then ellipsizes a real word, which reads as a name, where a cut of our
  * own reads as a typo.
  */

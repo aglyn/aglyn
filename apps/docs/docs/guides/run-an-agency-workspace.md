@@ -41,8 +41,8 @@ You then join their organization as a member and can leave cleanly.
 To build first and hand over later, create a workspace for the client, build the
 site there, and then send the client an
 [owner handoff](/workspace-and-billing/teams-and-roles/invite-teammates#owner-handoff)
-from its **Team** page: **Role → Owner (hand off this workspace)**. When they accept,
-the workspace and every site in it are theirs. You choose whether you stay on as an
+from its **Team** page: **Role → Owner (hand off this workspace)**. When they sign in
+with that address, the workspace and every site in it are theirs, with nothing to accept. You choose whether you stay on as an
 admin or leave. Staying needs a free team seat on their plan, so on Free choose
 **Leave after the handoff**, or have them add a seat first.
 :::

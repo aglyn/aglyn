@@ -40,8 +40,10 @@ import {
   mdiHandBackLeftOutline,
   mdiPauseCircleOutline,
   mdiPencilOutline,
+  mdiMessageReplyTextOutline,
   mdiPlayCircleOutline,
   mdiReply,
+  mdiReplyOutline,
   mdiShieldSearch,
   mdiSkipNext,
   mdiStopCircleOutline,
@@ -69,8 +71,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { OUTREACH_MAIL_GATEWAY_LABELS } from '../engine/mail-gateway'
+import { outreachEnrollmentHasInbound } from '../engine/manual-reply'
 import { outreachNextSendState } from '../engine/next-send'
 import { outreachClickSummary } from '../model/enrollment-engagement'
 import {
@@ -190,6 +193,8 @@ const KIND_ICONS: Record<OutreachTimelineKind, { path: string }> = {
   stopped: mdiStopCircleOutline,
   'do-not-contact': mdiAccountCancelOutline,
   replied: mdiReply,
+  'auto-reply': mdiReplyOutline,
+  answered: mdiMessageReplyTextOutline,
   bounced: mdiEmailAlertOutline,
   'opted-out': mdiEmailOffOutline,
   held: mdiHandBackLeftOutline,
@@ -580,7 +585,6 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
     enabled: detailsOpen && Boolean(enrollment?.campaignIds?.length),
   })
   const steps = useMemo(() => sequence?.steps ?? [], [sequence])
-  const actions = useOutreachEnrollmentActions({ api, steps })
 
   const memberName = useCallback(
     (uid: string) => roster.options.find((option) => option.uid === uid)?.label ?? 'a member',
@@ -595,6 +599,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   const mailbox =
     props.mailboxes.mailboxes.find((entry) => entry.id === (enrollment?.mailboxId || sequence?.mailboxId)) ?? null
   const timeZone = mailbox?.timezone ?? null
+  const actions = useOutreachEnrollmentActions({ api, steps, timeZone })
   const time = (ms: number | null | undefined) => formatOutreachTime(ms, timeZone)
   const timeline = useMemo(
     () =>
@@ -610,6 +615,23 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
         : [],
     [enrollment, steps, history, memberName, timeZone, gateway.data],
   )
+
+  /*
+   * A reply synced before replies were kept is on the enrollment only as an
+   * id (AGL-4020). Once per page, the thread route reads it from the mailbox
+   * and keeps it; the enrollment's listener then shows it in the timeline.
+   * A member who may not read that mailbox is answered with nothing new.
+   */
+  const backfilled = useRef<string | null>(null)
+  const unreadReply =
+    enrollment !== null && outreachEnrollmentHasInbound(enrollment) && !enrollment.inboundMessages?.length
+  useEffect(() => {
+    if (!unreadReply || !enrollmentId || backfilled.current === enrollmentId) return
+    backfilled.current = enrollmentId
+    api.readEnrollmentThread(enrollmentId).catch((error: unknown) => {
+      console.warn('[outreach] their reply could not be read from the mailbox', error)
+    })
+  }, [api, enrollmentId, unreadReply])
 
   const back = (
     <Button
@@ -666,16 +688,19 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   const held = enrollment.status === 'paused' && enrollment.stopReason === 'gateway_blocked_here'
 
   /*
-   * The one act that moves the person forward is the button: resuming a
-   * paused one, else curating the next email. Everything else is in the
-   * menu, the destructive acts included, as on every record page.
+   * The one act that moves the person forward is the button: answering a
+   * person who wrote back (AGL-4020), else resuming a paused one, else
+   * curating the next email. Everything else is in the menu, the
+   * destructive acts included, as on every record page.
    */
   const available = outreachEnrollmentActionsFor(enrollment, steps)
-  const primary: OutreachEnrollmentRowAction | null = available.includes('resume')
-    ? 'resume'
-    : available.includes('curate')
-      ? 'curate'
-      : null
+  const primary: OutreachEnrollmentRowAction | null = available.includes('reply')
+    ? 'reply'
+    : available.includes('resume')
+      ? 'resume'
+      : available.includes('curate')
+        ? 'curate'
+        : null
   const menu = actions.menuItems(enrollment, (action) => action !== primary)
   const dash = (value: number) => (value ? value.toLocaleString() : '—')
   const notTracked = !trackClicks && !figures.clicks && !figures.scannerClicks ? 'Not tracked' : undefined
@@ -719,7 +744,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
                   disabled={actions.busy === enrollment.id}
                   onClick={() => actions.choose(enrollment, primary)}
                 >
-                  {held ? 'Resume and send' : OUTREACH_ENROLLMENT_ACTION_LABELS[primary]}
+                  {held && primary === 'resume' ? 'Resume and send' : OUTREACH_ENROLLMENT_ACTION_LABELS[primary]}
                 </Button>
               ) : null}
               {menu.length ? <RowActionsMenu label={name} items={menu} /> : null}
@@ -801,6 +826,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
               />
               <OutreachFigure label="Scanner clicks" value={dash(figures.scannerClicks)} hint={notTracked ?? 'Not counted'} />
               <OutreachFigure label="Replies" value={dash(figures.replies)} />
+              {figures.answers ? <OutreachFigure label="Answers sent" value={dash(figures.answers)} /> : null}
             </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">

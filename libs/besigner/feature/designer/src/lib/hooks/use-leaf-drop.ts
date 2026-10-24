@@ -33,8 +33,14 @@ export function useLeafDrop(
    * Multiple surfaces register droppables for the same node simultaneously;
    * without a discriminator their dnd-kit ids collide and the later mount
    * evicts the earlier one from the registry, leaving dead drop targets.
+   *
+   * It is also the surface the drop marker reads (`DropSurface`): a hierarchy
+   * row is a vertical list item wherever it sits, a breadcrumb a horizontal
+   * one.
    */
   area = 'leaf',
+  /** Anything else the drop marker needs from this target. */
+  extra?: Record<string, unknown>,
 ): ReturnType<typeof useDroppable> {
   // Disable the droppable for the node that is currently being dragged.
   // Without a DragOverlay the draggable element receives the CSS transform
@@ -50,6 +56,8 @@ export function useLeafDrop(
     data: {
       accept,
       node,
+      surface: area,
+      ...extra,
     },
   })
 }

@@ -65,23 +65,24 @@ export const ElementInteractionsForm = observer(
     const nodeExperiment = (interactions.sectionExperiments ?? []).find(
       (experiment) => experiment.nodeId === node?.$id,
     )
+    // No padding of its own: the tab panel insets this the same 16px it
+    // insets Attributes and the Styles fields. Padding here as well put the
+    // controls twice as far from the panel's edges as anything else in it,
+    // and the top margin the label kept from sitting under the attribute
+    // fields added the same again above it.
     if (!interactions.onCreateInteraction || !node?.$id) {
       return (
-        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary">
           {'Interactions are not available on this kind of document.'}
         </Typography>
       )
     }
     return (
-      <Stack sx={{ p: 2 }}>
+      <Stack>
         <FormControl margin="none" fullWidth>
           {/* Interactions (AGL-258): automations bound to this
               element's stable data-aglyn selector. */}
-          <Typography
-            variant="overline"
-            color="text.secondary"
-            sx={{ mt: 2 }}
-          >
+          <Typography variant="overline" color="text.secondary">
             {'Interactions'}
             {/* AGL-2167 — the trigger list says when, and
                 nothing here says what an interaction can then

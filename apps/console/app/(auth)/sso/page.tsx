@@ -41,7 +41,7 @@ import AuthFormTemplateComponent from '../../../components/auth-form-template.co
 import AuthFormComponent from '../../../components/auth-form.component'
 import { currentFirstTouch } from '../../../utils/account-acquisition'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
-import isMobileBrowser from '../../../utils/is-mobile-browser'
+import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
 import { createAuthProvider } from '../../../utils/oauth-providers'
 import { describeSsoError } from '../../../utils/sso-errors'
 

@@ -41,7 +41,13 @@ import { standInCrmRecordRoutes } from '../testing/stand-in-crm-record-routes'
  * own (`model/enrollment-timeline.spec.ts`).
  */
 
-const mockApi = { actOnEnrollment: jest.fn(), curateDrafts: jest.fn(), saveCuratedStep: jest.fn() }
+const mockApi = {
+  actOnEnrollment: jest.fn(),
+  curateDrafts: jest.fn(),
+  saveCuratedStep: jest.fn(),
+  readEnrollmentThread: jest.fn(),
+  replyToEnrollment: jest.fn(),
+}
 const mockEnqueueSnackbar = jest.fn()
 let mockSequence: OutreachLoad<OutreachSequence | null>
 let mockEnrollment: OutreachLoad<OutreachEnrollment | null>
@@ -193,6 +199,7 @@ beforeEach(() => {
   mockHistory = { status: 'ready', data: [] }
   mockGateway = { status: 'ready', data: null }
   mockApi.actOnEnrollment.mockResolvedValue({ ok: true, changed: true, stoppedOthers: 0, enrollment: {} })
+  mockApi.readEnrollmentThread.mockReturnValue(new Promise(() => undefined))
 })
 
 describe('the header: who, which record, where they stand', () => {
@@ -272,6 +279,53 @@ describe('the header: who, which record, where they stand', () => {
     expect(screen.getByRole('alert').textContent).toBe(reason)
     fireEvent.click(screen.getByRole('button', { name: 'Resume and send' }))
     await waitFor(() => expect(mockApi.actOnEnrollment).toHaveBeenCalledWith('seq-1_c-1', 'resume', undefined))
+  })
+})
+
+describe('a person who wrote back (AGL-4020)', () => {
+  const theirReply = {
+    id: 'in-1',
+    threadId: 'thread-1',
+    messageId: '<keith-1@example.com>',
+    references: ['<m1@example.com>'],
+    from: 'keith@example.com',
+    fromName: 'Keith Example',
+    replyTo: null,
+    subject: 'Re: Hi Keith',
+    atMs: T + 40 * MIN,
+    kind: 'reply' as const,
+    body: 'Can you send pricing for two plants?',
+  }
+  const replied = (overrides: Partial<OutreachEnrollment> = {}) =>
+    enrollment({ status: 'replied', stopReason: 'reply', stoppedAtMs: T + 40 * MIN, nextDueAtMs: null, ...overrides })
+
+  it('reads their reply first in the timeline, and answers it in the thread from the header', async () => {
+    mockEnrollment = { status: 'ready', data: replied({ inboundMessages: [theirReply] }) }
+    renderDetail()
+    expect(activity().getByText('Reply from Keith Example')).toBeTruthy()
+    expect(activity().getByText('Can you send pricing for two plants?')).toBeTruthy()
+    // Kept already: nothing is read from the mailbox until the member answers.
+    expect(mockApi.readEnrollmentThread).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Reply in thread' }))
+    expect(screen.getByRole('dialog', { name: 'Reply to Keith Example' })).toBeTruthy()
+    await waitFor(() => expect(mockApi.readEnrollmentThread).toHaveBeenCalledWith('seq-1_c-1'))
+  })
+
+  it('reads a reply synced before replies were kept from the mailbox, once', async () => {
+    mockEnrollment = { status: 'ready', data: replied() }
+    const view = renderDetail()
+    await waitFor(() => expect(mockApi.readEnrollmentThread).toHaveBeenCalledTimes(1))
+    view.rerender(
+      <OutreachEnrollmentDetail
+        orgId="org-1"
+        sectionPath={SECTION}
+        sequenceId="seq-1"
+        enrollmentId="seq-1_c-1"
+        mailboxes={mailboxes}
+      />,
+    )
+    expect(mockApi.readEnrollmentThread).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Reply in thread' })).toBeTruthy()
   })
 })
 

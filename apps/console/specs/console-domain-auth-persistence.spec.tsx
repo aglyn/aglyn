@@ -126,7 +126,7 @@ jest.mock('../hooks/use-url-names-org', () => ({
   __esModule: true,
   useUrlNamedOrg: () => undefined,
 }))
-jest.mock('../hooks/use-org-plans', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-org-plans', () => ({
   __esModule: true,
   useOrgPlans: () => ({}),
 }))

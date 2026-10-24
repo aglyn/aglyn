@@ -71,13 +71,13 @@ describe('readRequestGeo', () => {
 })
 
 describe('sanctionsVerdict — the countries ToS §3.6 names', () => {
-  it.each(['CU', 'IR', 'KP', 'SY'])('blocks %s', (country) => {
+  it.each(['CU', 'IR', 'KP'])('blocks %s', (country) => {
     const verdict = sanctionsVerdict({ country, region: null })
     expect(verdict.blocked).toBe(true)
     expect(verdict.outcome).toBe('blocked-country')
   })
 
-  it.each(['US', 'GB', 'DE', 'UA', 'RU', 'BY', 'CN'])(
+  it.each(['US', 'GB', 'DE', 'UA', 'RU', 'BY', 'CN', 'SY'])(
     'allows %s — only a comprehensive embargo is in scope',
     (country) => {
       expect(sanctionsVerdict({ country, region: null }).blocked).toBe(false)

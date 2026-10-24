@@ -39,7 +39,7 @@ import { render } from '@testing-library/react'
 import { HostThemeProviders } from '../app/[host]/host-theme-providers'
 
 /** A customer site with an attached domain of its own. */
-const CUSTOMER_HOST = 'cname--ready-to-roll.example'
+const CUSTOMER_HOST = 'cname--acme-builders.example'
 /** The operator's own marketing host, under the middleware's sentinel. */
 const PLATFORM_HOST = 'cname--aglyn.com'
 

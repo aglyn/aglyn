@@ -2754,8 +2754,13 @@ when a person chooses it (`jobs/ai-empty-site-sweep.ts`).
   pooled seats, every member's projection, the Firestore tree), the tenant's
   cached pages and names, "Removed an empty site" in the workspace feed with
   no actor, and a `host.deleted` audit row by `system:cron` with the reason
-  `ai-start-empty`. A site in a consent group is kept. Once the site is gone
-  the job gets `siteRemoved: { at, name }` (`siteRemoved: true` on the wire).
+  `ai-start-empty`. A site in a consent group is kept. The erase takes the
+  site's AI jobs with it (`aiJobs` is an org collection the site owns), so
+  once the site is gone the sweep writes the job back as the verdict read
+  it, with `siteRemoved: { at, name }` added (`siteRemoved: true` on the
+  wire): the kind, the answers, `createdAt` and `expiresAt` all survive.
+  Merged alone, `siteRemoved` left a one-field stub that no list showed and
+  nothing expired (AGL-4015).
   An eraser that cannot answer is tried again 15 minutes later, five times.
 - **Coming back.** The site's own address is gone, so the console shows "This
   site doesn't exist anymore". The job stays in the AI jobs drawer, which says
@@ -2766,9 +2771,10 @@ when a person chooses it (`jobs/ai-empty-site-sweep.ts`).
   drawn for such a job, says the same.
 - **Proved by** `jobs/ai-empty-site-sweep.spec.ts` (the production shapes:
   kc-x-carder cancelled 13 s in with its plan pending and 0 credits, a failed
-  start, one started again, one with a layout written), `ai-jobs.spec.ts` (the
-  marker from each write that ends a job), and
-  `ai-empty-site-sweep.emulator.spec.ts` (the real queries and `eraseHost`).
+  start, one started again, one with a layout written, and the job outliving
+  the site whole), `ai-jobs.spec.ts` (the marker from each write that ends a
+  job), and `ai-empty-site-sweep.emulator.spec.ts` (the real queries and
+  `eraseHost`, and the job back on the drawer's newest-first list).
 
 ## Running a guided start locally
 
@@ -2922,6 +2928,18 @@ inventory. An answer that breaks a check is asked for once more, with the
 broken rules named and the parts at fault quoted; one that still breaks one
 ends `needs_input` in the doctrine's sentence (`aiDoctrineNeedsInputMessage`),
 which fails a listing's job and becomes an audit unit's note.
+
+**A length is fitted, not failed (AGL-4016).** A listing, or a batch of fixes,
+whose re-ask still runs a field past its length has those fields cut to it
+(`aiFitSeoText`, the page step's `aiClipAtWord` cut), and the whole check is
+run again on the fitted answer (`aiFitSeoOverrun` in `runtime/seo-fields.ts`).
+It is kept only when that check then passes. A numbered rule broken, any other
+fault left, or an answer cut off at its ceiling still ends `needs_input`, and
+nothing more is asked or spent. MindFullMe's Home listing (2026-10-20) failed
+over a 65-character title that the fast model wrote on both answers. A batch
+used to drop every page's fixes over one long title. The site proposal
+(`propose_site_listing`) is not fitted, because its 300- and 1,000-character
+fields hold sentences that a cut would leave unfinished.
 
 ## The page kind
 

@@ -611,6 +611,14 @@ export function getEmailConfig(): EmailConfig {
 }
 
 /**
+ * Where a reply to the platform's own mail goes: the operator's support
+ * mailbox, `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, or nothing when it is unset.
+ */
+export function platformReplyTo(): string | undefined {
+  return (process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim() || undefined
+}
+
+/**
  * True when the provider has its settings and `USAGE_EMAIL_FROM` is present.
  *
  * Callers that answer an HTTP request (rather than firing best-effort mail)
@@ -740,6 +748,14 @@ export async function sendEmail(
     resolvedFrom ?? configuredFrom,
     messageFromName(options),
   )
+  // Platform mail answers to the operator's support mailbox. The sending
+  // subdomain has no inbox, so without this a reply to an account, billing
+  // or team email went nowhere, and the From had to say "noreply" to admit
+  // it. A message on a resolved identity (a site's own address) keeps
+  // whatever its caller set; so does any caller that names its own.
+  const replyTo =
+    options.replyTo ??
+    (resolvedFrom ? undefined : platformReplyTo())
 
   const missing = [
     ...provider.missingSettings(),
@@ -1120,7 +1136,7 @@ export async function sendEmail(
         ...(body ? { html: body } : {}),
         ...(Object.keys(headers).length ? { headers } : {}),
         ...(tags.length ? { tags } : {}),
-        ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+        ...(replyTo ? { replyTo } : {}),
         ...(bcc.length ? { bcc } : {}),
       },
       options.context,

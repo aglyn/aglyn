@@ -30,6 +30,8 @@ const classKeys = generateComponentClassKeys('NodeOutline', [
   'selectedSelf',
   'draggingSelf',
   'draggingOver',
+  'editing',
+  'repeatMember',
 ])
 
 const NodeOutlineRoot = styled('div', {
@@ -48,6 +50,7 @@ const NodeOutlineRoot = styled('div', {
   // for why these two states — and no others — are exempt from the slate;
   // `canvas-chrome-palette.spec.ts` pins each exemption to its declaration.
   const selectionAccent = tv.palette.secondary.main
+  const selectionAccentChannel = tv.palette.secondary.mainChannel
   const hoverAccent = tv.palette.primary.main
   const hoverAccentChannel = tv.palette.primary.mainChannel
   return {
@@ -105,6 +108,21 @@ const NodeOutlineRoot = styled('div', {
     [`&.${classKeys.hoveringSelf}:not(.${classKeys.selectedSelf})`]: {
       outlineColor: hoverAccent,
     },
+    // Text being typed into wears no wash: it must look exactly as it renders
+    // (AGL-2486). The outline stays, so the element is still findable.
+    [`&.${classKeys.editing}`]: {
+      backgroundColor: 'transparent',
+    },
+    // The element inside a repeat group (AGL-3111): the one an edit changes,
+    // marked in the selection's own hue at half strength, so it reads as part
+    // of the selection rather than as a second one. Solid: a dimmed dash was
+    // too faint against the copies' dashed grey.
+    [`&.${classKeys.repeatMember}`]: {
+      outlineWidth: 1,
+      outlineStyle: 'solid',
+      outlineOffset: -1,
+      outlineColor: `rgba(${selectionAccentChannel} / 0.5)`,
+    },
     [`&.${classKeys.draggingSelf}`]: {
       outlineColor: 'transparent',
       backgroundColor: `rgba(${slateChannel} / 0.12)`,
@@ -128,11 +146,13 @@ export interface NodeOutlineProps extends ComponentProps<
   typeof NodeOutlineRoot
 > {
   node: Aglyn.NodeSchema<any>
+  /** The node's text is open in the in-place editor. */
+  editing?: boolean
 }
 
 export const NodeOutline = observer(
   forwardRef<HTMLDivElement, NodeOutlineProps>((props, ref) => {
-    const { className, node, style, ...rest } = props
+    const { className, node, style, editing, ...rest } = props
     const $id = node?.$id
     const isSelected = Besigner.focus.isNodeSelected(node)
     const isHovered = Besigner.focus.isNodeHovered(node)
@@ -158,6 +178,7 @@ export const NodeOutline = observer(
             [classKeys.hoveringSelf]: Boolean(isHovered),
             [classKeys.draggingSelf]: Boolean(isDragging),
             [classKeys.draggingOver]: Boolean(isDraggingOver),
+            [classKeys.editing]: Boolean(editing),
           },
           classKeys.root,
           className,
@@ -169,5 +190,26 @@ export const NodeOutline = observer(
 )
 
 NodeOutline.displayName = 'NodeOutline'
+
+/**
+ * The box round the element itself inside its repeat group — see
+ * `withRepeatGroup` in the overlay. Positioned by the caller, like every
+ * outline here; its colour is decided above with the rest of them.
+ */
+export const RepeatMemberOutline = forwardRef<
+  HTMLDivElement,
+  ComponentProps<typeof NodeOutlineRoot>
+>((props, ref) => {
+  const { className, ...rest } = props
+  return (
+    <NodeOutlineRoot
+      ref={ref}
+      data-aglyn-repeat-member=""
+      className={clsx(classKeys.root, classKeys.repeatMember, className)}
+      {...rest}
+    />
+  )
+})
+RepeatMemberOutline.displayName = 'RepeatMemberOutline'
 
 export default NodeOutline

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { useConfirmationContext } from '../contexts/confirmation.context'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback } from 'react'
 

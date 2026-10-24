@@ -262,7 +262,7 @@ const freeMeter = (used: number, last: number) => ({
 
 describe('the usage strip and the plan card say one number (AGL-3722)', () => {
   it('moves the strip by the plan’s own spend, once: 117 after the chat turn, 71 after the 46-credit plan', async () => {
-    // zachary1748, 2026-10-10: the chat turn (31 credits) left 117; the build's
+    // A free workspace, 2026-10-10: the chat turn (31 credits) left 117; the build's
     // plan then spent 46, and its card, read after that spend, said 71 — while
     // the strip, moved only by the chat turn, still said 117.
     const left = { left: 71, total: 300, resetsOn: '2026-11-01', used: { account: 229, org: 229, orgBand: 300, state: 'warn' } }
