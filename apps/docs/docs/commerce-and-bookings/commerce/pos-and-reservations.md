@@ -149,21 +149,22 @@ to the customer yourself.
 
 ### Platform fees at the register
 
-Your plan's platform fee is charged on **card**, **charge-to-room** and
-**store credit** payments. **Cash** and **gift card** payments carry no platform fee: cash is
-yours in full, and the fee on a gift card is charged when the card is sold,
-not again when it is spent.
+Your plan's platform fee is charged on **card** and **charge-to-room**
+payments. **Cash**, **gift card** and **store credit** payments carry no
+platform fee: cash is yours in full, the fee on a gift card is charged when the
+card is sold, not again when it is spent, and store credit is value you gave
+your customer, so no money changes hands.
 
 | Payment | Platform fee | How it is collected |
 | --- | --- | --- |
 | Card reader, typed card, card (QR) | Your plan's rate | Deducted from your Stripe payout for that payment |
 | Charge to room | Your plan's rate | No payout to deduct from, so it is added to your next monthly invoice |
-| Store credit | Your plan's rate | Added to your next monthly invoice, like a room charge |
 | Cash | None | — |
 | Gift card | None | — |
+| Store credit | None | — |
 
-A **split** sale charges the fee only on the part of the sale its card,
-room-charge and store-credit payments paid: a $100 sale paid $60 by card and
+A **split** sale charges the fee only on the part of the sale its card and
+room-charge payments paid: a $100 sale paid $60 by card and
 $40 in cash carries the fee on $60, deducted from that card's payout, and
 nothing on the cash. Sales you ring while the register is
 [offline](pos-operations.md#selling-while-offline) are cash, so they carry no
