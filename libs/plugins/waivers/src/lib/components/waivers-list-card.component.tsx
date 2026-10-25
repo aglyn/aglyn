@@ -104,7 +104,7 @@ export function WaiversListCard(props: WaiversListCardProps) {
   return (
     <CardDisplay
       header="Waivers"
-      help={pluginDocsHelp('waivers', { anchor: '#share-it-before-riders-arrive' })}
+      help={pluginDocsHelp('waivers', { anchor: '#your-waivers' })}
       HeaderProps={{
         action: (
           <BlockedControl blocked={!canManage} reason="Writing waivers needs the Manage waivers permission.">

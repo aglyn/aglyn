@@ -1081,9 +1081,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   waivers: {
     '#find-a-signature': 'The Signatures card lists the newest first.',
-    '#share-it-before-riders-arrive': 'On the Waivers card, select Share beside a waiver: Copy link gives you a link to send in a confirmation, a text or a post.',
     '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
     '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
+    '#your-waivers': 'The Waivers card lists every waiver on the site: its title, whether it is a Draft, Published or Retired, its version, how long a signature lasts, and when it last changed.',
   },
   webhooks: {
     '#outbound-webhooks': 'Send an HTTP request to a URL you control when a site event fires — for example, post to a Slack endpoint or your own API when a form is submitted or a new booking comes in.',
