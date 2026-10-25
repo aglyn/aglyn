@@ -161,10 +161,13 @@ private fun RegisterScreenBody(context: NativePluginContext) {
       displayApi = ConsolePosDisplayApi(context.api, hostId),
       kioskQueueApi = ConsolePosKioskQueueApi(context.api, hostId),
       printersApi = ConsolePosPrintersApi(context.api, hostId),
+      checkInApi = ConsolePosCheckInApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
-  RegisterContent(model, onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) }, ordersZone = { PosOrdersZone(context) })
+  androidx.compose.runtime.CompositionLocalProvider(LocalPosPluginContext provides context) {
+    RegisterContent(model, onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) }, ordersZone = { PosOrdersZone(context) })
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -259,6 +262,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
 
   val checkout = model.checkout
   var opsOpen by remember { mutableStateOf(false) }
+  var checkIn by remember { mutableStateOf<PosCheckInModel?>(null) }
   Box(
     Modifier.fillMaxSize().then(keys).focusRequester(registerFocus).focusable().testTag("pos-register")
       // Any touch is the register in use: it keeps the idle lock away.
@@ -274,7 +278,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
     if (wide) {
       Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
-          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, ordersZone = ordersZone)
+          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = { checkIn = model.makeCheckIn() }, ordersZone = ordersZone)
           // The basket is the sale now: the grid rests until it is paid or canceled.
           if (checkout != null) {
             Box(
@@ -302,7 +306,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
       Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { CheckoutPane(model, checkout, onOpenReaders) }
     } else {
       Column(Modifier.fillMaxSize()) {
-        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, ordersZone = ordersZone)
+        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = { checkIn = model.makeCheckIn() }, ordersZone = ordersZone)
         BasketBar(model) { basketOpen = true }
       }
     }
@@ -325,6 +329,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
   if (holdsOpen) HoldsDialog(model) { holdsOpen = false }
   if (model.offlineCashOpen) OfflineCashDialog(model)
   if (opsOpen) RegisterOpsDialog(model) { opsOpen = false }
+  checkIn?.let { sheet -> PosCheckInDialog(sheet, model.hostId) { checkIn = null } }
   if (model.cashier.locked) LockedRegister(model)
   if (cameraOpen && camera != null) {
     val filter = remember { CameraScanFilter() }
@@ -363,6 +368,8 @@ private fun CatalogPane(
   onCamera: (() -> Unit)? = null,
   /** Opens the Register sheet: the cashier, the shift and the drawer. */
   onOps: () -> Unit = {},
+  /** Opens check-in at the window (AGL-4063). */
+  onCheckIn: () -> Unit = {},
   /** What other plugins put in the register's `posOrders` zone, above the grid. */
   ordersZone: @Composable () -> Unit = {},
 ) {
@@ -394,6 +401,9 @@ private fun CatalogPane(
       }
       WithTooltip("Enter a barcode or SKU") { IconButton(onClick = onEnterCode, modifier = Modifier.testTag("pos-enter-code")) {
         Icon(AglynIcons.named("barcode"), contentDescription = "Enter a barcode or SKU")
+      } }
+      WithTooltip("Check in") { IconButton(onClick = onCheckIn, modifier = Modifier.testTag("pos-check-in-open")) {
+        Icon(AglynIcons.named("confirmation_number"), contentDescription = "Check in")
       } }
       WithTooltip("Cashier and shift") { IconButton(onClick = onOps, modifier = Modifier.testTag("pos-ops-open")) {
         Icon(AglynIcons.named("person_check"), contentDescription = "Cashier and shift")

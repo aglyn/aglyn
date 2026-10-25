@@ -110,6 +110,10 @@ final class RegisterModel {
   @ObservationIgnored private var tillShift: PosShiftModel!
   /// The customer lookup beside the basket.
   @ObservationIgnored let customers: PosCustomerModel
+  /// Check-in at the window (AGL-4063): the route the check-in sheet and the attached customer's count ask.
+  @ObservationIgnored let checkInAPI: PosCheckInAPI
+  /// What the attached customer has to check in today.
+  @ObservationIgnored let checkInDue: PosCheckInDue
   /// The last sale this register finished, and its receipt.
   @ObservationIgnored let lastReceipt: PosLastReceiptModel
   /// This register's receipt printers (AGL-3909).
@@ -139,7 +143,7 @@ final class RegisterModel {
     keyedEntry: KeyedCardEntry? = nil,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
     uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
-    displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil
+    displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil, checkInAPI: PosCheckInAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -152,6 +156,9 @@ final class RegisterModel {
     self.keyedEntry = keyedEntry
     store = RegisterStore(defaults: defaults, hostID: hostID)
     customers = PosCustomerModel(api: customersAPI ?? ConsolePosCustomersAPI(api: api, hostID: hostID))
+    let checkIns = checkInAPI ?? ConsolePosCheckInAPI(api: api, hostID: hostID)
+    self.checkInAPI = checkIns
+    checkInDue = PosCheckInDue(api: checkIns)
     lastReceipt = PosLastReceiptModel(reader: reader, api: sale, store: store, hostID: hostID)
     printers = PosPrintersModel(reader: reader, api: api, hostID: hostID)
     let ops = self.opsAPI
@@ -397,6 +404,11 @@ final class RegisterModel {
   func setCustomerEmail(_ email: String) { updateCart(cart.withCustomerEmail(email)) }
   /// Attaches the customer the lookup found; nil lets them go. Their email is the sale's.
   func attachCustomer(_ customer: PosCustomer?) { updateCart(cart.withCustomer(customer)) }
+
+  /// A check-in sheet for this register: the person who checks people in is the PIN's cashier, at this register.
+  func makeCheckIn() -> PosCheckInModel {
+    PosCheckInModel(api: checkInAPI, registerID: { [weak self] in self?.register?.id }, assertion: { [weak self] in self?.cashier.assertion })
+  }
   func clearCart() { updateCart(.empty) }
 
   /// Takes the basket's total in cash while offline. The sale is on the device, and the basket cleared, only when this answers; nil when it could not be kept.

@@ -684,6 +684,51 @@
         }
       ]
     },
+    "alreadyCheckedInLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "checkedInAtMs": 1792940040000,
+              "checkedInByName": "Sam"
+            },
+            "America/Chicago"
+          ],
+          "result": "Already checked in at 9:54 AM by Sam"
+        },
+        {
+          "args": [
+            {
+              "checkedInAtMs": 1792940040000,
+              "checkedInByName": null
+            },
+            "UTC"
+          ],
+          "result": "Already checked in at 2:54 PM"
+        },
+        {
+          "args": [
+            {
+              "checkedInAtMs": null,
+              "checkedInByName": "Sam"
+            },
+            "UTC"
+          ],
+          "result": "Already checked in by Sam"
+        },
+        {
+          "args": [
+            {
+              "checkedInAtMs": null,
+              "checkedInByName": null
+            },
+            "UTC"
+          ],
+          "result": "Already checked in"
+        }
+      ]
+    },
     "apportionCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -4519,6 +4564,55 @@
         }
       ]
     },
+    "checkInItemLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "itemName": "Day pass",
+              "variantLabel": null,
+              "unitIndex": 0,
+              "unitCount": 1
+            }
+          ],
+          "result": "Day pass"
+        },
+        {
+          "args": [
+            {
+              "itemName": "Day pass",
+              "variantLabel": "Adult",
+              "unitIndex": 0,
+              "unitCount": 1
+            }
+          ],
+          "result": "Day pass · Adult"
+        },
+        {
+          "args": [
+            {
+              "itemName": "Day pass",
+              "variantLabel": "Adult",
+              "unitIndex": 1,
+              "unitCount": 3
+            }
+          ],
+          "result": "Day pass · Adult (2 of 3)"
+        },
+        {
+          "args": [
+            {
+              "itemName": "RV camping with hookups",
+              "variantLabel": null,
+              "unitIndex": 0,
+              "unitCount": 2
+            }
+          ],
+          "result": "RV camping with hookups (1 of 2)"
+        }
+      ]
+    },
     "checkInRefusal": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "cases": [
@@ -4711,6 +4805,95 @@
             1800000000000
           ],
           "result": "This guest is not checked in"
+        }
+      ]
+    },
+    "checkInTimeLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "America/Chicago"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null,
+            "UTC"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null,
+            "Not/AZone"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            0,
+            "America/Chicago"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            0,
+            "UTC"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            0,
+            "Not/AZone"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            1792940040000,
+            "America/Chicago"
+          ],
+          "result": "9:54 AM"
+        },
+        {
+          "args": [
+            1792940040000,
+            "UTC"
+          ],
+          "result": "2:54 PM"
+        },
+        {
+          "args": [
+            1792940040000,
+            "Not/AZone"
+          ],
+          "result": "2:54 PM"
+        },
+        {
+          "args": [
+            1792900800000,
+            "America/Chicago"
+          ],
+          "result": "11:00 PM"
+        },
+        {
+          "args": [
+            1792900800000,
+            "UTC"
+          ],
+          "result": "4:00 AM"
+        },
+        {
+          "args": [
+            1792900800000,
+            "Not/AZone"
+          ],
+          "result": "4:00 AM"
         }
       ]
     },
@@ -7386,6 +7569,53 @@
             }
           ],
           "result": "-13% · 20% conf."
+        }
+      ]
+    },
+    "describeWristband": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            {
+              "number": "214",
+              "color": "Blue"
+            }
+          ],
+          "result": "Blue #214"
+        },
+        {
+          "args": [
+            {
+              "number": "#214",
+              "color": null
+            }
+          ],
+          "result": "#214"
+        },
+        {
+          "args": [
+            {
+              "number": null,
+              "color": "Red"
+            }
+          ],
+          "result": "Red"
+        },
+        {
+          "args": [
+            {
+              "number": null,
+              "color": null
+            }
+          ],
+          "result": ""
         }
       ]
     },
@@ -19422,6 +19652,113 @@
         }
       ]
     },
+    "normalizeProductCheckIn": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "on"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "enabled": "yes"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "enabled": false,
+              "headcount": 4
+            }
+          ],
+          "result": {
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 3
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 3
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 2.6
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 3
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 0
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 80
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 50
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": "5"
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 5
+          }
+        }
+      ]
+    },
     "normalizeScreenSlug": {
       "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
       "cases": [
@@ -19526,6 +19863,131 @@
             null
           ],
           "result": null
+        }
+      ]
+    },
+    "normalizeWristband": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "ok": true,
+            "wristband": null
+          }
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "ok": true,
+            "wristband": null
+          }
+        },
+        {
+          "args": [
+            "blue"
+          ],
+          "result": {
+            "error": "That is not a wristband.",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "number": " 214 ",
+              "color": " Blue "
+            }
+          ],
+          "result": {
+            "ok": true,
+            "wristband": {
+              "color": "Blue",
+              "number": "214"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "number": "",
+              "color": ""
+            }
+          ],
+          "result": {
+            "ok": true,
+            "wristband": null
+          }
+        },
+        {
+          "args": [
+            {
+              "number": "A-12",
+              "color": ""
+            }
+          ],
+          "result": {
+            "ok": true,
+            "wristband": {
+              "color": null,
+              "number": "A-12"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "number": "12 3",
+              "color": ""
+            }
+          ],
+          "result": {
+            "error": "A wristband number is letters, digits and dashes.",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "number": "",
+              "color": "Blue2"
+            }
+          ],
+          "result": {
+            "error": "A wristband color is a word, such as Blue.",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "number": "1234567890123456789012345",
+              "color": ""
+            }
+          ],
+          "result": {
+            "error": "A wristband number or color is 24 characters at most.",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "number": "#7",
+              "color": "Light blue"
+            }
+          ],
+          "result": {
+            "ok": true,
+            "wristband": {
+              "color": "Light blue",
+              "number": "#7"
+            }
+          }
         }
       ]
     },

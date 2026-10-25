@@ -63,6 +63,7 @@ private fun AttachedCustomer(model: RegisterModel, customer: PosCustomer) {
     }
     TextButton(onClick = { model.attachCustomer(null) }, modifier = Modifier.testTag("pos-customer-remove")) { Text("Remove") }
   }
+  AttachedCustomerCheckIn(model, customer)
 }
 
 @Composable

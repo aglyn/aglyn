@@ -93,8 +93,11 @@ export const CHECK_IN_BATCH_MAX = 50
 /** A wristband's number or color, at most this many characters. */
 export const CHECK_IN_WRISTBAND_MAX = 24
 
-/** Colors offered as quick picks for a wristband. Any word is accepted. */
-export const CHECK_IN_WRISTBAND_COLORS = [
+/**
+ * Colors offered as quick picks for a wristband. Any word is accepted. A plain
+ * list (not `as const`), so the native contracts carry it as one.
+ */
+export const CHECK_IN_WRISTBAND_COLORS: readonly string[] = [
   'Red',
   'Orange',
   'Yellow',
@@ -104,7 +107,7 @@ export const CHECK_IN_WRISTBAND_COLORS = [
   'Pink',
   'White',
   'Black',
-] as const
+]
 
 /** The order statuses whose check-in lines are due. */
 export const CHECK_IN_ORDER_STATUSES = ['paid', 'partially_fulfilled', 'fulfilled', 'delivered'] as const

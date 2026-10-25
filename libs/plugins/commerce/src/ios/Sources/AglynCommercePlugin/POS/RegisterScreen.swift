@@ -20,6 +20,7 @@ struct RegisterScreen: View {
   @State private var showOps = false
   @State private var showPrinters = false
   @State private var showOfflineCash = false
+  @State private var checkIn: PosCheckInModel?
   let context: NativePluginContext
 
   init(context: NativePluginContext) {
@@ -75,6 +76,11 @@ struct RegisterScreen: View {
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
     .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
     .sheet(isPresented: $showOfflineCash) { OfflineCashSheet(model: model) }
+    .sheet(item: $checkIn) { sheet in
+      PosCheckInSheet(model: sheet, hostID: model.hostID) { checkIn = nil }
+        .environment(\.posPluginContext, context)
+    }
+    .environment(\.posPluginContext, context)
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
     .simultaneousGesture(TapGesture().onEnded { model.cashier.touch() })
@@ -117,6 +123,11 @@ struct RegisterScreen: View {
 
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
+    // Check-in at the window (AGL-4063), beside the menu as the console's operations bar has it: the window does it all day.
+    ToolbarItem(placement: .primaryAction) {
+      Button("Check in", systemImage: "ticket") { checkIn = model.makeCheckIn() }
+        .accessibilityIdentifier("pos-check-in-open")
+    }
     ToolbarItem(placement: .primaryAction) {
       Menu {
         if let registers = model.registers.value, registers.count > 1 {

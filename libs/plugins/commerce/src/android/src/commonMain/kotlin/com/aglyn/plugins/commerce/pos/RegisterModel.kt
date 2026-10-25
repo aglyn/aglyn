@@ -73,6 +73,8 @@ class RegisterModel(
   kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
   /** The receipt printers route. */
   printersApi: PosPrintersApi = OfflinePosPrinters,
+  /** Check-in at the window (AGL-4063). */
+  val checkInApi: PosCheckInApi = OfflinePosCheckIn,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -84,6 +86,12 @@ class RegisterModel(
 
   /** The customer lookup beside the basket. */
   val customers = PosCustomerModel(customersApi, scope)
+
+  /** What the attached customer has to check in today. */
+  val checkInDue = PosCheckInDue(checkInApi)
+
+  /** A check-in sheet for this register: the person who checks people in is the PIN's cashier, at this register. */
+  fun makeCheckIn(): PosCheckInModel = PosCheckInModel(checkInApi, scope, { register?.id }, { cashier.assertion })
   /** The last sale this register finished, and its receipt. */
   val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
 

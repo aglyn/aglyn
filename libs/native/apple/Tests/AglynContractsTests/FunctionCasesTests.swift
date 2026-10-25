@@ -64,6 +64,7 @@ final class FunctionCasesTests: XCTestCase {
       "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions",
       "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency",
       "planCardMeterOrder", "planCardContext", "planCardShows",
+      "checkInItemLabel", "describeWristband", "checkInTimeLabel", "alreadyCheckedInLabel", "normalizeWristband", "normalizeProductCheckIn",
     ] {
       XCTAssertNotNil(functions[name], name)
     }
@@ -218,6 +219,56 @@ final class FunctionCasesTests: XCTestCase {
       let zone = item.args.count > 1 ? string(item.args[1]) : nil
       XCTAssertEqual(formatReceiptTime(atMs, timeZone: zone), item.result as? String, item.label)
     }
+  }
+
+  /// Check-in at the window (AGL-4063): a person's line, a wristband, a time and the wristband rule, as the console says them.
+  /// An unknown zone reads in UTC here, the zone the cases were made in (the device's on a register).
+  func testCheckInLabelsReadAsTheConsoleWritesThem() {
+    let utc = TimeZone(identifier: "UTC")!
+    for item in cases("checkInItemLabel") {
+      let row = item.args[0] as? [String: Any] ?? [:]
+      XCTAssertEqual(
+        checkInItemLabel(
+          itemName: row["itemName"] as? String ?? "", variantLabel: row["variantLabel"] as? String, unitIndex: int(row["unitIndex"]),
+          unitCount: int(row["unitCount"])), item.result as? String, item.label)
+    }
+    func band(_ value: Any?) -> CheckInWristband? {
+      guard let object = value as? [String: Any] else { return nil }
+      return CheckInWristband(color: object["color"] as? String, number: object["number"] as? String)
+    }
+    for item in cases("describeWristband") {
+      XCTAssertEqual(describeWristband(band(item.args[0])), item.result as? String, item.label)
+    }
+    for item in cases("checkInTimeLabel") {
+      let at = (item.args[0] as? NSNumber)?.doubleValue
+      XCTAssertEqual(checkInTimeLabel(at, timeZone: string(item.args[1]) ?? "", fallback: utc), item.result as? String, item.label)
+    }
+    for item in cases("alreadyCheckedInLabel") {
+      let row = item.args[0] as? [String: Any] ?? [:]
+      XCTAssertEqual(
+        alreadyCheckedInLabel(
+          checkedInAtMs: (row["checkedInAtMs"] as? NSNumber)?.doubleValue, checkedInByName: row["checkedInByName"] as? String,
+          timeZone: string(item.args[1]) ?? "", fallback: utc), item.result as? String, item.label)
+    }
+    for item in cases("normalizeWristband") {
+      let want = item.result as? [String: Any] ?? [:]
+      let expected: WristbandCheck =
+        (want["ok"] as? Bool) == true ? .ok(band(want["wristband"])) : .refused(want["error"] as? String ?? "")
+      // The route also refuses a value that is not an object; the register only ever sends the two fields.
+      if let raw = item.args[0] as? String, !raw.isEmpty { continue }
+      let object = item.args[0] as? [String: Any]
+      XCTAssertEqual(normalizeWristband(number: object?["number"] as? String, color: object?["color"] as? String), expected, item.label)
+    }
+    for item in cases("normalizeProductCheckIn") {
+      let want = item.result as? [String: Any]
+      let got = normalizeProductCheckIn(item.args[0])
+      XCTAssertEqual(got?.enabled, want?["enabled"] as? Bool, item.label)
+      XCTAssertEqual(got?.headcount, (want?["headcount"] as? NSNumber)?.intValue, item.label)
+    }
+    XCTAssertEqual(checkInHeadcount(""), 1)
+    XCTAssertEqual(checkInHeadcount("4"), 4)
+    XCTAssertEqual(ContractValues.shared.checkInWristbandColors.first, "Red")
+    XCTAssertEqual(ContractValues.shared.posCheckInRoute, "/api/commerce/pos-check-in")
   }
 
   func testChannelLabelsComeFromTheGeneratedMap() {

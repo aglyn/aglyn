@@ -49,6 +49,7 @@ struct ProductEditorSheet: View {
         }
       }
       optionsSection
+      checkInSection
       ForEach($model.draft.variants) { $variant in
         Section(model.draft.variants.count > 1 ? variant.label : "Price and codes") {
           amountField("Price", text: $variant.price).accessibilityIdentifier("variant-price-\(variant.id)")
@@ -105,6 +106,54 @@ struct ProductEditorSheet: View {
       Text("Options")
     } footer: {
       if model.draft.variants.count > 1 { Text("\(model.draft.variants.count) variants. Separate values with commas.") }
+    }
+  }
+
+  /// Check-in at the window (AGL-4063): whether each one sold is somebody to check in on the day it was bought, how many
+  /// people one admits, and (with variants) each variant's own choice. The console's `ProductCheckInFields`, in its words.
+  @ViewBuilder private var checkInSection: some View {
+    Section {
+      Toggle("Needs check-in", isOn: $model.draft.needsCheckIn).accessibilityIdentifier("product-needs-check-in")
+      if model.draft.needsCheckIn {
+        LabeledContent("People per item") {
+          TextField("1", text: $model.draft.headcount)
+            .multilineTextAlignment(.trailing)
+            .monospacedDigit()
+            #if os(iOS)
+              .keyboardType(.numberPad)
+            #endif
+            .accessibilityIdentifier("product-check-in-headcount")
+        }
+      }
+      if model.draft.variants.count > 1 {
+        ForEach($model.draft.variants) { $variant in
+          Picker(variant.label, selection: $variant.checkIn) {
+            Text(model.draft.needsCheckIn ? "Same as the product (needs check-in)" : "Same as the product (no check-in)")
+              .tag(VariantCheckIn.product)
+            Text("Needs check-in").tag(VariantCheckIn.on)
+            Text("No check-in").tag(VariantCheckIn.off)
+          }
+          .accessibilityIdentifier("variant-check-in-\(variant.id)")
+          if variant.checkIn == .on {
+            LabeledContent("People per item") {
+              TextField("1", text: $variant.headcount)
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
+                #if os(iOS)
+                  .keyboardType(.numberPad)
+                #endif
+            }
+          }
+        }
+      }
+    } header: {
+      Text("Check-in")
+    } footer: {
+      let people = checkInHeadcount(model.draft.headcount)
+      Text(
+        "Each one sold, online or at the register, is somebody to check in at the window on the day it was bought, with an "
+          + "optional wristband number or color."
+          + (model.draft.needsCheckIn ? (people > 1 ? " Buying 3 makes \(3 * people) check-ins." : " Buying 3 makes 3 check-ins.") : ""))
     }
   }
 

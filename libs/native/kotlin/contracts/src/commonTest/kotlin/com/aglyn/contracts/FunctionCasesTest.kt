@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions", "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions", "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency", "checkInItemLabel", "describeWristband", "checkInTimeLabel", "alreadyCheckedInLabel", "normalizeWristband", "normalizeProductCheckIn")))
   }
 
   /** The plan card's meters (AGL-3992): which leads for the screen in front, the order of the rest, and whether it shows. */
@@ -139,6 +139,57 @@ class FunctionCasesTest {
   @Test
   fun formatReceiptTimeCases() = cases("formatReceiptTime").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.content, formatReceiptTime(args[0].jsonPrimitive.long, str(args.getOrNull(1))), args.toString())
+  }
+
+  /**
+   * Check-in at the window (AGL-4063): a person's line, a wristband, a time and the wristband rule, as the console says them. An
+   * unknown zone reads in UTC here, the zone the cases were made in (the device's on a register).
+   */
+  @Test
+  fun checkInLabelsReadAsTheConsoleWritesThem() {
+    fun num(element: JsonElement?) = (element as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.toDouble()
+    cases("checkInItemLabel").forEach { (args, result) ->
+      val row = args[0].jsonObject
+      assertEquals(
+        result.jsonPrimitive.content,
+        checkInItemLabel(str(row["itemName"]).orEmpty(), str(row["variantLabel"]), num(row["unitIndex"])!!.toInt(), num(row["unitCount"])!!.toInt()),
+        args.toString(),
+      )
+    }
+    fun band(element: JsonElement?): CheckInWristband? =
+      (element as? JsonObject)?.let { CheckInWristband(color = str(it["color"]), number = str(it["number"])) }
+    cases("describeWristband").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, describeWristband(band(args[0])), args.toString()) }
+    cases("checkInTimeLabel").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, checkInTimeLabel(num(args[0]), str(args[1]).orEmpty(), "UTC"), args.toString())
+    }
+    cases("alreadyCheckedInLabel").forEach { (args, result) ->
+      val row = args[0].jsonObject
+      assertEquals(result.jsonPrimitive.content, alreadyCheckedInLabel(num(row["checkedInAtMs"]), str(row["checkedInByName"]), str(args[1]).orEmpty(), "UTC"), args.toString())
+    }
+    cases("normalizeWristband").forEach { (args, result) ->
+      // The route also refuses a value that is not an object; the register only ever sends the two fields.
+      if (args[0] is JsonPrimitive && str(args[0]).orEmpty().isNotEmpty()) return@forEach
+      val want = result.jsonObject
+      val expected = if (want["ok"]?.jsonPrimitive?.boolean == true) WristbandCheck.Ok(band(want["wristband"])) else WristbandCheck.Refused(str(want["error"]).orEmpty())
+      val typed = args[0] as? JsonObject
+      assertEquals(expected, normalizeWristband(str(typed?.get("number")), str(typed?.get("color"))), args.toString())
+    }
+    fun plain(element: JsonElement): Any? = when (element) {
+      is JsonNull -> null
+      is JsonObject -> element.mapValues { plain(it.value) }
+      is JsonArray -> element.map { plain(it) }
+      is JsonPrimitive -> if (element.isString) element.content else element.booleanOrNull ?: element.content.toDouble()
+    }
+    cases("normalizeProductCheckIn").forEach { (args, result) ->
+      val want = result as? JsonObject
+      val got = normalizeProductCheckIn(plain(args[0]))
+      assertEquals(want?.get("enabled")?.jsonPrimitive?.boolean, got?.enabled, args.toString())
+      assertEquals(want?.get("headcount")?.jsonPrimitive?.long, got?.headcount, args.toString())
+    }
+    assertEquals(1, checkInHeadcount(""))
+    assertEquals(4, checkInHeadcount("4"))
+    assertEquals("Red", Contracts.checkInWristbandColors.first())
+    assertEquals("/api/commerce/pos-check-in", Contracts.posCheckInRoute)
   }
 
   @Test

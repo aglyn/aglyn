@@ -71,6 +71,43 @@ final class ProductWritesTests: XCTestCase {
     XCTAssertEqual(variants[1]["barcode"], "123")
   }
 
+  /// Check-in at the window (AGL-4063): the product's setting and each variant's own, written as the console writes them.
+  func testCheckInIsWrittenOnTheProductAndEachVariantAsTheConsoleWritesIt() {
+    var draft = productDraft(stored)
+    XCTAssertFalse(draft.needsCheckIn)
+    XCTAssertEqual(draft.variants.map(\.checkIn), [.product, .product])
+    var body = productSaveJSON(draft, stored: stored.data)
+    XCTAssertNil(body["checkIn"], "never turned on, never written")
+    draft.needsCheckIn = true
+    draft.headcount = "2"
+    draft.variants[0].checkIn = .off
+    draft.variants[1].checkIn = .on
+    draft.variants[1].headcount = "80"
+    body = productSaveJSON(draft, stored: stored.data)
+    XCTAssertEqual(body["checkIn"], ["enabled": true, "headcount": 2])
+    guard case .array(let variants)? = body["variants"] else { return XCTFail("no variants") }
+    XCTAssertEqual(variants[0]["checkIn"], ["enabled": false])
+    XCTAssertEqual(variants[1]["checkIn"], ["enabled": true, "headcount": 50], "a headcount is capped at the ceiling")
+    // Opened again, the editor shows what was stored; turning the product off keeps an explicit off.
+    var data = stored.data
+    data["checkIn"] = ["enabled": true, "headcount": 2]
+    data["variants"] = [
+      ["id": "v1", "options": ["size": "Small"], "priceUsd": 12.5, "checkIn": ["enabled": false]],
+      ["id": "v2", "options": ["size": "Large"], "priceUsd": 15, "checkIn": ["enabled": true, "headcount": 3]],
+    ]
+    var reopened = productDraft(FirestoreDocument(id: "p1", data: data))
+    XCTAssertTrue(reopened.needsCheckIn)
+    XCTAssertEqual(reopened.headcount, "2")
+    XCTAssertEqual(reopened.variants.map(\.checkIn), [.off, .on])
+    XCTAssertEqual(reopened.variants[1].headcount, "3")
+    reopened.needsCheckIn = false
+    reopened.variants[0].checkIn = .product
+    body = productSaveJSON(reopened, stored: data)
+    XCTAssertEqual(body["checkIn"], ["enabled": false])
+    guard case .array(let after)? = body["variants"] else { return XCTFail("no variants") }
+    XCTAssertNil(after[0]["checkIn"], "same as the product removes the variant's own")
+  }
+
   func testANewProductIsTheConsolesBlankOneWithASlugAndStartingStock() {
     var draft = ProductDraft(productID: newProductID(), create: true)
     draft.name = "Café Latte"

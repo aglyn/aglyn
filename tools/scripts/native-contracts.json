@@ -609,6 +609,26 @@
         "POS_TENDER_LABELS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts": {
+      "values": [
+        "CHECK_IN_MAX_HEADCOUNT"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-check-in.ts": {
+      "types": [
+        "HostCheckIn",
+        "CheckInWristband",
+        "CheckInCustomer",
+        "CheckInStatus",
+        "CheckInDayTotals"
+      ],
+      "values": [
+        "POS_CHECK_IN_ROUTE",
+        "CHECK_IN_BATCH_MAX",
+        "CHECK_IN_WRISTBAND_MAX",
+        "CHECK_IN_WRISTBAND_COLORS"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
       "types": [
         "ReturnReason"
@@ -994,7 +1014,7 @@
         "libs/plugins/outreach/src/lib/native-nav.ts",
         "libs/plugins/redirects/src/lib/native-nav.ts",
         "libs/plugins/sms/src/lib/native-nav.ts",
-      "libs/plugins/waivers/src/lib/native-nav.ts",
+        "libs/plugins/waivers/src/lib/native-nav.ts",
         "libs/plugins/workflows/src/lib/native-nav.ts"
       ]
     },
@@ -1094,7 +1114,15 @@
     "ThemeDensity.space6",
     "ThemeDensity.space64",
     "ThemeDensity.space8",
-    "ThemeDensity.titlebarHeight"
+    "ThemeDensity.titlebarHeight",
+    "HostCheckIn.unitIndex",
+    "HostCheckIn.unitCount",
+    "HostCheckIn.lineIndex",
+    "CheckInCustomer.unitsDue",
+    "CheckInCustomer.unitsCheckedIn",
+    "CheckInDayTotals.expected",
+    "CheckInDayTotals.checkedIn",
+    "ProductCheckIn.headcount"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -1130,7 +1158,9 @@
     "PosKioskProduct.imageUrl",
     "PosKioskLine.variantId",
     "PosKioskLine.modifiers",
-    "PosKioskSaleLine.variantLabel"
+    "PosKioskSaleLine.variantLabel",
+    "HostCheckIn",
+    "CheckInCustomer"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -28858,6 +28888,237 @@
         [
           [],
           true
+        ]
+      ]
+    },
+    "checkInItemLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "args": [
+        [
+          {
+            "itemName": "Day pass",
+            "variantLabel": null,
+            "unitIndex": 0,
+            "unitCount": 1
+          }
+        ],
+        [
+          {
+            "itemName": "Day pass",
+            "variantLabel": "Adult",
+            "unitIndex": 0,
+            "unitCount": 1
+          }
+        ],
+        [
+          {
+            "itemName": "Day pass",
+            "variantLabel": "Adult",
+            "unitIndex": 1,
+            "unitCount": 3
+          }
+        ],
+        [
+          {
+            "itemName": "RV camping with hookups",
+            "variantLabel": null,
+            "unitIndex": 0,
+            "unitCount": 2
+          }
+        ]
+      ]
+    },
+    "describeWristband": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "number": "214",
+            "color": "Blue"
+          }
+        ],
+        [
+          {
+            "number": "#214",
+            "color": null
+          }
+        ],
+        [
+          {
+            "number": null,
+            "color": "Red"
+          }
+        ],
+        [
+          {
+            "number": null,
+            "color": null
+          }
+        ]
+      ]
+    },
+    "checkInTimeLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "argsProduct": [
+        [
+          null,
+          0,
+          1792940040000,
+          1792900800000
+        ],
+        [
+          "America/Chicago",
+          "UTC",
+          "Not/AZone"
+        ]
+      ]
+    },
+    "alreadyCheckedInLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "args": [
+        [
+          {
+            "checkedInAtMs": 1792940040000,
+            "checkedInByName": "Sam"
+          },
+          "America/Chicago"
+        ],
+        [
+          {
+            "checkedInAtMs": 1792940040000,
+            "checkedInByName": null
+          },
+          "UTC"
+        ],
+        [
+          {
+            "checkedInAtMs": null,
+            "checkedInByName": "Sam"
+          },
+          "UTC"
+        ],
+        [
+          {
+            "checkedInAtMs": null,
+            "checkedInByName": null
+          },
+          "UTC"
+        ]
+      ]
+    },
+    "normalizeWristband": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "blue"
+        ],
+        [
+          {
+            "number": " 214 ",
+            "color": " Blue "
+          }
+        ],
+        [
+          {
+            "number": "",
+            "color": ""
+          }
+        ],
+        [
+          {
+            "number": "A-12",
+            "color": ""
+          }
+        ],
+        [
+          {
+            "number": "12 3",
+            "color": ""
+          }
+        ],
+        [
+          {
+            "number": "",
+            "color": "Blue2"
+          }
+        ],
+        [
+          {
+            "number": "1234567890123456789012345",
+            "color": ""
+          }
+        ],
+        [
+          {
+            "number": "#7",
+            "color": "Light blue"
+          }
+        ]
+      ]
+    },
+    "normalizeProductCheckIn": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          "on"
+        ],
+        [
+          {
+            "enabled": "yes"
+          }
+        ],
+        [
+          {
+            "enabled": false,
+            "headcount": 4
+          }
+        ],
+        [
+          {
+            "enabled": true
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 3
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 2.6
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 0
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 80
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": "5"
+          }
         ]
       ]
     }

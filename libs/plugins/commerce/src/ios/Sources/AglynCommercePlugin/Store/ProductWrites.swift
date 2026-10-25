@@ -63,6 +63,14 @@ struct VariantDraft: Identifiable, Equatable {
   var selections: [String: String] = [:]
   /// Added to the matrix in this edit, so its stock and picks are written with the save.
   var fresh = false
+  /// Its own check-in setting (AGL-4063): the product's, on, or off; and its people per item when on.
+  var checkIn: VariantCheckIn = .product
+  var headcount = "1"
+}
+
+/// A variant's check-in choice, as the console's product editor offers it.
+enum VariantCheckIn: String, CaseIterable, Equatable {
+  case product, on, off
 }
 
 /// What the editor edits.
@@ -75,6 +83,9 @@ struct ProductDraft: Equatable {
   var type: ProductType = .physical
   var options: [OptionDraft] = []
   var variants: [VariantDraft] = [VariantDraft(id: "default", label: "Default")]
+  /// Check-in at the window (AGL-4063): each one sold is somebody to check in, and how many people one admits.
+  var needsCheckIn = false
+  var headcount = "1"
 }
 
 /// A fresh product id, minted here so a retried create finds its own product.
@@ -103,16 +114,20 @@ func productDraft(_ doc: FirestoreDocument) -> ProductDraft {
         price: moneyText(raw["priceUsd"]), compareAt: moneyText(raw["compareAtPriceUsd"]),
         sku: raw["sku"] as? String ?? "", barcode: raw["barcode"] as? String ?? "",
         stock: (raw["inventory"] as? NSNumber).flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0 }.map { String($0.intValue) } ?? "",
-        selections: (raw["options"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String })
+        selections: (raw["options"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String },
+        checkIn: normalizeProductCheckIn(raw["checkIn"]).map { $0.enabled ? .on : .off } ?? .product,
+        headcount: String(normalizeProductCheckIn(raw["checkIn"])?.headcount ?? 1))
     }
   let options: [OptionDraft] = (data["options"] as? [Any] ?? []).compactMap { entry in
     guard let raw = entry as? [String: Any], let name = raw["name"] as? String else { return nil }
     return OptionDraft(name: name, valuesText: (raw["values"] as? [Any] ?? []).compactMap { $0 as? String }.joined(separator: ", "))
   }
+  let checkIn = normalizeProductCheckIn(data["checkIn"])
   return ProductDraft(
     productID: doc.id, create: false, name: doc.string("name") ?? "", description: doc.string("description") ?? "",
     status: doc.string("status").flatMap(ProductStatus.init(rawValue:)) ?? .active,
-    type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, options: options, variants: variants)
+    type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, options: options, variants: variants,
+    needsCheckIn: checkIn?.enabled == true, headcount: String(checkIn?.headcount ?? 1))
 }
 
 /// A price above this is refused, as the console's editor refuses it.
@@ -173,7 +188,21 @@ func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue
     put("barcode", edit.barcode) { .string($0) }
     if !edit.selections.isEmpty { fields["options"] = .object(edit.selections.mapValues { .string($0) }) }
     if draft.create || edit.fresh { fields["inventory"] = Int(trimmed(edit.stock)).map { .number(Double($0)) } ?? .null }
+    // A variant's own check-in (AGL-4063) only where the product has variants to tell apart, as the console offers it.
+    if draft.variants.count > 1 {
+      switch edit.checkIn {
+      case .product: fields.removeValue(forKey: "checkIn")
+      case .on: fields["checkIn"] = .object(["enabled": true, "headcount": .number(Double(checkInHeadcount(edit.headcount)))])
+      case .off: fields["checkIn"] = .object(["enabled": false])
+      }
+    }
     return .object(fields)
+  }
+  // The product's check-in: written once it is on, and kept as off once it was ever set, as the console's switch writes it.
+  if draft.needsCheckIn {
+    base["checkIn"] = .object(["enabled": true, "headcount": .number(Double(checkInHeadcount(draft.headcount)))])
+  } else if base["checkIn"] != nil {
+    base["checkIn"] = .object(["enabled": false])
   }
   base["name"] = .string(draft.name)
   base["description"] = .string(draft.description)

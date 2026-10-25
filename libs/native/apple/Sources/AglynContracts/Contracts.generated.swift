@@ -383,6 +383,60 @@ public struct BookingWindow: Codable, Hashable, Sendable {
   }
 }
 
+public struct CheckInCustomer: Codable, Hashable, Sendable {
+  public var contactId: String?
+  public var customerKey: String?
+  public var email: String?
+  public var items: [String]?
+  public var name: String?
+  public var phone: String?
+  public var unitsCheckedIn: Int?
+  public var unitsDue: Int?
+
+  public init(contactId: String? = nil, customerKey: String? = nil, email: String? = nil, items: [String]? = nil, name: String? = nil, phone: String? = nil, unitsCheckedIn: Int? = nil, unitsDue: Int? = nil) {
+    self.contactId = contactId
+    self.customerKey = customerKey
+    self.email = email
+    self.items = items
+    self.name = name
+    self.phone = phone
+    self.unitsCheckedIn = unitsCheckedIn
+    self.unitsDue = unitsDue
+  }
+}
+
+public struct CheckInDayTotals: Codable, Hashable, Sendable {
+  public var checkedIn: Int
+  public var expected: Int
+
+  public init(checkedIn: Int, expected: Int) {
+    self.checkedIn = checkedIn
+    self.expected = expected
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CheckInStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case checkedIn = "checked_in"
+  case expected = "expected"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct CheckInWristband: Codable, Hashable, Sendable {
+  public var color: String?
+  public var number: String?
+
+  public init(color: String? = nil, number: String? = nil) {
+    self.color = color
+    self.number = number
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ContentSchemaType: String, Codable, CaseIterable, Hashable, Sendable {
   case article = "Article"
@@ -962,6 +1016,100 @@ public struct FunnelStepResult: Codable, Hashable, Sendable {
     self.label = label
     self.medianMsFromPrevious = medianMsFromPrevious
     self.visitors = visitors
+  }
+}
+
+public struct HostCheckIn: Codable, Hashable, Sendable {
+  public var channel: HostCheckInChannel?
+  public var checkedInAtMs: Double?
+  public var checkedInBy: String?
+  public var checkedInByName: String?
+  public var checkInAttempt: String?
+  public var contactId: String?
+  public var createdAtMs: Double?
+  public var customerEmail: String?
+  public var customerEmailLower: String?
+  public var customerKey: String?
+  public var customerName: String?
+  public var customerPhone: String?
+  public var dayKey: String?
+  public var itemName: String?
+  public var lineIndex: Int?
+  public var orderId: String?
+  public var orderLabel: String?
+  public var productId: String?
+  public var reservationId: String?
+  public var searchTokens: [String]?
+  public var source: HostCheckInSource?
+  public var status: CheckInStatus?
+  public var undoneAtMs: Double?
+  public var undoneBy: String?
+  public var unitCount: Int?
+  public var unitIndex: Int?
+  public var updatedAtMs: Double?
+  public var variantId: String?
+  public var variantLabel: String?
+  public var wristband: CheckInWristband?
+
+  public init(channel: HostCheckInChannel? = nil, checkedInAtMs: Double? = nil, checkedInBy: String? = nil, checkedInByName: String? = nil, checkInAttempt: String? = nil, contactId: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerEmailLower: String? = nil, customerKey: String? = nil, customerName: String? = nil, customerPhone: String? = nil, dayKey: String? = nil, itemName: String? = nil, lineIndex: Int? = nil, orderId: String? = nil, orderLabel: String? = nil, productId: String? = nil, reservationId: String? = nil, searchTokens: [String]? = nil, source: HostCheckInSource? = nil, status: CheckInStatus? = nil, undoneAtMs: Double? = nil, undoneBy: String? = nil, unitCount: Int? = nil, unitIndex: Int? = nil, updatedAtMs: Double? = nil, variantId: String? = nil, variantLabel: String? = nil, wristband: CheckInWristband? = nil) {
+    self.channel = channel
+    self.checkedInAtMs = checkedInAtMs
+    self.checkedInBy = checkedInBy
+    self.checkedInByName = checkedInByName
+    self.checkInAttempt = checkInAttempt
+    self.contactId = contactId
+    self.createdAtMs = createdAtMs
+    self.customerEmail = customerEmail
+    self.customerEmailLower = customerEmailLower
+    self.customerKey = customerKey
+    self.customerName = customerName
+    self.customerPhone = customerPhone
+    self.dayKey = dayKey
+    self.itemName = itemName
+    self.lineIndex = lineIndex
+    self.orderId = orderId
+    self.orderLabel = orderLabel
+    self.productId = productId
+    self.reservationId = reservationId
+    self.searchTokens = searchTokens
+    self.source = source
+    self.status = status
+    self.undoneAtMs = undoneAtMs
+    self.undoneBy = undoneBy
+    self.unitCount = unitCount
+    self.unitIndex = unitIndex
+    self.updatedAtMs = updatedAtMs
+    self.variantId = variantId
+    self.variantLabel = variantLabel
+    self.wristband = wristband
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostCheckInChannel: String, Codable, CaseIterable, Hashable, Sendable {
+  case draft = "draft"
+  case marketplace = "marketplace"
+  case online = "online"
+  case pos = "pos"
+  case reservation = "reservation"
+  case subscription = "subscription"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostCheckInSource: String, Codable, CaseIterable, Hashable, Sendable {
+  case order = "order"
+  case reservation = "reservation"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -3986,9 +4134,9 @@ public enum ProductChannelFactsCondition: String, Codable, CaseIterable, Hashabl
 
 public struct ProductCheckIn: Codable, Hashable, Sendable {
   public var enabled: Bool
-  public var headcount: Double?
+  public var headcount: Int?
 
-  public init(enabled: Bool, headcount: Double? = nil) {
+  public init(enabled: Bool, headcount: Int? = nil) {
     self.enabled = enabled
     self.headcount = headcount
   }
@@ -4928,6 +5076,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let businessToneLabels: [String: String]
   public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
+  public let checkInBatchMax: Int
+  public let checkInMaxHeadcount: Int
+  public let checkInWristbandColors: [String]
+  public let checkInWristbandMax: Int
   public let checkoutShippingCountryCodes: [String]
   public let checkoutShippingCountryNames: [String: String]
   public let code128Patterns: [[Double]]
@@ -5111,6 +5263,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardScreenContexts: [String: String]
   public let planCardWarningShare: Double
   public let posCashEventLabels: [String: String]
+  public let posCheckInRoute: String
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
   public let posDisplayThanksMs: Int
@@ -5241,6 +5394,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case businessToneLabels = "BUSINESS_TONE_LABELS"
     case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
+    case checkInBatchMax = "CHECK_IN_BATCH_MAX"
+    case checkInMaxHeadcount = "CHECK_IN_MAX_HEADCOUNT"
+    case checkInWristbandColors = "CHECK_IN_WRISTBAND_COLORS"
+    case checkInWristbandMax = "CHECK_IN_WRISTBAND_MAX"
     case checkoutShippingCountryCodes = "CHECKOUT_SHIPPING_COUNTRY_CODES"
     case checkoutShippingCountryNames = "CHECKOUT_SHIPPING_COUNTRY_NAMES"
     case code128Patterns = "CODE128_PATTERNS"
@@ -5424,6 +5581,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
+    case posCheckInRoute = "POS_CHECK_IN_ROUTE"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
     case posDisplayThanksMs = "POS_DISPLAY_THANKS_MS"

@@ -82,6 +82,10 @@
       "why": "The Header and Footer bands an email block starts from, as plain data: the email plugin registers them as presets and the native apps start a component from the same trees (AGL-3668). No imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/email-search.ts",
+      "why": "An email address's search prefixes; imports only name-search. The check-in record's search tokens are built from it (AGL-4063)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/email-state.ts",
       "why": "Reached by crm.ts: an address's deliverability states."
     },
@@ -410,6 +414,10 @@
       "why": "The product and variant check-in setting (whether an item needs check-in, people per item) and its normalize/validate rules (AGL-4043), no imports; ProductVariant carries it, so the native contracts read it."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-check-in.ts",
+      "why": "Check-in at the window (AGL-4043): the check-in record, the customer row, wristbands and the labels the register prints; imports only listed modules. Aglyn POS mirrors its types and replays its labels (AGL-4063)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
     },
@@ -440,6 +448,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "why": "Reservation pricing and availability (nights, units, pending holds); a type-only import of commerce-tax-decision. The apps' Stays port reads its unit bounds and hold window as contract values (AGL-4045)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
@@ -478,8 +490,16 @@
       "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/order-list-fields.ts",
+      "why": "An order's list and search fields; imports email-search, name-search, commerce-dispute, order-shipping-export and commerce-orders. Reached by commerce-check-in (AGL-4063)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
       "why": "Pickup and local delivery on an order (AGL-3624): the statuses, labels, transitions and queue fields the native Aglyn app shows and queries; no imports."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-shipping-export.ts",
+      "why": "Which of an order's lines still ship and its sync fields; imports only commerce-orders, order-fulfillment and order-local-fulfillment. Reached by order-list-fields (AGL-4063)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/paid-media.ts",

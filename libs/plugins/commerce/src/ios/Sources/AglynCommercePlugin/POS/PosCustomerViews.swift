@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import SwiftUI
 
@@ -54,6 +55,38 @@ private struct AttachedCustomer: View {
       Button("Remove") { model.attachCustomer(nil) }.buttonStyle(.borderless).accessibilityIdentifier("pos-customer-remove")
     }
     .task(id: customer.email ?? "") { await model.customers.loadStats(email: customer.email) }
+    AttachedCustomerCheckIn(model: model, customer: customer)
+  }
+}
+
+/// What the attached customer has to check in today (AGL-4063), as the console's customer panel shows it: "Check in (2)"
+/// while anyone waits, and the `posCheckIn` zone on a day they have anything due.
+private struct AttachedCustomerCheckIn: View {
+  let model: RegisterModel
+  let customer: PosCustomer
+  @State private var sheet: PosCheckInModel?
+  @Environment(\.posPluginContext) private var context
+
+  var body: some View {
+    let due = model.checkInDue
+    VStack(alignment: .leading, spacing: AglynSpace.half) {
+      if due.waiting > 0 {
+        Button("Check in (\(due.waiting))") { sheet = model.makeCheckIn() }
+          .buttonStyle(.bordered)
+          .accessibilityIdentifier("pos-customer-check-in")
+      }
+      if let dayKey = due.dayKey {
+        PosCheckInZone(
+          params: posCheckInZoneParams(
+            hostID: model.hostID, contactId: customer.kind == "contact" ? customer.id : nil, email: customer.email, dayKey: dayKey,
+            name: customer.name, unitsDue: due.total, placement: "register-customer"))
+      }
+    }
+    .task(id: customer) { await due.load(customer) }
+    .sheet(item: $sheet, onDismiss: { Task { await due.load(customer) } }) { open in
+      PosCheckInSheet(model: open, hostID: model.hostID, initial: checkInTarget(for: customer)) { sheet = nil }
+        .environment(\.posPluginContext, context)
+    }
   }
 }
 
