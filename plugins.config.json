@@ -4346,6 +4346,10 @@
       },
       "contributes": {
         "console": {
+          "shell": true,
+          "orgRoutes": [
+            "/domains"
+          ],
           "slots": [
             "hostDomain",
             "hostDomainConnect"

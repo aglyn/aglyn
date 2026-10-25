@@ -33,4 +33,14 @@ describe('domains plugin', () => {
       ['hostDomainConnect', 'customDomain'],
     ])
   })
+
+  it('adds the workspace Domains page, every name beneath it, with no plan gate (AGL-4040)', () => {
+    registerDomainsConsole()
+    const extension = listConsoleExtensions().find((entry) => entry.pluginId === 'domains')
+    expect(extension?.featureFlag).toBeUndefined()
+    expect(extension?.orgNavItems).toEqual([
+      expect.objectContaining({ label: 'Domains', href: '/domains', ownsSubtree: true }),
+    ])
+    expect(extension?.navItems ?? []).toEqual([])
+  })
 })

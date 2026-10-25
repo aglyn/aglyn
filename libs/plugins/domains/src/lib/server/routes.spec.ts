@@ -194,6 +194,8 @@ describe('the Domains page list', () => {
     expect(rows['stale.com'].connected).toBe(false)
     expect(rows['moving.com'].status).toBe('transferring-in')
     expect(body).toMatchObject({ configured: true, entitled: true, billingPermission: true })
+    // Every site's current domain, so Connect can name the one it replaces.
+    expect(body.siteDomains).toEqual({ 'host-1': 'testbakery.com', 'host-2': 'otherbakery.com' })
     expect(JSON.stringify(body)).not.toContain('costUsd')
   })
 

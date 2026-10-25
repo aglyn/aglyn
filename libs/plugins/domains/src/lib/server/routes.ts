@@ -243,6 +243,18 @@ export async function workspaceRoute(request: Request): Promise<Response> {
     }),
   )
   const servedBy = new Map(hosts)
+  // Every site's current domain, so Connect to a site can name the one it
+  // replaces before the owner confirms.
+  const sites = await db()
+    .collection('hosts')
+    .where('orgId', '==', actor.orgId)
+    .limit(200)
+    .get()
+    .catch(() => null)
+  const siteDomains: Record<string, string> = {}
+  for (const site of sites?.docs ?? []) {
+    siteDomains[site.id] = String(site.get('cname') ?? '').trim().toLowerCase()
+  }
   const entitled = checkEntitlement(actor.org as never, 'customDomain')
   const configured = sellingConfigured()
   const refusal = entitled ? await buyRefusal(actor, billing) : null
@@ -257,6 +269,7 @@ export async function workspaceRoute(request: Request): Promise<Response> {
     canBuy: configured && entitled && !refusal,
     refusal,
     rows,
+    siteDomains,
     contactDefaults: contactDefaultsFor(actor),
   })
 }
