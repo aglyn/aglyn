@@ -93,6 +93,7 @@ import {
   AI_SITE_INSPIRATION_SIGNALS_INPUT,
   aiSiteInspirationLookPins,
   aiSiteInspirationPairings,
+  aiSiteInspirationBriefHasFigures,
   aiSiteInspirationBuildable,
   aiSiteInspirationHomeOrder,
   aiSiteInspirationPlanLines,
@@ -374,9 +375,9 @@ describe('the look the sites pin (AGL-3975)', () => {
 
 describe('what the plan is told (AGL-3975)', () => {
   /** A start that can build every part: a selling store that also blogs, drafts events and has customer words. */
-  const EVERY_PART: AiSiteInspirationStart = { siteKind: 'store', posts: true, sells: true, events: true, customerWords: true }
+  const EVERY_PART: AiSiteInspirationStart = { siteKind: 'store', posts: true, sells: true, events: true, customerWords: true, figures: true }
   /** A paid restaurant start as most are: no posts, nothing sold, no events, no customer words. */
-  const RESTAURANT_START: AiSiteInspirationStart = { siteKind: 'restaurant', posts: false, sells: false, events: false, customerWords: false }
+  const RESTAURANT_START: AiSiteInspirationStart = { siteKind: 'restaurant', posts: false, sells: false, events: false, customerWords: false, figures: false }
 
   it('tells every plan each site’s structure in one fenced block of data, and only a paid plan the features, each as Aglyn’s own part', () => {
     const inspiration = inspirationOf(PORTFOLIO_SIGNALS, RESTAURANT_SIGNALS)
@@ -422,6 +423,32 @@ describe('what the plan is told (AGL-3975)', () => {
     expect(told({ ...RESTAURANT_START, customerWords: true })).toContain('testimonials')
     expect(told(EVERY_PART)).toEqual(['booking', 'forms', 'gallery', 'events', 'menu', 'testimonials', 'newsletter', 'blog', 'store'])
     for (const feature of AI_SITE_INSPIRATION_FEATURES) expect(typeof aiSiteInspirationBuildable(feature, RESTAURANT_START)).toBe('boolean')
+  })
+
+  it('follows a liked site’s numbers section only where the brief gives figures: eval case 3 planned one with none', () => {
+    const saas = inspirationOf(SAAS_SIGNALS)
+    const order = (start: AiSiteInspirationStart) => aiSiteInspirationHomeOrder(saas, start)?.sections ?? []
+    expect(order({ ...RESTAURANT_START, figures: false })).not.toContain('stats')
+    expect(order({ ...RESTAURANT_START, figures: true })).toContain('stats')
+    const told = aiSiteInspirationPlanLines(saas, { paid: true, start: { ...RESTAURANT_START, figures: false } }).join('\n')
+    expect(told).not.toContain('numbers')
+    expect(told).toContain('how it works')
+  })
+
+  it('reads a count in the brief as figures, never a year, the site’s size, a phone or an address', () => {
+    for (const brief of ['Over 200 weddings photographed', 'We have 12 years in the trade', '98% of clients rebook', '1,500+ kegs tracked', 'Serving 3 counties']) {
+      expect(aiSiteInspirationBriefHasFigures(brief)).toBe(true)
+    }
+    for (const brief of [
+      'A 6-page website for a taproom inventory app. Founded 2016.',
+      'Make 6 pages. Call (828) 555-0142.',
+      '120 Laurel Fork Road, Boone, NC 28607, open Tue–Sat 9–5',
+      'Started in 2019 by two brewers',
+      '',
+    ]) {
+      expect(aiSiteInspirationBriefHasFigures(brief)).toBe(false)
+    }
+    expect(aiSiteInspirationBriefHasFigures(null)).toBe(false)
   })
 
   const INVENTORY = {
@@ -480,7 +507,8 @@ describe('what the plan is told (AGL-3975)', () => {
     expect(readPage).toHaveBeenCalledTimes(3)
     const prompt = promptOf()
     expect(prompt).toContain('<inspiration-structure>')
-    expect(prompt).toContain('Site 3 sections, top to bottom: hero, clients or partners, services or features, how it works, numbers, pricing')
+    // The bakery's brief gives no figures, so the SaaS site's numbers section is not followed (eval case 3).
+    expect(prompt).toContain('Site 3 sections, top to bottom: hero, clients or partners, services or features, how it works, pricing')
     // A bakery start drafts no events and sells nothing, so neither part is offered.
     expect(prompt).toContain('- menu: a menu section')
     expect(prompt).not.toContain('- events:')

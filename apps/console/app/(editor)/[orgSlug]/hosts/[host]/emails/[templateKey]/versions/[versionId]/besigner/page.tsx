@@ -192,6 +192,7 @@ function HostEmailBesignerPage() {
     status,
     error,
     hasPendingWrites,
+    fromCache: versionFromCache,
   } = useFirestoreDoc<HostEmailVersionState>(
     () =>
       editable && hostId
@@ -308,12 +309,15 @@ function HostEmailBesignerPage() {
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // Every save converts a typed `{{name}}` to its id token (AGL-3481).
     bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: version?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: editable ? versionFromCache : undefined,
     status: editable ? status : 'success',
     error,
     save: saveVersion,
@@ -625,7 +629,7 @@ function HostEmailBesignerPage() {
             <Stack sx={{ alignItems: 'center', justifyContent: 'center' }}>
               <Typography>{'Not found'}</Typography>
             </Stack>
-          ) : status === 'loading' ? (
+          ) : status === 'loading' || awaitingServer ? (
             LOADING_OVERLAY_ELEMENT
           ) : (
             <>

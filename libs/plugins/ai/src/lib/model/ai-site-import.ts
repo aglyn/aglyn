@@ -125,6 +125,8 @@ export type AiSiteImportLeftOutReason =
   | 'empty'
   /** It could not be read: an error, no answer, or not a web page. */
   | 'unreadable'
+  /** The site's bot protection or firewall turned AglynBot away (401, 403 or 429). */
+  | 'blocked'
   /** Over the size one page may be. */
   | 'too-large'
   /** It sends visitors to another website. */
@@ -136,6 +138,7 @@ export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason
   'login-form',
   'empty',
   'unreadable',
+  'blocked',
   'too-large',
   'off-site',
 ]
@@ -691,6 +694,8 @@ export const AI_SITE_IMPORT_LEFT_OUT_COPY: Readonly<Record<AiSiteImportLeftOutRe
   'login-form': 'A sign-in page. Pages that ask for a password are never brought in.',
   empty: 'Nothing to bring in: the page has no text or photos.',
   unreadable: 'It could not be read just now.',
+  blocked:
+    'The site’s bot protection or firewall turned AglynBot away. Allow AglynBot in your site’s bot or firewall settings, then bring the site in again.',
   'too-large': 'Larger than a page can be to bring in.',
   'off-site': 'It sends visitors to another website.',
 }
