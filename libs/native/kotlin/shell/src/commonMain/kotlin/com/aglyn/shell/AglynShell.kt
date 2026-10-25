@@ -94,6 +94,7 @@ fun AglynShell(
     val state = auth
     val authScreen = state is AuthState.SignedOut ||
       (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
+    ReportAuthScreen(state, services.authFlow.landing, impersonation != null)
     // One signed-out screen, moved rather than rebuilt when the account appears mid sign-up: rebuilding it cancelled the
     // sign-up's own coroutine, so its acceptance, names and held workspace could go unwritten.
     val signedOutScreen = remember(services, autoSignIn) { movableContentOf { SignedOutScreen(services, autoSignIn) } }

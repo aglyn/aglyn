@@ -123,6 +123,11 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   LaunchedEffect(uid) { if (services.auth.impersonation.value == null) services.push.register(uid) }
   // Entering or leaving a support session starts from home: nothing open belonged to the other person.
   val supporting = impersonation != null
+  // Crash reports name the person by Firebase uid only, and never the customer a support session reads as (AGL-4067).
+  LaunchedEffect(uid, supporting) { com.aglyn.core.Telemetry.user(if (supporting) null else uid) }
+  // The screen on show, by its key, for Analytics and crash reports.
+  val screenKey = navigator.telemetryKey
+  LaunchedEffect(screenKey) { com.aglyn.core.Telemetry.screen(screenKey) }
   var wasSupporting by remember { mutableStateOf(supporting) }
   val chrome = remember(uid) { NavChromeState(services.prefs) }
   LaunchedEffect(supporting) {

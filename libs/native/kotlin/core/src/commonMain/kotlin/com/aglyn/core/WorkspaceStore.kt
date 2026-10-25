@@ -252,6 +252,7 @@ class WorkspaceStore(
    * workspace on this device. A workspace never opened here opens on the whole workspace.
    */
   fun selectOrg(orgId: String) {
+    reportPick(orgId, null)
     val remembered = restoredFor.value?.let { uid -> prefs.get(scopeKey(uid, orgId)) }
     picked.value = when (remembered) {
       null, WHOLE -> WorkspacePick(orgId, null, whole = true)
@@ -270,6 +271,7 @@ class WorkspaceStore(
    * workspace the pick does not name would fall back to the first site.
    */
   fun selectSite(hostId: String?) {
+    reportPick(state.value.org?.id, hostId)
     picked.value = WorkspacePick(state.value.org?.id ?: picked.value.orgId, hostId)
   }
 
@@ -279,12 +281,24 @@ class WorkspaceStore(
    * name it, and falls back to the first one otherwise.
    */
   fun select(orgId: String, hostId: String?) {
+    reportPick(orgId, hostId)
     picked.value = WorkspacePick(orgId, hostId)
   }
 
   /** Puts exactly this scope on screen: [hostId]'s site, or the whole workspace when it is null (a window tab's own). */
   fun selectScope(orgId: String, hostId: String?) {
     picked.value = WorkspacePick(orgId, hostId, whole = hostId == null)
+  }
+
+  /**
+   * Analytics for a pick (AGL-4067): `workspace_switch` when another workspace replaces the one on show, `site_open` when
+   * a site is opened. No ids or names go with either.
+   */
+  private fun reportPick(orgId: String?, hostId: String?) {
+    val shown = state.value
+    val current = shown.org?.id
+    if (orgId != null && current != null && orgId != current) Telemetry.event(TelemetryEvent.WORKSPACE_SWITCH)
+    if (hostId != null && hostId != shown.site?.id) Telemetry.event(TelemetryEvent.SITE_OPEN)
   }
 
   private fun restore(uid: String): WorkspacePick =

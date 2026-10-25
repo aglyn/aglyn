@@ -11,6 +11,7 @@
  *
  *   node tools/scripts/native-release.mjs ios-archive <Aglyn|AglynPOS> <ios|macos>
  *   node tools/scripts/native-release.mjs ios-upload <path to .xcarchive>
+ *   node tools/scripts/native-release.mjs ios-symbols <path to .xcarchive>
  *   node tools/scripts/native-release.mjs android-bundle <app|pos>
  *   node tools/scripts/native-release.mjs android-upload <path to .aab> [track]
  *
@@ -25,6 +26,16 @@
  *   (Xcode → Settings → Accounts). CURRENT_PROJECT_VERSION is the UTC time
  *   as yyyyMMddHHmm, so every archive outnumbers the last upload; the
  *   version is the root package.json's (releaseVersion below).
+ *   The archive's dSYMs then go to Firebase Crashlytics (ios-symbols).
+ * ios-symbols: uploads an archive's dSYMs to Firebase Crashlytics with its
+ *   `upload-symbols` (from the firebase-ios-sdk package checkout), so a crash
+ *   from that build reads as source lines (AGL-4067). There is no
+ *   GoogleService-Info.plist, so the Firebase app id is read from the archived
+ *   app's own Info.plist (AGLYN_FIREBASE_APP_ID, which Config/Release.xcconfig
+ *   sets per target). The Mac app is the same target as the iPhone and iPad
+ *   app, so it shares that Apple app id; only the platform (`mac`) differs.
+ *   ios-archive runs it after every archive; a failed upload is reported, not
+ *   fatal, and is retried with this command.
  * ios-upload: `xcodebuild -exportArchive` with destination `upload`, which
  *   sends the archive to App Store Connect (TestFlight) under the same
  *   account. The app record must already exist.
@@ -36,6 +47,9 @@
  *   Gradle through the environment only, never the command line. The
  *   versionCode is the minutes since 1970 (UTC); versionName is the root
  *   package.json's version, passed as -Paglyn.versionName.
+ *   -Paglyn.crashlyticsMappingUpload=true has the Crashlytics Gradle plugin
+ *   upload the R8 mapping file, so the bundle's crashes deobfuscate; no other
+ *   build uploads one.
  *
  * android-upload: sends a bundle to a Play testing track (internal unless
  *   a track is named) through the Play Developer API: an edit, the bundle,
@@ -57,6 +71,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmdirSync,
   statSync,
@@ -204,6 +219,68 @@ function iosArchive(scheme, platform) {
     `\n${scheme} ${platform}: ${version} (${core}) build ${build} from ${headCommit()}`,
   )
   console.log(`archive ${archive} (${sizeOf(archive)})`)
+  try {
+    iosSymbols(archive)
+  } catch (error) {
+    if (!(error instanceof ReleaseError)) throw error
+    console.error(
+      `\nThe dSYMs did not reach Crashlytics (${error.message}). Retry with:\n  node tools/scripts/native-release.mjs ios-symbols ${archive}`,
+    )
+  }
+}
+
+/** The archived app's Info.plist, iOS (`App.app/Info.plist`) or macOS (`App.app/Contents/Info.plist`). */
+function archivedInfoPlist(archive) {
+  const apps = join(archive, 'Products', 'Applications')
+  const app = existsSync(apps)
+    ? readdirSync(apps).find((name) => name.endsWith('.app'))
+    : undefined
+  if (!app) fail(`no app in ${apps}`)
+  const plist = [
+    join(apps, app, 'Info.plist'),
+    join(apps, app, 'Contents', 'Info.plist'),
+  ].find((path) => existsSync(path))
+  if (!plist) fail(`no Info.plist in ${join(apps, app)}`)
+  return { plist, mac: plist.includes(`${app}/Contents/`) }
+}
+
+function plistValue(plist, key) {
+  const result = spawnSync('plutil', ['-extract', key, 'raw', plist], {
+    encoding: 'utf8',
+  })
+  return result.status === 0 ? result.stdout.trim() : ''
+}
+
+/** Sends an archive's dSYMs to Firebase Crashlytics (see ios-symbols above). */
+function iosSymbols(archive) {
+  if (!archive || !existsSync(archive) || !statSync(archive).isDirectory())
+    fail('name an .xcarchive whose dSYMs to upload')
+  const tool = join(
+    IOS,
+    'build',
+    'SourcePackages',
+    'checkouts',
+    'firebase-ios-sdk',
+    'Crashlytics',
+    'upload-symbols',
+  )
+  if (!existsSync(tool))
+    fail(`no upload-symbols at ${tool} (an archive resolves the packages there)`)
+  const dsyms = join(archive, 'dSYMs')
+  if (!existsSync(dsyms) || readdirSync(dsyms).length === 0)
+    fail(`no dSYMs in ${dsyms}`)
+  const { plist, mac } = archivedInfoPlist(archive)
+  if (plistValue(plist, 'AGLYN_TELEMETRY') !== 'on') {
+    console.log(
+      'AGLYN_TELEMETRY is not on for this build, so it reports no crashes; no dSYMs uploaded.',
+    )
+    return
+  }
+  const appID = plistValue(plist, 'AGLYN_FIREBASE_APP_ID')
+  if (!/^1:\d+:ios:[0-9a-f]+$/.test(appID) || /^1:0+:/.test(appID))
+    fail(`AGLYN_FIREBASE_APP_ID in ${plist} is not a Firebase Apple app id`)
+  run(tool, ['-ai', appID, '-p', mac ? 'mac' : 'ios', '--', dsyms])
+  console.log(`dSYMs from ${basename(archive)} uploaded to Crashlytics.`)
 }
 
 function iosUpload(archive) {
@@ -299,6 +376,8 @@ function androidBundle(module) {
         `:${module}:bundleRelease`,
         `-Paglyn.versionCode=${versionCode}`,
         `-Paglyn.versionName=${releaseVersion().version}`,
+        // The R8 mapping file goes to Crashlytics, so this bundle's crashes deobfuscate (AGL-4067).
+        '-Paglyn.crashlyticsMappingUpload=true',
       ],
       { cwd: ANDROID, env },
     ),
@@ -436,6 +515,9 @@ try {
     case 'ios-upload':
       iosUpload(args[0])
       break
+    case 'ios-symbols':
+      iosSymbols(args[0])
+      break
     case 'android-bundle':
       androidBundle(args[0])
       break
@@ -444,7 +526,7 @@ try {
       break
     default:
       fail(
-        'usage: ios-archive <Aglyn|AglynPOS> <ios|macos> | ios-upload <archive> | android-bundle <app|pos> | android-upload <aab> [track]',
+        'usage: ios-archive <Aglyn|AglynPOS> <ios|macos> | ios-upload <archive> | ios-symbols <archive> | android-bundle <app|pos> | android-upload <aab> [track]',
       )
   }
 } catch (error) {

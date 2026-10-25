@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- No advertising ID and no ad attribution (AGL-4067): Firebase Analytics' library asks for these, and the app never
+       uses them. -->
+  <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- Scan stock reads barcodes with the camera; a device without one still works. -->
   <uses-permission android:name="android.permission.CAMERA" />
@@ -95,5 +100,30 @@
     <meta-data
       android:name="com.google.firebase.messaging.default_notification_channel_id"
       android:value="aglyn" />
+    <!-- Firebase starts from AndroidFirebase alone, never from resources: the build carries google_app_id for Analytics
+         (which reads it from there), and Firebase's own init provider would start a half-configured app from it. -->
+    <provider
+      android:name="com.google.firebase.provider.FirebaseInitProvider"
+      android:authorities="${applicationId}.firebaseinitprovider"
+      tools:node="remove" />
+    <!-- Crash reports and Analytics (AGL-4067): off until FirebaseTelemetrySink.install turns them on, which it does only
+         in a release build on production (BuildConfig.TELEMETRY), so nothing is sent before the config decides. -->
+    <meta-data
+      android:name="firebase_crashlytics_collection_enabled"
+      android:value="false" />
+    <meta-data
+      android:name="firebase_analytics_collection_enabled"
+      android:value="false" />
+    <!-- No advertising use: no advertising ID, no ad personalization signals. Screens are logged by their key from the
+         shell (Telemetry.screen), never by activity class. -->
+    <meta-data
+      android:name="google_analytics_adid_collection_enabled"
+      android:value="false" />
+    <meta-data
+      android:name="google_analytics_default_allow_ad_personalization_signals"
+      android:value="false" />
+    <meta-data
+      android:name="google_analytics_automatic_screen_reporting_enabled"
+      android:value="false" />
   </application>
 </manifest>

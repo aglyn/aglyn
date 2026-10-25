@@ -211,6 +211,20 @@ public struct ConsoleWebView {
       return nil
     }
 
+    // A page that failed to load, or a web content process that died, is told to Telemetry (AGL-4067); the screen keeps
+    // its own handling.
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+      Telemetry.record(error, "webview.navigation")
+    }
+
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+      Telemetry.record(error, "webview.provisional_navigation")
+    }
+
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+      Telemetry.record(BridgeRefusal("The web content process ended."), "webview.content_process_ended")
+    }
+
     public func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
       guard message.frameInfo.isMainFrame, let data = message.body as? String else { return }
       let parsed = BridgeProtocol.parse(
@@ -220,17 +234,20 @@ public struct ConsoleWebView {
       let name = parent.bridgeName
       switch parsed {
       case .rejected(let reason, let id?):
-        webView?.evaluateJavaScript(
-          BridgeProtocol.replyScript(
-            globalName: name, id: id,
-            result: .failure(BridgeRefusal("The app refused the call (\(reason.rawValue))."))))
-      case .rejected:
+        let refusal = BridgeRefusal("The app refused the call (\(reason.rawValue)).")
+        Telemetry.record(refusal, "webview.bridge_refused:\(reason.rawValue)")
+        webView?.evaluateJavaScript(BridgeProtocol.replyScript(globalName: name, id: id, result: .failure(refusal)))
+      case .rejected(let reason, nil):
+        Telemetry.record(BridgeRefusal("The app refused a call."), "webview.bridge_refused:\(reason.rawValue)")
         return
       case .request(let request):
         guard let handler = parent.handlers[request.method] else { return }
         Task { @MainActor in
           let result: Result<JSONValue, Error>
-          do { result = .success(try await handler(request.params)) } catch { result = .failure(error) }
+          do { result = .success(try await handler(request.params)) } catch {
+            result = .failure(error)
+            Telemetry.record(error, "webview.bridge:\(request.method)")
+          }
           _ = try? await webView?.evaluateJavaScript(
             BridgeProtocol.replyScript(globalName: name, id: request.id, result: result))
         }
@@ -239,6 +256,7 @@ public struct ConsoleWebView {
   }
 }
 
+/// A call the bridge refused, or a web content process that ended: the error Telemetry is handed for either.
 struct BridgeRefusal: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
