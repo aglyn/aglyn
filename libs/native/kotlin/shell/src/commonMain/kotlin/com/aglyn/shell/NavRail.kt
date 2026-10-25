@@ -383,13 +383,19 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit) = this.combine
 
 /** The person's photo (their initials until the profile has one): opens the account menu. */
 @Composable
-internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, modifier: Modifier = Modifier, tooltip: com.aglyn.ui.FastTooltipState? = null) {
-  val fill = MaterialTheme.colorScheme.tertiary
-  val name = user?.displayName?.takeIf { it.isNotBlank() } ?: user?.email ?: "?"
+internal fun AccountAvatar(
+  user: AuthUser?,
+  size: Int,
+  onClick: (() -> Unit)?,
+  modifier: Modifier = Modifier,
+  tooltip: com.aglyn.ui.FastTooltipState? = null,
+  photoUrl: String? = null,
+) {
+  // The person on screen draws the face the console draws (AGL-4010); another account its photo as last shown.
+  val identity = LocalAccountIdentity.current?.takeIf { it.uid != null && it.uid == user?.uid }
+  val name = identity?.name ?: user?.displayName?.takeIf { it.isNotBlank() } ?: user?.email ?: "?"
   val content: @Composable () -> Unit = {
-    Box(Modifier.size(size.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
-      Text(workspaceInitials(name), color = readableOn(fill), style = MaterialTheme.typography.labelLarge, maxLines = 1)
-    }
+    com.aglyn.ui.PersonAvatar(workspaceInitials(name), photoUrl ?: identity?.photoUrl, size.dp)
   }
   if (onClick == null) {
     Box(modifier) { content() }

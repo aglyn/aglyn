@@ -2,6 +2,7 @@ package com.aglyn.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
 
@@ -87,8 +89,28 @@ fun RemoteImage(
   }
 }
 
-/** How long to wait before each further try of a picture that failed (a CDN variant still being made, a dropped connection). */
-private val REMOTE_IMAGE_RETRIES = listOf(1_000L, 3_000L, 8_000L)
+/**
+ * The waits before each new try at a picture that did not load: a cold CDN, a flaky network or a token that was still
+ * being minted answers the first request badly, so a picture is tried again after 1, 3 and 8 seconds before its fallback
+ * stays (the Apple loader's, AGL-4010).
+ */
+internal val ImageRetryDelaysMs = listOf(1_000L, 3_000L, 8_000L)
+
+/** [attempt]'s answer, tried again after each of [delaysMs] while it answers null or fails; null when every try did. */
+internal suspend fun <T : Any> withImageRetries(delaysMs: List<Long> = ImageRetryDelaysMs, attempt: suspend () -> T?): T? {
+  for (wait in listOf(0L) + delaysMs) {
+    if (wait > 0) delay(wait)
+    val answer = try {
+      attempt()
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Throwable) {
+      null
+    }
+    if (answer != null) return answer
+  }
+  return null
+}
 
 /**
  * The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. Art the decoders
@@ -102,23 +124,49 @@ fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   var image by remember(url) { mutableStateOf(url?.let(ImageCache::get)) }
   LaunchedEffect(url, loader) {
     if (url == null || loader == null || image != null) return@LaunchedEffect
-    for (attempt in 0..REMOTE_IMAGE_RETRIES.size) {
-      if (attempt > 0) kotlinx.coroutines.delay(REMOTE_IMAGE_RETRIES[attempt - 1])
-      image = try {
-        val bytes = loader.load(url)
-        (bytes?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() }
-          ?: bytes?.let { com.aglyn.core.mediaRasterUrl(url) }?.let { png -> loader.load(png)?.decodeToImageBitmap() })
-          ?.also { ImageCache.put(url, it) }
-      } catch (error: CancellationException) {
-        throw error
-      } catch (_: Throwable) {
-        null
-      }
-      if (image != null) return@LaunchedEffect
-    }
+    image = withImageRetries {
+      val bytes = loader.load(url)
+      bytes?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() }
+        ?: bytes?.let { com.aglyn.core.mediaRasterUrl(url) }?.let { png -> loader.load(png)?.decodeToImageBitmap() }
+    }?.also { ImageCache.put(url, it) }
   }
   return image
 }
+
+/**
+ * A person's photo (AGL-4010): their picture covering the circle, loaded with retries, and their [initials] on the
+ * [fill] circle while it loads, when it fails, or when they have none. The one avatar every place a person appears
+ * draws: the rail foot, the account menu and switcher, the phone's top bar, team rows.
+ */
+@Composable
+fun PersonAvatar(
+  initials: String,
+  photoUrl: String?,
+  size: Dp,
+  modifier: Modifier = Modifier,
+  fill: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.tertiary,
+) {
+  val fit = BrandFit.Photo(size.value)
+  val picture = rememberBrandPicture(photoUrl, fit)
+  Box(modifier.size(size).clip(androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+    if (picture != null) {
+      BrandDrawn(picture, fit.layout(picture.art), size)
+      Box(Modifier.size(size).border(1.dp, MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape))
+    } else {
+      Box(Modifier.size(size).background(fill), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Text(
+          initials,
+          color = readableOn(fill),
+          style = if (size < AvatarLargeText) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleLarge,
+          maxLines = 1,
+        )
+      }
+    }
+  }
+}
+
+/** From this size up a person's initials are set as a title, not a label (the account menu's 56 and the sheet's 72). */
+private val AvatarLargeText = 48.dp
 
 /**
  * A brand picture in a small square: a workspace's logo or a site's favicon, its dark-theme art in dark mode when there
@@ -166,8 +214,12 @@ internal sealed interface BrandFit {
   /** A workspace's tile of [side] dp ([WorkspaceTile]), with its logo slot of [slot] dp on the plate. */
   data class Tile(override val side: Float, val cornerFraction: Float, val slot: Float) : BrandFit
 
+  /** A person's photo in a circle of [side] dp ([PersonAvatar]): it always covers the circle, as the console's does. */
+  data class Photo(override val side: Float) : BrandFit
+
   /** Where [art] goes in this box. */
   fun layout(art: BrandArt): BrandLayout = when (this) {
+    is Photo -> BrandLayout(fill = true, inkSide = side * art.fillFactor, plate = false)
     is Badge -> when {
       art.opaqueCorners -> BrandLayout(fill = true, inkSide = side * art.fillFactor, plate = false)
       else -> BrandLayout(fill = false, inkSide = side * (brandBadgeScale(art, cornerFraction) ?: brandArtScale(art.ink, cornerFraction)), plate = false)
@@ -246,17 +298,13 @@ internal fun rememberBrandPicture(url: String?, fit: BrandFit): BrandImage? {
   }
   LaunchedEffect(url, fit, density, loader) {
     if (url == null || loader == null || picture != null) return@LaunchedEffect
-    picture = try {
+    picture = withImageRetries {
       val bytes = BrandBytes.get(url) ?: loader.load(url)?.also { BrandBytes.put(url, it) }
       val known = BrandImages.art(url)
-      bytes?.let { withContext(Dispatchers.Default) { decodeBrandImage(it, known, fit, density) } }?.also {
-        BrandImages.putArt(url, it.art)
-        BrandImages.put(url, brandPixels(fit, it.art, density), it)
-      }
-    } catch (error: CancellationException) {
-      throw error
-    } catch (_: Throwable) {
-      null
+      bytes?.let { withContext(Dispatchers.Default) { decodeBrandImage(it, known, fit, density) } }
+    }?.also {
+      BrandImages.putArt(url, it.art)
+      BrandImages.put(url, brandPixels(fit, it.art, density), it)
     }
   }
   return picture

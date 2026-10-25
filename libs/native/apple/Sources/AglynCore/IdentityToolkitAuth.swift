@@ -319,7 +319,9 @@ public actor IdentityToolkitAuth {
     let body = try await post(
       "\(identityBase)/v1/accounts:update?key=\(apiKey)",
       json: ["idToken": .string(current.idToken), "displayName": .string(name), "returnSecureToken": .bool(true)])
-    let user = AglynUser(uid: current.user.uid, email: current.user.email, displayName: name.isEmpty ? nil : name)
+    let user = AglynUser(
+      uid: current.user.uid, email: current.user.email, displayName: name.isEmpty ? nil : name,
+      photoURL: current.user.photoURL)
     return accept(
       user: user, idToken: body["idToken"]?.stringValue ?? current.idToken,
       refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
@@ -370,11 +372,12 @@ public actor IdentityToolkitAuth {
     accept(user: user, idToken: idToken, refreshToken: refreshed, expiresIn: body["expires_in"])
   }
 
-  /// Keeps the tokens, and reads whether the address is confirmed off the ID token (`email_verified`), as the routes do.
+  /// Keeps the tokens, and reads whether the address is confirmed (`email_verified`) and the account's picture (`picture`)
+  /// off the ID token, as the routes do.
   @discardableResult
   private func accept(user: AglynUser, idToken: String, refreshToken: String, expiresIn: JSONValue?) -> AglynUser {
     let seconds = expiresIn?.textValue.flatMap(Double.init) ?? 3600
-    let user = user.verified(TokenClaims(idToken: idToken).emailVerified)
+    let user = user.fromToken(TokenClaims(idToken: idToken))
     session = Session(
       user: user, idToken: idToken, refreshToken: refreshToken,
       expiresAt: now().addingTimeInterval(seconds))

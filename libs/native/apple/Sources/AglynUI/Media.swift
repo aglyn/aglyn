@@ -133,10 +133,13 @@ enum AglynBrandFit: Hashable, Sendable {
   case badge(side: CGFloat, cornerRadius: CGFloat)
   /// A workspace's tile of `side` points (`AglynWorkspaceTile`), with its logo slot of `slot` points on the plate.
   case tile(side: CGFloat, cornerRadius: CGFloat, slot: CGFloat)
+  /// A person's photo in a circle of `side` points (`AglynAccountAvatar`): it always covers the circle, as the
+  /// console's avatar does, whatever its edges hold.
+  case photo(side: CGFloat)
 
   var side: CGFloat {
     switch self {
-    case .badge(let side, _), .tile(let side, _, _): side
+    case .badge(let side, _), .tile(let side, _, _), .photo(let side): side
     }
   }
 
@@ -150,6 +153,8 @@ enum AglynBrandFit: Hashable, Sendable {
         return AglynBrandLayout(kind: .whole, inkSide: side * badge, plate: false)
       }
       return AglynBrandLayout(kind: .whole, inkSide: side * art.scale(cornerFraction: corner), plate: false)
+    case .photo(let side):
+      return AglynBrandLayout(kind: .fill, inkSide: side * art.fillFactor, plate: false)
     case .tile(let side, let cornerRadius, let slot):
       let corner = side > 0 ? cornerRadius / side : 0.5
       // Figma Rail/Workspace tile, Type=Picture: a picture covers the whole tile.

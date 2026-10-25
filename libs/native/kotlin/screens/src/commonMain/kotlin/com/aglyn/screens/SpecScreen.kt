@@ -1038,6 +1038,11 @@ private fun ListRow(
       title = primary,
       supporting = supporting,
       icon = block.string("icon")?.let { AglynIcons.named(materialIcon(ScreenValues.render(it, scope))) },
+      // `avatar`: the row is a person, drawn with their photo (the console's avatar), their initials when they have none
+      // (AGL-4010).
+      personInitials = block.string("avatar")?.let { com.aglyn.ui.workspaceInitials(primary) },
+      personPhoto = block.string("avatar")?.let { ScreenValues.render(it, scope) }
+        ?.let { com.aglyn.core.mediaPreviewUrl(it.ifEmpty { null }, LocalScreenSession.current.origin, null, 128) },
       selected = target != null && target == selection,
       onClick = target?.let { { open(it.screen, it.params) } },
       trailing = if (trailingText == null && actions.isEmpty() && target == null && toggle == null) null else ({

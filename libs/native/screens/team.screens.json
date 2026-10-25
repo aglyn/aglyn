@@ -161,6 +161,7 @@
           "primary": "{item.displayName|item.email|item.$id}",
           "secondary": "{item.email}",
           "tertiary": "{item.title}",
+          "avatar": "{item.photoURL}",
           "icon": "person.crop.circle|account_circle",
           "badges": [
             {

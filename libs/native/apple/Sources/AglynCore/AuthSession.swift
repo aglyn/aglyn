@@ -14,23 +14,31 @@ public struct AglynUser: Equatable, Sendable {
   /// Whether the account's email address is confirmed. Every console route refuses an account that has not confirmed it,
   /// so the app shows the verification step first, as the console's `/verify-email` does. False when unknown.
   public let emailVerified: Bool
+  /// The picture on the sign-in record (the SDK's `photoURL`, the ID token's `picture`): the fallback for the person's
+  /// own photo when their profile has none (`readAccountPhoto`, AGL-4010).
+  public let photoURL: String?
 
-  public init(uid: String, email: String?, displayName: String?, emailVerified: Bool = false) {
+  public init(uid: String, email: String?, displayName: String?, emailVerified: Bool = false, photoURL: String? = nil) {
     self.uid = uid
     self.email = email
     self.displayName = displayName
     self.emailVerified = emailVerified
+    self.photoURL = photoURL
   }
 
-  /// The same person with what a fresh token says about the address.
-  func verified(_ verified: Bool) -> AglynUser {
-    AglynUser(uid: uid, email: email, displayName: displayName, emailVerified: verified)
+  /// The same person with what a fresh token says about the address and the picture.
+  func fromToken(_ claims: TokenClaims) -> AglynUser {
+    AglynUser(
+      uid: uid, email: email, displayName: displayName, emailVerified: claims.emailVerified,
+      photoURL: claims.values["picture"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? photoURL)
   }
 }
 
 extension AglynUser {
   init(sdk user: User) {
-    self.init(uid: user.uid, email: user.email, displayName: user.displayName, emailVerified: user.isEmailVerified)
+    self.init(
+      uid: user.uid, email: user.email, displayName: user.displayName, emailVerified: user.isEmailVerified,
+      photoURL: user.photoURL?.absoluteString)
   }
 }
 
@@ -382,6 +390,17 @@ public final class AuthSession {
     roster?.save(next)
   }
 
+  /// Remembers the picture the account in use shows (its profile's, else its sign-in record's), so the account switcher
+  /// draws each account's face (AGL-4010).
+  public func recordPhoto(_ photoURL: String?) {
+    guard impersonation == nil, var account = accounts.first(where: { $0.slot == activeSlot }), account.photoURL != photoURL
+    else { return }
+    account.photoURL = photoURL
+    let next = accounts.map { $0.slot == account.slot ? account : $0 }
+    accounts = next
+    roster?.save(next)
+  }
+
   /// Uses another signed-in account. Its session is read back from its Keychain slot when it was not used this launch;
   /// one the server no longer accepts is dropped. A support session is ended first.
   public func switchAccount(to slot: String) async {
@@ -614,7 +633,7 @@ public final class AuthSession {
     setBase(
       AglynUser(
         uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed,
-        emailVerified: signedIn.isEmailVerified))
+        emailVerified: signedIn.isEmailVerified, photoURL: signedIn.photoURL?.absoluteString))
   }
 
   /// Disconnects a sign-in provider (`google.com`), as the console's Account section does with `unlink`.

@@ -892,7 +892,8 @@
         "APP_DENSITIES",
         "APP_TEXT_SIZES",
         "APP_SIDEBAR_STYLES",
-        "APP_ICON_ID_MAX"
+        "APP_ICON_ID_MAX",
+        "ACCOUNT_PHOTO_FIELD"
       ]
     },
     "libs/aglyn/src/lib/app-utils/native-nav.ts": {
@@ -27840,6 +27841,111 @@
           "00B0FF"
         ],
         [
+          null
+        ]
+      ]
+    },
+    "readAccountPhoto": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "photoUrl": "https://cdn.example.com/me.jpg"
+          },
+          "https://lh3.example.com/a.jpg"
+        ],
+        [
+          {
+            "photoUrl": "  /api/media/cdn/org:o1/m1  "
+          },
+          null
+        ],
+        [
+          {
+            "photoUrl": "   "
+          },
+          "  https://lh3.example.com/a.jpg "
+        ],
+        [
+          {
+            "photoURL": "https://cdn.example.com/roster.jpg"
+          },
+          null
+        ],
+        [
+          {},
+          "https://lh3.example.com/a.jpg"
+        ],
+        [
+          null,
+          ""
+        ],
+        [
+          {
+            "photoUrl": 7
+          },
+          null
+        ],
+        [
+          null,
+          null
+        ]
+      ]
+    },
+    "readAccountName": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "firstName": "Jordan",
+            "lastName": "Lee"
+          },
+          "J. Lee",
+          "jordan@example.com"
+        ],
+        [
+          {
+            "firstName": " Jordan ",
+            "lastName": ""
+          },
+          null,
+          "jordan@example.com"
+        ],
+        [
+          {
+            "lastName": "Lee"
+          },
+          null,
+          null
+        ],
+        [
+          {
+            "firstName": "  ",
+            "lastName": null
+          },
+          "  Pat Lee ",
+          "pat@example.com"
+        ],
+        [
+          {},
+          "",
+          "pat@example.com"
+        ],
+        [
+          null,
+          null,
+          " pat@example.com "
+        ],
+        [
+          {
+            "firstName": 7
+          },
+          null,
+          null
+        ],
+        [
+          null,
+          null,
           null
         ]
       ]

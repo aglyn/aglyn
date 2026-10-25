@@ -148,6 +148,19 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  func testThePersonsPhotoAndNameResolveAsTheConsoleResolvesThem() throws {
+    func arg(_ item: Case, _ index: Int) -> Any? { item.args[index] is NSNull ? nil : item.args[index] }
+    for item in cases("readAccountPhoto") {
+      XCTAssertEqual(
+        readAccountPhoto(profile(item.args[0]), authPhotoURL: arg(item, 1)), item.result as? String, item.label)
+    }
+    for item in cases("readAccountName") {
+      XCTAssertEqual(
+        readAccountName(profile(item.args[0]), authDisplayName: arg(item, 1), email: arg(item, 2)),
+        item.result as? String, item.label)
+    }
+  }
+
   func testTheManifestResolvesPerScope() throws {
     for item in cases("resolveNavList") {
       let listID = NativeNavListId(rawValue: item.args[0] as? String ?? "") ?? .unknown

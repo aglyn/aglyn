@@ -32782,6 +32782,159 @@
         }
       ]
     },
+    "readAccountName": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "firstName": "Jordan",
+              "lastName": "Lee"
+            },
+            "J. Lee",
+            "jordan@example.com"
+          ],
+          "result": "Jordan Lee"
+        },
+        {
+          "args": [
+            {
+              "firstName": " Jordan ",
+              "lastName": ""
+            },
+            null,
+            "jordan@example.com"
+          ],
+          "result": "Jordan"
+        },
+        {
+          "args": [
+            {
+              "lastName": "Lee"
+            },
+            null,
+            null
+          ],
+          "result": "Lee"
+        },
+        {
+          "args": [
+            {
+              "firstName": "  ",
+              "lastName": null
+            },
+            "  Pat Lee ",
+            "pat@example.com"
+          ],
+          "result": "Pat Lee"
+        },
+        {
+          "args": [
+            {},
+            "",
+            "pat@example.com"
+          ],
+          "result": "pat@example.com"
+        },
+        {
+          "args": [
+            null,
+            null,
+            " pat@example.com "
+          ],
+          "result": "pat@example.com"
+        },
+        {
+          "args": [
+            {
+              "firstName": 7
+            },
+            null,
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null,
+            null,
+            null
+          ],
+          "result": ""
+        }
+      ]
+    },
+    "readAccountPhoto": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "photoUrl": "https://cdn.example.com/me.jpg"
+            },
+            "https://lh3.example.com/a.jpg"
+          ],
+          "result": "https://cdn.example.com/me.jpg"
+        },
+        {
+          "args": [
+            {
+              "photoUrl": "  /api/media/cdn/org:o1/m1  "
+            },
+            null
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            {
+              "photoUrl": "   "
+            },
+            "  https://lh3.example.com/a.jpg "
+          ],
+          "result": "https://lh3.example.com/a.jpg"
+        },
+        {
+          "args": [
+            {
+              "photoURL": "https://cdn.example.com/roster.jpg"
+            },
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {},
+            "https://lh3.example.com/a.jpg"
+          ],
+          "result": "https://lh3.example.com/a.jpg"
+        },
+        {
+          "args": [
+            null,
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "photoUrl": 7
+            },
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            null
+          ],
+          "result": null
+        }
+      ]
+    },
     "readAppTheme": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [

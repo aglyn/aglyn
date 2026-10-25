@@ -243,25 +243,45 @@ public struct AglynRailButton: View {
   }
 }
 
-/// The person's photo: their initials on the slate circle (the apps keep no profile picture of their own).
+/// A person's photo (AGL-4010): their picture covering the circle, loaded by the retrying cached loader, and their
+/// initials on the slate circle while it loads, when it fails, or when they have none. The one avatar every place a
+/// person appears draws: the rail foot, the account menu and switcher, the phone's top bar and sheet, Settings.
 public struct AglynAccountAvatar: View {
   let initials: String
+  let photoURL: URL?
   let size: CGFloat
   let colorHex: String?
 
-  public init(initials: String, size: CGFloat = 32, colorHex: String? = nil) {
+  public init(initials: String, photoURL: URL? = nil, size: CGFloat = 32, colorHex: String? = nil) {
     self.initials = initials
+    self.photoURL = photoURL
     self.size = size
     self.colorHex = colorHex
   }
 
   public var body: some View {
+    Group {
+      if let photoURL {
+        AglynBrandLoaded(url: photoURL, fit: .photo(side: size)) { picture, layout in
+          AglynBrandDrawn(picture: picture, layout: layout, side: size, cornerRadius: size / 2)
+            .overlay(Circle().strokeBorder(AglynColor.divider))
+        } fallback: {
+          initialsCircle
+        }
+      } else {
+        initialsCircle
+      }
+    }
+    .frame(width: size, height: size)
+    .accessibilityHidden(true)
+  }
+
+  private var initialsCircle: some View {
     Text(initials)
       .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
       .foregroundStyle(AglynTokens.light.primary.contrastText)
       .frame(width: size, height: size)
       .background(Circle().fill(Color(aglynHex: colorHex) ?? AglynColor.neutralTile))
-      .accessibilityHidden(true)
   }
 }
 

@@ -13,6 +13,8 @@ import com.aglyn.contracts.keepPinnedOrgs
 import com.aglyn.contracts.movePinnedOrg
 import com.aglyn.contracts.pinOrg
 import com.aglyn.contracts.pinnedOrgsOverCap
+import com.aglyn.contracts.readAccountName
+import com.aglyn.contracts.readAccountPhoto
 import com.aglyn.contracts.readAppTheme
 import com.aglyn.contracts.readPinnedOrgs
 import com.aglyn.contracts.readRecentOrgs
@@ -55,7 +57,19 @@ data class AccountPreferences(
   val syncedTheme: AppThemePrefs = Contracts.defaultAppTheme,
   /** This device's own theme, when "Apply to this device only" is on. */
   val deviceTheme: AppThemePrefs? = null,
+  /**
+   * The profile's own picture, name and notification sound fields (`photoUrl`, `firstName`, `lastName`,
+   * `notificationSound`), the picture and name read through [photo] and [name] so the person shows as the console shows
+   * them (AGL-4010).
+   */
+  val identity: Map<String, String> = emptyMap(),
 ) {
+  /** The person's own picture: the profile's, else the sign-in record's, else null (draw initials). */
+  fun photo(authPhotoUrl: String?): String? = readAccountPhoto(identity, authPhotoUrl)
+
+  /** The person's own name: the profile's first and last name, else the sign-in record's display name, else the email. */
+  fun name(authDisplayName: String?, email: String?): String = readAccountName(identity, authDisplayName, email)
+
   val pinned: List<String> get() = com.aglyn.contracts.effectivePinnedOrgs(stored)
   val overCap: Boolean get() = pinnedOrgsOverCap(stored)
 
@@ -111,6 +125,8 @@ class AccountPreferencesStore(
           workspaceColors = readWorkspaceColors(data),
           syncedTheme = readAppTheme(data),
           deviceTheme = readDeviceTheme(forUid),
+          identity = listOf(Contracts.accountPhotoField, "firstName", "lastName", Contracts.notificationSoundField)
+            .mapNotNull { key -> (data?.get(key) as? String)?.let { key to it } }.toMap(),
         )
       }
       .launchIn(scope)

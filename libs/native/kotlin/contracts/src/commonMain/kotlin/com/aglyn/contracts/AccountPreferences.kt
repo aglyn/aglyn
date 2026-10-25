@@ -326,3 +326,24 @@ fun AppThemePrefs.toPlain(): Map<String, Any?> = mapOf(
   "appIcon" to appIcon,
   "useWorkspaceBrand" to useWorkspaceBrand,
 )
+
+// ── Who is signed in ────────────────────────────────────────────────────────
+
+private fun trimmed(value: Any?): String = (value as? String)?.trim().orEmpty()
+
+/**
+ * The person's own picture, as the console draws it (AGL-4010): `users/{uid}.photoUrl` first, else the sign-in
+ * record's `photoURL`, else null (draw initials). A blank value is never a picture. A library pick is a
+ * `/api/media/cdn/...` path; resolve it with `mediaPreviewUrl` before loading it.
+ */
+fun readAccountPhoto(profile: Any?, authPhotoUrl: Any?): String? =
+  trimmed(field(profile, Contracts.accountPhotoField)).ifEmpty { trimmed(authPhotoUrl) }.ifEmpty { null }
+
+/**
+ * The person's own name, as the console shows it (AGL-2486, AGL-4010): the profile's first and last name, else the
+ * sign-in record's display name, else the email address, else empty.
+ */
+fun readAccountName(profile: Any?, authDisplayName: Any?, email: Any?): String =
+  listOf(trimmed(field(profile, "firstName")), trimmed(field(profile, "lastName")))
+    .filter { it.isNotEmpty() }.joinToString(" ")
+    .ifEmpty { trimmed(authDisplayName) }.ifEmpty { trimmed(email) }

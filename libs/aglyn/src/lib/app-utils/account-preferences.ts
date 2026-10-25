@@ -781,3 +781,46 @@ export function readAppTheme(profile: unknown): AppThemePrefs {
         : DEFAULT_APP_THEME.useWorkspaceBrand,
   }
 }
+
+// ── Who is signed in ────────────────────────────────────────────────────────
+
+/**
+ * `users/{uid}` field holding the person's own picture (AGL-1961). Lowercase
+ * `url`: the roster's `photoURL` spelling reads as nothing here.
+ */
+export const ACCOUNT_PHOTO_FIELD = 'photoUrl'
+
+function trimmed(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * The person's own picture, the same answer in the console and both apps
+ * (AGL-4010): `users/{uid}.photoUrl` first (the profile they edit, filled from
+ * the identity provider on every sign-in), else the sign-in record's
+ * `photoURL`, else null, so the caller draws initials. A blank value is never
+ * a picture, so a photo in either place wins over an empty one in the other.
+ * A library pick is stored as a `/api/media/cdn/...` path; resolving it to an
+ * address is the caller's (`mediaPreviewURL` on native).
+ */
+export function readAccountPhoto(profile: unknown, authPhotoUrl: unknown): string | null {
+  return trimmed(field(profile, ACCOUNT_PHOTO_FIELD)) || trimmed(authPhotoUrl) || null
+}
+
+/**
+ * The person's own name, the same answer in the console and both apps
+ * (AGL-2486, AGL-4010): the profile's first and last name, else the sign-in
+ * record's display name (empty for an SSO account), else the email address,
+ * else empty.
+ */
+export function readAccountName(
+  profile: unknown,
+  authDisplayName: unknown,
+  email: unknown,
+): string {
+  const fromProfile = [field(profile, 'firstName'), field(profile, 'lastName')]
+    .map(trimmed)
+    .filter(Boolean)
+    .join(' ')
+  return fromProfile || trimmed(authDisplayName) || trimmed(email)
+}

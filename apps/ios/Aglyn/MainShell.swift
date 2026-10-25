@@ -520,6 +520,8 @@ struct ShellFrame<Content: View>: View {
       // never for the next site with the same screen still open (a deleted site's Danger zone stayed open on another).
       .onChange(of: model.workspace?.sites.map(\.id) ?? []) { leaveARemovedSite() }
       .onChange(of: model.workspace?.effective, initial: true) { leaveARemovedSite() }
+      // Each account's photo, kept on the roster so the switcher draws every account's face (AGL-4010).
+      .onChange(of: AccountIdentity(model: model).photoValue, initial: true) { _, photo in model.auth?.recordPhoto(photo) }
       .onChange(of: navigation.section) { _, section in
         navigation.record(section)
         recordRecent(section)
@@ -1335,7 +1337,8 @@ struct PhoneTopBar: ViewModifier {
             Button {
               navigation.showAccount = true
             } label: {
-              AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 28)
+              let identity = AccountIdentity(model: model)
+              AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 28)
             }
             .accessibilityLabel("Your account")
             .accessibilityIdentifier("topbar-account")
@@ -1518,19 +1521,44 @@ struct AccountSheet: View {
     NavigationStack {
       List {
         Section {
-          VStack(spacing: 6) {
-            AglynAccountAvatar(initials: identity.initials, size: 64)
-            Text(identity.name).font(AglynFont.headline)
-            if let email = identity.email, email != identity.name {
-              Text(email).font(AglynFont.subheadline).foregroundStyle(.secondary)
+          // The identity card (Figma Phone 21:234): your photo, name and address, and Edit profile.
+          Button {
+            dismiss()
+            navigation.push(.screen(AccountPlaces.profileScreen, [:]))
+          } label: {
+            HStack(spacing: 14) {
+              AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 72)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(identity.name).font(AglynFont.title3.weight(.semibold)).foregroundStyle(AglynColor.textPrimary)
+                if let email = identity.email, email != identity.name {
+                  Text(email).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+                }
+                Text("Edit profile").font(AglynFont.subheadline.weight(.medium)).foregroundStyle(AglynColor.tint)
+              }
+              Spacer(minLength: 0)
+              Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
             }
           }
-          .frame(maxWidth: .infinity)
-          .listRowBackground(Color.clear)
+          .buttonStyle(.aglynRow)
+          .disabled(model.registry.screen(AccountPlaces.profileScreen) == nil)
+          .accessibilityIdentifier("account-edit-profile")
         }
         Section {
           ThemeRow()
           row("Theme settings", "paintpalette") { navigation.push(.themeSettings) }
+          Button {
+            dismiss()
+            navigation.push(.notificationSettings)
+          } label: {
+            AglynRow("Notifications and sound", systemImage: "bell") {
+              HStack(spacing: 6) {
+                if let sound = identity.soundLabel { Text(sound).foregroundStyle(AglynColor.secondaryText) }
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+              }
+            }
+          }
+          .buttonStyle(.aglynRow)
+          .accessibilityIdentifier("account-notifications")
           row("Settings", "gearshape") { navigation.push(.settings) }
           if model.registry.screen(AccountPlaces.marketplaceScreen) != nil {
             row("Marketplace", "storefront") { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }
@@ -1548,7 +1576,7 @@ struct AccountSheet: View {
                 dismiss()
               } label: {
                 HStack(spacing: 10) {
-                  AglynAccountAvatar(initials: account.initials, size: 28)
+                  AglynAccountAvatar(initials: account.initials, photoURL: identity.photoURL(of: account), size: 28)
                   VStack(alignment: .leading, spacing: 1) {
                     Text(account.displayName ?? account.email ?? "Account").font(AglynFont.body)
                     if let email = account.email, account.displayName != nil {

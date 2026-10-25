@@ -15,6 +15,11 @@ data class AuthUser(
    * shell shows the verification step first, as the console's `/verify-email` does. Each [AuthSession] states it.
    */
   val emailVerified: Boolean = true,
+  /**
+   * The picture on the sign-in record (the SDK's `photoUrl`, Identity Toolkit's `photoUrl`): the fallback for the person's own
+   * photo when their profile has none (`readAccountPhoto`, AGL-4010).
+   */
+  val photoUrl: String? = null,
 )
 
 sealed interface AuthState {

@@ -5175,6 +5175,7 @@ public enum WorkspaceColorSource: String, Codable, CaseIterable, Hashable, Senda
 public struct ContractValues: Codable, Hashable, Sendable {
   public let accountColorPattern: String
   public let accountItemLabelMax: Int
+  public let accountPhotoField: String
   public let appAppearances: [AppAppearance]
   public let appDensities: [AppDensity]
   public let appIconIdMax: Int
@@ -5496,6 +5497,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   enum CodingKeys: String, CodingKey {
     case accountColorPattern = "ACCOUNT_COLOR_PATTERN"
     case accountItemLabelMax = "ACCOUNT_ITEM_LABEL_MAX"
+    case accountPhotoField = "ACCOUNT_PHOTO_FIELD"
     case appAppearances = "APP_APPEARANCES"
     case appDensities = "APP_DENSITIES"
     case appIconIdMax = "APP_ICON_ID_MAX"

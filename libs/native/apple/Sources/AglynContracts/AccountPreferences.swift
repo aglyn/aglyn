@@ -347,3 +347,29 @@ public extension AppThemePrefs {
     ]
   }
 }
+
+// MARK: Who is signed in
+
+private func trimmedText(_ value: Any?) -> String {
+  (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+}
+
+/// The person's own picture, as the console draws it (AGL-4010): `users/{uid}.photoUrl` first, else the sign-in
+/// record's `photoURL`, else nil (draw initials). A blank value is never a picture. A library pick is a
+/// `/api/media/cdn/...` path; resolve it with `mediaPreviewURL` before loading it.
+public func readAccountPhoto(_ profile: [String: Any]?, authPhotoURL: Any?) -> String? {
+  let stored = trimmedText(field(profile, values.accountPhotoField))
+  if !stored.isEmpty { return stored }
+  let auth = trimmedText(authPhotoURL)
+  return auth.isEmpty ? nil : auth
+}
+
+/// The person's own name, as the console shows it (AGL-2486, AGL-4010): the profile's first and last name, else the
+/// sign-in record's display name, else the email address, else empty.
+public func readAccountName(_ profile: [String: Any]?, authDisplayName: Any?, email: Any?) -> String {
+  let fromProfile = [trimmedText(field(profile, "firstName")), trimmedText(field(profile, "lastName"))]
+    .filter { !$0.isEmpty }.joined(separator: " ")
+  if !fromProfile.isEmpty { return fromProfile }
+  let fromAuth = trimmedText(authDisplayName)
+  return fromAuth.isEmpty ? trimmedText(email) : fromAuth
+}

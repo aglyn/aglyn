@@ -5,6 +5,7 @@
   ],
   "ACCOUNT_COLOR_PATTERN": "^#[0-9A-Fa-f]{6}$",
   "ACCOUNT_ITEM_LABEL_MAX": 120,
+  "ACCOUNT_PHOTO_FIELD": "photoUrl",
   "APP_APPEARANCES": [
     "system",
     "light",

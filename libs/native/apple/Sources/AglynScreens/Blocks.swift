@@ -302,6 +302,7 @@ struct ListBlock: View {
 
 struct ListRow: View {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynScreenSession) private var session
   let block: BlockSpec
   let scope: JSONValue
   /// The row's picked columns as one line (`columns`), empty for a list without them.
@@ -334,7 +335,15 @@ struct ListRow: View {
     // On the Mac and iPad a row is at most three lines (Figma List/Site row): its name, one line of detail, one line
     // of the picked columns, with its badges at the trailing end; a phone keeps the fuller stack.
     let row = HStack(alignment: .center, spacing: 12) {
-      if let icon = block["icon"]?.stringValue {
+      if let avatar = block["avatar"]?.stringValue {
+        // `avatar`: the row is a person, drawn with their photo (the console's avatar), their initials when they have
+        // none (AGL-4010).
+        let photo = ScreenValues.render(avatar, in: scope)
+        AglynAccountAvatar(
+          initials: accountInitials(name: primary, email: nil),
+          photoURL: mediaPreviewURL(photo.isEmpty ? nil : photo, origin: session.origin, hostID: nil, width: 128),
+          size: 30)
+      } else if let icon = block["icon"]?.stringValue {
         IconBadge(ScreenSpec.appleIcon(ScreenValues.render(icon, in: scope)), tone: .info, size: 30, circle: true)
           .accessibilityHidden(true)
       }

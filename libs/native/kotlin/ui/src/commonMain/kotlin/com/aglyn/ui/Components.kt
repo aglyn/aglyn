@@ -77,6 +77,9 @@ fun AglynListItem(
   /** A workspace's logo or a site's favicon in the icon's place; the icon shows while there is none. */
   imageUrl: String? = null,
   darkImageUrl: String? = null,
+  /** A person's initials: the row is that person, drawn with [personPhoto] (their initials while there is none). */
+  personInitials: String? = null,
+  personPhoto: String? = null,
 ) {
   val colors = MaterialTheme.colorScheme
   val shape = MaterialTheme.shapes.large
@@ -112,7 +115,9 @@ fun AglynListItem(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    if (icon != null) {
+    if (personInitials != null) {
+      PersonAvatar(personInitials, personPhoto, 40.dp)
+    } else if (icon != null) {
       BrandPicture(imageUrl, darkImageUrl, 40.dp, CircleShape) {
         Box(
           Modifier.size(40.dp).clip(CircleShape).background(if (selected) colors.primary else colors.primaryContainer),

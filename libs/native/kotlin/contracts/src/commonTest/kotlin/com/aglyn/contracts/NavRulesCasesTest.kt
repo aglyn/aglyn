@@ -91,6 +91,16 @@ class NavRulesCasesTest {
   }
 
   @Test
+  fun photoAndName() {
+    cases("readAccountPhoto").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.contentOrNull, readAccountPhoto(plainOf(args[0]), plainOf(args[1])), args.toString())
+    }
+    cases("readAccountName").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, readAccountName(plainOf(args[0]), plainOf(args[1]), plainOf(args[2])), args.toString())
+    }
+  }
+
+  @Test
   fun colorsAndTheme() {
     cases("isAccountColor").forEach { (args, result) -> assertEquals(result.jsonPrimitive.booleanOrNull, isAccountColor(plainOf(args[0])), args.toString()) }
     cases("readWorkspaceColors").forEach { (args, result) ->
