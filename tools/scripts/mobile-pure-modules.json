@@ -402,6 +402,10 @@
       "why": "Which buyer emails an order has sent, read by the app's order detail (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "why": "The product and variant check-in setting (whether an item needs check-in, people per item) and its normalize/validate rules (AGL-4043), no imports; ProductVariant carries it, so the native contracts read it."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
     },

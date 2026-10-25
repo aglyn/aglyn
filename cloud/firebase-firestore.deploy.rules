@@ -2900,6 +2900,23 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
+match /posHardwareSales/{orderId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 function hostMemberRole(hostId) {
 return get(/databases/$(database)/documents/hosts/$(hostId))
 .data.get('memberRoles', {}).get(request.auth.uid, null);
