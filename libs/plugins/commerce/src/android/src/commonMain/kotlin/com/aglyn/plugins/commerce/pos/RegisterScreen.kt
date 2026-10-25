@@ -161,6 +161,7 @@ private fun RegisterScreenBody(context: NativePluginContext) {
       displayApi = ConsolePosDisplayApi(context.api, hostId),
       kioskQueueApi = ConsolePosKioskQueueApi(context.api, hostId),
       printersApi = ConsolePosPrintersApi(context.api, hostId),
+      dayReportApi = ConsolePosDayReportApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
@@ -323,7 +324,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
   }
   model.sheet?.let { ItemSheetDialog(model, it, wide) }
   if (holdsOpen) HoldsDialog(model) { holdsOpen = false }
-  if (model.offlineCashOpen) OfflineCashDialog(model)
+  if (model.offlineCashOpen) OfflineSaleDialog(model)
   if (opsOpen) RegisterOpsDialog(model) { opsOpen = false }
   if (model.cashier.locked) LockedRegister(model)
   if (cameraOpen && camera != null) {
@@ -703,13 +704,13 @@ private fun BasketBar(model: RegisterModel, onOpen: () -> Unit) {
 private fun ChargeButton(model: RegisterModel, modifier: Modifier = Modifier) {
   val cart = model.cart
   if (!model.online) {
-    // Offline: cash is the one tender that still sells, saved on this register until the connection returns.
+    // Offline: cash, and a card on this device's reader (AGL-4039), saved on this register until the connection returns.
     Column(modifier, verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
       Button(
         onClick = { model.offlineCashOpen = true },
         enabled = !cart.isEmpty && model.offline.ready && model.register != null,
         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("pos-charge-offline"),
-      ) { Text("Take cash offline", style = MaterialTheme.typography.titleMedium) }
+      ) { Text("Charge offline", style = MaterialTheme.typography.titleMedium) }
       model.offline.unavailableReason?.takeIf { !cart.isEmpty }?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
       }

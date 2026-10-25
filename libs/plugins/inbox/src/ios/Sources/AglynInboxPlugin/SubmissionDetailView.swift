@@ -118,6 +118,14 @@ struct SubmissionDetailView: View {
           .fixedSize()
           .accessibilityLabel("More actions")
           .accessibilityIdentifier("submission-actions")
+          // The detail's one filled button on its head's trailing edge, beside More (Figma Orders 13:1019's Fulfill).
+          if submission.sender.email != nil {
+            AglynPrimaryHeaderButton("Reply", systemImage: InboxSymbols.reply, shortcut: .init("r", modifiers: [.command, .shift])) {
+              reply(submission)
+            }
+            .disabled(!canEdit)
+            .accessibilityIdentifier("submission-reply")
+          }
         }
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
           StatusChip(submission.formName, tone: .info)
@@ -136,30 +144,20 @@ struct SubmissionDetailView: View {
         if !received.isEmpty {
           Text(received).font(AglynFont.caption).foregroundStyle(.secondary)
         }
-        if submission.sender.email != nil {
-          Button {
-            reply(submission)
-          } label: {
-            Label("Reply", systemImage: InboxSymbols.reply)
+      }
+      // What can be done with it, as plain rows in the accent color (a › on the one that opens another screen).
+      if submission.capturedKind != nil || (InboxPermissions(role: role.role).canReply && submission.sender.email != nil) {
+        Section {
+          if let kind = submission.capturedKind, let id = submission.capturedID {
+            AglynActionRow(kind == "lead" ? "Open the lead in the CRM" : "Open the contact in the CRM", opens: true) {
+              context.navigate(kind == "lead" ? "crm.lead" : "crm.contact", [kind: id])
+            }
+            .accessibilityIdentifier("submission-open-crm")
           }
-          .buttonStyle(.aglynProminent)
-          .disabled(!canEdit)
-          .keyboardShortcut("r", modifiers: [.command, .shift])
-          .accessibilityIdentifier("submission-reply")
-        }
-        if let kind = submission.capturedKind, let id = submission.capturedID {
-          Button(kind == "lead" ? "Open the lead in the CRM" : "Open the contact in the CRM") {
-            context.navigate(kind == "lead" ? "crm.lead" : "crm.contact", [kind: id])
+          if InboxPermissions(role: role.role).canReply && submission.sender.email != nil {
+            AglynActionRow("Add to a marketing list", systemImage: "list.bullet") { listSheet = true }
+              .accessibilityIdentifier("submission-add-to-list")
           }
-          .accessibilityIdentifier("submission-open-crm")
-        }
-        if InboxPermissions(role: role.role).canReply && submission.sender.email != nil {
-          Button {
-            listSheet = true
-          } label: {
-            Label("Add to a marketing list", systemImage: "list.bullet")
-          }
-          .accessibilityIdentifier("submission-add-to-list")
         }
       }
       Section("What they sent") {
@@ -186,7 +184,6 @@ struct SubmissionDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("submission-detail")
   }
 }

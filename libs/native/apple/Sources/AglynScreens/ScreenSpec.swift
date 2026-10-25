@@ -652,14 +652,18 @@ public struct FieldSpec: Sendable, Identifiable {
   /// bounds or pattern, or a multiselect that has not chosen every choice it must cover.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
     if mismatches(value, in: context) { return true }
+    // `mustChange`: unfinished while the value is still the one the field opened with (a pick that changes nothing, as
+    // the console's tier picker shows Apply only once another tier is chosen).
+    if config?["mustChange"] == .bool(true), let initial,
+      ScreenValues.text(value) == ScreenValues.render(initial, in: context)
+    {
+      return true
+    }
     if let pattern {
       let typed = ScreenValues.text(value)
       if !typed.isEmpty, typed.range(of: pattern, options: .regularExpression) == nil { return true }
     }
-    if kind == "number", let number = ScreenValues.number(value) {
-      if let min, number < min { return true }
-      if let max, number > max { return true }
-    }
+    if outOfBounds(value) { return true }
     if coversAll, kind == "multiselect" {
       let chosen = Set(Optional(value).array.compactMap { $0.stringValue })
       if choices(in: context).contains(where: { !chosen.contains($0.value) }) { return true }
@@ -745,6 +749,22 @@ public struct FieldSpec: Sendable, Identifiable {
     }
   }
 
+  /// Whether a number field holds something typed that is not a number, or a number outside its bounds.
+  public func outOfBounds(_ value: JSONValue) -> Bool {
+    let typed = ScreenValues.text(value).trimmingCharacters(in: .whitespaces)
+    guard kind == "number", !typed.isEmpty else { return false }
+    guard let number = Double(typed) ?? ScreenValues.number(value) else { return true }
+    if let min, number < min { return true }
+    if let max, number > max { return true }
+    return false
+  }
+
+  /// Whether the field's `mismatch` line is said under it: the value is not what it must match, or a number field's value is
+  /// outside its bounds (`A whole number from 1 to 500`).
+  public func refuses(_ value: JSONValue, in context: JSONValue) -> Bool {
+    mismatches(value, in: context) || outOfBounds(value)
+  }
+
   /// Whether a value is not what the field must match (a field with nothing to match never mismatches).
   public func mismatches(_ value: JSONValue, in context: JSONValue) -> Bool {
     guard let mustMatch else { return false }
@@ -754,7 +774,9 @@ public struct FieldSpec: Sendable, Identifiable {
       guard let cents = ScreenValues.dollarsToCents(typed) else { return true }
       return cents != ScreenValues.dollarsToCents(expected)
     }
-    return typed != expected
+    // Surrounding spaces never count, as on the console's type-to-confirm (`confirmText.trim()`): a keyboard's
+    // prediction ends a word with a space, and the name typed exactly would still be refused.
+    return typed.trimmingCharacters(in: .whitespacesAndNewlines) != expected
   }
 
   init(key: String, label: String, kind: String, required: Bool, help: String?) {
@@ -883,6 +905,57 @@ public struct FieldSpec: Sendable, Identifiable {
       let label = ScreenValues.render(labelTemplate, in: scope).replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
         .trimmingCharacters(in: .whitespaces)
       return (ScreenValues.render(valueTemplate, in: scope), label)
+    }
+  }
+}
+
+/// One row of a `choice` field: a value with its label, a line under it, a badge and whether it can be picked.
+public struct FieldChoice: Sendable, Identifiable {
+  public let value: String
+  public let label: String
+  /// What the choice means, under its label; for a choice that cannot be picked, why (`disabledDetail`).
+  public let detail: String?
+  /// A short mark beside the label (the tier held now: "Current") and its tone.
+  public let badge: FieldChoiceBadge?
+  public let enabled: Bool
+  public var id: String { value }
+}
+
+/// A `choice` row's mark: its text and the tone it is drawn in (`info`, `neutral`, …).
+public struct FieldChoiceBadge: Sendable, Equatable {
+  public let text: String
+  public let tone: String?
+}
+
+extension FieldSpec {
+  /// The rows of a `choice` field: its static `options`, then one per item of `optionsFrom`. Each option (static or
+  /// `optionsFrom`) may carry `detail` (a template), `badge` (`{ text, when, tone }`), `enabled` (a condition; a choice
+  /// that fails it is shown and cannot be picked, never hidden) and `disabledDetail` (the line it shows then).
+  public func choiceRows(in context: JSONValue) -> [FieldChoice] {
+    func row(_ spec: JSONValue, value: String, label: String, in scope: JSONValue) -> FieldChoice {
+      let enabled = ScreenValues.condition(spec["enabled"]?.stringValue, in: scope)
+      let line = (enabled ? nil : spec["disabledDetail"]?.stringValue) ?? spec["detail"]?.stringValue
+      let detail = line.map { ScreenValues.render($0, in: scope) }.flatMap { $0.isEmpty ? nil : $0 }
+      var badge: FieldChoiceBadge?
+      if let mark = spec["badge"], let text = mark["text"]?.stringValue,
+        ScreenValues.condition(mark["when"]?.stringValue, in: scope)
+      {
+        badge = FieldChoiceBadge(text: ScreenValues.render(text, in: scope), tone: mark["tone"]?.stringValue)
+      }
+      return FieldChoice(value: value, label: label, detail: detail, badge: badge, enabled: enabled)
+    }
+    let statics = (config?["options"]).array.map { option -> FieldChoice in
+      if case .string(let value) = option { return row(.null, value: value, label: value, in: context) }
+      let value = ScreenValues.text(option["value"])
+      return row(option, value: value, label: ScreenValues.render(ScreenValues.text(option["label"] ?? option["value"]), in: context), in: context)
+    }
+    guard let from = optionsFrom, let path = from["items"]?.stringValue else { return statics }
+    let scopes = ScreenValues.scopes(items: path, within: nil, filter: from["filter"]?.stringValue, in: context)
+    return statics + scopes.map { scope in
+      row(
+        from, value: ScreenValues.render(from["value"]?.stringValue ?? "{item.$id}", in: scope),
+        label: ScreenValues.render(from["label"]?.stringValue ?? from["value"]?.stringValue ?? "{item.$id}", in: scope),
+        in: scope)
     }
   }
 }

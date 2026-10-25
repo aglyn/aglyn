@@ -650,6 +650,64 @@ describe('the ordinary campaign still sends', () => {
     }
   })
 
+  it('answers every preview with the plan lock, refused or not', async () => {
+    // The native composers draw this as it comes, so a Free plan is said
+    // the moment the composer opens, whatever the audience resolves to.
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({ hostId: HOST, action: 'preview' })
+
+      expect(result.body.planLock).toMatchObject({
+        kind: 'not-on-plan',
+        planLabel: 'Pro',
+        reason: 'Campaign email is included from Pro.',
+      })
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+    const paid = await post({ hostId: HOST, action: 'preview' })
+    expect(paid.body.planLock ?? null).toBeNull()
+  })
+
+  it('answers the "Send now" dry run with the plan lock', async () => {
+    // The email's own page and the native confirm sheets ask this before
+    // they offer the button, so a Free plan is said instead of a count.
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({
+        hostId: HOST,
+        action: 'sendNow',
+        campaignId: 'draft-1',
+        dryRun: true,
+      })
+
+      expect(result.body.planLock).toMatchObject({
+        kind: 'not-on-plan',
+        planLabel: 'Pro',
+      })
+      expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['status']).toBe(
+        'draft',
+      )
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+    const paid = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'draft-1',
+      dryRun: true,
+    })
+    expect(paid.body.planLock ?? null).toBeNull()
+  })
+
   it('still saves a draft on a plan with no campaign email', async () => {
     mockOrgPlan = 'free'
     try {

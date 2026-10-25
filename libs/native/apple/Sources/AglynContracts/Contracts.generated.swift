@@ -92,6 +92,64 @@ public struct AccountPushSettingsAccountValue: Codable, Hashable, Sendable {
   }
 }
 
+public struct AiInsightCardCopy: Codable, Hashable, Sendable {
+  public var action: String
+  public var site: String
+  public var title: String
+  public var workspace: String
+
+  public init(action: String, site: String, title: String, workspace: String) {
+    self.action = action
+    self.site = site
+    self.title = title
+    self.workspace = workspace
+  }
+}
+
+public struct AiInsightDialogCopy: Codable, Hashable, Sendable {
+  public var answerFailed: String
+  public var ask: String
+  public var askAnother: String
+  public var askFailed: String
+  public var cannotRun: String
+  public var close: String
+  public var digest: String
+  public var digestFailed: String
+  public var hideFigures: String
+  public var openJobs: String
+  public var promise: String
+  public var questionFailed: String
+  public var questionLabel: String
+  public var showFigures: String
+  public var stillWriting: String
+  public var title: String
+  public var unanswered: String
+  public var windowLabel: String
+  public var working: String
+
+  public init(answerFailed: String, ask: String, askAnother: String, askFailed: String, cannotRun: String, close: String, digest: String, digestFailed: String, hideFigures: String, openJobs: String, promise: String, questionFailed: String, questionLabel: String, showFigures: String, stillWriting: String, title: String, unanswered: String, windowLabel: String, working: String) {
+    self.answerFailed = answerFailed
+    self.ask = ask
+    self.askAnother = askAnother
+    self.askFailed = askFailed
+    self.cannotRun = cannotRun
+    self.close = close
+    self.digest = digest
+    self.digestFailed = digestFailed
+    self.hideFigures = hideFigures
+    self.openJobs = openJobs
+    self.promise = promise
+    self.questionFailed = questionFailed
+    self.questionLabel = questionLabel
+    self.showFigures = showFigures
+    self.stillWriting = stillWriting
+    self.title = title
+    self.unanswered = unanswered
+    self.windowLabel = windowLabel
+    self.working = working
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   case production = "production"
@@ -447,6 +505,21 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   case commit = "commit"
   case omitted = "omitted"
   case pipeline = "pipeline"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CrmLeadStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case new = "new"
+  case nurturing = "nurturing"
+  case qualified = "qualified"
+  case unqualified = "unqualified"
+  case working = "working"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -3093,6 +3166,18 @@ public enum PaymentRiskSignalKind: String, Codable, CaseIterable, Hashable, Send
   }
 }
 
+public struct PhoneHomeGroup: Codable, Hashable, Sendable {
+  public var id: String
+  public var label: String?
+  public var rows: [NativeNavRow]
+
+  public init(id: String, label: String? = nil, rows: [NativeNavRow]) {
+    self.id = id
+    self.label = label
+    self.rows = rows
+  }
+}
+
 public struct PickupLocationSettings: Codable, Hashable, Sendable {
   public var enabled: Bool?
   public var hours: String?
@@ -3161,6 +3246,216 @@ public enum PosCashEventType: String, Codable, CaseIterable, Hashable, Sendable 
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosDayCash: Codable, Hashable, Sendable {
+  public var cashRefundsCents: Double
+  public var cashSalesCents: Double
+  public var closedShiftCount: Double
+  public var countedCashCents: Double
+  public var dropsCents: Double
+  public var expectedCashCents: Double
+  public var openExpectedCashCents: Double
+  public var openingFloatCents: Double
+  public var openShiftCount: Double
+  public var paidInCents: Double
+  public var paidOutCents: Double
+  public var varianceCents: Double
+
+  public init(cashRefundsCents: Double, cashSalesCents: Double, closedShiftCount: Double, countedCashCents: Double, dropsCents: Double, expectedCashCents: Double, openExpectedCashCents: Double, openingFloatCents: Double, openShiftCount: Double, paidInCents: Double, paidOutCents: Double, varianceCents: Double) {
+    self.cashRefundsCents = cashRefundsCents
+    self.cashSalesCents = cashSalesCents
+    self.closedShiftCount = closedShiftCount
+    self.countedCashCents = countedCashCents
+    self.dropsCents = dropsCents
+    self.expectedCashCents = expectedCashCents
+    self.openExpectedCashCents = openExpectedCashCents
+    self.openingFloatCents = openingFloatCents
+    self.openShiftCount = openShiftCount
+    self.paidInCents = paidInCents
+    self.paidOutCents = paidOutCents
+    self.varianceCents = varianceCents
+  }
+}
+
+public struct PosDayCashierRow: Codable, Hashable, Sendable {
+  public var discountsCents: Double
+  public var grossSalesCents: Double
+  public var memberId: String
+  public var name: String
+  public var netSalesCents: Double
+  public var orderCount: Double
+  public var refundCount: Double
+  public var refundsCents: Double
+  public var salesByTender: [String: Double]
+  public var taxCents: Double
+  public var tipsCents: Double
+
+  public init(discountsCents: Double, grossSalesCents: Double, memberId: String, name: String, netSalesCents: Double, orderCount: Double, refundCount: Double, refundsCents: Double, salesByTender: [String: Double], taxCents: Double, tipsCents: Double) {
+    self.discountsCents = discountsCents
+    self.grossSalesCents = grossSalesCents
+    self.memberId = memberId
+    self.name = name
+    self.netSalesCents = netSalesCents
+    self.orderCount = orderCount
+    self.refundCount = refundCount
+    self.refundsCents = refundsCents
+    self.salesByTender = salesByTender
+    self.taxCents = taxCents
+    self.tipsCents = tipsCents
+  }
+}
+
+public struct PosDayRegisterRow: Codable, Hashable, Sendable {
+  public var discountsCents: Double
+  public var grossSalesCents: Double
+  public var name: String
+  public var netSalesCents: Double
+  public var orderCount: Double
+  public var refundCount: Double
+  public var refundsCents: Double
+  public var registerId: String
+  public var salesByTender: [String: Double]
+  public var taxCents: Double
+  public var tipsCents: Double
+
+  public init(discountsCents: Double, grossSalesCents: Double, name: String, netSalesCents: Double, orderCount: Double, refundCount: Double, refundsCents: Double, registerId: String, salesByTender: [String: Double], taxCents: Double, tipsCents: Double) {
+    self.discountsCents = discountsCents
+    self.grossSalesCents = grossSalesCents
+    self.name = name
+    self.netSalesCents = netSalesCents
+    self.orderCount = orderCount
+    self.refundCount = refundCount
+    self.refundsCents = refundsCents
+    self.registerId = registerId
+    self.salesByTender = salesByTender
+    self.taxCents = taxCents
+    self.tipsCents = tipsCents
+  }
+}
+
+public struct PosDayReport: Codable, Hashable, Sendable {
+  public var byCashier: [PosDayCashierRow]
+  public var byRegister: [PosDayRegisterRow]
+  public var byTender: [PosDayTenderRow]
+  public var cash: PosDayCash
+  public var currency: String
+  public var days: Double
+  public var endMs: Double
+  public var from: String
+  public var generatedAtMs: Double
+  public var hostId: String
+  public var shifts: [PosDayShiftRow]
+  public var startMs: Double
+  public var storeName: String
+  public var timeZone: String
+  public var to: String
+  public var totals: PosDayTotals
+  public var truncated: Bool?
+
+  public init(byCashier: [PosDayCashierRow], byRegister: [PosDayRegisterRow], byTender: [PosDayTenderRow], cash: PosDayCash, currency: String, days: Double, endMs: Double, from: String, generatedAtMs: Double, hostId: String, shifts: [PosDayShiftRow], startMs: Double, storeName: String, timeZone: String, to: String, totals: PosDayTotals, truncated: Bool? = nil) {
+    self.byCashier = byCashier
+    self.byRegister = byRegister
+    self.byTender = byTender
+    self.cash = cash
+    self.currency = currency
+    self.days = days
+    self.endMs = endMs
+    self.from = from
+    self.generatedAtMs = generatedAtMs
+    self.hostId = hostId
+    self.shifts = shifts
+    self.startMs = startMs
+    self.storeName = storeName
+    self.timeZone = timeZone
+    self.to = to
+    self.totals = totals
+    self.truncated = truncated
+  }
+}
+
+public struct PosDayShiftRow: Codable, Hashable, Sendable {
+  public var closedAtMs: Double?
+  public var closedByName: String?
+  public var countedCashCents: Double?
+  public var expectedCashCents: Double
+  public var netSalesCents: Double
+  public var openedAtMs: Double
+  public var openedByName: String
+  public var openingFloatCents: Double
+  public var registerId: String
+  public var registerName: String
+  public var shiftId: String
+  public var status: PosDayShiftRowStatus
+  public var varianceCents: Double?
+
+  public init(closedAtMs: Double? = nil, closedByName: String? = nil, countedCashCents: Double? = nil, expectedCashCents: Double, netSalesCents: Double, openedAtMs: Double, openedByName: String, openingFloatCents: Double, registerId: String, registerName: String, shiftId: String, status: PosDayShiftRowStatus, varianceCents: Double? = nil) {
+    self.closedAtMs = closedAtMs
+    self.closedByName = closedByName
+    self.countedCashCents = countedCashCents
+    self.expectedCashCents = expectedCashCents
+    self.netSalesCents = netSalesCents
+    self.openedAtMs = openedAtMs
+    self.openedByName = openedByName
+    self.openingFloatCents = openingFloatCents
+    self.registerId = registerId
+    self.registerName = registerName
+    self.shiftId = shiftId
+    self.status = status
+    self.varianceCents = varianceCents
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosDayShiftRowStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case closed = "closed"
+  case `open` = "open"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosDayTenderRow: Codable, Hashable, Sendable {
+  public var label: String
+  public var method: PosTenderMethod
+  public var netCents: Double
+  public var refundsCents: Double
+  public var salesCents: Double
+
+  public init(label: String, method: PosTenderMethod, netCents: Double, refundsCents: Double, salesCents: Double) {
+    self.label = label
+    self.method = method
+    self.netCents = netCents
+    self.refundsCents = refundsCents
+    self.salesCents = salesCents
+  }
+}
+
+public struct PosDayTotals: Codable, Hashable, Sendable {
+  public var discountsCents: Double
+  public var grossSalesCents: Double
+  public var netSalesCents: Double
+  public var orderCount: Double
+  public var refundCount: Double
+  public var refundsCents: Double
+  public var salesByTender: [String: Double]
+  public var taxCents: Double
+  public var tipsCents: Double
+
+  public init(discountsCents: Double, grossSalesCents: Double, netSalesCents: Double, orderCount: Double, refundCount: Double, refundsCents: Double, salesByTender: [String: Double], taxCents: Double, tipsCents: Double) {
+    self.discountsCents = discountsCents
+    self.grossSalesCents = grossSalesCents
+    self.netSalesCents = netSalesCents
+    self.orderCount = orderCount
+    self.refundCount = refundCount
+    self.refundsCents = refundsCents
+    self.salesByTender = salesByTender
+    self.taxCents = taxCents
+    self.tipsCents = tipsCents
   }
 }
 
@@ -3530,7 +3825,23 @@ public struct PosKioskVariant: Codable, Hashable, Sendable {
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosOfflineCardForward: String, Codable, CaseIterable, Hashable, Sendable {
+  case declined = "declined"
+  case failed = "failed"
+  case forwarded = "forwarded"
+  case stored = "stored"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
+  case cardDeclined = "card-declined"
+  case cardNotCharged = "card-not-charged"
   case cashShort = "cash-short"
   case cashierUnverified = "cashier-unverified"
   case clockAdjusted = "clock-adjusted"
@@ -3555,6 +3866,7 @@ public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
 
 public struct PosOfflineKit: Codable, Hashable, Sendable {
   public var available: Bool
+  public var card: PosOfflineKitCard?
   public var hostId: String
   public var issuedAtMs: Double
   public var maxDiscountPct: Double
@@ -3566,8 +3878,9 @@ public struct PosOfflineKit: Codable, Hashable, Sendable {
   public var unavailableReason: String?
   public var v: Int
 
-  public init(available: Bool, hostId: String, issuedAtMs: Double, maxDiscountPct: Double, orgId: String, receipt: PosOfflineKitReceipt, registers: [PosOfflineKitRegister], requireOpenShift: Bool, tax: PosOfflineKitTax, unavailableReason: String? = nil, v: Int) {
+  public init(available: Bool, card: PosOfflineKitCard? = nil, hostId: String, issuedAtMs: Double, maxDiscountPct: Double, orgId: String, receipt: PosOfflineKitReceipt, registers: [PosOfflineKitRegister], requireOpenShift: Bool, tax: PosOfflineKitTax, unavailableReason: String? = nil, v: Int) {
     self.available = available
+    self.card = card
     self.hostId = hostId
     self.issuedAtMs = issuedAtMs
     self.maxDiscountPct = maxDiscountPct
@@ -3578,6 +3891,24 @@ public struct PosOfflineKit: Codable, Hashable, Sendable {
     self.tax = tax
     self.unavailableReason = unavailableReason
     self.v = v
+  }
+}
+
+public struct PosOfflineKitCard: Codable, Hashable, Sendable {
+  public var available: Bool
+  public var currency: String
+  public var destination: String
+  public var maxDeviceDailyCents: Double
+  public var maxSaleCents: Double
+  public var unavailableReason: String?
+
+  public init(available: Bool, currency: String, destination: String, maxDeviceDailyCents: Double, maxSaleCents: Double, unavailableReason: String? = nil) {
+    self.available = available
+    self.currency = currency
+    self.destination = destination
+    self.maxDeviceDailyCents = maxDeviceDailyCents
+    self.maxSaleCents = maxSaleCents
+    self.unavailableReason = unavailableReason
   }
 }
 
@@ -3683,6 +4014,7 @@ public enum PosOfflineRefusal: String, Codable, CaseIterable, Hashable, Sendable
 }
 
 public struct PosOfflineSale: Codable, Hashable, Sendable {
+  public var card: PosOfflineSaleCard?
   public var cashierAssertion: String?
   public var cashTenderedCents: Double
   public var changeCents: Double
@@ -3697,10 +4029,12 @@ public struct PosOfflineSale: Codable, Hashable, Sendable {
   public var shiftId: String?
   public var signedInUid: String
   public var soldAtMs: Double
+  public var tender: PosOfflineTender?
   public var totals: OrderTotals
   public var v: Int
 
-  public init(cashierAssertion: String? = nil, cashTenderedCents: Double, changeCents: Double, customer: PosOfflineSaleCustomer? = nil, discountPct: Double, hostId: String, lines: [PosOfflineSaleLine], locationId: String? = nil, orgId: String, registerId: String, saleKey: String, shiftId: String? = nil, signedInUid: String, soldAtMs: Double, totals: OrderTotals, v: Int) {
+  public init(card: PosOfflineSaleCard? = nil, cashierAssertion: String? = nil, cashTenderedCents: Double, changeCents: Double, customer: PosOfflineSaleCustomer? = nil, discountPct: Double, hostId: String, lines: [PosOfflineSaleLine], locationId: String? = nil, orgId: String, registerId: String, saleKey: String, shiftId: String? = nil, signedInUid: String, soldAtMs: Double, tender: PosOfflineTender? = nil, totals: OrderTotals, v: Int) {
+    self.card = card
     self.cashierAssertion = cashierAssertion
     self.cashTenderedCents = cashTenderedCents
     self.changeCents = changeCents
@@ -3715,8 +4049,25 @@ public struct PosOfflineSale: Codable, Hashable, Sendable {
     self.shiftId = shiftId
     self.signedInUid = signedInUid
     self.soldAtMs = soldAtMs
+    self.tender = tender
     self.totals = totals
     self.v = v
+  }
+}
+
+public struct PosOfflineSaleCard: Codable, Hashable, Sendable {
+  public var brand: String?
+  public var declineMessage: String?
+  public var forward: PosOfflineCardForward
+  public var last4: String?
+  public var paymentIntentId: String?
+
+  public init(brand: String? = nil, declineMessage: String? = nil, forward: PosOfflineCardForward, last4: String? = nil, paymentIntentId: String? = nil) {
+    self.brand = brand
+    self.declineMessage = declineMessage
+    self.forward = forward
+    self.last4 = last4
+    self.paymentIntentId = paymentIntentId
   }
 }
 
@@ -3815,6 +4166,18 @@ public struct PosOfflineSyncResponse: Codable, Hashable, Sendable {
 
   public init(results: [PosOfflineSaleOutcome]) {
     self.results = results
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosOfflineTender: String, Codable, CaseIterable, Hashable, Sendable {
+  case card = "card"
+  case cash = "cash"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -4298,6 +4661,16 @@ public enum ReturnReason: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct ScreenReferrerCount: Codable, Hashable, Sendable {
+  public var count: Double
+  public var referrer: String
+
+  public init(count: Double, referrer: String) {
+    self.count = count
+    self.referrer = referrer
+  }
+}
+
 public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   public var devices: [String: Double]
   public var referrers: [String: Double]
@@ -4308,6 +4681,20 @@ public struct ScreenTrafficRow: Codable, Hashable, Sendable {
     self.devices = devices
     self.referrers = referrers
     self.screenId = screenId
+    self.total = total
+  }
+}
+
+public struct ScreenTrafficSummary: Codable, Hashable, Sendable {
+  public var avgDwellMs: Double?
+  public var deviceLine: String
+  public var topReferrers: [ScreenReferrerCount]
+  public var total: Double
+
+  public init(avgDwellMs: Double? = nil, deviceLine: String, topReferrers: [ScreenReferrerCount], total: Double) {
+    self.avgDwellMs = avgDwellMs
+    self.deviceLine = deviceLine
+    self.topReferrers = topReferrers
     self.total = total
   }
 }
@@ -4543,6 +4930,51 @@ public enum StorefrontTaxMode: String, Codable, CaseIterable, Hashable, Sendable
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct TabBarLayout: Codable, Hashable, Sendable {
+  public var createInTopBar: Bool
+  public var slots: [String]
+
+  public init(createInTopBar: Bool, slots: [String]) {
+    self.createInTopBar = createInTopBar
+    self.slots = slots
+  }
+}
+
+public struct TabBarPins: Codable, Hashable, Sendable {
+  public var areas: [String]
+  public var chosen: Bool
+  public var scope: String
+
+  public init(areas: [String], chosen: Bool, scope: String) {
+    self.areas = areas
+    self.chosen = chosen
+    self.scope = scope
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum TabPinOutcome: String, Codable, CaseIterable, Hashable, Sendable {
+  case alreadyPinned = "alreadyPinned"
+  case full = "full"
+  case pinned = "pinned"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct TabPinResult: Codable, Hashable, Sendable {
+  public var outcome: TabPinOutcome
+  public var tabBars: [TabBarPins]
+
+  public init(outcome: TabPinOutcome, tabBars: [TabBarPins]) {
+    self.outcome = outcome
+    self.tabBars = tabBars
   }
 }
 
@@ -4884,6 +5316,7 @@ public enum WorkspaceColorSource: String, Codable, CaseIterable, Hashable, Senda
   case logo = "logo"
   case none = "none"
   case picked = "picked"
+  case stable = "stable"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -4896,6 +5329,16 @@ public enum WorkspaceColorSource: String, Codable, CaseIterable, Hashable, Senda
 public struct ContractValues: Codable, Hashable, Sendable {
   public let accountColorPattern: String
   public let accountItemLabelMax: Int
+  public let accountPhotoField: String
+  public let activityTypeLabels: [String: String]
+  public let aiActivityActionLabels: [String: String]
+  public let aiActivityActionSentences: [String: String]
+  public let aiInsightCardCopy: AiInsightCardCopy
+  public let aiInsightDefaultDays: Int
+  public let aiInsightDialogCopy: AiInsightDialogCopy
+  public let aiInsightPlaceholders: [String: String]
+  public let aiInsightQuestionMaxChars: Int
+  public let aiInsightWindows: [Double]
   public let appAppearances: [AppAppearance]
   public let appDensities: [AppDensity]
   public let appIconIdMax: Int
@@ -4944,6 +5387,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmFieldObjectLabels: [String: String]
+  public let crmLeadClosedStatuses: [CrmLeadStatus]
   public let crmLeadStatusLabels: [String: String]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
@@ -4974,6 +5418,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let eventOrganizerMaxLength: Int
   public let eventTitleMaxLength: Int
   public let experimentListQuery: ListQueryDeclaration
+  public let fewUnitsLeft: Int
   public let firstPartyPlugins: [FirstPartyPlugin]
   public let formInUse: ListQueryFilter
   public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
@@ -5018,6 +5463,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let localFulfillmentQueueTabs: [LocalFulfillmentQueueTab]
   public let marketplaceBrowseQuery: ListQueryDeclaration
   public let maxLabelCopies: Int
+  public let maxResourceUnits: Int
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -5099,6 +5545,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachSequenceNameMax: Int
   public let outreachTaskTitleMax: Int
   public let paymentAcceptedMaxLength: Int
+  public let pendingReservationHoldMs: Double
+  public let phoneHomeGroupLabels: [String: String]
+  public let phoneHomeSiteGroupLabel: String
+  public let phoneHomeTeamLabel: String
+  public let phoneHomeWorkspaceGroupLabel: String
   public let pinnedOrgsField: String
   public let pinnedOrgsMax: Int
   public let planCardAdvanceMs: Int
@@ -5110,7 +5561,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardMeters: [String]
   public let planCardScreenContexts: [String: String]
   public let planCardWarningShare: Double
+  public let platformBrandName: String
   public let posCashEventLabels: [String: String]
+  public let posDayReportMaxDays: Int
+  public let posDayReportRoute: String
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
   public let posDisplayThanksMs: Int
@@ -5125,6 +5579,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posKioskUnlockLockoutMs: Double
   public let posKioskUnlockMaxAttempts: Int
   public let posKioskUnlockTtlMs: Double
+  public let posOfflineCardIntentKind: String
+  public let posOfflineCardMaxSaleCentsLimit: Int
+  public let posOfflineCardReconnectWithinMs: Double
   public let posOfflineClockSkewMs: Double
   public let posOfflineDisabledTenders: [String: String]
   public let posOfflineFlagLabels: [String: String]
@@ -5145,7 +5602,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
-  public let railAllWorkspacesAtMost: Int
   public let railRecentOrgs: Int
   public let recentOrgsField: String
   public let recentOrgsMax: Int
@@ -5181,6 +5637,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
   public let suppressionListQuery: ListQueryDeclaration
+  public let tabBarAreasMax: Int
+  public let tabBarCreate: String
+  public let tabBarHome: String
+  public let tabBarsField: String
+  public let tabBarsMax: Int
   public let taskListDeclaration: ListQueryDeclaration
   public let templateKindOptions: [ListFilterOption]
   public let templateListBase: [ListQueryFilter]
@@ -5205,10 +5666,22 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let workflowMaxSteps: Int
   public let workspaceColorsField: String
   public let workspaceColorsMax: Int
+  public let workspaceSettingsRow: NativeNavRow
+  public let workspaceStableColors: [String]
 
   enum CodingKeys: String, CodingKey {
     case accountColorPattern = "ACCOUNT_COLOR_PATTERN"
     case accountItemLabelMax = "ACCOUNT_ITEM_LABEL_MAX"
+    case accountPhotoField = "ACCOUNT_PHOTO_FIELD"
+    case activityTypeLabels = "ACTIVITY_TYPE_LABELS"
+    case aiActivityActionLabels = "AI_ACTIVITY_ACTION_LABELS"
+    case aiActivityActionSentences = "AI_ACTIVITY_ACTION_SENTENCES"
+    case aiInsightCardCopy = "AI_INSIGHT_CARD_COPY"
+    case aiInsightDefaultDays = "AI_INSIGHT_DEFAULT_DAYS"
+    case aiInsightDialogCopy = "AI_INSIGHT_DIALOG_COPY"
+    case aiInsightPlaceholders = "AI_INSIGHT_PLACEHOLDERS"
+    case aiInsightQuestionMaxChars = "AI_INSIGHT_QUESTION_MAX_CHARS"
+    case aiInsightWindows = "AI_INSIGHT_WINDOWS"
     case appAppearances = "APP_APPEARANCES"
     case appDensities = "APP_DENSITIES"
     case appIconIdMax = "APP_ICON_ID_MAX"
@@ -5257,6 +5730,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmFieldObjectLabels = "CRM_FIELD_OBJECT_LABELS"
+    case crmLeadClosedStatuses = "CRM_LEAD_CLOSED_STATUSES"
     case crmLeadStatusLabels = "CRM_LEAD_STATUS_LABELS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
@@ -5287,6 +5761,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case eventOrganizerMaxLength = "EVENT_ORGANIZER_MAX_LENGTH"
     case eventTitleMaxLength = "EVENT_TITLE_MAX_LENGTH"
     case experimentListQuery = "EXPERIMENT_LIST_QUERY"
+    case fewUnitsLeft = "FEW_UNITS_LEFT"
     case firstPartyPlugins = "FIRST_PARTY_PLUGINS"
     case formInUse = "FORM_IN_USE"
     case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
@@ -5331,6 +5806,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case localFulfillmentQueueTabs = "LOCAL_FULFILLMENT_QUEUE_TABS"
     case marketplaceBrowseQuery = "MARKETPLACE_BROWSE_QUERY"
     case maxLabelCopies = "MAX_LABEL_COPIES"
+    case maxResourceUnits = "MAX_RESOURCE_UNITS"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
@@ -5412,6 +5888,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachSequenceNameMax = "OUTREACH_SEQUENCE_NAME_MAX"
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
+    case pendingReservationHoldMs = "PENDING_RESERVATION_HOLD_MS"
+    case phoneHomeGroupLabels = "PHONE_HOME_GROUP_LABELS"
+    case phoneHomeSiteGroupLabel = "PHONE_HOME_SITE_GROUP_LABEL"
+    case phoneHomeTeamLabel = "PHONE_HOME_TEAM_LABEL"
+    case phoneHomeWorkspaceGroupLabel = "PHONE_HOME_WORKSPACE_GROUP_LABEL"
     case pinnedOrgsField = "PINNED_ORGS_FIELD"
     case pinnedOrgsMax = "PINNED_ORGS_MAX"
     case planCardAdvanceMs = "PLAN_CARD_ADVANCE_MS"
@@ -5423,7 +5904,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardMeters = "PLAN_CARD_METERS"
     case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
+    case platformBrandName = "PLATFORM_BRAND_NAME"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
+    case posDayReportMaxDays = "POS_DAY_REPORT_MAX_DAYS"
+    case posDayReportRoute = "POS_DAY_REPORT_ROUTE"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
     case posDisplayThanksMs = "POS_DISPLAY_THANKS_MS"
@@ -5438,6 +5922,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posKioskUnlockLockoutMs = "POS_KIOSK_UNLOCK_LOCKOUT_MS"
     case posKioskUnlockMaxAttempts = "POS_KIOSK_UNLOCK_MAX_ATTEMPTS"
     case posKioskUnlockTtlMs = "POS_KIOSK_UNLOCK_TTL_MS"
+    case posOfflineCardIntentKind = "POS_OFFLINE_CARD_INTENT_KIND"
+    case posOfflineCardMaxSaleCentsLimit = "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT"
+    case posOfflineCardReconnectWithinMs = "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
     case posOfflineClockSkewMs = "POS_OFFLINE_CLOCK_SKEW_MS"
     case posOfflineDisabledTenders = "POS_OFFLINE_DISABLED_TENDERS"
     case posOfflineFlagLabels = "POS_OFFLINE_FLAG_LABELS"
@@ -5458,7 +5945,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
-    case railAllWorkspacesAtMost = "RAIL_ALL_WORKSPACES_AT_MOST"
     case railRecentOrgs = "RAIL_RECENT_ORGS"
     case recentOrgsField = "RECENT_ORGS_FIELD"
     case recentOrgsMax = "RECENT_ORGS_MAX"
@@ -5494,6 +5980,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
     case suppressionListQuery = "SUPPRESSION_LIST_QUERY"
+    case tabBarAreasMax = "TAB_BAR_AREAS_MAX"
+    case tabBarCreate = "TAB_BAR_CREATE"
+    case tabBarHome = "TAB_BAR_HOME"
+    case tabBarsField = "TAB_BARS_FIELD"
+    case tabBarsMax = "TAB_BARS_MAX"
     case taskListDeclaration = "TASK_LIST_DECLARATION"
     case templateKindOptions = "TEMPLATE_KIND_OPTIONS"
     case templateListBase = "TEMPLATE_LIST_BASE"
@@ -5518,5 +6009,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
     case workspaceColorsField = "WORKSPACE_COLORS_FIELD"
     case workspaceColorsMax = "WORKSPACE_COLORS_MAX"
+    case workspaceSettingsRow = "WORKSPACE_SETTINGS_ROW"
+    case workspaceStableColors = "WORKSPACE_STABLE_COLORS"
   }
 }

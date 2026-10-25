@@ -223,7 +223,68 @@
       "depKey": "layout/main-layout",
       "noSlash": "plain",
       "listResource": "email.list-members:abc123",
-      "wholeResource": "commerce.gift-cards"
+      "wholeResource": "commerce.gift-cards",
+      "siteErase": {
+        "resources": [
+          {
+            "pluginId": "data",
+            "preview": {
+              "noun": [
+                "dataset",
+                "datasets"
+              ],
+              "itemNoun": [
+                "record",
+                "records"
+              ],
+              "going": [
+                {
+                  "id": "d1",
+                  "name": "Menu",
+                  "items": 0
+                },
+                {
+                  "id": "d2",
+                  "name": "Staff",
+                  "items": 1234
+                },
+                {
+                  "id": "d3",
+                  "name": "Leads",
+                  "items": null
+                }
+              ],
+              "staying": 2
+            }
+          }
+        ]
+      },
+      "siteEraseGap": {
+        "resources": [
+          {
+            "pluginId": "data",
+            "preview": {
+              "noun": [
+                "dataset",
+                "datasets"
+              ],
+              "itemNoun": [
+                "record",
+                "records"
+              ],
+              "going": [],
+              "staying": 0
+            }
+          },
+          {
+            "pluginId": "other",
+            "preview": null
+          }
+        ]
+      },
+      "siteEraseNone": {
+        "resources": []
+      }
     },
     "now": {
       "ms": 1790000000000
@@ -737,6 +798,18 @@
     {
       "template": "{data.members[?item.role == nobody].*.$id:count}",
       "expect": "0"
+    },
+    {
+      "template": "{data.siteErase.resources[pluginId='data'].preview.going.length} {data.siteErase.resources[pluginId='data'].preview.noun.1}",
+      "expect": "3 datasets"
+    },
+    {
+      "template": "{data.siteErase.resources[pluginId='data'].preview.going.1.items:count} {data.siteErase.resources[pluginId='data'].preview.itemNoun.1}",
+      "expect": "1,234 records"
+    },
+    {
+      "template": "{data.siteErase.resources[pluginId='data'].preview.itemNoun.1:title} not counted",
+      "expect": "Records not counted"
     }
   ],
   "url": [
@@ -1712,6 +1785,70 @@
     {
       "when": "data.hundred + data.hundred > data.money / 1000",
       "expect": true
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.going.length > 1",
+      "expect": true
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.going.length == 1",
+      "expect": false
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.staying > 1",
+      "expect": true
+    },
+    {
+      "when": "data.siteErase.resources.length >= 0",
+      "expect": true
+    },
+    {
+      "when": "data.siteEraseNone.resources.length >= 0",
+      "expect": true
+    },
+    {
+      "when": "data.missing.resources.length >= 0",
+      "expect": false
+    },
+    {
+      "when": "data.siteErase.resources[?!item.preview]",
+      "expect": false
+    },
+    {
+      "when": "data.siteEraseGap.resources[?!item.preview]",
+      "expect": true
+    },
+    {
+      "when": "!data.siteErase.resources.*.preview.going",
+      "expect": false
+    },
+    {
+      "when": "!data.siteEraseGap.resources.*.preview.going",
+      "expect": true
+    },
+    {
+      "when": "!data.siteEraseNone.resources.*.preview.going",
+      "expect": true
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.going.0.items >= 0 && data.siteErase.resources[pluginId='data'].preview.going.0.items != 1",
+      "expect": true
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.going.0.items == ''",
+      "expect": false
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.going.2.items == ''",
+      "expect": true
+    },
+    {
+      "when": "data.siteErase.resources[pluginId='data'].preview.going.2.items >= 0",
+      "expect": false
+    },
+    {
+      "when": "data.siteEraseGap.resources[pluginId='data'].preview.going.length > 0",
+      "expect": false
     }
   ],
   "dollars": [

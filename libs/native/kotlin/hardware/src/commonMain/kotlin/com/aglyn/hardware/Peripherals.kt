@@ -59,6 +59,9 @@ interface Peripherals {
 
   /** This device's own print dialog: where a receipt goes when the register has no printer of its own. */
   val systemPrinter: SystemPrinter? get() = null
+
+  /** What the card reader's SDK did with cards it stored offline (AGL-4039), shared by the collector and the register. */
+  val offlineCardForwards: OfflineCardForwardLedger? get() = null
 }
 
 object NoPeripherals : Peripherals {
@@ -72,4 +75,5 @@ class StaticPeripherals(
   override val hidScanner: HidBurstDetector? = null,
   override val systemPrinter: SystemPrinter? = null,
   override val keyedCardEntry: KeyedCardEntry? = null,
+  override val offlineCardForwards: OfflineCardForwardLedger? = null,
 ) : Peripherals

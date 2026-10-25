@@ -65,6 +65,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
+import com.aglyn.ui.ChoiceRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
@@ -95,6 +96,20 @@ internal fun tone(name: String?): StatusTone = when (name) {
   "error" -> StatusTone.ERROR
   "info" -> StatusTone.INFO
   else -> StatusTone.NEUTRAL
+}
+
+/**
+ * A list row's badge as chips: one, or with `each` (a path to a list) one per row of that list, the row read as `row` (a
+ * resource's units left on each of the next nights). `when` is read once, against the list row.
+ */
+internal fun rowBadges(badge: JsonElement, scope: JsonElement): List<Pair<String, StatusTone>> {
+  if (!ScreenValues.condition(badge.str("when"), scope)) return emptyList()
+  val scopes = badge.str("each")?.let { path -> ScreenValues.rows(ScreenValues.lookup(path, scope)).map { ScreenContext.with(scope, "row", it) } }
+    ?: listOf(scope)
+  return scopes.mapNotNull { here ->
+    val text = ScreenValues.render(badge.str("text").orEmpty(), here)
+    if (text.isEmpty()) null else text to toneFor(badge, text, here)
+  }
 }
 
 internal fun toneFor(spec: JsonElement, value: String, context: JsonElement): StatusTone {
@@ -325,14 +340,14 @@ private fun SpecBodyContent(
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {
-          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: action.label) to ScreenValues.render(instead.str("text") ?: "", after)
+          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: ScreenValues.render(action.label, after)) to ScreenValues.render(instead.str("text") ?: "", after)
           // The entry may also open a page the route named (an invoice the bank has to confirm).
           instead.str("open")?.let { key -> (ScreenValues.lookup(key, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         } else {
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
         // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
-        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = action.label to ScreenValues.text(it) } }
+        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = ScreenValues.render(action.label, after) to ScreenValues.text(it) } }
         action.file?.let { file ->
           file.contents(after)?.let { (name, text) ->
             if (exporter == null) show("Saving a file is not available here.", StatusTone.WARNING)
@@ -999,15 +1014,13 @@ private fun ListRow(
   val target = block["open"]?.takeIf { ScreenValues.condition(it.str("when"), scope) }?.let { openSpec ->
     openSpec.str("screen")?.let { Selection(it, renderParams(openSpec.obj("params"), scope)) }
   }
-  val primary = ScreenValues.render(block.string("primary") ?: "{item.name|item.\$id}", scope).ifEmpty { "—" }
+  // A template, or a list of parts joined with ` · ` as `secondary` takes them (a part shown only while its `when` holds).
+  val primary = (block["primary"] as? JsonArray)?.let { rowLine(it, scope).orEmpty() }?.ifEmpty { "—" }
+    ?: ScreenValues.render(block.string("primary") ?: "{item.name|item.\$id}", scope).ifEmpty { "—" }
   val secondary = rowLine(block["secondary"], scope)
   val tertiary = rowLine(block["tertiary"], scope)
   val trailingText = block.string("trailing")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
-  val badges = block.raw.arr("badges").mapNotNull { badge ->
-    if (!ScreenValues.condition(badge.str("when"), scope)) return@mapNotNull null
-    val text = ScreenValues.render(badge.str("text").orEmpty(), scope)
-    if (text.isEmpty()) null else text to toneFor(badge, text, scope)
-  }
+  val badges = block.raw.arr("badges").flatMap { rowBadges(it, scope) }
   // `toggle: { value, disabled, on, off }`: a switch at the row's end whose
   // flip runs the `on` or `off` action (with its confirmation) against the
   // row; the screen's reload then shows what was stored.
@@ -1025,6 +1038,11 @@ private fun ListRow(
       title = primary,
       supporting = supporting,
       icon = block.string("icon")?.let { AglynIcons.named(materialIcon(ScreenValues.render(it, scope))) },
+      // `avatar`: the row is a person, drawn with their photo (the console's avatar), their initials when they have none
+      // (AGL-4010).
+      personInitials = block.string("avatar")?.let { com.aglyn.ui.workspaceInitials(primary) },
+      personPhoto = block.string("avatar")?.let { ScreenValues.render(it, scope) }
+        ?.let { com.aglyn.core.mediaPreviewUrl(it.ifEmpty { null }, LocalScreenSession.current.origin, null, 128) },
       selected = target != null && target == selection,
       onClick = target?.let { { open(it.screen, it.params) } },
       trailing = if (trailingText == null && actions.isEmpty() && target == null && toggle == null) null else ({
@@ -1188,6 +1206,19 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         }
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       }
+      "choice" -> {
+        // One of a few rows, each with a line under it and a mark (the console's tier menu: price, credits, Current); a row
+        // that cannot be picked stays, dimmed, with its reason.
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        for (choice in field.choiceRows(context)) {
+          ChoiceRow(
+            choice.label, text == choice.value, { onChange(FieldValue.Text(choice.value)) },
+            Modifier.testTag("choice-${field.key}-${choice.value}"),
+            supporting = choice.detail, enabled = choice.enabled,
+            badge = choice.badge?.let { mark -> { StatusChip(mark.text, tone(mark.tone)) } },
+          )
+        }
+      }
       "select", "country" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }
@@ -1233,7 +1264,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         modifier = Modifier.testTag("generate-${field.key}"),
       ) { Text("Generate") }
     }
-    val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.mismatches(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
+    val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.refuses(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
     if (mismatch != null) {
       Text(mismatch, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     } else if (help != null && field.kind != "toggle") {

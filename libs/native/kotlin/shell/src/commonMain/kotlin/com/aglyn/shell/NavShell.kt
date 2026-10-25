@@ -1,5 +1,7 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -78,6 +81,7 @@ import com.aglyn.contracts.NativeNavListId
 import com.aglyn.contracts.toRef
 import com.aglyn.core.AuthState
 import com.aglyn.core.WorkspaceState
+import com.aglyn.core.WorkspaceStore
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.LocalAglynPalette
 import com.aglyn.ui.LocalShellColors
@@ -86,7 +90,6 @@ import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.shellColors
 import com.aglyn.ui.space
-import com.aglyn.ui.workspaceTint
 import kotlinx.coroutines.launch
 
 /** The slot the AI panel's widget is drawn in (its plugin's, e.g. Assist). */
@@ -138,10 +141,14 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val compactChrome = LocalUsesCompactChrome.current
   val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
 
-  // The workspace on screen is the most recent one; each account remembers the workspaces it holds for links.
-  LaunchedEffect(workspace.org?.id) { workspace.org?.id?.let(services.accountPrefs::openedOrg) }
-  LaunchedEffect(workspace.orgs) {
-    services.accounts?.rememberWorkspaces(workspace.orgs.map { it.slug })
+  // The workspace on screen is the most recent one, once the account's preferences have loaded: on a fresh install the
+  // first workspace opens before they arrive, and was never recorded (AGL-4000). Each account remembers the workspaces it
+  // holds for links.
+  LaunchedEffect(workspace.org?.id, prefs.loaded) { workspace.org?.id?.let(services.accountPrefs::openedOrg) }
+  LaunchedEffect(workspace.orgs) { services.accounts?.rememberWorkspaces(workspace.orgs.map { it.slug }) }
+  // The rail's tiles' logos: its pins and recents as the preferences load (they often arrive after the workspaces, and a
+  // recent one past the first eight then kept its initial; AGL-4000), and the first eight for the menus.
+  LaunchedEffect(workspace.orgs, prefs.pinned, prefs.recentOrgs) {
     services.workspace.loadLogos((prefs.pinned + prefs.recentOrgs + workspace.orgs.take(8).map { it.id }).distinct())
   }
   // Moving to another scope leaves its settings mode.
@@ -183,6 +190,11 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
   val authState by services.auth.state.collectAsState()
   val user = (authState as? AuthState.SignedIn)?.user
+  // Invitations join on their own once the account is in use (AGL-4023), as the console's do on every load.
+  InviteJoinEffect(services)
+  // Each account's photo, kept on the roster so the switcher draws every account's face (AGL-4010).
+  val storedPhoto = prefs.photo(user?.photoUrl)
+  LaunchedEffect(storedPhoto, prefs.loaded) { if (prefs.loaded) services.accounts?.rememberPhoto(storedPhoto) }
   val screenSession = rememberScreenSession(services, navigator, workspace, user, claims) { claims = it }
 
   // The scope's lists, from the manifest.
@@ -203,21 +215,37 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
   val allGroups = scopeGroups + settingsGroups.orEmpty()
 
-  val (orgColor, tints) = workspace.org?.id?.let { rememberWorkspaceColor(it, workspace, prefs, services.api.origin) } ?: (null to false)
   val dark = MaterialTheme.colorScheme.background.let { (it.red + it.green + it.blue) / 3 < 0.5f }
-  // A workspace's color is its rail tile and a light wash over the sidebar while it is on screen (unless the Sidebar
-  // setting is Plain). Only a white-label workspace's brand color stands in for the accent ([workspaceAccent]); a picked
-  // or logo color never does, so the accent stays the account theme's (Aglyn blue unless the person picked one).
-  val brand = orgColor?.takeIf { tints }
+  // A workspace's color is its rail tile and nothing else: no surface (rail, sidebar, list column, chrome) wears a wash of
+  // it ("this looks green"; AGL-4000). Only a white-label workspace's brand color stands in for the
+  // accent ([workspaceAccent]); a picked or logo color never does, so the accent stays the account theme's (Aglyn blue
+  // unless the person picked one).
   val accentOrg = workspace.org?.id
   val accentEntitlements = accentOrg?.let { services.entitlements.state(it).collectAsState().value }
   LaunchedEffect(accentOrg) { accentOrg?.let { services.entitlements.load(it) } }
   val accent = accentOrg?.let { id ->
-    workspaceAccent(workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true, useWorkspaceBrand = prefs.theme.useWorkspaceBrand)
+    workspaceAccent(
+      workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true,
+      useWorkspaceBrand = prefs.theme.useWorkspaceBrand, pickedAccent = prefs.theme.accent,
+    )
   }?.let { com.aglyn.ui.colorOfHex(it) }
-  val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
+  // A site on screen that is deleted (or taken away) leaves for the whole workspace's Sites, as View all sites does, never
+  // for the next site with the same screen still open (a deleted site's Danger zone stayed open on another site).
+  var shownScope by remember(uid) { mutableStateOf<Pair<String?, String?>>(null to null) }
+  LaunchedEffect(workspace) {
+    if (WorkspaceStore.shownSiteRemoved(shownScope.first, shownScope.second, workspace)) {
+      services.workspace.selectWholeWorkspace()
+      chrome.settingsMode = null
+      chrome.closeMenus()
+      navigator.select(NavKeys.of("site.sites"))
+      shownScope = workspace.org?.id to null
+    } else if (workspace.ready) {
+      shownScope = workspace.org?.id to workspace.site?.id
+    }
+  }
+
   val actions = remember(navigator, chrome, services) {
     ShellActions(
       openScreen = { screen, params ->
@@ -236,6 +264,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       addAccount = { services.accounts?.startAdding() },
       switchAccount = { slot -> exitScope.launch { services.accounts?.switchTo(slot) } },
       signOut = { exitScope.launch { services.signOut() } },
+      editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
+      notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
     )
   }
 
@@ -269,6 +299,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   BackHandler(enabled = navigator.stack.isNotEmpty() || chrome.settingsMode != null || navigator.top != ShellNavigator.HOME) {
     when {
       navigator.stack.isNotEmpty() -> navigator.back()
+      // A phone's settings screen returns to its settings list first (AGL-4006: the list is pushed on Home).
+      !wide && chrome.settingsMode != null && navigator.top != ShellNavigator.MENU -> navigator.select(ShellNavigator.MENU)
       chrome.settingsMode != null -> { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
       else -> navigator.select(ShellNavigator.HOME)
     }
@@ -333,13 +365,18 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   // A phone (never the desktop's narrow window) draws the brand's bold look in the Aglyn theme (AGL-3990).
   WorkspaceBrandTheme(services, dark, accent, phone = !wide && !compactChrome) {
-  val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
-  // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
-  val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
+  // The sidebar is Plain (the theme's neutral surface) unless the person picked Tinted, and even then the Aglyn theme's
+  // stays neutral: Tinted blends 5% of the accent in force into it, never a workspace's own color (Apple's
+  // `AglynColor.sidebar`; AGL-4000).
+  val shell = com.aglyn.ui.shellColors(
+    MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current,
+    sidebarAccent = com.aglyn.ui.LocalAccent.current?.fill.takeIf { sidebarTinted(prefs.theme) },
+  )
   CompositionLocalProvider(
     androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
     LocalShellActions provides actions,
+    LocalAccountIdentity provides accountIdentity(user, prefs, services.api.origin),
     LocalShellColors provides shell,
     LocalShowShortcuts provides wide,
   ) {
@@ -398,15 +435,39 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
     // The ☆ for the place on screen: a screen's title row draws it (the shared list scaffold); else the breadcrumbs do.
     val starSlot = remember(here) { here?.let { item -> com.aglyn.ui.PageStarSlot { StarButton(services, item, prefs) } } }
+    // The content area moves between places (Figma Motion 121:6163 / 121:6714, as Apple's AGL-4009): a pushed screen
+    // slides in from the trailing side and an uncovered one from the leading side, fading in on the drill's spring; another
+    // destination, section or tab cross-fades. Reduce Motion keeps the fades.
+    val place = ContentPlace(tabKey, navigator.currentKey, navigator.stack.size, navigator.top, route)
+    val reduce = com.aglyn.ui.reduceMotion()
+    val pushOffset = with(androidx.compose.ui.platform.LocalDensity.current) { com.aglyn.ui.ShellMotion.PUSH_OFFSET.roundToPx() }
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val body: @Composable () -> Unit = {
-      CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle, com.aglyn.ui.LocalPageStar provides starSlot) {
-        entries.SaveableStateProvider(tabKey + navigator.currentKey) {
-          ShellBody(
-            services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff,
-            searchResults = { query ->
-              SearchResultsScreen(services, workspace, enabled, hostAdmin, query) { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) }
-            },
-          ) { chrome.colorFor = it }
+      androidx.compose.animation.AnimatedContent(
+        place,
+        modifier = Modifier.fillMaxSize(),
+        contentKey = { it.tab + it.key },
+        transitionSpec = { contentTransform(initialState, targetState, reduce, if (rtl) -pushOffset else pushOffset) },
+        label = "content",
+      ) { shown ->
+        // A place keeps the title and ☆ slots it had while it was in front, so while it leaves it never writes into the
+        // arriving place's.
+        val front = shown.tab + shown.key == place.tab + place.key
+        val heldTitle = remember { SlotRef(screenTitle) }
+        val heldStar = remember { SlotRef(starSlot) }
+        if (front) {
+          heldTitle.value = screenTitle
+          heldStar.value = starSlot
+        }
+        CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides heldTitle.value, com.aglyn.ui.LocalPageStar provides heldStar.value) {
+          entries.SaveableStateProvider(shown.tab + shown.key) {
+            ShellBody(
+              services, context, navigator, workspace, widthClass, uid, shown.route, shown.top, openInBrowser, banner, screenSession.claims.isStaff,
+              searchResults = { query ->
+                SearchResultsScreen(services, workspace, enabled, hostAdmin, query) { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) }
+              },
+            ) { chrome.colorFor = it }
+          }
         }
       }
     }
@@ -544,19 +605,27 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             VerticalDivider(color = shellColors.divider)
           }
           if (!chrome.sidebarHidden) {
-            NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, tint, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
+            NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
             VerticalDivider(color = shellColors.divider)
           }
+          // The content area stands on the theme's surface, every column alike, never the grey canvas (AGL-4012).
+          val shellRow = this
+          com.aglyn.ui.ContentGround { with(shellRow) {
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
             val crumbsSlot = remember { com.aglyn.ui.PageCrumbsSlot() }
+            val sectionsSlot = remember { com.aglyn.ui.PageSectionsSlot() }
             if (route !is Route.Web) {
               // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
               val steps = if (row == null && route == null) null else {
-                val group = allGroups.firstOrNull { g -> row != null && row in g.rows }?.label
+                val holder = allGroups.firstOrNull { g -> row != null && row in g.rows }
                 val place = row?.label
                 buildList {
                   add(Crumb(workspace.site?.name ?: workspace.org?.name ?: "") { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) })
-                  group?.let { add(Crumb(it, null)) }
+                  // The group opens its first row, unless that is the place on screen (AGL-4058).
+                  holder?.label?.let { label ->
+                    val first = holder.rows.firstOrNull()?.takeIf { it != row }
+                    add(Crumb(label, first?.let { target -> { openRow(target) } }))
+                  }
                   place?.let { add(Crumb(it) { navigator.select(row?.key ?: navigator.top) }) }
                   // A section the row opens without tabs (Orders' Returns): the row leads back, then the section.
                   row?.sections?.firstOrNull { it.key == navigator.top && it.key != row.key }?.takeIf { row.rowId in SELF_SECTIONED_ROWS }?.let { add(Crumb(it.label, null)) }
@@ -570,7 +639,12 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
               if (steps != null && !crumbsSlot.claimed) Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
               banner()
-              sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
+              // A list beside its detail takes the section chips into its list column (it claims the slot), so the
+              // hairline runs from the top of the columns; any other screen shows the tabs across the content.
+              androidx.compose.runtime.SideEffect {
+                sectionsSlot.sections = sections?.let { list -> { SectionChips(list, navigator.top) { key -> navigator.select(key) } } } ?: {}
+              }
+              if (!sectionsSlot.claimed) sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
               // The content area brings every screen in by E − 16, so a screen that pads its content by 16 lands on the one
@@ -579,13 +653,15 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = bodyInset)) {
                 CompositionLocalProvider(
                   com.aglyn.ui.LocalPageCrumbs provides crumbsSlot,
+                  com.aglyn.ui.LocalPageSections provides sectionsSlot,
                   com.aglyn.ui.LocalBodyInset provides bodyInset,
                   com.aglyn.ui.LocalContentInset provides com.aglyn.ui.DetailPanePadding,
                 ) { body() }
               }
               if (assistTitle != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
-                Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
+                // The AI panel stays on the neutral ground, never a tinted sidebar's (AGL-4000).
+                Column(Modifier.width(380.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("ai-panel")) {
                   // Figma AI panel 18:485's header: ✦ in the accent, the title, Close.
                   Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) space(2.25f) else space(2.5f)), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
@@ -597,16 +673,21 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
             }
           }
+          } }
         }
       }
       if (tabs.overview) TabOverview(tabs, onSelect = ::selectTab, onReopen = { tab -> tabs.closed.remove(tab); tabs.closed.add(0, tab); reopenTab() })
       }
       }
     } else {
+      // The Team tile on the phone's Home (AGL-4006): the workspace settings' Members row, when this build has it.
+      val team = remember(version, orgEnabled, hostAdmin) {
+        navGroups(NativeNavListId.WORKSPACE_SETTINGS, orgEnabled, hostAdmin, services.registry, inSite = true).flatMap { it.rows }.firstOrNull { it.rowId == "members" }
+      }
       PhoneShell(
         services, navigator, chrome, workspace, prefs, user, uid, title, route, scopeGroups, settingsGroups, sidebar, starred,
         sections, banner, actions, enabled, onRow = { openRow(it) }, onStar = onStar, body = body,
-        assistTitle = assistTitle, assistContent = assistContent, help = help,
+        assistTitle = assistTitle, assistContent = assistContent, help = help, context = context, team = team,
       )
     }
     if (chrome.shortcuts) KeyboardShortcutsDialog { chrome.shortcuts = false }
@@ -729,7 +810,7 @@ private fun openOneBoxLine(
 private fun titleFor(services: ShellServices, navigator: ShellNavigator, route: Route?, row: NavItem?, named: String?): String = when (route) {
   is Route.Screen -> named ?: services.registry.screen(route.screenId)?.title ?: "Not found"
   is Route.Besigner -> "Besigner"
-  Route.Analytics -> "Overview"
+  Route.Analytics -> "Analytics"
   Route.Switcher -> "Switch workspace or site"
   Route.NotificationSettings -> "Notifications"
   Route.ThemeSettings -> "Theme"
@@ -756,6 +837,8 @@ private fun ShellBody(
   widthClass: WidthClass,
   uid: String,
   route: Route?,
+  /** The destination this content shows ([ShellNavigator.top] when it was in front). */
+  top: String,
   openInBrowser: (String) -> Unit,
   banner: @Composable () -> Unit,
   staff: Boolean,
@@ -771,7 +854,7 @@ private fun ShellBody(
     Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
     Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
     Route.ThemeSettings -> ThemeSettingsScreen(services, workspace, onWorkspaceColor)
-    null -> when (val top = navigator.top) {
+    null -> when (top) {
       ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
       ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
       ShellNavigator.SETTINGS -> SettingsScreen(services, context, staff, onTheme = { navigator.push(Route.ThemeSettings) }) { navigator.push(Route.NotificationSettings) }
@@ -783,6 +866,39 @@ private fun ShellBody(
           "" -> HomeScreen(services, context, workspace, widthClass, navigator)
           else -> PluginScreenHost(services, context, screen, params, workspace.site != null) { navigator.select(ShellNavigator.HOME) }
         }
+      }
+    }
+  }
+}
+
+/**
+ * The area's sections as chips atop a list column beside its detail (AGL-4012, Apple's list column head): one row on the
+ * column's content edge, the selected one in the accent fill, 12 below before the list toolbar.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun SectionChips(sections: List<NavSectionItem>, selected: String, onSelect: (String) -> Unit) {
+  val index = sections.indexOfFirst { it.key == selected }.coerceAtLeast(0)
+  val edge = com.aglyn.ui.LocalContentInset.current ?: com.aglyn.ui.contentInset()
+  val m = com.aglyn.ui.shellMetrics
+  val shape = RoundedCornerShape(m.controlRadius)
+  androidx.compose.foundation.layout.FlowRow(
+    Modifier.fillMaxWidth().padding(start = edge, end = edge, bottom = com.aglyn.ui.HeadMetrics.listColumnGap).selectableGroup().testTag("section-chips"),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    sections.forEachIndexed { i, section ->
+      val on = i == index
+      val scheme = MaterialTheme.colorScheme
+      Box(
+        Modifier.heightIn(min = 28.dp).clip(shape)
+          .background(if (on) scheme.primary else Color.Transparent)
+          .then(if (on) Modifier else Modifier.border(1.dp, scheme.outline, shape))
+          .selectable(selected = on, role = Role.Tab, onClick = { onSelect(section.key) })
+          .padding(horizontal = 10.dp).testTag("section-chip-${section.id}"),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(section.label, color = if (on) scheme.onPrimary else scheme.onSurface, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, maxLines = 1)
       }
     }
   }
@@ -915,7 +1031,7 @@ private fun WideToolbar(
 /** The workspace switcher's shortcut: ⌃⌘S on a Mac, Ctrl+Alt+S elsewhere. */
 internal fun railToggleShortcut(): String = if (isMacPlatform) "⌃⌘S" else "Ctrl+Alt+S"
 
-/** One step of the breadcrumbs, and where it leads (none for a group heading or the page on screen). */
+/** One step of the breadcrumbs, and where it leads (none for the page on screen). */
 private data class Crumb(val label: String, val open: (() -> Unit)?)
 
 /** "Bakery › Sell › Orders": where the screen sits; every step but the last leads back to it. */
@@ -926,7 +1042,9 @@ private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = n
   val edge = com.aglyn.ui.LocalContentInset.current ?: com.aglyn.ui.contentInset()
   val firstPads = steps.firstOrNull()?.let { it.open != null && steps.size > 1 } == true
   Row(
-    Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),
+    // Figma 13:3: 24 above the trail, 16 tall; the head below keeps its own 16 (com.aglyn.ui.HeadMetrics).
+    Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = com.aglyn.ui.HeadMetrics.top)
+      .heightIn(min = com.aglyn.ui.HeadMetrics.crumbs).testTag("title-crumb"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
@@ -955,6 +1073,19 @@ private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = n
 @Composable
 private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSelect: () -> Unit, onClose: () -> Unit, homeMark: @Composable () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
+  if (tab.pinned) {
+    // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded), drawn plain in every state:
+    // selected, hovered or pressed, it has no plate and no border (Figma Titlebar/Home tab 117:16049). A plate made the
+    // mark read as a button (AGL-4000).
+    Box(
+      Modifier.height(if (m.compact) 28.dp else 36.dp).testTag("tab-${tab.id}")
+        .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onSelect)
+        .semantics { this.selected = selected; role = Role.Tab; contentDescription = "Home: ${tab.title}" }
+        .padding(horizontal = 9.dp),
+      contentAlignment = Alignment.Center,
+    ) { homeMark() }
+    return
+  }
   Surface(
     onClick = onSelect,
     shape = RoundedCornerShape(m.controlRadius),
@@ -963,13 +1094,6 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
     modifier = Modifier.height(if (m.compact) 28.dp else 36.dp).widthIn(max = 260.dp).testTag("tab-${tab.id}")
       .semantics { this.selected = selected; role = Role.Tab },
   ) {
-    if (tab.pinned) {
-      // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded).
-      Box(Modifier.padding(horizontal = 9.dp).semantics { contentDescription = "Home: ${tab.title}" }, contentAlignment = Alignment.Center) {
-        homeMark()
-      }
-      return@Surface
-    }
     Row(Modifier.padding(start = 10.dp, end = if (closable) 2.dp else 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
       Icon(AglynIcons.named(tab.icon ?: "tab"), null, Modifier.size(14.dp), tint = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
       val split = tab.title.lastIndexOf(" — ")
@@ -1001,6 +1125,18 @@ internal fun TitleBarButton(label: String, icon: String, tag: String, enabled: B
   }
 }
 
+/** The phone top bar's AI button: [TitleBarButton]'s ✦, which wears the brand gradient in the phone's bold look (Figma Phone/Top bar 273:20194). */
+@Composable
+internal fun TitleBarAIButton(label: String, tag: String, onClick: () -> Unit) {
+  if (!com.aglyn.ui.LocalPhoneBold.current) return TitleBarButton(label, "auto_awesome", tag, onClick = onClick)
+  val m = com.aglyn.ui.shellMetrics
+  WithTooltip(label) {
+    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(m.barButton).testTag(tag)) {
+      com.aglyn.ui.AIGlyph(size = m.barIcon, contentDescription = label)
+    }
+  }
+}
+
 /** Opens one of the person's recent items: set by the shell, which knows how to reach its workspace and site. */
 /** What a page with no trail of its own puts in the breadcrumbs slot. */
 private val NoCrumbs: @Composable () -> Unit = {}
@@ -1018,6 +1154,7 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
   if (full) {
     androidx.compose.material3.AlertDialog(
       onDismissRequest = { full = false },
+      modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW),
       title = { Text("Starred is full") },
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
       confirmButton = { com.aglyn.ui.TextButton(onClick = { full = false }) { Text("OK") } },
@@ -1151,3 +1288,40 @@ internal fun HomeTabMark(services: ShellServices, workspace: com.aglyn.core.Work
     Box(Modifier.size(0.dp).testTag("home-tab-brand-mark"))
   }
 }
+
+/** One place the content area shows: a tab's destination or a screen pushed on it, so a change can pick its motion. */
+internal data class ContentPlace(val tab: String, val key: String, val depth: Int, val top: String, val route: Route?)
+
+/** How the content area moves from one place to the next. */
+internal enum class ContentMotion { PUSH, POP, FADE }
+
+/**
+ * A screen pushed on the same destination slides in (PUSH); one uncovered by going back slides in from the other side
+ * (POP); anything else (another destination, section or tab, or the drill between workspace and site) cross-fades.
+ */
+internal fun contentMotion(from: ContentPlace, to: ContentPlace): ContentMotion = when {
+  from.tab != to.tab || from.top != to.top -> ContentMotion.FADE
+  to.depth > from.depth -> ContentMotion.PUSH
+  to.depth < from.depth -> ContentMotion.POP
+  else -> ContentMotion.FADE
+}
+
+/**
+ * The motion's transform: a push or pop brings the arriving screen [offsetPx] in from the trailing (or leading) side and
+ * fades it in on the drill's spring (about 250 ms) while the leaving one fades out; a cross-fade is 150 ms. Reduce Motion
+ * keeps only the fades, at the same durations.
+ */
+internal fun contentTransform(from: ContentPlace, to: ContentPlace, reduce: Boolean, offsetPx: Int): androidx.compose.animation.ContentTransform {
+  val motion = contentMotion(from, to)
+  val fadeOut = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(com.aglyn.ui.ShellMotion.CROSS_FADE_MS))
+  if (motion == ContentMotion.FADE) {
+    return androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.aglyn.ui.ShellMotion.CROSS_FADE_MS)) togetherWith fadeOut
+  }
+  val fadeIn = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.aglyn.ui.ShellMotion.DRILL_MS))
+  if (reduce) return fadeIn togetherWith fadeOut
+  val startX = if (motion == ContentMotion.PUSH) offsetPx else -offsetPx
+  return (androidx.compose.animation.slideInHorizontally(com.aglyn.ui.ShellMotion.drill()) { startX } + fadeIn) togetherWith fadeOut
+}
+
+/** A plain holder a composition keeps (not state: reading it never subscribes). */
+private class SlotRef<T>(var value: T)

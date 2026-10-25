@@ -125,7 +125,7 @@ private struct WorkspacePickerRow: View {
           AglynWorkspaceTile(
             name: org.name, logoURL: model.mediaURL(logo?.light, hostID: nil),
             darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org.id).color,
-            selected: false, size: 28)
+            selected: false, size: 28, initials: workspaceInitial(org.name))
           VStack(alignment: .leading, spacing: 1) {
             Text(org.name).font(AglynFont.body).lineLimit(1)
             if !subtitle.isEmpty { Text(subtitle).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1) }
@@ -375,9 +375,6 @@ struct AddWorkspaceSheet: View {
   @Environment(AppModel.self) private var model
   let done: () -> Void
   @State private var creating = false
-  @State private var invites: [PendingInvite] = []
-  @State private var answering: String?
-  @State private var error: String?
 
   var body: some View {
     if creating {
@@ -385,19 +382,14 @@ struct AddWorkspaceSheet: View {
     } else {
       NavigationStack {
         Form {
-          if !invites.isEmpty {
+          // Invitations join on their own (AGL-4023): the ones still on their way, never an Accept.
+          if let invites = model.invites, !(invites.joining.isEmpty && invites.waiting.isEmpty) {
             Section("Invitations") {
-              ForEach(invites) { invite in
-                HStack {
-                  Text(invite.sentence).frame(maxWidth: .infinity, alignment: .leading)
-                  Button(answering == invite.id ? "Joining…" : "Accept") { accept(invite) }
-                    .buttonStyle(.aglynProminent)
-                    .disabled(answering != nil)
-                }
+              ForEach(invites.joining + invites.waiting) { invite in
+                InviteJoinStatus(invite: invite, joining: invites.statuses[invite.id] == .joining)
               }
             }
           }
-          if let error { Text(error).foregroundStyle(AglynColor.error) }
           Section {
             Button("Create a workspace", systemImage: "plus") { creating = true }
               .accessibilityIdentifier("add-workspace-create")
@@ -408,26 +400,9 @@ struct AddWorkspaceSheet: View {
         .formStyle(.grouped)
         .navigationTitle("Add workspace")
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { done() } } }
-        .task { invites = await model.signUpService?.pendingInvites() ?? [] }
+        .task { await model.joinInvites() }
       }
       .aglynSheetMinimumSize(width: 420, height: 300)
-    }
-  }
-
-  private func accept(_ invite: PendingInvite) {
-    guard let service = model.signUpService else { return }
-    answering = invite.id
-    error = nil
-    Task {
-      do {
-        try await service.answer(invite, accept: true)
-        model.workspace?.reload()
-        model.workspace?.open(orgID: invite.orgID)
-        done()
-      } catch {
-        self.error = (error as? ConsoleAPIError)?.message ?? "Accepting the invite failed"
-      }
-      answering = nil
     }
   }
 }

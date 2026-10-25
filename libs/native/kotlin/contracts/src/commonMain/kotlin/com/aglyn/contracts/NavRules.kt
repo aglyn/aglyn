@@ -196,3 +196,40 @@ fun rankedNavScreens(text: String, scope: OneBoxScope, enabledPluginIds: Collect
   searchNavScreens(text, scope, enabledPluginIds, hostAdmin)
     .sortedWith { a, b -> scoredOrder.compare(a.score to a.row.label, b.score to b.row.label) }
     .map { it.row }
+
+// ── The phone's Home (AGL-4006) ─────────────────────────────────────────────
+
+/**
+ * The phone's Home: every area of the scope as the same tile, in the sidebar's own groups (its More headed Tools), then
+ * the scope's own places last: Overview and Site settings in a site, Team and Workspace settings everywhere. [list] is the
+ * scope's everyday list as the app shows it, [team] the workspace settings' Members row when the person may open it, and
+ * [ownerName] heads the whole workspace's areas.
+ */
+fun phoneHomeGroups(list: ResolvedNavList, team: NativeNavRow?, ownerName: String): List<PhoneHomeGroup> {
+  val inSite = list.id == NativeNavListId.SITE
+  val own = mutableListOf<NativeNavRow>()
+  val groups = mutableListOf<PhoneHomeGroup>()
+  for (group in list.groups) {
+    if (group.dynamic != null) continue
+    val rows = group.rows.filter { it.screen != "shell.home" }
+    if (group.id == "top" || group.id == "settings") {
+      own += rows
+      continue
+    }
+    if (rows.isEmpty()) continue
+    val label = Contracts.phoneHomeGroupLabels[group.id] ?: group.label ?: ownerName.ifEmpty { null }
+    groups += PhoneHomeGroup(id = group.id, label = label, rows = rows)
+  }
+  team?.let { own += it.copy(label = Contracts.phoneHomeTeamLabel) }
+  own += Contracts.workspaceSettingsRow
+  groups += PhoneHomeGroup(
+    id = "scope",
+    label = if (inSite) Contracts.phoneHomeSiteGroupLabel else Contracts.phoneHomeWorkspaceGroupLabel,
+    rows = own,
+  )
+  return groups
+}
+
+/** Whether a Home tile may go in the tab bar: an area, never Home itself or a settings mode. */
+fun isTabPinnable(screen: String): Boolean =
+  screen != "shell.home" && screen != "shell.workspaceSettings" && screen != "shell.siteSettings"

@@ -28,8 +28,18 @@ class BesignerNavigationTest {
   }
 
   @Test
-  fun anotherSiteIsExternal() {
-    assertEquals(BesignerNavigation.External, besignerNavigation("https://evil.example/acme/hosts/shop/theme", origin))
-    assertEquals(BesignerNavigation.External, besignerNavigation("http://app.aglyn.com/acme/hosts/shop/theme", origin))
+  fun anotherSiteIsExternalOnlyFromALinkThePersonClicked() {
+    assertEquals(BesignerNavigation.External, besignerNavigation("https://evil.example/acme/hosts/shop/theme", origin, userActivated = true))
+    assertEquals(BesignerNavigation.External, besignerNavigation("http://app.aglyn.com/acme/hosts/shop/theme", origin, userActivated = true))
+  }
+
+  /** The console's once-a-day editor-hint bounce opened the person's browser beside the in-app Besigner (AGL-4002). */
+  @Test
+  fun aScriptOrRedirectToAnotherSiteIsDroppedNotOpenedInTheBrowser() {
+    val bounce = "https://console.aglyn.app/api/edit-hint/set?sig=abc&return=https%3A%2F%2Fapp.aglyn.com%2Fauth%2Fbesigner"
+    assertEquals(BesignerNavigation.Ignore, besignerNavigation(bounce, origin, "/acme/hosts/shop/screens/s1/versions/v2/besigner"))
+    assertEquals(BesignerNavigation.Ignore, besignerNavigation("https://evil.example/", origin))
+    // The console's own pages are decided the same way however they were reached.
+    assertEquals(BesignerNavigation.Native("/acme/hosts/shop/screens"), besignerNavigation("$origin/acme/hosts/shop/screens", origin, userActivated = false))
   }
 }

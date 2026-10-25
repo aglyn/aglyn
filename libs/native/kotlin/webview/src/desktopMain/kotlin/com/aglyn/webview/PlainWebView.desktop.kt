@@ -46,7 +46,7 @@ actual fun PlainWebView(state: WebPageState, onLeave: (url: String) -> Unit, mod
   var view by remember { mutableStateOf<WebView2View?>(null) }
   val listener = remember(state) {
     WebView2Listener(
-      onNavigation = { uri ->
+      onNavigation = { uri, _ ->
         if (webDestination(uri) == WebDestination.SYSTEM) {
           scope.launch { leave(uri) }
           NavigationVerdict.CANCEL

@@ -47,6 +47,19 @@ struct FieldsBlock: View {
 }
 
 /// The tone a row or badge takes: a fixed `tone`, or `tones` keyed by its value.
+/// A list row's badge as chips: one, or with `each` (a path to a list) one per row of that list, the row read as `row` (a
+/// resource's units left on each of the next nights). `when` is read once, against the list row.
+func rowBadges(_ badge: JSONValue, in scope: JSONValue) -> [(String, AglynTone)] {
+  guard ScreenValues.condition(badge["when"]?.stringValue, in: scope) else { return [] }
+  let scopes = badge["each"]?.stringValue.map { path in
+    ScreenValues.rows(ScreenValues.lookup(path, in: scope)).map { ScreenContext.with(scope, "row", $0) }
+  } ?? [scope]
+  return scopes.compactMap { here in
+    let text = ScreenValues.render(badge["text"]?.stringValue ?? "", in: here)
+    return text.isEmpty ? nil : (text, toneFor(badge, value: text, in: here))
+  }
+}
+
 func toneFor(_ spec: JSONValue, value: String, in context: JSONValue) -> AglynTone {
   if case .object(let map)? = spec["tones"] {
     return tone(map[value]?.stringValue ?? map["*"]?.stringValue)
@@ -90,13 +103,16 @@ struct MeterRow: View {
     let limit = ScreenValues.number(limitValue)
     let usedText = ScreenValues.formatted(usedValue, as: format, in: scope)
     let unlimited = limit == nil || (limit ?? 0) < 0
+    let explicitlyUnlimited = (limit ?? 0) < 0
     let limitText = unlimited ? "Unlimited" : ScreenValues.formatted(limitValue, as: format, in: scope)
     let fraction = unlimited || (limit ?? 0) <= 0 ? 0 : min(1, used / (limit ?? 1))
     VStack(alignment: .leading, spacing: 6) {
       HStack {
         Text(label).font(AglynFont.body)
         Spacer()
-        Text(unlimited ? usedText : "\(usedText) of \(limitText)")
+        // An uncapped meter says so, as the console's usage meter does ("8,964 / Unlimited"); one with no limit at all
+        // is a count.
+        Text(unlimited ? (explicitlyUnlimited ? "\(usedText) / Unlimited" : usedText) : "\(usedText) of \(limitText)")
           .font(AglynFont.subheadline).foregroundStyle(.secondary).monospacedDigit()
       }
       if !unlimited {
@@ -125,10 +141,17 @@ struct ListBlock: View {
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
-  /// The choice made in the list's `chips` filter; empty shows every row.
-  @State private var chosen = ""
+  /// The list toolbar draws its sort, columns and chips (in its one Filter menu, `SpecListFilter`) on the Mac and iPad,
+  /// so the list has no header row of its own for them.
+  var toolbarControls = false
   /// How many more pages of a `page`d list "Show more" has revealed.
   @State private var revealed = 0
+
+  /// The choice made in the list's `chips` filter; empty shows every row.
+  private var chosen: String { model.chips[ListColumns.key(of: block)] ?? "" }
+  private var chosenBinding: Binding<String> {
+    Binding(get: { model.chips[ListColumns.key(of: block)] ?? "" }, set: { model.chips[ListColumns.key(of: block)] = $0 })
+  }
 
   var body: some View {
     let key = ListColumns.key(of: block)
@@ -147,8 +170,8 @@ struct ListBlock: View {
     let page = block["page"]?.numberValue.map { Int($0) } ?? 0
     let shown = page > 0 ? Array(rows.prefix(page * (1 + revealed))) : rows
     Section {
-      if !chipValues.isEmpty {
-        Picker(chips?["label"]?.stringValue ?? "Filter", selection: $chosen) {
+      if !chipValues.isEmpty, !toolbarControls {
+        Picker(chips?["label"]?.stringValue ?? "Filter", selection: chosenBinding) {
           Text("All").tag("")
           ForEach(chipValues, id: \.self) { Text($0).tag($0) }
         }
@@ -183,8 +206,8 @@ struct ListBlock: View {
         .accessibilityIdentifier("load-more-\(loadKey)")
       }
     } header: {
-      let sortable = columns.filter(\.sortable)
-      let pickable = columns.filter { !$0.always }
+      let sortable = toolbarControls ? [] : columns.filter(\.sortable)
+      let pickable = toolbarControls ? [] : columns.filter { !$0.always }
       if !(title ?? "").isEmpty || !sortable.isEmpty || !pickable.isEmpty {
         HStack {
           Text(title ?? "")
@@ -278,6 +301,8 @@ struct ListBlock: View {
 }
 
 struct ListRow: View {
+  @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynScreenSession) private var session
   let block: BlockSpec
   let scope: JSONValue
   /// The row's picked columns as one line (`columns`), empty for a list without them.
@@ -298,38 +323,54 @@ struct ListRow: View {
   }
 
   var body: some View {
-    let primary = ScreenValues.render(block["primary"]?.stringValue ?? "{item.name|item.$id}", in: scope)
+    // A template, or a list of parts joined with ` · ` as `secondary` takes them (a part shown only while its `when` holds).
+    let primary: String = {
+      if case .array(_)? = block["primary"] { return rowLine(block["primary"], in: scope) ?? "" }
+      return ScreenValues.render(block["primary"]?.stringValue ?? "{item.name|item.$id}", in: scope)
+    }()
     let secondary = rowLine(block["secondary"], in: scope)
     let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
-    let badges = block["badges"].array.compactMap { badge -> (String, AglynTone)? in
-      guard ScreenValues.condition(badge["when"]?.stringValue, in: scope) else { return nil }
-      let text = ScreenValues.render(badge["text"]?.stringValue ?? "", in: scope)
-      return text.isEmpty ? nil : (text, toneFor(badge, value: text, in: scope))
-    }
+    let badges = block["badges"].array.flatMap { badge in rowBadges(badge, in: scope) }
+    // On the Mac and iPad a row is at most three lines (Figma List/Site row): its name, one line of detail, one line
+    // of the picked columns, with its badges at the trailing end; a phone keeps the fuller stack.
     let row = HStack(alignment: .center, spacing: 12) {
-      if let icon = block["icon"]?.stringValue {
+      if let avatar = block["avatar"]?.stringValue {
+        // `avatar`: the row is a person, drawn with their photo (the console's avatar), their initials when they have
+        // none (AGL-4010).
+        let photo = ScreenValues.render(avatar, in: scope)
+        AglynAccountAvatar(
+          initials: accountInitials(name: primary, email: nil),
+          photoURL: mediaPreviewURL(photo.isEmpty ? nil : photo, origin: session.origin, hostID: nil, width: 128),
+          size: 30)
+      } else if let icon = block["icon"]?.stringValue {
         IconBadge(ScreenSpec.appleIcon(ScreenValues.render(icon, in: scope)), tone: .info, size: 30, circle: true)
           .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: 3) {
-        Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(2)
+        Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(wide ? 1 : 2)
         if let secondary, !secondary.isEmpty {
-          Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+          Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(wide ? 1 : 2)
         }
         if !columnsLine.isEmpty {
-          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(3)
+          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(wide ? 1 : 3)
         }
-        if let tertiary, !tertiary.isEmpty {
+        if let tertiary, !tertiary.isEmpty, !wide || columnsLine.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
         }
-        if !badges.isEmpty {
-          HStack(spacing: 6) {
+        if !badges.isEmpty, !wide {
+          AglynWrapRow(spacing: AglynSpace.of(0.75), lineSpacing: AglynSpace.of(0.75)) {
             ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
           }
         }
       }
       Spacer(minLength: 8)
+      if !badges.isEmpty, wide {
+        HStack(spacing: 6) {
+          ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
+        }
+        .fixedSize()
+      }
       if let trailing, !trailing.isEmpty {
         Text(trailing).font(AglynFont.subheadline).foregroundStyle(.secondary).monospacedDigit()
       }
@@ -363,12 +404,12 @@ struct ListRow: View {
       }
       if let toggle = rowToggle(primary) { toggle }
     }
-    .listRowBackground(target != nil && selection?.wrappedValue == target ? AglynColor.tint.opacity(0.14) : nil)
+    .aglynRowSelected(target != nil && selection?.wrappedValue == target)
     .contextMenu { menuItems }
     #if os(iOS)
       .swipeActions(edge: .trailing) {
         ForEach(actions.filter(\.destructive).prefix(1)) { action in
-          Button(role: .destructive) { trigger(action, scope) } label: { Label(action.label, systemImage: action.icon ?? "trash") }
+          Button(role: .destructive) { trigger(action, scope) } label: { Label(ScreenValues.render(action.label, in: scope), systemImage: action.icon ?? "trash") }
         }
       }
     #endif
@@ -524,6 +565,21 @@ struct FieldInput: View {
             ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
           }
         }
+      case "choice":
+        // One of a few rows, each with a line under it and a mark (the console's tier menu: price, credits, Current);
+        // a row that cannot be picked stays, dimmed, with its reason.
+        VStack(alignment: .leading, spacing: 0) {
+          Text(label).font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+            .padding(.bottom, AglynSpace.half)
+          ForEach(field.choiceRows(in: context)) { choice in
+            AglynChoiceRow(
+              choice.label, detail: choice.detail,
+              badge: choice.badge.map { ($0.text, tone($0.tone)) },
+              selected: text.wrappedValue == choice.value, enabled: choice.enabled
+            ) { text.wrappedValue = choice.value }
+            .accessibilityIdentifier("choice-\(field.key)-\(choice.value)")
+          }
+        }
       case "hours":
         HoursInput(field: field, text: text)
       case "multiselect":
@@ -595,7 +651,7 @@ struct FieldInput: View {
           .buttonStyle(.borderless)
           .accessibilityIdentifier("generate-\(field.key)")
       }
-      if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.mismatches(.string(text.wrappedValue), in: context) {
+      if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.refuses(.string(text.wrappedValue), in: context) {
         Text(ScreenValues.render(mismatch, in: context)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
       } else if let help = field.help {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
@@ -657,7 +713,7 @@ struct FormBlock: View {
         HStack(spacing: AglynSpace.one) {
           Spacer(minLength: 0)
           if busy { ProgressView().controlSize(.small) }
-          Button(action.label) {
+          Button(ScreenValues.render(action.label, in: scope)) {
             submit(action, visibleOnly(filled, fields))
           }
           .buttonStyle(.aglynProminent)
@@ -970,5 +1026,102 @@ struct PlainFormRow<Control: View>: View {
     } else {
       control
     }
+  }
+}
+
+/// A list screen's one Filter control on the Mac and iPad (Figma List toolbar, Calm rule 3): beside its search, one menu
+/// holding what the list can be narrowed and ordered by. The screen's own filter action (one that opens this screen
+/// again with the person's choices, such as the staff lists' "Filter the list"), the list's `chips` values, its sort
+/// columns and the columns its rows show. It reads as on, with the choice's name, once a chip or a filter is picked.
+struct SpecListFilter: View {
+  let block: BlockSpec
+  @Bindable var model: ScreenModel
+  let context: JSONValue
+  /// The screen's actions that filter its own list.
+  let filters: [ActionSpec]
+  let trigger: (ActionSpec, JSONValue) -> Void
+
+  var body: some View {
+    let key = ListColumns.key(of: block)
+    let columns = ListColumns.columns(of: block)
+    let sortable = columns.filter(\.sortable)
+    let pickable = columns.filter { !$0.always }
+    let asked = model.order[key]
+    let chosenColumn = asked.flatMap { order in columns.first { $0.id == order.column } }
+    let chips = block["chips"]
+    let chipValues = chips.map { ScreenValues.lookup($0["from"]?.stringValue ?? "", in: context).array.map { ScreenValues.text($0) } } ?? []
+    let chosen = model.chips[key] ?? ""
+    let shown = model.shownColumns(of: key, in: columns)
+    if !filters.isEmpty || !chipValues.isEmpty || !sortable.isEmpty || !pickable.isEmpty {
+      AglynFilterMenu(active: activeName(chosen: chosen)) {
+        ForEach(filters) { action in
+          Button {
+            trigger(action, context)
+          } label: {
+            Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "line.3.horizontal.decrease")
+          }
+        }
+        if !chipValues.isEmpty {
+          Picker(
+            chips?["label"]?.stringValue ?? "Show",
+            selection: Binding(get: { model.chips[key] ?? "" }, set: { model.chips[key] = $0 })
+          ) {
+            Text("All").tag("")
+            ForEach(chipValues, id: \.self) { Text($0).tag($0) }
+          }
+          .pickerStyle(.inline)
+        }
+        if !sortable.isEmpty {
+          Section("Sort by") {
+            Button {
+              Task { await model.ask(nil, of: key, routed: chosenColumn?.route != nil) }
+            } label: {
+              if asked == nil { Label("Default order", systemImage: "checkmark") } else { Text("Default order") }
+            }
+            ForEach(sortable) { column in
+              let active = asked?.column == column.id ? asked : nil
+              Button {
+                Task {
+                  await model.ask(
+                    ListColumns.next(after: asked, tapping: column), of: key,
+                    routed: column.route != nil || chosenColumn?.route != nil)
+                }
+              } label: {
+                if let active {
+                  Label("\(column.label) \(active.descending ? "\u{2193}" : "\u{2191}")", systemImage: "checkmark")
+                } else {
+                  Text(column.label)
+                }
+              }
+            }
+          }
+        }
+        if !pickable.isEmpty {
+          Section("Show") {
+            ForEach(pickable) { column in
+              Toggle(
+                column.label,
+                isOn: Binding(
+                  get: { shown.contains(column.id) },
+                  set: { on in model.shown[key] = on ? shown.union([column.id]) : shown.subtracting([column.id]) }))
+            }
+          }
+        }
+      }
+      .accessibilityIdentifier("list-filter-\(key)")
+    }
+  }
+
+  /// The Filter button's name while something narrows the list: the chip picked, else the filter action's first
+  /// choice that is set (its prompt's label), else nothing.
+  private func activeName(chosen: String) -> String? {
+    if !chosen.isEmpty { return chosen }
+    for action in filters {
+      for field in action.prompt {
+        let value = ScreenValues.text(ScreenValues.lookup("params.\(field.key)", in: context))
+        if !value.isEmpty { return field.label }
+      }
+    }
+    return nil
   }
 }

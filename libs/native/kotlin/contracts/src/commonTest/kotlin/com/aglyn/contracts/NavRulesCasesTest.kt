@@ -58,6 +58,41 @@ class NavRulesCasesTest {
     }
   }
 
+  /** The phone's tab bar (AGL-4006): pins per scope, the first-opened default, and where Create goes. */
+  @Test
+  fun phoneTabBar() {
+    val barList = ListSerializer(TabBarPins.serializer())
+    fun bars(json: JsonElement): List<TabBarPins> = readTabBars(mapOf("tabBars" to plainOf(json)))
+    cases("tabBarScope").forEach { (args, result) ->
+      assertEquals(text(result), tabBarScope(text(args[0]), args.getOrNull(1)?.let(::nullableString)), args.toString())
+    }
+    cases("readTabBars").forEach { (args, result) -> same(result, readTabBars(plainOf(args[0])), barList, args.toString()) }
+    cases("tabBarAreas").forEach { (args, result) -> same(result, tabBarAreas(bars(args[0]), text(args[1])), strings, args.toString()) }
+    cases("pinTabArea").forEach { (args, result) ->
+      same(result, pinTabArea(bars(args[0]), text(args[1]), text(args[2])), TabPinResult.serializer(), args.toString())
+    }
+    cases("unpinTabArea").forEach { (args, result) -> same(result, unpinTabArea(bars(args[0]), text(args[1]), text(args[2])), barList, args.toString()) }
+    cases("moveTabArea").forEach { (args, result) ->
+      same(result, moveTabArea(bars(args[0]), text(args[1]), text(args[2]), args[3].jsonPrimitive.content.toDouble().toInt()), barList, args.toString())
+    }
+    cases("setTabAreas").forEach { (args, result) -> same(result, setTabAreas(bars(args[0]), text(args[1]), ids(args[2])), barList, args.toString()) }
+    cases("autoPinTabArea").forEach { (args, result) -> same(result, autoPinTabArea(bars(args[0]), text(args[1]), text(args[2])), barList, args.toString()) }
+    cases("tabBarLayout").forEach { (args, result) -> same(result, tabBarLayout(ids(args[0]), ids(args[1])), TabBarLayout.serializer(), args.toString()) }
+  }
+
+  /** The phone's Home (AGL-4006): every area as the same tile, More headed Tools, the scope's own places last. */
+  @Test
+  fun phoneHome() {
+    cases("phoneHomeGroups").forEach { (args, result) ->
+      val list = decode(ResolvedNavList.serializer(), args[0])
+      val team = (args[1] as? kotlinx.serialization.json.JsonObject)?.let { decode(NativeNavRow.serializer(), it) }
+      same(result, phoneHomeGroups(list, team, text(args[2])), ListSerializer(PhoneHomeGroup.serializer()), args.toString())
+    }
+    cases("isTabPinnable").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.booleanOrNull, isTabPinnable(text(args[0].jsonObject.getValue("screen"))), args.toString())
+    }
+  }
+
   @Test
   fun recentWorkspacesAndTheRail() {
     cases("readRecentOrgs").forEach { (args, result) -> same(result, readRecentOrgs(plainOf(args[0])), strings, args.toString()) }
@@ -65,6 +100,7 @@ class NavRulesCasesTest {
     cases("railWorkspaces").forEach { (args, result) ->
       same(result, railWorkspaces(ids(args[0]), ids(args[1]), ids(args[2])), RailWorkspaces.serializer(), args.toString())
     }
+    cases("workspaceInitial").forEach { (args, result) -> assertEquals(text(result), workspaceInitial(text(args[0])), args.toString()) }
   }
 
   @Test
@@ -90,13 +126,27 @@ class NavRulesCasesTest {
   }
 
   @Test
+  fun photoAndName() {
+    cases("readAccountPhoto").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.contentOrNull, readAccountPhoto(plainOf(args[0]), plainOf(args[1])), args.toString())
+    }
+    cases("readAccountName").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, readAccountName(plainOf(args[0]), plainOf(args[1]), plainOf(args[2])), args.toString())
+    }
+  }
+
+  @Test
   fun colorsAndTheme() {
     cases("isAccountColor").forEach { (args, result) -> assertEquals(result.jsonPrimitive.booleanOrNull, isAccountColor(plainOf(args[0])), args.toString()) }
     cases("readWorkspaceColors").forEach { (args, result) ->
       same(result, readWorkspaceColors(plainOf(args[0])), MapSerializer(String.serializer(), String.serializer()), args.toString())
     }
     cases("resolveWorkspaceColor").forEach { (args, result) ->
-      same(result, resolveWorkspaceColor(plainOf(args[0]), plainOf(args[1]), plainOf(args[2]), args[3].jsonPrimitive.booleanOrNull == true), WorkspaceColor.serializer(), args.toString())
+      val orgId = if (args.size > 4) plainOf(args[4]) else null
+      same(result, resolveWorkspaceColor(plainOf(args[0]), plainOf(args[1]), plainOf(args[2]), args[3].jsonPrimitive.booleanOrNull == true, orgId), WorkspaceColor.serializer(), args.toString())
+    }
+    cases("workspaceStableColor").forEach { (args, result) ->
+      assertEquals(nullableString(result), workspaceStableColor(plainOf(args[0])), args.toString())
     }
     cases("readAppTheme").forEach { (args, result) -> same(result, readAppTheme(plainOf(args[0])), AppThemePrefs.serializer(), args.toString()) }
     // What is written back reads the same.

@@ -224,6 +224,7 @@ fun DateTimeField(
     val time = rememberTimePickerState(initialHour = minutes / 60, initialMinute = minutes % 60)
     AlertDialog(
       onDismissRequest = { pickedDay = null },
+      modifier = Modifier.sheetEntrance(SheetEntrance.GROW),
       title = { Text("Pick a time") },
       text = { TimePicker(time) },
       confirmButton = {

@@ -1,5 +1,5 @@
 {
-  "$comment": "Reservation pricing and availability from libs/plugins/commerce/src/lib/model/commerce-reservations.ts (the console). Replayed by Swift and Kotlin; libs/plugins/commerce/src/lib/native-stays-cases.spec.ts keeps it equal to the TypeScript.",
+  "$comment": "Reservation pricing, availability and units (several identical units per resource, AGL-4044) from libs/plugins/commerce/src/lib/model/commerce-reservations.ts (the console). Replayed by Swift and Kotlin; libs/plugins/commerce/src/lib/native-stays-cases.spec.ts keeps it equal to the TypeScript.",
   "nowMs": 1790856000000,
   "blocks": [
     {
@@ -1030,6 +1030,642 @@
       "checkIn": "2026-10-05",
       "checkOut": "2026-10-05",
       "available": false
+    }
+  ],
+  "units": [
+    {
+      "units": 1
+    },
+    {
+      "raw": 12,
+      "units": 12
+    },
+    {
+      "raw": 1,
+      "units": 1
+    },
+    {
+      "raw": 500,
+      "units": 500
+    },
+    {
+      "raw": 501,
+      "units": 500
+    },
+    {
+      "raw": 2.7,
+      "units": 2
+    },
+    {
+      "raw": 0,
+      "units": 1
+    },
+    {
+      "raw": -3,
+      "units": 1
+    },
+    {
+      "raw": null,
+      "units": 1
+    },
+    {
+      "raw": "12",
+      "units": 12
+    },
+    {
+      "raw": " 7 ",
+      "units": 7
+    },
+    {
+      "raw": "",
+      "units": 1
+    },
+    {
+      "raw": "abc",
+      "units": 1
+    },
+    {
+      "raw": true,
+      "units": 1
+    },
+    {
+      "raw": false,
+      "units": 1
+    },
+    {
+      "raw": "Infinity",
+      "units": 1
+    },
+    {
+      "raw": 1000000000,
+      "units": 500
+    }
+  ],
+  "multiUnit": [
+    {
+      "name": "12 RV hookups, partly booked",
+      "units": 12,
+      "blocks": [
+        {
+          "fromDayMs": 1792281600000,
+          "toDayMs": 1792368000000
+        }
+      ],
+      "stays": [
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791590400000,
+          "checkOutDayMs": 1791763200000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791676800000,
+          "checkOutDayMs": 1791763200000,
+          "status": "checked_in"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1792022400000,
+          "checkOutDayMs": 1792108800000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "cancelled"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "no_show"
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "pending",
+          "createdAtMs": 1790855400000
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "pending",
+          "createdAtMs": 1790854140000
+        },
+        {
+          "checkInDayMs": 1791849600000,
+          "checkOutDayMs": 1791936000000,
+          "status": "pending"
+        }
+      ],
+      "availability": [
+        {
+          "checkIn": "2026-10-10",
+          "checkOut": "2026-10-11",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-10",
+          "checkOut": "2026-10-12",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-11",
+          "checkOut": "2026-10-12",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-12",
+          "checkOut": "2026-10-13",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-13",
+          "checkOut": "2026-10-14",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-12",
+          "checkOut": "2026-10-14",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-14",
+          "checkOut": "2026-10-15",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-14",
+          "checkOut": "2026-10-16",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-15",
+          "checkOut": "2026-10-16",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-16",
+          "checkOut": "2026-10-17",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-16",
+          "checkOut": "2026-10-18",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-17",
+          "checkOut": "2026-10-19",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-18",
+          "checkOut": "2026-10-19",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-19",
+          "checkOut": "2026-10-21",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-12",
+          "checkOut": "2026-10-12",
+          "available": false
+        },
+        {
+          "checkIn": "2026-10-14",
+          "checkOut": "2026-10-13",
+          "available": false
+        }
+      ],
+      "nightsFrom": "2026-10-09",
+      "nights": [
+        {
+          "day": "2026-10-09",
+          "unitsLeft": 12,
+          "units": 12
+        },
+        {
+          "day": "2026-10-10",
+          "unitsLeft": 1,
+          "units": 12
+        },
+        {
+          "day": "2026-10-11",
+          "unitsLeft": 0,
+          "units": 12
+        },
+        {
+          "day": "2026-10-12",
+          "unitsLeft": 12,
+          "units": 12
+        },
+        {
+          "day": "2026-10-13",
+          "unitsLeft": 1,
+          "units": 12
+        },
+        {
+          "day": "2026-10-14",
+          "unitsLeft": 12,
+          "units": 12
+        },
+        {
+          "day": "2026-10-15",
+          "unitsLeft": 0,
+          "units": 12
+        },
+        {
+          "day": "2026-10-16",
+          "unitsLeft": 12,
+          "units": 12
+        },
+        {
+          "day": "2026-10-17",
+          "unitsLeft": 12,
+          "units": 12
+        },
+        {
+          "day": "2026-10-18",
+          "unitsLeft": 0,
+          "units": 12
+        },
+        {
+          "day": "2026-10-19",
+          "unitsLeft": 12,
+          "units": 12
+        },
+        {
+          "day": "2026-10-20",
+          "unitsLeft": 12,
+          "units": 12
+        }
+      ]
+    },
+    {
+      "name": "3 matching cabins",
+      "units": 3,
+      "blocks": [],
+      "stays": [
+        {
+          "checkInDayMs": 1793491200000,
+          "checkOutDayMs": 1793750400000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1793577600000,
+          "checkOutDayMs": 1793664000000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1793577600000,
+          "checkOutDayMs": 1793836800000,
+          "status": "checked_in"
+        },
+        {
+          "checkInDayMs": 1793664000000,
+          "checkOutDayMs": 1793750400000,
+          "status": "pending",
+          "createdAtMs": 1790855700000
+        }
+      ],
+      "availability": [
+        {
+          "checkIn": "2026-11-01",
+          "checkOut": "2026-11-02",
+          "available": true
+        },
+        {
+          "checkIn": "2026-11-01",
+          "checkOut": "2026-11-03",
+          "available": false
+        },
+        {
+          "checkIn": "2026-11-02",
+          "checkOut": "2026-11-03",
+          "available": false
+        },
+        {
+          "checkIn": "2026-11-03",
+          "checkOut": "2026-11-04",
+          "available": false
+        },
+        {
+          "checkIn": "2026-11-04",
+          "checkOut": "2026-11-06",
+          "available": true
+        },
+        {
+          "checkIn": "2026-11-05",
+          "checkOut": "2026-11-06",
+          "available": true
+        },
+        {
+          "checkIn": "2026-10-30",
+          "checkOut": "2026-11-02",
+          "available": true
+        }
+      ],
+      "nightsFrom": "2026-10-31",
+      "nights": [
+        {
+          "day": "2026-10-31",
+          "unitsLeft": 3,
+          "units": 3
+        },
+        {
+          "day": "2026-11-01",
+          "unitsLeft": 2,
+          "units": 3
+        },
+        {
+          "day": "2026-11-02",
+          "unitsLeft": 0,
+          "units": 3
+        },
+        {
+          "day": "2026-11-03",
+          "unitsLeft": 0,
+          "units": 3
+        },
+        {
+          "day": "2026-11-04",
+          "unitsLeft": 2,
+          "units": 3
+        },
+        {
+          "day": "2026-11-05",
+          "unitsLeft": 3,
+          "units": 3
+        },
+        {
+          "day": "2026-11-06",
+          "unitsLeft": 3,
+          "units": 3
+        }
+      ]
+    },
+    {
+      "name": "units stored as text",
+      "units": "2",
+      "blocks": [],
+      "stays": [
+        {
+          "checkInDayMs": 1796860800000,
+          "checkOutDayMs": 1797033600000,
+          "status": "confirmed"
+        },
+        {
+          "checkInDayMs": 1796947200000,
+          "checkOutDayMs": 1797033600000,
+          "status": "confirmed"
+        }
+      ],
+      "availability": [
+        {
+          "checkIn": "2026-12-10",
+          "checkOut": "2026-12-11",
+          "available": true
+        },
+        {
+          "checkIn": "2026-12-11",
+          "checkOut": "2026-12-12",
+          "available": false
+        },
+        {
+          "checkIn": "2026-12-09",
+          "checkOut": "2026-12-11",
+          "available": true
+        }
+      ],
+      "nightsFrom": "2026-12-09",
+      "nights": [
+        {
+          "day": "2026-12-09",
+          "unitsLeft": 2,
+          "units": 2
+        },
+        {
+          "day": "2026-12-10",
+          "unitsLeft": 1,
+          "units": 2
+        },
+        {
+          "day": "2026-12-11",
+          "unitsLeft": 0,
+          "units": 2
+        },
+        {
+          "day": "2026-12-12",
+          "unitsLeft": 2,
+          "units": 2
+        }
+      ]
+    },
+    {
+      "name": "one unit (no units field) behaves as a resource always has",
+      "blocks": [],
+      "stays": [
+        {
+          "checkInDayMs": 1796860800000,
+          "checkOutDayMs": 1797033600000,
+          "status": "confirmed"
+        }
+      ],
+      "availability": [
+        {
+          "checkIn": "2026-12-10",
+          "checkOut": "2026-12-11",
+          "available": false
+        },
+        {
+          "checkIn": "2026-12-12",
+          "checkOut": "2026-12-13",
+          "available": true
+        },
+        {
+          "checkIn": "2026-12-08",
+          "checkOut": "2026-12-10",
+          "available": true
+        }
+      ],
+      "nightsFrom": "2026-12-09",
+      "nights": [
+        {
+          "day": "2026-12-09",
+          "unitsLeft": 1,
+          "units": 1
+        },
+        {
+          "day": "2026-12-10",
+          "unitsLeft": 0,
+          "units": 1
+        },
+        {
+          "day": "2026-12-11",
+          "unitsLeft": 0,
+          "units": 1
+        },
+        {
+          "day": "2026-12-12",
+          "unitsLeft": 1,
+          "units": 1
+        }
+      ]
     }
   ]
 }

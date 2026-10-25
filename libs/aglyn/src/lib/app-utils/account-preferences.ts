@@ -30,6 +30,7 @@
  * | `recents` | {@link RecentItem}s, most recently opened first | 30 |
  * | `workspaceColors` | workspace id → `#RRGGBB` the person picked | 100 |
  * | `appTheme` | {@link AppThemePrefs}, the apps' look, synced | — |
+ * | `tabBars` | {@link TabBarPins}, the phone's tab bar per site and per workspace | 4 areas each, 100 in all |
  *
  * The caps are held twice: here, by every writer, and by the Firestore rules,
  * which refuse a write that grows a list past its cap. A list that is ALREADY
@@ -59,9 +60,6 @@ export const RECENT_ORGS_MAX = 8
 
 /** How many recent workspaces the rail shows below the pins. */
 export const RAIL_RECENT_ORGS = 3
-
-/** An account with this many workspaces or fewer sees them all on the rail. */
-export const RAIL_ALL_WORKSPACES_AT_MOST = 8
 
 /** `users/{uid}` field holding the person's starred screens and records. */
 export const STARRED_FIELD = 'starred'
@@ -169,6 +167,10 @@ export interface AppThemePrefs {
   density: AppDensity
   /** `system` follows Dynamic Type or the font scale; the rest are the Mac and Windows sizes. */
   textSize: AppTextSize
+  /**
+   * `plain` keeps the sidebar on the theme's surface; `tinted` lays the THEME's accent over it at 5%, on a theme other
+   * than Aglyn only (Aglyn's sidebar is always neutral). A workspace's color never tints it: that is its rail tile's.
+   */
   sidebarStyle: AppSidebarStyle
   /** The app icon's id: `aglyn`, or one of the alternates the apps ship. */
   appIcon: string
@@ -458,20 +460,26 @@ export interface RailWorkspaces {
   pinned: string[]
   /** Below the divider: recently opened and not pinned, at most {@link RAIL_RECENT_ORGS}. */
   recent: string[]
-  /** Every other workspace, for an account small enough to list them all. */
+  /**
+   * Workspaces listed on the rail beyond the pins and the recents. Always
+   * empty: every account reaches the rest through the All tile
+   * (AGL-3996). The field stays so the apps that read it need no change.
+   */
   rest: string[]
-  /** Whether the last tile is "All workspaces", opening the searchable switcher. */
+  /** Whether the last tile is "All workspaces", opening the searchable switcher: whenever there is a workspace. */
   allTile: boolean
   /** How many workspaces the person belongs to, shown under the All tile. */
   total: number
 }
 
 /**
- * The rail for one account: up to five pinned, a divider, up to three recent,
- * then an "All workspaces (N)" tile. An account with
- * {@link RAIL_ALL_WORKSPACES_AT_MOST} workspaces or fewer sees them all and
- * no All tile, since there is nothing to hide. `orgIds` is every membership,
- * in the switcher's order; an id the person no longer belongs to is ignored.
+ * The rail for one account, the same for every account however few
+ * workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
+ * pinned, a divider, up to three recent under "Recent", a divider, then the
+ * "All workspaces" tile with the total, which opens the switcher where pins
+ * are edited. A small account that saw every tile in one unlabeled column
+ * had no way into the switcher and no Recent label or divider. `orgIds` is every membership, in the switcher's order;
+ * an id the person no longer belongs to is ignored.
  */
 export function railWorkspaces(
   orgIds: readonly string[],
@@ -482,24 +490,26 @@ export function railWorkspaces(
   const belongs = new Set(members)
   const pins = effectivePinnedOrgs(pinned).filter((id) => belongs.has(id))
   const pinnedSet = new Set(pins)
-  if (members.length <= RAIL_ALL_WORKSPACES_AT_MOST) {
-    return {
-      pinned: pins,
-      recent: [],
-      rest: members.filter((id) => !pinnedSet.has(id)),
-      allTile: false,
-      total: members.length,
-    }
-  }
   return {
     pinned: pins,
     recent: idList(recent)
       .filter((id) => belongs.has(id) && !pinnedSet.has(id))
       .slice(0, RAIL_RECENT_ORGS),
     rest: [],
-    allTile: true,
+    allTile: members.length > 0,
     total: members.length,
   }
+}
+
+/**
+ * The one letter a workspace tile without a logo shows (Figma Rail/Workspace
+ * tile, Type=Initial): the first letter or digit of its name, upper-cased;
+ * "?" for a name with neither. One letter, not two: the tile's color, picked
+ * per workspace, tells two workspaces with the same letter apart.
+ */
+export function workspaceInitial(name: string): string {
+  const first = /[\p{L}\p{N}]/u.exec(name ?? '')
+  return first ? first[0].toUpperCase() : '?'
 }
 
 // ── Starred and recent items ────────────────────────────────────────────────
@@ -661,7 +671,44 @@ export function readWorkspaceColors(profile: unknown): Record<string, string> {
   return out
 }
 
-export type WorkspaceColorSource = 'picked' | 'brand' | 'logo' | 'none'
+/**
+ * The colors a workspace's tile takes when nothing else gives it one
+ * ({@link workspaceStableColor}): the console's blue for text on a light
+ * ground (primary.dark), deep tones of the brand palette's
+ * violet and pink, and a rose, orange, gold, green and teal beside them,
+ * each dark enough that the tile's white initial reads at 4.5:1 or more. The
+ * slate is left out: it is the tile of a workspace with no id at all.
+ */
+export const WORKSPACE_STABLE_COLORS: readonly string[] = [
+  '#0077AD',
+  '#6A4FD8',
+  '#A62BBF',
+  '#C2185B',
+  '#B4501A',
+  '#8A6A00',
+  '#2E7D5B',
+  '#00796B',
+]
+
+/**
+ * The color a workspace with no picked, brand or logo color shows on its
+ * tile: one of {@link WORKSPACE_STABLE_COLORS}, chosen by its id, so the same
+ * workspace has the same color on every device and in every app, and two
+ * workspaces with the same initial usually differ. The id is hashed with
+ * 32-bit FNV-1a over its UTF-16 code units, which each platform computes the
+ * same way. Null for an empty id.
+ */
+export function workspaceStableColor(orgId: unknown): string | null {
+  if (typeof orgId !== 'string' || orgId === '') return null
+  let hash = 0x811c9dc5
+  for (let i = 0; i < orgId.length; i++) {
+    hash ^= orgId.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return WORKSPACE_STABLE_COLORS[hash % WORKSPACE_STABLE_COLORS.length] ?? null
+}
+
+export type WorkspaceColorSource = 'picked' | 'brand' | 'logo' | 'stable' | 'none'
 
 export interface WorkspaceColor {
   /** `#RRGGBB`, or null when nothing gives the workspace a color. */
@@ -678,12 +725,18 @@ export interface WorkspaceColor {
  * it while you are in the workspace unless the person turned "Use each
  * workspace's brand" off, which stops the brand and logo colors tinting the
  * app (a picked color still does: the person chose it).
+ *
+ * Given the workspace's id, a workspace with none of the three still gets a
+ * color: its stable one ({@link workspaceStableColor}). That one colors only
+ * its tile (the rail, the pickers, the menus, the sidebar's header), never
+ * the app.
  */
 export function resolveWorkspaceColor(
   picked: unknown,
   brandColor: unknown,
   logoColor: unknown,
   useWorkspaceBrand: boolean,
+  orgId?: unknown,
 ): WorkspaceColor {
   if (isAccountColor(picked)) return { color: picked, source: 'picked', tintsApp: true }
   if (isAccountColor(brandColor)) {
@@ -692,6 +745,8 @@ export function resolveWorkspaceColor(
   if (isAccountColor(logoColor)) {
     return { color: logoColor, source: 'logo', tintsApp: useWorkspaceBrand }
   }
+  const stable = workspaceStableColor(orgId)
+  if (stable) return { color: stable, source: 'stable', tintsApp: false }
   return { color: null, source: 'none', tintsApp: false }
 }
 
@@ -726,4 +781,245 @@ export function readAppTheme(profile: unknown): AppThemePrefs {
         ? (raw['useWorkspaceBrand'] as boolean)
         : DEFAULT_APP_THEME.useWorkspaceBrand,
   }
+}
+
+// ── The phone's tab bar (AGL-4006) ──────────────────────────────────────────
+
+/** `users/{uid}` field holding the areas the person keeps in the phone's tab bar, per site and per workspace. */
+export const TAB_BARS_FIELD = 'tabBars'
+
+/**
+ * The most areas one tab bar holds beside Home: iOS and
+ * Material take five destinations at most, and nothing ever overflows into a
+ * More tab. With four, Create leaves the bar for the top bar.
+ */
+export const TAB_BAR_AREAS_MAX = 4
+
+/** The most sites and workspaces the account keeps a tab bar for, the bound the Firestore rules hold. */
+export const TAB_BARS_MAX = 100
+
+/** The tab bar's own slots beside the areas: Home, always first, and Create new. */
+export const TAB_BAR_HOME = 'home'
+export const TAB_BAR_CREATE = 'create'
+
+/** One site's or workspace's tab bar. */
+export interface TabBarPins {
+  /** `site:<hostId>` or `org:<orgId>` ({@link tabBarScope}). */
+  scope: string
+  /** Nav manifest row ids, in the person's order, at most {@link TAB_BAR_AREAS_MAX}. */
+  areas: string[]
+  /**
+   * The person pinned, unpinned or reordered here by hand. Until then the
+   * first areas they open take the free spots and stay (the default the
+   * orchestrator settled on 2026-10-20: nothing guessed, nothing rotating);
+   * after it, only the person changes the bar.
+   */
+  chosen: boolean
+}
+
+export type TabPinOutcome = 'pinned' | 'alreadyPinned' | 'full'
+
+export interface TabPinResult {
+  /** Every stored tab bar after the request: unchanged unless `outcome` is `pinned`. */
+  tabBars: TabBarPins[]
+  outcome: TabPinOutcome
+}
+
+/** What a phone's tab bar shows, in order, and where Create new goes. */
+export interface TabBarLayout {
+  /** {@link TAB_BAR_HOME}, the areas, and {@link TAB_BAR_CREATE} in the centre unless it moved to the top bar. */
+  slots: string[]
+  /** Four areas fill the bar, so Create new sits in the top bar beside the AI button. */
+  createInTopBar: boolean
+}
+
+/** The key of one site's tab bar, or the whole workspace's. */
+export function tabBarScope(orgId: string, hostId?: string | null): string {
+  return hostId ? `site:${hostId}` : `org:${orgId}`
+}
+
+function tabAreaList(value: unknown): string[] {
+  return idList(value)
+    .filter((id) => id !== TAB_BAR_HOME && id !== TAB_BAR_CREATE)
+    .slice(0, TAB_BAR_AREAS_MAX)
+}
+
+function tabBarList(value: unknown): TabBarPins[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const out: TabBarPins[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const raw = entry as Record<string, unknown>
+    const scope = raw['scope']
+    if (typeof scope !== 'string' || !/^(site|org):./.test(scope) || seen.has(scope)) continue
+    seen.add(scope)
+    out.push({ scope, areas: tabAreaList(raw['areas']), chosen: raw['chosen'] === true })
+  }
+  return out.slice(-TAB_BARS_MAX)
+}
+
+/**
+ * Every tab bar the person keeps, each well formed, without repeats. Anything
+ * that is not a `{ scope, areas, chosen }` reads as no tab bar, so a stray
+ * value can never take the phone's shell down.
+ */
+export function readTabBars(profile: unknown): TabBarPins[] {
+  return tabBarList(field(profile, TAB_BARS_FIELD))
+}
+
+/** One scope's areas, in the person's order. */
+export function tabBarAreas(tabBars: readonly TabBarPins[], scope: string): string[] {
+  return tabBarList(tabBars).find((bar) => bar.scope === scope)?.areas ?? []
+}
+
+/**
+ * Every tab bar with one scope's replaced. A scope seen for the first time
+ * goes last; past {@link TAB_BARS_MAX} the oldest OTHER scopes give way.
+ */
+function withTabBar(tabBars: readonly TabBarPins[], next: TabBarPins): TabBarPins[] {
+  const current = tabBarList(tabBars)
+  const at = current.findIndex((bar) => bar.scope === next.scope)
+  const out = at === -1 ? [...current, next] : current.map((bar, index) => (index === at ? next : bar))
+  while (out.length > TAB_BARS_MAX) {
+    const oldest = out.findIndex((bar) => bar.scope !== next.scope)
+    if (oldest === -1) break
+    out.splice(oldest, 1)
+  }
+  return out
+}
+
+/**
+ * Pins an area at the end of a scope's tab bar (long-press a tile, "Add to tab
+ * bar"), or says the bar is full: a full bar is never made room in quietly.
+ */
+export function pinTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+): TabPinResult {
+  const current = tabBarList(tabBars)
+  const areas = tabBarAreas(current, scope)
+  if (!area || area === TAB_BAR_HOME || area === TAB_BAR_CREATE || areas.includes(area)) {
+    return { tabBars: current, outcome: 'alreadyPinned' }
+  }
+  if (areas.length >= TAB_BAR_AREAS_MAX) return { tabBars: current, outcome: 'full' }
+  return {
+    tabBars: withTabBar(current, { scope, areas: [...areas, area], chosen: true }),
+    outcome: 'pinned',
+  }
+}
+
+/** A scope's tab bar without one area; the person chose, so opened areas no longer fill the spot. */
+export function unpinTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+): TabBarPins[] {
+  const areas = tabBarAreas(tabBars, scope)
+  return withTabBar(tabBars, { scope, areas: areas.filter((id) => id !== area), chosen: true })
+}
+
+/** A scope's tab bar with one area moved left (`-1`) or right (`1`) a place; unchanged at an end. */
+export function moveTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+  offset: number,
+): TabBarPins[] {
+  const areas = tabBarAreas(tabBars, scope)
+  const from = areas.indexOf(area)
+  const to = from + (offset < 0 ? -1 : 1)
+  if (from === -1 || to < 0 || to >= areas.length) return tabBarList(tabBars)
+  const next = [...areas]
+  next[from] = next[to]
+  next[to] = area
+  return withTabBar(tabBars, { scope, areas: next, chosen: true })
+}
+
+/** A scope's tab bar as the Tab bar sheet left it: these areas, in this order, at most four. */
+export function setTabAreas(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  areas: readonly string[],
+): TabBarPins[] {
+  return withTabBar(tabBars, { scope, areas: tabAreaList(areas), chosen: true })
+}
+
+/**
+ * The default before anyone pins: an area the person opens takes a free spot
+ * and stays there, until the bar is full or the person changes it by hand.
+ * Unchanged once the scope is `chosen`, the area is in the bar already, or the
+ * bar is full.
+ */
+export function autoPinTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+): TabBarPins[] {
+  const current = tabBarList(tabBars)
+  const bar = current.find((entry) => entry.scope === scope)
+  const areas = bar?.areas ?? []
+  if (!area || area === TAB_BAR_HOME || area === TAB_BAR_CREATE) return current
+  if (bar?.chosen || areas.includes(area) || areas.length >= TAB_BAR_AREAS_MAX) return current
+  return withTabBar(current, { scope, areas: [...areas, area], chosen: false })
+}
+
+/**
+ * The tab bar to draw: Home first, then the pinned areas the scope can open
+ * (`available`, the Home tiles' ids in this build), with Create new in the
+ * centre slot. Four areas fill the bar, and Create moves to the top bar.
+ */
+export function tabBarLayout(areas: readonly string[], available: readonly string[]): TabBarLayout {
+  const open = new Set(available)
+  const shown = tabAreaList(areas).filter((id) => open.has(id))
+  if (shown.length >= TAB_BAR_AREAS_MAX) {
+    return { slots: [TAB_BAR_HOME, ...shown], createInTopBar: true }
+  }
+  const slots = [TAB_BAR_HOME, ...shown]
+  slots.splice(Math.floor((shown.length + 2) / 2), 0, TAB_BAR_CREATE)
+  return { slots, createInTopBar: false }
+}
+
+// ── Who is signed in ────────────────────────────────────────────────────────
+
+/**
+ * `users/{uid}` field holding the person's own picture (AGL-1961). Lowercase
+ * `url`: the roster's `photoURL` spelling reads as nothing here.
+ */
+export const ACCOUNT_PHOTO_FIELD = 'photoUrl'
+
+function trimmed(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * The person's own picture, the same answer in the console and both apps
+ * (AGL-4010): `users/{uid}.photoUrl` first (the profile they edit, filled from
+ * the identity provider on every sign-in), else the sign-in record's
+ * `photoURL`, else null, so the caller draws initials. A blank value is never
+ * a picture, so a photo in either place wins over an empty one in the other.
+ * A library pick is stored as a `/api/media/cdn/...` path; resolving it to an
+ * address is the caller's (`mediaPreviewURL` on native).
+ */
+export function readAccountPhoto(profile: unknown, authPhotoUrl: unknown): string | null {
+  return trimmed(field(profile, ACCOUNT_PHOTO_FIELD)) || trimmed(authPhotoUrl) || null
+}
+
+/**
+ * The person's own name, the same answer in the console and both apps
+ * (AGL-2486, AGL-4010): the profile's first and last name, else the sign-in
+ * record's display name (empty for an SSO account), else the email address,
+ * else empty.
+ */
+export function readAccountName(
+  profile: unknown,
+  authDisplayName: unknown,
+  email: unknown,
+): string {
+  const fromProfile = [field(profile, 'firstName'), field(profile, 'lastName')]
+    .map(trimmed)
+    .filter(Boolean)
+    .join(' ')
+  return fromProfile || trimmed(authDisplayName) || trimmed(email)
 }

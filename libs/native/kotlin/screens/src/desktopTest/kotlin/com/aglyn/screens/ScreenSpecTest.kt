@@ -52,6 +52,22 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun deleteSiteConfirmIgnoresSurroundingSpacesAsTheConsoleDoes() {
+    val spec = Json.parseToJsonElement(File(screensDir, "site.screens.json").readText()).arr("screens")
+      .mapNotNull { ScreenSpec.parse(it) }.first { it.id == "core.site.delete" }
+    val actions = spec.blocks.first { it.type == "actions" }
+    val delete = actions.raw.arr("items").mapNotNull { ActionSpec.parse(it) }.first { it.id == "delete" }
+    val typed = delete.prompt.first { it.key == "typed" }
+    val context = Json.parseToJsonElement("""{"site":{"id":"h1","name":"Delete test Mac"}}""")
+    // The console compares `confirmText.trim()`: a keyboard's prediction ending the name with a space still confirms.
+    assertFalse(typed.mismatches(JsonPrimitive("Delete test Mac"), context))
+    assertFalse(typed.mismatches(JsonPrimitive("Delete test Mac "), context))
+    assertFalse(typed.mismatches(JsonPrimitive(" Delete test Mac\n"), context))
+    assertTrue(typed.mismatches(JsonPrimitive("Delete test Ma"), context))
+    assertTrue(typed.mismatches(JsonPrimitive("delete test mac"), context))
+  }
+
+  @Test
   fun templateCases() {
     val file = Json.parseToJsonElement(File(screensDir, "template-cases.json").readText())
     val context = file.obj("context")!!
@@ -1162,6 +1178,66 @@ class ScreenSpecTest {
     assertEquals("hostedInvoiceUrl", set.insteadEntry(bank).str("open"))
     assertEquals("Card declined", set.insteadEntry(scope("{}", """"response":{"paymentPending":true,"declined":true}""")).str("title"))
     assertNull(set.insteadEntry(scope("{}", """"response":{"ok":true,"quantities":{"hosts":3}}""")))
+  }
+
+  /** The Aglyn AI row is the console's tier picker (AGL-4008); Apple's ScreenSpecTests asserts the same. */
+  @Test
+  fun theAiTierPickerOffersTheConsoleTiersAndQuotesAMove() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
+    val list = spec.blocks.first { it.type == "list" }
+    val actions = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+    val tier = actions.first { it.id == "tier" }
+    val turnOn = actions.first { it.id == "on" }
+    val tiers = """[{"id":"spark","label":"Spark","credits":4000,"unitUsd":9,"configured":true},""" +
+      """{"id":"plus","label":"Plus","credits":19000,"unitUsd":39,"configured":true},""" +
+      """{"id":"studio","label":"Studio","credits":99000,"unitUsd":199,"configured":false}]"""
+    fun scope(addons: String, extra: String = "") = Json.parseToJsonElement(
+      """{"org":{"id":"o1","manager":true},"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI","toggle":true}$extra}""",
+    )
+    val held = """{"hasSubscription":true,"plan":"pro","interval":"month","aiTier":"plus","aiTiers":$tiers,"quantities":{"aiAddon":1},""" +
+      """"catalog":{"aiAddon":{"unitUsd":39,"configured":true,"upgradeRequired":false}}}"""
+    val base = scope(held)
+    assertTrue(ScreenValues.condition(tier.whenCondition, base))
+    assertFalse(ScreenValues.condition(turnOn.whenCondition, base))
+    assertEquals("Aglyn AI tier", ScreenValues.render(tier.label, base))
+    val field = tier.prompt.first()
+    assertEquals("choice", field.kind)
+    val rows = field.choiceRows(base)
+    assertEquals(listOf("none", "spark", "plus", "studio"), rows.map { it.value })
+    assertEquals(listOf("No tier", "Spark — \$9/mo", "Plus — \$39/mo", "Studio — \$199/mo"), rows.map { it.label })
+    assertEquals("Your plan's included credits only", rows[0].detail)
+    assertEquals("+4,000 credits a month", rows[1].detail)
+    assertEquals(FieldChoiceBadge("Current", "info"), rows[2].badge)
+    assertNull(rows[0].badge)
+    assertFalse(rows[3].enabled)
+    assertEquals("+99,000 credits a month (not configured yet)", rows[3].detail)
+    assertEquals("plus", ScreenValues.render(field.initial!!, base))
+    assertTrue(field.unmet(JsonPrimitive("plus"), base))
+    assertFalse(field.unmet(JsonPrimitive("spark"), base))
+    assertEquals(
+      Json.parseToJsonElement("""{"orgId":"o1","action":"preview","kind":"aiAddon","quantity":1,"tier":"spark"}"""),
+      ScreenValues.resolveBody(tier.check!!.body!!, scope(held, ""","form":{"tier":"spark"}""")),
+    )
+    assertEquals(
+      Json.parseToJsonElement("""{"orgId":"o1","action":"set","kind":"aiAddon","quantity":0}"""),
+      ScreenValues.resolveBody(tier.body!!, scope(held, ""","form":{"tier":"none"}""")),
+    )
+    val later = ""","preview":{"defersToPeriodEnd":true,"effectiveAt":"2026-11-01T00:00:00Z","currency":"usd"}"""
+    assertEquals(
+      "Aglyn AI Spark? Nothing is charged and nothing is refunded. You keep Plus for the rest of the period you have paid for, and Spark starts on Nov 1, 2026. From then: \$9/mo, adding 4,000 AI credits a month on top of your plan's.",
+      tier.confirmText(scope(held, ""","form":{"tier":"spark"}$later""")),
+    )
+    assertEquals(
+      "Aglyn AI: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.",
+      tier.confirmText(scope(held, ""","form":{"tier":"none"}$later""")),
+    )
+    val fresh = """{"hasSubscription":true,"plan":"pro","interval":"year","aiTiers":$tiers,""" +
+      """"catalog":{"aiAddon":{"unitUsd":9,"configured":true,"upgradeRequired":false}}}"""
+    assertEquals(
+      "Aglyn AI Plus? \$39.00 will be charged to your card now, prorated for the rest of this period. Ongoing: \$39/mo (billed yearly with your plan), adding 19,000 AI credits a month on top of your plan's.",
+      tier.confirmText(scope(fresh, ""","form":{"tier":"plus"},"preview":{"chargedNowCents":3900,"currency":"usd","taxComplete":true}""")),
+    )
+    assertEquals(FieldChoiceBadge("Current", "neutral"), field.choiceRows(scope(fresh))[0].badge)
   }
 
   @Test

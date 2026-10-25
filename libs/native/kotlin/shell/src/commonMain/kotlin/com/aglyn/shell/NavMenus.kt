@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aglyn.contracts.AppAppearance
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.NativeNavListId
@@ -73,6 +75,10 @@ internal class ShellActions(
   val addAccount: () -> Unit,
   val switchAccount: (slot: String) -> Unit,
   val signOut: () -> Unit,
+  /** The person's own profile (name, photo): `core.account.profile`. */
+  val editProfile: () -> Unit = {},
+  /** The person's notification settings and sound. */
+  val notificationSettings: () -> Unit = {},
 )
 
 /** The workspace menu (its name ▾): who it is, then Invite people, Workspace settings, Billing and usage, Workspace color. */
@@ -85,7 +91,7 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
     val (light, dark) = orgLogoUrls(workspace, org.id, services.api.origin)
     val (color) = rememberWorkspaceColor(org.id, workspace, prefs, services.api.origin)
     Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      WorkspaceTile(org.name, light, dark, color, size = 40.dp)
+      WorkspaceTile(org.name, light, dark, color, size = 40.dp, initials = com.aglyn.contracts.workspaceInitial(org.name))
       Column(Modifier.weight(1f)) {
         Text(org.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(workspaceAddress(services, org.slug), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -121,8 +127,36 @@ internal fun workspaceAddress(services: ShellServices, slug: String): String =
 internal val LocalShellActions = androidx.compose.runtime.staticCompositionLocalOf<ShellActions?> { null }
 
 /**
- * The account menu (your photo): who you are, Theme, Settings, Marketplace, Documentation, Report an issue, then the
- * accounts signed in on this device with Add account, and Sign out (of the account on screen only).
+ * Who is signed in, for the account menu's header and every photo of them (AGL-4010): their name and picture as the
+ * console resolves them (`readAccountName`, `readAccountPhoto`: the profile first, then the sign-in record), the picture as
+ * an address on the console the app talks to, and the notification sound they picked.
+ */
+internal data class AccountIdentity(val uid: String?, val name: String, val email: String?, val photoUrl: String?, val soundLabel: String?)
+
+/** The person on screen, provided once by the shell, so every avatar of them draws the same face. */
+internal val LocalAccountIdentity = androidx.compose.runtime.compositionLocalOf<AccountIdentity?> { null }
+
+/** The width a person's photo is asked for at: the largest it is drawn (the phone sheet's 72) at 3x. */
+internal const val ACCOUNT_PHOTO_WIDTH = 256
+
+internal fun accountIdentity(user: AuthUser?, prefs: com.aglyn.core.AccountPreferences, origin: String): AccountIdentity {
+  val stored = prefs.photo(user?.photoUrl)
+  val sound = prefs.identity[Contracts.notificationSoundField]
+  return AccountIdentity(
+    uid = user?.uid,
+    name = prefs.name(user?.displayName, user?.email).ifEmpty { "Signed in" },
+    email = user?.email,
+    photoUrl = com.aglyn.core.mediaPreviewUrl(stored, origin, null, ACCOUNT_PHOTO_WIDTH),
+    soundLabel = (Contracts.notificationSounds.firstOrNull { it.id == sound }
+      ?: Contracts.notificationSounds.firstOrNull { it.id == Contracts.defaultNotificationSound })?.label,
+  )
+}
+
+/**
+ * The account menu (your photo; Figma Mac / Popover / Account 16:142, dark 311:2829): your photo, name and address with
+ * Edit profile; Appearance inline, Theme settings…, Notifications and sound, Settings; Marketplace, Documentation, Report
+ * an issue; the accounts signed in on this device with their photos and Add account; Sign out (of the account on screen
+ * only). Only what the console offers the signed-in person.
  */
 @Composable
 internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: () -> Unit) {
@@ -131,45 +165,63 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
   val accounts = services.accounts
   val signedIn = accounts?.accounts?.value.orEmpty()
   val active = accounts?.active?.value
-  var themeOpen by remember { mutableStateOf(false) }
-  Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-    AccountAvatar(user, size = 40, onClick = null)
-    Column(Modifier.weight(1f)) {
-      Text(user?.displayName?.takeIf { it.isNotBlank() } ?: user?.email ?: "Signed in", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      user?.email?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+  val identity = LocalAccountIdentity.current ?: accountIdentity(user, prefs, services.api.origin)
+  val m = com.aglyn.ui.shellMetrics
+  val photo = if (m.compact) 56.dp else 64.dp
+  Row(
+    Modifier.padding(horizontal = 12.dp, vertical = 12.dp).testTag("account-menu-header"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    com.aglyn.ui.PersonAvatar(com.aglyn.ui.workspaceInitials(identity.name), identity.photoUrl, photo)
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      Text(identity.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      identity.email?.takeIf { it != identity.name }?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      }
+      com.aglyn.ui.OutlinedButton(
+        onClick = { close(); actions.editProfile() },
+        modifier = Modifier.padding(top = 6.dp).height(if (m.compact) 28.dp else 32.dp).testTag("account-menu-edit-profile"),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+      ) { Text("Edit profile", style = MaterialTheme.typography.labelLarge) }
     }
   }
   HorizontalDivider()
-  MenuRow("Appearance", "contrast", trailing = appearanceLabel(prefs.theme.appearance) + "  ›", tag = "account-menu-appearance") { themeOpen = !themeOpen }
-  if (themeOpen) {
-    for (appearance in Contracts.appAppearances) {
-      MenuRow(
-        appearanceLabel(appearance),
-        if (prefs.theme.appearance == appearance) "check" else null,
-        tag = "account-menu-appearance-${appearance.raw}",
-      ) {
-        services.accountPrefs.setTheme(prefs.theme.copy(appearance = appearance), deviceOnly = prefs.deviceTheme != null)
-      }
-    }
+  AppearanceRow(prefs.theme.appearance) { appearance ->
+    services.accountPrefs.setTheme(prefs.theme.copy(appearance = appearance), deviceOnly = prefs.deviceTheme != null)
   }
-  MenuRow("Theme", "palette", trailing = themeLabel(prefs.theme.theme, services.config.brandName), tag = "account-menu-theme") { close(); actions.themeSettings() }
+  MenuRow("Theme settings…", "palette", tag = "account-menu-theme") { close(); actions.themeSettings() }
+  MenuRow("Notifications and sound", "notifications", trailing = identity.soundLabel, tag = "account-menu-notifications") {
+    close(); actions.notificationSettings()
+  }
   MenuRow("Settings", "settings", tag = "account-menu-settings") { close(); actions.accountSettings() }
+  HorizontalDivider()
   MenuRow("Marketplace", "storefront", tag = "account-menu-marketplace") { close(); actions.openScreen("marketplace.sell", emptyMap()) }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }
   MenuRow("Report an issue", "bug_report", tag = "account-menu-report") { close(); actions.openScreen("core.support", emptyMap()) }
   if (accounts != null) {
     HorizontalDivider()
-    Text("Accounts", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+    Text(
+      "Accounts", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+    )
     for (account in signedIn) {
       val current = account.slot == active
       androidx.compose.material3.DropdownMenuItem(
         text = {
           Column {
-            Text(account.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            account.email?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+            Text(account.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            account.email?.takeIf { account.displayName != null }?.let {
+              Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
           }
         },
-        leadingIcon = { AccountAvatar(AuthUser(account.uid, account.email, account.displayName), size = 28, onClick = null) },
+        leadingIcon = {
+          AccountAvatar(
+            AuthUser(account.uid, account.email, account.displayName), size = if (m.compact) 24 else 28, onClick = null,
+            photoUrl = com.aglyn.core.mediaPreviewUrl(account.photoUrl, services.api.origin, null, ACCOUNT_PHOTO_WIDTH),
+          )
+        },
         trailingIcon = if (current) ({ Icon(AglynIcons.named("check"), contentDescription = "On screen", tint = MaterialTheme.colorScheme.primary) }) else null,
         onClick = { close(); if (!current) actions.switchAccount(account.slot) },
         modifier = Modifier.testTag("account-menu-account-${account.slot}").semantics { selected = current },
@@ -179,6 +231,42 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
   }
   HorizontalDivider()
   MenuRow("Sign out", "logout", tag = "sign-out") { close(); actions.signOut() }
+}
+
+/** Appearance (Figma Menu/Appearance 310:2015): Light, Dark and Match system inline, the console's own toggle. */
+@Composable
+private fun AppearanceRow(picked: AppAppearance, onPick: (AppAppearance) -> Unit) {
+  val m = com.aglyn.ui.shellMetrics
+  val segment = if (m.compact) androidx.compose.ui.unit.DpSize(30.dp, 22.dp) else androidx.compose.ui.unit.DpSize(40.dp, 30.dp)
+  Row(
+    Modifier.fillMaxWidth().heightIn(min = if (m.compact) 32.dp else 48.dp).padding(horizontal = 16.dp).testTag("account-menu-appearance"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    Icon(AglynIcons.named("contrast"), null, Modifier.size(if (m.compact) 16.dp else 24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Appearance", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontSize = if (m.compact) 13.sp else androidx.compose.ui.unit.TextUnit.Unspecified)
+    Row(
+      Modifier.clip(RoundedCornerShape(m.controlRadius)).background(MaterialTheme.colorScheme.surfaceVariant).padding(2.dp),
+      horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+      for ((appearance, icon) in listOf(AppAppearance.LIGHT to "light_mode", AppAppearance.DARK to "dark_mode", AppAppearance.SYSTEM to "desktop_windows")) {
+        val on = appearance == picked
+        Box(
+          Modifier.size(segment).clip(RoundedCornerShape(m.controlRadius - 2.dp))
+            .background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent)
+            .clickable { onPick(appearance) }
+            .semantics { role = Role.RadioButton; selected = on; contentDescription = appearanceLabel(appearance) }
+            .testTag("account-menu-appearance-${appearance.raw}"),
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(
+            AglynIcons.named(icon), null, Modifier.size(if (m.compact) 14.dp else 18.dp),
+            tint = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+    }
+  }
 }
 
 /** The account menu as a dropdown from the rail's photo. */
@@ -204,7 +292,7 @@ internal fun PinnedFullDialog(services: ShellServices, workspace: WorkspaceState
   var replacing by remember { mutableStateOf<String?>(null) }
   AlertDialog(
     onDismissRequest = onDone,
-    modifier = Modifier.testTag("pinned-full-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("pinned-full-dialog"),
     title = { Text("Pinned is full. Replace one?") },
     text = {
       Column {
@@ -248,7 +336,7 @@ internal fun KeepPinsDialog(services: ShellServices, workspace: WorkspaceState, 
   val kept = remember { mutableStateListOf<String>().apply { addAll(prefs.pinned) } }
   AlertDialog(
     onDismissRequest = onLater,
-    modifier = Modifier.testTag("keep-pins-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("keep-pins-dialog"),
     title = { Text("Keep which $max pins?") },
     text = {
       Column {
@@ -284,7 +372,7 @@ internal fun KeepPinsDialog(services: ShellServices, workspace: WorkspaceState, 
 
 /**
  * Workspace colors: the pick for one workspace, saved on the account. Automatic uses the brand color, then a color taken
- * from the logo; a pick shows on the rail tile and as a light tint while you are in it. Only you see your pick.
+ * from the logo; a pick shows on the workspace's tile only, never as a tint over the app (AGL-4000). Only you see it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -292,24 +380,26 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
   val prefs = services.accountPrefs.state.collectAsState().value
   val org = workspace.orgs.firstOrNull { it.id == orgId } ?: return onDone()
   val picked = colorOfHex(prefs.workspaceColors[orgId])
-  val (current) = rememberWorkspaceColor(orgId, workspace, prefs, services.api.origin)
+  val resolved = rememberResolvedWorkspaceColor(orgId, workspace, prefs, services.api.origin)
+  val current = colorOfHex(resolved.color)
   var custom by remember { mutableStateOf(prefs.workspaceColors[orgId].orEmpty()) }
   val (light, dark) = orgLogoUrls(workspace, orgId, services.api.origin)
   AlertDialog(
     onDismissRequest = onDone,
-    modifier = Modifier.testTag("workspace-color-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("workspace-color-dialog"),
     title = { Text("Workspace color") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-          WorkspaceTile(org.name, light, dark, current, size = 40.dp)
+          WorkspaceTile(org.name, light, dark, current, size = 40.dp, initials = com.aglyn.contracts.workspaceInitial(org.name))
           Column {
             Text(org.name, style = MaterialTheme.typography.titleSmall)
             Text(
               when {
                 picked != null -> "Your color"
-                workspace.orgLogos[orgId]?.brandColor != null -> "Brand color (white-label)"
-                current != null -> "From its logo"
+                resolved.source == com.aglyn.contracts.WorkspaceColorSource.BRAND -> "Brand color (white-label)"
+                resolved.source == com.aglyn.contracts.WorkspaceColorSource.LOGO -> "From its logo"
+                resolved.source == com.aglyn.contracts.WorkspaceColorSource.STABLE -> "Automatic"
                 else -> "No color yet"
               },
               style = MaterialTheme.typography.bodySmall,
@@ -338,7 +428,7 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
           modifier = Modifier.fillMaxWidth().testTag("workspace-color-hex"),
         )
         Text(
-          "Automatic uses the workspace's brand color, else a color from its logo. Saved on your account; only you see it.",
+          "Automatic uses the workspace's brand color, else a color from its logo, else one of its own. Saved on your account; only you see it.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

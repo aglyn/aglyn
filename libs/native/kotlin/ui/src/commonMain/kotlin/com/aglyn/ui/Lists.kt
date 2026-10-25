@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,6 +43,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 
 /**
  * A list that refreshes when pulled (and from a refresh key on desktop, where
@@ -151,6 +154,12 @@ fun OverflowMenu(
  */
 @Composable
 fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
+  // A list beside its detail (tablet, desktop) heads its own column as the area's head (Figma Orders 13:483, AGL-4012):
+  // 20 above a 28 title row in the list title's type, its ☆ and actions, 12 below, then the area's section chips.
+  if (LocalListColumn.current != null) {
+    ListColumnHead(title, modifier, actions)
+    return
+  }
   FlowRow(
     modifier.fillMaxWidth().padding(horizontal = LocalContentInset.current ?: space(2f), vertical = space(1f)),
     horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End),
@@ -226,4 +235,44 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, captio
       if (caption != null) Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
   }
+}
+
+/** [ListHeader] atop a list column beside its detail: the area's head, then its section chips. */
+@Composable
+private fun ListColumnHead(title: String, modifier: Modifier, actions: @Composable () -> Unit) {
+  val star = LocalPageStar.current
+  if (star != null) {
+    androidx.compose.runtime.DisposableEffect(star) {
+      star.claim()
+      onDispose { star.release() }
+    }
+  }
+  val edge = LocalContentInset.current ?: contentInset()
+  androidx.compose.foundation.layout.Column(modifier.fillMaxWidth()) {
+    androidx.compose.foundation.layout.Row(
+      Modifier.fillMaxWidth().padding(start = edge, end = edge, top = HeadMetrics.listColumnTop, bottom = HeadMetrics.listColumnGap)
+        .heightIn(min = HeadMetrics.listColumnTitleRow).testTag("list-column-head"),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(space(1f)),
+    ) {
+      Text(
+        title,
+        Modifier.weight(1f, fill = false).semantics { heading() },
+        style = MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line),
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      star?.star?.invoke()
+      androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+      actions()
+    }
+    ListColumnSections()
+  }
+}
+
+/** The list column title's type (Figma 13:483: 22/28 bold), shared by [ListScreenScaffold] and [ListHeader]. */
+object ListColumnTitle {
+  val size = 22.sp
+  val line = 28.sp
 }

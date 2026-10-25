@@ -26,6 +26,8 @@ struct RouteView: View {
     case .view(let pushed): pushed.view
     case .web(let page): AglynBrowserScreen(page)
     case .searchResults(let query): SearchResultsScreen(initial: query)
+    // The app's shell draws a phone's settings list (ShellStack); nothing else pushes it.
+    case .modeList: EmptyView()
     }
   }
 }
@@ -126,42 +128,64 @@ struct BesignerScreen: View {
     case failed(String)
   }
 
+  /// Where the loading state stands: it covers the whole area until the editor has painted (`BesignerReveal`).
+  @State private var phase: BesignerReveal.Phase = .opening
+  private var shown: Bool { phase == .shown }
+
   var body: some View {
-    Group {
-      switch state {
-      case .starting:
-        ProgressView("Opening the Besigner")
-      case .failed(let message):
+    ZStack {
+      if case .ready(let cookies) = state, let config = model.config,
+        let url = BesignerEntry.url(origin: config.consoleOrigin, besignerPath: path)
+      {
+        // The web view has its whole frame from its first layout, under the loading state, so nothing the console
+        // draws while it signs in (its own "One moment" card) shows, at any size.
+        ConsoleWebView(
+          url: url, trustedOrigins: [config.consoleOrigin], cookies: cookies.compactMap(\.cookie),
+          model: webModel,
+          handlers: [
+            "openNative": { params in
+              let link = params["path"]?.stringValue ?? ""
+              guard case .screen(let screen, let screenParams)? = model.registry.resolve(link) else {
+                return ["opened": false]
+              }
+              navigation.push(.screen(screen, screenParams))
+              return ["opened": true]
+            },
+            "close": { _ in
+              leave()
+              return nil
+            },
+          ],
+          info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")],
+          allowsPath: { session.allows($0) },
+          onRefusedPath: { handBack($0) }
+        )
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .ignoresSafeArea(edges: .bottom)
+        .task(id: url) { await revealWhenDrawn() }
+      }
+      if case .failed(let message) = state {
         AglynEmptyState("The Besigner did not open", systemImage: "exclamationmark.triangle", message: message) {
           Button("Try again") { Task { await start() } }
         }
-      case .ready(let cookies):
-        if let config = model.config, let url = BesignerEntry.url(origin: config.consoleOrigin, besignerPath: path) {
-          ConsoleWebView(
-            url: url, trustedOrigins: [config.consoleOrigin], cookies: cookies.compactMap(\.cookie),
-            model: webModel,
-            handlers: [
-              "openNative": { params in
-                let link = params["path"]?.stringValue ?? ""
-                guard case .screen(let screen, let screenParams)? = model.registry.resolve(link) else {
-                  return ["opened": false]
-                }
-                navigation.push(.screen(screen, screenParams))
-                return ["opened": true]
-              },
-              "close": { _ in
-                leave()
-                return nil
-              },
-            ],
-            info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")],
-            allowsPath: { session.allows($0) },
-            onRefusedPath: { handBack($0) }
-          )
-          .ignoresSafeArea(edges: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AglynColor.paper)
+      } else if phase == .stillOpening {
+        // A slow load stays covered: never a blank or half-drawn editor (AGL-4002).
+        AglynLoadingState("Still opening the Besigner", detail: "This is taking longer than usual.") {
+          Button("Try again") { Task { await start() } }
         }
+        .accessibilityIdentifier("besigner-loading")
+        .transition(.opacity)
+      } else if !shown {
+        AglynLoadingState("Opening the Besigner")
+          .accessibilityIdentifier("besigner-loading")
+          .transition(.opacity)
       }
     }
+    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
     // The screen's own name, never the web page's: the page title carried an
     // unread count and the brand into the Mac window title (AGL-3894).
     .navigationTitle("Besigner")
@@ -173,7 +197,26 @@ struct BesignerScreen: View {
     #endif
     .aglynScreenTitle("Besigner")
     .aglynPrimaryAction(id: "besigner-done", "Done", systemImage: "checkmark") { leave() }
+    // The editor's own Assist is the AI here; the app's panel closes rather than sit beside it (AGL-4057).
+    .onAppear { navigation.showAssist = false }
     .task { await start() }
+  }
+
+  /// Lifts the loading state once the editor has painted (`BesignerReveal.paintedScript`) on an editor page, past the
+  /// sign-in hand-off. A slow load turns the loading state into "still opening" and keeps waiting: it never uncovers
+  /// a page that has not painted.
+  private func revealWhenDrawn() async {
+    let clock = ContinuousClock()
+    let started = clock.now
+    while !Task.isCancelled, !shown {
+      let path = webModel.url.map(ConsoleNavigationPolicy.consolePath) ?? ""
+      let painted = BesignerReveal.onEditor(path: path) ? await webModel.check(BesignerReveal.paintedScript) : false
+      let next = BesignerReveal.phase(elapsed: clock.now - started, path: path, painted: painted)
+      guard !Task.isCancelled else { return }
+      if next != phase { withAnimation(AglynShellMotion.reveal) { phase = next } }
+      if next == .shown { return }
+      try? await Task.sleep(for: .milliseconds(150))
+    }
   }
 
   /// Back to the screen the Besigner was opened from.
@@ -207,6 +250,7 @@ struct BesignerScreen: View {
 
   private func start() async {
     session.left = false
+    phase = .opening
     state = .starting
     guard let config = model.config, let auth = model.auth,
       let token = try? await auth.idToken(forceRefresh: false) else {

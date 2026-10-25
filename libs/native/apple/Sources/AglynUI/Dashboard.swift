@@ -476,10 +476,17 @@ public struct AglynPressableStyle: ButtonStyle {
 }
 
 extension View {
-  /// A list on the console's page color, its rows on paper: the kit's list look in light and dark. On the Mac and iPad
-  /// its rows sit on the column's content edges: the Mac's list insets every row by 16 of its own, so the list's safe
-  /// area adds the rest of E (measured off screen); iPad's grouped cards take E as their margins.
+  /// A list's ground. On a phone the console's page color with its rows on paper (the platform's grouped list). On the
+  /// Mac and iPad a content list as Figma draws one (Mac Sites 13:3, Orders 13:483): plain rows on the content surface,
+  /// no card and no grey ground, each row's content on the column's content edges E ("why is there
+  /// even a padding, and why is there grey?"). A plain Mac list sets a row's content 8 points in from its own edge and
+  /// ignores row insets and content margins set from outside it (measured off screen), so its safe area adds the rest
+  /// of E; iPad's plain rows take E as their margins. A form's ground is `aglynFormBackground`.
   public func aglynListBackground() -> some View { modifier(AglynListBackgroundModifier()) }
+
+  /// A settings form's ground: the console's page color with its cards on the content edges, as accepted
+  /// (#1843). In a list+detail's columns the ground is the content surface instead.
+  public func aglynFormBackground() -> some View { modifier(AglynFormBackgroundModifier()) }
 
   /// A list row on the console's paper surface.
   public func aglynListRow() -> some View {
@@ -491,11 +498,56 @@ private struct AglynListBackgroundModifier: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
 
   func body(content: Content) -> some View {
-    let base = content.scrollContentBackground(.hidden).background(AglynColor.page)
+    if wide {
+      let base = content.listStyle(.plain).scrollContentBackground(.hidden).background(AglynColor.paper)
+      #if os(macOS)
+        base.safeAreaPadding(.horizontal, AglynContentInsets.horizontal - AglynContentInsets.listBuiltIn.leading)
+      #else
+        base.contentMargins(.horizontal, AglynContentInsets.horizontal - 16, for: .scrollContent)
+      #endif
+    } else {
+      content.scrollContentBackground(.hidden).background(AglynColor.page)
+    }
+  }
+}
+
+private struct AglynFormBackgroundModifier: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynDetailColumn) private var detailColumn
+  @Environment(\.aglynListColumn) private var listColumn
+
+  func body(content: Content) -> some View {
+    let base = content.scrollContentBackground(.hidden)
+      .background(wide && (detailColumn || listColumn) ? AglynColor.paper : AglynColor.page)
     #if os(macOS)
       base.safeAreaPadding(.horizontal, wide ? AglynContentInsets.horizontal - 16 : 0)
     #else
       base.contentMargins(.horizontal, wide ? AglynContentInsets.horizontal : nil, for: .scrollContent)
     #endif
+  }
+}
+
+extension View {
+  /// A list screen's ground: the content surface on the Mac and iPad (`AglynGround`), and on a phone the page ground
+  /// with the brand's glow in the bold look (`aglynPhoneGround`).
+  public func aglynListGround() -> some View { modifier(AglynListGround()) }
+}
+
+struct AglynListGround: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+
+  func body(content: Content) -> some View {
+    if wide { content.background(AglynGround()) } else { content.aglynPhoneGround() }
+  }
+}
+
+/// A list or detail screen's ground: on the Mac and iPad the content surface (list and detail columns
+/// stand on the surface, never on grey), on a phone the console's page color under its grouped rows. Dashboards with
+/// cards (Home, Overview) keep `AglynColor.page`.
+public struct AglynGround: ShapeStyle {
+  public init() {}
+
+  public func resolve(in environment: EnvironmentValues) -> Color.Resolved {
+    (environment.aglynWideChrome ? AglynColor.paper : AglynColor.page).resolve(in: environment)
   }
 }

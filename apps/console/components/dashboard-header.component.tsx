@@ -53,6 +53,11 @@ export interface DashboardHeaderProps
      * screen reader walking the document outline.
      */
     secondary?: JSX.Children
+    /**
+     * A label after the title, inside the same `h1`: the Beta chip of a
+     * released surface that is still changing (AGL-4052).
+     */
+    badge?: JSX.Children
   }
   headerRight?: JSX.Children
   /**
@@ -82,6 +87,7 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
     sx: headerSx,
     icon: headerIcon,
     secondary: headerSecondary,
+    badge: headerBadge,
     ...headerProps
   } = header || {}
 
@@ -170,6 +176,14 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                       {'/'}
                     </Box>
                     {headerSecondary}
+                  </Box>
+                ) : null}
+                {headerBadge ? (
+                  <Box
+                    component="span"
+                    sx={{ display: 'inline-flex', ml: 1.5 }}
+                  >
+                    {headerBadge}
                   </Box>
                 ) : null}
                 {help && (

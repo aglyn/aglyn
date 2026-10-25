@@ -6,6 +6,12 @@ description: "An AI image generator in the Aglyn media library: describe a pictu
 
 # Create images with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 **Create with AI** in the media library makes pictures from a description and adds them
 to the library you have open. The **Kind** menu lists what it can make, in four sections:
 

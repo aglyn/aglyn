@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,7 +94,7 @@ internal fun keyboardShortcuts(): List<Pair<String, String>> = listOf(
 internal fun KeyboardShortcutsDialog(onDismiss: () -> Unit) {
   AlertDialog(
     onDismissRequest = onDismiss,
-    modifier = Modifier.testTag("keyboard-shortcuts"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("keyboard-shortcuts"),
     title = { Text("Keyboard shortcuts", Modifier.semantics { heading() }) },
     text = {
       Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -121,3 +121,67 @@ export function topReferrer(row: ScreenTrafficRow): string {
 export function referrerLabel(key: string): string {
   return key.replace(/_/g, '.')
 }
+
+/** One UTC day of one page's traffic, as `hosts/{id}/screenAnalytics/{screenId}:{day}` holds it. */
+export interface ScreenTrafficDay {
+  total: number
+  referrers: Record<string, number>
+  devices: Record<string, number>
+  /** Summed dwell across the day's samples (AGL-2182). */
+  dwellMs: number
+  /** How many visits reported a dwell: the divisor. */
+  dwellSamples: number
+}
+
+/** A referrer and the visits it sent. */
+export interface ScreenReferrerCount {
+  referrer: string
+  count: number
+}
+
+/** A page's traffic over its window, as its detail view's "Page traffic" card shows it. */
+export interface ScreenTrafficSummary {
+  total: number
+  /** The mean dwell over the visits that reported one, or null when none did. */
+  avgDwellMs: number | null
+  /** `desktop 38% · mobile 58% · tablet 4%`; empty when no device was recorded. */
+  deviceLine: string
+  /** The five referrers that sent the most visits, most first (raw keys: `referrerLabel` names them). */
+  topReferrers: ScreenReferrerCount[]
+}
+
+/**
+ * The figures of a page's "Page traffic" card from its day documents, oldest first (AGL-4011). One function so the
+ * console card and the native page detail compute the same numbers, held by the native function cases.
+ *
+ * The dwell is averaged over SAMPLES, not over views (AGL-2182): not every visit reports one (a killed tab sends
+ * nothing), so dividing by views would report less time than any visit spent. The device line names desktop, mobile
+ * and tablet in that order, each over every recorded device.
+ */
+export function summarizeScreenTraffic(days: readonly ScreenTrafficDay[]): ScreenTrafficSummary {
+  const total = days.reduce((sum, day) => sum + day.total, 0)
+  const dwellTotalMs = days.reduce((sum, day) => sum + day.dwellMs, 0)
+  const dwellSamples = days.reduce((sum, day) => sum + day.dwellSamples, 0)
+  const referrers: Record<string, number> = {}
+  const devices: Record<string, number> = {}
+  for (const day of days) {
+    for (const [host, count] of Object.entries(day.referrers)) referrers[host] = (referrers[host] ?? 0) + count
+    for (const [device, count] of Object.entries(day.devices)) devices[device] = (devices[device] ?? 0) + count
+  }
+  const deviceSum = Object.values(devices).reduce((sum, count) => sum + count, 0)
+  const deviceLine = deviceSum
+    ? ['desktop', 'mobile', 'tablet']
+        .filter((device) => devices[device])
+        .map((device) => `${device} ${Math.round(((devices[device] ?? 0) / deviceSum) * 100)}%`)
+        .join(' · ')
+    : ''
+  return {
+    total,
+    avgDwellMs: dwellSamples > 0 ? dwellTotalMs / dwellSamples : null,
+    deviceLine,
+    topReferrers: Object.entries(referrers)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([referrer, count]) => ({ referrer, count })),
+  }
+}

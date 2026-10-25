@@ -6,6 +6,12 @@ description: "Generate a website from a prompt: describe a business and an Aglyn
 
 # Generate a website from a prompt
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 An AI build job can scaffold a whole site from a brief, such as *"a neighborhood dog groomer
 that takes bookings"*. The job proposes a **plan** first — the pages it will build with their
 addresses and navigation, the layout they share, a contact form, and a palette suggestion made

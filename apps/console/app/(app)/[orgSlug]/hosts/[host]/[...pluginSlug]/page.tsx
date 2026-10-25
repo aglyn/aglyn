@@ -19,12 +19,14 @@
 import {
   checkEntitlement,
   RELEASE_FLAGS,
+  releaseStageOfSurface,
   type ReleaseFlagKey,
 } from '@aglyn/aglyn'
 import { resolveConsolePluginPage } from '@aglyn/aglyn'
 import { useEnabledPluginIds } from '../../../../../../components/console-plugins-gate.component'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
+import { BetaChip } from '@aglyn/shared-ui-jsx/components/beta-chip.component'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
@@ -236,6 +238,17 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         ? { released: flags[releaseFlag].released, ready: releaseFlagsReady }
         : undefined,
     [releaseFlag, flags, releaseFlagsReady],
+  )
+
+  // The Beta chip on the heading (AGL-4052): the surface's own flag or its
+  // open section's, released for this workspace and staged beta. Held until
+  // the verdicts settle, so the label is never drawn and then taken away.
+  const surfaceStage = useMemo(
+    () =>
+      releaseFlagsReady
+        ? releaseStageOfSurface([releaseFlag, sectionReleaseFlag], flags)
+        : undefined,
+    [releaseFlagsReady, releaseFlag, sectionReleaseFlag, flags],
   )
 
   /**
@@ -664,6 +677,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         // title across every section of a hub says only which surface is
         // open, and the section is the part the reader navigated to.
         secondary: activeSection?.label,
+        badge: surfaceStage === 'beta' ? <BetaChip /> : undefined,
         icon: { path: header?.icon?.path ?? ICON_VARIANT_APP_SETTINGS.path },
       }}
     >

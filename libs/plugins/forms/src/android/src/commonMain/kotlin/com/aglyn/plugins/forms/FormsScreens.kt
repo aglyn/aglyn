@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreTimestamp
@@ -201,6 +202,11 @@ private fun FormDetail(
   open: (FormDialog) -> Unit,
 ) {
   val live by remember(hostId, formId, context.firestore) { context.firestore.observeDoc("${formsPath(hostId)}/$formId") }.collectAsState(Live.Loading)
+  // Newest first, as the console lists them: the Versions card shows them, and Design in the Besigner opens the newest
+  // when the form has no published one (AGL-4002).
+  val versions by remember(hostId, formId, context.firestore) {
+    context.firestore.observe(FirestoreQuery("${formsPath(hostId)}/$formId/versions", orderBy = listOf(FirestoreOrder("createdAt", descending = true)), limit = 20))
+  }.collectAsState(Live.Loading)
   CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
@@ -242,7 +248,10 @@ private fun FormDetail(
               Text("Submissions", Modifier.padding(start = space(1f)))
             }
             OutlinedButton(
-              onClick = { runner.run { context.openBesigner(formBesignerPath(form.id, api.versionToOpen(form, null)), ConsoleScope.SITE) } },
+              onClick = {
+                val newest = (versions as? Live.Ready)?.value?.firstOrNull()?.id
+                runner.run { context.openBesigner(formBesignerPath(form.id, api.versionToOpen(form, null, newest)), ConsoleScope.SITE) }
+              },
               enabled = canEdit && !runner.busy,
               modifier = Modifier.testTag("form-edit-besigner"),
             ) {
@@ -268,7 +277,7 @@ private fun FormDetail(
             )
           }
         }
-        FormVersions(context, hostId, form, api, runner, canPublish)
+        FormVersions(context, form, versions, api, runner, canPublish)
         SectionCard("Details") {
           DetailRow("Form id", form.id)
           DetailRow("Updated", form.updatedAt?.let { relativeTime(it.epochMillis, now) })
@@ -316,10 +325,7 @@ private fun RoutingCard(form: FormRow, api: FormsApi, runner: ActionRunner, canE
 }
 
 @Composable
-private fun FormVersions(context: NativePluginContext, hostId: String, form: FormRow, api: FormsApi, runner: ActionRunner, canPublish: Boolean) {
-  val versions by remember(hostId, form.id, context.firestore) {
-    context.firestore.observe(FirestoreQuery("${formsPath(hostId)}/${form.id}/versions", orderBy = listOf(FirestoreOrder("createdAt", descending = true)), limit = 20))
-  }.collectAsState(Live.Loading)
+private fun FormVersions(context: NativePluginContext, form: FormRow, versions: Live<List<FirestoreDoc>>, api: FormsApi, runner: ActionRunner, canPublish: Boolean) {
   var refused by remember(form.id) { mutableStateOf<List<String>>(emptyList()) }
   SectionCard("Versions") {
     when (val live = versions) {

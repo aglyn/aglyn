@@ -40,6 +40,11 @@ export interface StatusChipProps {
   icon?: ReactElement
   /** Outlined for a quiet status beside other content; filled to stand out. */
   variant?: 'filled' | 'outlined'
+  /**
+   * The root element. `span` where the chip sits inside phrasing content,
+   * such as a heading or a tab label, where a `div` is not allowed.
+   */
+  component?: 'div' | 'span'
   'data-testid'?: string
 }
 
@@ -50,13 +55,14 @@ export interface StatusChipProps {
  * cards; a tone names what the state means and the theme picks the color.
  */
 export function StatusChip(props: StatusChipProps) {
-  const { label, tone = 'neutral', icon, variant = 'filled' } = props
+  const { label, tone = 'neutral', icon, variant = 'filled', component } = props
   return (
     <Chip
       size="small"
       label={label}
       color={TONE_COLOR[tone]}
       variant={variant}
+      {...(component ? { component } : {})}
       {...(icon ? { icon } : {})}
       data-testid={props['data-testid']}
     />

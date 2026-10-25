@@ -72,6 +72,37 @@ final class WorkspaceStoreTests: XCTestCase {
     XCTAssertEqual(WorkspaceStore.reconcile(.init(orgID: "a", hostID: "s1"), orgs: orgs, sites: []), .init(orgID: "a", hostID: nil))
   }
 
+  func testADeletedSiteOnScreenIsRemovedNotReplaced() {
+    // s2 was on screen and is gone from the loaded list (deleted): the shell leaves for the workspace's Sites.
+    let left = Array(sites.prefix(1))
+    XCTAssertTrue(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s2", orgID: "a", sites: left, ready: true))
+    // Still listed, nothing on screen, the sites still loading, or another workspace now shown: nothing was removed.
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s1", orgID: "a", sites: left, ready: true))
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: nil, orgID: "a", sites: left, ready: true))
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s2", orgID: "a", sites: [], ready: false))
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "b", shownHostID: "s2", orgID: "a", sites: left, ready: true))
+    // The last site deleted leaves an empty, loaded list: removed too.
+    XCTAssertTrue(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s1", orgID: "a", sites: [], ready: true))
+  }
+
+  func testAWindowInsideADeletedSiteLeavesEvenWhenItSteppedInAfterThePick() {
+    var watch = WorkspaceStore.ShownSiteWatch()
+    // A Sites row picks s2 while the window is on the whole workspace, then the window steps inside it with no new pick.
+    XCTAssertFalse(watch.update(orgID: "a", pickedHostID: "s1", sites: sites, ready: true, inSite: false))
+    XCTAssertFalse(watch.update(orgID: "a", pickedHostID: "s2", sites: sites, ready: true, inSite: false))
+    // s2 is deleted while the window is inside it: the store has already fallen back to s1, and the window leaves.
+    XCTAssertTrue(watch.update(orgID: "a", pickedHostID: "s1", sites: Array(sites.prefix(1)), ready: true, inSite: true))
+    XCTAssertFalse(watch.update(orgID: "a", pickedHostID: "s1", sites: Array(sites.prefix(1)), ready: true, inSite: false))
+    // A window on the whole workspace does not leave when its picked site goes.
+    var outside = WorkspaceStore.ShownSiteWatch()
+    _ = outside.update(orgID: "a", pickedHostID: "s2", sites: sites, ready: true, inSite: false)
+    XCTAssertFalse(outside.update(orgID: "a", pickedHostID: "s1", sites: Array(sites.prefix(1)), ready: true, inSite: false))
+    // Another workspace opened is a switch, not a deletion.
+    var switching = WorkspaceStore.ShownSiteWatch()
+    _ = switching.update(orgID: "a", pickedHostID: "s2", sites: sites, ready: true, inSite: true)
+    XCTAssertFalse(switching.update(orgID: "b", pickedHostID: nil, sites: [], ready: true, inSite: true))
+  }
+
   func testMembershipRowsReadTheConsoleFields() {
     XCTAssertEqual(
       WorkspaceStore.org(from: .init(id: "o", data: ["orgName": "Acme", "slug": "acme", "role": "owner"])),

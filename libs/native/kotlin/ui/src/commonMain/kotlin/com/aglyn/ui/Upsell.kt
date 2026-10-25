@@ -61,24 +61,44 @@ enum class UpgradeKind(val actionTitle: String, internal val icon: String) {
  * A feature the plan leaves out, where the feature would be (the console's blocked plugin page): a lock (a ticket for an
  * add-on), the console's sentence naming the plan that includes it, and View plans (or View add-ons). The screen stays
  * reachable, so the way to buy the feature is where people look for it.
+ *
+ * Narrower than [UPGRADE_NOTICE_INLINE_MIN] (a phone) it stacks: icon and sentence on one row, the action under the
+ * sentence, as Apple's AglynUpgradeNotice does and Figma's Notice/Upgrade Layout=Stacked draws (AGL-4055).
  */
 @Composable
 fun UpgradeNotice(message: String, kind: UpgradeKind = UpgradeKind.PLAN, modifier: Modifier = Modifier, action: (() -> Unit)?) {
   val m = shellMetrics
   val palette = LocalAglynPalette.current
-  Row(
+  BoxWithConstraints(
     modifier.fillMaxWidth().clip(RoundedCornerShape(m.controlRadius + 2.dp)).background(palette.info.main.copy(alpha = 0.08f))
       .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp).testTag("upgrade-notice"),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    Icon(AglynIcons.named(kind.icon), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(message, fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-    if (action != null) {
-      OutlinedButton(onClick = action, shape = controlShape(), modifier = Modifier.testTag("upgrade-notice-action")) { Text(kind.actionTitle) }
+    val icon = @Composable { Icon(AglynIcons.named(kind.icon), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    val button = @Composable {
+      if (action != null) {
+        OutlinedButton(onClick = action, shape = controlShape(), modifier = Modifier.testTag("upgrade-notice-action")) { Text(kind.actionTitle) }
+      }
+    }
+    if (maxWidth < UPGRADE_NOTICE_INLINE_MIN) {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          icon()
+          Text(message, fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        }
+        Box(Modifier.padding(start = 32.dp)) { button() }
+      }
+    } else {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        icon()
+        Text(message, fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        button()
+      }
     }
   }
 }
+
+/** The narrowest an upgrade notice keeps its action beside the sentence (Figma Notice/Upgrade Layout=Inline). */
+val UPGRADE_NOTICE_INLINE_MIN = 560.dp
 
 /** The notice standing in for a whole screen the plan leaves out: at the top of the content, at its margins. */
 @Composable

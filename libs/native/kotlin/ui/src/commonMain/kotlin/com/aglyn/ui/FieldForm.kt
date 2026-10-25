@@ -317,6 +317,7 @@ private fun TimeField(
     val state = rememberTimePickerState(initialHour = minutes / 60, initialMinute = minutes % 60)
     AlertDialog(
       onDismissRequest = { open = false },
+      modifier = Modifier.sheetEntrance(SheetEntrance.GROW),
       confirmButton = {
         TextButton(onClick = {
           onChange("${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}")

@@ -155,11 +155,25 @@ public func readerPrompt(_ display: String) -> String {
   }
 }
 
+/// The ways the reader is ready to take the card (the SDK's `ReaderInputOptions`), as the Kotlin kit says them.
+public func readerInputPrompt(_ options: [String]) -> String {
+  let ways = options.compactMap { option -> String? in
+    switch option.uppercased() {
+    case "TAP", "TAP_CARD": "tap"
+    case "INSERT", "INSERT_CARD": "insert"
+    case "SWIPE", "SWIPE_CARD": "swipe"
+    default: nil
+    }
+  }
+  return ways.isEmpty ? "Present the card." : "Ready: \(ways.joined(separator: ", ")) the card."
+}
+
 /// Discovery's failure, as the cashier reads it.
 public func friendlyDiscoveryError(code: String, message: String?) -> String {
   switch code.uppercased() {
-  case "TAP_TO_PAY_UNSUPPORTED_DEVICE", "TAP_TO_PAY_UNSUPPORTED_OS_VERSION":
+  case "TAP_TO_PAY_UNSUPPORTED_DEVICE":
     "This device cannot take Tap to Pay. It needs an iPhone XS or later. Use a Bluetooth card reader instead."
+  case "TAP_TO_PAY_UNSUPPORTED_OS_VERSION": TapToPayNotice.needsUpdate.message
   case "BLUETOOTH_DISABLED", "BLUETOOTH_ERROR": "Turn on Bluetooth to find card readers."
   case "BLUETOOTH_SCAN_TIMED_OUT": "No card reader answered. Turn the reader on, keep it close and try again."
   case "BLUETOOTH_ACCESS_DENIED", "BLUETOOTH_PERMISSION_DENIED":
@@ -177,7 +191,7 @@ public func friendlyConnectError(code: String, message: String?) -> String {
   case "UNSUPPORTED_READER_VERSION":
     "This reader needs a software update. Keep it charged and connected while it updates."
   case "READER_BATTERY_CRITICALLY_LOW": "The reader's battery is too low. Charge it and try again."
-  default: nonBlank(message) ?? "The reader could not connect. Try again."
+  default: tapToPayNotice(code: code)?.message ?? nonBlank(message) ?? "The reader could not connect. Try again."
   }
 }
 
@@ -287,6 +301,26 @@ public protocol DeviceReaderControls: AnyObject {
   /// Reconnects the reader connected last time, silently: no permission is asked for, and
   /// nothing happens when none was connected or a permission is missing.
   func reconnectRemembered(hostID: String, sessions: CardReaderSessionSource) async
+  /// Gets this device's reader ready without asking for anything, when the app opens or comes back to the front
+  /// (Apple 1.5): the reader connected last time, else Tap to Pay on iPhone on an iPhone that can take it.
+  func warmUp(hostID: String, sessions: CardReaderSessionSource) async
+  /// Why Tap to Pay on iPhone could not connect last time; nil when nothing is wrong.
+  var tapToPayNotice: TapToPayNotice? { get }
+  /// Whether this person may accept Apple's Tap to Pay on iPhone terms (`tapToPayTermsPermitted`).
+  func permitTapToPayTerms(_ permitted: Bool)
+  /// True once Apple's terms were accepted on this device, until the screen showing Apple's education clears it.
+  var tapToPayTermsJustAccepted: Bool { get }
+  func clearTapToPayTermsJustAccepted()
+}
+
+extension DeviceReaderControls {
+  public func warmUp(hostID: String, sessions: CardReaderSessionSource) async {
+    await reconnectRemembered(hostID: hostID, sessions: sessions)
+  }
+  public var tapToPayNotice: TapToPayNotice? { nil }
+  public func permitTapToPayTerms(_ permitted: Bool) {}
+  public var tapToPayTermsJustAccepted: Bool { false }
+  public func clearTapToPayTermsJustAccepted() {}
 }
 
 /// The reader controls behind this collector, or nil (the simulated one, the Mac).

@@ -157,7 +157,6 @@ private struct SchemaEditor: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("schema-editor")
     .sheet(item: $sheet) { sheetView($0) }
     .task(id: dataset.id) {

@@ -133,10 +133,13 @@ enum AglynBrandFit: Hashable, Sendable {
   case badge(side: CGFloat, cornerRadius: CGFloat)
   /// A workspace's tile of `side` points (`AglynWorkspaceTile`), with its logo slot of `slot` points on the plate.
   case tile(side: CGFloat, cornerRadius: CGFloat, slot: CGFloat)
+  /// A person's photo in a circle of `side` points (`AglynAccountAvatar`): it always covers the circle, as the
+  /// console's avatar does, whatever its edges hold.
+  case photo(side: CGFloat)
 
   var side: CGFloat {
     switch self {
-    case .badge(let side, _), .tile(let side, _, _): side
+    case .badge(let side, _), .tile(let side, _, _), .photo(let side): side
     }
   }
 
@@ -150,6 +153,8 @@ enum AglynBrandFit: Hashable, Sendable {
         return AglynBrandLayout(kind: .whole, inkSide: side * badge, plate: false)
       }
       return AglynBrandLayout(kind: .whole, inkSide: side * art.scale(cornerFraction: corner), plate: false)
+    case .photo(let side):
+      return AglynBrandLayout(kind: .fill, inkSide: side * art.fillFactor, plate: false)
     case .tile(let side, let cornerRadius, let slot):
       let corner = side > 0 ? cornerRadius / side : 0.5
       // Figma Rail/Workspace tile, Type=Picture: a picture covers the whole tile.
@@ -366,6 +371,51 @@ final class AglynBrandImage {
   }
 }
 
+/// A brand picture's bytes in a form the image decoders read (AGL-3996). ImageIO decodes no SVG, and the media CDN's
+/// `?w=` serves an SVG unchanged, so a workspace logo uploaded as an SVG fell back to its initials
+/// and gave the rail no color. The CDN draws any asset as a transparent PNG on request (`?icon=png-N`, the site icon
+/// set's `transparent` plate, `site-icon-set.ts`); an SVG is read through that.
+public enum AglynRasterArt {
+  /// The sides the CDN draws a transparent PNG at (`site-icon-set.ts`: `FAVICON_PNG_SIZES` + `MANIFEST_ICON_SIZES`).
+  public static let pngSides = [16, 32, 48, 72, 96, 128, 144, 152, 192, 256, 384, 512]
+  /// The media CDN's route, as `mediaPreviewURL` builds its addresses.
+  static let cdnRoute = "/api/media/cdn/"
+
+  /// The CDN's PNG of the asset at `url`, at least as wide as the `w` it was asked at; nil for an address that is not
+  /// on the media CDN, or already names a representation.
+  public static func pngURL(for url: URL) -> URL? {
+    guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false), parts.path.contains(cdnRoute) else {
+      return nil
+    }
+    var items = parts.queryItems ?? []
+    guard !items.contains(where: { $0.name == "icon" }) else { return nil }
+    let width = items.first(where: { $0.name == "w" }).flatMap { Int($0.value ?? "") } ?? 160
+    let side = pngSides.first { $0 >= width } ?? pngSides[pngSides.count - 1]
+    items.removeAll { $0.name == "w" }
+    items.append(URLQueryItem(name: "icon", value: "png-\(side)"))
+    parts.queryItems = items
+    return parts.url
+  }
+
+  /// Whether a response's bytes are a vector picture the decoders cannot read.
+  static func isVector(_ data: Data, response: URLResponse) -> Bool {
+    let type = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+    if type.contains("svg") { return true }
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return true }
+    return CGImageSourceGetCount(source) == 0
+  }
+
+  /// The bytes at `url`, or the CDN's PNG of them when they are an SVG; nil when neither can be fetched.
+  public static func data(from url: URL, session: URLSession = .shared) async -> Data? {
+    guard let (data, response) = try? await session.data(from: url) else { return nil }
+    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+    guard isVector(data, response: response), let png = pngURL(for: url) else { return data }
+    guard let (pngData, pngResponse) = try? await session.data(from: png) else { return nil }
+    if let http = pngResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+    return pngData
+  }
+}
+
 /// One brand picture as one box draws it, on a screen of `scale` pixels a point.
 struct AglynBrandRequest: Hashable, Sendable {
   let url: URL
@@ -433,7 +483,8 @@ enum AglynBrandImageLoader {
     return nil
   }
 
-  /// The picture `request` draws, or nil when it cannot be fetched or is not an image.
+  /// The picture `request` draws, or nil when it cannot be fetched or is not an image. An SVG is read as the media
+  /// CDN's PNG of it.
   static func load(_ request: AglynBrandRequest) async -> AglynBrandImage? {
     if let hit = cached(request) { return hit }
     let key = request.url as NSURL
@@ -441,8 +492,8 @@ enum AglynBrandImageLoader {
     if let kept = bytes.object(forKey: key) {
       data = kept as Data
     } else {
-      guard let (fetched, response) = try? await URLSession.shared.data(from: request.url) else { return nil }
-      if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+      // An SVG is read as the media CDN's PNG of it (`AglynRasterArt`).
+      guard let fetched = await AglynRasterArt.data(from: request.url) else { return nil }
       bytes.setObject(fetched as NSData, forKey: key, cost: fetched.count)
       data = fetched
     }

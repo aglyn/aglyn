@@ -188,7 +188,7 @@ struct CrmHubScreen: View {
         if scope.orgLevel { CrmCreateSitePick(context: context, scope: scope) }
         sectionView(context, scope, api, reference).frame(maxWidth: .infinity, maxHeight: .infinity)
       }
-      .background(AglynColor.page)
+      .background(AglynGround())
     }
     .navigationTitle(section == .contacts ? "CRM" : section.label)
     .aglynScreenTitle(section == .contacts ? "CRM" : section.label)

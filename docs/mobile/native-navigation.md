@@ -186,6 +186,7 @@ their area. The final review should look at both placements.
 | `recents` | `RecentItem[]`: the same reference, plus `openedAtMs` | 30 | app, on opening a screen or record |
 | `workspaceColors` | `{ [orgId]: '#RRGGBB' }` | 100 | app, account menu → Theme → Workspace colors |
 | `appTheme` | `AppThemePrefs`: `appearance`, `theme`, `accent`, `density`, `textSize`, `sidebarStyle`, `appIcon`, `useWorkspaceBrand` | its own keys and values | app, account menu → Theme |
+| `tabBars` | `TabBarPins[]`: `scope` (`site:<hostId>` or `org:<orgId>`), `areas` (nav row ids, in order), `chosen` | 4 areas a scope, 100 scopes | phone: long-press a Home tile, the account sheet → Tab bar, and the first areas opened (§9) |
 
 - A `kind` is `screen` for a nav row (its `id` is the row's) or a one-box
   group id for a record (`page`, `order`, `contact` and so on).
@@ -346,9 +347,50 @@ before.
 
 ## 8. Owed deploys
 
-- **Firestore rules:** `accountPrefsValid()` on `users/{userId}`. Deploy them
+- **Firestore rules:** `accountPrefsValid()` on `users/{userId}`, which now
+  also caps `tabBars` (AGL-4006). Deploy them
   before or with the promotion that ships this change, and before any app
   build that writes the new fields. Without them the caps are not enforced
   server-side, though the client writers still cap.
 - **Indexes:** none.
 - **Functions:** none.
+
+## 9. The phone's navigation (AGL-4006)
+
+The phone's shape was decided on 2026-10-20, after a Menu tab and a More
+bucket were rejected: every area is equally important and equally easy to reach. Both
+phone shells draw it from the same contract, and the Figma Phone page (2:7)
+holds the frames (Home 22:176, Android Home 22:775, the Tab bar sheet,
+Pin an area, First open, Area switcher, Activity). Decisions page cards 7 to 9.
+
+- **Home is every area as the same tile.** `phoneHomeGroups(list, team,
+  ownerName)` (native-nav.ts) takes the scope's everyday list as the app
+  shows it and returns its groups, the sidebar's More headed Tools
+  (`PHONE_HOME_GROUP_LABELS`), then the scope's own places last: Overview and
+  Site settings in a site, Team (the workspace settings' Members row) and
+  Workspace settings (`WORKSPACE_SETTINGS_ROW`) everywhere. A tile's badge is
+  its area's Needs-you count.
+- **The tab bar is the person's.** Home is always first, then up to four
+  areas (`TAB_BAR_AREAS_MAX`): long-press a tile → Add to tab bar, or the
+  account sheet → Tab bar to remove, reorder and add. `isTabPinnable` keeps
+  Home and the two settings modes out. `tabBarLayout(areas, available)`
+  places Create new in the centre slot while there are three areas or fewer;
+  with four the bar is full (iOS and Material take five destinations, and
+  nothing overflows into a More tab), so Create moves to the top bar beside
+  the AI button. A pinned area its scope cannot open (a plugin off, a screen
+  this build lacks) is left out, never drawn dead.
+- **Pins are kept per scope** (`tabBarScope`: each site, and the whole
+  workspace) in `users/{uid}.tabBars`.
+- **Before anyone pins:** a fresh scope shows Home and Create, with a
+  one-time tip (kept on the device). The first areas opened take the free
+  spots and stay (`autoPinTabArea`); a scope the person changed by hand
+  (`chosen`) is only changed by them again. Nothing is guessed and nothing
+  rotates.
+- **Any area is one tap from Home and two from anywhere:** an area opened
+  from a tile is pushed on the Home tab; a pinned area is its own tab's root.
+  Its title carries ▾, which opens the same tiles as a sheet (iOS) or a modal
+  bottom sheet (Android) to switch area in place. Inside an area its
+  sections stay chips (AGL-3993).
+- **The top bar** holds the scope chip, search, the bell (Activity: Needs
+  you and the notifications), the AI button and the photo (the account
+  sheet, now with a Tab bar row).

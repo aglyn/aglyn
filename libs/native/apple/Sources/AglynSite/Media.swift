@@ -97,6 +97,76 @@ public func sortedFolders(_ folders: [MediaFolder]) -> [MediaFolder] {
   }
 }
 
+/// A folder and every folder under it, the folder first (`mediaFolderDescendants`).
+public func mediaFolderSubtree(_ id: String, folders: [MediaFolder]) -> [String] {
+  var children: [String: [String]] = [:]
+  for folder in folders { if let parent = folder.parentID { children[parent, default: []].append(folder.id) } }
+  var out: [String] = []
+  var queue = [id]
+  var seen = Set<String>()
+  while !queue.isEmpty {
+    let next = queue.removeFirst()
+    guard seen.insert(next).inserted else { continue }
+    out.append(next)
+    queue.append(contentsOf: children[next] ?? [])
+  }
+  return out
+}
+
+/// Firestore's cap on disjunctions: the product of every `in` and `-any` (`MEDIA_DISJUNCTION_LIMIT`).
+public let mediaDisjunctionLimit = 30
+
+/// Said when Include subfolders gives way to the open folder alone (the console's notice, word for word).
+public let mediaSubfoldersDroppedNotice =
+  "Include subfolders is off for this folder: it has more subfolders than one query can look through, so only the "
+  + "files directly in it are shown."
+
+/// The folders one view reads: the open folder, and with Include subfolders every folder under it, unless they and
+/// the reader's scope tokens pass Firestore's thirty disjunctions (then only the open folder, and `dropped`).
+public func mediaFolderIDs(
+  _ folder: FolderPick, subtree: [String], scopeTokens: [String]?
+) -> (ids: [String], dropped: Bool) {
+  guard case .one(let id) = folder else { return ([], false) }
+  let ids = subtree.first == id ? subtree : [id] + subtree.filter { $0 != id }
+  if ids.count > 1 && ids.count * (scopeTokens?.count ?? 1) > mediaDisjunctionLimit { return ([id], true) }
+  return (ids, false)
+}
+
+/// Where an arrow key moves the focus in a grid of `columns` across: left and right step one, up and down a row;
+/// nil past an edge. With nothing focused, any arrow focuses the first item.
+public func mediaGridStep<ID: Hashable>(_ ids: [ID], from current: ID?, columns: Int, move: MediaGridMove) -> ID? {
+  guard !ids.isEmpty else { return nil }
+  guard let current, let index = ids.firstIndex(of: current) else { return ids.first }
+  let across = max(1, columns)
+  let next: Int
+  switch move {
+  case .left: next = index - 1
+  case .right: next = index + 1
+  case .up: next = index - across
+  case .down: next = index + across
+  }
+  return ids.indices.contains(next) ? ids[next] : nil
+}
+
+/// An arrow key's direction in a grid.
+public enum MediaGridMove: Sendable { case left, right, up, down }
+
+/// Which files a click selects: alone, toggled (⌘-click), or the run from the last one picked (⇧-click), in the grid's
+/// order (the console's `media-selection` rules).
+public func mediaSelection(
+  _ current: Set<String>, anchor: String?, clicked: String, toggle: Bool, range: Bool, order: [String]
+) -> Set<String> {
+  if range, let anchor, let from = order.firstIndex(of: anchor), let to = order.firstIndex(of: clicked) {
+    return current.union(order[min(from, to)...max(from, to)])
+  }
+  if toggle {
+    var next = current
+    if next.contains(clicked) { next.remove(clicked) } else { next.insert(clicked) }
+    return next
+  }
+  return [clicked]
+}
+
 /// A folder's path for a picker: `Blog / Covers`.
 public func folderPath(_ folder: MediaFolder, byID: [String: MediaFolder]) -> String {
   var names: [String] = []
@@ -172,13 +242,68 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     cdnPath.map { Self.trimmedOrigin(origin) + $0 } ?? url
   }
 
-  /// A thumbnail at `width` pixels (the CDN's own variants), or the file itself.
+  /// A thumbnail at `width` pixels (the CDN's own variants), or the file itself. An SVG has no width variants, so it is
+  /// asked for as a square transparent PNG (`?icon=png-N`, the CDN's icon sizes); a film shows its poster only when its
+  /// document records one (otherwise the poster URL is a 404 and the tile shows the film's type instead).
   public func thumbnail(origin: String, width: Int = 320) -> String? {
-    if kind == "image", let cdnPath { return "\(Self.trimmedOrigin(origin))\(cdnPath)?w=\(width)" }
-    if kind == "video", let cdnPath { return "\(Self.trimmedOrigin(origin))\(cdnPath)?poster=1&w=\(width)" }
+    let base = cdnPath.map { Self.trimmedOrigin(origin) + $0 }
+    if kind == "image", let base {
+      if isSVG { return "\(base)?icon=png-\(mediaIconSize(atLeast: width))" }
+      return "\(base)?w=\(width)"
+    }
+    if kind == "video", hasPoster, let base { return "\(base)?poster=1&w=\(width)" }
     if kind == "image" { return url }
     return nil
   }
+
+  /// Whether the file is an SVG drawing.
+  public var isSVG: Bool { contentType.lowercased().hasPrefix("image/svg") }
+
+  /// What a tile says the file is, as the console's tile does: its type's short label (`PDF`, `XLSX`, `JPEG`).
+  public var typeLabel: String { mediaFileType(contentType).label }
+
+  /// The tile's caption: `PDF · 1.2 MB`.
+  public var caption: String { "\(typeLabel) · \(formatBytes(sizeBytes ?? 0))" }
+}
+
+/// The square PNG sizes the CDN draws an SVG at (`?icon=png-N`).
+public let mediaIconSizes = [16, 32, 48, 72, 96, 128, 144, 152, 192, 256, 384, 512]
+
+/// The smallest icon size at least `pixels` wide (the largest when none is).
+public func mediaIconSize(atLeast pixels: Int) -> Int {
+  mediaIconSizes.first { $0 >= pixels } ?? mediaIconSizes[mediaIconSizes.count - 1]
+}
+
+/// What a tile shows for a file it cannot draw a preview of: the console's own map (`mediaFileTypeIcon`), as an SF
+/// Symbol and a short label. It never returns nothing: an unknown type is a document named by its subtype.
+public func mediaFileType(_ contentType: String) -> (symbol: String, label: String) {
+  let value = contentType.split(separator: ";").first.map(String.init)?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+  let exact: [String: (String, String)] = [
+    "application/pdf": ("doc.richtext", "PDF"),
+    "application/zip": ("doc.zipper", "ZIP"), "application/x-zip-compressed": ("doc.zipper", "ZIP"),
+    "application/gzip": ("doc.zipper", "GZIP"), "application/x-tar": ("doc.zipper", "TAR"),
+    "application/x-7z-compressed": ("doc.zipper", "7Z"), "application/vnd.rar": ("doc.zipper", "RAR"),
+    "application/msword": ("doc.text", "DOC"),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ("doc.text", "DOCX"),
+    "application/rtf": ("doc.text", "RTF"),
+    "application/vnd.ms-excel": ("tablecells", "XLS"),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ("tablecells", "XLSX"),
+    "text/csv": ("tablecells", "CSV"),
+    "application/vnd.ms-powerpoint": ("rectangle.on.rectangle", "PPT"),
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ("rectangle.on.rectangle", "PPTX"),
+    "audio/mpeg": ("music.note", "MP3"), "audio/mp4": ("music.note", "M4A"), "audio/aac": ("music.note", "AAC"),
+    "audio/ogg": ("music.note", "OGG"), "audio/wav": ("music.note", "WAV"),
+    "text/plain": ("doc.text", "TXT"), "text/markdown": ("doc.text", "MD"),
+    "application/json": ("curlybraces", "JSON"),
+  ]
+  if let hit = exact[value] { return (hit.0, hit.1) }
+  let subtype = value.split(separator: "/", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
+  let label = subtype.isEmpty ? "FILE" : (subtype.split(separator: "+").first.map(String.init) ?? subtype).uppercased()
+  for (prefix, symbol) in [("image/", "photo"), ("video/", "film"), ("audio/", "music.note"), ("text/", "doc.text")]
+  where value.hasPrefix(prefix) {
+    return (symbol, label)
+  }
+  return ("doc", label)
 }
 
 /// The sentence an audio uploader confirms, word for word, and the one the server stores with the answer (`AUDIO_RIGHTS_STATEMENT`).
@@ -318,13 +443,19 @@ public func uploaderOptions(_ api: ConsoleAPIClient, orgID: String) async -> [Up
 /// clause).
 public func mediaRequest(
   folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
-  filters: MediaFilters = MediaFilters()
+  filters: MediaFilters = MediaFilters(), subtree: [String] = []
 ) -> ListQueryRequest {
   var base: [ListQueryFilter] = []
   switch folder {
   case .all: break
   case .root: base.append(ListQueryFilter(op: .equal, path: "folderId", value: .null))
-  case .one(let id): base.append(ListQueryFilter(op: .equal, path: "folderId", value: .string(id)))
+  case .one(let id):
+    let ids = mediaFolderIDs(folder, subtree: subtree, scopeTokens: scopeTokens).ids
+    if ids.count > 1 {
+      base.append(ListQueryFilter(op: .in, path: "folderId", value: .array(ids.map { .string($0) })))
+    } else {
+      base.append(ListQueryFilter(op: .equal, path: "folderId", value: .string(id)))
+    }
   }
   if let scopeTokens {
     base.append(ListQueryFilter(op: .arrayContainsAny, path: "visibleTo", value: .array(scopeTokens.map { .string($0) })))
@@ -345,22 +476,35 @@ public func mediaRequest(
 /// What the console's plan makes of one view: the query, and what it left out and why.
 public func mediaPlan(
   folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
-  filters: MediaFilters = MediaFilters()
+  filters: MediaFilters = MediaFilters(), subtree: [String] = []
 ) -> ListQueryPlan {
   planListQuery(
     ContractValues.shared.mediaListQuery,
     mediaRequest(
-      folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters),
+      folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters,
+      subtree: subtree),
     names: MediaNameNormalizers())
 }
 
 public func mediaQuery(
   scope: MediaScope, folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
-  filters: MediaFilters = MediaFilters(), limit: Int = mediaPageSize
+  filters: MediaFilters = MediaFilters(), subtree: [String] = [], limit: Int = mediaPageSize
 ) -> FirestoreQuery {
   mediaPlan(
-    folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters
+    folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters,
+    subtree: subtree
   ).firestoreQuery(scope.path + ["media"], limit: limit)
+}
+
+/// How many files one folder holds, as the console's folder card counts them (`getCountFromServer` on `folderId`, with
+/// the scope clause for a reader limited to some sites); nil when the count cannot be read.
+public func mediaFolderCount(
+  _ reader: FirestoreReader, scope: MediaScope, folderID: String, scopeTokens: [String]?
+) async -> Int? {
+  var filters: [ListQueryConstraint] = []
+  if let scopeTokens { filters.append(ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: scopeTokens)) }
+  return try? await reader.count(
+    FirestoreQuery(scope.path + ["media"], equals: [("folderId", folderID)], filters: filters))
 }
 
 /// What the plan could not honor, in words: a clause it refused (two array
@@ -389,6 +533,8 @@ public final class MediaListModel {
   public private(set) var notices: [String] = []
   public var sort = MediaSort.newest { didSet { if oldValue != sort { restart() } } }
   public var search = "" { didSet { if oldValue != search { restart() } } }
+  /// The open folder and every folder under it, when Include subfolders is on; empty otherwise.
+  public var subtree: [String] = [] { didSet { if oldValue != subtree { restart() } } }
   /// The scope clause a limited reader's queries carry; nil reads the whole library.
   public private(set) var scopeTokens: [String]?
 
@@ -420,8 +566,11 @@ public final class MediaListModel {
   }
 
   /// Drops a file the person just deleted, without waiting for the listener.
-  public func drop(_ id: String) {
-    if case .ready(let items) = rows { rows = .ready(items.filter { $0.id != id }) }
+  public func drop(_ id: String) { drop([id]) }
+
+  /// Drops files the person just deleted or moved out of the view, without waiting for the listener.
+  public func drop(_ ids: Set<String>) {
+    if case .ready(let items) = rows { rows = .ready(items.filter { !ids.contains($0.id) }) }
   }
 
   private func restart() {
@@ -434,12 +583,14 @@ public final class MediaListModel {
     if !keep { rows = .loading }
     guard let reader, let scope else { return }
     let window = limit
+    let dropped = mediaFolderIDs(folder, subtree: subtree, scopeTokens: scopeTokens).dropped
     notices = mediaPlanNotices(
       mediaPlan(
-        folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters))
+        folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters,
+        subtree: subtree)) + (dropped ? [mediaSubfoldersDroppedNotice] : [])
     let query = mediaQuery(
       scope: scope, folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search,
-      filters: filters, limit: window + 1)
+      filters: filters, subtree: subtree, limit: window + 1)
     listener = reader.listen(query) { [weak self] result in
       guard let self else { return }
       switch result {
@@ -572,6 +723,11 @@ public struct MediaAPI: Sendable {
         "action": "update-details", "mediaId": id, "fileName": fileName, "alt": alt, "description": description,
         "tags": tags,
       ])
+  }
+
+  /// Sets one file's tags and nothing else (the route keeps its name, alt text and description).
+  public func setTags(_ id: String, tags: [String]) async throws {
+    try await post("/api/media/folders", ["action": "update-details", "mediaId": id, "tags": tags])
   }
 
   public func setPrivate(_ id: String, _ isPrivate: Bool) async throws {

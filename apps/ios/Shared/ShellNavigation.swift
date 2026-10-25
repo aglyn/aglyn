@@ -34,6 +34,9 @@ enum Route: Hashable {
   case web(AglynWebPage)
   /// Every result for what was typed in the search ("See all results for 'x'").
   case searchResults(String)
+  /// A settings mode's list on a phone (Site settings, Workspace settings from Home's tiles, AGL-4006): the list of the
+  /// mode the navigation is in.
+  case modeList
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.
@@ -130,6 +133,16 @@ final class ShellNavigation {
   var showCreate = false
   /// The AI panel, docked on the right (a sheet on a phone).
   var showAssist = false
+  /// The in-app Besigner is the screen on show. Its own Assist launcher, which reads and edits the canvas, is then the
+  /// one AI there, so the title bar's ✦ steps aside (AGL-4057).
+  var besignerOnScreen: Bool {
+    if case .besigner? = paths[section]?.last { return true }
+    return false
+  }
+  /// The phone's area switcher: every area as the same tiles, from an area's title ▾ (AGL-4006).
+  var showAreaSwitcher = false
+  /// The phone's Tab bar sheet: the person's pinned areas, to remove, reorder and add (AGL-4006).
+  var showTabBar = false
   /// This navigation's identity, for a tab strip that keeps every tab's view alive.
   var tabID: ObjectIdentifier { ObjectIdentifier(self) }
   /// The sidebar folded away (View ▸ Hide Sidebar, ⌥⌘S), so the place in use takes the width.
@@ -155,9 +168,10 @@ final class ShellNavigation {
   var pinFull: PendingPin?
   /// The workspace whose color is being picked.
   var colorFor: ColorPickTarget?
-  /// The sidebar groups the person opened, remembered on this device; a group holding the screen in use is open too.
-  var openGroups: Set<String> {
-    didSet { UserDefaults.standard.set(Array(openGroups), forKey: Self.openGroupsKey) }
+  /// The sidebar groups as the person left them, open or folded, remembered on this device (AGL-3996): opening a place
+  /// opens only its own group, and only when it is folded.
+  var groups: AglynSidebarGroups {
+    didSet { UserDefaults.standard.set(groups.stored, forKey: Self.openGroupsKey) }
   }
 
   static let inSiteKey = "aglyn.shell.inSite"
@@ -165,7 +179,7 @@ final class ShellNavigation {
 
   init() {
     inSite = UserDefaults.standard.object(forKey: Self.inSiteKey) as? Bool ?? true
-    openGroups = Set(UserDefaults.standard.stringArray(forKey: Self.openGroupsKey) ?? [])
+    groups = AglynSidebarGroups(stored: UserDefaults.standard.stringArray(forKey: Self.openGroupsKey) ?? [])
   }
   /// An invitation a notification opened, waiting for its accept or decline.
   var pendingInvite: FeedNotification?
@@ -204,11 +218,12 @@ final class ShellNavigation {
     paths[section] = stack
   }
 
-  /// A section a phone has no tab for opens in Menu, pushed as an area: an area with its section chips, the shell's own
-  /// pages as they are.
-  func openInMenu(_ target: ShellSection) {
-    section = .more
+  /// A section a phone has no tab for opens on the Home tab, pushed (AGL-4006: the phone has no Menu tab): an area
+  /// with its section chips, the shell's own pages as they are. Home's stack is kept, so Back returns where it was.
+  func openOnHome(_ target: ShellSection) {
+    section = .home
     switch target {
+    case .home: paths[.home] = []
     case .settings: push(.settings)
     case .notifications: push(.notifications)
     case .analytics: push(.analytics)

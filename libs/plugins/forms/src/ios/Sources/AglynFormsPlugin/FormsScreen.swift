@@ -81,7 +81,6 @@ struct FormsScreen: View {
     }
     .navigationTitle("Forms")
     .aglynScreenTitle("Forms")
-    .aglynSearchable(text: $searchText, prompt: "Search forms")
     .onChange(of: searchText) { _, text in model.type(text) }
     .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating forms")) {
       runner.clear()
@@ -166,10 +165,23 @@ struct FormsScreen: View {
     }
   }
 
+  /// The status as the list toolbar's one Filter on the Mac and iPad (Calm rule 3): In use at rest, the choice's name
+  /// once another is picked. A phone keeps its chips.
+  private var statusFilter: some View {
+    AglynFilterMenu(active: model.status == .inUse ? nil : model.status.label) {
+      Picker("Show", selection: $model.status) {
+        ForEach(FormStatusFilter.allCases) { status in Text(status.label).tag(status) }
+      }
+      .pickerStyle(.inline)
+    }
+  }
+
   @ViewBuilder
   private func list(selectable: Bool) -> some View {
+    // The list column's own toolbar on the Mac and iPad: the search and the one Filter sit over the list, never across
+    // the detail beside it.
     VStack(spacing: 0) {
-      chips
+      if !selectable { chips }
       if sheet == nil, exporting == nil, retiring == nil, let error = runner.error {
         AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
@@ -178,7 +190,8 @@ struct FormsScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
+    .aglynSearchable(text: $searchText, prompt: "Search forms") { statusFilter }
   }
 
   @ViewBuilder

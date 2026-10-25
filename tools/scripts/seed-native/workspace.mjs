@@ -101,6 +101,9 @@ const SAMPLE_PHOTOS = {
   // The seed's own brand art: the workspace's logo, and a favicon for every site (the site logo is the bakery's).
   'seed-media-brand-mark': 'tools/scripts/seed-native/art/juniper-street-co-logo.png',
   'seed-media-logo': 'tools/scripts/seed-native/art/juniper-street-bakery-favicon.png',
+  // The member's own photo (AGL-4010): a square crop of libs/plugins/ai/scripts/style-preview-photos/personal-portrait.jpg
+  // (Unsplash License; its row in that folder's CREDITS.md).
+  'seed-media-member-photo': 'tools/scripts/seed-native/art/member-photo.jpg',
   'seed-media-favicon:mobile-demo-site': 'tools/scripts/seed-native/art/juniper-street-bakery-favicon.png',
   'seed-media-favicon:mobile-bloom-bakery': 'tools/scripts/seed-native/art/juniper-street-catering-favicon.png',
   'seed-media-favicon:mobile-studio-north': 'tools/scripts/seed-native/art/juniper-street-cafe-favicon.png',
@@ -249,6 +252,9 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
       nameLower: nameSearchKey(site.displayName),
       searchTokens: hostSearchTokens(site),
       hasCustomDomain: Boolean(site.cname),
+      // The mirror carries the custom domain as the console's sync writes it (host-memberships.ts), so a site list
+      // shows the address the live site answers on.
+      ...(site.cname ? { cname: site.cname } : {}),
       createdAt: ago(site.created),
       role: 'admin',
       updatedAt: now,
@@ -282,6 +288,7 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
     ['hosts', hostId, 'seed-media-hero', 'hero-banner-wide.webp', 'image/webp', 412_880, 2400, 900, 'Loaves on a wooden counter', null, 1],
     ['orgs', orgId, 'seed-media-brand-mark', 'brand-mark.png', 'image/png', 64_512, 512, 512, 'Workspace brand mark', 'seed-brand', 20],
     ['orgs', orgId, 'seed-media-brand-guide', 'brand-guide.pdf', 'application/pdf', 1_802_240, 0, 0, '', 'seed-brand', 18],
+    ['orgs', orgId, 'seed-media-member-photo', 'profile-photo.jpg', 'image/jpeg', 22_653, 400, 400, 'Profile photo', null, 21],
     ...[hostId, ...sites.map((site) => site.id)].map((siteId) => [
       'hosts', siteId, 'seed-media-favicon', 'favicon.png', 'image/png', 0, 256, 256, 'Site favicon', null, 30,
     ]),

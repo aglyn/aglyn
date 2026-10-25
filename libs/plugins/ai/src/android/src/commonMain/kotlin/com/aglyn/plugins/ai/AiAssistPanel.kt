@@ -31,7 +31,10 @@ import androidx.compose.ui.unit.sp
 import com.aglyn.screens.ScreenValues
 import com.aglyn.ui.LocalAccent
 import com.aglyn.ui.LocalAglynPalette
+import com.aglyn.ui.LocalPhoneBold
 import com.aglyn.ui.LocalThemeSurfaces
+import com.aglyn.ui.brandGradientBackground
+import com.aglyn.ui.phoneHighlight
 import com.aglyn.ui.radius
 import com.aglyn.ui.shellMetrics
 import com.aglyn.ui.space
@@ -245,7 +248,7 @@ fun AssistPanel(context: NativePluginContext) {
       Row(
         Modifier.fillMaxWidth().heightIn(min = m.composer)
           .background(assistSunken(), RoundedCornerShape(m.composerRadius))
-          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(m.composerRadius))
+          .border(1.dp, assistBorder(), RoundedCornerShape(m.composerRadius))
           .padding(start = m.composerLeading, end = space(0.75f)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(space(1.25f)),
@@ -272,7 +275,8 @@ fun AssistPanel(context: NativePluginContext) {
         // Send: the accent's fill with a white paper plane (Figma Send 273:20321).
         Box(
           Modifier.size(m.send).alpha(if (canSend) 1f else 0.4f).clip(RoundedCornerShape(m.sendRadius))
-            .background(MaterialTheme.colorScheme.primary)
+            // In the phone's bold look the brand gradient, under the same white plane.
+            .then(if (LocalPhoneBold.current) Modifier.brandGradientBackground() else Modifier.background(MaterialTheme.colorScheme.primary))
             .clickable(enabled = canSend, role = Role.Button) { ask(question) }
             .semantics { contentDescription = "Send" }
             .testTag("assist-send"),
@@ -360,20 +364,31 @@ private fun assistSunken(): Color = LocalThemeSurfaces.current?.sunken ?: Materi
 @Composable
 private fun assistAccentIcon(): Color = LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary
 
+/** The suggestions' and the field's outline: border/subtle in the phone's bold look, the scheme's quiet outline otherwise. */
+@Composable
+private fun assistBorder(): Color =
+  if (LocalPhoneBold.current) LocalThemeSurfaces.current?.borderSubtle ?: MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outlineVariant
+
+/** The marks on the chip and the suggestions: the brand pink (highlight/icon) in the phone's bold look, the accent otherwise. */
+@Composable
+private fun assistMarkIcon(): Color = if (LocalPhoneBold.current) phoneHighlight().icon else assistAccentIcon()
+
 /** What the panel reads: the place's own icon and name on the accent's soft wash. */
 @Composable
 private fun ContextChip(m: AssistMetrics, looking: String, icon: String?) {
+  val bold = LocalPhoneBold.current
   Row(
     Modifier.padding(start = m.edge, end = m.edge, top = space(0.5f), bottom = space(0.75f))
-      .background(LocalAccent.current?.soft ?: MaterialTheme.colorScheme.primaryContainer, CircleShape)
+      // In the phone's bold look the highlight's pink wash, icon and text (Figma 273:20305); the accent's wash otherwise.
+      .background(if (bold) phoneHighlight().soft else LocalAccent.current?.soft ?: MaterialTheme.colorScheme.primaryContainer, CircleShape)
       .padding(m.chipPadding)
       .semantics(mergeDescendants = true) {}
       .testTag("assist-context"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(space(0.75f)),
   ) {
-    Icon(AglynIcons.named(icon?.takeIf { AglynIcons.has(it) } ?: "visibility"), null, Modifier.size(space(1.75f)), tint = assistAccentIcon())
-    Text("Looking at: $looking", style = m.text(m.chipText, m.chipWeight), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Icon(AglynIcons.named(icon?.takeIf { AglynIcons.has(it) } ?: "visibility"), null, Modifier.size(space(1.75f)), tint = assistMarkIcon())
+    Text("Looking at: $looking", style = m.text(m.chipText, m.chipWeight), color = if (bold) phoneHighlight().text else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -383,14 +398,15 @@ private fun Suggestion(m: AssistMetrics, text: String, enabled: Boolean, onClick
   val shape = RoundedCornerShape(m.suggestionRadius)
   Row(
     Modifier.fillMaxWidth().heightIn(min = m.suggestionHeight).clip(shape)
-      .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+      .then(if (LocalPhoneBold.current) Modifier.background(LocalThemeSurfaces.current?.raised ?: MaterialTheme.colorScheme.surface, shape) else Modifier)
+      .border(1.dp, assistBorder(), shape)
       .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
       .padding(horizontal = m.suggestionPadding, vertical = space(0.75f))
       .testTag("assist-suggestion"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(m.suggestionIconGap),
   ) {
-    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(m.suggestionIcon), tint = assistAccentIcon())
+    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(m.suggestionIcon), tint = assistMarkIcon())
     Text(text, style = m.text(m.suggestion), color = MaterialTheme.colorScheme.onSurface)
   }
 }

@@ -416,6 +416,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   }
 }
 
+/** One row of a `choice` field: a value with its label, a line under it, a mark beside it and whether it can be picked. */
+data class FieldChoice(val value: String, val label: String, val detail: String?, val badge: FieldChoiceBadge?, val enabled: Boolean)
+
+/** A `choice` row's mark: its text and the tone it is drawn in (`info`, `neutral`, …). */
+data class FieldChoiceBadge(val text: String, val tone: String?)
+
 class FieldSpec private constructor(
   val key: String,
   val label: String,
@@ -495,13 +501,11 @@ class FieldSpec private constructor(
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mismatches(value, context)) return true
+    // `mustChange`: unfinished while the value is still the one the field opened with (a pick that changes nothing, as the
+    // console's tier picker shows Apply only once another tier is chosen).
+    if (config.isTrue("mustChange") && initial != null && ScreenValues.text(value) == ScreenValues.render(initial, context)) return true
     if (pattern != null) ScreenValues.text(value).let { typed -> if (typed.isNotEmpty() && !Regex(pattern).containsMatchIn(typed)) return true }
-    if (kind == "number") {
-      ScreenValues.number(value)?.let { number ->
-        if (min != null && number < min) return true
-        if (max != null && number > max) return true
-      }
-    }
+    if (outOfBounds(value)) return true
     if (coversAll && kind == "multiselect") {
       val chosen = ((value as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
       if (choices(context).any { it.first !in chosen }) return true
@@ -510,6 +514,20 @@ class FieldSpec private constructor(
     val finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != null)
     return required && kind != "toggle" && !finished
   }
+
+  /** Whether a number field holds something typed that is not a number, or a number outside its bounds. */
+  fun outOfBounds(value: JsonElement): Boolean {
+    val typed = ScreenValues.text(value).trim()
+    if (kind != "number" || typed.isEmpty()) return false
+    val number = typed.toDoubleOrNull() ?: ScreenValues.number(value) ?: return true
+    return (min != null && number < min) || (max != null && number > max)
+  }
+
+  /**
+   * Whether the field's `mismatch` line is said under it: the value is not what it must match, or a number field's value is
+   * outside its bounds (`A whole number from 1 to 500`).
+   */
+  fun refuses(value: JsonElement, context: JsonElement): Boolean = mismatches(value, context) || outOfBounds(value)
 
   /** Whether a value is not what the field must match (a field with nothing to match never mismatches). */
   fun mismatches(value: JsonElement, context: JsonElement): Boolean {
@@ -520,7 +538,42 @@ class FieldSpec private constructor(
       val cents = ScreenValues.dollarsToCents(typed) ?: return true
       return cents != ScreenValues.dollarsToCents(expected)
     }
-    return typed != expected
+    // Surrounding spaces never count, as on the console's type-to-confirm (`confirmText.trim()`): a keyboard's
+    // prediction ends a word with a space, and the name typed exactly would still be refused.
+    return typed.trim() != expected
+  }
+
+  /**
+   * The rows of a `choice` field: its static `options`, then one per item of `optionsFrom`. Each option (static or
+   * `optionsFrom`) may carry `detail` (a template), `badge` (`{ text, when, tone }`), `enabled` (a condition; a choice that
+   * fails it is shown and cannot be picked, never hidden) and `disabledDetail` (the line it shows then).
+   */
+  fun choiceRows(context: JsonElement): List<FieldChoice> {
+    fun row(spec: JsonElement?, value: String, label: String, scope: JsonElement): FieldChoice {
+      val enabled = ScreenValues.condition(spec.str("enabled"), scope)
+      val line = (if (enabled) null else spec.str("disabledDetail")) ?: spec.str("detail")
+      val detail = line?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
+      val mark = spec.obj("badge")
+      val badge = mark.str("text")?.takeIf { ScreenValues.condition(mark.str("when"), scope) }
+        ?.let { FieldChoiceBadge(ScreenValues.render(it, scope), mark.str("tone")) }
+      return FieldChoice(value, label, detail, badge, enabled)
+    }
+    val statics = config.arr("options").map { option ->
+      if (option is JsonPrimitive && option.isString) {
+        row(null, option.content, option.content, context)
+      } else {
+        val value = ScreenValues.text(option.obj("value"))
+        row(option, value, ScreenValues.render(ScreenValues.text(option.obj("label") ?: option.obj("value")), context), context)
+      }
+    }
+    val from = optionsFrom ?: return statics
+    val path = from.str("items") ?: return statics
+    return statics + ScreenValues.scopes(path, null, from.str("filter"), context).map { scope ->
+      row(
+        from, ScreenValues.render(from.str("value") ?: "{item.\$id}", scope),
+        ScreenValues.render(from.str("label") ?: from.str("value") ?: "{item.\$id}", scope), scope,
+      )
+    }
   }
 
   fun choices(context: JsonElement): List<Pair<String, String>> {

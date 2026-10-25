@@ -218,7 +218,7 @@ private struct CollectionEntries: View {
       }
       rows(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -353,7 +353,6 @@ private struct EntryForm: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .onChange(of: stored) { _, next in draft = next }
     .accessibilityIdentifier("entry-editor")
   }

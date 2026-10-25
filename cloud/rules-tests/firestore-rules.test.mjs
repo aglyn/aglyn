@@ -6581,6 +6581,17 @@ describe('account preferences are bounded, pins at five (AGL-3943)', () => {
     await mustDeny('pinned sites that are not a list', setDoc(me(), { pinnedHosts: { h1: ORG } }, { merge: true }))
   })
 
+  it("bounds the phone's tab bars at a hundred sites and workspaces (AGL-4006)", async () => {
+    const bars = (n) => Array.from({ length: n }, (_, i) => ({ scope: `site:h${i + 1}`, areas: ['pages'], chosen: true }))
+    await mustAllow('a hundred tab bars', setDoc(me(), { tabBars: bars(100) }))
+    await mustDeny(
+      'a hundred and first by arrayUnion',
+      setDoc(me(), { tabBars: arrayUnion({ scope: 'site:h101', areas: [], chosen: false }) }, { merge: true }),
+    )
+    await mustAllow('one fewer', setDoc(me(), { tabBars: bars(99) }, { merge: true }))
+    await mustDeny('tab bars that are not a list', setDoc(me(), { tabBars: { 'site:h1': ['pages'] } }, { merge: true }))
+  })
+
   it('caps recent workspaces, starred items, recent items and workspace colors', async () => {
     await mustAllow(
       'eight recent workspaces, fifty stars, thirty recents, one color',

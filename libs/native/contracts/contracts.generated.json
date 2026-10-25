@@ -5,6 +5,94 @@
   ],
   "ACCOUNT_COLOR_PATTERN": "^#[0-9A-Fa-f]{6}$",
   "ACCOUNT_ITEM_LABEL_MAX": 120,
+  "ACCOUNT_PHOTO_FIELD": "photoUrl",
+  "ACTIVITY_TYPE_LABELS": {
+    "company": "Company",
+    "component": "Component",
+    "contact": "Contact",
+    "content": "Content",
+    "deal": "Deal",
+    "function": "Function",
+    "host": "Site",
+    "invite": "Invitation",
+    "layout": "Layout",
+    "lead": "Lead",
+    "media": "Media",
+    "member": "Member",
+    "org": "Organization",
+    "role": "Role",
+    "screen": "Page",
+    "subscription": "Subscription",
+    "template": "Template",
+    "theme": "Theme",
+    "variable": "Variable",
+    "workflow": "Workflow"
+  },
+  "AI_ACTIVITY_ACTION_LABELS": {
+    "ai.addon.purchased": "Added the AI add-on",
+    "ai.addon.removed": "Removed the AI add-on",
+    "ai.allotment.changed": "AI allotment changed",
+    "ai.assist.section": "AI generated a section",
+    "ai.edit.applied": "Applied AI edits",
+    "ai.job.canceled": "Canceled an AI generation",
+    "ai.job.created": "Started an AI generation",
+    "ai.job.needs_input": "AI generation paused for input",
+    "ai.job.output": "AI generated",
+    "ai.overage.cap": "AI overage ceiling",
+    "ai.overage.hardCap": "AI stop-at-band switch",
+    "ai.permission.changed": "AI permission changed",
+    "ai.seo.applied": "Applied AI SEO fixes as drafts"
+  },
+  "AI_ACTIVITY_ACTION_SENTENCES": {
+    "ai.assist.section": "Added a section to {target} with Aglyn AI",
+    "ai.edit.applied": "Applied Aglyn AI edits to {target}",
+    "ai.job.output": "Created {target} with Aglyn AI",
+    "ai.seo.applied": "Applied Aglyn AI search fixes to {target}"
+  },
+  "AI_INSIGHT_CARD_COPY": {
+    "action": "Ask a question",
+    "site": "Ask a question about this site’s traffic, sales, bookings, automation runs and pipeline. Every answer shows the figures it is built from.",
+    "title": "Ask AI about these numbers",
+    "workspace": "Ask a question about your workspace’s pipeline, the deals it closed and your datasets. Every answer shows the figures it is built from."
+  },
+  "AI_INSIGHT_DEFAULT_DAYS": 14,
+  "AI_INSIGHT_DIALOG_COPY": {
+    "answerFailed": "The answer could not be loaded. Try again.",
+    "ask": "Ask",
+    "askAnother": "Ask another",
+    "askFailed": "The question could not be asked. Try again.",
+    "cannotRun": "This workspace cannot run AI jobs right now.",
+    "close": "Close",
+    "digest": "Send me weekly insights for this workspace every Monday",
+    "digestFailed": "Your weekly insights setting could not be saved. Try again.",
+    "hideFigures": "Hide the figures",
+    "openJobs": "Open AI jobs",
+    "promise": "The answer is read from your own figures, and every number in it links to where it comes from. Nothing is changed or sent.",
+    "questionFailed": "The question could not be answered. Try again.",
+    "questionLabel": "What do you want to know?",
+    "showFigures": "Show the figures",
+    "stillWriting": "The answer is still being written. Find it in AI jobs in a minute.",
+    "title": "Ask about your numbers",
+    "unanswered": "The figures read here did not answer this question.",
+    "windowLabel": "Over the last",
+    "working": "Reading your figures. This usually takes a minute."
+  },
+  "AI_INSIGHT_PLACEHOLDERS": {
+    "analytics": "Which pages brought in the most visitors, and did anything change?",
+    "automations": "Which automations failed most this month?",
+    "bookings": "Which services were booked most, and how many were canceled?",
+    "crm-reports": "Which campaign or form brought in the most people this month?",
+    "datasets": "What is the average order total by state?",
+    "marketing": "Which campaign brought in the most form submissions, and what did it earn?",
+    "workspace": "How much is in the pipeline, and what closed this month?"
+  },
+  "AI_INSIGHT_QUESTION_MAX_CHARS": 1000,
+  "AI_INSIGHT_WINDOWS": [
+    7,
+    14,
+    30,
+    90
+  ],
   "APP_APPEARANCES": [
     "system",
     "light",
@@ -1534,6 +1622,10 @@
     "deal": "Deals",
     "lead": "Leads"
   },
+  "CRM_LEAD_CLOSED_STATUSES": [
+    "qualified",
+    "unqualified"
+  ],
   "CRM_LEAD_STATUS_LABELS": {
     "new": "New",
     "nurturing": "Nurturing",
@@ -2103,6 +2195,7 @@
       }
     ]
   },
+  "FEW_UNITS_LEFT": 3,
   "FIRST_PARTY_PLUGINS": [
     {
       "alwaysOn": true,
@@ -3843,6 +3936,7 @@
     ]
   },
   "MAX_LABEL_COPIES": 500,
+  "MAX_RESOURCE_UNITS": 500,
   "MEDIA_ALT_MAX_LENGTH": 300,
   "MEDIA_ALT_OPTIONS": [
     {
@@ -5227,7 +5321,7 @@
                   "traffic",
                   "visitors"
                 ],
-                "label": "Overview",
+                "label": "Analytics",
                 "order": 20,
                 "screen": "shell.analytics"
               }
@@ -7799,6 +7893,13 @@
   "OUTREACH_SEQUENCE_NAME_MAX": 120,
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "PENDING_RESERVATION_HOLD_MS": 1800000,
+  "PHONE_HOME_GROUP_LABELS": {
+    "more": "Tools"
+  },
+  "PHONE_HOME_SITE_GROUP_LABEL": "Site & workspace",
+  "PHONE_HOME_TEAM_LABEL": "Team",
+  "PHONE_HOME_WORKSPACE_GROUP_LABEL": "Settings",
   "PINNED_ORGS_FIELD": "pinnedOrgs",
   "PINNED_ORGS_MAX": 5,
   "PLAN_CARD_ADVANCE_MS": 8000,
@@ -7891,12 +7992,15 @@
     "site.sites": "sites"
   },
   "PLAN_CARD_WARNING_SHARE": 0.8,
+  "PLATFORM_BRAND_NAME": "Aglyn",
   "POS_CASH_EVENT_LABELS": {
     "drop": "Safe drop",
     "paid_in": "Paid in",
     "paid_out": "Paid out",
     "refund": "Cash refund"
   },
+  "POS_DAY_REPORT_MAX_DAYS": 31,
+  "POS_DAY_REPORT_ROUTE": "/api/commerce/pos-day-report",
   "POS_DISPLAY_MAX_LINES": 60,
   "POS_DISPLAY_PAIRING_TTL_MS": 600000,
   "POS_DISPLAY_THANKS_MS": 8000,
@@ -7911,6 +8015,9 @@
   "POS_KIOSK_UNLOCK_LOCKOUT_MS": 900000,
   "POS_KIOSK_UNLOCK_MAX_ATTEMPTS": 5,
   "POS_KIOSK_UNLOCK_TTL_MS": 300000,
+  "POS_OFFLINE_CARD_INTENT_KIND": "pos-offline",
+  "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT": 1000000,
+  "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS": 86400000,
   "POS_OFFLINE_CLOCK_SKEW_MS": 600000,
   "POS_OFFLINE_DISABLED_TENDERS": {
     "card_keyed": "Typed cards need the connection.",
@@ -7921,6 +8028,8 @@
     "gift_card": "A gift card balance can only be checked online."
   },
   "POS_OFFLINE_FLAG_LABELS": {
+    "card-declined": "The card taken offline was declined when it was charged; the order is unpaid",
+    "card-not-charged": "The card taken offline could not be charged; the order is unpaid",
     "cash-short": "The cash recorded is less than the total",
     "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
     "clock-adjusted": "The device clock was off; the sale is dated when it synced",
@@ -8154,7 +8263,6 @@
     "status",
     "type"
   ],
-  "RAIL_ALL_WORKSPACES_AT_MOST": 8,
   "RAIL_RECENT_ORGS": 3,
   "RECENT_ORGS_FIELD": "recentOrgs",
   "RECENT_ORGS_MAX": 8,
@@ -8486,6 +8594,11 @@
       }
     ]
   },
+  "TAB_BAR_AREAS_MAX": 4,
+  "TAB_BAR_CREATE": "create",
+  "TAB_BAR_HOME": "home",
+  "TAB_BARS_FIELD": "tabBars",
+  "TAB_BARS_MAX": 100,
   "TASK_LIST_DECLARATION": {
     "fields": [
       {
@@ -11820,5 +11933,28 @@
   "TIME_ZONE_DEFAULT_LABEL": "UTC (default)",
   "WORKFLOW_MAX_STEPS": 25,
   "WORKSPACE_COLORS_FIELD": "workspaceColors",
-  "WORKSPACE_COLORS_MAX": 100
+  "WORKSPACE_COLORS_MAX": 100,
+  "WORKSPACE_SETTINGS_ROW": {
+    "console": {
+      "id": "workspaceSettings",
+      "surface": "shell"
+    },
+    "icon": {
+      "android": "apartment",
+      "apple": "building.2"
+    },
+    "id": "workspaceSettings",
+    "label": "Workspace settings",
+    "screen": "shell.workspaceSettings"
+  },
+  "WORKSPACE_STABLE_COLORS": [
+    "#0077AD",
+    "#6A4FD8",
+    "#A62BBF",
+    "#C2185B",
+    "#B4501A",
+    "#8A6A00",
+    "#2E7D5B",
+    "#00796B"
+  ]
 }

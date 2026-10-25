@@ -36,6 +36,15 @@ class HostStatusTest {
     assertEquals("shop.aglyn.app", siteAddress("shop"))
     assertNull(siteAddress(""))
   }
+
+  @Test
+  fun aSiteListShowsTheCustomDomainElseThePlatformAddress() {
+    assertEquals("example.com", siteListAddress("example.com", "shop"))
+    assertEquals("example.com", siteListAddress(" example.com ", "shop"))
+    assertEquals("shop.aglyn.app", siteListAddress(null, "shop"))
+    assertEquals("shop.aglyn.app", siteListAddress(" ", "shop"))
+    assertNull(siteListAddress(null, ""))
+  }
 }
 
 class RelativeTimeTest {

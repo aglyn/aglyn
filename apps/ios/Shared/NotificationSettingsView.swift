@@ -78,7 +78,7 @@ struct NotificationSettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Notification settings")
     .aglynScreenTitle("Notification settings")
     .onAppear(perform: start)

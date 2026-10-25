@@ -8,8 +8,8 @@ import SwiftUI
 
 /// The sidebar for the scope a window stands in (AGL-3945, Figma Sidebar 12:703): the brand bar, the scope's header
 /// (the workspace and its menu, or the way back to it and the site picker, or a settings mode's back and title), then the
-/// manifest's groups, folded except the one in use and any the person opened. A Starred group lists what the person
-/// starred here.
+/// manifest's groups, each open or folded as the person left it (opening a place opens its own group). A Starred group
+/// lists what the person starred here.
 struct ShellSidebar: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
@@ -157,7 +157,8 @@ struct WorkspaceButton: View {
         AglynWorkspaceTile(
           name: org?.name ?? "Workspace", logoURL: model.mediaURL(logo?.light, hostID: nil),
           darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org?.id).color,
-          selected: false, size: AglynShellMetrics.workspaceLogo, cornerRadius: AglynShellMetrics.workspaceLogoRadius)
+          selected: false, size: AglynShellMetrics.workspaceLogo, initials: workspaceInitial(org?.name ?? "Workspace"),
+          cornerRadius: AglynShellMetrics.workspaceLogoRadius)
           .padding(-3)
         // Figma Sidebar/Scope header 98:1023: an 18-point name row with ▾ at the header's trailing edge, 2 points, and
         // an 18-point plan badge.
@@ -417,7 +418,6 @@ struct SidebarList: View {
 
   var body: some View {
     let list = scope.currentList
-    let holding = ShellScope.group(holding: navigation.section, in: list)
     // Drawn rows, not a sidebar List: the platform's list adds its own insets, selection and type (Figma Sidebar/Row).
     ScrollView(.vertical) {
       VStack(alignment: .leading, spacing: push ? 0 : 2) {
@@ -425,7 +425,7 @@ struct SidebarList: View {
         if !push && list.id == .workspace && filter.isEmpty { AglynSidebarDivider() }
         ForEach(Array(list.groups.enumerated()), id: \.element.id) { index, group in
           if !push && needsDivider(before: group, at: index, in: list) { AglynSidebarDivider() }
-          groupView(group, open: isOpen(group, holding: holding))
+          groupView(group, open: isOpen(group))
         }
       }
       .padding(.top, push ? 0 : 4)
@@ -453,14 +453,14 @@ struct SidebarList: View {
     }
   }
 
-  private func isOpen(_ group: NativeNavGroup, holding: String?) -> Bool {
-    // Starred stays open at rest (Figma 12:703) until the person folds it; the other groups open with the place in use.
-    if group.dynamic == "starred" { return !navigation.openGroups.contains(groupKey(group) + ".folded") }
-    return !group.foldable || !filter.isEmpty || group.id == holding || navigation.openGroups.contains(groupKey(group))
+  /// Open as the person left it (AGL-3996); a search shows every match, and a group that cannot fold is always open.
+  private func isOpen(_ group: NativeNavGroup) -> Bool {
+    !group.foldable || !filter.isEmpty
+      || navigation.groups.isOpen(groupKey(group), openAtRest: ShellScope.openAtRest(group))
   }
 
   /// The fold state is remembered per scope kind and group (`site.sell`), on this device.
-  private func groupKey(_ group: NativeNavGroup) -> String { "\(scope.currentList.id.rawValue).\(group.id)" }
+  private func groupKey(_ group: NativeNavGroup) -> String { ShellScope.groupKey(group.id, in: scope.currentList) }
 
   @ViewBuilder
   private func groupView(_ group: NativeNavGroup, open: Bool) -> some View {
@@ -534,9 +534,8 @@ struct SidebarList: View {
 
   /// Folds or opens a group, remembered for the scope kind (Figma Motion: about 200 ms).
   private func toggle(_ group: NativeNavGroup) {
-    let key = group.dynamic == "starred" ? groupKey(group) + ".folded" : groupKey(group)
     withAnimation(AglynShellMotion.fold) {
-      if navigation.openGroups.contains(key) { navigation.openGroups.remove(key) } else { navigation.openGroups.insert(key) }
+      navigation.groups.toggle(groupKey(group), openAtRest: ShellScope.openAtRest(group))
     }
   }
 

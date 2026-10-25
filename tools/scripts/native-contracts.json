@@ -235,7 +235,9 @@
     },
     "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts": {
       "types": [
-        "ScreenTrafficRow"
+        "ScreenTrafficRow",
+        "ScreenReferrerCount",
+        "ScreenTrafficSummary"
       ]
     },
     "libs/aglyn/src/lib/app-utils/functions.ts": {
@@ -324,6 +326,9 @@
       "types": [
         "PosOfflineSaleLine",
         "PosOfflineSaleCustomer",
+        "PosOfflineTender",
+        "PosOfflineCardForward",
+        "PosOfflineSaleCard",
         "PosOfflineSale",
         "PosOfflineFlag",
         "PosOfflineStockConflict",
@@ -334,7 +339,8 @@
         "PosOfflineSyncRequest",
         "PosOfflineSyncResponse",
         "PosOfflineKitRegister",
-        "PosOfflineKit"
+        "PosOfflineKit",
+        "PosOfflineKitCard"
       ],
       "values": [
         "POS_OFFLINE_SYNC_ROUTE",
@@ -344,7 +350,10 @@
         "POS_OFFLINE_MAX_AGE_MS",
         "POS_OFFLINE_CLOCK_SKEW_MS",
         "POS_OFFLINE_DISABLED_TENDERS",
-        "POS_OFFLINE_FLAG_LABELS"
+        "POS_OFFLINE_FLAG_LABELS",
+        "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT",
+        "POS_OFFLINE_CARD_INTENT_KIND",
+        "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
       ]
     },
     "libs/plugins/inbox/src/lib/model/reply-policy.ts": {
@@ -373,7 +382,8 @@
         "CRM_LEAD_STATUS_LABELS",
         "CRM_ACTIVITIES_PER_RECORD_CEILING",
         "CRM_EMAIL_SUBJECT_MAX",
-        "CRM_EMAIL_BODY_MAX"
+        "CRM_EMAIL_BODY_MAX",
+        "CRM_LEAD_CLOSED_STATUSES"
       ]
     },
     "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
@@ -609,6 +619,28 @@
         "POS_TENDER_LABELS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-day-report.ts": {
+      "types": [
+        "PosDayTotals",
+        "PosDayTenderRow",
+        "PosDayRegisterRow",
+        "PosDayCashierRow",
+        "PosDayShiftRow",
+        "PosDayCash",
+        "PosDayReport"
+      ],
+      "values": [
+        "POS_DAY_REPORT_ROUTE",
+        "POS_DAY_REPORT_MAX_DAYS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-reservations.ts": {
+      "values": [
+        "PENDING_RESERVATION_HOLD_MS",
+        "MAX_RESOURCE_UNITS",
+        "FEW_UNITS_LEFT"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
       "types": [
         "ReturnReason"
@@ -838,7 +870,11 @@
         "StarResult",
         "StarOutcome",
         "WorkspaceColor",
-        "WorkspaceColorSource"
+        "WorkspaceColorSource",
+        "TabBarPins",
+        "TabPinResult",
+        "TabPinOutcome",
+        "TabBarLayout"
       ],
       "values": [
         "PINNED_ORGS_FIELD",
@@ -846,13 +882,13 @@
         "RECENT_ORGS_FIELD",
         "RECENT_ORGS_MAX",
         "RAIL_RECENT_ORGS",
-        "RAIL_ALL_WORKSPACES_AT_MOST",
         "STARRED_FIELD",
         "STARRED_MAX",
         "RECENTS_FIELD",
         "RECENTS_MAX",
         "WORKSPACE_COLORS_FIELD",
         "WORKSPACE_COLORS_MAX",
+        "WORKSPACE_STABLE_COLORS",
         "APP_THEME_FIELD",
         "ACCOUNT_ITEM_LABEL_MAX",
         "ACCOUNT_COLOR_PATTERN",
@@ -863,7 +899,13 @@
         "APP_DENSITIES",
         "APP_TEXT_SIZES",
         "APP_SIDEBAR_STYLES",
-        "APP_ICON_ID_MAX"
+        "APP_ICON_ID_MAX",
+        "TAB_BARS_FIELD",
+        "TAB_BAR_AREAS_MAX",
+        "TAB_BARS_MAX",
+        "TAB_BAR_HOME",
+        "TAB_BAR_CREATE",
+        "ACCOUNT_PHOTO_FIELD"
       ]
     },
     "libs/aglyn/src/lib/app-utils/native-nav.ts": {
@@ -885,14 +927,20 @@
         "NativeNavCreateItem",
         "NativeNavCreateList",
         "NativeNavCreateContribution",
-        "ResolvedCreateItem"
+        "ResolvedCreateItem",
+        "PhoneHomeGroup"
       ],
       "values": [
         "NATIVE_NAV_MANIFEST",
         "NATIVE_NAV_SHELL_SCREENS",
         "NATIVE_CREATE_PERMISSION_REASON",
         "NATIVE_CREATE_SITE_ROLE_REASON",
-        "NATIVE_CREATE_PLAN_REASON"
+        "NATIVE_CREATE_PLAN_REASON",
+        "PHONE_HOME_GROUP_LABELS",
+        "PHONE_HOME_SITE_GROUP_LABEL",
+        "PHONE_HOME_WORKSPACE_GROUP_LABEL",
+        "PHONE_HOME_TEAM_LABEL",
+        "WORKSPACE_SETTINGS_ROW"
       ]
     },
     "libs/aglyn/src/lib/app-utils/one-box-search.ts": {
@@ -965,6 +1013,32 @@
         "PLAN_CARD_ADVANCE_MS",
         "PLAN_CARD_WARNING_SHARE"
       ]
+    },
+    "libs/plugins/ai/src/lib/activity/ai-activity-words.ts": {
+      "values": [
+        "AI_ACTIVITY_ACTION_LABELS",
+        "AI_ACTIVITY_ACTION_SENTENCES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/activity-type-labels.ts": {
+      "values": [
+        "ACTIVITY_TYPE_LABELS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/platform-brand.ts": {
+      "values": [
+        "PLATFORM_BRAND_NAME"
+      ]
+    },
+    "libs/plugins/ai/src/lib/model/ai-insight-ask.ts": {
+      "values": [
+        "AI_INSIGHT_WINDOWS",
+        "AI_INSIGHT_DEFAULT_DAYS",
+        "AI_INSIGHT_QUESTION_MAX_CHARS",
+        "AI_INSIGHT_CARD_COPY",
+        "AI_INSIGHT_PLACEHOLDERS",
+        "AI_INSIGHT_DIALOG_COPY"
+      ]
     }
   },
   "assembled": {
@@ -995,7 +1069,7 @@
         "libs/plugins/outreach/src/lib/native-nav.ts",
         "libs/plugins/redirects/src/lib/native-nav.ts",
         "libs/plugins/sms/src/lib/native-nav.ts",
-      "libs/plugins/waivers/src/lib/native-nav.ts",
+        "libs/plugins/waivers/src/lib/native-nav.ts",
         "libs/plugins/workflows/src/lib/native-nav.ts"
       ]
     },
@@ -26541,6 +26615,63 @@
           ],
           [],
           []
+        ],
+        [
+          [
+            "w1",
+            "w2",
+            "w3",
+            "w4",
+            "w5",
+            "w6"
+          ],
+          [
+            "w6"
+          ],
+          [
+            "w6",
+            "w2"
+          ]
+        ],
+        [
+          [
+            "w1",
+            "w2"
+          ],
+          [],
+          []
+        ]
+      ]
+    },
+    "workspaceInitial": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "Juniper Street Co."
+        ],
+        [
+          "acme builders"
+        ],
+        [
+          "Northwind Construction"
+        ],
+        [
+          "  42 Studio"
+        ],
+        [
+          "Ölstudio Berlin"
+        ],
+        [
+          "— Aglyn"
+        ],
+        [
+          "🌿 Fern & Fig"
+        ],
+        [
+          ""
+        ],
+        [
+          "—"
         ]
       ]
     },
@@ -27607,6 +27738,94 @@
           null,
           null,
           false
+        ],
+        [
+          null,
+          null,
+          null,
+          true,
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          null,
+          null,
+          null,
+          false,
+          "Qm7tR2wXyZ4"
+        ],
+        [
+          null,
+          null,
+          "#445566",
+          true,
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          null,
+          null,
+          null,
+          true,
+          ""
+        ],
+        [
+          "#112233",
+          null,
+          null,
+          true,
+          "org-1"
+        ]
+      ]
+    },
+    "workspaceStableColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          "Qm7tR2wXyZ4"
+        ],
+        [
+          "org-1"
+        ],
+        [
+          "org-2"
+        ],
+        [
+          "org-3"
+        ],
+        [
+          "org-4"
+        ],
+        [
+          "org-5"
+        ],
+        [
+          "org-6"
+        ],
+        [
+          "org-7"
+        ],
+        [
+          "org-8"
+        ],
+        [
+          "a"
+        ],
+        [
+          "Ölstudio"
+        ],
+        [
+          "🌿"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          42
         ]
       ]
     },
@@ -27667,6 +27886,111 @@
           "00B0FF"
         ],
         [
+          null
+        ]
+      ]
+    },
+    "readAccountPhoto": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "photoUrl": "https://cdn.example.com/me.jpg"
+          },
+          "https://lh3.example.com/a.jpg"
+        ],
+        [
+          {
+            "photoUrl": "  /api/media/cdn/org:o1/m1  "
+          },
+          null
+        ],
+        [
+          {
+            "photoUrl": "   "
+          },
+          "  https://lh3.example.com/a.jpg "
+        ],
+        [
+          {
+            "photoURL": "https://cdn.example.com/roster.jpg"
+          },
+          null
+        ],
+        [
+          {},
+          "https://lh3.example.com/a.jpg"
+        ],
+        [
+          null,
+          ""
+        ],
+        [
+          {
+            "photoUrl": 7
+          },
+          null
+        ],
+        [
+          null,
+          null
+        ]
+      ]
+    },
+    "readAccountName": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "firstName": "Jordan",
+            "lastName": "Lee"
+          },
+          "J. Lee",
+          "jordan@example.com"
+        ],
+        [
+          {
+            "firstName": " Jordan ",
+            "lastName": ""
+          },
+          null,
+          "jordan@example.com"
+        ],
+        [
+          {
+            "lastName": "Lee"
+          },
+          null,
+          null
+        ],
+        [
+          {
+            "firstName": "  ",
+            "lastName": null
+          },
+          "  Pat Lee ",
+          "pat@example.com"
+        ],
+        [
+          {},
+          "",
+          "pat@example.com"
+        ],
+        [
+          null,
+          null,
+          " pat@example.com "
+        ],
+        [
+          {
+            "firstName": 7
+          },
+          null,
+          null
+        ],
+        [
+          null,
+          null,
           null
         ]
       ]
@@ -28859,6 +29183,1833 @@
         [
           [],
           true
+        ]
+      ]
+    },
+    "tabBarScope": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "o1",
+          "h1"
+        ],
+        [
+          "o1",
+          null
+        ],
+        [
+          "o1"
+        ]
+      ]
+    },
+    "readTabBars": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "tabBars": [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "tabBars": "x"
+          }
+        ],
+        [
+          null
+        ],
+        [
+          {
+            "tabBars": [
+              {
+                "scope": "nope",
+                "areas": [
+                  "a"
+                ]
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "home",
+                  "a",
+                  "a",
+                  "create",
+                  "b",
+                  "c",
+                  "d",
+                  "e"
+                ],
+                "chosen": "yes"
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "z"
+                ],
+                "chosen": true
+              },
+              7
+            ]
+          }
+        ]
+      ]
+    },
+    "tabBarAreas": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h9"
+        ],
+        [
+          [],
+          "org:o1"
+        ]
+      ]
+    },
+    "pinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "emails"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "crm"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm",
+                "emails",
+                "orders"
+              ],
+              "chosen": true
+            }
+          ],
+          "site:h1",
+          "products"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h2",
+          "forms"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          ""
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "home"
+        ]
+      ]
+    },
+    "unpinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "crm"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "crm"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "zz"
+        ]
+      ]
+    },
+    "moveTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "crm",
+          -1
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "pages",
+          1
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "pages",
+          -1
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "zz",
+          1
+        ]
+      ]
+    },
+    "setTabAreas": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          [
+            "emails",
+            "pages",
+            "emails",
+            "home",
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          [],
+          "org:o2",
+          []
+        ]
+      ]
+    },
+    "autoPinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "emails"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "emails"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "crm"
+        ],
+        [
+          [],
+          "site:h3",
+          "automation"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm",
+                "emails",
+                "orders"
+              ],
+              "chosen": true
+            }
+          ],
+          "site:h1",
+          "forms"
+        ],
+        [
+          [
+            {
+              "scope": "org:o1",
+              "areas": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "e"
+        ]
+      ]
+    },
+    "tabBarLayout": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [],
+          [
+            "pages"
+          ]
+        ],
+        [
+          [
+            "pages"
+          ],
+          [
+            "pages"
+          ]
+        ],
+        [
+          [
+            "pages",
+            "crm"
+          ],
+          [
+            "pages",
+            "crm"
+          ]
+        ],
+        [
+          [
+            "pages",
+            "crm",
+            "emails"
+          ],
+          [
+            "pages",
+            "crm",
+            "emails"
+          ]
+        ],
+        [
+          [
+            "pages",
+            "crm",
+            "emails",
+            "orders"
+          ],
+          [
+            "pages",
+            "crm",
+            "emails",
+            "orders"
+          ]
+        ],
+        [
+          [
+            "orders",
+            "pages"
+          ],
+          [
+            "pages"
+          ]
+        ]
+      ]
+    },
+    "phoneHomeGroups": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "args": [
+        [
+          {
+            "id": "site",
+            "groups": [
+              {
+                "id": "top",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "home",
+                    "label": "Home",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.home",
+                    "console": {
+                      "surface": "shell",
+                      "id": "home"
+                    }
+                  },
+                  {
+                    "id": "overview",
+                    "label": "Overview",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.analytics",
+                    "console": {
+                      "surface": "shell",
+                      "id": "overview"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "starred",
+                "label": "Starred",
+                "foldable": true,
+                "dynamic": "starred",
+                "rows": []
+              },
+              {
+                "id": "website",
+                "label": "Website",
+                "foldable": true,
+                "rows": [
+                  {
+                    "id": "pages",
+                    "label": "Pages",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.pages",
+                    "console": {
+                      "surface": "shell",
+                      "id": "pages"
+                    }
+                  },
+                  {
+                    "id": "media",
+                    "label": "Media",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.media",
+                    "console": {
+                      "surface": "shell",
+                      "id": "media"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "more",
+                "label": "More",
+                "foldable": true,
+                "rows": [
+                  {
+                    "id": "automation",
+                    "label": "Automation",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "workflows.automation",
+                    "console": {
+                      "surface": "shell",
+                      "id": "automation"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "settings",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "siteSettings",
+                    "label": "Site settings",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.siteSettings",
+                    "console": {
+                      "surface": "shell",
+                      "id": "siteSettings"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "members",
+            "label": "Members",
+            "icon": {
+              "apple": "square",
+              "android": "square"
+            },
+            "screen": "core.team",
+            "console": {
+              "surface": "shell",
+              "id": "members"
+            }
+          },
+          "Juniper Street Co."
+        ],
+        [
+          {
+            "id": "workspace",
+            "groups": [
+              {
+                "id": "top",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "home",
+                    "label": "Home",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.home",
+                    "console": {
+                      "surface": "shell",
+                      "id": "home"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "starred",
+                "label": "Starred",
+                "foldable": true,
+                "dynamic": "starred",
+                "rows": []
+              },
+              {
+                "id": "workspace",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "sites",
+                    "label": "Sites",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.sites",
+                    "console": {
+                      "surface": "shell",
+                      "id": "sites"
+                    }
+                  },
+                  {
+                    "id": "crm",
+                    "label": "CRM",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "crm.contacts",
+                    "console": {
+                      "surface": "shell",
+                      "id": "crm"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "members",
+            "label": "Members",
+            "icon": {
+              "apple": "square",
+              "android": "square"
+            },
+            "screen": "core.team",
+            "console": {
+              "surface": "shell",
+              "id": "members"
+            }
+          },
+          "Juniper Street Co."
+        ],
+        [
+          {
+            "id": "workspace",
+            "groups": [
+              {
+                "id": "top",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "home",
+                    "label": "Home",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.home",
+                    "console": {
+                      "surface": "shell",
+                      "id": "home"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "starred",
+                "label": "Starred",
+                "foldable": true,
+                "dynamic": "starred",
+                "rows": []
+              },
+              {
+                "id": "workspace",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "sites",
+                    "label": "Sites",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.sites",
+                    "console": {
+                      "surface": "shell",
+                      "id": "sites"
+                    }
+                  },
+                  {
+                    "id": "crm",
+                    "label": "CRM",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "crm.contacts",
+                    "console": {
+                      "surface": "shell",
+                      "id": "crm"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          null,
+          ""
+        ],
+        [
+          {
+            "id": "site",
+            "groups": []
+          },
+          null,
+          "x"
+        ]
+      ]
+    },
+    "isTabPinnable": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "args": [
+        [
+          {
+            "screen": "site.pages"
+          }
+        ],
+        [
+          {
+            "screen": "shell.home"
+          }
+        ],
+        [
+          {
+            "screen": "shell.analytics"
+          }
+        ],
+        [
+          {
+            "screen": "shell.workspaceSettings"
+          }
+        ],
+        [
+          {
+            "screen": "shell.siteSettings"
+          }
+        ]
+      ]
+    },
+    "summarizeScreenTraffic": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "total": 0,
+              "referrers": {},
+              "devices": {},
+              "dwellMs": 0,
+              "dwellSamples": 0
+            },
+            {
+              "total": 0,
+              "referrers": {},
+              "devices": {},
+              "dwellMs": 0,
+              "dwellSamples": 0
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 5,
+              "referrers": {
+                "google_com": 2,
+                "bing_com": 1
+              },
+              "devices": {
+                "mobile": 3,
+                "desktop": 2
+              },
+              "dwellMs": 120000,
+              "dwellSamples": 4
+            },
+            {
+              "total": 4,
+              "referrers": {
+                "google_com": 1,
+                "yelp_com": 3
+              },
+              "devices": {
+                "mobile": 1,
+                "tablet": 1
+              },
+              "dwellMs": 0,
+              "dwellSamples": 0
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 3,
+              "referrers": {
+                "a_com": 1,
+                "b_com": 1,
+                "c_com": 1,
+                "d_com": 1,
+                "e_com": 1,
+                "f_com": 1
+              },
+              "devices": {
+                "desktop": 1,
+                "mobile": 1,
+                "tablet": 1
+              },
+              "dwellMs": 3725000,
+              "dwellSamples": 1
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 2,
+              "referrers": {},
+              "devices": {
+                "tv": 2
+              },
+              "dwellMs": 5000,
+              "dwellSamples": 2
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 7,
+              "referrers": {
+                "x_com": 3
+              },
+              "devices": {
+                "desktop": 2,
+                "mobile": 1,
+                "watch": 4
+              },
+              "dwellMs": 9000,
+              "dwellSamples": 3
+            },
+            {
+              "total": 1,
+              "referrers": {
+                "x_com": 1,
+                "y_com": 4
+              },
+              "devices": {
+                "desktop": 1
+              },
+              "dwellMs": 0,
+              "dwellSamples": 0
+            }
+          ]
+        ]
+      ]
+    },
+    "describeAutomationRunAction": {
+      "module": "libs/plugins/workflows/src/lib/model/run-activity-words.ts",
+      "args": [
+        [
+          "Action ran on order.created"
+        ],
+        [
+          "Workflow failed on form.submitted: timeout"
+        ],
+        [
+          "Org automation skipped on booking.created"
+        ],
+        [
+          "Action is waiting, on order.paid"
+        ],
+        [
+          "Action ran on webhook with errors: step 2"
+        ],
+        [
+          "Saved the screen"
+        ],
+        [
+          "  Workflow ran on contactCreated  "
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "posOfflineCardRefusal": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 10000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 10001,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2000,
+            "takenTodayCents": 499000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 1000,
+            "takenTodayCents": 499000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": false,
+              "unavailableReason": "Card sales offline are not turned on in this store’s point of sale settings.",
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": false,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": null,
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 0,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 5000000,
+              "maxDeviceDailyCents": 9000000
+            },
+            "totalCents": 1200000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 500000,
+              "maxDeviceDailyCents": 12345678
+            },
+            "totalCents": 200000,
+            "takenTodayCents": 12300000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 1000000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 900000,
+            "takenTodayCents": 50000000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 1000001,
+            "takenTodayCents": 0
+          }
+        ]
+      ]
+    },
+    "posOfflineCardIntentMetadata": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d",
+            "hostId": "host_1",
+            "orgId": "org_1",
+            "registerId": "reg_1"
+          }
+        ]
+      ]
+    },
+    "sanitizePosOfflineSaleCard": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "forward": "stored",
+            "brand": "visa",
+            "last4": "4242"
+          }
+        ],
+        [
+          {
+            "forward": "forwarded",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345"
+          }
+        ],
+        [
+          {
+            "forward": "forwarded"
+          }
+        ],
+        [
+          {
+            "forward": "declined",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345",
+            "declineMessage": "Your card was declined.",
+            "last4": "42"
+          }
+        ],
+        [
+          {
+            "forward": "lost"
+          }
+        ],
+        [
+          {
+            "forward": "stored",
+            "paymentIntentId": "../charges"
+          }
+        ]
+      ]
+    },
+    "posDayRangeLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-day-report.ts",
+      "args": [
+        [
+          {
+            "from": "2026-10-24",
+            "to": "2026-10-24"
+          }
+        ],
+        [
+          {
+            "from": "2026-10-24",
+            "to": "2026-10-26"
+          }
+        ]
+      ]
+    },
+    "posDayAmount": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-day-report.ts",
+      "args": [
+        [
+          1234,
+          "usd"
+        ],
+        [
+          1200,
+          "jpy"
+        ],
+        [
+          null,
+          "usd"
+        ],
+        [
+          -512,
+          "usd"
+        ]
+      ]
+    },
+    "posDayReportCsv": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-day-report.ts",
+      "args": [
+        [
+          {
+            "hostId": "h1",
+            "storeName": "Corner Cafe",
+            "currency": "usd",
+            "timeZone": "America/Chicago",
+            "from": "2026-10-24",
+            "to": "2026-10-25",
+            "startMs": 1792818000000,
+            "endMs": 1792990800000,
+            "days": 2,
+            "generatedAtMs": 1792990000000,
+            "totals": {
+              "orderCount": 12,
+              "grossSalesCents": 10000,
+              "discountsCents": 50,
+              "taxCents": 180,
+              "tipsCents": 150,
+              "refundCount": 1,
+              "refundsCents": 500,
+              "netSalesCents": 9500,
+              "salesByTender": {
+                "cash": 4000,
+                "card_present": 6000
+              }
+            },
+            "byTender": [
+              {
+                "method": "cash",
+                "label": "Cash",
+                "salesCents": 4000,
+                "refundsCents": 500,
+                "netCents": 3500
+              },
+              {
+                "method": "card_present",
+                "label": "Card",
+                "salesCents": 6000,
+                "refundsCents": 0,
+                "netCents": 6000
+              }
+            ],
+            "byRegister": [
+              {
+                "orderCount": 8,
+                "grossSalesCents": 7000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 1,
+                "refundsCents": 500,
+                "netSalesCents": 6500,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "registerId": "r1",
+                "name": "Front, \"main\" till"
+              },
+              {
+                "orderCount": 4,
+                "grossSalesCents": 3000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 0,
+                "refundsCents": 0,
+                "netSalesCents": 3000,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "registerId": "r2",
+                "name": "Gate 2"
+              }
+            ],
+            "byCashier": [
+              {
+                "orderCount": 12,
+                "grossSalesCents": 10000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 1,
+                "refundsCents": 500,
+                "netSalesCents": 9500,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "memberId": "u1",
+                "name": "Jordan Lee"
+              }
+            ],
+            "shifts": [
+              {
+                "shiftId": "s1",
+                "registerId": "r1",
+                "registerName": "Front",
+                "status": "closed",
+                "openedAtMs": 1792846800000,
+                "closedAtMs": 1792879200000,
+                "openedByName": "Jordan Lee",
+                "closedByName": "Jordan Lee",
+                "openingFloatCents": 15000,
+                "netSalesCents": 6500,
+                "expectedCashCents": 18500,
+                "countedCashCents": 18300,
+                "varianceCents": -200
+              },
+              {
+                "shiftId": "s2",
+                "registerId": "r2",
+                "registerName": "Gate 2",
+                "status": "open",
+                "openedAtMs": 1792933200000,
+                "closedAtMs": null,
+                "openedByName": "Jordan Lee",
+                "closedByName": null,
+                "openingFloatCents": 10000,
+                "netSalesCents": 3000,
+                "expectedCashCents": 11000,
+                "countedCashCents": null,
+                "varianceCents": null
+              }
+            ],
+            "cash": {
+              "openingFloatCents": 25000,
+              "cashSalesCents": 4000,
+              "cashRefundsCents": 500,
+              "paidInCents": 1000,
+              "paidOutCents": 700,
+              "dropsCents": 2000,
+              "closedShiftCount": 1,
+              "openShiftCount": 1,
+              "expectedCashCents": 18500,
+              "countedCashCents": 18300,
+              "varianceCents": -200,
+              "openExpectedCashCents": 11000
+            },
+            "truncated": true
+          }
+        ]
+      ]
+    },
+    "posDayReportIsEmpty": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-day-report.ts",
+      "args": [
+        [
+          {
+            "hostId": "h1",
+            "storeName": "Corner Cafe",
+            "currency": "usd",
+            "timeZone": "America/Chicago",
+            "from": "2026-10-24",
+            "to": "2026-10-25",
+            "startMs": 1792818000000,
+            "endMs": 1792990800000,
+            "days": 2,
+            "generatedAtMs": 1792990000000,
+            "totals": {
+              "orderCount": 12,
+              "grossSalesCents": 10000,
+              "discountsCents": 50,
+              "taxCents": 180,
+              "tipsCents": 150,
+              "refundCount": 1,
+              "refundsCents": 500,
+              "netSalesCents": 9500,
+              "salesByTender": {
+                "cash": 4000,
+                "card_present": 6000
+              }
+            },
+            "byTender": [
+              {
+                "method": "cash",
+                "label": "Cash",
+                "salesCents": 4000,
+                "refundsCents": 500,
+                "netCents": 3500
+              },
+              {
+                "method": "card_present",
+                "label": "Card",
+                "salesCents": 6000,
+                "refundsCents": 0,
+                "netCents": 6000
+              }
+            ],
+            "byRegister": [
+              {
+                "orderCount": 8,
+                "grossSalesCents": 7000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 1,
+                "refundsCents": 500,
+                "netSalesCents": 6500,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "registerId": "r1",
+                "name": "Front, \"main\" till"
+              },
+              {
+                "orderCount": 4,
+                "grossSalesCents": 3000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 0,
+                "refundsCents": 0,
+                "netSalesCents": 3000,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "registerId": "r2",
+                "name": "Gate 2"
+              }
+            ],
+            "byCashier": [
+              {
+                "orderCount": 12,
+                "grossSalesCents": 10000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 1,
+                "refundsCents": 500,
+                "netSalesCents": 9500,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "memberId": "u1",
+                "name": "Jordan Lee"
+              }
+            ],
+            "shifts": [
+              {
+                "shiftId": "s1",
+                "registerId": "r1",
+                "registerName": "Front",
+                "status": "closed",
+                "openedAtMs": 1792846800000,
+                "closedAtMs": 1792879200000,
+                "openedByName": "Jordan Lee",
+                "closedByName": "Jordan Lee",
+                "openingFloatCents": 15000,
+                "netSalesCents": 6500,
+                "expectedCashCents": 18500,
+                "countedCashCents": 18300,
+                "varianceCents": -200
+              },
+              {
+                "shiftId": "s2",
+                "registerId": "r2",
+                "registerName": "Gate 2",
+                "status": "open",
+                "openedAtMs": 1792933200000,
+                "closedAtMs": null,
+                "openedByName": "Jordan Lee",
+                "closedByName": null,
+                "openingFloatCents": 10000,
+                "netSalesCents": 3000,
+                "expectedCashCents": 11000,
+                "countedCashCents": null,
+                "varianceCents": null
+              }
+            ],
+            "cash": {
+              "openingFloatCents": 25000,
+              "cashSalesCents": 4000,
+              "cashRefundsCents": 500,
+              "paidInCents": 1000,
+              "paidOutCents": 700,
+              "dropsCents": 2000,
+              "closedShiftCount": 1,
+              "openShiftCount": 1,
+              "expectedCashCents": 18500,
+              "countedCashCents": 18300,
+              "varianceCents": -200,
+              "openExpectedCashCents": 11000
+            },
+            "truncated": true
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "storeName": "Corner Cafe",
+            "currency": "usd",
+            "timeZone": "America/Chicago",
+            "from": "2026-10-24",
+            "to": "2026-10-25",
+            "startMs": 1792818000000,
+            "endMs": 1792990800000,
+            "days": 2,
+            "generatedAtMs": 1792990000000,
+            "totals": {
+              "orderCount": 0,
+              "grossSalesCents": 0,
+              "discountsCents": 50,
+              "taxCents": 180,
+              "tipsCents": 150,
+              "refundCount": 0,
+              "refundsCents": 0,
+              "netSalesCents": 0,
+              "salesByTender": {
+                "cash": 4000,
+                "card_present": 6000
+              }
+            },
+            "byTender": [
+              {
+                "method": "cash",
+                "label": "Cash",
+                "salesCents": 4000,
+                "refundsCents": 500,
+                "netCents": 3500
+              },
+              {
+                "method": "card_present",
+                "label": "Card",
+                "salesCents": 6000,
+                "refundsCents": 0,
+                "netCents": 6000
+              }
+            ],
+            "byRegister": [
+              {
+                "orderCount": 8,
+                "grossSalesCents": 7000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 1,
+                "refundsCents": 500,
+                "netSalesCents": 6500,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "registerId": "r1",
+                "name": "Front, \"main\" till"
+              },
+              {
+                "orderCount": 4,
+                "grossSalesCents": 3000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 0,
+                "refundsCents": 0,
+                "netSalesCents": 3000,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "registerId": "r2",
+                "name": "Gate 2"
+              }
+            ],
+            "byCashier": [
+              {
+                "orderCount": 12,
+                "grossSalesCents": 10000,
+                "discountsCents": 50,
+                "taxCents": 180,
+                "tipsCents": 150,
+                "refundCount": 1,
+                "refundsCents": 500,
+                "netSalesCents": 9500,
+                "salesByTender": {
+                  "cash": 4000,
+                  "card_present": 6000
+                },
+                "memberId": "u1",
+                "name": "Jordan Lee"
+              }
+            ],
+            "shifts": [],
+            "cash": {
+              "openingFloatCents": 25000,
+              "cashSalesCents": 4000,
+              "cashRefundsCents": 500,
+              "paidInCents": 1000,
+              "paidOutCents": 700,
+              "dropsCents": 2000,
+              "closedShiftCount": 1,
+              "openShiftCount": 1,
+              "expectedCashCents": 18500,
+              "countedCashCents": 18300,
+              "varianceCents": -200,
+              "openExpectedCashCents": 11000
+            },
+            "truncated": true
+          }
+        ]
+      ]
+    },
+    "posShiftsCsv": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "args": [
+        [
+          [
+            {
+              "id": "s1",
+              "registerName": "Front counter",
+              "hostId": "h1",
+              "registerId": "r1",
+              "status": "closed",
+              "openedBy": "u1",
+              "openedByName": "Hannah Reyes",
+              "openedAtMs": 1792929600000,
+              "openingFloatCents": 15000,
+              "cashEvents": [],
+              "closedBy": "u1",
+              "closedByName": "Hannah Reyes",
+              "closedAtMs": 1792958700000,
+              "countedCashCents": 20350,
+              "expectedCashCents": 20550,
+              "varianceCents": -200,
+              "netSalesCents": 23110,
+              "report": {
+                "orderCount": 11,
+                "grossSalesCents": 24360,
+                "discountsCents": 250,
+                "taxCents": 1840,
+                "tipsCents": 1260,
+                "salesByTender": {
+                  "card_present": 15810,
+                  "cash": 7300,
+                  "gift_card": 1250
+                },
+                "refundCount": 1,
+                "refundsCents": 1250,
+                "refundsByTender": {
+                  "cash": 1250
+                },
+                "netSalesCents": 23110,
+                "openingFloatCents": 15000,
+                "cashSalesCents": 7300,
+                "paidInCents": 0,
+                "paidOutCents": 500,
+                "dropsCents": 0,
+                "cashRefundsCents": 1250,
+                "expectedCashCents": 20550
+              }
+            },
+            {
+              "id": "s2",
+              "hostId": "h1",
+              "registerId": "r2",
+              "status": "open",
+              "openedBy": "u2",
+              "openedByName": "=Leo, \"Park\"",
+              "openedAtMs": 1793016900000,
+              "openingFloatCents": 10000,
+              "cashEvents": [],
+              "closedAtMs": null,
+              "countedCashCents": null,
+              "expectedCashCents": null,
+              "varianceCents": null,
+              "netSalesCents": null
+            }
+          ]
+        ],
+        [
+          []
         ]
       ]
     }

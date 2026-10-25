@@ -267,7 +267,7 @@ private struct RecordsBody: View {
       .aglynContentEdges().padding(.vertical, AglynSpace.one)
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -481,7 +481,6 @@ struct RecordDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("record-detail")
   }
 }

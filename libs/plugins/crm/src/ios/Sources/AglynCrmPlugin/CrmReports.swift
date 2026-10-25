@@ -195,7 +195,6 @@ struct ReportsSection: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("crm-reports")
     .task(id: scope.readTokens) {
       let reader = context.firestore

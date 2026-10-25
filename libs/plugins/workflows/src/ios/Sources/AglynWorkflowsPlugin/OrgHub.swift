@@ -23,7 +23,8 @@ struct OrgAutomationsSection: View {
     let docs = live.docs ?? []
     let rows = sortedOrgAutomations(docs)
     let canEdit = sites.canEdit
-    List {
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
+    AglynGroupedForm(plain: true) {
       Section {
         Text(
           "Write an automation once and run it on every site you choose. Each run is that site’s own: its email goes from that site, it counts on that site’s action runs, and the site can pause it for itself. Pro plans and up."
@@ -59,11 +60,12 @@ struct OrgAutomationsSection: View {
           } label: {
             Label("Add org automation", systemImage: "plus")
           }
+          .buttonStyle(.aglynRow)
+          .foregroundStyle(AglynColor.tint)
           .accessibilityIdentifier("add-org-automation")
         }
       }
     }
-    .aglynListBackground()
     .accessibilityIdentifier("org-automations-list")
     .automationConfirm($confirm)
     .task(id: orgID) { live.start(context.firestore, AutomationQueries.orgAutomations(orgID)) }
@@ -236,7 +238,8 @@ struct OrgSiteListSection: View {
     let reachable = Array(sites.sites.prefix(AutomationCeilings.orgSitesMax))
     let shown = showAll ? reachable : Array(reachable.prefix(AutomationCeilings.orgSitesOpen))
     let folded = reachable.count - shown.count
-    List {
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
+    AglynGroupedForm(plain: true) {
       Section {
         Text(kind.intro).font(AglynFont.subheadline).foregroundStyle(.secondary)
         if !canRead {
@@ -273,6 +276,8 @@ struct OrgSiteListSection: View {
               } label: {
                 Label("Add \(kind.noun) on a site", systemImage: "plus")
               }
+              .buttonStyle(.aglynRow)
+              .foregroundStyle(AglynColor.tint)
               .accessibilityIdentifier("org-add-on-site")
             }
           } footer: {
@@ -283,7 +288,6 @@ struct OrgSiteListSection: View {
         }
       }
     }
-    .aglynListBackground()
     .accessibilityIdentifier("org-\(kind.rawValue)-list")
     .task(id: canRead ? shown.map(\.id) : []) {
       guard canRead else { return }

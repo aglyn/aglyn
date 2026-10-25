@@ -21,8 +21,9 @@ extension AglynColor {
     guard runtime.sidebarTinted, runtime.theme.id != "aglyn", let accent = runtime.accentIntent(dark: dark) else { return surface }
     return blend(surface, accent.main, 0.05)
   }
-  /// A tile with no color of its own: the palette's slate.
-  public static let neutralTile = adaptive(light: AglynTokens.light.tertiary.main, dark: AglynTokens.dark.grey[700] ?? .gray)
+  /// A tile with no color of its own (no workspace id to take a stable color from): the brand slate in both
+  /// appearances, the light palette's tertiary.
+  public static let neutralTile = AglynTokens.light.tertiary.main
   /// A count that asks for action (unread, waiting): the secondary intent's fill.
   public static let badge = intent({ $0.secondary }, \.main)
   public static let badgeText = intent({ $0.secondary }, \.contrastText)
@@ -102,12 +103,16 @@ public struct AglynWorkspaceTile: View {
   let selected: Bool
   let unread: Int
   let size: CGFloat
+  /// The letters drawn without a logo: a workspace's one initial (`workspaceInitial`, Figma Type=Initial); nil draws
+  /// `aglynInitials` of the name, as a site's tile does.
+  let initials: String?
   let cornerRadius: CGFloat?
 
   public init(
     name: String, logoURL: URL?, darkLogoURL: URL? = nil, colorHex: String?, selected: Bool, unread: Int = 0,
-    size: CGFloat = AglynShellMetrics.tile, cornerRadius: CGFloat? = nil
+    size: CGFloat = AglynShellMetrics.tile, initials: String? = nil, cornerRadius: CGFloat? = nil
   ) {
+    self.initials = initials
     self.name = name
     self.logoURL = logoURL
     self.darkLogoURL = darkLogoURL
@@ -160,20 +165,22 @@ public struct AglynWorkspaceTile: View {
           .background(shape.fill(layout.plate ? AglynColor.paper : Color.clear))
           .overlay(shape.strokeBorder(AglynColor.divider, lineWidth: layout.plate ? 1 : 0))
       } fallback: {
-        initials
+        initialsTile
       }
     } else {
-      initials
+      initialsTile
     }
   }
 
-  private var initials: some View {
+  private var letters: String { initials ?? aglynInitials(name) }
+
+  private var initialsTile: some View {
     let fill = Color(aglynHex: colorHex) ?? AglynColor.neutralTile
-    return Text(aglynInitials(name))
+    return Text(letters)
       .font(
         .system(
           size: size == AglynShellMetrics.tile
-            ? AglynShellMetrics.tileInitials : size * (aglynInitials(name).count > 1 ? 0.36 : 0.44),
+            ? AglynShellMetrics.tileInitials : size * (letters.count > 1 ? 0.36 : 0.44),
           weight: .semibold))
       .foregroundStyle(colorHex == nil || Color.aglynPrefersLightText(colorHex) ? AglynTokens.light.primary.contrastText : AglynTokens.light.text.primary)
       .frame(width: size, height: size)
@@ -182,6 +189,10 @@ public struct AglynWorkspaceTile: View {
 }
 
 /// A square rail button (All workspaces, Admin): a symbol on a faint tile, with a caption under it.
+///
+/// At a tile's size it is Figma's All workspaces tile (Rail 97:14737 / 12:279): the grid on the sunken ground inside a
+/// border/subtle hairline, its total under it in the secondary text, in a box as tall as Figma's. At the utility size it
+/// is a foot button (Admin).
 public struct AglynRailButton: View {
   let systemImage: String
   let caption: String?
@@ -195,45 +206,82 @@ public struct AglynRailButton: View {
     self.size = size
   }
 
+  private var utility: Bool { size == AglynShellMetrics.utility }
+  private var radius: CGFloat {
+    utility ? AglynShellMetrics.controlRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
+  }
+
   public var body: some View {
-    VStack(spacing: 3) {
-      Image(systemName: systemImage)
-        .font(.system(size: size == AglynShellMetrics.utility ? AglynShellMetrics.rowIcon - 2 : size * 0.42, weight: .semibold))
-        .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.railText)
-        .frame(width: size, height: size)
+    if utility {
+      // Create new is filled; Admin is the bare outline (Figma Rail/Utility button, Kind=Admin 97:946 / 5:98).
+      symbol
         .background(
-          RoundedRectangle(
-            cornerRadius: size == AglynShellMetrics.utility
-              ? AglynShellMetrics.controlRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile,
-            style: .continuous)
-            .fill(filled ? AglynColor.primary : AglynColor.paper.opacity(0.7)))
-      if let caption {
-        Text(caption).font(.system(size: AglynShellMetrics.railCaption + 1, weight: .medium)).monospacedDigit()
-          .foregroundStyle(AglynColor.railText).lineLimit(1)
+          RoundedRectangle(cornerRadius: radius, style: .continuous).fill(filled ? AglynColor.primary : Color.clear))
+        .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    } else {
+      VStack(spacing: AglynShellMetrics.allTileGap) {
+        symbol
+          .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(AglynColor.sunken))
+          .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(AglynColor.divider, lineWidth: 1))
+        if let caption {
+          Text(caption)
+            .font(.system(size: AglynShellMetrics.allTileTotal, weight: AglynShellMetrics.allTileTotalWeight))
+            .monospacedDigit()
+            .foregroundStyle(AglynColor.secondaryText)
+            .lineLimit(1)
+        }
       }
+      .frame(height: AglynShellMetrics.allTileHeight)
     }
+  }
+
+  private var symbol: some View {
+    Image(systemName: systemImage)
+      .font(.system(size: AglynShellMetrics.rowIcon - (utility ? 2 : 0), weight: filled ? .semibold : .regular))
+      .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.secondaryText)
+      .frame(width: size, height: size)
   }
 }
 
-/// The person's photo: their initials on the slate circle (the apps keep no profile picture of their own).
+/// A person's photo (AGL-4010): their picture covering the circle, loaded by the retrying cached loader, and their
+/// initials on the slate circle while it loads, when it fails, or when they have none. The one avatar every place a
+/// person appears draws: the rail foot, the account menu and switcher, the phone's top bar and sheet, Settings.
 public struct AglynAccountAvatar: View {
   let initials: String
+  let photoURL: URL?
   let size: CGFloat
   let colorHex: String?
 
-  public init(initials: String, size: CGFloat = 32, colorHex: String? = nil) {
+  public init(initials: String, photoURL: URL? = nil, size: CGFloat = 32, colorHex: String? = nil) {
     self.initials = initials
+    self.photoURL = photoURL
     self.size = size
     self.colorHex = colorHex
   }
 
   public var body: some View {
+    Group {
+      if let photoURL {
+        AglynBrandLoaded(url: photoURL, fit: .photo(side: size)) { picture, layout in
+          AglynBrandDrawn(picture: picture, layout: layout, side: size, cornerRadius: size / 2)
+            .overlay(Circle().strokeBorder(AglynColor.divider))
+        } fallback: {
+          initialsCircle
+        }
+      } else {
+        initialsCircle
+      }
+    }
+    .frame(width: size, height: size)
+    .accessibilityHidden(true)
+  }
+
+  private var initialsCircle: some View {
     Text(initials)
       .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
       .foregroundStyle(AglynTokens.light.primary.contrastText)
       .frame(width: size, height: size)
       .background(Circle().fill(Color(aglynHex: colorHex) ?? AglynColor.neutralTile))
-      .accessibilityHidden(true)
   }
 }
 

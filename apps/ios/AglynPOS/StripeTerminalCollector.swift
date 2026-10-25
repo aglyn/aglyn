@@ -32,6 +32,14 @@
    * answer, so the register is exercised without hardware. Card-present
    * payments settle on the platform account: the connection never sets
    * `onBehalfOf`, and the server's intent alone decides where money goes.
+   *
+   * WITH NO CONNECTION (AGL-4039) a Bluetooth reader still takes cards: the
+   * app creates the intent itself (`OfflineTerminalPort`, the sequence in
+   * AglynHardware) and the SDK stores the card until a connection returns,
+   * then forwards it and tells `OfflineDelegate`, which writes the outcome to
+   * the device's forward ledger for the register. The site's Location and
+   * merchant name are remembered per site, so the SDK can start and the
+   * reader can reconnect while the console cannot be reached.
    */
 
   /// No connection token to hand the SDK, or no reader where one was expected.
@@ -102,7 +110,7 @@
 
   /// The SDK's delegate callbacks, handed to the collector on the main actor.
   private final class TerminalEvents: NSObject, DiscoveryDelegate, TapToPayReaderDelegate, MobileReaderDelegate,
-    @unchecked Sendable
+    OfflineDelegate, @unchecked Sendable
   {
     weak var collector: StripeTerminalCollector?
     var onDiscovered: (([Reader]) -> Void)?
@@ -133,7 +141,13 @@
     }
 
     func reader(_ reader: Reader, didRequestReaderInput inputOptions: ReaderInputOptions) {
-      send { $0.prompt = "Present the card." }
+      // The ways the reader takes the card right now: a large tap can ask for the chip instead (AGL-4039).
+      var ways: [String] = []
+      if inputOptions.contains(.tapCard) { ways.append("TAP") }
+      if inputOptions.contains(.insertCard) { ways.append("INSERT") }
+      if inputOptions.contains(.swipeCard) { ways.append("SWIPE") }
+      let words = readerInputPrompt(ways)
+      send { $0.prompt = words }
     }
 
     func reader(_ reader: Reader, didRequestReaderDisplayMessage displayMessage: ReaderDisplayMessage) {
@@ -164,6 +178,24 @@
       send { $0.batteryChanged(Double(batteryLevel), charging: isCharging) }
     }
 
+    /// Apple's Tap to Pay on iPhone terms were accepted on this device: Apple's education follows (Apple 4.2).
+    func tapToPayReaderDidAcceptTermsOfService(_ reader: Reader) {
+      send { $0.termsAccepted() }
+    }
+
+    // MARK: OfflineDelegate (AGL-4039)
+
+    func terminal(_ terminal: Terminal, didChange offlineStatus: OfflineStatus) {}
+
+    func terminal(_ terminal: Terminal, didForwardPaymentIntent intent: PaymentIntent, error: Error?) {
+      let forward = offlineForward(intent, error: error)
+      send { $0.forwarded(forward) }
+    }
+
+    func terminal(_ terminal: Terminal, didReportForwardingError error: Error) {
+      // A forward that failed without naming its payment is retried by the SDK; nothing to record.
+    }
+
     static func displayName(_ message: ReaderDisplayMessage) -> String {
       switch message {
       case .retryCard: "RETRY_CARD"
@@ -182,11 +214,52 @@
 
   /// The SDK's error codes the shared words know, by their names in the
   /// Kotlin kit; anything else keeps its number.
+  /// What the SDK's forward of a stored card became, for the register's ledger.
+  private func offlineForward(_ intent: PaymentIntent, error: Error?) -> OfflineCardForward? {
+    guard let saleKey = intent.metadata?["saleKey"], !saleKey.isEmpty else { return nil }
+    let status = intent.stripeId == nil ? nil : terminalIntent(intent).status
+    let present = intent.latestCharge?.paymentMethodDetails?.cardPresent
+    let stored = intent.offlineDetails?.cardPresentDetails
+    return OfflineCardForward(
+      saleKey: saleKey, paymentIntentID: intent.stripeId,
+      status: offlineForwardStatus(intentID: intent.stripeId, status: error == nil ? status : "requires_payment_method"),
+      message: error.map { terminalError($0).apiMessage ?? $0.localizedDescription },
+      brand: present?.brand ?? stored?.brand, last4: present?.last4 ?? stored?.last4)
+  }
+
+  /// The reader's intent as the offline sequence reads it.
+  private func offlineIntent(_ intent: PaymentIntent) -> OfflineTerminalIntent {
+    let present = intent.latestCharge?.paymentMethodDetails?.cardPresent
+    let stored = intent.offlineDetails?.cardPresentDetails
+    return OfflineTerminalIntent(
+      id: intent.stripeId, status: terminalIntent(intent).status, amountCents: Int(intent.amount),
+      storedOffline: intent.offlineDetails?.requiresUpload == true, saleKey: intent.metadata?["saleKey"],
+      brand: present?.brand ?? stored?.brand, last4: present?.last4 ?? stored?.last4)
+  }
+
+  /// What the reader needs of a site to start with no connection: its Location, name and mode, as last seen online.
+  private struct RememberedSite: Codable {
+    let locationID: String
+    let merchantName: String
+    let testMode: Bool
+  }
+
   private let terminalErrorNames: [Int: String] = [
     1100: "NOT_CONNECTED_TO_READER", 2020: "CANCELED", 2320: "BLUETOOTH_DISABLED",
     2321: "BLUETOOTH_ACCESS_DENIED", 2330: "BLUETOOTH_SCAN_TIMED_OUT", 3010: "READER_BUSY",
     3850: "UNSUPPORTED_READER_VERSION", 4020: "READER_CONNECTED_TO_ANOTHER_DEVICE",
     6000: "DECLINED_BY_STRIPE_API", 6500: "DECLINED_BY_READER",
+    // Cards taken offline (AGL-4039): worded by AglynHardware's `offlineCardErrorMessage`, never the SDK's own text.
+    2860: "OFFLINE_PAYMENTS_DATABASE_TOO_LARGE", 2890: "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT", 3971: "TAP_TO_PAY_READER_OFFLINE_MODE_NOT_ALLOWED",
+    6901: "INTERAC_NOT_SUPPORTED_OFFLINE", 6902: "OFFLINE_AND_CARD_EXPIRED", 6903: "OFFLINE_TRANSACTION_DECLINED",
+    6905: "ONLINE_PIN_NOT_SUPPORTED_OFFLINE", 10106: "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE",
+    // Tap to Pay on iPhone: worded by AglynHardware's `tapToPayNotice`.
+    2910: "UNSUPPORTED_MOBILE_DEVICE_CONFIGURATION", 2920: "PASSCODE_NOT_ENABLED",
+    2960: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_REQUIRES_ICLOUD_SIGN_IN", 2970: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_CANCELED",
+    3100: "NFC_DISABLED", 3905: "TAP_TO_PAY_READER_REQUEST_INTERRUPTED", 3910: "TAP_TO_PAY_READER_FAILED_TO_PREPARE",
+    3920: "TAP_TO_PAY_READER_DEVICE_BANNED", 3930: "TAP_TO_PAY_READER_TOS_NOT_YET_ACCEPTED",
+    3940: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_FAILED", 3950: "TAP_TO_PAY_READER_MERCHANT_BLOCKED",
+    3960: "TAP_TO_PAY_READER_INVALID_MERCHANT", 3970: "TAP_TO_PAY_READER_ACCOUNT_DEACTIVATED",
   ]
 
   private func terminalError(_ error: Error, intent: PaymentIntent? = nil) -> TerminalError {
@@ -260,7 +333,9 @@
 
   @MainActor
   @Observable
-  final class StripeTerminalCollector: CardCollector, DeviceReaderControls, TerminalPaymentPort {
+  final class StripeTerminalCollector: CardCollector, DeviceReaderControls, TerminalPaymentPort, OfflineCardCollector,
+    OfflineTerminalPort
+  {
     static let shared = StripeTerminalCollector()
 
     private(set) var state: CardCollectorState = .disconnected
@@ -269,6 +344,16 @@
     private(set) var discovery: ReaderDiscovery = .idle
     private(set) var connectedReader: DeviceReader?
     fileprivate(set) var update: ReaderUpdate?
+    /// Why Tap to Pay on iPhone could not connect last time (the checkout button says it).
+    private(set) var tapToPayNotice: TapToPayNotice?
+    /// Apple's terms were just accepted here; the register shows Apple's education, then clears it.
+    private(set) var tapToPayTermsJustAccepted = false
+    /// Only Aglyn staff may accept Apple's terms (`tapToPayTermsPermitted`); a warm-up never shows them.
+    @ObservationIgnored private var termsPermitted = false
+    @ObservationIgnored private var silent = false
+    /// The kind being connected, so Tap to Pay's setup reads as its own and not as a reader update.
+    @ObservationIgnored private var connectingKind: CardCollectorKind?
+    private var osMajor: Int { ProcessInfo.processInfo.operatingSystemVersion.majorVersion }
 
     @ObservationIgnored private let tokens = TerminalTokens()
     @ObservationIgnored private let events = TerminalEvents()
@@ -281,6 +366,10 @@
     @ObservationIgnored private var testMode = false
     @ObservationIgnored private var deviceType: String?
     @ObservationIgnored private var intent: PaymentIntent?
+    /// The intent of the card being taken offline (AGL-4039).
+    @ObservationIgnored private var offlinePayment: PaymentIntent?
+    @ObservationIgnored var onOfflineForward: (() -> Void)?
+    @ObservationIgnored private let forwards = OfflineCardForwardLedger()
     @ObservationIgnored private var inFlight: Cancelable?
     /// Discovered SDK readers by id, so a pick maps back to the SDK object.
     @ObservationIgnored private var found: [String: Reader] = [:]
@@ -329,6 +418,17 @@
           merchantName = session.merchantDisplayName
           testMode = session.testMode
           tokens.prefetched = session.secret
+          remember(site: hostID, RememberedSite(locationID: session.locationID, merchantName: session.merchantDisplayName, testMode: session.testMode))
+        } catch let lost as CardReaderSetupError where lost.code == .unreachable {
+          // No connection: start from what this site's reader last saw online, so a card can be stored (AGL-4039).
+          guard let known = rememberedSite(hostID) else {
+            state = .unavailable("Card readers are not set up for this store yet.")
+            if ask { discovery = .failed("Connect once so the card reader can get ready to work offline.") }
+            return false
+          }
+          locationID = known.locationID
+          merchantName = known.merchantName
+          testMode = known.testMode
         } catch {
           let words =
             (error as? CardReaderSetupError)?.message ?? (error as? LocalizedError)?.errorDescription
@@ -338,7 +438,11 @@
           return false
         }
       }
-      if !Terminal.isInitialized() { Terminal.initWithTokenProvider(tokens, delegate: nil) }
+      if !Terminal.isInitialized() {
+        Terminal.initWithTokenProvider(tokens, delegate: nil, offlineDelegate: events, logLevel: .none)
+      }
+      // The simulated reader stores cards offline only when asked to (test mode).
+      if testMode { Terminal.shared.simulatorConfiguration.offlineEnabled = true }
       if case .unavailable = state { state = .disconnected }
       return true
     }
@@ -348,6 +452,11 @@
     func discover(_ kind: CardCollectorKind, hostID: String, sessions: CardReaderSessionSource) async {
       guard kinds.contains(kind) else {
         discovery = .failed("This device cannot use that card reader.")
+        return
+      }
+      if kind == .tapToPay, osMajor < TapToPayIPhone.minimumOSMajor {
+        tapToPayNotice = .needsUpdate
+        discovery = .failed(TapToPayNotice.needsUpdate.message)
         return
       }
       guard await prepare(hostID: hostID, sessions: sessions, ask: true) else { return }
@@ -423,12 +532,16 @@
       guard let locationID else { return false }
       generation += 1
       await cancelDiscovery()
-      state = .connecting("Connecting \(deviceReader(reader).label)…")
+      state = .connecting(kind == .tapToPay ? "Getting \(TapToPayIPhone.title) ready…" : "Connecting \(deviceReader(reader).label)…")
+      connectingKind = kind
+      defer { connectingKind = nil }
       do {
         let config: ConnectionConfiguration
         if kind == .tapToPay {
+          // Aglyn accepts Apple's terms once for every store; a store member, or a warm-up, never sees them.
           config = try TapToPayConnectionConfigurationBuilder(delegate: events, locationId: locationID)
             .setMerchantDisplayName(merchantName)
+            .setTosAcceptancePermitted(termsPermitted && !silent)
             .build()
         } else {
           // A simulated Bluetooth reader stays at its own mock location.
@@ -445,6 +558,7 @@
           config = try builder.build()
         }
         let connected = try await connectReader(reader, config)
+        if kind == .tapToPay { tapToPayNotice = nil }
         didConnect(connected)
         defaults.set(kind.rawValue, forKey: Self.rememberedKind)
         defaults.set(readerID(connected), forKey: Self.rememberedReader)
@@ -452,8 +566,10 @@
         return true
       } catch {
         state = .disconnected
-        discovery = .failed(
-          friendlyConnectError(code: terminalError(error).code, message: (error as NSError).localizedDescription))
+        let code = terminalError(error).code
+        let words = friendlyConnectError(code: code, message: (error as NSError).localizedDescription)
+        if kind == .tapToPay { tapToPayNotice = noticeForTapToPay(code: code) ?? .failed(words) }
+        discovery = .failed(words)
         return false
       }
     }
@@ -470,7 +586,38 @@
       Terminal.shared.installAvailableUpdate()
     }
 
+    /// Gets the reader ready when the app opens or comes back to the front (Apple 1.5): the reader connected last
+    /// time, else Tap to Pay on iPhone on an iPhone that can take it. Silent: no permission and no terms are asked for.
+    func warmUp(hostID: String, sessions: CardReaderSessionSource) async {
+      guard !state.isConnected, discovering == nil else { return }
+      if defaults.string(forKey: Self.rememberedKind) != nil {
+        await reconnectRemembered(hostID: hostID, sessions: sessions)
+        return
+      }
+      guard kinds.contains(.tapToPay), osMajor >= TapToPayIPhone.minimumOSMajor, location.allowed,
+        tapToPayNotice != .notTurnedOn
+      else { return }
+      silent = true
+      defer { silent = false }
+      guard await prepare(hostID: hostID, sessions: sessions, ask: false) else { return }
+      if let first = await scan(.tapToPay, stopWhen: { _ in true }).first {
+        _ = await connectSDK(first, kind: .tapToPay)
+      }
+      if !state.isConnected { discovery = .idle }
+    }
+
+    func permitTapToPayTerms(_ permitted: Bool) { termsPermitted = permitted }
+
+    func clearTapToPayTermsJustAccepted() { tapToPayTermsJustAccepted = false }
+
+    fileprivate func termsAccepted() {
+      tapToPayTermsJustAccepted = true
+      tapToPayNotice = nil
+    }
+
     func reconnectRemembered(hostID: String, sessions: CardReaderSessionSource) async {
+      silent = true
+      defer { silent = false }
       guard !state.isConnected, location.allowed,
         let raw = defaults.string(forKey: Self.rememberedKind), let kind = CardCollectorKind(rawValue: raw),
         kinds.contains(kind)
@@ -498,11 +645,15 @@
         return state
       }
       if siteID == hostID, state.isConnected { return state }
+      if kind == .tapToPay, osMajor < TapToPayIPhone.minimumOSMajor {
+        tapToPayNotice = .needsUpdate
+        return state
+      }
       guard await prepare(hostID: hostID, sessions: sessions, ask: true) else {
         if case .failed(let words) = discovery, !state.isConnected { state = .unavailable(words) }
         return state
       }
-      state = .connecting(kind == .tapToPay ? "Starting Tap to Pay…" : "Looking for card readers…")
+      state = .connecting(kind == .tapToPay ? "Getting \(TapToPayIPhone.title) ready…" : "Looking for card readers…")
       guard let first = await scan(kind, stopWhen: { _ in true }).first else {
         if case .failed(let words) = discovery { state = .unavailable(words) } else { state = .disconnected }
         return state
@@ -538,6 +689,21 @@
 
     // MARK: SDK events
 
+    private func remember(site hostID: String, _ site: RememberedSite) {
+      if let data = try? JSONEncoder().encode(site) { defaults.set(data, forKey: "aglyn.pos.reader.site.\(hostID)") }
+    }
+
+    private func rememberedSite(_ hostID: String) -> RememberedSite? {
+      guard let data = defaults.data(forKey: "aglyn.pos.reader.site.\(hostID)") else { return nil }
+      return try? JSONDecoder().decode(RememberedSite.self, from: data)
+    }
+
+    fileprivate func forwarded(_ forward: OfflineCardForward?) {
+      guard let forward else { return }
+      forwards.record(forward)
+      onOfflineForward?()
+    }
+
     fileprivate func didConnect(_ reader: Reader) {
       let device = deviceReader(reader)
       connectedReader = device
@@ -567,14 +733,19 @@
 
     fileprivate func updateStarted(_ offered: ReaderUpdate) {
       update = ReaderUpdate(progress: 0, required: offered.required, version: offered.version, duration: offered.duration)
-      prompt = "Updating the card reader. Keep it close and charged."
+      prompt =
+        connectingKind == .tapToPay
+        ? TapToPayNotice.preparing(progress: 0).title + "…" : "Updating the card reader. Keep it close and charged."
     }
 
     fileprivate func updateProgress(_ progress: Double) {
       var next = update ?? ReaderUpdate()
       next.progress = progress
       update = next
-      prompt = "Updating the card reader: \(Int((progress * 100).rounded()))%."
+      let percent = Int((progress * 100).rounded())
+      prompt =
+        connectingKind == .tapToPay
+        ? "\(TapToPayNotice.preparing(progress: progress).title): \(percent)%." : "Updating the card reader: \(percent)%."
     }
 
     fileprivate func updateFinished(_ reader: Reader, failed: String?) {
@@ -604,6 +775,110 @@
       guard let inFlight, !inFlight.completed else { return }
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
         inFlight.cancel { _ in continuation.resume() }
+      }
+    }
+
+    // MARK: OfflineCardCollector (AGL-4039)
+
+    var offlineCardUnavailableReason: String? {
+      guard case .connected(_, let kind, _) = state else { return "Connect the card reader to take cards offline." }
+      if kind == .tapToPay {
+        return "Tap to Pay cannot take cards offline on this phone. Connect a Bluetooth card reader, or take cash."
+      }
+      return nil
+    }
+
+    func collectOffline(_ request: OfflineCardRequest) async -> OfflineCardOutcome {
+      prompt = nil
+      defer {
+        prompt = nil
+        offlinePayment = nil
+        inFlight = nil
+      }
+      return await collectOfflineCardPayment(self, request, readerDeviceType: state.isConnected ? deviceType : nil)
+    }
+
+    func registerConnectivityChanged(online: Bool) {
+      #if DEBUG
+        // `-AglynMirrorOfflineToStripe YES`: a simulated reader goes offline with the register, so store and forward
+        // can be driven on a simulator whose Mac still reaches Stripe.
+        guard testMode, UserDefaults.standard.bool(forKey: "AglynMirrorOfflineToStripe"), Terminal.isInitialized() else { return }
+        guard
+          let config = try? SimulatedOfflineModeConfigurationBuilder()
+            .setSdkOfflineMode(online ? .disabled : .offlineImmediate)
+            .build()
+        else { return }
+        try? Terminal.shared.setSimulatedOfflineModeConfiguration(config)
+      #endif
+    }
+
+    // MARK: OfflineTerminalPort
+
+    func create(_ request: OfflineCardRequest) async -> Result<OfflineTerminalIntent, TerminalError> {
+      let params: PaymentIntentParameters
+      let config: CreateConfiguration
+      do {
+        params = try PaymentIntentParametersBuilder(amount: UInt(request.amountCents), currency: request.currency)
+          .setCaptureMethod(.manual)
+          .setTransferDataDestination(request.destination)
+          .setMetadata(request.metadata)
+          .build()
+        // The store's limits once more at the SDK: above them the card must be taken online.
+        let held = Terminal.shared.offlineStatus.sdk.paymentAmountsByCurrency[request.currency]?.intValue ?? 0
+        let behavior: OfflineBehavior = offlineCardRequiresOnline(request, sdkStoredCents: held) ? .requireOnline : .preferOnline
+        config = try CreateConfigurationBuilder().setOfflineBehavior(behavior).build()
+      } catch {
+        return .failure(terminalError(error))
+      }
+      return await withCheckedContinuation { continuation in
+        Terminal.shared.createPaymentIntent(params, createConfig: config) { created, error in
+          Task { @MainActor in
+            if let created {
+              self.offlinePayment = created
+              continuation.resume(returning: .success(offlineIntent(created)))
+            } else {
+              continuation.resume(returning: .failure(terminalError(error ?? ReaderSetupError.notSetUp)))
+            }
+          }
+        }
+      }
+    }
+
+    func collect(saleKey: String) async -> Result<OfflineTerminalIntent, TerminalError> {
+      guard let payment = offlinePayment else { return .failure(TerminalError(code: "INTENT_NOT_CREATED")) }
+      let config: CollectPaymentIntentConfiguration
+      do {
+        config = try CollectPaymentIntentConfigurationBuilder().setSkipTipping(true).build()
+      } catch {
+        return .failure(terminalError(error))
+      }
+      return await withCheckedContinuation { continuation in
+        inFlight = Terminal.shared.collectPaymentMethod(payment, collectConfig: config) { collected, error in
+          Task { @MainActor in
+            if let collected {
+              self.offlinePayment = collected
+              continuation.resume(returning: .success(offlineIntent(collected)))
+            } else {
+              continuation.resume(returning: .failure(terminalError(error ?? ReaderSetupError.notSetUp)))
+            }
+          }
+        }
+      }
+    }
+
+    func confirm(saleKey: String) async -> Result<OfflineTerminalIntent, TerminalError> {
+      guard let payment = offlinePayment else { return .failure(TerminalError(code: "INTENT_NOT_CREATED")) }
+      inFlight = nil
+      return await withCheckedContinuation { continuation in
+        _ = Terminal.shared.confirmPaymentIntent(payment) { confirmed, error in
+          Task { @MainActor in
+            if let confirmed {
+              continuation.resume(returning: .success(offlineIntent(confirmed)))
+            } else {
+              continuation.resume(returning: .failure(terminalError(error ?? ReaderSetupError.notSetUp)))
+            }
+          }
+        }
       }
     }
 
@@ -667,4 +942,7 @@
       }
     }
   }
+
+  /// AglynHardware's `tapToPayNotice(code:)`, under a name the collector's own `tapToPayNotice` property does not shadow.
+  private func noticeForTapToPay(code: String) -> TapToPayNotice? { tapToPayNotice(code: code) }
 #endif

@@ -100,7 +100,7 @@ struct LogicScreen: View {
           }
           content(hostID, api)
         }
-        .background(AglynColor.page)
+        .background(AglynGround())
         .task(id: hostID) {
           variablesQuery.start(context.firestore, ceilingQuery(variablesPath(hostID)))
           functionsQuery.start(context.firestore, ceilingQuery(functionsPath(hostID)))

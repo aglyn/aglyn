@@ -34,9 +34,14 @@ data class TerminalReadiness(
   val ready: Boolean get() = available && merchantReady && locationReady
 }
 
-/** The route's 409 as a setup error the screen can act on; anything else unchanged. */
+/**
+ * The route's 409 as a setup error the screen can act on, no answer at all as
+ * [CardReaderSetupCode.UNREACHABLE] (the reader may then start offline,
+ * AGL-4039); anything else unchanged.
+ */
 fun asSetupError(error: Throwable): Throwable {
   val api = error as? ConsoleApiError ?: return error
+  if (api.status == 0) return CardReaderSetupError(CardReaderSetupCode.UNREACHABLE, api.message)
   val code = CardReaderSetupCode.of(api.body.obj()["code"].str())
   return if (api.status == 409 && code != null) CardReaderSetupError(code, api.message) else error
 }

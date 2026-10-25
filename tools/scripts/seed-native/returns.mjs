@@ -15,7 +15,8 @@
  *   The store's return policy goes on `settings/store.returns`.
  * - `hosts/{hostId}/resources` and `hosts/{hostId}/reservations`:
  *   `HostResource` and `HostReservation` (commerce-reservations.ts), two
- *   cabins and their stays, days at UTC midnight as the reservation routes
+ *   cabins and their stays, and twelve RV hookups (one resource with
+ *   `units: 12`) part booked, days at UTC midnight as the reservation routes
  *   keep them.
  */
 
@@ -162,5 +163,44 @@ export async function seedReturns({ put, hostId, now: date }) {
       createdAtMs: now - (20 - inDays) * HOUR,
     })
   }
-  return `${returns.length} returns, ${cabins.length} cabins, ${stays.length} stays`
+  /*
+   * Twelve identical RV hookups (AGL-4044, several units per resource): five
+   * left tomorrow, none the night after, two left the night after that, and a
+   * block four nights out that closes every hookup. The native Reservations
+   * screen draws these as its units-left look-ahead.
+   */
+  await put(`hosts/${hostId}/resources/seed-rv-hookups`, {
+    name: 'RV hookups',
+    description: 'Water and 30/50 amp at every site.',
+    units: 12,
+    capacity: 6,
+    nightlyRateUsd: 60,
+    minNights: 1,
+    blocks: [{ fromDayMs: dayMs(now, 4), toDayMs: dayMs(now, 5) }],
+  })
+  const hookupNights = [
+    [1, 7],
+    [2, 12],
+    [3, 10],
+  ]
+  let hookupStays = 0
+  for (const [inDays, count] of hookupNights) {
+    for (let n = 1; n <= count; n++) {
+      hookupStays++
+      await put(`hosts/${hostId}/reservations/seed-rv-${inDays}-${n}`, {
+        resourceId: 'seed-rv-hookups',
+        status: 'confirmed',
+        checkInDayMs: dayMs(now, inDays),
+        checkOutDayMs: dayMs(now, inDays + 1),
+        guestName: `Site ${n} guest`,
+        guestEmail: null,
+        nights: 1,
+        totalCents: 6000,
+        depositCents: 0,
+        paidCents: 0,
+        createdAtMs: now - HOUR,
+      })
+    }
+  }
+  return `${returns.length} returns, ${cabins.length + 1} resources, ${stays.length + hookupStays} stays`
 }

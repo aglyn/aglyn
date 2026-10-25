@@ -44,6 +44,13 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
 
   /// The address a person knows the site by: its custom domain, else its platform address (the Sites list's rule).
   public var shownAddress: String { cname ?? HostStatus.siteAddress(subdomain) ?? subdomain }
+
+  /// The same once the host document is read (the Sites list's order): the host's own custom domain, else the
+  /// membership mirror's, else `<slug>.aglyn.app`, so a mirror written before it carried `cname` still shows the address
+  /// the live site answers on.
+  public func shownAddress(hostCname: String?) -> String {
+    hostCname.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? shownAddress
+  }
 }
 
 /// What a workspace's own document says about how it looks: its logos (`logoUrl`, `logoDarkUrl`), its brand color
@@ -452,6 +459,36 @@ public final class WorkspaceStore {
       subdomain: subdomain, role: doc.string("role") ?? "",
       favicon: doc.string("favicon").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 },
       cname: doc.string("cname").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
+  }
+
+  /// Whether the site that was on screen (`shownOrgID`'s `shownHostID`) has left that workspace's loaded sites: deleted
+  /// (here, on the web or on another device) or taken away from the person. The shell then shows the whole workspace's
+  /// Sites, never another site in its place: whatever screen of the gone site was open, its Danger zone included, would
+  /// otherwise stay open on the next site.
+  nonisolated public static func shownSiteRemoved(
+    shownOrgID: String?, shownHostID: String?, orgID: String?, sites: [WorkspaceSite], ready: Bool
+  ) -> Bool {
+    guard let shownHostID, ready, orgID == shownOrgID else { return false }
+    return !sites.contains { $0.id == shownHostID }
+  }
+
+  /// Follows the site a window shows and says when it has gone (`shownSiteRemoved`), so the window leaves for the
+  /// workspace's Sites. It remembers the picked site whatever the scope: a Sites row picks the site before the window
+  /// steps inside it, so a site remembered only while inside was never remembered at all. Only a window inside the
+  /// site leaves; one on the whole workspace already shows it.
+  public struct ShownSiteWatch: Equatable, Sendable {
+    public private(set) var shown: WorkspacePick?
+    public init() {}
+
+    /// Notes what is on screen now; true when the window inside the site it showed should leave for Sites.
+    public mutating func update(
+      orgID: String?, pickedHostID: String?, sites: [WorkspaceSite], ready: Bool, inSite: Bool
+    ) -> Bool {
+      let removed = WorkspaceStore.shownSiteRemoved(
+        shownOrgID: shown?.orgID, shownHostID: shown?.hostID, orgID: orgID, sites: sites, ready: ready)
+      if ready { shown = WorkspacePick(orgID: orgID, hostID: pickedHostID) }
+      return removed && inSite
+    }
   }
 
   /// Which org and site to show, given what is remembered and what exists.

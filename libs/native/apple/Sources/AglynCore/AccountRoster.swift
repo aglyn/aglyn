@@ -18,16 +18,22 @@ public struct SignedInAccount: Codable, Equatable, Hashable, Identifiable, Senda
   /// The workspaces this account belonged to when it was last in use: a tapped push names a workspace, not an account,
   /// so the app finds whose it is here.
   public var orgIDs: [String]
+  /// The account's own picture as it was last shown (`readAccountPhoto`, AGL-4010), so the switcher draws each account's
+  /// face without reading anyone's profile; nil until it has been on screen, or when it has none.
+  public var photoURL: String?
 
   public var id: String { slot }
   public var isBase: Bool { slot == Self.baseSlot }
 
-  public init(slot: String, uid: String, email: String?, displayName: String?, orgIDs: [String] = []) {
+  public init(
+    slot: String, uid: String, email: String?, displayName: String?, orgIDs: [String] = [], photoURL: String? = nil
+  ) {
     self.slot = slot
     self.uid = uid
     self.email = email
     self.displayName = displayName
     self.orgIDs = orgIDs
+    self.photoURL = photoURL
   }
 
   /// The initials the account's photo shows when it has none ("ZG"), from the name, else the address.
@@ -88,6 +94,8 @@ public enum AccountRosterRules {
     if let index = next.firstIndex(where: { $0.slot == account.slot }) {
       var kept = account
       if kept.orgIDs.isEmpty { kept.orgIDs = next[index].orgIDs }
+      // The same person signing in again keeps the photo last shown, until their profile is read again.
+      if kept.photoURL == nil, kept.uid == next[index].uid { kept.photoURL = next[index].photoURL }
       next[index] = kept
     } else {
       next.append(account)

@@ -383,16 +383,26 @@ struct CampaignSendAPI {
     return try await api.request(campaignSendRoute, method: .post, body: jsonBody(all))
   }
 
-  func sendNowCount(_ id: String) async throws -> Int {
-    let answer = try await post(["action": "sendNow", "campaignId": id, "dryRun": true])
-    return Int(answer?["sendable"]?.numberValue ?? answer?["sent"]?.numberValue ?? 0)
+  func sendNowCount(_ id: String) async throws -> DryRunCount {
+    try await dryRunCount(["action": "sendNow", "campaignId": id, "dryRun": true])
   }
 
   func sendNow(_ id: String) async throws { try await post(["action": "sendNow", "campaignId": id]) }
 
-  func followUpCount(_ id: String) async throws -> Int {
-    let answer = try await post(["action": "followUp", "campaignId": id, "dryRun": true])
-    return Int(answer?["sendable"]?.numberValue ?? answer?["sent"]?.numberValue ?? 0)
+  func followUpCount(_ id: String) async throws -> DryRunCount {
+    try await dryRunCount(["action": "followUp", "campaignId": id, "dryRun": true])
+  }
+
+  /// Who a dry run reaches, or the plan that stops it: a refusal carrying `planLock` is an answer, not an error.
+  private func dryRunCount(_ fields: [String: Any?]) async throws -> DryRunCount {
+    do {
+      let answer = try await post(fields)
+      return DryRunCount(
+        reaching: Int(answer?["sendable"]?.numberValue ?? answer?["sent"]?.numberValue ?? 0), planLock: CampaignPlanLock.from(answer))
+    } catch let error as ConsoleAPIError {
+      guard let lock = CampaignPlanLock.from(error.body) else { throw error }
+      return DryRunCount(reaching: 0, planLock: lock)
+    }
   }
 
   func followUp(_ id: String) async throws { try await post(["action": "followUp", "campaignId": id]) }
@@ -423,4 +433,10 @@ struct CampaignSendAPI {
     all["action"] = action
     return try await post(all)?["campaignId"]?.stringValue
   }
+}
+
+/// A "Send now" or "Send to more" dry run's answer.
+struct DryRunCount: Equatable {
+  var reaching: Int
+  var planLock: CampaignPlanLock?
 }

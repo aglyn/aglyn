@@ -45,7 +45,18 @@ struct RegisterOpsSheet: View {
           .disabled(model.register == nil)
           .accessibilityIdentifier("pos-lock")
         }
-        Section("Shift") { ShiftControls(model: model) }
+        Section("Shift") {
+          ShiftControls(model: model)
+          // Every register, shift and cashier for the day or the event (AGL-4037), and this device's unsynced sales.
+          NavigationLink {
+            PosDayTotalsView(
+              model: PosDayReportModel(api: model.dayReportAPI), currency: model.currency,
+              notSynced: PosDayNotSynced(model.offline.queue))
+          } label: {
+            Text("Day totals")
+          }
+          .accessibilityIdentifier("pos-day-totals")
+        }
         DisplayDevicesSection(model: model)
         LastReceiptSection(model: model)
         Section("Returns") {

@@ -3,6 +3,8 @@ package com.aglyn.pos
 import android.app.Application
 import com.aglyn.core.AglynEnv
 import com.aglyn.hardware.AndroidSystemPrinter
+import com.aglyn.hardware.OfflineCardForwardLedger
+import com.aglyn.hardware.OfflineCardForwardStore
 import com.aglyn.hardware.StaticPeripherals
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePluginManifest
@@ -28,6 +30,17 @@ class AglynPosApplication : Application() {
 
   /** Stripe's card form for a card typed in at the register; the activity on screen attaches it. */
   internal val keyedCards: StripeKeyedCardEntry by lazy { StripeKeyedCardEntry(this) }
+
+  /** Cards the reader stored offline and what Stripe made of them once forwarded (AGL-4039), on this device. */
+  private val offlineCardForwards: OfflineCardForwardLedger by lazy {
+    val prefs = getSharedPreferences("aglyn-pos-offline-cards", MODE_PRIVATE)
+    OfflineCardForwardLedger(object : OfflineCardForwardStore {
+      override fun read(): String? = prefs.getString("forwards", null)
+      override fun write(value: String?) {
+        prefs.edit().apply { if (value == null) remove("forwards") else putString("forwards", value) }.commit()
+      }
+    })
+  }
 
   val services: ShellServices by lazy {
     AndroidShell.services(
@@ -56,7 +69,15 @@ class AglynPosApplication : Application() {
       // Only the SDK's simulated readers run until live readers are switched
       // on for a build (TERMINAL_LIVE_READERS), which needs Stripe live mode.
       peripherals = StaticPeripherals(
-        cardCollector = StripeTerminalCollector(this, simulated = !BuildConfig.TERMINAL_LIVE_READERS, permissions = { permissionGate }),
+        cardCollector = StripeTerminalCollector(
+          this,
+          simulated = !BuildConfig.TERMINAL_LIVE_READERS,
+          permissions = { permissionGate },
+          forwards = offlineCardForwards,
+          mirrorOfflineToStripe = BuildConfig.DEBUG,
+        ),
+        // What the reader's SDK did with cards it stored offline, read by the register (AGL-4039).
+        offlineCardForwards = offlineCardForwards,
         // A receipt with no printer of its own goes to Android's print sheet, as the console's goes to the browser's.
         systemPrinter = AndroidSystemPrinter(this),
         // A card typed in at the register goes into Stripe's own card form, not through our code.

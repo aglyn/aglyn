@@ -3,18 +3,27 @@ package com.aglyn.shell
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.rightClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.aglyn.core.AccountSessions
@@ -47,7 +56,7 @@ class NavShellUiTest {
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-overview") > 0 }
     onNodeWithTag("nav-site-home").assertIsDisplayed()
-    onNodeWithTag("nav-site-overview").assertTextContains("Overview")
+    onNodeWithTag("nav-site-overview").assertTextContains("Analytics")
     // Website is folded until opened (it holds nothing in use yet); it lists the site's Pages and Media.
     assertEquals(0, onAllNodesWithTagCount("nav-site-pages"))
     onNodeWithTag("nav-group-website").performClick()
@@ -58,6 +67,68 @@ class NavShellUiTest {
     onNode(androidx.compose.ui.test.hasText("Pages", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("title-crumb"))).assertIsDisplayed()
     // The old drawer's double site heading is gone.
     assertEquals(0, onAllNodesWithTextCount("Site · Acme Shop"))
+  }
+
+  @Test
+  fun aDeletedSiteOnScreenLeavesForTheWorkspacesSitesNeverTheNextSite() = runComposeUiTest {
+    val shop = com.aglyn.core.FirestoreDoc("h1", "users/u1/hostMemberships/h1", mapOf("orgId" to "o1", "displayName" to "Acme Shop", "subdomain" to "shop", "role" to "admin"))
+    val blog = com.aglyn.core.FirestoreDoc("h2", "users/u1/hostMemberships/h2", mapOf("orgId" to "o1", "displayName" to "Acme Blog", "subdomain" to "blog", "role" to "admin"))
+    val memberships = kotlinx.coroutines.flow.MutableStateFlow(listOf(blog, shop))
+    val services = testServices(userDoc = emptyMap(), liveCollections = mapOf("users/u1/hostMemberships" to memberships))
+    val navigator = ShellNavigator()
+    setContent { AglynShell(services, navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site != null }
+    services.workspace.selectSite("h1")
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site?.id == "h1" }
+    // The site's Danger zone is open when the site goes (deleted here, on the web or on another device).
+    runOnIdle { navigator.select(NavKeys.of("core.site.delete")) }
+    waitForIdle()
+    memberships.value = listOf(blog)
+    // The whole workspace's Sites, as View all sites opens; never Acme Blog with its Danger zone still open.
+    waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.sites") }
+    assertTrue(services.workspace.state.value.wholeWorkspace)
+    assertEquals(null, services.workspace.state.value.site)
+  }
+
+  @Test
+  fun aGroupThePersonOpenedStaysOpenWhileTheyNavigate() = runComposeUiTest {
+    // Groups remember whether they are open while the person navigates. The test
+    // site's only foldable group is Website (Sell and Customers need plugins this registry does not load), so this walks
+    // the rule on it: opening a place opens its group, leaving keeps it open, a fold sticks, and nothing else folds it.
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-group-website") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("nav-site-pages"))
+    // Opened from elsewhere (search, Recents), Pages opens Website.
+    runOnIdle { navigator.select(NavKeys.of("site.pages")) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-media") > 0 }
+    // Leaving for Overview keeps Website open (it used to fold as soon as it no longer held the screen).
+    onNodeWithTag("nav-site-overview").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top != NavKeys.of("site.pages") }
+    waitForIdle()
+    onNodeWithTag("nav-site-media").assertIsDisplayed()
+    // Folded by the person while on Pages, it stays folded as they move on.
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
+    onNodeWithTag("nav-group-website").performClick()
+    waitForIdle()
+    assertEquals(0, onAllNodesWithTagCount("nav-site-media"))
+    onNodeWithTag("nav-site-home").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top != NavKeys.of("site.pages") }
+    waitForIdle()
+    assertEquals(0, onAllNodesWithTagCount("nav-site-media"))
+    // Opening one of its places again opens it.
+    runOnIdle { navigator.select(NavKeys.of("site.media")) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-media") > 0 }
+  }
+
+  @Test
+  fun theRememberedGroupStatesReadTheOlderOneOpenGroupForm() {
+    assertEquals(mapOf("site.website" to true, "site.starred" to false), parseGroupStates("site.website,site.starred.folded"))
+    val states = mapOf("site.website" to true, "site.sell" to false, "workspace.more" to true)
+    assertEquals(states, parseGroupStates(formatGroupStates(states)))
   }
 
   @Test
@@ -111,6 +182,97 @@ class NavShellUiTest {
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-mark") > 0 }
     assertEquals(0, onAllNodesWithTagCount("home-tab-brand-mark"))
+  }
+
+  @Test
+  fun hoveringARailTargetNamesItFastAndTheBubbleFollowsThePointer() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // Two letters alone do not say which workspace is which. A hover names the tile in full after 150 ms; moving straight on to the next target names it at once; a right-click (a long press on
+    // touch) opens the menu headed by the full name.
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-tile-o1") > 0 }
+    mainClock.autoAdvance = false
+    onNodeWithTag("rail-tile-o1").performMouseInput { moveTo(center) }
+    mainClock.advanceTimeBy(80)
+    assertEquals(0, onAllNodesWithTag("fast-tooltip-label").fetchSemanticsNodes().size, "no bubble before 150 ms")
+    mainClock.advanceTimeBy(120)
+    onNodeWithTag("fast-tooltip-label").assertTextEquals("Acme")
+    // 8 dp clear of the rail's edge (the targets are the rail's full width), centered on the tile.
+    val rail = onNodeWithTag("workspace-rail").fetchSemanticsNode().boundsInWindow
+    val tile = onNodeWithTag("rail-tile-o1").fetchSemanticsNode().boundsInWindow
+    val bubble = onNodeWithTag("fast-tooltip").fetchSemanticsNode().boundsInWindow
+    val gapDp = (bubble.left - rail.right) / density.density
+    val offCenterDp = kotlin.math.abs(bubble.center.y - tile.center.y) / density.density
+    println("tooltip: gap ${gapDp} dp, off center ${offCenterDp} dp, bubble ${bubble.width / density.density}×${bubble.height / density.density} dp")
+    assertTrue(gapDp in 7.5f..8.5f, "the bubble sits 8 dp clear of the rail: $gapDp dp")
+    assertTrue(offCenterDp <= 1f, "the bubble is centered on the tile: $offCenterDp dp off")
+    (System.getProperty("aglyn.tooltipShot") ?: System.getenv("AGLYN_TOOLTIP_SHOT"))?.let { path ->
+      // The window with the bubble showing, for a side-by-side: the window's root, then the bubble's popup over it.
+      val roots = onAllNodes(androidx.compose.ui.test.isRoot())
+      val first = roots[0].captureToImage().toPixelMap()
+      val awt = java.awt.image.BufferedImage(first.width, first.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+      val g = awt.createGraphics()
+      for (i in 0 until roots.fetchSemanticsNodes().size) {
+        val layer = roots[i].captureToImage().toPixelMap()
+        val img = java.awt.image.BufferedImage(layer.width, layer.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        for (x in 0 until layer.width) for (y in 0 until layer.height) {
+          val c = layer[x, y]
+          img.setRGB(x, y, ((c.alpha * 255).toInt() shl 24) or ((c.red * 255).toInt() shl 16) or ((c.green * 255).toInt() shl 8) or (c.blue * 255).toInt())
+        }
+        g.drawImage(img, 0, 0, null)
+      }
+      g.dispose()
+      javax.imageio.ImageIO.write(awt, "png", java.io.File(path))
+    }
+    onNodeWithTag("rail-all").performMouseInput { moveTo(center) }
+    mainClock.advanceTimeByFrame()
+    onNodeWithTag("fast-tooltip-label").assertTextEquals("All workspaces")
+    onNodeWithTag("rail-create").performMouseInput { moveTo(center) }
+    mainClock.advanceTimeByFrame()
+    onNodeWithTag("fast-tooltip-label").assertTextEquals("Create new")
+    mainClock.autoAdvance = true
+    onNodeWithTag("rail-tile-o1").performMouseInput { rightClick(center) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-menu-name") > 0 }
+    onNodeWithTag("rail-menu-name").assertTextEquals("Acme")
+  }
+
+  @Test
+  fun everyAccountsRailHasRecentAndAllAndAWorkspacesColorIsItsTileOnly() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // (AGL-4000) a one-workspace account still gets Recent (the workspace in use, recorded once the
+    // preferences load) and All workspaces with its total, which opens the picker where pins are edited; and a picked
+    // color is the tile's only, never a wash over the sidebar ("this looks green").
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = mapOf("workspaceColors" to mapOf("o1" to "#E040FB"))), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-label-recent") > 0 }
+    onNodeWithTag("rail-tile-o1").assertExists()
+    onNodeWithTag("rail-all-total", useUnmergedTree = true).assertTextContains("1")
+    assertEquals(0, onAllNodesWithTagCount("rail-label-pinned"))
+    assertEquals(1, onAllNodesWithTagCount("rail-divider"))
+    val sidebar = onNodeWithTag("nav-sidebar").captureToImage().toPixelMap()
+    val ground = sidebar[sidebar.width - 3, sidebar.height / 2]
+    // The Aglyn theme's own surface, in whichever appearance the machine is in (Plain; AGL-4000): a pink wash would be
+    // a few points off it in every channel.
+    val surfaces = listOf(false, true).mapNotNull { com.aglyn.ui.themeSurfaces(com.aglyn.contracts.AppThemeName.AGLYN, it)?.surface }
+    assertTrue(
+      surfaces.any { s -> listOf(s.red - ground.red, s.green - ground.green, s.blue - ground.blue).all { kotlin.math.abs(it) < 0.01f } },
+      "sidebar ground $ground, not one of $surfaces",
+    )
+    onNodeWithTag("rail-all").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-pin-o1") > 0 }
+  }
+
+  @Test
+  fun theHomeTabIsThePlainMarkEvenWhenSelected() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // Figma Titlebar/Home tab 117:16049: no plate and no border in any state (AGL-4000); the tab row's ground shows
+    // through to the mark's edge.
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-mark") > 0 }
+    val tab = onAllNodes(androidx.compose.ui.test.hasContentDescription("Home:", substring = true)).onFirst().captureToImage().toPixelMap()
+    // The tab's corner and its top-middle are the same ground (a plate's border would draw a line there).
+    assertEquals(tab[0, 0], tab[tab.width / 2, 0])
+    assertEquals(tab[0, 0], tab[0, tab.height / 2])
   }
 
   @Test
@@ -235,19 +397,25 @@ class NavShellUiTest {
     onNodeWithTag("nav-workspaceSettings-members").assertIsDisplayed()
   }
 
+  /**
+   * The phone (AGL-4006): the scope chip, every area of the scope as the same tile on Home, and a tab bar
+   * of Home, the person's pins and Create; no Menu tab. A fresh tab bar is Home and Create with the one-time tip.
+   */
   @Test
-  fun aPhoneHasTheScopeChipTheTabsAndTheMenu() = runDesktopComposeUiTest(width = 400, height = 820) {
+  fun aPhoneHasTheScopeChipEveryAreaAsATileAndNoMenu() = runDesktopComposeUiTest(width = 400, height = 820) {
     setContent { AglynShell(testServices(userDoc = emptyMap())) }
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-tabs") > 0 }
     onNodeWithTag("scope-chip").assertTextContains("Acme Shop", substring = true)
     onNodeWithTag("tab-home").assertIsDisplayed()
     onNodeWithTag("tab-create").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("tab-menu"))
     assertEquals(0, onAllNodesWithTagCount("workspace-rail"))
-    onNodeWithTag("tab-menu").performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-menu") > 0 }
-    onNodeWithTag("nav-group-website").performClick()
-    onNodeWithTag("nav-site-pages").assertIsDisplayed()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-pages") > 0 }
+    onNodeWithTag("home-tile-media").assertExists()
+    onNodeWithTag("home-tile-workspaceSettings").assertExists()
+    onNodeWithTag("home-group-website").assertTextContains("Website")
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("pin-tip") > 0 }
     // The chip opens the picker's first step.
     onNodeWithTag("scope-chip").performClick()
     onNodeWithTag("picker-org-o1").performClick()
@@ -256,19 +424,16 @@ class NavShellUiTest {
   }
 
   /**
-   * On a phone, Menu › Website › Pages opens with its section tabs, and each tab swaps the area in place: Components,
-   * Layouts, Templates and Content are one tap from Pages, never a screen deeper (AGL-3993).
+   * On a phone, Pages' tile opens it with its section tabs, and each tab swaps the area in place: Components, Layouts,
+   * Templates and Content are one tap from Pages, never a screen deeper (AGL-3993).
    */
   @Test
-  fun aPhonesMenuReachesEverySectionOfPages() = runDesktopComposeUiTest(width = 400, height = 820) {
+  fun aPhonesPagesTileReachesEverySectionOfPages() = runDesktopComposeUiTest(width = 400, height = 820) {
     val navigator = ShellNavigator()
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
     signIn()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-menu") > 0 }
-    onNodeWithTag("tab-menu").performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-menu") > 0 }
-    onNodeWithTag("nav-group-website").performClick()
-    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-pages") > 0 }
+    onNodeWithTag("home-tile-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
     onNodeWithTag("section-tabs").assertIsDisplayed()
     for (section in listOf("components", "layouts", "templates", "content", "pages")) {
@@ -277,6 +442,94 @@ class NavShellUiTest {
       assertTrue(navigator.stack.isEmpty(), "site.$section is one tap from Pages, not pushed")
       onNodeWithTag("section-tabs").assertIsDisplayed()
     }
+  }
+
+  /** Before anyone pins, the first areas opened take the free spots and stay, Create in the centre between them. */
+  @Test
+  fun aPhonesFirstAreasOpenedTakeTheFreeSpotsAndStay() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val writes = Writes()
+    setContent { AglynShell(testServices(userDoc = emptyMap(), writer = writes)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-pages") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("tab-pages"))
+    onNodeWithTag("home-tile-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-pages") > 0 }
+    onNodeWithTag("tab-home").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-media") > 0 }
+    onNodeWithTag("home-tile-media").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") > 0 }
+    val pages = onNodeWithTag("tab-pages").getBoundsInRoot().left
+    val create = onNodeWithTag("tab-create").getBoundsInRoot().left
+    val media = onNodeWithTag("tab-media").getBoundsInRoot().left
+    assertTrue(pages < create && create < media, "Home, Pages, Create, Media")
+    val last = writes.all.last { it.second.containsKey("tabBars") }.second["tabBars"] as List<*>
+    assertEquals(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media"), "chosen" to false), last.single())
+  }
+
+  /**
+   * Long-press a tile to take it out of the tab bar or put it back; the Tab bar sheet reorders; a change by hand stops
+   * opened areas filling the spot; four areas move Create to the top bar.
+   */
+  @Test
+  fun aPhonesTabBarPinsUnpinsAndReorders() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val writes = Writes()
+    val userDoc = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = userDoc, writer = writes)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("pin-tip"))
+    onNodeWithTag("home-tile-media").performTouchInput { longClick() }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tile-unpin-media") > 0 }
+    onNodeWithTag("tile-unpin-media").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") == 0 }
+    // A change by hand: an opened area no longer takes the spot.
+    onNodeWithTag("home-tile-overview").performClick()
+    onNodeWithTag("tab-home").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-media") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("tab-overview"))
+    onNodeWithTag("home-tile-media").performTouchInput { longClick() }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tile-pin-media") > 0 }
+    onNodeWithTag("tile-pin-media").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") > 0 }
+    // The Tab bar sheet, from the account sheet: Media moves up, then Done.
+    onNodeWithTag("phone-account").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("account-tab-bar") > 0 }
+    onNodeWithTag("account-tab-bar").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-bar-sheet") > 0 }
+    onNodeWithTag("tab-bar-pinned-media").performCustomAccessibilityActionWithLabel("Move up")
+    onNodeWithTag("tab-bar-add-overview").performScrollTo().performClick()
+    onNodeWithTag("tab-bar-done").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-bar-sheet") == 0 }
+    val last = writes.all.last { it.second.containsKey("tabBars") }.second["tabBars"] as List<*>
+    val areas = (last.single() as Map<*, *>)["areas"] as List<*>
+    assertEquals(listOf("media", "pages", "overview"), areas.take(3))
+    assertTrue(onNodeWithTag("tab-media").getBoundsInRoot().left < onNodeWithTag("tab-pages").getBoundsInRoot().left, "Media before Pages")
+  }
+
+  /**
+   * Four pinned areas fill the tab bar, so Create new moves to the top bar beside the AI button; a settings mode (Site
+   * settings) is never a tab, so three pinned areas keep Create in the centre.
+   */
+  @Test
+  fun aPhonesFourPinsMoveCreateToTheTopBar() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val full = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media", "overview", "members"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = full)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-members") > 0 }
+    onNodeWithTag("tab-members").assertTextContains("Team")
+    onNodeWithTag("phone-create").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("tab-create"))
+  }
+
+  @Test
+  fun aPhonesSettingsModeIsNeverATab() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val userDoc = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media", "overview", "siteSettings"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = userDoc)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-overview") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("tab-siteSettings"))
+    onNodeWithTag("tab-create").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("phone-create"))
   }
 
   /**

@@ -6,6 +6,12 @@ description: "Ask Aglyn Assist for what you need in one message — pages, a for
 
 # Build from Assist chat
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 The [Aglyn Assist](../getting-started/aglyn-assist.md) chat answers questions. On a site
 with AI generation, it also **builds**: describe what you need in one message, such as
 *"add a pricing page and a quote request form, and a welcome email for people who send

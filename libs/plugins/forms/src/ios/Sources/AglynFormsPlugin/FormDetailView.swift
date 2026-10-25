@@ -87,7 +87,6 @@ struct FormDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("form-detail")
   }
 
@@ -137,7 +136,7 @@ struct FormDetailView: View {
         Button {
           guard let api else { return }
           runner.run {
-            let versionID = try await api.versionToOpen(form)
+            let versionID = try await api.versionToOpen(form, newest: model.versions.first?.id)
             context.openBesigner(formBesignerPath(formID: form.id, versionID: versionID), scope: .site)
           }
         } label: {

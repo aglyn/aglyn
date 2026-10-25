@@ -279,3 +279,16 @@ fun themedPalette(base: AglynPalette, surfaces: ThemeSurfaces?, accent: AccentCo
   }
   return palette
 }
+
+/**
+ * The content area's ground on a tablet or desktop: every column (a screen, a list and its detail) stands on the theme's
+ * surface (`paper`, Figma's content body), never the canvas, which is the phone's page ground. Material's own grounds
+ * (`background`, `surface`) read the same inside, so a sheet, a field or a section drawn on them sits plain on the column
+ * instead of as a grey card (AGL-4012, as Apple's AglynColor.paper columns).
+ */
+@Composable
+fun ContentGround(content: @Composable () -> Unit) {
+  val paper = LocalAglynPalette.current.paper
+  val scheme = MaterialTheme.colorScheme
+  MaterialTheme(colorScheme = scheme.copy(background = paper, surface = paper), typography = MaterialTheme.typography, shapes = MaterialTheme.shapes, content = content)
+}

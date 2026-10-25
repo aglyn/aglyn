@@ -161,6 +161,7 @@
           "primary": "{item.displayName|item.email|item.$id}",
           "secondary": "{item.email}",
           "tertiary": "{item.title}",
+          "avatar": "{item.photoURL}",
           "icon": "person.crop.circle|account_circle",
           "badges": [
             {
@@ -826,7 +827,7 @@
           "type": "list",
           "items": "data.mine.invites",
           "primary": "{item.orgName|item.orgSlug}",
-          "secondary": "Join as {item.role:title}",
+          "secondary": "Your access is almost ready. Nothing is needed from you.",
           "icon": "building.2|domain",
           "badges": [
             {
@@ -835,34 +836,7 @@
               "tone": "warning"
             }
           ],
-          "actions": [
-            {
-              "id": "accept",
-              "label": "Accept",
-              "icon": "checkmark.circle|check_circle",
-              "url": "/api/orgs/invites",
-              "body": {
-                "orgId": "{item.orgId}",
-                "action": "accept",
-                "inviteId": "{item.$id}"
-              },
-              "success": "You joined {item.orgName}"
-            },
-            {
-              "id": "decline",
-              "label": "Decline",
-              "icon": "xmark.circle|cancel",
-              "destructive": true,
-              "confirm": "Decline the invitation to {item.orgName}?",
-              "url": "/api/orgs/invites",
-              "body": {
-                "orgId": "{item.orgId}",
-                "action": "decline",
-                "inviteId": "{item.$id}"
-              },
-              "success": "Declined"
-            }
-          ],
+          "footer": "Invitations join on their own. One still listed here is waiting on the workspace's admins, who have been told.",
           "empty": "No invitations waiting for you."
         }
       ]
