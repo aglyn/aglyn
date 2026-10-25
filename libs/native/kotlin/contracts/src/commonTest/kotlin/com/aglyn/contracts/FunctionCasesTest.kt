@@ -129,6 +129,20 @@ class FunctionCasesTest {
   }
 
   @Test
+  fun theDayReportReadsAndExportsAsTheConsoleDoes() {
+    fun report(value: JsonElement) = ContractJsonFormat.decodeFromJsonElement(PosDayReport.serializer(), value)
+    cases("posDayRangeLabel").forEach { (args, result) ->
+      val input = args[0].jsonObject
+      assertEquals(result.jsonPrimitive.content, posDayRangeLabel(str(input["from"])!!, str(input["to"])!!))
+    }
+    cases("posDayAmount").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, posDayAmount(args[0].takeIf { it !is JsonNull }?.jsonPrimitive?.double, str(args[1])!!), args.toString())
+    }
+    cases("posDayReportIsEmpty").forEach { (args, result) -> assertEquals(result.jsonPrimitive.boolean, posDayReportIsEmpty(report(args[0]))) }
+    cases("posDayReportCsv").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, posDayReportCsv(report(args[0]))) }
+  }
+
+  @Test
   fun aSaleKeyIsAnIdTheOrderCanTake() = cases("posOfflineSaleKeyIsValid").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.boolean, posOfflineSaleKeyIsValid(str(args[0])), args.toString())
   }
