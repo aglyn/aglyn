@@ -212,9 +212,10 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'the workspace proves it owns the domain (a DNS record, a home page ' +
       'meta tag, or a code emailed to an address at the domain), then ' +
       'AglynBot reads the site within robots.txt, same-origin only, under ' +
-      'page, byte and time budgets. OFF by default: the ownership and crawl ' +
-      'doors answer 404 while it is off.',
-    defaultEnabled: false,
+      'page, byte and time budgets. ON since 2026-10-25 (beta.282, after the ' +
+      'Legal v18 import clause and the blocked-page reason, AGL-4029); turned ' +
+      'off, the ownership and crawl doors answer 404.',
+    defaultEnabled: true,
   },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends

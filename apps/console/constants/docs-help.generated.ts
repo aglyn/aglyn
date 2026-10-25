@@ -149,6 +149,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/commerce-and-bookings/bookings/overview',
     title: 'Bookings & Scheduling',
   },
+  bringMySite: {
+    path: '/ai/bring-my-site',
+    title: 'Bring my site',
+  },
   buildABlog: {
     path: '/building-sites/site-templates/build-a-blog',
     title: 'Build a blog',
@@ -978,6 +982,7 @@ export const DOCS_HELP_ANCHORS = {
   billing: ['#billing-page', '#current-plan', '#locked-features', '#billing-link', '#tiers--entitlements', '#made-with-badge', '#leaving-notice', '#plan-without-subscription', '#upgrade-proposal', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#usage-card', '#metered-usage-estimate', '#usage-history', '#campaign-sending-pace', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#what-you-will-pay', '#billing-history', '#billing-email', '#payment-methods', '#billing-address', '#billing-address-on-profile', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#functions-card', '#parameters-a-visitor-can-answer', '#a-calculator-you-lay-out', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#draft-services', '#price-labels', '#phone-and-address', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#export-bookings', '#related'],
+  bringMySite: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#waves', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
   buildABlog: ['#1-create-a-collection', '#delete-a-collection', '#2-write-entries', '#entry-basics', '#entry-details', '#entry-cover-image', '#entry-featured-video', '#entry-seo', '#entry-traffic', '#scheduling', '#authors', '#the-authors-own-page-in-search-and-in-a-share', '#links-a-reader-can-click', '#the-authors-page', '#designing-the-author-page', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#category-filtering', '#entry-tokens', '#no-template-still-designed', '#paginated-page-sets', '#build-your-own-pager', '#4-publish--syndicate', '#video-collection', '#tips', '#related'],
   buildAndPublishASurvey: ['#1-create-the-dataset', '#2-add-a-screen-for-the-survey', '#3-insert-a-form-from-the-element-picker', '#4-configure-the-fields', '#5-point-the-form-at-the-dataset', '#6-publish', '#7-watch-responses-arrive', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
