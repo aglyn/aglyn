@@ -87,6 +87,29 @@ only register a reader to the Stripe account that ordered it.
   — or use **Card (QR)** or **Type card** for that sale.
 
 
+### Reader start-up screen {#reader-start-up-screen}
+
+While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it
+shows a start-up screen. Choose what yours show under **Reader start-up
+screen** on the **POS devices** card:
+
+- **The Aglyn start-up screen** — the default.
+- **Your logo** — the logo from your organization profile, centered on a white
+  screen. If the profile has no logo yet, the card links to it. A square logo
+  with a little space around it looks best.
+- **Your own image** — a full-screen picture from your media library. It must
+  be a portrait image shaped 9:16, at least 1080 × 1920 pixels, as a PNG, JPEG
+  or WebP; the card refuses any other shape before saving. It is sized for each
+  reader's screen for you.
+
+A workspace on a white-label plan never shows the Aglyn screen: its readers
+show its own logo unless it picks an image.
+
+Your choice goes to every reader on the site, including ones you add later.
+Readers pick up a change within about ten minutes. If you change your logo,
+open the **POS devices** card again to send the new one. Any admin or editor
+who can use the point of sale can change it.
+
 ## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
 
 :::note Rolling out

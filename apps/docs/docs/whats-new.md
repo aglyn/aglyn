@@ -397,6 +397,23 @@ for the how-to.
 -->
 
 <!--
+  AGL-4048 — Card reader start-up screens are built and run in Stripe test mode
+  only, like every card reader control, until card readers are live
+  (STRIPE_TERMINAL_LIVE_ENABLED). This entry is held unpublished: once card
+  readers are live on aglyn.com and staff have uploaded the default screen on
+  Staff → Reader start-up screen, remove this comment's markers and move
+  "(newest)" here from the top heading.
+
+## October 2026 — your logo on your card readers
+
+- **[Reader start-up screen](commerce-and-bookings/commerce/pos-hardware.md#reader-start-up-screen)** —
+  your Stripe Reader S700, S710 and BBPOS WisePOS E can show your own logo, or
+  a full-screen image of your choice, while they wait for a payment. Choose it
+  on the **POS devices** card; every reader on the site picks it up within
+  about ten minutes. White-label workspaces show their own logo by default.
+-->
+
+<!--
   AGL-4038 — The POS hardware shop is built and hidden until the console sets
   POS_HARDWARE_SHOP_ENABLED=true with the item prices and shipping figures, and
   card readers are live (STRIPE_TERMINAL_LIVE_ENABLED). This entry is held
