@@ -182,6 +182,24 @@ class NavShellUiTest {
     println("tooltip: gap ${gapDp} dp, off center ${offCenterDp} dp, bubble ${bubble.width / density.density}×${bubble.height / density.density} dp")
     assertTrue(gapDp in 7.5f..8.5f, "the bubble sits 8 dp clear of the rail: $gapDp dp")
     assertTrue(offCenterDp <= 1f, "the bubble is centered on the tile: $offCenterDp dp off")
+    (System.getProperty("aglyn.tooltipShot") ?: System.getenv("AGLYN_TOOLTIP_SHOT"))?.let { path ->
+      // The window with the bubble showing, for a side-by-side: the window's root, then the bubble's popup over it.
+      val roots = onAllNodes(androidx.compose.ui.test.isRoot())
+      val first = roots[0].captureToImage().toPixelMap()
+      val awt = java.awt.image.BufferedImage(first.width, first.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+      val g = awt.createGraphics()
+      for (i in 0 until roots.fetchSemanticsNodes().size) {
+        val layer = roots[i].captureToImage().toPixelMap()
+        val img = java.awt.image.BufferedImage(layer.width, layer.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        for (x in 0 until layer.width) for (y in 0 until layer.height) {
+          val c = layer[x, y]
+          img.setRGB(x, y, ((c.alpha * 255).toInt() shl 24) or ((c.red * 255).toInt() shl 16) or ((c.green * 255).toInt() shl 8) or (c.blue * 255).toInt())
+        }
+        g.drawImage(img, 0, 0, null)
+      }
+      g.dispose()
+      javax.imageio.ImageIO.write(awt, "png", java.io.File(path))
+    }
     onNodeWithTag("rail-all").performMouseInput { moveTo(center) }
     mainClock.advanceTimeByFrame()
     onNodeWithTag("fast-tooltip-label").assertTextEquals("All workspaces")
