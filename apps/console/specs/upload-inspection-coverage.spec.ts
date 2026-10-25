@@ -66,6 +66,11 @@ const COVERED_INGRESSES = [
   //    media library. The bytes are a third party's, so they are inspected
   //    like any upload's, before the bucket write.
   'apps/console/utils/server/media-ingest.ts',
+  // 10. A waiver's signer files (AGL-4042) — a drawn signature sent as an
+  //    image and a staff member's photo of a signed paper waiver, kept in
+  //    private Storage. Both are the caller's bytes, inspected in the plugin's
+  //    one file store before the bucket write.
+  'libs/plugins/waivers/src/lib/server/db.ts',
 ]
 
 /**

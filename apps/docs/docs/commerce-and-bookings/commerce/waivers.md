@@ -34,6 +34,13 @@ Viewers can't see signatures, because they hold people's dates of birth and thei
 children's names.
 :::
 
+## Your waivers {#your-waivers}
+
+The **Waivers** card lists every waiver on the site: its title, whether it is a
+**Draft**, **Published** or **Retired**, its version, how long a signature lasts,
+and when it last changed. Select a waiver to open it, or **New waiver** to write
+one.
+
 ## Write a waiver
 
 1. Open **Waivers** and select **New waiver**.
