@@ -269,7 +269,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
       </Stack>
       {answer.siteConnected ? (
         <Typography variant="body2" color="text.secondary">
-          {`Records marked ${MANAGED_LABEL} are how visitors reach your site at this domain, so they can’t be changed here.`}
+          {`Records marked ${MANAGED_LABEL} are how visitors reach your site at this domain and keep its security certificate working, so they can’t be changed here.`}
         </Typography>
       ) : null}
       <ListTable

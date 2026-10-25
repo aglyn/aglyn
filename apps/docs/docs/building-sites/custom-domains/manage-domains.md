@@ -103,8 +103,10 @@ bought here does.
   for the domain itself, or enter a subdomain like `shop`), the value, and any fields
   that type needs, such as **Priority** for a mail server.
 - Click a record to change or delete it.
-- Records marked **Managed by Aglyn** are how visitors reach your site at this domain.
-  They can't be changed here. Disconnect the domain from its site first if you need to.
+- Records marked **Managed by Aglyn** are how visitors reach your site at this domain
+  and keep its security certificate working: the address records for the domain itself
+  and `www`, and any CAA records. They can't be changed here, and a new one can't be
+  added over them. Disconnect the domain from its site first if you need to.
 
 If a domain uses another provider's nameservers (common for a domain you just
 transferred in), the page names them and explains that its records are edited there.

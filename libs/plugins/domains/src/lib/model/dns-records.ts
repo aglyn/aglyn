@@ -238,7 +238,8 @@ const SITE_ADDRESS_TYPES = new Set(['A', 'AAAA', 'ALIAS', 'CNAME'])
  * Whether a record is one Aglyn keeps for the name and must not be changed
  * from the editor: a record the registrar created for the name's own DNS
  * (`creator: system`), and — while the name serves a site — the address
- * records at the domain itself and at `www`, which are how visitors reach it.
+ * records at the domain itself and at `www`, which are how visitors reach it,
+ * and every CAA record, which says who may issue its certificate.
  */
 export function isAglynManagedRecord(
   record: { type: string; name: string; creator?: string | null },
@@ -246,19 +247,22 @@ export function isAglynManagedRecord(
 ): boolean {
   if (String(record.creator ?? '').toLowerCase() === 'system') return true
   if (!siteConnected) return false
+  // A CAA record decides which authority may issue the site's certificate;
+  // one that left ours out would take the site off HTTPS at its renewal.
+  if (record.type === 'CAA') return true
   return SITE_ADDRESS_TYPES.has(record.type) && (record.name === '' || record.name === 'www')
 }
 
 /**
  * Whether a new or changed record would take the address a connected site
- * serves from: an address record at the domain itself or at `www`.
+ * serves from — an address record at the domain itself or at `www` — or
+ * decide who may issue its certificate (CAA).
  */
 export function wouldReplaceSiteAddress(record: RegistrarDnsRecord, siteConnected: boolean): boolean {
-  return (
-    siteConnected &&
-    SITE_ADDRESS_TYPES.has(record.type) &&
-    (record.name === '' || record.name === 'www')
-  )
+  if (!siteConnected) return false
+  // A CAA record could leave out the authority the site's certificate needs.
+  if (record.type === 'CAA') return true
+  return SITE_ADDRESS_TYPES.has(record.type) && (record.name === '' || record.name === 'www')
 }
 
 /** `''` → the domain itself, as the list shows a record's name. */

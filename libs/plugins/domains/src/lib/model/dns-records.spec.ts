@@ -139,4 +139,11 @@ describe('records Aglyn manages', () => {
     expect(wouldReplaceSiteAddress({ type: 'TXT', name: '', value: 'x' }, true)).toBe(false)
     expect(wouldReplaceSiteAddress({ type: 'A', name: '', value: '1.2.3.4' }, false)).toBe(false)
   })
+
+  it('keeps CAA records while a site is connected, so its certificate authority cannot be blocked', () => {
+    expect(isAglynManagedRecord({ type: 'CAA', name: '', creator: 'user' }, true)).toBe(true)
+    expect(isAglynManagedRecord({ type: 'CAA', name: '', creator: 'user' }, false)).toBe(false)
+    expect(wouldReplaceSiteAddress({ type: 'CAA', name: '', value: '0 issue "x.example"' }, true)).toBe(true)
+    expect(wouldReplaceSiteAddress({ type: 'CAA', name: '', value: '0 issue "x.example"' }, false)).toBe(false)
+  })
 })
