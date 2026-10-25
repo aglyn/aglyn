@@ -367,6 +367,44 @@ describe('cronJobsHealth', () => {
     expect(pastGrace['report-usage'].ok).toBe(false)
   })
 
+  it('holds the Site Care reconciliation green through GitHub dispatch lag and red on a dropped day (AGL-4030)', () => {
+    /*
+     * The lateness is MEASURED, not assumed: from 2026-10-20 every 14:15Z
+     * fire landed 3h10m to 4h20m late, and this workflow's worst dispatch so
+     * far is 9h22m (a Monday). Both must read green, or the row is a false
+     * red on an ordinary day. A whole missed day must read red, or the row
+     * watches nothing.
+     */
+    const job = SCHEDULED_JOBS.find((entry) => entry.id === 'site-care-reconcile')
+    expect(job).toBeDefined()
+    expect(job!.cron).toBe('15 14 * * *')
+    expect(job!.runner).toBe('github-actions')
+    const yesterdaysBeat = Date.parse('2026-10-22T18:30:00.000Z')
+    const todaysFire = Date.parse('2026-10-23T14:15:00.000Z')
+    const at = (now: number, graceMinutes = job!.graceMinutes) =>
+      cronJobsHealth(
+        [{ jobId: 'site-care-reconcile', atMs: yesterdaysBeat }],
+        WATCHING_SINCE,
+        3,
+        now,
+        [{ ...job!, graceMinutes }],
+      )['site-care-reconcile']
+
+    // Today's run not yet dispatched, 4h30m and 9h22m after its fire: green.
+    expect(at(todaysFire + 270 * MINUTE).ok).toBe(true)
+    expect(at(todaysFire + 562 * MINUTE).ok).toBe(true)
+    // The six-hour grace the daily GitHub rows used to carry reds the 9h22m
+    // case on identical input — the reason this row carries twelve.
+    expect(at(todaysFire + 562 * MINUTE, 360).ok).toBe(false)
+
+    // Today's fire dropped entirely: green up to the grace, red past it.
+    expect(at(todaysFire + (job!.graceMinutes - 1) * MINUTE).ok).toBe(true)
+    const dropped = at(todaysFire + (job!.graceMinutes + 1) * MINUTE)
+    expect(dropped.ok).toBe(false)
+    expect(dropped.code).toBe('job-silent')
+    expect(dropped.dueAt).toBe('2026-10-23T14:15:00.000Z')
+  })
+
   /*==========================================
    * The three-states rule: unreadable is never green.
    *=========================================*/

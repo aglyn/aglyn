@@ -172,6 +172,13 @@ reply on the thread does not stop it.
 - **Answer on the request, not from the inbox.** A Site Care request that came by
   email is still in the support inbox too. Reply from the request's thread, so the
   owner's answer joins the same request instead of opening a new one.
+- **A sender in more than one Site Care workspace.** An emailed request from someone
+  who is a member of several workspaces with Site Care is filed on one of them, and
+  the others are kept with the request. The staff notice for the new request names
+  them, and the **Site Care** card says "Also a member of" with their names. If the
+  request belongs to one of the others, use **Move to workspace** on the card (see
+  below). Only staff see the other workspaces; the workspace the request is on does
+  not.
 
 ### Working a request {#site-care-working}
 
@@ -212,6 +219,18 @@ and after.
 redesign), use **Send quote** with one flat price and what it covers. The owner
 replies to accept; the invoice is a separate step.
 
+**Move to workspace.** For an emailed request whose sender is in several Site Care
+workspaces, choose the workspace it belongs to from the ones the card lists. The
+request, its thread and its history move there: its time counts against that
+workspace's included hour for the month, and the summary goes to that workspace's
+owner when you close it. A dated record of the move and a staff audit row are
+written; nothing earlier is changed, and the owner is not emailed about the move. The
+button stays on the card but is turned off, with the reason on hover, once the request
+is closed, once the owner's approval of extra time is recorded on it, or once extra
+time has been charged on it, because each of those belongs to the workspace it is on.
+It can only move to a workspace the sender was a member of when they wrote, that still
+has Site Care, and that they are still a member of.
+
 ### The month and the statement {#site-care-month}
 
 The **Site Care** card on the staff page for the workspace shows the month: every
@@ -223,7 +242,11 @@ the extra time and every correction.
 ### When the reconciliation alerts {#site-care-reconciliation}
 
 Once a day each closed request's charge is compared with its Stripe invoice item, and
-each month's total with Stripe's, for this month and the last. The same check compares
+each month's total with Stripe's, for this month and the last. Each request is also
+checked against its own record: the minutes logged, the included time they used and the
+owner's recorded yes must come to the hours billed (every started hour past the included
+time, never fewer than the owner approved), and nothing may bill without that yes unless
+it was absorbed. The same check compares
 each project's invoices with Stripe (see below). A difference raises **Site Care billing
 does not match Stripe** (Should know) for that workspace and month, or for its projects.
 It changes nothing on either side. Open the request or project it names: retry a charge

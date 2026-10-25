@@ -1442,9 +1442,12 @@ Notes that keep these honest:
   deliberately idle. **Grace is a property of the RUNNER, and it is a floor
   rather than the exact bar** — the verdict compares the mark against the last
   fire already that old, so the phase of the clock against the schedule
-  decides where the threshold lands. GitHub Actions rows carry 6h (daily) and
-  24h (weekly) because GitHub delays scheduled workflows routinely and a row
-  that reds on ordinary lateness is one people mute. The two Cloud Scheduler
+  decides where the threshold lands. GitHub Actions rows carry 24h (weekly)
+  and 12h (the daily `site-care-reconcile`, AGL-4030) because GitHub delays
+  scheduled workflows routinely and a row that reds on ordinary lateness is
+  one people mute. The 12h is measured: that entry lands 3–4.5h late every
+  day, and this workflow's worst dispatch so far is 9h22m, which the old 6h
+  daily grace would have read as a dead job. The two Cloud Scheduler
   rows added by AGL-1617 carry **45 minutes on a 15-minute schedule — red
   between 45 and 60 minutes of silence, three missed fires** — because Cloud
   Scheduler does not drift. That tightening is the point of the move: the 90
