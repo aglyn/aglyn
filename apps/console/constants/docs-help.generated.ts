@@ -521,6 +521,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-protection/maintenance-mode',
     title: 'Maintenance mode',
   },
+  makeYourSitePrivate: {
+    path: '/building-sites/site-protection/make-your-site-private',
+    title: 'Make your site private',
+  },
   manageAccount: {
     path: '/workspace-and-billing/manage-account',
     title: 'Manage Account',
@@ -1057,6 +1061,7 @@ export const DOCS_HELP_ANCHORS = {
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#links-that-survive-a-rename', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenance: ['#maintenance-page', '#is-the-job-still-running', '#running-a-job-by-hand', '#the-jobs', '#audit-archive', '#plugin-artifact-reaper', '#plugin-verdict-re-verification', '#jobs-that-live-elsewhere', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
+  makeYourSitePrivate: ['#hide-the-whole-site-until-launch', '#keep-it-out-of-search-only', '#share-it-behind-a-password', '#only-signed-in-members', '#check-whats-still-public', '#related'],
   manageAccount: ['#account-tabs', '#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#product-updates', '#profile-image', '#basic-info', '#contact-details', '#security', '#close-account', '#close-account-steps', '#close-account-in-the-apps', '#close-account-deleted', '#close-account-kept', '#close-account-help', '#delete-your-data', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#review-queue', '#verification-requests', '#listed-plugins', '#submission-status', '#review-overview', '#review-checklist', '#review-verdict', '#review-versions', '#take-down', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#org-marketing-overview', '#org-overlays', '#related'],

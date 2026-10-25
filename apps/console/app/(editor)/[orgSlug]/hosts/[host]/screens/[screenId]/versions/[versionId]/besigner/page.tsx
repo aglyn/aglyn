@@ -461,7 +461,13 @@ function BesignerPage(props) {
     screenId: screenId as string,
     versionId: versionId as string,
   })
-  const { data, status, error, hasPendingWrites } = result
+  const {
+    data,
+    status,
+    error,
+    hasPendingWrites,
+    fromCache: versionFromCache,
+  } = result
   // The page's layout style overrides (AGL-3286) are stored on the version
   // beside `nodes`, and ride on the canvas root while the editor is open — so
   // an edit to one is an undoable, draft-carried change like any other.
@@ -595,12 +601,15 @@ function BesignerPage(props) {
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // Every save converts a typed `{{name}}` to its id token (AGL-3481).
     bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: versionFromCache,
     status,
     error,
     save: saveScreenVersion,
@@ -2280,7 +2289,7 @@ function BesignerPage(props) {
                       >
                         <Typography>{'Not found'}</Typography>
                       </Stack>
-                    ) : status === 'loading' ? (
+                    ) : status === 'loading' || awaitingServer ? (
                       LOADING_OVERLAY_ELEMENT
                     ) : (
                       <>

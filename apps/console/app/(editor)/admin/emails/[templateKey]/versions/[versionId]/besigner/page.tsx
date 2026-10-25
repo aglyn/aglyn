@@ -196,6 +196,7 @@ function SystemEmailBesignerPage() {
     status,
     error,
     hasPendingWrites,
+    fromCache: versionFromCache,
   } = useFirestoreDoc<SystemEmailVersionState>(
     () =>
       editable
@@ -282,12 +283,15 @@ function SystemEmailBesignerPage() {
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // A platform template has no site, so no variables to name (AGL-3481).
     bindingLookups: null,
     updatedAt: version?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: editable ? versionFromCache : undefined,
     // A refused template never builds a document ref, so `useFirestoreDoc`
     // reports 'loading' forever — and the shared hook turns that into a
     // loading overlay that would sit on top of the refusal message with no
@@ -533,7 +537,7 @@ function SystemEmailBesignerPage() {
             <Stack sx={{ alignItems: 'center', justifyContent: 'center' }}>
               <Typography>{'Not found'}</Typography>
             </Stack>
-          ) : status === 'loading' ? (
+          ) : status === 'loading' || awaitingServer ? (
             LOADING_OVERLAY_ELEMENT
           ) : (
             <>

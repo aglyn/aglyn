@@ -179,7 +179,13 @@ function TemplateBesignerPage(props) {
     templateId,
   })
   const templateRef = useHostTemplateRef({ hostId, templateId })
-  const { data, status, error, hasPendingWrites } = result
+  const {
+    data,
+    status,
+    error,
+    hasPendingWrites,
+    fromCache: versionFromCache,
+  } = result
   // The browser tab names THIS document, not just its site (AGL-2486).
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(templateId, data?.displayName)
@@ -288,12 +294,15 @@ function TemplateBesignerPage(props) {
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // Every save converts a typed `{{name}}` to its id token (AGL-3481).
     bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: versionFromCache,
     status,
     error,
     save: saveTemplateNodes,
@@ -572,7 +581,7 @@ function TemplateBesignerPage(props) {
           >
             <Typography>{'Not found'}</Typography>
           </Stack>
-        ) : status === 'loading' ? (
+        ) : status === 'loading' || awaitingServer ? (
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>

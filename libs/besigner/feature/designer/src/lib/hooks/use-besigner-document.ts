@@ -113,6 +113,19 @@ export interface BesignerDocumentSource<TData = unknown> {
    * that has no such queue.
    */
   pendingWrites?: boolean
+  /**
+   * The snapshot came from the local cache and the server has not confirmed
+   * it yet (Firestore's `snapshot.metadata.fromCache`).
+   *
+   * A cold persistent cache answers a listen first with an EMPTY cached
+   * snapshot, and only then with the server's document. Taken at its word,
+   * that first answer read as "no such document" and the editor raised
+   * "404: … not found" over a document that was about to draw (AGL-4002).
+   * So an empty answer only counts as missing once the server says so;
+   * until then the editor is still loading. Omitted (undefined) reads as
+   * server-confirmed, which is right for every store that has no cache.
+   */
+  fromCache?: boolean
   status?: 'idle' | 'loading' | 'success' | 'error'
   error?: { message?: string } | null
   /**
@@ -360,6 +373,12 @@ export interface UseBesignerDocumentResult {
   hasError: boolean
   notFound: boolean
   /**
+   * The read has answered with nothing so far, but only from the local cache
+   * (AGL-4002): the server's answer is still to come, so the editor shows its
+   * loading state, never "Not found" and never an empty canvas.
+   */
+  awaitingServer: boolean
+  /**
    * The document is on screen but the server has stopped answering for it
    * (AGL-1066) — cached content, no refresh coming. Saving is already refused
    * by the seed guards; this is what an editor would surface to say why.
@@ -408,6 +427,7 @@ export function useBesignerDocument<TData = unknown>(
     nodes,
     updatedAt,
     pendingWrites,
+    fromCache,
     status,
     error,
     save,
@@ -441,7 +461,9 @@ export function useBesignerDocument<TData = unknown>(
    * `hasError` covers the errored half either way; this keeps the two verdicts
    * from both going false and rendering an editor over nothing.
    */
-  const notFound = status !== 'loading' && !nodes
+  const awaitingServer =
+    status !== 'loading' && !nodes && !errored && fromCache === true
+  const notFound = status !== 'loading' && !nodes && !awaitingServer
 
   // The canvas is a singleton shared by every editing session; without a
   // reset on leave, client-side navigation to another document keeps (and
@@ -974,6 +996,7 @@ export function useBesignerDocument<TData = unknown>(
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
     staleContent,
   }
 }

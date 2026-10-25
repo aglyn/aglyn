@@ -274,12 +274,6 @@ describe('scheduled-crons.yml wiring', () => {
           'for a morning summary.',
       ],
       [
-        '15 14 * * * /api/admin/site-care/reconcile',
-        'AGL-3959: the same as the CRM digest above. A new inventory row reds ' +
-          '/api/health/crons before the first daily run fires; the route beats on ' +
-          'every POST, so the row is added once a beat exists.',
-      ],
-      [
         '0 13 * * 1 /api/admin/weekly-summary',
         'AGL-3867: the same as the CRM digest above. A new inventory row reds ' +
           '/api/health/crons before the first Monday fires; the route beats on ' +
