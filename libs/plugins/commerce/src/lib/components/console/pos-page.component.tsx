@@ -854,7 +854,15 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
         discountPct={discountPct}
         onDiscountPct={setDiscountPct}
         customer={
-          sale ? null : <PosCustomerLookup hostId={hostId} value={customer} onChange={setCustomer} />
+          sale ? null : (
+            <PosCustomerLookup
+              hostId={hostId}
+              value={customer}
+              onChange={setCustomer}
+              registerId={registerId}
+              {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
+            />
+          )
         }
         locked={Boolean(sale)}
       />

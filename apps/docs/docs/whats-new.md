@@ -10,7 +10,18 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — several identical units in one reservation resource (newest)
+## October 2026 — check people in at the window, with wristbands (newest)
+
+- **[Check-in at the window](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
+  mark a day pass, camping or parking as **Needs check-in**, with how many
+  people one item admits. At the register, tap **Check in**, look the customer
+  up by name, email, phone or order number, and check each person in with an
+  optional wristband number and color, whether they bought online or at the
+  window. Guests whose stay covers the day are there too. **Commerce → Orders
+  → Today's check-ins** lists who is expected and who is in, to sort, export
+  or print.
+
+## October 2026 — several identical units in one reservation resource
 
 - **[Several identical units](commerce-and-bookings/commerce/pos-and-reservations.md#several-identical-units)** —
   a reservation resource can now hold several of the same thing, such as 12 RV

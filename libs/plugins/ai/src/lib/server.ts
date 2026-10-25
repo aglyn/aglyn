@@ -43,6 +43,7 @@ import { registerAiDuplicateJob } from './jobs/ai-job-duplicate-step'
 import { registerAiSettingsJob } from './jobs/ai-job-settings-step'
 import { registerAiMediaJob } from './jobs/ai-job-media-step'
 import { registerAiTrackingJob } from './jobs/ai-job-tracking-step'
+import { registerAiPrivacyJob } from './jobs/ai-job-privacy-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -158,6 +159,7 @@ function registerAiJobKinds(): void {
   // The site's analytics and advertising tags, as Setup → Tracking sets
   // them, saved live (AGL-3751).
   registerAiTrackingJob()
+  registerAiPrivacyJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()
