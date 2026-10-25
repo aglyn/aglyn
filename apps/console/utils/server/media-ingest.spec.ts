@@ -29,6 +29,9 @@ let mockQuarantined = false
 let mockGateAllowed = true
 let mockStored: Array<{ id: string; data: Record<string, unknown> }> = []
 const mockScopeCalls: unknown[] = []
+const mockReads: string[] = []
+let mockOrgBilling: Record<string, unknown> = { plan: 'pro' }
+let mockUploadSiteError: { status: number; message: string } | null = null
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -45,12 +48,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         }),
       }),
       firestore: () => ({
-        collection: () => ({
-          doc: () => ({
-            collection: () => ({
+        collection: (name: string) => ({
+          doc: (id: string) => ({
+            collection: (sub: string) => ({
               where: (field: string, _op: string, value: unknown) => ({
                 limit: () => ({
                   get: async () => ({
+                    // Which library was read: `{collection}/{id}/media`.
+                    path: mockReads.push(`${name}/${id}/${sub}`),
                     docs: mockStored
                       .filter((entry) =>
                         field === 'stockPhoto.key'
@@ -80,6 +85,7 @@ jest.mock('./media-scope', () => ({
   resolveMediaScope: async (...args: unknown[]) => {
     mockScopeCalls.push(args)
     if (mockScopeError) return { error: mockScopeError }
+    const orgId = (args[0] as { orgId?: string }).orgId
     const scopeRef = {
       firestore: {},
       collection: (name: string) => ({
@@ -94,21 +100,37 @@ jest.mock('./media-scope', () => ({
       }),
     }
     return {
-      scope: {
-        base: 'hosts/host-1',
-        collection: 'hosts',
-        scopeId: 'host-1',
-        orgId: 'org-1',
-        scopeRef,
-        billing: { plan: 'pro' },
-        cdnScope: 'host-1',
-      },
+      scope: orgId
+        ? {
+            base: `orgs/${orgId}`,
+            collection: 'orgs',
+            scopeId: orgId,
+            orgId,
+            scopeRef,
+            billing: mockOrgBilling,
+            cdnScope: `org:${orgId}`,
+          }
+        : {
+            base: 'hosts/host-1',
+            collection: 'hosts',
+            scopeId: 'host-1',
+            orgId: 'org-1',
+            scopeRef,
+            billing: { plan: 'pro' },
+            cdnScope: 'host-1',
+          },
     }
   },
   mediaCdnPathUpdate: ({ cdnScope, mediaId }: { cdnScope: string; mediaId: string }) =>
     `/api/media/cdn/${cdnScope}/${mediaId}`,
   // The library holds one folder, `owner`, named "From the owner"; any other id is stale.
   folderStoragePath: async (_scopeRef: unknown, folderId: string | null) => (folderId === 'owner' ? 'From the owner' : ''),
+}))
+
+jest.mock('./media-upload-site', () => ({
+  __esModule: true,
+  resolveUploadSite: async (_scope: unknown, body: { forHostId?: string }) =>
+    mockUploadSiteError ? { error: mockUploadSiteError } : { hostId: body?.forHostId ?? null },
 }))
 
 jest.mock('./media-storage-band', () => ({
@@ -161,6 +183,9 @@ beforeEach(() => {
   mockQuarantined = false
   mockGateAllowed = true
   mockStored = []
+  mockReads.length = 0
+  mockOrgBilling = { plan: 'pro' }
+  mockUploadSiteError = null
 })
 
 describe('the console media ingest (AGL-3660)', () => {
@@ -243,6 +268,75 @@ describe('the console media ingest (AGL-3660)', () => {
       height: 853,
     })
     expect(await consoleMediaIngest.findStockPhoto({ hostId: 'host-1', sourceKey: 'pixabay:9' })).toBeNull()
+  })
+
+  it("stores a stock photo in the workspace's shared library, shared as its Default sharing says (AGL-4066)", async () => {
+    const request = {
+      hostId: '',
+      orgId: 'org-1',
+      uid: 'member-1',
+      fileName: 'pixabay-7101001.jpg',
+      contentType: 'image/jpeg',
+      bytes: JPEG,
+      description: 'Photo by StudioLight on Pixabay.',
+      stockPhoto: STOCK,
+    }
+    const result = await consoleMediaIngest.ingest(request)
+    expect(result).toMatchObject({ ok: true })
+    const { mediaId } = result as { mediaId: string }
+    expect(mockScopeCalls[0]).toEqual([{ orgId: 'org-1' }, {}, 'member-1', { feature: 'uploads' }])
+    expect(mockSaved[0]).toEqual({ path: `orgs/org-1/media/${mediaId}`, bytes: JPEG.length })
+    // No site on screen: every site may use it, as an upload from the workspace Media page.
+    expect(mockCreated[0].data).toMatchObject({ visibleTo: ['org'], stockPhoto: { ...STOCK, importedAt: expect.anything() } })
+
+    // A workspace that shares new media with the site it came from, and a site on screen.
+    mockOrgBilling = { plan: 'pro', defaultMediaScope: 'host' }
+    await consoleMediaIngest.ingest({ ...request, hostId: 'host-1' })
+    expect(mockScopeCalls[1]).toEqual([{ orgId: 'org-1', forHostId: 'host-1' }, {}, 'member-1', { feature: 'uploads' }])
+    expect(mockCreated[1].data).toMatchObject({ visibleTo: ['host:host-1'] })
+
+    // A site the member cannot reach is refused, never widened.
+    mockUploadSiteError = { status: 403, message: 'Your access to this organization does not reach that site' }
+    expect(await consoleMediaIngest.ingest({ ...request, hostId: 'host-2' })).toEqual({
+      ok: false,
+      status: 403,
+      reason: 'Your access to this organization does not reach that site',
+    })
+    expect(mockCreated).toHaveLength(2)
+  })
+
+  it("stamps no sharing on a site library's asset", async () => {
+    await consoleMediaIngest.ingest({ hostId: 'host-1', uid: 'member-1', fileName: 'a.jpg', contentType: 'image/jpeg', bytes: JPEG })
+    expect(mockCreated[0].data).not.toHaveProperty('visibleTo')
+  })
+
+  it('finds a workspace copy of a stock photo only where it is shared with every site, or the one named (AGL-4066)', async () => {
+    mockStored = [
+      { id: 'narrow', data: { stockPhoto: STOCK, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/org:org-1/narrow', visibleTo: ['host:other'] } },
+      { id: 'unshared', data: { stockPhoto: STOCK, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/org:org-1/unshared' } },
+    ]
+    expect(await consoleMediaIngest.findStockPhoto({ hostId: '', orgId: 'org-1', sourceKey: 'pixabay:7101001' })).toBeNull()
+    expect(mockReads).toContain('orgs/org-1/media')
+    mockStored.push({
+      id: 'site',
+      data: { stockPhoto: STOCK, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/org:org-1/site', visibleTo: ['host:host-1'] },
+    })
+    expect(await consoleMediaIngest.findStockPhoto({ hostId: '', orgId: 'org-1', sourceKey: 'pixabay:7101001' })).toBeNull()
+    expect(await consoleMediaIngest.findStockPhoto({ hostId: 'host-1', orgId: 'org-1', sourceKey: 'pixabay:7101001' })).toMatchObject({
+      mediaId: 'site',
+    })
+    mockStored.push({
+      id: 'all',
+      data: { stockPhoto: STOCK, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/org:org-1/all', visibleTo: ['org'] },
+    })
+    expect(await consoleMediaIngest.findStockPhoto({ hostId: '', orgId: 'org-1', sourceKey: 'pixabay:7101001' })).toMatchObject({
+      mediaId: 'all',
+      src: 'media:org:org-1/all',
+    })
+    // A site's own library is read as before, by its id.
+    mockReads.length = 0
+    await consoleMediaIngest.findStockPhoto({ hostId: 'host-1', sourceKey: 'pixabay:7101001' })
+    expect(mockReads).toEqual(['hosts/host-1/media'])
   })
 
   it("files a photo link's photo in its folder, marked as the owner's (AGL-3957)", async () => {

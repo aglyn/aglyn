@@ -46,7 +46,18 @@ import {
  */
 
 export interface PluginMediaIngestRequest {
+  /**
+   * The site whose library the asset is stored in; with {@link orgId}, the
+   * site on screen, if any, which the workspace's Default sharing may narrow
+   * the asset to, and otherwise empty.
+   */
   hostId: string
+  /**
+   * The workspace whose SHARED library the asset is stored in instead of a
+   * site's (AGL-4066): the media picker opened with no site, adding a stock
+   * photo. Absent, the site's own library.
+   */
+  orgId?: string
   /**
    * The member the asset is stored as. Their access to the site, the site's
    * lockdown and the workspace's plan and storage band are checked as for
@@ -102,8 +113,15 @@ export interface PluginMediaIngest {
   /**
    * The site's live, public asset copied from a stock photo with this source
    * key (`{provider}:{id}`), so a photo is never stored twice in one library.
+   * With `orgId`, the workspace library's asset (AGL-4066), taken only where
+   * it is shared with every site, or with `hostId`'s when one is named, so a
+   * member is never handed a file their sharing keeps from them.
    */
-  findStockPhoto(input: { hostId: string; sourceKey: string }): Promise<PluginMediaAsset | null>
+  findStockPhoto(input: {
+    hostId: string
+    sourceKey: string
+    orgId?: string
+  }): Promise<PluginMediaAsset | null>
   /**
    * The site's live, public photos of the business itself (AGL-3957): what
    * came through a site photo link, newest first, at most `limit`. A photo
