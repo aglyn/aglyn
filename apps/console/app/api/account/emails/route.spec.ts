@@ -65,8 +65,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   listAccountEmails: async () => [],
   meterPlatformEmail: async () => undefined,
   removeAccountEmail: async () => ({ ok: true }),
-  setPrimaryAccountEmail: async () => ({ ok: true }),
+  setPrimaryAccountEmail: (...args: unknown[]) => mockSetPrimary(...args),
 }))
+
+const mockSetPrimary = jest.fn(
+  async (..._args: unknown[]): Promise<Record<string, unknown>> => ({ ok: true }),
+)
 
 /** What the confirmation's template renders; null unless a test says. */
 const mockRender = jest.fn(
@@ -162,5 +166,53 @@ describe('POST /api/account/emails — the confirmation’s copy (AGL-3322)', ()
     expect(lastMail()['subject']).toBe('Confirm your email address')
     expect(lastMail()['text']).toContain('If you did not ask to add this address')
     expect(lastMail()['html']).toBeUndefined()
+  })
+})
+
+describe('POST /api/account/emails — make primary (AGL-4041)', () => {
+  const makePrimary = () =>
+    POST(
+      new Request('https://app.aglyn.com/api/account/emails', {
+        method: 'POST',
+        headers: { authorization: 'Bearer token', 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'primary', address: 'work@example.com' }),
+      }),
+    )
+
+  afterEach(() => {
+    mockSetPrimary.mockReset()
+    mockSetPrimary.mockResolvedValue({ ok: true })
+  })
+
+  it('answers 409 with the refusal when another account holds the address', async () => {
+    mockSetPrimary.mockResolvedValue({
+      ok: false,
+      refusal: 'claimed-by-another-account',
+      message: 'taken',
+    })
+
+    const response = await makePrimary()
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: 'taken',
+      reason: 'claimed-by-another-account',
+    })
+  })
+
+  it('logs the method, action and code when something real fails', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockSetPrimary.mockRejectedValue(
+      Object.assign(new Error('backend down'), { code: 'auth/internal-error' }),
+    )
+
+    const response = await makePrimary()
+
+    expect(response.status).toBe(500)
+    expect(logged.mock.calls[0]?.slice(0, 2)).toEqual([
+      '[account/emails] failed',
+      JSON.stringify({ method: 'POST', action: 'primary', code: 'auth/internal-error' }),
+    ])
+    logged.mockRestore()
   })
 })

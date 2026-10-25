@@ -110,6 +110,7 @@ export function mailWebhookBody(
       ...(message.tags?.length ? { tags: message.tags } : {}),
       ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       ...(message.bcc?.length ? { bcc: message.bcc } : {}),
+      ...(message.attachments?.length ? { attachments: message.attachments } : {}),
     },
   }
 }

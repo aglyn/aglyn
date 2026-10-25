@@ -160,6 +160,12 @@ export interface CatalogOffer {
   shipping: CatalogShippingPrice[]
   /** When the product last changed, epoch ms; absent when unknown. */
   updatedAtMs?: number
+  /**
+   * The store sells this offer in person only — at its register, never online
+   * (AGL-4060). Present only on a page asked for with `inPersonOnly`; a reader
+   * that lists offers anywhere a shopper buys online never sees one.
+   */
+  inPersonOnly?: true
 }
 
 export interface CatalogPage {
@@ -175,8 +181,18 @@ export interface PluginProductCatalog {
    * One page of the store's live, listed offers: never a draft, archived or
    * deleted product. About `limit` offers — a product's configurations are
    * never split across pages, so a page may run over by one product's worth.
+   *
+   * Offers the store sells in person only (AGL-4060) are left out, since a
+   * feed, an ad catalog, a marketplace or a delivery app sells online. A
+   * reader that only counts the shelf — a stock sync — asks with
+   * `inPersonOnly: true` and gets them too, each marked `inPersonOnly`.
    */
-  page(request: { hostId: string; cursor?: string | null; limit: number }): Promise<CatalogPage>
+  page(request: {
+    hostId: string
+    cursor?: string | null
+    limit: number
+    inPersonOnly?: boolean
+  }): Promise<CatalogPage>
 }
 
 export const PLUGIN_PRODUCT_CATALOG = definePluginServiceContract<PluginProductCatalog>(

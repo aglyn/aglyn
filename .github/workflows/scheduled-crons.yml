@@ -127,9 +127,10 @@ on:
     # difference raises `billing.siteCareReconciliation`. Daily on this runner
     # for the CRM digest's reasons: an hour of drift costs nothing to a check
     # of yesterday's charges, and the route only reads and alerts, deduped per
-    # workspace-month, so a manual re-dispatch raises nothing new. NOT in
-    # `SCHEDULED_JOBS` yet, for the same reason as the digest: the route beats
-    # on every POST, so the row is added once a beat exists.
+    # workspace-month, so a manual re-dispatch raises nothing new. Watched by
+    # `/api/health/crons` as `site-care-reconcile` (AGL-4030), added once the
+    # route had a beat to judge, with a twelve-hour grace because GitHub
+    # dispatches this entry three to four and a half hours late every day.
     - cron: '15 14 * * *' # site-care-reconcile — daily 14:15 UTC (09:15 America/Chicago)
     # ⛔ The hourly CRM task reminders (AGL-2659) are NOT here any more; they
     # run on Cloud Scheduler as `consoleCrmTaskReminders`. GitHub delivered

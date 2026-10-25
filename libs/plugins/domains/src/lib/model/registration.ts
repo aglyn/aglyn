@@ -23,20 +23,28 @@
  * The lifecycle, every step of which the sweep can resume from:
  *
  *   charging ──► registering ──► connecting ──► active ──► expired
- *      │              │                            │
- *      ▼              ▼                            └──► transferred-out
+ *      │   │          │                 ▲          │
+ *      │   │          ▼                 │          └──► transferred-out
+ *      │   └──► transferring-in ────────┘
+ *      ▼              │
  *   declined       refunded
  *
  * `charging` holds the name while the card is charged; `registering` holds
- * the registrar's order; `connecting` is a registered name not yet attached
- * to its site. A failure after the charge always ends in `refunded`, never in
- * a customer paying for a name they do not hold.
+ * the registrar's order; `transferring-in` is a name moving here from another
+ * registrar (AGL-4040), which can take days; `connecting` is a registered
+ * name not yet attached to its site. A failure after the charge always ends
+ * in `refunded`, never in a customer paying for a name they do not hold.
+ *
+ * A name with `hostId: null` belongs to the workspace and serves no site:
+ * one bought from the workspace's Domains page, or while the site already
+ * had a domain, or transferred in (AGL-4040).
  */
 
 export type DomainRegistrationStatus =
   | 'charging'
   | 'declined'
   | 'registering'
+  | 'transferring-in'
   | 'refunded'
   | 'connecting'
   | 'active'
@@ -47,9 +55,56 @@ export type DomainRegistrationStatus =
 export const HOLDING_STATUSES: readonly DomainRegistrationStatus[] = [
   'charging',
   'registering',
+  'transferring-in',
   'connecting',
   'active',
 ]
+
+/** ICANN's registrant contact, as every registrar takes it. */
+export interface RegistrantContact {
+  firstName: string
+  lastName: string
+  email: string
+  /** E.164, `+1.5125550123` or `+15125550123`. */
+  phone: string
+  address1: string
+  address2?: string
+  city: string
+  state: string
+  zip: string
+  /** ISO 3166-1 alpha-2. */
+  country: string
+  companyName?: string
+}
+
+/** How a name came to the workspace. Absent on names bought before AGL-4040. */
+export type DomainRegistrationOrigin = 'purchase' | 'transfer-in'
+
+/** What a swap onto a site released, kept until the connect finishes (AGL-4040). */
+export interface DomainSwapState {
+  /** The site the name is being connected to. */
+  hostId: string
+  /** The domain that site served before, and its www twin. */
+  replaced: string | null
+  replacedTwin: string | null
+  /** Whether `replaced` is this workspace's registration, tied to that site. */
+  replacedOurs: boolean
+  /** The site the name served before the move, and its twin there. */
+  fromHostId: string | null
+  fromServed: boolean
+  fromTwin: string | null
+  startedAtMs: number
+  actor: { uid: string; email: string | null }
+}
+
+/** A transfer in from another registrar, while it runs (AGL-4040). */
+export interface DomainTransferInState {
+  orderId: string
+  startedAtMs: number
+  /** The registrar's own transfer status as last read, a code. */
+  lastStatus?: string | null
+  checkedAtMs?: number | null
+}
 
 /** Where a renewal stands for the CURRENT term (`forExpiresAt`). */
 export interface DomainRenewalState {
@@ -66,6 +121,12 @@ export interface DomainRenewalState {
   lastChargeError?: string
   /** The registrar order the renewal placed. */
   orderId?: string
+  /**
+   * The contact change (its `contactChange.updatedAtMs`) the renewal order
+   * carried to the registrar (AGL-4040), so a change saved after the order
+   * waits for the next one rather than being marked applied.
+   */
+  contactSentForMs?: number
   renewedAtMs?: number
   /** Dunning ran out, or the customer turned auto-renew off: let it expire. */
   abandonedAtMs?: number
@@ -105,8 +166,26 @@ export interface DomainRegistrationDoc {
   orderId?: string | null
   registeredAtMs?: number | null
   expiresAtMs?: number | null
-  /** Who the name is registered to, for display; the full contact is not kept. */
+  /** Who the name is registered to, for display. */
   registrant: { name: string; email: string }
+  origin?: DomainRegistrationOrigin
+  transfer?: DomainTransferInState | null
+  /**
+   * The full registrant contact the owner entered on the Domains page
+   * (AGL-4040). Kept only once an owner edits it, read only by the server
+   * (the collection is closed to clients), and sent to the registrar with
+   * the next renewal, since the registrar takes no contact change on its own.
+   */
+  registrantContact?: RegistrantContact | null
+  /** Set while {@link registrantContact} waits for the next renewal. */
+  contactChange?: { updatedAtMs: number; updatedBy: string } | null
+  /** When the registrar last refused a renewal that carried the edited contact. */
+  contactRejectedAtMs?: number | null
+  /**
+   * A move onto a site that is still connecting (AGL-4040): what the swap
+   * released, so the sweep can put it back if the connect never finishes.
+   */
+  pendingSwap?: DomainSwapState | null
   /** ICANN's registrant email check, as last read from the registrar. */
   contactVerification?: {
     verified: boolean
@@ -154,6 +233,17 @@ export interface DomainRegistrationView {
   /** Set while a renewal charge is failing. */
   renewalFailing: boolean
   failure: string | null
+  registrantName: string
+  /** ICANN's registrant email check as last read; null before the first read. */
+  contactVerified: boolean | null
+  /** When an edited contact was saved, while it waits for the next renewal. */
+  contactPendingSinceMs: number | null
+  /** When the registrar refused the edited contact, until it is edited again. */
+  contactRejectedAtMs: number | null
+  origin: DomainRegistrationOrigin
+  /** The registrar's transfer status while a transfer in runs. */
+  transferStatus: string | null
+  transferStartedAtMs: number | null
 }
 
 export function registrationView(doc: DomainRegistrationDoc): DomainRegistrationView {
@@ -175,5 +265,28 @@ export function registrationView(doc: DomainRegistrationDoc): DomainRegistration
       doc.renewal?.lastChargeError && !doc.renewal?.chargedInvoiceId,
     ),
     failure: doc.failure ?? null,
+    registrantName: doc.registrant?.name ?? '',
+    contactVerified: verification ? verification.verified === true : null,
+    contactPendingSinceMs: doc.contactChange?.updatedAtMs ?? null,
+    contactRejectedAtMs: doc.contactRejectedAtMs ?? null,
+    origin: doc.origin ?? 'purchase',
+    transferStatus: doc.status === 'transferring-in' ? (doc.transfer?.lastStatus ?? null) : null,
+    transferStartedAtMs: doc.transfer?.startedAtMs ?? null,
   }
+}
+
+/**
+ * About when the registrar is asked to renew a name: once the renewal is
+ * charged, about 30 days before it expires (`RENEWAL_CHARGE_DAYS` in the
+ * lifecycle). An edited contact reaches the registrar then. Null when the
+ * name will not renew on its own.
+ */
+export const RENEWAL_LEAD_DAYS = 30
+
+export function nextRenewalAtMs(
+  view: Pick<DomainRegistrationView, 'autoRenew' | 'expiresAtMs' | 'status'>,
+  nowMs = Date.now(),
+): number | null {
+  if (view.status !== 'active' || !view.autoRenew || !view.expiresAtMs) return null
+  return Math.max(nowMs, view.expiresAtMs - RENEWAL_LEAD_DAYS * 24 * 60 * 60 * 1000)
 }
