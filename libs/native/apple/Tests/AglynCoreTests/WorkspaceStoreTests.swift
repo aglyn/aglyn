@@ -72,6 +72,19 @@ final class WorkspaceStoreTests: XCTestCase {
     XCTAssertEqual(WorkspaceStore.reconcile(.init(orgID: "a", hostID: "s1"), orgs: orgs, sites: []), .init(orgID: "a", hostID: nil))
   }
 
+  func testADeletedSiteOnScreenIsRemovedNotReplaced() {
+    // s2 was on screen and is gone from the loaded list (deleted): the shell leaves for the workspace's Sites.
+    let left = Array(sites.prefix(1))
+    XCTAssertTrue(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s2", orgID: "a", sites: left, ready: true))
+    // Still listed, nothing on screen, the sites still loading, or another workspace now shown: nothing was removed.
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s1", orgID: "a", sites: left, ready: true))
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: nil, orgID: "a", sites: left, ready: true))
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s2", orgID: "a", sites: [], ready: false))
+    XCTAssertFalse(WorkspaceStore.shownSiteRemoved(shownOrgID: "b", shownHostID: "s2", orgID: "a", sites: left, ready: true))
+    // The last site deleted leaves an empty, loaded list: removed too.
+    XCTAssertTrue(WorkspaceStore.shownSiteRemoved(shownOrgID: "a", shownHostID: "s1", orgID: "a", sites: [], ready: true))
+  }
+
   func testMembershipRowsReadTheConsoleFields() {
     XCTAssertEqual(
       WorkspaceStore.org(from: .init(id: "o", data: ["orgName": "Acme", "slug": "acme", "role": "owner"])),

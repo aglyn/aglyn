@@ -454,6 +454,17 @@ public final class WorkspaceStore {
       cname: doc.string("cname").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
   }
 
+  /// Whether the site that was on screen (`shownOrgID`'s `shownHostID`) has left that workspace's loaded sites: deleted
+  /// (here, on the web or on another device) or taken away from the person. The shell then shows the whole workspace's
+  /// Sites, never another site in its place: whatever screen of the gone site was open, its Danger zone included, would
+  /// otherwise stay open on the next site.
+  public static func shownSiteRemoved(
+    shownOrgID: String?, shownHostID: String?, orgID: String?, sites: [WorkspaceSite], ready: Bool
+  ) -> Bool {
+    guard let shownHostID, ready, orgID == shownOrgID else { return false }
+    return !sites.contains { $0.id == shownHostID }
+  }
+
   /// Which org and site to show, given what is remembered and what exists.
   public static func reconcile(
     _ picked: WorkspacePick, orgs: [WorkspaceOrg], sites: [WorkspaceSite]?

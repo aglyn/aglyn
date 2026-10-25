@@ -316,6 +316,15 @@ class WorkspaceStore(
       )
     }
 
+    /**
+     * Whether the site that was on screen ([shownOrgId]'s [shownHostId]) has left that workspace's loaded sites: deleted
+     * (here, on the web or on another device) or taken away from the person. The shell then shows the whole workspace's
+     * Sites, never another site in its place: whatever screen of the gone site was open, its Danger zone included, would
+     * otherwise stay open on the next site.
+     */
+    fun shownSiteRemoved(shownOrgId: String?, shownHostId: String?, state: WorkspaceState): Boolean =
+      shownHostId != null && state.ready && state.org?.id == shownOrgId && state.sites.none { it.id == shownHostId }
+
     /** Which org and site to show, given what is remembered and what exists. */
     fun reconcilePick(
       picked: WorkspacePick,
