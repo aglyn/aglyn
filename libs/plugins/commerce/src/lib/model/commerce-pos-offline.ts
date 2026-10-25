@@ -36,6 +36,8 @@ import { POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT } from './pos-offline-card-limits
  *    sizes the platform fee then, exactly as for an online card sale. A bank
  *    can still decline it at that point, after the customer left: the order
  *    is then recorded unpaid and flagged, and the register says so.
+ *    Off until the store turns it on, then within the store's two limits:
+ *    per sale, and per device per day (as Shopify POS words it).
  *  - Every other card tender cannot: Tap to Pay on Android, the server's
  *    smart readers, the typed card and the QR link are server-driven, and
  *    Stripe does not take a server-driven card payment without the server.
@@ -89,9 +91,10 @@ export const POS_OFFLINE_CLOCK_SKEW_MS = 10 * 60 * 1000
 export type PosOfflineTender = 'cash' | 'card'
 
 export {
+  POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
   POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
   POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT,
-  POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
+  POS_OFFLINE_CARD_RECONNECT_WITHIN_MS,
 } from './pos-offline-card-limits'
 
 /** The `metadata[kind]` of a PaymentIntent the app created for a card rung offline. */
@@ -304,10 +307,10 @@ export interface PosOfflineKitCard {
   /** The connected account the charge transfers to (a destination charge, as online). */
   destination: string
   currency: string
-  /** The ceiling of one card sale rung offline, in cents. */
+  /** The limit of one card sale rung offline, in cents. */
   maxSaleCents: number
-  /** The ceiling of every card sale one device holds unsent, in cents. */
-  maxStoredCents: number
+  /** The limit of every card one device takes offline in a day, in cents. */
+  maxDeviceDailyCents: number
 }
 
 /**
@@ -569,26 +572,27 @@ export function sanitizePosOfflineSaleCard(raw: unknown): PosOfflineSaleCard | n
 
 /**
  * Why a card cannot be taken offline for `totalCents`, in the cashier's
- * words, or `null` when it can: the store turned it off, the sale is over
- * the store's (or Stripe's) ceiling for one card, or the cards this device
- * already holds unsent would pass the store's ceiling for all of them.
+ * words, or `null` when it can: the store has not turned it on, the sale is
+ * over the store's (or Stripe's) limit per sale, or the cards this device
+ * has taken offline today would pass the store's daily limit per device.
  */
 export function posOfflineCardRefusal(input: {
-  card: Pick<PosOfflineKitCard, 'available' | 'unavailableReason' | 'maxSaleCents' | 'maxStoredCents'> | null | undefined
+  card: Pick<PosOfflineKitCard, 'available' | 'unavailableReason' | 'maxSaleCents' | 'maxDeviceDailyCents'> | null | undefined
   totalCents: number
-  storedCents: number
+  /** Every card this device took offline today, in cents. */
+  takenTodayCents: number
 }): string | null {
   const card = input.card
   if (!card) return 'Card sales offline need the register to connect once first.'
-  if (!card.available) return card.unavailableReason || 'Card sales offline are off for this store.'
+  if (!card.available) return card.unavailableReason || 'Card sales offline are not turned on for this store.'
   const total = wholeCents(input.totalCents)
   if (total <= 0) return 'There is nothing to charge.'
   const perSale = Math.min(wholeCents(card.maxSaleCents), POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT)
   if (total > perSale) return `Offline, a card sale can be up to ${dollars(perSale)}. Take cash, or charge it when you are back online.`
-  const stored = wholeCents(input.storedCents)
-  const ceiling = wholeCents(card.maxStoredCents)
-  if (stored + total > ceiling) {
-    return `This register already holds ${dollars(stored)} in cards to charge, and offline it can hold up to ${dollars(ceiling)}. Take cash, or wait for the connection.`
+  const today = wholeCents(input.takenTodayCents)
+  const daily = wholeCents(card.maxDeviceDailyCents)
+  if (today + total > daily) {
+    return `This device has taken ${dollars(today)} in cards offline today, and its daily limit is ${dollars(daily)}. Take cash, or wait for the connection.`
   }
   return null
 }

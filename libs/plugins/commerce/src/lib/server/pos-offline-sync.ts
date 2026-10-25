@@ -352,10 +352,10 @@ async function buildPosOfflineKitCard(
     destination: '',
     currency: POS_CURRENCY,
     maxSaleCents: settings.maxSaleCents,
-    maxStoredCents: settings.maxStoredCents,
+    maxDeviceDailyCents: settings.maxDeviceDailyCents,
   }
   const off = (unavailableReason: string): PosOfflineKitCard => ({ ...base, available: false, unavailableReason })
-  if (!settings.enabled) return off('Card sales offline are turned off in this store’s point of sale settings.')
+  if (!settings.enabled) return off('Card sales offline are not turned on in this store’s point of sale settings.')
   const terminal = await deps.card.terminal(staff.hostId)
   if (!terminal.available) return off('Card readers are not set up for this store yet.')
   if (!terminal.locationId) return off('Connect a card reader once while online, then cards keep working offline.')

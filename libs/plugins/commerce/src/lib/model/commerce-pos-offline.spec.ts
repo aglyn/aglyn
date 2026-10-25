@@ -25,8 +25,8 @@ import {
   posOfflineSoldAt,
   posOfflineTotalsAddUp,
   POS_OFFLINE_CARD_INTENT_KIND,
+  POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
   POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
-  POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
   POS_OFFLINE_CLOCK_SKEW_MS,
   POS_OFFLINE_DISABLED_TENDERS,
   POS_OFFLINE_FLAG_LABELS,
@@ -145,7 +145,7 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
   const card = {
     available: true,
     maxSaleCents: POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
-    maxStoredCents: POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
+    maxDeviceDailyCents: POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
   }
   const SALE = {
     v: 1,
@@ -162,18 +162,18 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     changeCents: 100,
   }
 
-  it('takes a card up to the store ceilings and says why not past them', () => {
-    expect(posOfflineCardRefusal({ card, totalCents: 2479, storedCents: 0 })).toBeNull()
-    expect(posOfflineCardRefusal({ card, totalCents: 25_000, storedCents: 0 })).toBeNull()
-    expect(posOfflineCardRefusal({ card, totalCents: 25_001, storedCents: 0 })).toMatch(/up to \$250\.00/)
-    expect(posOfflineCardRefusal({ card, totalCents: 2000, storedCents: 249_000 })).toMatch(/holds \$2,490\.00/)
-    expect(posOfflineCardRefusal({ card: null, totalCents: 2479, storedCents: 0 })).toMatch(/connect once/)
-    expect(posOfflineCardRefusal({ card: { ...card, available: false }, totalCents: 2479, storedCents: 0 })).toMatch(/off/)
+  it('takes a card within the limit per sale and the daily limit per device, and says why not past them', () => {
+    expect(posOfflineCardRefusal({ card, totalCents: 2479, takenTodayCents: 0 })).toBeNull()
+    expect(posOfflineCardRefusal({ card, totalCents: 10_000, takenTodayCents: 0 })).toBeNull()
+    expect(posOfflineCardRefusal({ card, totalCents: 10_001, takenTodayCents: 0 })).toMatch(/up to \$100\.00/)
+    expect(posOfflineCardRefusal({ card, totalCents: 2000, takenTodayCents: 499_000 })).toMatch(/taken \$4,990\.00 .* daily limit is \$5,000\.00/)
+    expect(posOfflineCardRefusal({ card: null, totalCents: 2479, takenTodayCents: 0 })).toMatch(/connect once/)
+    expect(posOfflineCardRefusal({ card: { ...card, available: false }, totalCents: 2479, takenTodayCents: 0 })).toMatch(/not turned on/)
   })
 
-  it('never lets a store ceiling pass Stripe’s own ceiling for one offline card', () => {
-    const wide = { available: true, maxSaleCents: 5_000_000, maxStoredCents: 9_000_000 }
-    expect(posOfflineCardRefusal({ card: wide, totalCents: 1_200_000, storedCents: 0 })).toMatch(/\$10,000\.00/)
+  it('never lets a store limit pass Stripe’s own limit for one offline card', () => {
+    const wide = { available: true, maxSaleCents: 5_000_000, maxDeviceDailyCents: 9_000_000 }
+    expect(posOfflineCardRefusal({ card: wide, totalCents: 1_200_000, takenTodayCents: 0 })).toMatch(/\$10,000\.00/)
   })
 
   it('names the sale on the PaymentIntent so the charge can be matched without the sync', () => {

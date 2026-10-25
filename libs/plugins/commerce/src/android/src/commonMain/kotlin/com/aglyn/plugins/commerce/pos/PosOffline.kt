@@ -27,6 +27,7 @@ import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.KeyValueStore
+import com.aglyn.core.localDayAndTime
 import com.aglyn.hardware.OfflineCardForward
 import com.aglyn.hardware.OfflineCardRequest
 import com.aglyn.hardware.OfflineCardTaken
@@ -189,11 +190,21 @@ class PosOfflineDeviceStore(private val store: KeyValueStore, scope: String) {
     return queue().any { it.id == entry.id }
   }
 
+  /** Every card this DEVICE took offline on [day] (any member, any site): what the daily limit per device counts (AGL-4039). */
+  fun cardsTaken(day: String): Long {
+    val parts = store.get(CARDS_TODAY_KEY).orEmpty().split('|')
+    return if (parts.size == 2 && parts[0] == day) parts[1].toLongOrNull() ?: 0 else 0
+  }
+
+  fun addCardTaken(cents: Long, day: String) = store.set(CARDS_TODAY_KEY, "$day|${cardsTaken(day) + maxOf(0, cents)}")
+
   fun remove(saleKey: String) {
     val list = queue().filter { it.id != saleKey }
     store.set(queueKey, if (list.isEmpty()) null else ContractJsonFormat.encodeToString(ListSerializer(PosOfflineQueued.serializer()), list))
   }
 }
+
+private const val CARDS_TODAY_KEY = "commerce.pos.offline.cardsToday"
 
 /** A key for one offline sale: the order's id once it syncs. Leading letters keep it from ever reading as an order number. */
 @OptIn(ExperimentalUuidApi::class)
@@ -210,6 +221,8 @@ class PosOfflineModel(
   private val assertion: () -> String?,
   private val now: () -> Long = ::nowMs,
   private val mintKey: () -> String = ::newPosOfflineSaleKey,
+  /** The device's own calendar day, `yyyy-MM-dd`: the daily limit per device resets with it. */
+  private val today: () -> String = { localDayAndTime(now()).first },
 ) {
   var kit by mutableStateOf(store.loadKit())
     private set
@@ -241,8 +254,15 @@ class PosOfflineModel(
   val waitingCards: List<PosOfflineQueued> get() = waiting.filter { it.isCard }
   val waitingCardCents: Long get() = waitingCards.sumOf { it.totalCents }
 
-  /** Every card this member holds on the device that Stripe has not been sent: what the stored ceiling counts. */
-  val storedCardCents: Long get() = queue.filter { it.cardOnDevice }.sumOf { it.totalCents }
+  /** Every card this device took offline today: what the daily limit per device counts. */
+  val cardsTakenTodayCents: Long get() = store.cardsTaken(today())
+
+  /** When the oldest card still on the device was taken; null when none waits for Stripe. */
+  val oldestCardOnDeviceMs: Double? get() = queue.filter { it.cardOnDevice }.minOfOrNull { it.sale.soldAtMs }
+
+  /** Cards have waited on the device past the time Stripe recommends reconnecting within. */
+  val cardsWaitedTooLong: Boolean
+    get() = oldestCardOnDeviceMs?.let { now() - it > Contracts.posOfflineCardReconnectWithinMs } ?: false
 
   /** The shift open on the register as last seen: the live one, else the kit's. */
   private fun lastKnownShift(): String? {
@@ -286,7 +306,7 @@ class PosOfflineModel(
     unavailableReason?.let { return it }
     val totals = totals(cart) ?: return "This basket cannot be rung offline."
     if (discountOverLimit(cart)) return "This register may discount up to ${(kit?.maxDiscountPct ?: 0.0).toLong()}%."
-    return posOfflineCardRefusal(kit?.card, totals.totalCents ?: 0.0, storedCardCents.toDouble())
+    return posOfflineCardRefusal(kit?.card, totals.totalCents ?: 0.0, cardsTakenTodayCents.toDouble())
   }
 
   /** The card to take for this basket, under a key minted for the sale; null when it cannot be taken. */
@@ -336,7 +356,7 @@ class PosOfflineModel(
       last4 = taken.last4,
       paymentIntentId = taken.paymentIntentId,
     )
-    return ring(cart, taken.saleKey, 0.0, 0.0, card)
+    return ring(cart, taken.saleKey, 0.0, 0.0, card)?.also { store.addCardTaken(it.totalCents, today()) }
   }
 
   private fun ring(cart: Cart, saleKey: String, cashTenderedCents: Double, changeCents: Double, card: PosOfflineSaleCard?): PosOfflineRung? {

@@ -22,11 +22,14 @@
  * three numbers would cost every console page.
  */
 
-/** The default ceiling of one card sale rung offline, in cents, until the store sets its own. */
-export const POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT = 25_000
+/** The limit per sale a store is offered when it turns offline cards on, in cents (the store sets its own). */
+export const POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT = 10_000
 
-/** The default ceiling of every card sale one device holds unsent, in cents. */
-export const POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT = 250_000
+/** The daily limit per device a store is offered when it turns offline cards on, in cents: every card one device takes offline in a day. */
+export const POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT = 500_000
+
+/** How long cards may wait on a device before the register asks, more firmly, to reconnect. */
+export const POS_OFFLINE_CARD_RECONNECT_WITHIN_MS = 24 * 60 * 60 * 1000
 
 /** Stripe's own ceiling for one payment collected offline (10,000 USD). */
 export const POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT = 1_000_000

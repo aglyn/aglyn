@@ -92,11 +92,11 @@ private func offlineDollars(_ cents: Double) -> String {
 }
 
 /// Why a card cannot be taken offline for `totalCents`, in the cashier's words; nil when it can.
-public func posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, storedCents: Double) -> String? {
+public func posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, takenTodayCents: Double) -> String? {
   guard let card else { return "Card sales offline need the register to connect once first." }
   guard card.available else {
     let reason = card.unavailableReason ?? ""
-    return reason.isEmpty ? "Card sales offline are off for this store." : reason
+    return reason.isEmpty ? "Card sales offline are not turned on for this store." : reason
   }
   let total: Double = wholeCents(totalCents)
   guard total > 0 else { return "There is nothing to charge." }
@@ -105,11 +105,11 @@ public func posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, 
   if total > perSale {
     return "Offline, a card sale can be up to \(offlineDollars(perSale)). Take cash, or charge it when you are back online."
   }
-  let stored: Double = wholeCents(storedCents)
-  let ceiling: Double = wholeCents(card.maxStoredCents)
-  if stored + total > ceiling {
+  let today: Double = wholeCents(takenTodayCents)
+  let daily: Double = wholeCents(card.maxDeviceDailyCents)
+  if today + total > daily {
     return
-      "This register already holds \(offlineDollars(stored)) in cards to charge, and offline it can hold up to \(offlineDollars(ceiling)). Take cash, or wait for the connection."
+      "This device has taken \(offlineDollars(today)) in cards offline today, and its daily limit is \(offlineDollars(daily)). Take cash, or wait for the connection."
   }
   return nil
 }

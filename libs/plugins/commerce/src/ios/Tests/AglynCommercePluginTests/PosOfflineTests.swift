@@ -386,11 +386,11 @@ final class ConsolePosOfflineAPITests: XCTestCase {
 final class PosOfflineCardTests: XCTestCase {
   private let key = "offcard0000000000000000001"
 
-  private func cardKit(available: Bool = true, maxSale: Double = 25_000, maxStored: Double = 250_000) -> PosOfflineKit {
+  private func cardKit(available: Bool = true, maxSale: Double = 10_000, maxDaily: Double = 500_000) -> PosOfflineKit {
     makeKit {
       $0.card = PosOfflineKitCard(
-        available: available, currency: "usd", destination: "acct_merchant", maxSaleCents: maxSale,
-        maxStoredCents: maxStored, unavailableReason: available ? nil : "Card sales offline are off.")
+        available: available, currency: "usd", destination: "acct_merchant", maxDeviceDailyCents: maxDaily,
+        maxSaleCents: maxSale, unavailableReason: available ? nil : "Card sales offline are not turned on.")
     }
   }
 
@@ -436,7 +436,8 @@ final class PosOfflineCardTests: XCTestCase {
       cart: cart(), taken: OfflineCardTaken(saleKey: key, paymentIntentID: nil, brand: "visa", last4: "4242"))
     XCTAssertEqual(rung?.card?.forward, .stored)
     XCTAssertEqual(rung?.sale.cashTenderedCents, 0)
-    XCTAssertEqual(offline.storedCardCents, 1296)
+    XCTAssertEqual(offline.cardsTakenTodayCents, 1296)
+    XCTAssertNotNil(offline.oldestCardOnDeviceMs)
     XCTAssertEqual(offline.waitingCardCents, 1296)
     await offline.syncNow()
     XCTAssertTrue(api.batchesSent.isEmpty, "Stripe has not got the card yet")
@@ -447,7 +448,8 @@ final class PosOfflineCardTests: XCTestCase {
     ])
     XCTAssertEqual(applied, [key])
     XCTAssertEqual(offline.queue.first?.sale.card?.paymentIntentId, "pi_3Q0abcdEFGH12345")
-    XCTAssertEqual(offline.storedCardCents, 0)
+    XCTAssertNil(offline.oldestCardOnDeviceMs, "Stripe has the card now")
+    XCTAssertEqual(offline.cardsTakenTodayCents, 1296, "the daily limit still counts it")
     await offline.syncNow()
     XCTAssertEqual(api.batchesSent, [[key]])
     XCTAssertTrue(offline.queue.isEmpty)
@@ -474,13 +476,36 @@ final class PosOfflineCardTests: XCTestCase {
     XCTAssertTrue(offline.notices.isEmpty)
   }
 
-  func testCardsOnTheDeviceCountAgainstTheStoredCeiling() async {
+  func testTheDailyLimitPerDeviceCountsEveryCardTakenTodayAndResetsTomorrow() async {
     let api = FakeOfflineAPI()
-    api.kitAnswer = cardKit(maxStored: 2000)
-    let offline = await ready(api, keys: [])
+    api.kitAnswer = cardKit(maxDaily: 2000)
+    let defaults = suite()
+    var day = "2026-10-25"
+    let offline = PosOfflineModel(
+      api: api, store: PosOfflineDeviceStore(defaults: defaults, scope: "u1:h1"), uid: "u1", registerID: { "r1" },
+      locationID: { "loc1" }, shiftID: { nil }, assertion: { nil }, now: { 1_700_000_100_000 }, today: { day })
+    await offline.refreshKit()
     _ = offline.ringCardSale(cart: cart(), taken: OfflineCardTaken(saleKey: key, paymentIntentID: nil))
     XCTAssertEqual(
       offline.cardRefusal(for: cart()),
-      "This register already holds $12.96 in cards to charge, and offline it can hold up to $20.00. Take cash, or wait for the connection.")
+      "This device has taken $12.96 in cards offline today, and its daily limit is $20.00. Take cash, or wait for the connection.")
+    // Another member on the same device counts too: the limit is the device's.
+    XCTAssertEqual(PosOfflineDeviceStore(defaults: defaults, scope: "u2:h1").cardsTaken(on: day), 1296)
+    day = "2026-10-26"
+    XCTAssertNil(offline.cardRefusal(for: cart()))
+  }
+
+  func testCardsWaitingADayAskToReconnectNow() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit()
+    var clock: Int64 = 1_700_000_100_000
+    let offline = PosOfflineModel(
+      api: api, store: PosOfflineDeviceStore(defaults: suite(), scope: "u1:h1"), uid: "u1", registerID: { "r1" },
+      locationID: { "loc1" }, shiftID: { nil }, assertion: { nil }, now: { clock }, today: { "2026-10-25" })
+    await offline.refreshKit()
+    _ = offline.ringCardSale(cart: cart(), taken: OfflineCardTaken(saleKey: key, paymentIntentID: nil))
+    XCTAssertFalse(offline.cardsWaitedTooLong)
+    clock += 25 * 60 * 60 * 1000
+    XCTAssertTrue(offline.cardsWaitedTooLong)
   }
 }

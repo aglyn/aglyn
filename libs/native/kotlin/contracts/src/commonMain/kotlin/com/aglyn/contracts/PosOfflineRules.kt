@@ -80,17 +80,17 @@ private fun offlineDollars(cents: Double): String {
 }
 
 /** Why a card cannot be taken offline for [totalCents], in the cashier's words; null when it can. */
-fun posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, storedCents: Double): String? {
+fun posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, takenTodayCents: Double): String? {
   if (card == null) return "Card sales offline need the register to connect once first."
-  if (!card.available) return card.unavailableReason?.takeIf { it.isNotEmpty() } ?: "Card sales offline are off for this store."
+  if (!card.available) return card.unavailableReason?.takeIf { it.isNotEmpty() } ?: "Card sales offline are not turned on for this store."
   val total = wholeCents(totalCents)
   if (!(total > 0)) return "There is nothing to charge."
   val perSale = minOf(wholeCents(card.maxSaleCents), Contracts.posOfflineCardMaxSaleCentsLimit.toDouble())
   if (total > perSale) return "Offline, a card sale can be up to ${offlineDollars(perSale)}. Take cash, or charge it when you are back online."
-  val stored = wholeCents(storedCents)
-  val ceiling = wholeCents(card.maxStoredCents)
-  if (stored + total > ceiling) {
-    return "This register already holds ${offlineDollars(stored)} in cards to charge, and offline it can hold up to ${offlineDollars(ceiling)}. Take cash, or wait for the connection."
+  val today = wholeCents(takenTodayCents)
+  val daily = wholeCents(card.maxDeviceDailyCents)
+  if (today + total > daily) {
+    return "This device has taken ${offlineDollars(today)} in cards offline today, and its daily limit is ${offlineDollars(daily)}. Take cash, or wait for the connection."
   }
   return null
 }

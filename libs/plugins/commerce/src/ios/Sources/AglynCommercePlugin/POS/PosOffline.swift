@@ -163,6 +163,19 @@ struct PosOfflineDeviceStore {
     return queue().contains { $0.id == entry.id }
   }
 
+  /// Every card this DEVICE took offline on `day` (any member, any site): what the daily limit per device counts (AGL-4039).
+  func cardsTaken(on day: String) -> Int {
+    let parts = (defaults.string(forKey: Self.cardsTodayKey) ?? "").split(separator: "|")
+    guard parts.count == 2, parts[0] == day else { return 0 }
+    return Int(parts[1]) ?? 0
+  }
+
+  func addCardTaken(_ cents: Int, on day: String) {
+    defaults.set("\(day)|\(cardsTaken(on: day) + max(0, cents))", forKey: Self.cardsTodayKey)
+  }
+
+  private static let cardsTodayKey = "commerce.pos.offline.cardsToday"
+
   func remove(_ saleKey: String) {
     let list = queue().filter { $0.id != saleKey }
     if list.isEmpty {
@@ -171,6 +184,12 @@ struct PosOfflineDeviceStore {
       defaults.set(data, forKey: queueKey)
     }
   }
+}
+
+/// The device's calendar day for `ms`, `yyyy-MM-dd`, in its own time zone.
+func posLocalDayKey(_ ms: Int64) -> String {
+  let parts = Calendar.current.dateComponents([.year, .month, .day], from: Date(timeIntervalSince1970: Double(ms) / 1000))
+  return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
 }
 
 /// A key for one offline sale: the order's id once it syncs. Leading letters keep it from ever reading as an order number.
@@ -200,6 +219,8 @@ final class PosOfflineModel {
   @ObservationIgnored private let assertion: () -> String?
   @ObservationIgnored private let now: () -> Int64
   @ObservationIgnored private let mintKey: () -> String
+  /// The device's own calendar day, `yyyy-MM-dd`: the daily limit per device resets with it.
+  @ObservationIgnored private let today: () -> String
   @ObservationIgnored private var ringing = false
   @ObservationIgnored private var syncInFlight = false
   /// Told when a sync failed at the network (true) or the console answered it (false).
@@ -208,7 +229,8 @@ final class PosOfflineModel {
   init(
     api: PosOfflineAPI, store: PosOfflineDeviceStore, uid: String, registerID: @escaping () -> String?,
     locationID: @escaping () -> String?, shiftID: @escaping () -> String?, assertion: @escaping () -> String?,
-    now: @escaping () -> Int64 = nowMs, mintKey: @escaping () -> String = newPosOfflineSaleKey
+    now: @escaping () -> Int64 = nowMs, mintKey: @escaping () -> String = newPosOfflineSaleKey,
+    today: (() -> String)? = nil
   ) {
     self.api = api
     self.store = store
@@ -219,6 +241,7 @@ final class PosOfflineModel {
     self.assertion = assertion
     self.now = now
     self.mintKey = mintKey
+    self.today = today ?? { posLocalDayKey(now()) }
     kit = store.loadKit()
     queue = store.queue()
   }
@@ -230,8 +253,17 @@ final class PosOfflineModel {
   var waitingCards: [PosOfflineQueued] { waiting.filter(\.isCard) }
   var waitingCardCents: Int { waitingCards.reduce(0) { $0 + $1.totalCents } }
   var waitingCashCents: Int { waitingCents - waitingCardCents }
-  /// Every card this member holds on the device that Stripe has not been sent: what the stored ceiling counts.
-  var storedCardCents: Int { queue.filter(\.cardOnDevice).reduce(0) { $0 + $1.totalCents } }
+  /// Every card this device took offline today: what the daily limit per device counts.
+  var cardsTakenTodayCents: Int { store.cardsTaken(on: today()) }
+
+  /// When the oldest card still on the device was taken; nil when none waits for Stripe.
+  var oldestCardOnDeviceMs: Double? { queue.filter(\.cardOnDevice).map(\.sale.soldAtMs).min() }
+
+  /// Cards have waited on the device past the time Stripe recommends reconnecting within.
+  var cardsWaitedTooLong: Bool {
+    guard let oldest = oldestCardOnDeviceMs else { return false }
+    return Double(now()) - oldest > ContractValues.shared.posOfflineCardReconnectWithinMs
+  }
 
   /// The shift open on the register as last seen: the live one, else the kit's.
   private func lastKnownShift() -> String? {
@@ -274,7 +306,8 @@ final class PosOfflineModel {
     if let reason = unavailableReason { return reason }
     guard let totals = totals(for: cart) else { return "This basket cannot be rung offline." }
     if discountOverLimit(cart) { return "This register may discount up to \(Int(kit?.maxDiscountPct ?? 0))%." }
-    return posOfflineCardRefusal(card: kit?.card, totalCents: totals.totalCents ?? 0, storedCents: Double(storedCardCents))
+    return posOfflineCardRefusal(
+      card: kit?.card, totalCents: totals.totalCents ?? 0, takenTodayCents: Double(cardsTakenTodayCents))
   }
 
   /// The card to take for this basket, under a key minted for the sale; nil when it cannot be taken.
@@ -317,7 +350,9 @@ final class PosOfflineModel {
     let card = PosOfflineSaleCard(
       brand: taken.brand, forward: taken.paymentIntentID == nil ? .stored : .forwarded, last4: taken.last4,
       paymentIntentId: taken.paymentIntentID)
-    return ring(cart: cart, saleKey: taken.saleKey, cashTenderedCents: 0, changeCents: 0, card: card)
+    let rung = ring(cart: cart, saleKey: taken.saleKey, cashTenderedCents: 0, changeCents: 0, card: card)
+    if let rung { store.addCardTaken(rung.totalCents, on: today()) }
+    return rung
   }
 
   private func ring(

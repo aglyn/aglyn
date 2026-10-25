@@ -97,6 +97,10 @@ fun RegisterOfflineBanner(model: RegisterModel) {
         action = if (offline.syncing) null else ({ TextButton(onClick = { offline.syncInBackground() }) { Text("Sync now") } }),
       )
     }
+    // Cards stored on this device wait for a connection: Stripe recommends reconnecting within a day (AGL-4039).
+    offline.oldestCardOnDeviceMs?.let { oldest ->
+      NoticeBanner(reconnectMessage(oldest, model), if (offline.cardsWaitedTooLong) StatusTone.ERROR else StatusTone.WARNING, Modifier.testTag("pos-offline-cards-reconnect"))
+    }
     offline.syncError?.let { NoticeBanner("Offline sales could not sync: $it They stay on this register.", StatusTone.ERROR) }
     offline.refused.forEach { entry ->
       NoticeBanner(
@@ -298,7 +302,7 @@ fun OfflineSaleDialog(model: RegisterModel) {
               }
               cardRefusal != null -> NoticeBanner(cardRefusal, StatusTone.WARNING, Modifier.testTag("offline-card-refusal"))
               else -> NoticeBanner(
-                "The card is saved on this register and charged when the connection returns. Offline card sales take up to ${fmt((offline.kit?.card?.maxSaleCents ?: 0.0).toLong())} each.",
+                "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to ${fmt((offline.kit?.card?.maxSaleCents ?: 0.0).toLong())}, and this device can take up to ${fmt((offline.kit?.card?.maxDeviceDailyCents ?: 0.0).toLong())} in cards a day.",
                 StatusTone.INFO,
               )
             }
@@ -355,6 +359,15 @@ private fun waitingSummary(model: RegisterModel): String {
     "${cards.size} of them ${if (cards.size == 1) "a card" else "cards"} to charge (${money(offline.waitingCardCents, model.currency)})"
   }
   return "$head, $tail."
+}
+
+/** Reconnect soon: the cards on this device are charged only once Stripe has them. */
+private fun reconnectMessage(oldestMs: Double, model: RegisterModel): String {
+  val count = model.offline.queue.count { it.cardOnDevice }
+  val cards = if (count == 1) "1 card taken offline is" else "$count cards taken offline are"
+  if (model.offline.cardsWaitedTooLong) return "$cards still on this device after more than a day. Reconnect now so they can be charged."
+  val by = formatReceiptTime((oldestMs + com.aglyn.contracts.Contracts.posOfflineCardReconnectWithinMs).toLong(), model.timeZone)
+  return "$cards saved on this device and charged once it reconnects. Reconnect within a day, by $by."
 }
 
 /** The words for a card taken offline that was never paid. */

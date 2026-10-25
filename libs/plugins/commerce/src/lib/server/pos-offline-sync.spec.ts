@@ -516,21 +516,23 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
       await handlePosOfflineSync(deps, { ...h.request('cashier', {}), method: 'GET', query: { hostId: 'shop' } } as any)
     ).body['kit'] as any
 
-  it('hands the register the destination and the store ceilings', async () => {
-    h.config['posOfflineCardMaxSale'] = 100
+  it('is off until the store turns it on, then hands the register the destination and its two limits', async () => {
+    expect((await kit()).card).toMatchObject({ available: false, unavailableReason: expect.stringMatching(/not turned on/) })
+    h.config['posOfflineCardSales'] = true
     expect((await kit()).card).toEqual({
       available: true,
       destination: 'acct_merchant',
       currency: 'usd',
       maxSaleCents: 10_000,
-      maxStoredCents: 250_000,
+      maxDeviceDailyCents: 500_000,
     })
+    h.config['posOfflineCardMaxSale'] = 250
+    h.config['posOfflineCardDailyLimit'] = 2000
+    expect((await kit()).card).toMatchObject({ maxSaleCents: 25_000, maxDeviceDailyCents: 200_000 })
   })
 
-  it('says why not when the store turned it off or Stripe would not turn it on', async () => {
-    h.config['posOfflineCardSales'] = false
-    expect((await kit()).card).toMatchObject({ available: false, unavailableReason: expect.stringMatching(/turned off/) })
-    delete h.config['posOfflineCardSales']
+  it('says why not when Stripe would not turn offline mode on', async () => {
+    h.config['posOfflineCardSales'] = true
     offlineEnabled = false
     expect((await kit()).card).toMatchObject({ available: false, destination: '' })
   })

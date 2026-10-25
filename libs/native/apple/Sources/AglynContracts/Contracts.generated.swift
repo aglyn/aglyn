@@ -3547,16 +3547,16 @@ public struct PosOfflineKitCard: Codable, Hashable, Sendable {
   public var available: Bool
   public var currency: String
   public var destination: String
+  public var maxDeviceDailyCents: Double
   public var maxSaleCents: Double
-  public var maxStoredCents: Double
   public var unavailableReason: String?
 
-  public init(available: Bool, currency: String, destination: String, maxSaleCents: Double, maxStoredCents: Double, unavailableReason: String? = nil) {
+  public init(available: Bool, currency: String, destination: String, maxDeviceDailyCents: Double, maxSaleCents: Double, unavailableReason: String? = nil) {
     self.available = available
     self.currency = currency
     self.destination = destination
+    self.maxDeviceDailyCents = maxDeviceDailyCents
     self.maxSaleCents = maxSaleCents
-    self.maxStoredCents = maxStoredCents
     self.unavailableReason = unavailableReason
   }
 }
@@ -5125,10 +5125,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posKioskUnlockLockoutMs: Double
   public let posKioskUnlockMaxAttempts: Int
   public let posKioskUnlockTtlMs: Double
+  public let posOfflineCardDeviceDailyCentsDefault: Int
   public let posOfflineCardIntentKind: String
   public let posOfflineCardMaxSaleCentsDefault: Int
   public let posOfflineCardMaxSaleCentsLimit: Int
-  public let posOfflineCardMaxStoredCentsDefault: Int
+  public let posOfflineCardReconnectWithinMs: Double
   public let posOfflineClockSkewMs: Double
   public let posOfflineDisabledTenders: [String: String]
   public let posOfflineFlagLabels: [String: String]
@@ -5440,10 +5441,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posKioskUnlockLockoutMs = "POS_KIOSK_UNLOCK_LOCKOUT_MS"
     case posKioskUnlockMaxAttempts = "POS_KIOSK_UNLOCK_MAX_ATTEMPTS"
     case posKioskUnlockTtlMs = "POS_KIOSK_UNLOCK_TTL_MS"
+    case posOfflineCardDeviceDailyCentsDefault = "POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT"
     case posOfflineCardIntentKind = "POS_OFFLINE_CARD_INTENT_KIND"
     case posOfflineCardMaxSaleCentsDefault = "POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT"
     case posOfflineCardMaxSaleCentsLimit = "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT"
-    case posOfflineCardMaxStoredCentsDefault = "POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT"
+    case posOfflineCardReconnectWithinMs = "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
     case posOfflineClockSkewMs = "POS_OFFLINE_CLOCK_SKEW_MS"
     case posOfflineDisabledTenders = "POS_OFFLINE_DISABLED_TENDERS"
     case posOfflineFlagLabels = "POS_OFFLINE_FLAG_LABELS"

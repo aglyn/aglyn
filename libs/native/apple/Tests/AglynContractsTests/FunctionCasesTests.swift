@@ -176,14 +176,14 @@ final class FunctionCasesTests: XCTestCase {
       if let raw = input["card"] as? [String: Any] {
         card = PosOfflineKitCard(
           available: raw["available"] as? Bool ?? false, currency: "usd", destination: "acct_test",
+          maxDeviceDailyCents: (raw["maxDeviceDailyCents"] as? NSNumber)?.doubleValue ?? 0,
           maxSaleCents: (raw["maxSaleCents"] as? NSNumber)?.doubleValue ?? 0,
-          maxStoredCents: (raw["maxStoredCents"] as? NSNumber)?.doubleValue ?? 0,
           unavailableReason: raw["unavailableReason"] as? String)
       }
       XCTAssertEqual(
         posOfflineCardRefusal(
           card: card, totalCents: (input["totalCents"] as? NSNumber)?.doubleValue ?? 0,
-          storedCents: (input["storedCents"] as? NSNumber)?.doubleValue ?? 0),
+          takenTodayCents: (input["takenTodayCents"] as? NSNumber)?.doubleValue ?? 0),
         item.result as? String, item.label)
     }
     for item in cases("posOfflineCardIntentMetadata") {

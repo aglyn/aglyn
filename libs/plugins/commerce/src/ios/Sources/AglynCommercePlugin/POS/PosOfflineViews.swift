@@ -58,6 +58,11 @@ struct RegisterOfflineBanner: View {
         )
         .accessibilityIdentifier("register-offline-sync")
       }
+      // Cards stored on this device wait for a connection: Stripe recommends reconnecting within a day (AGL-4039).
+      if let oldest = offline.oldestCardOnDeviceMs {
+        AglynNotice(reconnectMessage(oldestMs: oldest, model: model), tone: offline.cardsWaitedTooLong ? .error : .warning)
+          .accessibilityIdentifier("register-offline-cards-reconnect")
+      }
       if let error = offline.syncError {
         AglynNotice("Offline sales could not sync: \(error) They stay on this register.", tone: .error)
       }
@@ -111,6 +116,19 @@ private func waitingSummary(_ model: RegisterModel) -> String {
     ? (cards.count == 1 ? "a card to charge" : "all cards to charge")
     : "\(cards.count) of them \(cards.count == 1 ? "a card" : "cards") to charge (\(model.money(offline.waitingCardCents)))"
   return "\(head), \(tail)."
+}
+
+/// Reconnect soon: the cards on this device are charged only once Stripe has them.
+@MainActor
+private func reconnectMessage(oldestMs: Double, model: RegisterModel) -> String {
+  let count = model.offline.queue.filter(\.cardOnDevice).count
+  let cards = count == 1 ? "1 card taken offline is" : "\(count) cards taken offline are"
+  if model.offline.cardsWaitedTooLong {
+    return "\(cards) still on this device after more than a day. Reconnect now so they can be charged."
+  }
+  let by = Date(timeIntervalSince1970: (oldestMs + ContractValues.shared.posOfflineCardReconnectWithinMs) / 1000)
+    .formatted(date: .abbreviated, time: .shortened)
+  return "\(cards) saved on this device and charged once it reconnects. Reconnect within a day, by \(by)."
 }
 
 /// The words for a card taken offline that was never paid.
@@ -255,7 +273,8 @@ struct OfflineSaleSheet: View {
 
   @ViewBuilder private func cardSections(owed: Int) -> some View {
     let refusal = model.offlineCardRefusal(cart)
-    let ceiling = Int(model.offline.kit?.card?.maxSaleCents ?? 0)
+    let perSale = Int(model.offline.kit?.card?.maxSaleCents ?? 0)
+    let perDay = Int(model.offline.kit?.card?.maxDeviceDailyCents ?? 0)
     Section {
       LabeledContent("Card reader") { Text(readerName).foregroundStyle(.secondary) }
       if taking {
@@ -268,7 +287,7 @@ struct OfflineSaleSheet: View {
         AglynNotice(refusal, tone: .warning).accessibilityIdentifier("offline-card-refusal")
       } else {
         AglynNotice(
-          "The card is saved on this register and charged when the connection returns. Offline card sales take up to \(model.money(ceiling)) each.",
+          "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to \(model.money(perSale)), and this device can take up to \(model.money(perDay)) in cards a day.",
           tone: .info)
       }
       if let failed {

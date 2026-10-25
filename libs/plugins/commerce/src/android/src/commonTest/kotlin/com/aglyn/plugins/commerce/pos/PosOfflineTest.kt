@@ -403,11 +403,11 @@ class ConsolePosOfflineApiTest {
 class PosOfflineCardTest {
   private val key = "offcard0000000000000000001"
 
-  private fun cardKit(available: Boolean = true, maxSale: Double = 25_000.0, maxStored: Double = 250_000.0) = makeKit {
+  private fun cardKit(available: Boolean = true, maxSale: Double = 10_000.0, maxDaily: Double = 500_000.0) = makeKit {
     it.copy(
       card = com.aglyn.contracts.PosOfflineKitCard(
-        available = available, currency = "usd", destination = "acct_merchant", maxSaleCents = maxSale, maxStoredCents = maxStored,
-        unavailableReason = if (available) null else "Card sales offline are off.",
+        available = available, currency = "usd", destination = "acct_merchant", maxSaleCents = maxSale, maxDeviceDailyCents = maxDaily,
+        unavailableReason = if (available) null else "Card sales offline are not turned on.",
       ),
     )
   }
@@ -446,7 +446,8 @@ class PosOfflineCardTest {
     offline.refreshKit()
     val rung = assertNotNull(offline.ringCardSale(cart(), com.aglyn.hardware.OfflineCardTaken(key, null, "visa", "4242")))
     assertEquals(com.aglyn.contracts.PosOfflineCardForward.STORED, rung.card?.forward)
-    assertEquals(1296L, offline.storedCardCents)
+    assertEquals(1296L, offline.cardsTakenTodayCents)
+    assertNotNull(offline.oldestCardOnDeviceMs)
     offline.sync()
     assertTrue(api.batches.isEmpty(), "Stripe has not got the card yet")
     val applied = offline.applyForwards(
@@ -456,7 +457,8 @@ class PosOfflineCardTest {
       ),
     )
     assertEquals(setOf(key), applied)
-    assertEquals(0L, offline.storedCardCents)
+    assertNull(offline.oldestCardOnDeviceMs, "Stripe has the card now")
+    assertEquals(1296L, offline.cardsTakenTodayCents, "the daily limit still counts it")
     offline.sync()
     assertEquals(listOf(listOf(key)), api.batches)
     assertTrue(offline.queue.isEmpty())
@@ -483,14 +485,38 @@ class PosOfflineCardTest {
   }
 
   @Test
-  fun cardsOnTheDeviceCountAgainstTheStoredCeiling() = runTest {
-    val api = FakeOfflineApi().apply { kitAnswer = cardKit(maxStored = 2000.0) }
-    val offline = model(api, InMemoryKeyValueStore(), this)
+  fun theDailyLimitPerDeviceCountsEveryCardTakenTodayAndResetsTomorrow() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit(maxDaily = 2000.0) }
+    val device = InMemoryKeyValueStore()
+    var day = "2026-10-25"
+    val offline = PosOfflineModel(
+      api, PosOfflineDeviceStore(device, "u1:h1"), "u1", this, { "r1" }, { "loc1" }, { null }, { null }, { 1_700_000_100_000 },
+      ::newPosOfflineSaleKey, { day },
+    )
     offline.refreshKit()
     offline.ringCardSale(cart(), com.aglyn.hardware.OfflineCardTaken(key, null))
     assertEquals(
-      "This register already holds $12.96 in cards to charge, and offline it can hold up to $20.00. Take cash, or wait for the connection.",
+      "This device has taken $12.96 in cards offline today, and its daily limit is $20.00. Take cash, or wait for the connection.",
       offline.cardRefusal(cart()),
     )
+    // Another member on the same device counts too: the limit is the device's.
+    assertEquals(1296L, PosOfflineDeviceStore(device, "u2:h1").cardsTaken(day))
+    day = "2026-10-26"
+    assertNull(offline.cardRefusal(cart()))
+  }
+
+  @Test
+  fun cardsWaitingADayAskToReconnectNow() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
+    var clock = 1_700_000_100_000L
+    val offline = PosOfflineModel(
+      api, PosOfflineDeviceStore(InMemoryKeyValueStore(), "u1:h1"), "u1", this, { "r1" }, { "loc1" }, { null }, { null }, { clock },
+      ::newPosOfflineSaleKey, { "2026-10-25" },
+    )
+    offline.refreshKit()
+    offline.ringCardSale(cart(), com.aglyn.hardware.OfflineCardTaken(key, null))
+    assertFalse(offline.cardsWaitedTooLong)
+    clock += 25L * 60 * 60 * 1000
+    assertTrue(offline.cardsWaitedTooLong)
   }
 }

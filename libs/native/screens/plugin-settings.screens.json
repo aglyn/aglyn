@@ -2614,9 +2614,9 @@
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
-          "posOfflineCardSales": true,
-          "posOfflineCardMaxSale": 250,
-          "posOfflineCardMaxStored": 2500,
+          "posOfflineCardSales": false,
+          "posOfflineCardMaxSale": 100,
+          "posOfflineCardDailyLimit": 5000,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2661,16 +2661,16 @@
             },
             {
               "key": "posOfflineCardMaxSale",
-              "label": "Largest card sale offline ($)",
+              "label": "Limit per sale ($)",
               "kind": "number",
               "initial": "{item.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
               "help": "Between 1 and 10000."
             },
             {
-              "key": "posOfflineCardMaxStored",
-              "label": "Most in cards one device holds offline ($)",
+              "key": "posOfflineCardDailyLimit",
+              "label": "Daily limit per device ($)",
               "kind": "number",
-              "initial": "{item.posOfflineCardMaxStored ?? const.defaults.posOfflineCardMaxStored}",
+              "initial": "{item.posOfflineCardDailyLimit ?? const.defaults.posOfflineCardDailyLimit}",
               "help": "Between 1 and 100000."
             },
             {
@@ -2787,7 +2787,7 @@
                 "posMaxDiscountPct": "{form.posMaxDiscountPct}",
                 "posOfflineCardSales": "{form.posOfflineCardSales}",
                 "posOfflineCardMaxSale": "{form.posOfflineCardMaxSale}",
-                "posOfflineCardMaxStored": "{form.posOfflineCardMaxStored}",
+                "posOfflineCardDailyLimit": "{form.posOfflineCardDailyLimit}",
                 "posTippingEnabled": "{form.posTippingEnabled}",
                 "posTipPercentages": "{form.posTipPercentages}",
                 "posReceiptDefault": "{form.posReceiptDefault}",
@@ -2823,9 +2823,9 @@
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
-          "posOfflineCardSales": true,
-          "posOfflineCardMaxSale": 250,
-          "posOfflineCardMaxStored": 2500,
+          "posOfflineCardSales": false,
+          "posOfflineCardMaxSale": 100,
+          "posOfflineCardDailyLimit": 5000,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2887,30 +2887,30 @@
             },
             {
               "key": "ov_posOfflineCardMaxSale",
-              "label": "Override Largest card sale offline ($) for this site",
+              "label": "Override Limit per sale ($) for this site",
               "kind": "toggle",
               "initial": "{data.site.posOfflineCardMaxSale:present}"
             },
             {
               "key": "posOfflineCardMaxSale",
-              "label": "Largest card sale offline ($)",
+              "label": "Limit per sale ($)",
               "kind": "number",
               "initial": "{data.site.posOfflineCardMaxSale ?? data.org.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
               "when": "form.ov_posOfflineCardMaxSale",
               "help": "Between 1 and 10000."
             },
             {
-              "key": "ov_posOfflineCardMaxStored",
-              "label": "Override Most in cards one device holds offline ($) for this site",
+              "key": "ov_posOfflineCardDailyLimit",
+              "label": "Override Daily limit per device ($) for this site",
               "kind": "toggle",
-              "initial": "{data.site.posOfflineCardMaxStored:present}"
+              "initial": "{data.site.posOfflineCardDailyLimit:present}"
             },
             {
-              "key": "posOfflineCardMaxStored",
-              "label": "Most in cards one device holds offline ($)",
+              "key": "posOfflineCardDailyLimit",
+              "label": "Daily limit per device ($)",
               "kind": "number",
-              "initial": "{data.site.posOfflineCardMaxStored ?? data.org.posOfflineCardMaxStored ?? const.defaults.posOfflineCardMaxStored}",
-              "when": "form.ov_posOfflineCardMaxStored",
+              "initial": "{data.site.posOfflineCardDailyLimit ?? data.org.posOfflineCardDailyLimit ?? const.defaults.posOfflineCardDailyLimit}",
+              "when": "form.ov_posOfflineCardDailyLimit",
               "help": "Between 1 and 100000."
             },
             {
@@ -3137,9 +3137,9 @@
                     "$delete": true
                   }
                 },
-                "posOfflineCardMaxStored": {
-                  "$if": "form.ov_posOfflineCardMaxStored",
-                  "then": "{form.posOfflineCardMaxStored}",
+                "posOfflineCardDailyLimit": {
+                  "$if": "form.ov_posOfflineCardDailyLimit",
+                  "then": "{form.posOfflineCardDailyLimit}",
                   "else": {
                     "$delete": true
                   }
