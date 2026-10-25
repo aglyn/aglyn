@@ -59,7 +59,7 @@ struct HomeSiteStats: View {
         navigation.select(.analytics)
       }
       HomeGlanceGrid(title: "At a glance")
-      SiteActivityCard(reader: reader, hostID: site.id, limit: 5, refresh: model.refreshToken) {
+      SiteActivityCard(reader: reader, api: model.api, hostID: site.id, limit: 5, refresh: model.refreshToken) {
         navigation.select(.plugin("core.site.activity"))
       }
     }
@@ -117,6 +117,8 @@ struct HomeWorkspaceStats: View {
             review(standing, slug: slug)
           }
         }
+        // The bundle proposed with the plan, named so the owner knows what Billing will have chosen (AGL-3956).
+        if standing.bundled { Text(standing.summary).font(AglynFont.strongSubheadline) }
         Text(standing.body).font(AglynFont.subheadline).foregroundStyle(.secondary)
         if let note = standing.note { Text(note).font(AglynFont.subheadline) }
       }

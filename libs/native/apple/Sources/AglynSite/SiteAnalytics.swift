@@ -230,21 +230,28 @@ public struct SiteActivityRow: Identifiable, Equatable, Sendable {
 
 /// A site's activity log, newest first: the whole site's (Home's Recent activity) or one page's (Page Activity).
 /// A window of 200, as the console's card reads; one page's rows are filtered on the server and sorted here, which
-/// needs no composite index.
+/// needs no composite index. A row that recorded a person's uid and no address is named by the address that account
+/// holds today, read through the console's `/api/hosts/activity-actors` (`useResolvedActivityActors`), fifty at a time.
 @MainActor
 @Observable
 public final class SiteActivityModel {
   public static let window = 200
+  static let actorsPerRequest = 50
   public private(set) var rows: [SiteActivityRow]?
   public private(set) var failed = false
   /// The window was full: there is more history than these rows.
   public private(set) var truncated = false
   @ObservationIgnored private var listener: FirestoreListening?
+  @ObservationIgnored private var docs: [FirestoreDocument] = []
+  @ObservationIgnored private var resolved: [String: String] = [:]
+  @ObservationIgnored private var asked: Set<String> = []
 
   public init() {}
 
-  public func start(reader: FirestoreReader, hostID: String, targetID: String? = nil) {
+  public func start(reader: FirestoreReader, api: ConsoleAPIClient?, hostID: String, targetID: String? = nil) {
     listener?.remove()
+    resolved = [:]
+    asked = []
     let query =
       if let targetID {
         FirestoreQuery(["hosts", hostID, "activity"], equals: [("target.id", targetID)], limit: Self.window + 1)
@@ -252,18 +259,52 @@ public final class SiteActivityModel {
         FirestoreQuery(["hosts", hostID, "activity"], order: [.init("createdAt", descending: true)], limit: Self.window + 1)
       }
     listener = reader.listen(query) { [weak self] result in
+      guard let self else { return }
       switch result {
       case .success(let docs):
-        self?.truncated = docs.count > Self.window
-        self?.rows = docs.prefix(Self.window).map { doc in
-          let fields = ActivityEntryFields(data: doc.data)
-          return SiteActivityRow(
-            id: doc.id, text: activityRowText(fields), actor: activityActorLabel(fields), at: doc.date("createdAt"))
-        }
-        .sorted { ($0.at ?? .distantPast) > ($1.at ?? .distantPast) }
-        self?.failed = false
+        self.truncated = docs.count > Self.window
+        self.docs = Array(docs.prefix(Self.window))
+        self.failed = false
+        self.publish()
+        self.resolveActors(api: api, hostID: hostID)
       case .failure:
-        self?.failed = true
+        self.failed = true
+      }
+    }
+  }
+
+  private func publish() {
+    rows = docs.map { doc in
+      var fields = ActivityEntryFields(data: doc.data)
+      if let uid = Self.unaddressedUID(fields), let now = resolved[uid] { fields.actorEmailNow = now }
+      return SiteActivityRow(id: doc.id, text: activityRowText(fields), actor: activityActorLabel(fields), at: doc.date("createdAt"))
+    }
+    .sorted { ($0.at ?? .distantPast) > ($1.at ?? .distantPast) }
+  }
+
+  /// The uid a row names with no address: a person's (never an API key's or the platform's).
+  static func unaddressedUID(_ fields: ActivityEntryFields) -> String? {
+    if let email = fields.actorEmail, !email.isEmpty { return nil }
+    let uid = fields.actorId?.trimmingCharacters(in: .whitespaces) ?? ""
+    return uid.isEmpty || uid == "api" || uid.hasPrefix("system:") ? nil : uid
+  }
+
+  private func resolveActors(api: ConsoleAPIClient?, hostID: String) {
+    guard let api else { return }
+    let fresh = Array(Set(docs.compactMap { Self.unaddressedUID(ActivityEntryFields(data: $0.data)) }).subtracting(asked)).sorted()
+    guard !fresh.isEmpty else { return }
+    asked.formUnion(fresh)
+    Task {
+      for start in stride(from: 0, to: fresh.count, by: Self.actorsPerRequest) {
+        let batch = fresh[start..<min(fresh.count, start + Self.actorsPerRequest)]
+        // A refused or failed lookup leaves the console's own label, `Account <uid>`.
+        guard
+          let body = try? await api.request(
+            "/api/hosts/activity-actors", query: [("hostId", hostID), ("uids", batch.joined(separator: ","))]),
+          case .object(let actors)? = body["actors"]
+        else { continue }
+        for (uid, value) in actors { if let email = value.stringValue { resolved[uid] = email } }
+        publish()
       }
     }
   }
@@ -589,6 +630,7 @@ public struct PageTrafficCard: View {
 /// `limit` shows only the newest rows (Home's five); nil shows the whole window.
 public struct SiteActivityCard: View {
   let reader: FirestoreReader
+  let api: ConsoleAPIClient?
   let hostID: String
   let targetID: String?
   let title: String
@@ -598,10 +640,11 @@ public struct SiteActivityCard: View {
   @State private var model = SiteActivityModel()
 
   public init(
-    reader: FirestoreReader, hostID: String, targetID: String? = nil, title: String = "Recent activity", limit: Int? = nil,
-    refresh: Int = 0, viewAll: (() -> Void)? = nil
+    reader: FirestoreReader, api: ConsoleAPIClient?, hostID: String, targetID: String? = nil, title: String = "Recent activity",
+    limit: Int? = nil, refresh: Int = 0, viewAll: (() -> Void)? = nil
   ) {
     self.reader = reader
+    self.api = api
     self.hostID = hostID
     self.targetID = targetID
     self.title = title
@@ -620,7 +663,7 @@ public struct SiteActivityCard: View {
       }
       content
     }
-    .task(id: "\(hostID):\(targetID ?? ""):\(refresh)") { model.start(reader: reader, hostID: hostID, targetID: targetID) }
+    .task(id: "\(hostID):\(targetID ?? ""):\(refresh)") { model.start(reader: reader, api: api, hostID: hostID, targetID: targetID) }
     .onDisappear { model.stop() }
     .accessibilityIdentifier(targetID == nil ? "site-activity" : "page-activity")
   }

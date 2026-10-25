@@ -105,7 +105,7 @@ private fun GlanceRows(items: List<Pair<Boolean, @Composable () -> Unit>>) {
 internal fun HomeSiteStats(services: ShellServices, context: NativePluginContext, hostId: String, openAnalytics: () -> Unit) {
   SiteTrafficCard(services.firestore, hostId, viewDetails = openAnalytics)
   HomeGlanceGrid(services, context, "At a glance")
-  SiteActivityCard(services.firestore, hostId, limit = 5, viewAll = { context.navigate("core.site.activity") })
+  SiteActivityCard(services.firestore, services.api, hostId, limit = 5, viewAll = { context.navigate("core.site.activity") })
 }
 
 /**
@@ -127,6 +127,8 @@ internal fun HomeUpgradeProposal(context: NativePluginContext, org: Map<String, 
       Text(proposal.headline(orgName, productName), Modifier.widthIn(max = space(80f)), style = MaterialTheme.typography.titleMedium)
       Button(onClick = { context.openLink(proposal.destination(orgSlug)) }, modifier = Modifier.testTag("home-upgrade-review")) { Text("Review the plan") }
     }
+    // The bundle proposed with the plan, named so the owner knows what Billing will have chosen (AGL-3956).
+    if (proposal.bundled) Text(proposal.summary, style = MaterialTheme.typography.titleSmall)
     Text(proposal.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     proposal.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
   }

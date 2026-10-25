@@ -555,7 +555,7 @@ struct PageDetail: View {
         }
         .aglynBareFormRow()
         Section {
-          SiteActivityCard(reader: context.firestore, hostID: hostID, targetID: page.id, title: "Page Activity")
+          SiteActivityCard(reader: context.firestore, api: context.api, hostID: hostID, targetID: page.id, title: "Page Activity")
         }
         .aglynBareFormRow()
       }

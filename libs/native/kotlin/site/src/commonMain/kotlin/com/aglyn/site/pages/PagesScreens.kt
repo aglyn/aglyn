@@ -366,7 +366,7 @@ private fun PageDetail(
       PageVersions(context, hostId, page, api, runner, canPublish, loader)
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
       com.aglyn.site.analytics.PageTrafficCard(context.firestore, context.api, hostId, page.id, upgrade = { context.navigate("core.billing.plans") })
-      com.aglyn.site.analytics.SiteActivityCard(context.firestore, hostId, targetId = page.id, title = "Page Activity")
+      com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = page.id, title = "Page Activity")
     }
   }
 }

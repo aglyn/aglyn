@@ -206,10 +206,36 @@ fun activityQuery(hostId: String, targetId: String?) = if (targetId != null) {
 /** One row of a site's activity log, in the console's words. */
 data class SiteActivityRow(val id: String, val text: String, val actor: String, val atMs: Long?)
 
-fun siteActivityRows(docs: List<FirestoreDoc>): List<SiteActivityRow> = docs.take(ACTIVITY_WINDOW).map { doc ->
-  val fields = ActivityEntryFields.of(doc.data)
+/**
+ * The rows in the console's words, newest first; a row that recorded a person's uid and no address is named by [resolved]
+ * (the address that account holds today, from `/api/hosts/activity-actors`), else the console's `Account <uid>`.
+ */
+fun siteActivityRows(docs: List<FirestoreDoc>, resolved: Map<String, String> = emptyMap()): List<SiteActivityRow> = docs.take(ACTIVITY_WINDOW).map { doc ->
+  val fields = ActivityEntryFields.of(doc.data).let { fields -> unaddressedUid(fields)?.let { resolved[it] }?.let { fields.copy(actorEmailNow = it) } ?: fields }
   SiteActivityRow(doc.id, activityRowText(fields), activityActorLabel(fields), (doc.data["createdAt"] as? FirestoreTimestamp)?.epochMillis)
 }.sortedByDescending { it.atMs ?: Long.MIN_VALUE }
+
+/** The uid a row names with no address: a person's (never an API key's or the platform's), `useResolvedActivityActors`. */
+fun unaddressedUid(fields: ActivityEntryFields): String? {
+  if (!fields.actorEmail.isNullOrEmpty()) return null
+  val uid = fields.actorId?.trim().orEmpty()
+  return if (uid.isEmpty() || uid == "api" || uid.startsWith("system:")) null else uid
+}
+
+/** How many uids one `/api/hosts/activity-actors` request names. */
+const val ACTORS_PER_REQUEST = 50
+
+/** The addresses the console's actors route resolves for [uids], fifty at a time; a refused batch is left out. */
+suspend fun resolveActivityActors(api: ConsoleApiClient, hostId: String, uids: List<String>): Map<String, String> {
+  val resolved = mutableMapOf<String, String>()
+  for (batch in uids.chunked(ACTORS_PER_REQUEST)) {
+    runCatching {
+      val body = api.request("/api/hosts/activity-actors", query = mapOf("hostId" to hostId, "uids" to batch.joinToString(","))) as? JsonObject
+      (body?.get("actors") as? JsonObject)?.forEach { (uid, value) -> (value as? JsonPrimitive)?.takeIf { it.isString }?.let { resolved[uid] = it.content } }
+    }
+  }
+  return resolved
+}
 
 /** A count as the console prints it: `1,284`. */
 fun analyticsCount(value: Double): String = value.toLong().toString().reversed().chunked(3).joinToString(",").reversed()
@@ -475,6 +501,7 @@ fun PageTrafficCard(
 @Composable
 fun SiteActivityCard(
   firestore: FirestoreReader,
+  api: ConsoleApiClient,
   hostId: String,
   modifier: Modifier = Modifier,
   targetId: String? = null,
@@ -496,7 +523,13 @@ fun SiteActivityCard(
         StatusTone.WARNING,
       )
       is Live.Ready -> {
-        val rows = siteActivityRows(live.value)
+        var resolved by remember(hostId) { mutableStateOf<Map<String, String>>(emptyMap()) }
+        val unaddressed = remember(live.value) { live.value.mapNotNull { unaddressedUid(ActivityEntryFields.of(it.data)) }.distinct() }
+        LaunchedEffect(hostId, unaddressed) {
+          val fresh = unaddressed.filter { it !in resolved }
+          if (fresh.isNotEmpty()) resolved = resolved + resolveActivityActors(api, hostId, fresh)
+        }
+        val rows = siteActivityRows(live.value, resolved)
         if (rows.isEmpty()) {
           Text("No activity yet — changes made in the console appear here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {

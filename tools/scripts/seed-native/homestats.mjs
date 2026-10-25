@@ -15,7 +15,7 @@
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
 
-export async function seedHomestats({ put, orgId, hostId, now: date }) {
+export async function seedHomestats({ put, uid, orgId, hostId, now: date }) {
   const now = date.getTime()
   // What `/api/admin/org-upgrade-proposal` writes: shown on the workspace's Home while no subscription is mirrored live.
   await put(
@@ -40,6 +40,8 @@ export async function seedHomestats({ put, orgId, hostId, now: date }) {
     ['Updated SEO', { type: 'screen', id: 'menu', name: 'Menu' }, 1 * DAY, { actorEmail: 'mobile-owner@example.test' }],
     ['ai.job.output', { type: 'screen', id: 'menu', name: 'Menu' }, 3 * DAY, { actorEmail: 'mobile-owner@example.test' }],
     ['Changed page access', { type: 'screen', id: 'menu', name: 'Menu' }, 6 * DAY, { actorId: 'api', apiKeyName: 'Zapier' }],
+    // A uid and no address: the apps name it by the address the account holds now (`/api/hosts/activity-actors`).
+    ['Updated page settings', { type: 'screen', id: 'home', name: 'Home' }, 2 * DAY, { actorId: uid }],
     ['Action ran on formSubmitted', { type: 'workflow', id: 'wf-follow-up', name: 'Order follow-up' }, 7 * HOUR, { actorId: 'system:engine' }],
   ]
   for (const [index, [action, target, ago, actor]] of pageActivity.entries()) {

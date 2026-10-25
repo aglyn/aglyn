@@ -43,4 +43,13 @@ class AnalyticsTrafficTest {
     assertEquals(listOf(FirestoreOrder("createdAt", descending = true)), activityQuery("h1", null).orderBy)
     assertEquals(ACTIVITY_WINDOW + 1, activityQuery("h1", null).limit)
   }
+
+  @Test
+  fun anUnaddressedActorIsNamedByTheAddressItHoldsNowElseItsAccount() {
+    val doc = com.aglyn.core.FirestoreDoc("a1", "hosts/h1/activity/a1", mapOf("action" to "Saved", "actorId" to "u1"))
+    assertEquals("Account u1", siteActivityRows(listOf(doc)).single().actor)
+    assertEquals("lee@example.com", siteActivityRows(listOf(doc), mapOf("u1" to "lee@example.com")).single().actor)
+    val key = com.aglyn.core.FirestoreDoc("a2", "hosts/h1/activity/a2", mapOf("action" to "Saved", "actorId" to "api"))
+    assertEquals(null, unaddressedUid(com.aglyn.contracts.ActivityEntryFields.of(key.data)))
+  }
 }
