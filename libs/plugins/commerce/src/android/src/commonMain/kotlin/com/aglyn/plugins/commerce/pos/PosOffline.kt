@@ -10,18 +10,26 @@ import com.aglyn.contracts.PosOfflineFlag
 import com.aglyn.contracts.PosOfflineKit
 import com.aglyn.contracts.PosOfflineOutcomeStatus
 import com.aglyn.contracts.PosOfflineRefusal
+import com.aglyn.contracts.PosOfflineCardForward
 import com.aglyn.contracts.PosOfflineSale
+import com.aglyn.contracts.PosOfflineSaleCard
 import com.aglyn.contracts.PosOfflineSaleCustomer
 import com.aglyn.contracts.PosOfflineSaleLine
 import com.aglyn.contracts.PosOfflineSaleOutcome
 import com.aglyn.contracts.PosOfflineStockConflict
+import com.aglyn.contracts.PosOfflineTender
 import com.aglyn.contracts.PosOfflineTotalsLine
+import com.aglyn.contracts.posOfflineCardIntentMetadata
+import com.aglyn.contracts.posOfflineCardRefusal
 import com.aglyn.contracts.posOfflineChangeCents
 import com.aglyn.contracts.posOfflineSaleTotals
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.KeyValueStore
+import com.aglyn.hardware.OfflineCardForward
+import com.aglyn.hardware.OfflineCardRequest
+import com.aglyn.hardware.OfflineCardTaken
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -39,10 +47,12 @@ import kotlin.uuid.Uuid
  * THE REGISTER, OFFLINE (AGL-3625, AGL-3651, AGL-3652): the console register's
  * offline mode, on the device. The Apple app's `PosOffline.swift`, line for line.
  *
- * WHAT SELLS OFFLINE IS CASH, AND ONLY CASH (the console's rule, unchanged).
- * A card needs the reader and Stripe, a gift card's balance and a room charge's
- * stay can only be checked by the server, and a promotion code's cap is counted
- * there. The cashier's own discount, bounded by the site's ceiling, does sell.
+ * WHAT SELLS OFFLINE IS CASH, AND A CARD ON THIS DEVICE'S OWN READER (AGL-4039).
+ * Stripe's SDK stores the card on the device and sends it once a connection
+ * returns; the sale waits here until it has, then syncs and the server
+ * captures it. A gift card's balance and a room charge's stay can only be
+ * checked by the server, and a promotion code's cap is counted there. The
+ * cashier's own discount, bounded by the site's ceiling, does sell.
  *
  * WHAT IT KEEPS, for ONE signed-in member at ONE site: the KIT (the server's
  * offline rules: the store's in-person tax, the discount ceiling, the shift rule,
@@ -81,6 +91,12 @@ data class PosOfflineQueued(
 
   val id: String get() = sale.saleKey
   val totalCents: Long get() = (sale.totals.totalCents ?: 0.0).toLong()
+
+  /** Paid by a card on this device's reader (AGL-4039). */
+  val isCard: Boolean get() = sale.tender == PosOfflineTender.CARD
+
+  /** A card still on the device: Stripe has not been sent it yet, so it cannot sync. */
+  val cardOnDevice: Boolean get() = isCard && sale.card?.forward == PosOfflineCardForward.STORED
 }
 
 /** A sale the server answered for with something to check. */
@@ -90,11 +106,19 @@ data class PosOfflineSyncNotice(
   val number: Long?,
   val flags: List<PosOfflineFlag>,
   val stockConflicts: List<PosOfflineStockConflict>,
+  /** The card and the money of a sale paid by card, for a declined card's own notice. */
+  val card: PosOfflineSaleCard? = null,
+  val totalCents: Long = 0,
+  val soldAtMs: Double = 0.0,
 ) {
+  /** A card taken offline that the bank declined, or that Stripe never took: the order is unpaid. */
+  val cardUnpaid: Boolean get() = PosOfflineFlag.CARD_DECLINED in flags || PosOfflineFlag.CARD_NOT_CHARGED in flags
+
   /** What to check, in the words the console shows. */
   val lines: List<String>
     get() = stockConflicts.map { "${it.shortUnits.toLong()} of ${it.requested.toLong()}× ${it.name} not in stock" } +
-      flags.filter { it != PosOfflineFlag.STOCK_SHORT }.map { Contracts.posOfflineFlagLabels[it.raw] ?: it.raw }
+      flags.filter { it != PosOfflineFlag.STOCK_SHORT && !(cardUnpaid && (it == PosOfflineFlag.CARD_DECLINED || it == PosOfflineFlag.CARD_NOT_CHARGED)) }
+        .map { Contracts.posOfflineFlagLabels[it.raw] ?: it.raw }
 }
 
 /** A cash sale the register just rang offline, for its receipt step. */
@@ -102,6 +126,9 @@ data class PosOfflineRung(val sale: PosOfflineSale) {
   val changeCents: Long get() = sale.changeCents.toLong()
   val totalCents: Long get() = (sale.totals.totalCents ?: 0.0).toLong()
   val hasCustomerEmail: Boolean get() = !sale.customer?.email.isNullOrEmpty()
+
+  /** The card, for a sale paid by card on this device's reader. */
+  val card: PosOfflineSaleCard? get() = if (sale.tender == PosOfflineTender.CARD) sale.card else null
 }
 
 /** The two offline calls, as the signed-in member. */
@@ -210,6 +237,13 @@ class PosOfflineModel(
   val refused: List<PosOfflineQueued> get() = queue.filter { it.state == PosOfflineQueued.State.REFUSED }
   val waitingCents: Long get() = waiting.sumOf { it.totalCents }
 
+  /** Cards waiting to be charged, and their total (AGL-4039). */
+  val waitingCards: List<PosOfflineQueued> get() = waiting.filter { it.isCard }
+  val waitingCardCents: Long get() = waitingCards.sumOf { it.totalCents }
+
+  /** Every card this member holds on the device that Stripe has not been sent: what the stored ceiling counts. */
+  val storedCardCents: Long get() = queue.filter { it.cardOnDevice }.sumOf { it.totalCents }
+
   /** The shift open on the register as last seen: the live one, else the kit's. */
   private fun lastKnownShift(): String? {
     shiftId()?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -247,6 +281,28 @@ class PosOfflineModel(
   /** The discount is above this site's ceiling. */
   fun discountOverLimit(cart: Cart): Boolean = kit?.let { cart.discountPct.toDouble() > it.maxDiscountPct } ?: false
 
+  /** Why this basket cannot be paid by card offline, in the cashier's words; null when it can (AGL-4039). */
+  fun cardRefusal(cart: Cart): String? {
+    unavailableReason?.let { return it }
+    val totals = totals(cart) ?: return "This basket cannot be rung offline."
+    if (discountOverLimit(cart)) return "This register may discount up to ${(kit?.maxDiscountPct ?: 0.0).toLong()}%."
+    return posOfflineCardRefusal(kit?.card, totals.totalCents ?: 0.0, storedCardCents.toDouble())
+  }
+
+  /** The card to take for this basket, under a key minted for the sale; null when it cannot be taken. */
+  fun cardRequest(cart: Cart): OfflineCardRequest? {
+    if (cardRefusal(cart) != null) return null
+    val current = kit ?: return null
+    val card = current.card ?: return null
+    val register = registerId() ?: return null
+    val totals = totals(cart) ?: return null
+    val key = mintKey()
+    return OfflineCardRequest(
+      key, (totals.totalCents ?: 0.0).toLong(), card.currency, card.destination,
+      posOfflineCardIntentMetadata(key, current.hostId, current.orgId, register),
+    )
+  }
+
   /** Reads the site's offline rules while online. */
   suspend fun refreshKit() {
     try {
@@ -262,12 +318,32 @@ class PosOfflineModel(
 
   /** Queues one cash sale; null (and nothing taken) when it cannot be kept. */
   fun ringCashSale(cart: Cart, tenderedCents: Long): PosOfflineRung? {
-    val current = kit ?: return null
-    val register = registerId() ?: return null
-    if (!current.available || cart.isEmpty || uid.isEmpty() || discountOverLimit(cart)) return null
     val totals = totals(cart) ?: return null
     val total = totals.totalCents ?: 0.0
     if (tenderedCents.toDouble() < total) return null
+    return ring(cart, mintKey(), tenderedCents.toDouble(), posOfflineChangeCents(total, tenderedCents.toDouble()).toDouble(), null)
+  }
+
+  /**
+   * Queues one sale whose card this device's reader took (AGL-4039). The card
+   * is already on the device (or with Stripe), so this keeps the sale even
+   * past the ceilings: the money was taken.
+   */
+  fun ringCardSale(cart: Cart, taken: OfflineCardTaken): PosOfflineRung? {
+    val card = PosOfflineSaleCard(
+      brand = taken.brand,
+      forward = if (taken.paymentIntentId == null) PosOfflineCardForward.STORED else PosOfflineCardForward.FORWARDED,
+      last4 = taken.last4,
+      paymentIntentId = taken.paymentIntentId,
+    )
+    return ring(cart, taken.saleKey, 0.0, 0.0, card)
+  }
+
+  private fun ring(cart: Cart, saleKey: String, cashTenderedCents: Double, changeCents: Double, card: PosOfflineSaleCard?): PosOfflineRung? {
+    val current = kit ?: return null
+    val register = registerId() ?: return null
+    if (!current.available || cart.isEmpty || uid.isEmpty() || (card == null && discountOverLimit(cart))) return null
+    val totals = totals(cart) ?: return null
     val sold = now()
     val lines = cart.lines.map { line ->
       PosOfflineSaleLine(
@@ -290,9 +366,10 @@ class PosOfflineModel(
       ).takeUnless { it.email == null && it.name == null && it.id == null }
     }
     val sale = PosOfflineSale(
+      card = card,
       cashierAssertion = assertion(),
-      cashTenderedCents = tenderedCents.toDouble(),
-      changeCents = posOfflineChangeCents(total, tenderedCents.toDouble()).toDouble(),
+      cashTenderedCents = cashTenderedCents,
+      changeCents = changeCents,
       customer = customer,
       discountPct = cart.discountPct.toDouble(),
       hostId = current.hostId,
@@ -300,10 +377,11 @@ class PosOfflineModel(
       locationId = locationId(),
       orgId = current.orgId,
       registerId = register,
-      saleKey = mintKey(),
+      saleKey = saleKey,
       shiftId = lastKnownShift(),
       signedInUid = uid,
       soldAtMs = sold.toDouble(),
+      tender = if (card == null) null else PosOfflineTender.CARD,
       totals = totals,
       v = 1,
     )
@@ -315,6 +393,38 @@ class PosOfflineModel(
 
   fun dismissNotices() {
     notices = emptyList()
+  }
+
+  /** Dismisses one notice (a declined card's, which stands on its own). */
+  fun dismissNotice(saleKey: String) {
+    notices = notices.filter { it.saleKey != saleKey }
+  }
+
+  /**
+   * Applies what the reader's SDK said about cards it sent to Stripe, and
+   * answers the sale keys it applied (the ledger then forgets them). A
+   * forward for a sale another member or site queued is left for them.
+   */
+  fun applyForwards(forwards: List<OfflineCardForward>): Set<String> {
+    val applied = mutableSetOf<String>()
+    for (forward in forwards) {
+      val entry = store.queue().firstOrNull { it.id == forward.saleKey }?.takeIf { it.isCard } ?: continue
+      val card = entry.sale.card ?: continue
+      val next = card.copy(
+        forward = when (forward.status) {
+          OfflineCardForward.Status.AUTHORIZED -> PosOfflineCardForward.FORWARDED
+          OfflineCardForward.Status.DECLINED -> PosOfflineCardForward.DECLINED
+          OfflineCardForward.Status.FAILED -> PosOfflineCardForward.FAILED
+        },
+        paymentIntentId = forward.paymentIntentId ?: card.paymentIntentId,
+        declineMessage = forward.message?.take(300) ?: card.declineMessage,
+        brand = card.brand ?: forward.brand,
+        last4 = card.last4 ?: forward.last4,
+      )
+      if (store.put(entry.copy(sale = entry.sale.copy(card = next)))) applied += forward.saleKey
+    }
+    if (applied.isNotEmpty()) queue = store.queue()
+    return applied
   }
 
   /** Removes a refused sale the server will never take, after the cashier confirms. */
@@ -330,7 +440,8 @@ class PosOfflineModel(
 
   suspend fun sync() {
     if (syncInFlight) return
-    val mine = store.queue().filter { it.state == PosOfflineQueued.State.QUEUED && it.sale.signedInUid == uid }
+    // A card still on the device waits for its forward: the server reads Stripe, and Stripe has not got it yet.
+    val mine = store.queue().filter { it.state == PosOfflineQueued.State.QUEUED && it.sale.signedInUid == uid && !it.cardOnDevice }
     if (mine.isEmpty()) return
     syncInFlight = true
     syncing = true
@@ -352,7 +463,10 @@ class PosOfflineModel(
           if (result.status == PosOfflineOutcomeStatus.RECORDED || result.status == PosOfflineOutcomeStatus.REPLAYED) {
             store.remove(entry.id)
             if (!result.flags.isNullOrEmpty()) {
-              flagged += PosOfflineSyncNotice(result.saleKey, result.orderId ?: result.saleKey, result.number?.toLong(), result.flags.orEmpty(), result.stockConflicts.orEmpty())
+              flagged += PosOfflineSyncNotice(
+                result.saleKey, result.orderId ?: result.saleKey, result.number?.toLong(), result.flags.orEmpty(), result.stockConflicts.orEmpty(),
+                card = if (entry.isCard) entry.sale.card else null, totalCents = entry.totalCents, soldAtMs = entry.sale.soldAtMs,
+              )
             }
             continue
           }

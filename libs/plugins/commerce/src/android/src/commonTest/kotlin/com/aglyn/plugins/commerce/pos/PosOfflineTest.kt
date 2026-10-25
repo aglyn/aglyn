@@ -398,3 +398,99 @@ class ConsolePosOfflineApiTest {
     assertEquals(0, seen.single().body!!["sales"]!!.jsonArray.size)
   }
 }
+
+/** A card taken offline on this device's reader (AGL-4039): the Apple app's `PosOfflineCardTests`, case for case. */
+class PosOfflineCardTest {
+  private val key = "offcard0000000000000000001"
+
+  private fun cardKit(available: Boolean = true, maxSale: Double = 25_000.0, maxStored: Double = 250_000.0) = makeKit {
+    it.copy(
+      card = com.aglyn.contracts.PosOfflineKitCard(
+        available = available, currency = "usd", destination = "acct_merchant", maxSaleCents = maxSale, maxStoredCents = maxStored,
+        unavailableReason = if (available) null else "Card sales offline are off.",
+      ),
+    )
+  }
+
+  @Test
+  fun aCardIsTakenWithinTheStoreCeilingsAndRefusedPastThem() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    assertNull(offline.cardRefusal(cart()))
+    api.kitAnswer = cardKit(maxSale = 500.0)
+    offline.refreshKit()
+    assertEquals("Offline, a card sale can be up to $5.00. Take cash, or charge it when you are back online.", offline.cardRefusal(cart()))
+    api.kitAnswer = makeKit()
+    offline.refreshKit()
+    assertEquals("Card sales offline need the register to connect once first.", offline.cardRefusal(cart()))
+  }
+
+  @Test
+  fun theRequestNamesItsSaleAndTheStoreDestination() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    val request = assertNotNull(offline.cardRequest(cart()))
+    assertEquals(key, request.saleKey)
+    assertEquals("acct_merchant", request.destination)
+    assertEquals(1296L, request.amountCents)
+    assertEquals("pos-offline", request.metadata["kind"])
+    assertNull(request.problem)
+  }
+
+  @Test
+  fun aCardOnTheDeviceWaitsForItsForwardBeforeItSyncs() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
+    val offline = model(api, InMemoryKeyValueStore(), this)
+    offline.refreshKit()
+    val rung = assertNotNull(offline.ringCardSale(cart(), com.aglyn.hardware.OfflineCardTaken(key, null, "visa", "4242")))
+    assertEquals(com.aglyn.contracts.PosOfflineCardForward.STORED, rung.card?.forward)
+    assertEquals(1296L, offline.storedCardCents)
+    offline.sync()
+    assertTrue(api.batches.isEmpty(), "Stripe has not got the card yet")
+    val applied = offline.applyForwards(
+      listOf(
+        com.aglyn.hardware.OfflineCardForward(key, "pi_3Q0abcdEFGH12345", com.aglyn.hardware.OfflineCardForward.Status.AUTHORIZED),
+        com.aglyn.hardware.OfflineCardForward("someone-elses-sale-0000", "pi_x", com.aglyn.hardware.OfflineCardForward.Status.AUTHORIZED),
+      ),
+    )
+    assertEquals(setOf(key), applied)
+    assertEquals(0L, offline.storedCardCents)
+    offline.sync()
+    assertEquals(listOf(listOf(key)), api.batches)
+    assertTrue(offline.queue.isEmpty())
+  }
+
+  @Test
+  fun aDeclineAfterTheSaleIsToldOnItsOwnWithTheCard() = runTest {
+    val api = FakeOfflineApi().apply {
+      kitAnswer = cardKit()
+      answers[key] = PosOfflineSaleOutcome(flags = listOf(PosOfflineFlag.CARD_DECLINED), number = 1042.0, orderId = key, saleKey = key, status = PosOfflineOutcomeStatus.RECORDED)
+    }
+    val offline = model(api, InMemoryKeyValueStore(), this)
+    offline.refreshKit()
+    offline.ringCardSale(cart(), com.aglyn.hardware.OfflineCardTaken(key, null, "visa", "4242"))
+    offline.applyForwards(listOf(com.aglyn.hardware.OfflineCardForward(key, "pi_3Q0abcdEFGH12345", com.aglyn.hardware.OfflineCardForward.Status.DECLINED, "Your card was declined.")))
+    offline.sync()
+    val notice = offline.notices.single()
+    assertTrue(notice.cardUnpaid)
+    assertEquals("4242", notice.card?.last4)
+    assertEquals(1296L, notice.totalCents)
+    assertEquals(emptyList(), notice.lines)
+    offline.dismissNotice(key)
+    assertTrue(offline.notices.isEmpty())
+  }
+
+  @Test
+  fun cardsOnTheDeviceCountAgainstTheStoredCeiling() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit(maxStored = 2000.0) }
+    val offline = model(api, InMemoryKeyValueStore(), this)
+    offline.refreshKit()
+    offline.ringCardSale(cart(), com.aglyn.hardware.OfflineCardTaken(key, null))
+    assertEquals(
+      "This register already holds $12.96 in cards to charge, and offline it can hold up to $20.00. Take cash, or wait for the connection.",
+      offline.cardRefusal(cart()),
+    )
+  }
+}

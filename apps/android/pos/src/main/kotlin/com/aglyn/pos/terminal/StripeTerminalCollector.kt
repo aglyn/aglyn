@@ -11,9 +11,15 @@ import com.aglyn.hardware.CardCollector
 import com.aglyn.hardware.CardCollectorKind
 import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.CardReaderSessionSource
+import com.aglyn.hardware.CardReaderSetupCode
 import com.aglyn.hardware.CardReaderSetupError
 import com.aglyn.hardware.DeviceReader
 import com.aglyn.hardware.DeviceReaderControls
+import com.aglyn.hardware.OfflineCardCollector
+import com.aglyn.hardware.OfflineCardForwardLedger
+import com.aglyn.hardware.OfflineCardOutcome
+import com.aglyn.hardware.OfflineCardRequest
+import com.aglyn.hardware.collectOfflineCardPayment
 import com.aglyn.hardware.ReaderDiscovery
 import com.aglyn.hardware.ReaderUpdate
 import com.aglyn.hardware.collectCardPayment
@@ -29,6 +35,7 @@ import com.stripe.stripeterminal.external.callable.ConnectionTokenCallback
 import com.stripe.stripeterminal.external.callable.ConnectionTokenProvider
 import com.stripe.stripeterminal.external.callable.DiscoveryListener
 import com.stripe.stripeterminal.external.callable.MobileReaderListener
+import com.stripe.stripeterminal.external.callable.OfflineListener
 import com.stripe.stripeterminal.external.callable.ReaderCallback
 import com.stripe.stripeterminal.external.callable.TapToPayReaderListener
 import com.stripe.stripeterminal.external.callable.TerminalListener
@@ -37,6 +44,11 @@ import com.stripe.stripeterminal.external.models.ConnectionConfiguration
 import com.stripe.stripeterminal.external.models.ConnectionTokenException
 import com.stripe.stripeterminal.external.models.DeviceType
 import com.stripe.stripeterminal.external.models.DisconnectReason
+import com.stripe.stripeterminal.external.models.OfflineStatus
+import com.stripe.stripeterminal.external.models.PaymentIntent
+import com.stripe.stripeterminal.external.models.SimulatedOfflineMode
+import com.stripe.stripeterminal.external.models.SimulatedOfflineModeConfiguration
+import com.stripe.stripeterminal.external.models.SimulatorConfiguration
 import com.stripe.stripeterminal.external.models.DiscoveryConfiguration
 import com.stripe.stripeterminal.external.models.Reader
 import com.stripe.stripeterminal.external.models.ReaderDisplayMessage
@@ -78,12 +90,24 @@ fun interface PermissionGate {
  *
  * [simulated] runs the SDK's simulated readers (test mode). Until live
  * readers are switched on for a build, every build is simulated.
+ *
+ * WITH NO CONNECTION (AGL-4039) a Bluetooth reader still takes cards: the app
+ * creates the intent itself ([SdkOfflinePort], the sequence in the shared
+ * hardware kit) and the SDK stores the card until a connection returns, then
+ * forwards it and tells [OfflineListener], which writes the outcome to
+ * [forwards] for the register. The site's Location and merchant name are
+ * remembered per site, so the SDK can start and the reader can reconnect while
+ * the console cannot be reached. Tap to Pay on Android cannot store cards.
  */
 class StripeTerminalCollector(
   private val context: Context,
   private val simulated: Boolean,
   private val permissions: () -> PermissionGate?,
-) : CardCollector, DeviceReaderControls {
+  /** What the SDK did with cards it stored offline, shared with the register (AGL-4039). */
+  private val forwards: OfflineCardForwardLedger,
+  /** Debug builds: a simulated reader goes offline with the register, so store and forward can be driven on an emulator. */
+  private val mirrorOfflineToStripe: Boolean = false,
+) : CardCollector, DeviceReaderControls, OfflineCardCollector {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private val lock = Mutex()
 
@@ -115,6 +139,49 @@ class StripeTerminalCollector(
   private val found = LinkedHashMap<String, Reader>()
   private var discovering: Cancelable? = null
   private var collecting: Cancelable? = null
+
+  override var onOfflineForward: (() -> Unit)? = null
+
+  // ---- OfflineCardCollector (AGL-4039)
+
+  override val offlineCardUnavailableReason: String?
+    get() {
+      val connected = mutableState.value as? CardCollectorState.Connected ?: return "Connect the card reader to take cards offline."
+      return if (connected.kind == CardCollectorKind.TAP_TO_PAY) {
+        "Tap to Pay cannot take cards offline on Android. Connect a Bluetooth card reader, or take cash."
+      } else {
+        null
+      }
+    }
+
+  override suspend fun collectOffline(request: OfflineCardRequest): OfflineCardOutcome {
+    if (collecting != null) return OfflineCardOutcome.Failed("A payment is already in progress.")
+    return try {
+      collectOfflineCardPayment(SdkOfflinePort(terminal(), onCancelable = { collecting = it }), request, mutableConnected.value)
+    } finally {
+      collecting = null
+      mutablePrompt.value = null
+    }
+  }
+
+  override fun registerConnectivityChanged(online: Boolean) {
+    if (!mirrorOfflineToStripe || !simulated || !Terminal.isInitialized()) return
+    val mode = if (online) SimulatedOfflineMode.DISABLED else SimulatedOfflineMode.OFFLINE_IMMEDIATE
+    runCatching { Terminal.getInstance().simulatedOfflineModeConfiguration = SimulatedOfflineModeConfiguration(mode, SimulatedOfflineMode.DISABLED) }
+  }
+
+  private val offlineListener = object : OfflineListener {
+    override fun onOfflineStatusChange(offlineStatus: OfflineStatus) = Unit
+
+    override fun onPaymentIntentForwarded(paymentIntent: PaymentIntent, e: TerminalException?) {
+      val forward = paymentIntent.asOfflineForward(e) ?: return
+      forwards.record(forward)
+      scope.launch { onOfflineForward?.invoke() }
+    }
+
+    // A forward that failed without naming its payment is retried by the SDK; nothing to record.
+    override fun onForwardingFailure(e: TerminalException) = Unit
+  }
 
   // ---- CardCollector
 
@@ -284,10 +351,27 @@ class StripeTerminalCollector(
       locationId = null
     }
     if (locationId == null) {
+      val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       try {
         val session = sessions.session(hostId)
         locationId = session.locationId
         merchantName = session.merchantDisplayName
+        prefs.edit().putString("$KEY_SITE$hostId", "${session.locationId}\t${session.merchantDisplayName}").apply()
+      } catch (lost: CardReaderSetupError) {
+        if (lost.code != CardReaderSetupCode.UNREACHABLE) {
+          mutableState.value = CardCollectorState.Unavailable(lost.message ?: "Card readers are not set up for this store yet.")
+          if (ask) mutableDiscovery.value = ReaderDiscovery.Failed(lost.message ?: "Card readers are not set up for this store yet.")
+          return false
+        }
+        // No connection: start from what this site's reader last saw online, so a card can be stored (AGL-4039).
+        val known = prefs.getString("$KEY_SITE$hostId", null)?.split('\t')
+        if (known == null || known.size != 2) {
+          mutableState.value = CardCollectorState.Unavailable("Card readers are not set up for this store yet.")
+          if (ask) mutableDiscovery.value = ReaderDiscovery.Failed("Connect once so the card reader can get ready to work offline.")
+          return false
+        }
+        locationId = known[0]
+        merchantName = known[1]
       } catch (error: Throwable) {
         if (error is CancellationException) throw error
         val words = (error as? CardReaderSetupError)?.message ?: error.message ?: "Card readers are not set up for this store yet."
@@ -298,7 +382,9 @@ class StripeTerminalCollector(
     }
     if (!Terminal.isInitialized()) {
       try {
-        Terminal.init(context.applicationContext, LogLevel.WARNING, tokens, terminalListener, null)
+        Terminal.init(context.applicationContext, LogLevel.WARNING, tokens, terminalListener, offlineListener)
+        // The simulated reader stores cards offline only when asked to (test mode).
+        if (simulated) Terminal.getInstance().simulatorConfiguration = SimulatorConfiguration(offlineEnabled = true)
       } catch (error: TerminalException) {
         mutableState.value = CardCollectorState.Unavailable(friendlyDiscoveryError(error.errorCode.name, error.errorMessage))
         return false
@@ -404,6 +490,7 @@ class StripeTerminalCollector(
     private const val TAG = "AglynTerminal"
     private const val PREFS = "aglyn-pos-terminal"
     private const val KEY_KIND = "readerKind"
+    private const val KEY_SITE = "site:"
     private const val DISCOVERY_SECONDS = 30
     const val PERMISSIONS_NEEDED = "Allow location and nearby devices for Aglyn POS to use a card reader. Card networks require the location of in-person payments."
 
