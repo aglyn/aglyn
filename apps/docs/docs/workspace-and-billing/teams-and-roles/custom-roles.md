@@ -19,9 +19,13 @@ Control what each teammate can do with **roles** — named permission sets — p
 
 1. On the organization **Team** page, find the **Custom roles** card and choose
    **New role**.
-2. Give it a name and set each **permission** to granted, denied, or inherit (inherit
-   falls back to the member's org role default).
-3. Save, then assign it to members from the roster's **Custom role** column.
+2. Give it a name. The permissions are grouped by area (Organization, Billing, Team,
+   Sites, Data, Marketplace and plugins) and by plugin (AI, Commerce and the others
+   your workspace uses), and **Search permissions** finds one by name or description.
+3. Set each permission to **Allow**, **Deny** or **Inherit**. Inherit falls back to
+   the member's org role default, and each one says which org roles hold it by
+   default. The switch beside a group's heading sets every permission in it at once.
+4. Save, then assign it to members from the roster's **Custom role** column.
 
 The permission catalog covers organization settings, the activity log, billing (view
 and manage separately), member management, site creation and deletion, organization

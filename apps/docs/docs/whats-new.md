@@ -17,6 +17,9 @@ for the how-to.
   **Use the point of sale**, beside the organization's own. Each is listed
   while its plugin is on for the workspace, and the server enforces what the
   role says.
+- **[A grouped, searchable role editor](workspace-and-billing/teams-and-roles/custom-roles.md#create-a-custom-role)** —
+  permissions are grouped by area and by plugin, with a search box, and each is
+  **Allow**, **Deny** or **Inherit**, with a switch to set a whole group at once.
 
 ## October 2026 — digital waivers, signed before riders arrive
 
