@@ -16,6 +16,7 @@
  */
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
+import { posCheckInHandler, registerPosSaleCheckIns } from './pos-check-in'
 import { posCustomerHandler } from './pos-customer'
 import { posDayReportHandler } from './pos-day-report'
 import { registerPosSalePrinting } from './pos-print'
@@ -25,7 +26,8 @@ import { posStaffPinHandler } from './pos-staff-pin'
 
 /**
  * The register's operations routes (AGL-3609): shifts and the drawer, staff
- * PINs, the customer lookup and returns, the day totals (AGL-4037), plus the
+ * PINs, the customer lookup and returns, the day totals (AGL-4037), the
+ * check-in (AGL-4043), plus the
  * sale printing. Console-auth, so they register on the console surface with
  * the sale route itself.
  */
@@ -37,6 +39,11 @@ export function registerPosOpsRoutes(): void {
   // One day's or one event's totals across every register, shift and cashier
   // (AGL-4037): a GET, read with the same gate as the shift reports.
   registerPluginApiRoute('commerce/pos-day-report', posDayReportHandler)
+  // Check-in at the window (AGL-4043): who is due today, checking them in
+  // with a wristband, and the day's list; a register sale's check-ins are
+  // written the moment it completes, through the same seam as its printing.
+  registerPluginApiRoute('commerce/pos-check-in', posCheckInHandler)
+  registerPosSaleCheckIns()
   // A completed sale's receipt and drawer kick on the register's cloud
   // printers (AGL-3619), through the sale-completed seam every path fires.
   registerPosSalePrinting()

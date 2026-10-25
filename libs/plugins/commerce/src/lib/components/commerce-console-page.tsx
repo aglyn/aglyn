@@ -38,6 +38,7 @@ import PickupDeliveryQueueCard from './console/pickup-delivery-queue-card.compon
 import MemberPostsCard from './console/member-posts-card.component'
 import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
+import PosCheckInsCard from './console/pos-ops/pos-check-ins-card.component'
 import PosDayTotalsCard from './console/pos-ops/pos-day-totals-card.component'
 import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.component'
 import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
@@ -176,6 +177,12 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <PosDayTotalsCard hostId={hostId} canManagePos={canManagePos} />,
+            },
+            // Who is due at the window and who checked in (AGL-4043), beside
+            // the day's totals.
+            {
+              size: { xs: 12 },
+              children: <PosCheckInsCard hostId={hostId} canManagePos={canManagePos} />,
             },
             {
               size: { xs: 12 },

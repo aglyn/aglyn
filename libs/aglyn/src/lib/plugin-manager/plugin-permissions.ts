@@ -33,6 +33,13 @@ export interface PluginPermission {
   description?: string
   /** Verdict per built-in role tier when a role doesn't name the key. */
   defaults: { admin: boolean; editor: boolean; viewer: boolean }
+  /**
+   * The role editor's group for the key in the one permission catalog
+   * (AGL-4047): a core group id, or absent for a group of the plugin's own.
+   */
+  group?: string
+  /** The heading of a group of the plugin's own; absent: the plugin's catalog label. */
+  groupLabel?: string
 }
 
 /*

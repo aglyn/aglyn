@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { mdiWeb } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 
@@ -24,6 +25,7 @@ const BuyDomainCard = lazy(() => import('./components/buy-domain-card.component'
 const ConnectAutomatically = lazy(
   () => import('./components/connect-automatically.component'),
 )
+const DomainsPage = lazy(() => import('./components/domains-page.component'))
 
 /**
  * Domains' console half (AGL-3962, AGL-3963): widgets on the site's Custom
@@ -32,6 +34,13 @@ const ConnectAutomatically = lazy(
  * The buy card mounts on every plan with `showWhenNotEntitled`, so a Free
  * site sees what a domain would cost and the plan that includes it rather
  * than nothing at all.
+ *
+ * And one ORGANIZATION-LEVEL page (AGL-4040), the workspace's Domains page
+ * at `/[orgSlug]/domains`, listing every name the workspace holds; each
+ * name's own page is `/domains/<name>` beneath it. It carries no
+ * `featureFlag`: a workspace on a plan without domains still holds the names
+ * it bought, and the page says what the plan stops (buying, connecting)
+ * rather than hiding them. Its routes admit workspace owners and admins only.
  */
 export function registerDomainsConsole(): void {
   Aglyn.registerConsoleExtension({
@@ -52,6 +61,17 @@ export function registerDomainsConsole(): void {
         title: 'Connect automatically',
         featureFlag: 'customDomain',
         Component: ConnectAutomatically,
+      },
+    ],
+    orgNavItems: [
+      {
+        label: 'Domains',
+        href: '/domains',
+        ownsSubtree: true,
+        recordTitle: 'Domain',
+        icon: { path: mdiWeb.path },
+        header: { title: 'Domains', icon: { path: mdiWeb.path }, docsTopic: 'manageDomains' },
+        Component: DomainsPage,
       },
     ],
   })

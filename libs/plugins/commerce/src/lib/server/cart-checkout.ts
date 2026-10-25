@@ -259,7 +259,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     })
     cart.lines.forEach((line, index) => {
       const product = productsById.get(line.productId)
-      if (!product || product.deletedAt || product.status !== 'active') {
+      // Sold in person only (AGL-4060) is not for sale here, whatever the
+      // cart was holding when the switch went off.
+      if (!product || !CommerceModel.productListedOnline(product)) {
         throw Object.assign(new Error('unavailable'), {
           visible: `"${product?.name ?? 'A product'}" is no longer available`,
         })

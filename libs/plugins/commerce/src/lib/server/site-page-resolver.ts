@@ -79,12 +79,10 @@ export const commerceSitePageResolver: SitePageResolver = async ({
     ])
     const pdpScreenId = storeSettings.get('pdpScreenId')
     const productRaw = productSnapshot.docs[0]?.data() as any
-    if (
-      pdpScreenId &&
-      productRaw &&
-      !productRaw.deletedAt &&
-      productRaw.status === 'active'
-    ) {
+    // Live, active and sold online (AGL-4060): a product sold in person only
+    // has no page here, designed or built in, and falls through to the 404.
+    const listedOnline = CommerceModel.productListedOnline(productRaw)
+    if (pdpScreenId && listedOnline) {
       const product = CommerceModel.liftLegacyProduct(productRaw)
       const templateRes = await getScreen({
         hostId,
@@ -204,7 +202,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
     // rather than a 404 behind every card the product grid links. A store a
     // guided start built has no template of its own, and its grid links each
     // product here.
-    if (productRaw && !productRaw.deletedAt && productRaw.status === 'active') {
+    if (listedOnline) {
       return composeBuiltInProductPage(
         hostId,
         host,

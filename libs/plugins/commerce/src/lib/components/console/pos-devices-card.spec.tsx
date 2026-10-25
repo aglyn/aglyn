@@ -55,6 +55,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-1' } }),
   useFirestoreCollection: () => ({ data: registerRows }),
   useOrgPlan: () => orgPlan,
+  useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
 }))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (_user: unknown, url: string, init: any) => {
