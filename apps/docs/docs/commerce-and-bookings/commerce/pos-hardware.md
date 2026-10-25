@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Card readers (and buying them from Aglyn, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.
+description: Card readers (and buying them, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, barcode scanning, and product and shipping labels.
 ---
 
 # POS hardware

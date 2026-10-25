@@ -470,12 +470,12 @@ export const PLUGIN_DOCS = {
   posHardware: {
     path: '/commerce-and-bookings/commerce/pos-hardware',
     title: 'POS hardware',
-    excerpt: 'Card readers (and buying them from Aglyn, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.',
+    excerpt: 'Card readers (and buying them, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, barcode scanning, and product and shipping labels.',
   },
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
-    excerpt: 'Shifts and the cash drawer with X and Z reports, day and event totals across every register, check-in at the window with wristbands, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
+    excerpt: 'Shifts and X/Z reports, day and event totals, check-in with wristbands, staff PINs, customers at the register, returns and exchanges, printed receipts, and selling cash while offline.',
   },
   postPurchase: {
     path: '/commerce-and-bookings/commerce/tracking-and-protection',

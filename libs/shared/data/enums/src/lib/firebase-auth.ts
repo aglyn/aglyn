@@ -102,6 +102,11 @@ export const AuthAppErrorCodes = {
    * the account-creation blocking function refused it (AGL-1993).
    */
   SSO_DOMAIN_REQUIRED: 'auth/sso-domain-required',
+  /**
+   * The address is already a verified extra address on another account, and
+   * the account-creation blocking function refused a second one (AGL-4041).
+   */
+  EMAIL_ON_ANOTHER_ACCOUNT: 'auth/email-on-another-account',
 } as const
 
 export type AuthAppCode =
@@ -129,6 +134,7 @@ export const AuthErrorNotice = {
   [AuthAppErrorCodes.SSO_INCOMPLETE]: true,
   [AuthAppErrorCodes.PASSKEY_NOT_COMPLETED]: true,
   [AuthAppErrorCodes.SSO_DOMAIN_REQUIRED]: true,
+  [AuthAppErrorCodes.EMAIL_ON_ANOTHER_ACCOUNT]: true,
 }
 
 export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
@@ -275,6 +281,12 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   [AuthAppErrorCodes.SSO_DOMAIN_REQUIRED]:
     'No account was created. Choose Single sign-on (SSO) on the sign-in ' +
     'page and enter this address.',
+  // It names no account on purpose: whoever is signing up is anonymous, and
+  // the address alone must not say whose it is.
+  [AuthAppErrorCodes.EMAIL_ON_ANOTHER_ACCOUNT]:
+    'No new account was created. Sign in to the account you added this ' +
+    'address to, using that account\'s main email, Google or password. ' +
+    'If it is not yours, remove it from that account first.',
 }
 
 /**
@@ -284,6 +296,9 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
  * from a real outage.
  */
 export const SSO_DOMAIN_REQUIRED_MARKER = 'sso-domain-required'
+
+/** The text `cloud/functions` puts in its verified-alias refusal (AGL-4041). */
+export const EMAIL_ON_ANOTHER_ACCOUNT_MARKER = 'email-on-another-account'
 
 /**
  * The error as a person should see it. A blocking-function refusal arrives as
@@ -302,6 +317,16 @@ export function normalizeAuthError<T extends AuthResultError | null | undefined>
       ...error,
       code: AuthAppErrorCodes.SSO_DOMAIN_REQUIRED,
       message: 'This address signs in with single sign-on.',
+    } as T
+  }
+  if (
+    error?.code === AuthErrorCodes.INTERNAL_ERROR &&
+    String(error.message ?? '').includes(EMAIL_ON_ANOTHER_ACCOUNT_MARKER)
+  ) {
+    return {
+      ...error,
+      code: AuthAppErrorCodes.EMAIL_ON_ANOTHER_ACCOUNT,
+      message: 'This address is already on another account.',
     } as T
   }
   return error
