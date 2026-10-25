@@ -126,14 +126,9 @@ struct BesignerScreen: View {
     case failed(String)
   }
 
-  /// The Besigner's own app bar (its wordmark), which every editor page draws once the editor is mounted: the app's
-  /// loading state steps aside for it then, never for the console's sign-in hand-off page (AGL-4002).
-  static let editorDrawn = "document.getElementById('aglyn-besigner-logo-full') !== null"
-  /// The longest the loading state stays over a page that never draws the editor (the console's own error card).
-  static let revealAfter: Duration = .seconds(12)
-
-  /// Whether the editor shows: until then one native loading state covers the whole area.
-  @State private var shown = false
+  /// Where the loading state stands: it covers the whole area until the editor has painted (`BesignerReveal`).
+  @State private var phase: BesignerReveal.Phase = .opening
+  private var shown: Bool { phase == .shown }
 
   var body: some View {
     ZStack {
@@ -175,6 +170,13 @@ struct BesignerScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AglynColor.paper)
+      } else if phase == .stillOpening {
+        // A slow load stays covered: never a blank or half-drawn editor (AGL-4002).
+        AglynLoadingState("Still opening the Besigner", detail: "This is taking longer than usual.") {
+          Button("Try again") { Task { await start() } }
+        }
+        .accessibilityIdentifier("besigner-loading")
+        .transition(.opacity)
       } else if !shown {
         AglynLoadingState("Opening the Besigner")
           .accessibilityIdentifier("besigner-loading")
@@ -196,20 +198,21 @@ struct BesignerScreen: View {
     .task { await start() }
   }
 
-  /// Lifts the loading state once the editor has drawn its app bar (the page is on a Besigner path, past the sign-in
-  /// hand-off), or after `revealAfter` whatever the page shows, so it can never hold the screen.
+  /// Lifts the loading state once the editor has painted (`BesignerReveal.paintedScript`) on an editor page, past the
+  /// sign-in hand-off. A slow load turns the loading state into "still opening" and keeps waiting: it never uncovers
+  /// a page that has not painted.
   private func revealWhenDrawn() async {
     let clock = ContinuousClock()
     let started = clock.now
     while !Task.isCancelled, !shown {
       let path = webModel.url.map(ConsoleNavigationPolicy.consolePath) ?? ""
-      let onEditor = !path.hasPrefix(BesignerEntry.path) && DeepLinks.isBesignerPath(path)
-      if onEditor, await webModel.check(Self.editorDrawn) { break }
-      if clock.now - started > Self.revealAfter { break }
+      let painted = BesignerReveal.onEditor(path: path) ? await webModel.check(BesignerReveal.paintedScript) : false
+      let next = BesignerReveal.phase(elapsed: clock.now - started, path: path, painted: painted)
+      guard !Task.isCancelled else { return }
+      if next != phase { withAnimation(AglynShellMotion.reveal) { phase = next } }
+      if next == .shown { return }
       try? await Task.sleep(for: .milliseconds(150))
     }
-    guard !Task.isCancelled else { return }
-    withAnimation(AglynShellMotion.reveal) { shown = true }
   }
 
   /// Back to the screen the Besigner was opened from.
@@ -243,7 +246,7 @@ struct BesignerScreen: View {
 
   private func start() async {
     session.left = false
-    shown = false
+    phase = .opening
     state = .starting
     guard let config = model.config, let auth = model.auth,
       let token = try? await auth.idToken(forceRefresh: false) else {
