@@ -288,11 +288,11 @@ fun AglynListDetail(
         // Inside the shell's content area the outer edges are already brought in; only the edges at the divider are left.
         val body = LocalBodyInset.current != null
         Row(Modifier.fillMaxSize()) {
-          // The list column runs from the content area's edge to the hairline, so a selected row's fill spans its whole
-          // width (AGL-4012); its content sits on E (LocalContentInset), as before. Inside the shell, the column reaches
-          // back over the shell's own inset to the content area's edge.
-          Box(Modifier.weight(0.4f).fillMaxHeight().bleedStart(LocalBodyInset.current ?: 0.dp).testTag("list-column")) {
-            CompositionLocalProvider(LocalContentInset provides edge, LocalListColumn provides true) {
+          // The list column's content sits on E as before; a selectable row reaches back over the column's own inset (and
+          // the shell's) so its selection fills the column's whole width, edge to hairline (AGL-4012, ListColumnBleed).
+          val bleed = ListColumnBleed(start = if (body) LocalBodyInset.current ?: 0.dp else extra, end = extra)
+          Box(Modifier.weight(0.4f).fillMaxHeight().testTag("list-column").padding(start = if (body) 0.dp else extra, end = extra)) {
+            CompositionLocalProvider(LocalContentInset provides DetailPanePadding, LocalListColumn provides bleed) {
               panes.SaveableStateProvider("list") { list(selected) { selected = it } }
             }
           }
@@ -360,19 +360,26 @@ fun contentInset(): Dp = when {
  */
 val LocalContentInset = androidx.compose.runtime.compositionLocalOf<Dp?> { null }
 
-/** True inside a tablet or desktop list column beside its detail: its rows select with the full-width fill. */
-val LocalListColumn = androidx.compose.runtime.compositionLocalOf { false }
+/** How far a list column's rows reach past its content on each side to meet the column's edges. */
+data class ListColumnBleed(val start: Dp, val end: Dp)
 
-/** Lays this out [start] wider, reaching back over its parent's leading inset by that much (a full-bleed column). */
-internal fun Modifier.bleedStart(start: Dp): Modifier = if (start <= 0.dp) this else layout { measurable, constraints ->
-  val reach = start.roundToPx()
+/**
+ * Set inside a tablet or desktop list column beside its detail: its rows select with the square fill across the column's
+ * whole width, reaching past the column's inset by this much. Null elsewhere.
+ */
+val LocalListColumn = androidx.compose.runtime.compositionLocalOf<ListColumnBleed?> { null }
+
+/** Lays this out wider by [start] and [end], reaching over its parent's insets on both sides (a full-width row). */
+internal fun Modifier.bleed(start: Dp, end: Dp): Modifier = if (start <= 0.dp && end <= 0.dp) this else layout { measurable, constraints ->
+  val lead = start.roundToPx()
+  val trail = end.roundToPx()
   val placeable = measurable.measure(
     constraints.copy(
-      minWidth = constraints.minWidth + reach,
-      maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + reach else constraints.maxWidth,
+      minWidth = constraints.minWidth + lead + trail,
+      maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + lead + trail else constraints.maxWidth,
     ),
   )
-  layout(placeable.width - reach, placeable.height) { placeable.placeRelative(-reach, 0) }
+  layout(placeable.width - lead - trail, placeable.height) { placeable.placeRelative(-lead, 0) }
 }
 
 /** What a detail pane pads its own content by (`space(2f)`); the two-pane column adds E minus this. */

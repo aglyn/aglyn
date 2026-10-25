@@ -542,6 +542,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
           com.aglyn.ui.ContentGround { with(shellRow) {
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
             val crumbsSlot = remember { com.aglyn.ui.PageCrumbsSlot() }
+            val sectionsSlot = remember { com.aglyn.ui.PageSectionsSlot() }
             if (route !is Route.Web) {
               // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
               val steps = if (row == null && route == null) null else {
@@ -563,7 +564,12 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
               if (steps != null && !crumbsSlot.claimed) Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
               banner()
-              sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
+              // A list beside its detail takes the section chips into its list column (it claims the slot), so the
+              // hairline runs from the top of the columns; any other screen shows the tabs across the content.
+              androidx.compose.runtime.SideEffect {
+                sectionsSlot.sections = sections?.let { list -> { SectionChips(list, navigator.top) { key -> navigator.select(key) } } } ?: {}
+              }
+              if (!sectionsSlot.claimed) sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
               // The content area brings every screen in by E − 16, so a screen that pads its content by 16 lands on the one
@@ -572,6 +578,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = bodyInset)) {
                 CompositionLocalProvider(
                   com.aglyn.ui.LocalPageCrumbs provides crumbsSlot,
+                  com.aglyn.ui.LocalPageSections provides sectionsSlot,
                   com.aglyn.ui.LocalBodyInset provides bodyInset,
                   com.aglyn.ui.LocalContentInset provides com.aglyn.ui.DetailPanePadding,
                 ) { body() }
@@ -765,6 +772,39 @@ private fun ShellBody(
           "" -> HomeScreen(services, context, workspace, widthClass, navigator)
           else -> PluginScreenHost(services, context, screen, params, workspace.site != null) { navigator.select(ShellNavigator.HOME) }
         }
+      }
+    }
+  }
+}
+
+/**
+ * The area's sections as chips atop a list column beside its detail (AGL-4012, Apple's list column head): one row on the
+ * column's content edge, the selected one in the accent fill, 12 below before the list toolbar.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun SectionChips(sections: List<NavSectionItem>, selected: String, onSelect: (String) -> Unit) {
+  val index = sections.indexOfFirst { it.key == selected }.coerceAtLeast(0)
+  val edge = com.aglyn.ui.LocalContentInset.current ?: com.aglyn.ui.contentInset()
+  val m = com.aglyn.ui.shellMetrics
+  val shape = RoundedCornerShape(m.controlRadius)
+  androidx.compose.foundation.layout.FlowRow(
+    Modifier.fillMaxWidth().padding(start = edge, end = edge, bottom = com.aglyn.ui.HeadMetrics.listColumnGap).selectableGroup().testTag("section-chips"),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    sections.forEachIndexed { i, section ->
+      val on = i == index
+      val scheme = MaterialTheme.colorScheme
+      Box(
+        Modifier.heightIn(min = 28.dp).clip(shape)
+          .background(if (on) scheme.primary else Color.Transparent)
+          .then(if (on) Modifier else Modifier.border(1.dp, scheme.outline, shape))
+          .selectable(selected = on, role = Role.Tab, onClick = { onSelect(section.key) })
+          .padding(horizontal = 10.dp).testTag("section-chip-${section.id}"),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(section.label, color = if (on) scheme.onPrimary else scheme.onSurface, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, maxLines = 1)
       }
     }
   }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.dp
 
 /**
  * How a content list's selected row is filled on a tablet or desktop list column (AGL-4012, as Apple's): square and the
@@ -27,7 +28,24 @@ object ListSelection {
 
 /** Whether rows here select with the square, full-width fill: inside a list column beside its detail. */
 @Composable
-fun squareListSelection(): Boolean = LocalListColumn.current
+fun squareListSelection(): Boolean = LocalListColumn.current != null
+
+/**
+ * A square row's box: reaching the list column's edges past its inset ([squareRowPadding] brings its content back to
+ * where the column's content sits).
+ */
+@Composable
+fun Modifier.squareRowBox(): Modifier {
+  val bleed = LocalListColumn.current ?: return this
+  return bleed(bleed.start, bleed.end)
+}
+
+/** The horizontal padding a square row gives its content: the column's inset plus the reach on each side. */
+@Composable
+fun squareRowPadding(inset: androidx.compose.ui.unit.Dp): androidx.compose.foundation.layout.PaddingValues {
+  val bleed = LocalListColumn.current
+  return androidx.compose.foundation.layout.PaddingValues(start = inset + (bleed?.start ?: 0.dp), end = inset + (bleed?.end ?: 0.dp))
+}
 
 /** The selected row's fill for [squareListSelection]. */
 @Composable

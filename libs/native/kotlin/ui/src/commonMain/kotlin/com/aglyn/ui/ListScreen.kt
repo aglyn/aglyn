@@ -68,6 +68,34 @@ class PageCrumbsSlot {
 
 val LocalPageCrumbs = staticCompositionLocalOf<PageCrumbsSlot?> { null }
 
+/**
+ * The area's section chips (Orders / Returns / …), which the shell offers to the screen. A list beside its detail on a
+ * tablet or desktop takes them into its list column under its head ([ListColumnSections], AGL-4012, as Apple's
+ * AglynListColumnHeader); unclaimed, the shell draws them across the content.
+ */
+@Stable
+class PageSectionsSlot {
+  var sections: @Composable () -> Unit by mutableStateOf({})
+  private var claims by mutableStateOf(0)
+  val claimed: Boolean get() = claims > 0
+  fun claim() { claims++ }
+  fun release() { claims = (claims - 1).coerceAtLeast(0) }
+}
+
+val LocalPageSections = staticCompositionLocalOf<PageSectionsSlot?> { null }
+
+/** In a list column beside its detail: the area's section chips, taken from the shell (nothing elsewhere). */
+@Composable
+fun ListColumnSections() {
+  if (LocalListColumn.current == null) return
+  val slot = LocalPageSections.current ?: return
+  DisposableEffect(slot) {
+    slot.claim()
+    onDispose { slot.release() }
+  }
+  slot.sections()
+}
+
 /** One filter choice in a list's Filter menu: a group heading's options, one picked per group. */
 data class FilterChoice(val group: String, val key: String, val label: String)
 
@@ -204,7 +232,7 @@ fun ListScreenScaffold(
       Text(
         title,
         // Figma's list title: 22/28 bold on the desktop.
-        style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp) else MaterialTheme.typography.headlineSmall,
+        style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line) else MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -225,6 +253,8 @@ fun ListScreenScaffold(
       }
       if (more.isNotEmpty() && compactHead) OverflowMenu(more, contentDescription = "More actions", boxed = true)
     }
+    // A list beside its detail heads its own column: the area's section chips under the head, then the toolbar.
+    ListColumnSections()
     Row(
       Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = toolbarGap).testTag("$tag-toolbar"),
       verticalAlignment = Alignment.CenterVertically,
@@ -319,12 +349,13 @@ fun ScaffoldListRow(
   Row(
     modifier.fillMaxWidth()
       .then(
-        if (square) Modifier.squareRowGround(selected, interaction)
+        if (square) Modifier.squareRowBox().squareRowGround(selected, interaction)
         else Modifier.padding(horizontal = outer, vertical = 1.dp).clip(shape).background(if (selected) shellColors.selected else Color.Transparent),
       )
       .clickable(interactionSource = interaction, indication = if (square) null else androidx.compose.material3.ripple(), onClick = onClick)
       .heightIn(min = height)
-      .padding(horizontal = if (square) inset else padH, vertical = padV)
+      .then(if (square) Modifier.padding(squareRowPadding(inset)) else Modifier.padding(horizontal = padH))
+      .padding(vertical = padV)
       .semantics(mergeDescendants = true) { if (selected) this.selected = true },
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(gap),

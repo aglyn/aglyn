@@ -90,11 +90,12 @@ fun AglynListItem(
   val square = squareListSelection()
   val outer = if (square) 0.dp else LocalContentInset.current?.let { (it - ListRowInset).coerceAtLeast(0.dp) } ?: ListRowInset
   val inner = if (square) LocalContentInset.current ?: contentInset() else ListRowInset
+  val innerPadding = if (square) squareRowPadding(inner) else androidx.compose.foundation.layout.PaddingValues(horizontal = ListRowInset)
   Row(
     modifier
       .fillMaxWidth()
       .then(
-        if (square) Modifier.squareRowGround(selected, interaction)
+        if (square) Modifier.squareRowBox().squareRowGround(selected, interaction)
         else Modifier.padding(horizontal = outer, vertical = 1.dp).clip(shape).background(if (selected) colors.primaryContainer else Color.Transparent),
       )
       .then(if (focused) Modifier.border(2.dp, colors.primary, if (square) androidx.compose.ui.graphics.RectangleShape else shape) else Modifier)
@@ -107,7 +108,7 @@ fun AglynListItem(
       )
       .semantics(mergeDescendants = onClick != null) { if (selected) this.selected = true }
       .heightIn(min = if (supporting != null) (if (compact) 60.dp else 72.dp) else (if (compact) 48.dp else 56.dp))
-      .padding(horizontal = inner, vertical = if (compact) 6.dp else 10.dp),
+      .padding(innerPadding).padding(vertical = if (compact) 6.dp else 10.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(16.dp),
   ) {

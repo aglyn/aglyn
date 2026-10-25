@@ -16,6 +16,8 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.aglyn.ui.AglynListDetail
@@ -100,6 +102,10 @@ class ContentColumnsTest {
     val detailGround = image[image.width - 4, image.height - 4]
     assertTrue(detailGround.red > 0.99f && detailGround.green > 0.99f && detailGround.blue > 0.99f, "the detail column's ground is the surface: $detailGround")
     onNodeWithTag("plain-section", useUnmergedTree = true).assertExistsCompat()
+    // A click in the row's reach past the column's inset still lands on the row.
+    onNodeWithTag("row-1040").performMouseInput { click(androidx.compose.ui.geometry.Offset(2f, centerY)) }
+    waitForIdle()
+    assertEquals("1040", picked, "the row's full width is its target")
     (System.getProperty("aglyn.columnsShot") ?: System.getenv("AGLYN_COLUMNS_SHOT"))?.let { path ->
       val awt = java.awt.image.BufferedImage(image.width, image.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
       for (x in 0 until image.width) for (yy in 0 until image.height) {
@@ -112,3 +118,38 @@ class ContentColumnsTest {
 }
 
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertExistsCompat() = assertExists()
+
+@OptIn(ExperimentalTestApi::class)
+class ListColumnHeadTest {
+  @Test
+  fun aListBesideItsDetailTakesTheAreasHeadAndChipsIntoItsColumn() = runDesktopComposeUiTest(width = 1136, height = 821) {
+    val slot = com.aglyn.ui.PageSectionsSlot()
+    setContent {
+      AglynTheme(dark = false) {
+        CompositionLocalProvider(LocalShellMetrics provides CompactShellMetrics, com.aglyn.ui.LocalPageSections provides slot) {
+          androidx.compose.runtime.SideEffect { slot.sections = { Text("Submissions · Members", Modifier.testTag("chips")) } }
+          AglynListDetail(
+            list = { _, _ ->
+              Column {
+                com.aglyn.ui.ListHeader("Inbox") { Text("Export", Modifier.testTag("export")) }
+                Text("Search messages", Modifier.testTag("search"))
+              }
+            },
+            detail = { Text("detail") },
+          )
+        }
+      }
+    }
+    waitForIdle()
+    assertTrue(slot.claimed, "the list column took the section chips")
+    val column = onNodeWithTag("list-column").getBoundsInRoot()
+    val head = onNodeWithTag("list-column-head").getBoundsInRoot()
+    val chips = onNodeWithTag("chips").getBoundsInRoot()
+    val search = onNodeWithTag("search").getBoundsInRoot()
+    // 20 above the 28 title row, 12 below it; then the chips; then the toolbar.
+    assertEquals(20.dp, head.top - column.top, "head top")
+    assertEquals(48.dp, head.bottom - column.top, "head bottom (20 + 28)")
+    assertEquals(60.dp, chips.top - column.top, "chips at 60")
+    assertTrue(search.top >= chips.bottom, "the toolbar under the chips")
+  }
+}
