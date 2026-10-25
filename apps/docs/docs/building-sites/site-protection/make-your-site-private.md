@@ -102,6 +102,27 @@ Keep in mind:
   out people who aren't signed in; it doesn't hand-pick who joins. To remove someone,
   **suspend** them from the site's **Users** page.
 
+## Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask Assist to make these changes for you, such as *make my site private until
+launch*, *hide the site from Google*, *make the pricing page members only* or *put the site
+back online*. Assist shows the change on a plan card, and nothing changes until you
+confirm it. It's then saved to your live site straight away, just as if you'd used the
+switch yourself, and it uses no AI credits.
+
+- **Maintenance mode** can only be turned on or off by a **site admin**, as in the Admin
+  area. If you're an editor or author, Assist makes the rest of your request and says it
+  left maintenance mode alone.
+- **Members only** is set only on the **Business** plan and above. On other plans, Assist
+  says why it left the page as it was.
+- **Passwords** are never set by Assist, so a password never goes into the chat. Set it
+  in the page's **Page Access** card, as in
+  [Share it behind a password](#share-it-behind-a-password).
+
+Asking how, such as *how do I make my site private?*, gets you the steps on this page
+instead. Building from the chat needs AI generation on your plan; see
+[Build from Assist chat](../../ai/assist-builds.md#who-can-use-it).
+
 ## Check what's still public
 
 Before you share a link or announce a launch:

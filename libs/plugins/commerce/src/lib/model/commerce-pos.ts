@@ -145,15 +145,18 @@ export function isCardPaymentMethod(method: OrderPaymentMethod): boolean {
  * owed the same percentage as a card sale and had it added to the monthly
  * invoice. In-person rivals charge nothing on cash, and an event register that
  * bills its operator for the cash in their own apron is not one they will
- * choose, so two tenders now carry none:
+ * choose, so three tenders now carry none:
  *
  *  - cash: no payment service touches it, and the merchant keeps all of it;
  *  - gift card: the fee was taken when the card was SOLD, so charging it again
- *    when the card is spent would charge the same money twice.
+ *    when the card is spent would charge the same money twice;
+ *  - store credit (`credit`): rewards or referral value the merchant gave
+ *    away, so no money changes hands and an invoiced fee on it would only
+ *    penalize running a rewards program.
  *
  * Everything else still carries it. Card payments net it from their payout,
  * as always. A room charge (`folio`) is new revenue booked to a stay, so its
- * share goes on the invoice. Store credit (`credit`) is unchanged.
+ * share goes on the invoice.
  *
  * One predicate, so the register, the completion, the offline sync and the
  * docs cannot disagree about which tender is which.
@@ -163,6 +166,7 @@ export function isCardPaymentMethod(method: OrderPaymentMethod): boolean {
 export const POS_FEE_FREE_METHODS: ReadonlySet<OrderPaymentMethod> = new Set([
   'cash',
   'gift_card',
+  'credit',
 ])
 
 /** Whether a payment by `method` carries its share of the platform's take. */
@@ -345,7 +349,7 @@ export function posOwedTakeCents(input: {
  * What of the sale's take was NOT netted from a card payout, and therefore
  * goes on the merchant's invoice: the take the tenders owe
  * ({@link posOwedTakeCents}) less every succeeded card payment's share. Never
- * negative, and 0 for a sale paid only by card, cash and gift card.
+ * negative, and 0 for a sale paid only by card, cash, gift card and store credit.
  */
 export function posInvoiceTakeCents(input: {
   takeFeeCents: number
@@ -363,7 +367,7 @@ export function posInvoiceTakeCents(input: {
 
 /**
  * How the sale's fee reaches the platform, from the payments that carried it.
- * A cash or gift-card part carries none (AGL-4036), so a card + cash sale is
+ * A cash, gift-card or store-credit part carries none (AGL-4036), so a card + cash sale is
  * `payout`, not `split`.
  */
 export function posFeeCollection(

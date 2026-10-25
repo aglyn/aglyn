@@ -48,8 +48,10 @@
  */
 
 import type { AglynOrgBilling, HostAccessRole, OrgPlan, OrgRole } from '../foundation'
+import { declarationRoleDefaults } from '../app-utils/org-role-grants'
 import { FIRST_PARTY_PLUGINS } from './enabled-plugins'
 import {
+  listPluginPermissions,
   registerPluginPermissions,
   type PluginPermission,
 } from './plugin-permissions'
@@ -174,6 +176,32 @@ export interface PluginOrgPermissionDeclaration {
    * without it is never held by a collaborator.
    */
   hostRoleDefaults?: Readonly<Record<HostAccessRole, boolean>>
+  /**
+   * The role editor's group for the key (AGL-4047): a core group id
+   * (`CORE_ORG_PERMISSION_GROUPS`) or, absent, a group of the plugin's own.
+   */
+  group?: string
+  /** The heading of a group of the plugin's own; absent: the plugin's catalog label. */
+  groupLabel?: string
+}
+
+/**
+ * One key of the ONE permission catalog that a plugin contributes (AGL-4047),
+ * whichever of the two declaration APIs it came through:
+ * `registerPluginEntitlements({ orgPermissions })` (`source: 'catalog'`) or
+ * `registerPluginPermissions` (`source: 'tier'`, its per-tier defaults read
+ * as org-role defaults, the owner on the admin tier).
+ */
+export interface PluginCatalogPermission {
+  key: string
+  label: string
+  description: string
+  pluginId: string
+  roleDefaults: Readonly<Record<OrgRole, boolean>>
+  hostRoleDefaults?: Readonly<Record<HostAccessRole, boolean>>
+  group: string
+  groupLabel: string
+  source: 'catalog' | 'tier'
 }
 
 export interface PluginEntitlementRegistration {
@@ -298,7 +326,7 @@ export function registerPluginEntitlements(
     pluginId,
     'org permission',
     (registration.orgPermissions ?? []).map((entry) => entry.key),
-    (key) => pluginOrgPermissionOwner(key),
+    (key) => pluginOrgPermissionOwner(key) ?? pluginTierPermissionOwner(key),
   )
   registrations.set(pluginId, { ...registration, pluginId })
   if (registration.permissions?.length) {
@@ -332,6 +360,82 @@ function pluginOrgPermissionOwner(key: string): string | undefined {
     }
   }
   return undefined
+}
+
+function pluginTierPermissionOwner(key: string): string | undefined {
+  return listPluginPermissions().find((permission) => permission.key === key)?.pluginId
+}
+
+/** Refusals already logged by `listPluginCatalogPermissions`, so each is reported once. */
+const reportedCatalogRefusals = new Set<string>()
+
+/** A plugin's catalog label, the heading its own permission group carries. */
+function pluginLabel(pluginId: string): string {
+  return FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.label ?? pluginId
+}
+
+/**
+ * Every key plugins contribute to the permission catalog, through EITHER
+ * declaration API, in catalog order (AGL-4047): per plugin, its
+ * `orgPermissions` declarations and then its `registerPluginPermissions`
+ * keys. A key both APIs carry for the same plugin is the catalog
+ * declaration's; one a DIFFERENT plugin already declared is refused and
+ * logged once, the first declaration keeping its meaning and defaults.
+ *
+ * Read live: both registries fill at plugin module scope, which can be after
+ * any reader of this was evaluated.
+ */
+export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
+  const byPlugin = new Map<string, PluginCatalogPermission[]>()
+  const owner = new Map<string, string>()
+  const add = (entry: PluginCatalogPermission): void => {
+    const incumbent = owner.get(entry.key)
+    if (incumbent !== undefined) {
+      if (incumbent !== entry.pluginId) {
+        const refusal = `${entry.pluginId}\x00${entry.key}`
+        if (!reportedCatalogRefusals.has(refusal)) {
+          reportedCatalogRefusals.add(refusal)
+          console.error(
+            `[plugins] refused permission key "${entry.key}" to "${entry.pluginId}": ` +
+              `already declared by "${incumbent}"`,
+          )
+        }
+      }
+      return
+    }
+    owner.set(entry.key, entry.pluginId)
+    const list = byPlugin.get(entry.pluginId) ?? []
+    list.push(entry)
+    byPlugin.set(entry.pluginId, list)
+  }
+  for (const permission of listPluginOrgPermissions()) {
+    add({
+      key: permission.key,
+      label: permission.label,
+      description: permission.description,
+      pluginId: permission.pluginId,
+      roleDefaults: declarationRoleDefaults(permission),
+      ...(permission.hostRoleDefaults ? { hostRoleDefaults: permission.hostRoleDefaults } : {}),
+      group: permission.group ?? permission.pluginId,
+      groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
+      source: 'catalog',
+    })
+  }
+  for (const permission of listPluginPermissions()) {
+    add({
+      key: permission.key,
+      label: permission.label,
+      description: permission.description ?? '',
+      pluginId: permission.pluginId,
+      roleDefaults: declarationRoleDefaults(permission),
+      group: permission.group ?? permission.pluginId,
+      groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
+      source: 'tier',
+    })
+  }
+  return [...byPlugin.keys()]
+    .sort((a, b) => catalogRank(a) - catalogRank(b) || a.localeCompare(b))
+    .flatMap((pluginId) => byPlugin.get(pluginId) ?? [])
 }
 
 /** Every declared catalog permission, in catalog order, with the plugin that declared it. */
