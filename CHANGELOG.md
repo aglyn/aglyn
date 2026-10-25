@@ -9,6 +9,39 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.282 — 2026-10-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.281...v1.0.0-beta.282)
+
+### Added
+
+- **health:** watch the daily Site Care reconciliation on /api/health/crons ([AGL-4030](https://linear.app/aglyn/issue/AGL-4030))
+
+### Fixed
+
+- **ai:** a liked site's numbers section is followed only when the brief gives figures ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **site-care:** reconcile extra time against our own ledger too ([AGL-4031](https://linear.app/aglyn/issue/AGL-4031))
+- **theme:** typography paints a palette path color like text.secondary again ([AGL-4034](https://linear.app/aglyn/issue/AGL-4034))
+- **ai:** an anchor two section names share goes to the section it titles ([AGL-4032](https://linear.app/aglyn/issue/AGL-4032))
+- **site-care:** match a sender's aliases to their Site Care workspace ([AGL-4031](https://linear.app/aglyn/issue/AGL-4031))
+- **ai:** a page bot protection refuses is left out as blocked, not unreadable ([AGL-4029](https://linear.app/aglyn/issue/AGL-4029))
+- **release:** CHANGELOG.md drops a commit's directive ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+### Documentation
+
+- add "Make your site private" page so docs search and Assist can answer it ([AGL-4033](https://linear.app/aglyn/issue/AGL-4033))
+- **uptime:** record the twelve-hour grace on the daily GitHub row ([AGL-4030](https://linear.app/aglyn/issue/AGL-4030))
+- **ai:** say what to do when a site's bot protection turns aglynbot away ([AGL-4029](https://linear.app/aglyn/issue/AGL-4029))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **deps-dev:** bump fast-uri from 3.1.8 to 3.1.9
+- **deps-dev:** bump serialize-javascript from 7.1.2 to 7.1.4
+- **deps-dev:** bump the dev-minor-patch group with 11 updates
+
+</details>
+
 ## v1.0.0-beta.281 — 2026-10-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.280...v1.0.0-beta.281)

@@ -22,6 +22,14 @@ const PosConsolePage = lazy(() => import('./components/console/pos-page.componen
 /** The customer display (AGL-3608): loads only on the public page that shows it. */
 const PosDisplayPage = lazy(() => import('./components/console/pos-display-page.component'))
 const PosKioskPage = lazy(() => import('./components/console/pos-kiosk-page.component'))
+/** Staff → Hardware orders (AGL-4038): loads only on its staff page. */
+const PosHardwareOrdersStaffPage = lazy(
+  () => import('./components/console/pos-hardware-orders-staff-page.component'),
+)
+/** Staff → Reader start-up screen (AGL-4048): loads only on its staff page. */
+const PosReaderSplashStaffPage = lazy(
+  () => import('./components/console/pos-reader-splash-staff-page.component'),
+)
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
@@ -96,6 +104,26 @@ export function registerCommerceConsole(): void {
     // `/kiosk/commerce/pos-display`. No staff session: the device proves
     // itself with the display token it got by pairing, and
     // `server/pos-display.ts` refuses every read without one.
+    // Every workspace's orders from the POS hardware shop (AGL-4038), where
+    // staff record Stripe's order id and the tracking, move each order on,
+    // and cancel or refund one that has not shipped. The staff area loads
+    // this registrar through commerce's `staff` surface.
+    staffPages: [
+      {
+        id: 'hardware-orders',
+        label: 'Hardware orders',
+        header: { title: 'Hardware Orders', docsTopic: 'posHardware' },
+        Component: PosHardwareOrdersStaffPage,
+      },
+      // The platform's default card reader start-up screen (AGL-4048), which
+      // every store that has not picked its own logo or image shows.
+      {
+        id: 'reader-start-up-screen',
+        label: 'Reader start-up screen',
+        header: { title: 'Reader Start-up Screen', docsTopic: 'posHardware' },
+        Component: PosReaderSplashStaffPage,
+      },
+    ],
     publicPages: [
       { path: '/pos-display', title: 'Customer display', Component: PosDisplayPage },
       // The self-service kiosk (AGL-3623), paired the same way with a kiosk

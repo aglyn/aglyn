@@ -373,7 +373,8 @@ async function takeCash(
           settledAtMs: now,
           cashTenderedCents: tenderedCents,
           changeCents: tenderedCents - amountCents - tipCents,
-          takeFeeCents: CommerceModel.posTakeShareCents({
+          takeFeeCents: CommerceModel.posPaymentTakeShareCents({
+            method: 'cash',
             takeFeeCents: Number(order.posTakeFeeCents ?? 0),
             totalCents: total,
             amountCents,
@@ -482,7 +483,8 @@ async function takeGiftCard(
           settledAtMs: now,
           giftCardId: code,
           last4: code.slice(-4),
-          takeFeeCents: CommerceModel.posTakeShareCents({
+          takeFeeCents: CommerceModel.posPaymentTakeShareCents({
+            method: 'gift_card',
             takeFeeCents: Number(order.posTakeFeeCents ?? 0),
             totalCents: Number(order.totals?.totalCents ?? 0),
             amountCents,
@@ -610,7 +612,8 @@ async function takeCredit(
           creditReference: account.reference,
           creditLabel: account.label,
           ...(account.last4 ? { last4: account.last4 } : {}),
-          takeFeeCents: CommerceModel.posTakeShareCents({
+          takeFeeCents: CommerceModel.posPaymentTakeShareCents({
+            method: 'credit',
             takeFeeCents: Number(order.posTakeFeeCents ?? 0),
             totalCents: Number(order.totals?.totalCents ?? 0),
             amountCents,
@@ -681,7 +684,8 @@ async function takeFolio(
           settledAtMs: now,
           reservationId,
           folioAtMs: now,
-          takeFeeCents: CommerceModel.posTakeShareCents({
+          takeFeeCents: CommerceModel.posPaymentTakeShareCents({
+            method: 'folio',
             takeFeeCents: Number(order.posTakeFeeCents ?? 0),
             totalCents: Number(order.totals?.totalCents ?? 0),
             amountCents,

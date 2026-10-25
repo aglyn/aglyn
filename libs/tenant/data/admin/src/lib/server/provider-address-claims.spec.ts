@@ -34,7 +34,7 @@
  * ⛔ Every address below is synthetic.
  */
 
-import { registerProviderAddresses } from './account-emails'
+import { registerProviderAddresses, setPrimaryAccountEmail } from './account-emails'
 
 const store = new Map<string, Record<string, any>>()
 
@@ -118,10 +118,16 @@ jest.mock('./firebase-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
 }))
 
+/** Who Firebase Auth says holds an address; nobody unless a test says. */
+const mockFindUser = jest.fn(async (_address: string): Promise<any> => null)
+const mockUpdateUser = jest.fn(async (_uid: string, _update: any): Promise<void> => undefined)
+
 jest.mock('./auth-pools', () => ({
   __esModule: true,
-  findUserByEmailAcrossPools: async () => null,
-  authForPool: () => ({ updateUser: async () => undefined }),
+  findUserByEmailAcrossPools: (address: string) => mockFindUser(address),
+  authForPool: () => ({
+    updateUser: (uid: string, update: any) => mockUpdateUser(uid, update),
+  }),
 }))
 
 jest.mock('./sso-domain-policy', () => ({
@@ -137,6 +143,10 @@ const accountRow = (uid: string, address: string) =>
 
 beforeEach(() => {
   store.clear()
+  mockFindUser.mockReset()
+  mockFindUser.mockResolvedValue(null)
+  mockUpdateUser.mockReset()
+  mockUpdateUser.mockResolvedValue(undefined)
 })
 
 describe('registerProviderAddresses', () => {
@@ -279,5 +289,88 @@ describe('registerProviderAddresses', () => {
     ).resolves.toEqual({ claimed: [], conflicted: [] })
 
     failing.mockRestore()
+  })
+})
+
+/**
+ * AGL-4041. A provider address claimed for one account, then the Auth email
+ * of a NEW account that signed up with it through Google, which never looks
+ * at the index. "Make primary" on the first account used to reach
+ * `updateUser`, get EMAIL_EXISTS, and answer 500.
+ */
+describe('setPrimaryAccountEmail — an address another account now holds in Auth', () => {
+  const seed = () => {
+    store.set('users/uid_1/emails/primary@example.test', {
+      address: 'primary@example.test',
+      verified: true,
+      primary: true,
+    })
+    store.set('users/uid_1/emails/work@example.test', {
+      address: 'work@example.test',
+      verified: true,
+      primary: false,
+      source: 'provider',
+    })
+    store.set('emailIdentityIndex/work@example.test', {
+      uid: 'uid_1',
+      address: 'work@example.test',
+    })
+  }
+
+  it('refuses before touching Auth when another account holds it', async () => {
+    seed()
+    mockFindUser.mockResolvedValue({ record: { uid: 'uid_2' } })
+
+    const result = await setPrimaryAccountEmail('uid_1', 'work@example.test', {
+      tenantId: null,
+    })
+
+    expect(result).toMatchObject({ ok: false, refusal: 'claimed-by-another-account' })
+    expect(mockUpdateUser).not.toHaveBeenCalled()
+    expect(accountRow('uid_1', 'primary@example.test')?.['primary']).toBe(true)
+    expect(accountRow('uid_1', 'work@example.test')?.['primary']).toBe(false)
+  })
+
+  it('answers the same refusal when Auth says EMAIL_EXISTS anyway (a race)', async () => {
+    seed()
+    mockUpdateUser.mockRejectedValue(
+      Object.assign(new Error('The email address is already in use by another account.'), {
+        code: 'auth/email-already-exists',
+      }),
+    )
+
+    const result = await setPrimaryAccountEmail('uid_1', 'work@example.test', {
+      tenantId: null,
+    })
+
+    expect(result).toMatchObject({ ok: false, refusal: 'claimed-by-another-account' })
+    expect(accountRow('uid_1', 'primary@example.test')?.['primary']).toBe(true)
+  })
+
+  it('still throws any other Auth failure, so a real fault stays a 500', async () => {
+    seed()
+    mockUpdateUser.mockRejectedValue(
+      Object.assign(new Error('backend down'), { code: 'auth/internal-error' }),
+    )
+
+    await expect(
+      setPrimaryAccountEmail('uid_1', 'work@example.test', { tenantId: null }),
+    ).rejects.toThrow('backend down')
+  })
+
+  it('CONTROL: moves the primary when the address is free', async () => {
+    seed()
+
+    const result = await setPrimaryAccountEmail('uid_1', 'work@example.test', {
+      tenantId: null,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(mockUpdateUser).toHaveBeenCalledWith('uid_1', {
+      email: 'work@example.test',
+      emailVerified: true,
+    })
+    expect(accountRow('uid_1', 'work@example.test')?.['primary']).toBe(true)
+    expect(accountRow('uid_1', 'primary@example.test')?.['primary']).toBe(false)
   })
 })

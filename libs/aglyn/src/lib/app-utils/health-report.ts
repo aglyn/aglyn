@@ -2577,8 +2577,9 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Five GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
- * the weekly jobs, for which hours of drift cost nothing — and the rows
+ * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
+ * the weekly jobs and the daily Site Care reconciliation, for which hours of
+ * drift cost nothing — and the rows
  * driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` and `consoleAiJobsBeat`
  * (every minute), the routes the `consoleFastCrons` job carries every
@@ -2830,6 +2831,26 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 1440,
     drives:
       'Reports documents with no visibleTo — invisible to every site-scoped read (AGL-1478). Detect-only by construction, so it has no output whose age could stand in for this mark.',
+  },
+  {
+    id: 'site-care-reconcile',
+    label: 'Site Care reconciliation',
+    cron: '15 14 * * *',
+    runner: 'github-actions',
+    target: '/api/admin/site-care/reconcile',
+    // TWELVE HOURS, measured rather than borrowed (AGL-4030). The route
+    // stamps its beat at the start of the POST, so the only lateness this
+    // row has to absorb is GitHub's dispatch. From 2026-10-20 it fired every
+    // day, three to four and a half hours late (17:25Z to 18:36Z for 14:15Z),
+    // and this workflow's own history is worse on Mondays: the 13:00 daily
+    // digest landed 8h32m late on 2026-10-12 and a 07:30 weekly 9h22m late
+    // the same morning. The old six-hour daily grace would have gone red on
+    // those days with nothing wrong. Twelve hours clears the worst dispatch
+    // seen by more than two and a half hours, and a dropped day still reads
+    // `job-silent` from 02:15Z the next morning until the next run lands.
+    graceMinutes: 720,
+    drives:
+      'Compares each Site Care month total and each pending extra-time charge against Stripe every day (AGL-3959). If it stops, a difference between what was billed and what Stripe holds is never found, and staff are never told about the drift.',
   },
   {
     id: 'campaigns-process-scheduled',

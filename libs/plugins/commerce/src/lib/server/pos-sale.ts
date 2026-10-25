@@ -128,7 +128,8 @@ export function posSaleSummary(order: PosLiftedOrder) {
  *
  * Pure, so the spec can hold the arithmetic: the fee is every card payment's
  * own `application_fee_amount` plus the take the cards did not carry, the tip
- * is summed beside the total and never inside it.
+ * is summed beside the total and never inside it. Cash and gift-card parts
+ * carry no take at all (AGL-4036), so they add nothing to either half.
  */
 export function posCompletionPatch(
   order: PosLiftedOrder,
@@ -142,7 +143,7 @@ export function posCompletionPatch(
   const totalCents = Number(order.totals?.totalCents ?? 0)
   if (CommerceModel.posBalanceDueCents(totalCents, payments) > 0) return null
   const takeFeeCents = Math.max(0, Math.round(Number(order.posTakeFeeCents ?? 0)))
-  const invoiceTakeCents = CommerceModel.posInvoiceTakeCents({ takeFeeCents, payments })
+  const invoiceTakeCents = CommerceModel.posInvoiceTakeCents({ takeFeeCents, totalCents, payments })
   const settled = payments.filter((payment) => payment.status === 'succeeded')
   const cardFeeCents = settled
     .filter((payment) => CommerceModel.isCardPaymentMethod(payment.method))

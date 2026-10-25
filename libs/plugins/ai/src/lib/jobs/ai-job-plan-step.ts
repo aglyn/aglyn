@@ -20,6 +20,7 @@ import { aiSiteHomeArc, aiSiteHomeArcSentence, type AiSiteHomeArc } from '../mod
 import { aiSiteSeed } from '../model/ai-site-look'
 import { AI_SITE_INSPIRATION_INPUT } from '../model/ai-site-inspiration'
 import {
+  aiSiteInspirationBriefHasFigures,
   aiSiteInspirationHomeOrder,
   aiSiteInspirationPlanLines,
   readAiJobSiteInspiration,
@@ -1221,6 +1222,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       sells: aiSiteContentPart(job.inputs ?? null, freeTaste) === 'products',
       events: Boolean(siteEvents),
       customerWords: aiPlanHasCustomerWords({ brief: job.brief, inventory, siteKind: aiSiteKindOfInputs(job.inputs)?.id }),
+      figures: aiSiteInspirationBriefHasFigures(job.brief),
     }
     const ownOrder = Boolean(aiSiteInspirationHomeOrder(inspiration, inspirationStart))
     const prompt = [

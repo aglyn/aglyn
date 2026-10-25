@@ -52,7 +52,7 @@ import type {
   EmailDeliveryMessageSource,
 } from './email-delivery-events'
 import type { ReceivedEmailSource } from './received-email'
-import type { EmailTag } from './send-email'
+import type { EmailAttachment, EmailTag } from './send-email'
 
 /** One message, fully decided, in the shape every provider is handed. */
 export interface MailProviderMessage {
@@ -69,6 +69,8 @@ export interface MailProviderMessage {
   replyTo?: string | string[]
   /** Blind copies (AGL-3699); never on the message's own headers. */
   bcc?: string[]
+  /** Files carried with the message, base64 (AGL-4042). */
+  attachments?: EmailAttachment[]
 }
 
 /** What the provider said about one message. */
