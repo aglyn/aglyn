@@ -669,6 +669,45 @@ describe('the ordinary campaign still sends', () => {
     expect(paid.body.planLock ?? null).toBeNull()
   })
 
+  it('answers the "Send now" dry run with the plan lock', async () => {
+    // The email's own page and the native confirm sheets ask this before
+    // they offer the button, so a Free plan is said instead of a count.
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({
+        hostId: HOST,
+        action: 'sendNow',
+        campaignId: 'draft-1',
+        dryRun: true,
+      })
+
+      expect(result.body.planLock).toMatchObject({
+        kind: 'not-on-plan',
+        planLabel: 'Pro',
+      })
+      expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['status']).toBe(
+        'draft',
+      )
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+    const paid = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'draft-1',
+      dryRun: true,
+    })
+    expect(paid.body.planLock ?? null).toBeNull()
+  })
+
   it('still saves a draft on a plan with no campaign email', async () => {
     mockOrgPlan = 'free'
     try {

@@ -99,6 +99,9 @@ const mockPushed: string[] = []
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
+  // A plan with campaign email, so Send now and Send to more stay offered.
+  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
+  useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   // Signed in and able to mint an ID token: every campaign call this page
   // makes is authorized from one, and issues nothing without it.
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),

@@ -4290,37 +4290,60 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    /*
+     * THE PLAN'S ANSWER RIDES EVERY DRY RUN, refused or not.
+     *
+     * A composer asks for a preview the moment it opens, and "Send now" and
+     * "Send to more recipients" ask for a dry run before they offer their
+     * confirm, so this is where a plan without campaign email is said before
+     * any button that could only fail.
+     * The native composers draw `planLock` as it comes rather than porting
+     * the rule; the console computes the same `campaignPlanLock` from the
+     * same limit and counter. Read only when the answer is assembled, and
+     * a refusal that already carries its own lock (the cap) keeps it.
+     *
+     * A site outside an organization holds no campaign allowance to read.
+     */
+    const planLockFor = async (sendable?: number) =>
+      siteOrgId
+        ? campaignPlanLock({
+            limit: checkQuota(
+              orgForSite?.org as never,
+              'emailSendsPerMonth',
+              0,
+            ).limit,
+            used: await orgCampaignEmailSendsForMonth(
+              siteOrgId,
+              new Date().toISOString().slice(0, 7),
+            ),
+            sendable,
+          })
+        : null
+    const withPlanLock = <T extends object>(dryRun: Promise<T>) =>
+      dryRun.then(
+        async (result) => ({
+          ...result,
+          planLock: await planLockFor(
+            Number((result as { sendable?: number }).sendable ?? 0),
+          ),
+        }),
+        async (error: unknown) => {
+          if (error instanceof CampaignSendError && !error.planLock) {
+            throw new CampaignSendError(
+              error.message,
+              error.status,
+              error.reason,
+              await planLockFor(),
+            )
+          }
+          throw error
+        },
+      )
+
     if (action === 'preview') {
-      /*
-       * THE PLAN'S ANSWER RIDES EVERY PREVIEW, refused or not.
-       *
-       * A composer asks for a preview the moment it opens, so this is where
-       * a plan without campaign email is said before anything is written.
-       * The native composers draw `planLock` as it comes rather than porting
-       * the rule; the console computes the same `campaignPlanLock` from the
-       * same limit and counter. Read only when the answer is assembled, and
-       * a refusal that already carries its own lock (the cap) keeps it.
-       *
-       * A site outside an organization holds no campaign allowance to read.
-       */
-      const previewPlanLock = async (sendable?: number) =>
-        siteOrgId
-          ? campaignPlanLock({
-              limit: checkQuota(
-                orgForSite?.org as never,
-                'emailSendsPerMonth',
-                0,
-              ).limit,
-              used: await orgCampaignEmailSendsForMonth(
-                siteOrgId,
-                new Date().toISOString().slice(0, 7),
-              ),
-              sendable,
-            })
-          : null
       // Read-only, and it needs the same admin/editor role as a send: the
       // audience size of someone else's site is not public information.
-      const result = await performCampaignSend({
+      const result = await withPlanLock(performCampaignSend({
         hostId,
         subject: subject || 'preview',
         body: body || 'preview',
@@ -4343,23 +4366,8 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         ...(senderId ? { senderId } : {}),
         senderUid: decoded.uid,
         dryRun: true,
-      }).catch(async (error: unknown) => {
-        if (error instanceof CampaignSendError && !error.planLock) {
-          throw new CampaignSendError(
-            error.message,
-            error.status,
-            error.reason,
-            await previewPlanLock(),
-          )
-        }
-        throw error
-      })
-      return res.status(200).json({
-        ...result,
-        planLock: await previewPlanLock(
-          Number((result as { sendable?: number }).sendable ?? 0),
-        ),
-      })
+      }))
+      return res.status(200).json(result)
     }
 
     if (action === 'followUp') {
@@ -4386,10 +4394,13 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!sendSnapshot.exists || !sendIsOnHost(sendSnapshot, hostId)) {
         return res.status(404).json({ error: 'Unknown email' })
       }
-      const result = await performCampaignSend({
+      const followUpSend = performCampaignSend({
         ...storedSendOptionsFrom(sendSnapshot, hostId, decoded.uid, true),
         ...(req.body?.dryRun ? { dryRun: true } : {}),
       })
+      const result = await (req.body?.dryRun
+        ? withPlanLock(followUpSend)
+        : followUpSend)
       return res.status(200).json(result)
     }
 
@@ -4766,10 +4777,13 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           .json({ error: 'This email is already being sent' })
       }
       try {
-        const result = await performCampaignSend({
+        const sendNowSend = performCampaignSend({
           ...storedSendOptionsFrom(sendNowSnapshot, hostId, decoded.uid, false),
           ...(req.body?.dryRun ? { dryRun: true } : {}),
         })
+        const result = await (req.body?.dryRun
+          ? withPlanLock(sendNowSend)
+          : sendNowSend)
         /*
          * A dry run writes nothing, so the claim above is the only change it
          * made and it has to be put back — otherwise asking how many people
