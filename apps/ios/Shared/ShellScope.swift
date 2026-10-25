@@ -137,6 +137,20 @@ struct ShellScope {
     list.groups.first { $0.rows.contains { row($0, holds: section) } }?.id
   }
 
+  /// A sidebar group's key in the remembered fold state: its scope kind and id (`site.sell`).
+  static func groupKey(_ groupID: String, in list: ResolvedNavList) -> String { "\(list.id.rawValue).\(groupID)" }
+
+  /// Whether a group is open before the person has folded or opened it: Starred is (Figma 12:703); the rest fold.
+  static func openAtRest(_ group: NativeNavGroup) -> Bool { group.dynamic == "starred" }
+
+  /// Opens the group holding `section` when it is folded, and nothing else (AGL-3996: no accordion).
+  static func reveal(_ section: ShellSection, in list: ResolvedNavList, groups: inout AglynSidebarGroups) {
+    guard let id = group(holding: section, in: list), let group = list.groups.first(where: { $0.id == id }),
+      group.foldable
+    else { return }
+    groups.reveal(groupKey(id, in: list), openAtRest: openAtRest(group))
+  }
+
   /// The row a section belongs to, for its area's sections and actions.
   func row(for section: ShellSection) -> NativeNavRow? {
     currentList.groups.flatMap(\.rows).first { Self.row($0, holds: section) }
@@ -159,7 +173,8 @@ extension NativeNavRow {
 
 extension AppModel {
   /// The color a workspace shows on the rail and tints the app with (`resolveWorkspaceColor`): the person's pick, its
-  /// brand color, else a color taken from its logo.
+  /// brand color, a color taken from its logo, else its stable color from its id (`workspaceStableColor`), which colors
+  /// its tile only.
   func workspaceColor(_ orgID: String?) -> WorkspaceColor {
     guard let orgID else { return resolveWorkspaceColor(picked: nil, brandColor: nil, logoColor: nil, useWorkspaceBrand: false) }
     let logo = workspace?.orgLogos[orgID]
@@ -168,7 +183,8 @@ extension AppModel {
     // The logo is only read when nothing before it gives a color.
     let logoColor = picked == nil && brand == nil ? AglynLogoColors.shared.color(for: mediaURL(logo?.light, hostID: nil)) : nil
     return resolveWorkspaceColor(
-      picked: picked, brandColor: brand, logoColor: logoColor, useWorkspaceBrand: preferences?.appTheme.useWorkspaceBrand ?? true)
+      picked: picked, brandColor: brand, logoColor: logoColor, useWorkspaceBrand: preferences?.appTheme.useWorkspaceBrand ?? true,
+      orgID: orgID)
   }
 
   /// The account item for a sidebar row in the window's scope, to star or record as recent.

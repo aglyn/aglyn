@@ -21,8 +21,9 @@ extension AglynColor {
     guard runtime.sidebarTinted, runtime.theme.id != "aglyn", let accent = runtime.accentIntent(dark: dark) else { return surface }
     return blend(surface, accent.main, 0.05)
   }
-  /// A tile with no color of its own: the palette's slate.
-  public static let neutralTile = adaptive(light: AglynTokens.light.tertiary.main, dark: AglynTokens.dark.grey[700] ?? .gray)
+  /// A tile with no color of its own (no workspace id to take a stable color from): the brand slate in both
+  /// appearances, the light palette's tertiary.
+  public static let neutralTile = AglynTokens.light.tertiary.main
   /// A count that asks for action (unread, waiting): the secondary intent's fill.
   public static let badge = intent({ $0.secondary }, \.main)
   public static let badgeText = intent({ $0.secondary }, \.contrastText)

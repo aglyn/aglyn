@@ -16,6 +16,8 @@ struct WorkspaceRail: View {
   @Environment(ShellNavigation.self) private var navigation
   /// Unread notifications, by workspace.
   let unread: [String: Int]
+  /// The name bubble beside the tile under the pointer (AGL-3996).
+  @State private var tooltip = AglynRailTooltipState()
 
   static var width: CGFloat { AglynShellMetrics.railWidth }
 
@@ -41,7 +43,7 @@ struct WorkspaceRail: View {
               AglynRailButton(systemImage: "square.grid.2x2", caption: "\(rail.total)", size: AglynShellMetrics.tile)
             }
             .buttonStyle(.plain)
-            .help("All workspaces")
+            .aglynRailTooltip("All workspaces", id: "rail-all-workspaces", state: tooltip)
             .accessibilityLabel("All workspaces, \(rail.total)")
             .accessibilityIdentifier("rail-all-workspaces")
           }
@@ -59,15 +61,19 @@ struct WorkspaceRail: View {
             AglynRailButton(systemImage: "shield", size: AglynShellMetrics.utility)
           }
           .buttonStyle(.plain)
-          .help("Admin")
+          .aglynRailTooltip("Admin", id: "rail-admin", state: tooltip)
           .accessibilityLabel("Admin")
           .accessibilityIdentifier("rail-admin")
         }
         CreateNewButton()
+          .aglynRailTooltip("Create new", id: "rail-create", state: tooltip)
         AccountMenuButton(size: AglynShellMetrics.avatar)
+          .aglynRailTooltip(AccountIdentity(model: model).name, id: "rail-account", state: tooltip)
       }
       .padding(.vertical, 12)
     }
+    // Outside the scroll view, so a bubble is never clipped by it; WideShell raises the rail over the sidebar.
+    .aglynRailTooltipHost(tooltip)
     .frame(width: Self.width)
     .frame(maxHeight: .infinity)
     .background(AglynColor.rail)
@@ -98,7 +104,7 @@ struct WorkspaceRail: View {
   /// Between the rail's sections: a hairline in border/strong, which reads on the rail's tinted ground where the
   /// sidebar's border/subtle vanished (AGL-3996).
   private var railDivider: some View {
-    Rectangle().fill(AglynColor.dividerStrong).frame(width: AglynShellMetrics.railDivider, height: 1)
+    Rectangle().fill(AglynColor.borderStrong).frame(width: AglynShellMetrics.railDivider, height: 1)
       .accessibilityHidden(true)
   }
 
@@ -115,6 +121,7 @@ struct WorkspaceRail: View {
           name: org.name, logoURL: model.mediaURL(logo?.light, hostID: nil),
           darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(orgID).color,
           selected: selected, unread: unread[orgID] ?? 0, initials: workspaceInitial(org.name))
+          .aglynRailTooltip(org.name, id: orgID, state: tooltip)
       }
       .buttonStyle(.plain)
       // The workspace in use: a 3-point bar at the rail's leading edge beside its ring.
@@ -125,7 +132,6 @@ struct WorkspaceRail: View {
             .fill(AglynColor.accentIcon).frame(width: AglynShellMetrics.railBar.width, height: AglynShellMetrics.railBar.height)
         }
       }
-      .help(pinned ? "\(org.name) (⌘\((pins.firstIndex(of: orgID) ?? 0) + 1))" : org.name)
       .accessibilityIdentifier("rail-org-\(orgID)")
       .contextMenu { RailTileMenu(org: org) }
       if pinned {
@@ -157,8 +163,18 @@ struct WorkspaceRail: View {
   }
 }
 
-/// Right-click a rail tile: Pin or Unpin, Move up, Move down, Workspace color, Workspace settings.
+/// Right-click (or, on a touch screen, long-press) a rail tile: the workspace's name as the menu's title, then Pin or
+/// Unpin, Move up, Move down, Workspace color, Workspace settings. The title is how a touch screen names a tile, since
+/// it has no pointer to show the bubble.
 struct RailTileMenu: View {
+  let org: WorkspaceOrg
+
+  var body: some View {
+    Section(org.name) { RailTileMenuItems(org: org) }
+  }
+}
+
+private struct RailTileMenuItems: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let org: WorkspaceOrg
@@ -203,7 +219,6 @@ struct CreateNewButton: View {
     .buttonStyle(.plain)
     .menuIndicator(.hidden)
     .fixedSize()
-    .help("Create new")
     .accessibilityLabel("Create new")
     .accessibilityIdentifier("rail-create")
   }
