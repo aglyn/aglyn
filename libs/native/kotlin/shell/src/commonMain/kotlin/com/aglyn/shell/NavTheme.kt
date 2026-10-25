@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -268,7 +269,7 @@ private fun CustomAccentDialog(initial: String?, onDone: (String?) -> Unit) {
   val color = colorOfHex(text.trim())
   AlertDialog(
     onDismissRequest = { onDone(null) },
-    modifier = Modifier.widthIn(max = 420.dp).testTag("accent-custom-dialog"),
+    modifier = Modifier.widthIn(max = 420.dp).sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("accent-custom-dialog"),
     title = { Text("Custom accent") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

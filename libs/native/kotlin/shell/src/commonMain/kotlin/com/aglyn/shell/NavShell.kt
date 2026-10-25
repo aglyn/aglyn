@@ -1,5 +1,7 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
@@ -424,15 +426,39 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
     // The ☆ for the place on screen: a screen's title row draws it (the shared list scaffold); else the breadcrumbs do.
     val starSlot = remember(here) { here?.let { item -> com.aglyn.ui.PageStarSlot { StarButton(services, item, prefs) } } }
+    // The content area moves between places (Figma Motion 121:6163 / 121:6714, as Apple's AGL-4009): a pushed screen
+    // slides in from the trailing side and an uncovered one from the leading side, fading in on the drill's spring; another
+    // destination, section or tab cross-fades. Reduce Motion keeps the fades.
+    val place = ContentPlace(tabKey, navigator.currentKey, navigator.stack.size, navigator.top, route)
+    val reduce = com.aglyn.ui.reduceMotion()
+    val pushOffset = with(androidx.compose.ui.platform.LocalDensity.current) { com.aglyn.ui.ShellMotion.PUSH_OFFSET.roundToPx() }
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val body: @Composable () -> Unit = {
-      CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle, com.aglyn.ui.LocalPageStar provides starSlot) {
-        entries.SaveableStateProvider(tabKey + navigator.currentKey) {
-          ShellBody(
-            services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff,
-            searchResults = { query ->
-              SearchResultsScreen(services, workspace, enabled, hostAdmin, query) { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) }
-            },
-          ) { chrome.colorFor = it }
+      androidx.compose.animation.AnimatedContent(
+        place,
+        modifier = Modifier.fillMaxSize(),
+        contentKey = { it.tab + it.key },
+        transitionSpec = { contentTransform(initialState, targetState, reduce, if (rtl) -pushOffset else pushOffset) },
+        label = "content",
+      ) { shown ->
+        // A place keeps the title and ☆ slots it had while it was in front, so while it leaves it never writes into the
+        // arriving place's.
+        val front = shown.tab + shown.key == place.tab + place.key
+        val heldTitle = remember { SlotRef(screenTitle) }
+        val heldStar = remember { SlotRef(starSlot) }
+        if (front) {
+          heldTitle.value = screenTitle
+          heldStar.value = starSlot
+        }
+        CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides heldTitle.value, com.aglyn.ui.LocalPageStar provides heldStar.value) {
+          entries.SaveableStateProvider(shown.tab + shown.key) {
+            ShellBody(
+              services, context, navigator, workspace, widthClass, uid, shown.route, shown.top, openInBrowser, banner, screenSession.claims.isStaff,
+              searchResults = { query ->
+                SearchResultsScreen(services, workspace, enabled, hostAdmin, query) { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) }
+              },
+            ) { chrome.colorFor = it }
+          }
         }
       }
     }
@@ -787,6 +813,8 @@ private fun ShellBody(
   widthClass: WidthClass,
   uid: String,
   route: Route?,
+  /** The destination this content shows ([ShellNavigator.top] when it was in front). */
+  top: String,
   openInBrowser: (String) -> Unit,
   banner: @Composable () -> Unit,
   staff: Boolean,
@@ -802,7 +830,7 @@ private fun ShellBody(
     Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
     Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
     Route.ThemeSettings -> ThemeSettingsScreen(services, workspace, onWorkspaceColor)
-    null -> when (val top = navigator.top) {
+    null -> when (top) {
       ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
       ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
       ShellNavigator.SETTINGS -> SettingsScreen(services, context, staff, onTheme = { navigator.push(Route.ThemeSettings) }) { navigator.push(Route.NotificationSettings) }
@@ -1055,6 +1083,7 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
   if (full) {
     androidx.compose.material3.AlertDialog(
       onDismissRequest = { full = false },
+      modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW),
       title = { Text("Starred is full") },
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
       confirmButton = { com.aglyn.ui.TextButton(onClick = { full = false }) { Text("OK") } },
@@ -1188,3 +1217,40 @@ internal fun HomeTabMark(services: ShellServices, workspace: com.aglyn.core.Work
     Box(Modifier.size(0.dp).testTag("home-tab-brand-mark"))
   }
 }
+
+/** One place the content area shows: a tab's destination or a screen pushed on it, so a change can pick its motion. */
+internal data class ContentPlace(val tab: String, val key: String, val depth: Int, val top: String, val route: Route?)
+
+/** How the content area moves from one place to the next. */
+internal enum class ContentMotion { PUSH, POP, FADE }
+
+/**
+ * A screen pushed on the same destination slides in (PUSH); one uncovered by going back slides in from the other side
+ * (POP); anything else (another destination, section or tab, or the drill between workspace and site) cross-fades.
+ */
+internal fun contentMotion(from: ContentPlace, to: ContentPlace): ContentMotion = when {
+  from.tab != to.tab || from.top != to.top -> ContentMotion.FADE
+  to.depth > from.depth -> ContentMotion.PUSH
+  to.depth < from.depth -> ContentMotion.POP
+  else -> ContentMotion.FADE
+}
+
+/**
+ * The motion's transform: a push or pop brings the arriving screen [offsetPx] in from the trailing (or leading) side and
+ * fades it in on the drill's spring (about 250 ms) while the leaving one fades out; a cross-fade is 150 ms. Reduce Motion
+ * keeps only the fades, at the same durations.
+ */
+internal fun contentTransform(from: ContentPlace, to: ContentPlace, reduce: Boolean, offsetPx: Int): androidx.compose.animation.ContentTransform {
+  val motion = contentMotion(from, to)
+  val fadeOut = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(com.aglyn.ui.ShellMotion.CROSS_FADE_MS))
+  if (motion == ContentMotion.FADE) {
+    return androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.aglyn.ui.ShellMotion.CROSS_FADE_MS)) togetherWith fadeOut
+  }
+  val fadeIn = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.aglyn.ui.ShellMotion.DRILL_MS))
+  if (reduce) return fadeIn togetherWith fadeOut
+  val startX = if (motion == ContentMotion.PUSH) offsetPx else -offsetPx
+  return (androidx.compose.animation.slideInHorizontally(com.aglyn.ui.ShellMotion.drill()) { startX } + fadeIn) togetherWith fadeOut
+}
+
+/** A plain holder a composition keeps (not state: reading it never subscribes). */
+private class SlotRef<T>(var value: T)

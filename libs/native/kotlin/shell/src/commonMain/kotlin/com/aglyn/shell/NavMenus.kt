@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -204,7 +205,7 @@ internal fun PinnedFullDialog(services: ShellServices, workspace: WorkspaceState
   var replacing by remember { mutableStateOf<String?>(null) }
   AlertDialog(
     onDismissRequest = onDone,
-    modifier = Modifier.testTag("pinned-full-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("pinned-full-dialog"),
     title = { Text("Pinned is full. Replace one?") },
     text = {
       Column {
@@ -248,7 +249,7 @@ internal fun KeepPinsDialog(services: ShellServices, workspace: WorkspaceState, 
   val kept = remember { mutableStateListOf<String>().apply { addAll(prefs.pinned) } }
   AlertDialog(
     onDismissRequest = onLater,
-    modifier = Modifier.testTag("keep-pins-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("keep-pins-dialog"),
     title = { Text("Keep which $max pins?") },
     text = {
       Column {
@@ -298,7 +299,7 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
   val (light, dark) = orgLogoUrls(workspace, orgId, services.api.origin)
   AlertDialog(
     onDismissRequest = onDone,
-    modifier = Modifier.testTag("workspace-color-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("workspace-color-dialog"),
     title = { Text("Workspace color") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

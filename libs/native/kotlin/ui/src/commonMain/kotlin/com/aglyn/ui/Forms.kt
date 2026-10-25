@@ -145,7 +145,7 @@ fun ActionDialog(
   val shownError = if (confirmed) error else error?.takeIf { it != openedWith }
   AlertDialog(
     onDismissRequest = { if (!busy) onDismiss() },
-    modifier = modifier.testTag("action-dialog"),
+    modifier = modifier.sheetEntrance(SheetEntrance.GROW).testTag("action-dialog"),
     // The glyph says what kind of act it is: the error color for a destructive one, else the brand primary.
     icon = icon?.let { name -> { Icon(AglynIcons.named(name), contentDescription = null, tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) } },
     title = { Text(title) },

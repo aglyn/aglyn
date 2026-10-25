@@ -276,8 +276,8 @@ fun AglynListDetail(
         val crumbs = LocalPageCrumbs.current
         if (crumbs != null) {
           androidx.compose.runtime.DisposableEffect(crumbs) {
-            crumbs.claimed = true
-            onDispose { crumbs.claimed = false }
+            crumbs.claim()
+            onDispose { crumbs.release() }
           }
         }
         // One edge E per column. A list pane and a detail pane each pad their own content by 16 (DetailPanePadding), so

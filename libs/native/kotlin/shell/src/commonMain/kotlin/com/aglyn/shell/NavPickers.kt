@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -327,7 +328,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
   val scope = rememberCoroutineScope()
   AlertDialog(
     onDismissRequest = { if (!busy) open = false },
-    modifier = Modifier.testTag("add-workspace-dialog"),
+    modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("add-workspace-dialog"),
     title = { Text("Add a workspace") },
     text = {
       OutlinedTextField(

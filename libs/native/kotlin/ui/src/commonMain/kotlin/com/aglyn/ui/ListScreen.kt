@@ -50,7 +50,14 @@ import androidx.compose.ui.unit.dp
  */
 @Stable
 class PageStarSlot(val star: @Composable () -> Unit) {
-  var claimed by mutableStateOf(false)
+  /**
+   * How many screens on screen claim it. A count, not a flag: while the content area moves from one screen to the next
+   * both are composed, and the leaving one's release must not undo the arriving one's claim (AGL-4013).
+   */
+  private var claims by mutableStateOf(0)
+  val claimed: Boolean get() = claims > 0
+  fun claim() { claims++ }
+  fun release() { claims = (claims - 1).coerceAtLeast(0) }
 }
 
 val LocalPageStar = staticCompositionLocalOf<PageStarSlot?> { null }
@@ -62,7 +69,11 @@ val LocalPageStar = staticCompositionLocalOf<PageStarSlot?> { null }
 @Stable
 class PageCrumbsSlot {
   var crumbs: @Composable () -> Unit by mutableStateOf({})
-  var claimed by mutableStateOf(false)
+  /** How many screens claim them; a count for the same reason as [PageStarSlot]'s. */
+  private var claims by mutableStateOf(0)
+  val claimed: Boolean get() = claims > 0
+  fun claim() { claims++ }
+  fun release() { claims = (claims - 1).coerceAtLeast(0) }
 }
 
 val LocalPageCrumbs = staticCompositionLocalOf<PageCrumbsSlot?> { null }
@@ -162,8 +173,8 @@ fun ListScreenScaffold(
   val star = LocalPageStar.current
   if (star != null) {
     DisposableEffect(star) {
-      star.claimed = true
-      onDispose { star.claimed = false }
+      star.claim()
+      onDispose { star.release() }
     }
   }
   val metrics = LocalShellMetrics.current

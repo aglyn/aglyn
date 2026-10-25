@@ -196,6 +196,7 @@ fun DateTimeField(
     val state = rememberTimePickerState(initialHour = (ofDay / 3_600_000L).toInt(), initialMinute = ((ofDay / 60_000L) % 60).toInt(), is24Hour = true)
     AlertDialog(
       onDismissRequest = { step = 0 },
+      modifier = Modifier.sheetEntrance(SheetEntrance.GROW),
       title = { Text("Time (UTC)") },
       text = { Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.verticalScroll(rememberScrollState())) { TimePicker(state) } },
       confirmButton = {
