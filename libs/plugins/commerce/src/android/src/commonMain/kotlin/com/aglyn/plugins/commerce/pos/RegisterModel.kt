@@ -75,6 +75,8 @@ class RegisterModel(
   kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
   /** The receipt printers route. */
   printersApi: PosPrintersApi = OfflinePosPrinters,
+  /** The day report route (Day totals in the register sheet). */
+  val dayReportApi: PosDayReportApi = OfflinePosDayReport,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 

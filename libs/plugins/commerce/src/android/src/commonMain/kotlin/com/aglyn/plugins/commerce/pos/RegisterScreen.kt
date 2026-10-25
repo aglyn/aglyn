@@ -161,6 +161,7 @@ private fun RegisterScreenBody(context: NativePluginContext) {
       displayApi = ConsolePosDisplayApi(context.api, hostId),
       kioskQueueApi = ConsolePosKioskQueueApi(context.api, hostId),
       printersApi = ConsolePosPrintersApi(context.api, hostId),
+      dayReportApi = ConsolePosDayReportApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
