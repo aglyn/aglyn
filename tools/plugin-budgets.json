@@ -13,8 +13,10 @@
     "budget": 28672
   },
   "commerce": {
-    "baseline": 154458,
-    "budget": 193536
+    "baseline": 195532,
+    "budget": 205824,
+    "headroom": 1.05,
+    "note": "Re-baselined 2026-10-25 at 190.9 KB eager (was 150.8 KB at the last baseline, against a 189.0 KB budget) after beta.282's POS work (AGL-4036/4037/4038/4043) took the storefront's eager bytes past it; the product model now validates a variant's check-in setting. Headroom is cut to 5% so the next growth is looked at, not absorbed. Making the member/return/review widgets lazy (`--why commerce`) is the follow-up that earns headroom back."
   },
   "marketplace": {
     "baseline": 248508,
