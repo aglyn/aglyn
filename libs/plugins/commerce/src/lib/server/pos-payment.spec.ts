@@ -304,6 +304,11 @@ function sale() {
   return fakeDocs.get(ORDER) as any
 }
 
+/** The org-month the invoiced part of a sale's take accrues to (AGL-2111). */
+function accrual() {
+  return fakeDocs.get(`orgs/org-1/offlineFees/${new Date().toISOString().slice(0, 7)}`) as any
+}
+
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
@@ -343,13 +348,12 @@ describe('split tender', () => {
     expect(last.body.completed).toBe(true)
     expect(last.body.sale.payments.at(-1)).toMatchObject({ amountCents: 4500, changeCents: 500 })
     expect(sale().status).toBe('paid')
-    // No card took a share, so the whole take is on the invoice, exactly once.
-    expect(fakeDocs.get(`orgs/org-1/offlineFees/${new Date().toISOString().slice(0, 7)}`)).toMatchObject({
-      feeCents: 200,
-      orders: 1,
-    })
-    expect(sale().totals.feeCents).toBe(200)
-    expect(sale().feeCollection).toBe('invoice')
+    // Cash and gift card carry no platform fee (AGL-4036): nothing is owed,
+    // nothing goes on the invoice.
+    expect(accrual()).toBeUndefined()
+    expect(sale().totals.feeCents).toBe(0)
+    expect(sale().feeCollection).toBeUndefined()
+    expect(sale().payments.map((payment: any) => payment.takeFeeCents)).toEqual([0, 0, 0])
     expect(mockDecrement).toHaveBeenCalledTimes(1)
     expect(mockSaleCompleted).toEqual(['sale-1'])
   })
@@ -374,6 +378,89 @@ describe('split tender', () => {
     const over = await act({ action: 'card-keyed', amountCents: 2000 }, 'c')
     expect(over.status).toBe(409)
     expect(stripeCalls).toHaveLength(0)
+  })
+})
+
+/*
+ * NO PLATFORM FEE ON CASH OR GIFT CARD (AGL-4036). The seeded sale is $100.00
+ * with a $2.00 take. Card parts keep their share, netted from their payout; a
+ * room charge keeps its share, on the invoice; cash and gift-card parts owe
+ * nothing.
+ */
+describe('the platform fee on a split sale (AGL-4036)', () => {
+  it('gift card only: no fee and nothing accrued', async () => {
+    fakeDocs.set('hosts/host-1/giftCards/GIFTCARD09', { balanceCents: 20_000 })
+    const paid = await act({ action: 'gift-card', code: 'GIFTCARD09' }, 'g9')
+    expect(paid.body.completed).toBe(true)
+    expect(sale().payments[0]).toMatchObject({ method: 'gift_card', takeFeeCents: 0, feeCents: 0 })
+    expect(sale().totals.feeCents).toBe(0)
+    expect(sale().feeCollection).toBeUndefined()
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('room charge only: the whole take, accrued to the invoice', async () => {
+    fakeDocs.set('hosts/host-1/reservations/stay-9', { status: 'checked-in' })
+    const paid = await act({ action: 'folio', reservationId: 'stay-9' }, 'f9')
+    expect(paid.body.completed).toBe(true)
+    expect(sale().payments[0]).toMatchObject({ method: 'folio', takeFeeCents: 200 })
+    expect(sale().totals.feeCents).toBe(200)
+    expect(sale().feeCollection).toBe('invoice')
+    expect(accrual()).toMatchObject({ feeCents: 200, orders: 1 })
+  })
+
+  it('room charge + cash: only the room-charge share is accrued', async () => {
+    fakeDocs.set('hosts/host-1/reservations/stay-9', { status: 'checked-in' })
+    await act({ action: 'folio', reservationId: 'stay-9', amountCents: 3000 }, 'f1')
+    const paid = await act({ action: 'cash', tenderedCents: 7000 }, 'c1')
+    expect(paid.body.completed).toBe(true)
+    expect(sale().payments.map((payment: any) => [payment.method, payment.takeFeeCents])).toEqual([
+      ['folio', 60],
+      ['cash', 0],
+    ])
+    expect(sale().totals.feeCents).toBe(60)
+    expect(sale().feeCollection).toBe('invoice')
+    expect(accrual()).toMatchObject({ feeCents: 60, orders: 1 })
+  })
+
+  it('card + cash: the card carries its share in its own fee, and nothing is invoiced', async () => {
+    const card = await act({ action: 'card-keyed', amountCents: 6000, paymentMethodId: 'pm_cardVisa1234' }, 'k1')
+    expect(card.status).toBe(200)
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    // 60% of the $2.00 take, plus Stripe's cost on the $60.00 charge.
+    expect(Number(create.params.get('application_fee_amount'))).toBe(120 + posCardProcessingCostCents(6000))
+    const paid = await act({ action: 'cash', tenderedCents: 4000 }, 'c1')
+    expect(paid.body.completed).toBe(true)
+    expect(sale().payments.map((payment: any) => [payment.method, payment.takeFeeCents])).toEqual([
+      ['card_keyed', 120],
+      ['cash', 0],
+    ])
+    expect(sale().totals.feeCents).toBe(120 + posCardProcessingCostCents(6000))
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('card + gift card: the card carries its share, and nothing is invoiced', async () => {
+    fakeDocs.set('hosts/host-1/giftCards/GIFTCARD10', { balanceCents: 2500 })
+    await act({ action: 'gift-card', code: 'GIFTCARD10' }, 'g1')
+    const card = await act({ action: 'card-keyed', amountCents: 7500, paymentMethodId: 'pm_cardVisa1234' }, 'k1')
+    expect(card.body.completed).toBe(true)
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    expect(Number(create.params.get('application_fee_amount'))).toBe(150 + posCardProcessingCostCents(7500))
+    expect(sale().payments.map((payment: any) => [payment.method, payment.takeFeeCents])).toEqual([
+      ['gift_card', 0],
+      ['card_keyed', 150],
+    ])
+    expect(sale().totals.feeCents).toBe(150 + posCardProcessingCostCents(7500))
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('a 0% plan owes nothing on a room charge either', async () => {
+    seedSale(10_000, 0)
+    fakeDocs.set('hosts/host-1/reservations/stay-9', { status: 'checked-in' })
+    await act({ action: 'folio', reservationId: 'stay-9' }, 'f0')
+    expect(sale().status).toBe('paid')
+    expect(sale().totals.feeCents).toBe(0)
+    expect(sale().feeCollection).toBeUndefined()
+    expect(accrual()).toBeUndefined()
   })
 })
 
