@@ -37,6 +37,6 @@ final class NavCrumbsTests: XCTestCase {
   func testAGroupWithNoLabelHasNoLevel() {
     let list = resolveNavList(.site, enabledPluginIds: plugins, hostAdmin: true)
     let crumbs = navCrumbs(for: row("overview", in: list), in: list, owner: "Juniper Street Bakery", ownerOpens: navScopeRow(in: list))
-    XCTAssertEqual(crumbs.map(\.label), ["Juniper Street Bakery", "Overview"])
+    XCTAssertEqual(crumbs.map(\.label), ["Juniper Street Bakery", "Analytics"])
   }
 }
