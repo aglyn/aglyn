@@ -135,7 +135,7 @@ fun ChoiceDialog(
 ) {
   androidx.compose.material3.AlertDialog(
     onDismissRequest = onDismiss,
-    modifier = modifier.testTag("choice-dialog"),
+    modifier = modifier.sheetEntrance(SheetEntrance.GROW).testTag("choice-dialog"),
     title = { Text(title) },
     text = {
       Column {

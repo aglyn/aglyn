@@ -60,6 +60,40 @@ class ContentMotionTest {
     assertTrue(early - settled > 8.dp, "the pushed screen starts to the trailing side: early $early, settled $settled")
     assertTrue(early - settled <= 40.dp, "no further than the 40 dp offset: early $early, settled $settled")
   }
+
+  /**
+   * The push frame by frame at 60 fps: the pushed screen's leading edge at each 16 ms frame. It starts no further than the
+   * 40 dp offset, only ever travels toward its place (the drill's spring barely overshoots), and has settled by 400 ms.
+   * Set AGLYN_CONTENT_FRAMES=<file> to keep the table (frame | ms | offset dp).
+   */
+  @Test
+  fun aPushFrameByFrameIsOneSmoothMove() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-account") > 0 }
+    runOnIdle { navigator.select(ShellNavigator.SETTINGS) }
+    waitForIdle()
+    mainClock.autoAdvance = false
+    runOnIdle { navigator.push(Route.ThemeSettings) }
+    mainClock.advanceTimeByFrame()
+    val lefts = (0 until 30).map {
+      mainClock.advanceTimeBy(16)
+      onNodeWithTag("theme-settings").getBoundsInRoot().left
+    }
+    mainClock.advanceTimeBy(800)
+    val settled = onNodeWithTag("theme-settings").getBoundsInRoot().left
+    mainClock.autoAdvance = true
+    val offsets = lefts.map { (it - settled).value }
+    (System.getProperty("aglyn.contentFrames") ?: System.getenv("AGLYN_CONTENT_FRAMES"))?.let { path ->
+      java.io.File(path).writeText(
+        "frame | ms | offset dp\n" + offsets.mapIndexed { i, o -> "${i + 1} | ${(i + 1) * 16} | ${"%.2f".format(o)}" }.joinToString("\n") + "\n",
+      )
+    }
+    assertTrue(offsets.first() <= 40f, "starts within the 40 dp offset: $offsets")
+    for (i in 1 until offsets.size) assertTrue(offsets[i] <= offsets[i - 1] + 0.5f, "frame ${i + 1} moved back: $offsets")
+    assertTrue(offsets.drop(24).all { kotlin.math.abs(it) <= 0.5f }, "settled by 400 ms: $offsets")
+  }
 }
 @OptIn(ExperimentalTestApi::class)
 private fun androidx.compose.ui.test.ComposeUiTest.onAllNodesWithTagCount(tag: String): Int =

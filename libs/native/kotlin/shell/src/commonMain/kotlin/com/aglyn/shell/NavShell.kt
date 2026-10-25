@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -1022,6 +1023,7 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
   if (full) {
     androidx.compose.material3.AlertDialog(
       onDismissRequest = { full = false },
+      modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW),
       title = { Text("Starred is full") },
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
       confirmButton = { androidx.compose.material3.TextButton(onClick = { full = false }) { Text("OK") } },

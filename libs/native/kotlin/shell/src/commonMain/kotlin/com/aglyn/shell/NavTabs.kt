@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -144,7 +145,7 @@ internal fun TabOverview(tabs: ShellTabs, onSelect: (ShellTab) -> Unit, onReopen
   var query by remember { mutableStateOf("") }
   AlertDialog(
     onDismissRequest = { tabs.overview = false },
-    modifier = Modifier.widthIn(min = 520.dp).testTag("tab-overview-dialog"),
+    modifier = Modifier.widthIn(min = 520.dp).sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("tab-overview-dialog"),
     title = { Text("Tabs") },
     text = {
       Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
