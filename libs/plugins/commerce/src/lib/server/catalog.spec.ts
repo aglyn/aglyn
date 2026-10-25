@@ -730,3 +730,58 @@ describe('the card a catalog item draws', () => {
     expect(many).not.toHaveProperty('defaultVariantId')
   })
 })
+
+describe('a product sold in person only (AGL-4060)', () => {
+  /*
+   * `sellOnline: false` keeps a product on the register, the kiosk and the
+   * POS apps and off every grid. Absent reads as on — every product stored
+   * before the switch — so no query can ask for it, and the page drops the
+   * in-person ones and reads on.
+   */
+  beforeEach(() => {
+    seedProduct('a-hat', { name: 'A Hat', variants: [{ id: 'default', priceUsd: 30, inventory: null }] })
+    seedProduct('b-reader', {
+      name: 'B Reader',
+      sellOnline: false,
+      tags: ['hardware'],
+      variants: [{ id: 'default', priceUsd: 5, inventory: null }],
+    })
+    seedProduct('c-reader', {
+      name: 'C Reader',
+      sellOnline: false,
+      tags: ['hardware'],
+      variants: [{ id: 'default', priceUsd: 99, inventory: null }],
+    })
+    seedProduct('d-mug', { name: 'D Mug', sellOnline: true, variants: [{ id: 'default', priceUsd: 12, inventory: null }] })
+    seedProduct('e-tee', { name: 'E Tee', variants: [{ id: 'default', priceUsd: 20, inventory: null }] })
+  })
+
+  it('is in no grid, search or tag, and the page fills past it', async () => {
+    expect(names(await run({}))).toEqual(['A Hat', 'D Mug', 'E Tee'])
+    expect(names(await run({ q: 'reader' }))).toEqual([])
+    expect(names(await run({ tag: 'hardware' }))).toEqual([])
+    // A page of two reads on past the two in-person products, and its cursor
+    // continues after the last row it read, with no gap and no repeat.
+    const first = await run({ limit: '2' })
+    expect(names(first)).toEqual(['A Hat', 'D Mug'])
+    const second = await run({ limit: '2', after: first.body.nextCursor })
+    expect(names(second)).toEqual(['E Tee'])
+    expect(second.body.nextCursor).toBeUndefined()
+  })
+
+  it('never anchors the price slider', async () => {
+    expect((await run({ facets: '1' })).body.priceBounds).toEqual({ minCents: 1200, maxCents: 3000 })
+  })
+
+  it('is left out of an id list and a manual collection', async () => {
+    expect(names(await run({ ids: 'b-reader,a-hat,c-reader' }))).toEqual(['A Hat'])
+    fake.seed(`${HOST}/collections/kit`, {
+      kind: 'catalog',
+      name: 'Kit',
+      slug: 'kit',
+      mode: 'manual',
+      productIds: ['b-reader', 'd-mug', 'c-reader'],
+    })
+    expect(names(await run({ collectionId: 'kit' }))).toEqual(['D Mug'])
+  })
+})

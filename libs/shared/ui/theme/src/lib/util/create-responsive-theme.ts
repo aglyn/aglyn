@@ -43,6 +43,7 @@ import {
   meetsContrast,
   type ShadeDirection,
 } from './accessible-shade'
+import { addPalettePathColorVariants } from './palette-path-colors'
 
 enum ContrastText {
   LIGHT = 'rgba(0, 0, 0, 0.87)',
@@ -393,6 +394,8 @@ export function createResponsiveTheme(
   // After the shade repair, because both hover slots start from `dark` and
   // have to see the value that ships.
   ensureHoverShades(theme, themeOptions?.palette)
+  // Last of the palette passes, so the shades they add are paths too.
+  addPalettePathColorVariants(theme)
 
   theme = responsiveFontSizes(theme, {
     // Override to include `xs` and `xl` - default: ['sm', 'md', 'lg']

@@ -103,6 +103,8 @@ internal fun testServices(
   apiBody: (String) -> String? = { null },
   /** Collections a test changes while the shell runs (a site deleted), by path; they replace the fixed ones. */
   liveCollections: Map<String, StateFlow<List<FirestoreDoc>>> = emptyMap(),
+  /** Plugins loaded beside the platform's, for a test that needs one's contributions (the AI panel's slot). */
+  plugins: List<com.aglyn.pluginhost.NativePluginManifestEntry> = emptyList(),
 ): ShellServices {
   val prefs = InMemoryKeyValueStore()
   val auth = authFor(prefs)
@@ -139,7 +141,7 @@ internal fun testServices(
     ), { auth.idToken(it) }),
     workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
     prefs = prefs,
-    registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
+    registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES + plugins) },
     besigner = { _, _, _ -> },
     writer = writer,
   )

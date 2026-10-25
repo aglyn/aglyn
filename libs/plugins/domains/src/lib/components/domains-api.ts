@@ -21,7 +21,8 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback } from 'react'
 import type { DOMAINS_API_ROUTES } from '../constants/bundle-common'
-import type { DomainRegistrationView } from '../model/registration'
+import type { DnsRecordView } from '../model/dns-records'
+import type { DomainRegistrationView, RegistrantContact } from '../model/registration'
 
 export type DomainsRoute = (typeof DOMAINS_API_ROUTES)[keyof typeof DOMAINS_API_ROUTES]
 
@@ -75,14 +76,65 @@ export interface DomainOfferView {
   renewalCents: number
 }
 
+/**
+ * Which page a request comes from (AGL-4040): a site's Custom Domain page
+ * names its site, the workspace's Domains page names the workspace.
+ */
+export type DomainsScope = { hostId: string } | { orgId: string }
+
+export function isWorkspaceScope(scope: DomainsScope): scope is { orgId: string } {
+  return 'orgId' in scope
+}
+
+export interface ContactDefaults {
+  firstName: string
+  lastName: string
+  email: string
+}
+
 export interface RegistrationsAnswer {
   configured: boolean
   billingPermission: boolean
   canBuy: boolean
   refusal: { code: string; message: string } | null
+  /** Where a name bought now goes: this site, or the workspace (AGL-4040). */
+  buyTarget?: 'site' | 'workspace'
   registrations: DomainRegistrationView[]
   unassigned: DomainRegistrationView[]
-  contactDefaults: { firstName: string; lastName: string; email: string }
+  contactDefaults: ContactDefaults
+}
+
+/** One row of the workspace's Domains page (AGL-4040). */
+export type WorkspaceDomainRow = DomainRegistrationView & { connected: boolean }
+
+export interface WorkspaceAnswer {
+  configured: boolean
+  entitled: boolean
+  billingPermission: boolean
+  canBuy: boolean
+  refusal: { code: string; message: string } | null
+  rows: WorkspaceDomainRow[]
+  /** Each of the workspace's sites' current domain, by site id; '' for none. */
+  siteDomains: Record<string, string>
+  contactDefaults: ContactDefaults
+}
+
+export interface ContactAnswer {
+  contact: Partial<RegistrantContact>
+  stored: boolean
+  pendingSinceMs: number | null
+  rejectedAtMs: number | null
+  takesEffectAtMs: number | null
+  autoRenew: boolean
+  expiresAtMs: number | null
+  verification: { verified: boolean; verifyByMs: number | null; email: string | null } | null
+}
+
+export interface DnsAnswer {
+  ours: boolean
+  nameservers: string[]
+  siteConnected: boolean
+  records: DnsRecordView[]
 }
 
 export function formatMoney(cents: number): string {

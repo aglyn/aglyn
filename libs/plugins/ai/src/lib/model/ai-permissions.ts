@@ -69,6 +69,8 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
     description: 'Ask the assistant, rewrite copy with AI, and generate a section.',
     roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
     hostRoleDefaults: CONTENT_ROLES,
+    group: 'ai',
+    groupLabel: 'AI',
   },
   {
     key: 'ai.generate',
@@ -77,6 +79,8 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
       'Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.',
     roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
     hostRoleDefaults: CONTENT_ROLES,
+    group: 'ai',
+    groupLabel: 'AI',
   },
 ]
 

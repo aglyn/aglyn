@@ -20,7 +20,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +42,7 @@ import com.aglyn.core.WorkspaceState
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.TextButton
 import kotlinx.coroutines.launch
 
 /** Which notifications the bell's popover lists. */
