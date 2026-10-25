@@ -990,6 +990,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'by what one till carries.',
   ],
   [
+    'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-day-totals-card.component.tsx',
+    'One report, not a list (AGL-4037): the day totals route answers a ' +
+      'whole, bounded summary. Its footerless tables are a row per tender ' +
+      '(seven at most), per register (the tills a plan allows) and per ' +
+      'cashier (the staff who rang that day). The shifts table, the one that ' +
+      'grows with the range, keeps the grid’s own pager. The `limit(1)` read ' +
+      'only asks whether the site has a register at all.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-staff-pins-card.component.tsx',
     'The staff with a register PIN (AGL-3609): the roster the staff-PIN ' +
       'route answers, limited to the site’s admins and editors — a row per ' +
@@ -2063,7 +2072,9 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // capped by the memory's own `AI_SITE_MEMORY_MAX`.
     // 81 with local delivery's zones (AGL-3624), capped by its normalizer.
     // The pickup and delivery queue beside it is a real list, and pages.
-    expect(NOT_A_LIST).toHaveLength(81)
+    // 82 with the day totals' summary tables (AGL-4037): tenders, registers
+    // and cashiers; its shifts table pages.
+    expect(NOT_A_LIST).toHaveLength(82)
   })
 })
 

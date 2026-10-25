@@ -38,6 +38,7 @@ import PickupDeliveryQueueCard from './console/pickup-delivery-queue-card.compon
 import MemberPostsCard from './console/member-posts-card.component'
 import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
+import PosDayTotalsCard from './console/pos-ops/pos-day-totals-card.component'
 import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.component'
 import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
 import PaymentMethodsCard from './console/payment-methods-card.component'
@@ -168,6 +169,12 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <RecoveryQueueCard hostId={hostId} />,
+            },
+            // One day's or one event's totals across every register, shift
+            // and cashier (AGL-4037), above the shifts it adds up.
+            {
+              size: { xs: 12 },
+              children: <PosDayTotalsCard hostId={hostId} canManagePos={canManagePos} />,
             },
             {
               size: { xs: 12 },
