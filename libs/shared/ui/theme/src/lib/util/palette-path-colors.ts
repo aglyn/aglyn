@@ -80,7 +80,8 @@ export function addPalettePathColorVariants(theme: Theme): void {
       // The path is not one of Typography's declared colors, which is the
       // whole point: the type names the declared ones only.
       props: { color: path as never },
-      style: ({ theme: current }: { theme: Theme }) => ({ color: readPalettePath(current, path) }),
+      // MUI hands a variant's style its own base theme type; the theme is ours.
+      style: ({ theme: current }) => ({ color: readPalettePath(current as unknown as Theme, path) }),
     })
   }
   typography.variants = variants

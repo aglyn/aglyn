@@ -91,12 +91,12 @@ describe('Get a domain', () => {
     answer(
       {
         canBuy: false,
-        refusal: { code: 'site-has-domain', message: 'This site already has a domain connected. Disconnect it first to give the site a new one.' },
+        refusal: { code: 'fraud-hold', message: 'Buying is paused for this workspace while a payment review is open. Contact support to finish it.' },
       },
       [{ domain: 'testbakery.com', available: true, firstYearCents: 1599, renewalCents: 1599 }],
     )
     render(<BuyDomainCard {...props} entitled />)
-    expect(await screen.findByText(/already has a domain connected/)).toBeTruthy()
+    expect(await screen.findByText(/payment review is open/)).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Search for a domain'), { target: { value: 'test bakery' } })
     const buy = await screen.findByRole('button', { name: 'Buy' })
     expect((buy as HTMLButtonElement).disabled).toBe(true)
@@ -114,7 +114,46 @@ describe('Get a domain', () => {
     expect(screen.getByText('Taken')).toBeTruthy()
   })
 
-  it('manages a bought domain instead of offering another', async () => {
+  it('lets a site with a domain buy another, into the workspace, and says so first (AGL-4040)', async () => {
+    answer({ buyTarget: 'workspace' }, [
+      { domain: 'testbakery.net', available: true, firstYearCents: 1599, renewalCents: 1599 },
+    ])
+    render(<BuyDomainCard {...props} connectedDomain="testbakery.com" entitled />)
+    expect(await screen.findByText(/goes into your workspace’s domains/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search for a domain'), { target: { value: 'test bakery' } })
+    const buy = await screen.findByRole('button', { name: 'Buy' })
+    expect((buy as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(buy)
+    expect(await screen.findByText(/not connected to a site/)).toBeTruthy()
+  })
+
+  it('links to the workspace’s Domains page from its header', async () => {
+    answer()
+    render(<BuyDomainCard {...props} entitled />)
+    const link = await screen.findByRole('link', { name: 'All domains' })
+    expect(link.getAttribute('href')).toBe('/test-org/domains')
+  })
+
+  it('names the domain an unassigned name would replace before connecting it', async () => {
+    answer({
+      unassigned: [
+        {
+          domain: 'testbakery.net', hostId: null, status: 'active', autoRenew: true,
+          renewalCents: 1599, expiresAtMs: Date.parse('2027-10-19T00:00:00Z'), registeredAtMs: 1,
+          registrantEmail: 'alex@testbakery.com', verifyByMs: null, verificationEmail: null,
+          renewalFailing: false, failure: null, registrantName: 'Alex Test', contactVerified: true,
+          contactPendingSinceMs: null, contactRejectedAtMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
+        },
+      ],
+    })
+    render(<BuyDomainCard {...props} connectedDomain="testbakery.com" entitled />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Use for this site' }))
+    expect(await screen.findByText(/This site uses testbakery.com now/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Replace testbakery.com' })).toBeTruthy()
+    expect(request.mock.calls.some(([route]) => route === DOMAINS_API_ROUTES.reconnect)).toBe(false)
+  })
+
+  it('manages a bought domain, and still offers another', async () => {
     answer({
       registrations: [
         {
@@ -122,7 +161,8 @@ describe('Get a domain', () => {
           renewalCents: 1599, expiresAtMs: Date.parse('2027-10-19T00:00:00Z'), registeredAtMs: 1,
           registrantEmail: 'alex@testbakery.com',
           verifyByMs: Date.parse('2026-11-02T00:00:00Z'), verificationEmail: 'alex@testbakery.com',
-          renewalFailing: false, failure: null,
+          renewalFailing: false, failure: null, registrantName: 'Alex Test', contactVerified: false,
+          contactPendingSinceMs: null, contactRejectedAtMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
         },
       ],
     })
@@ -130,7 +170,8 @@ describe('Get a domain', () => {
     expect(await screen.findByText('Your domain')).toBeTruthy()
     expect(screen.getByText(/Confirm the email the registrar sent/)).toBeTruthy()
     expect(screen.getByText('Move to another registrar')).toBeTruthy()
-    expect(screen.queryByLabelText('Search for a domain')).toBeNull()
+    expect(screen.getByText('Get another domain')).toBeTruthy()
+    expect(screen.getByLabelText('Search for a domain')).toBeTruthy()
   })
 })
 
@@ -161,7 +202,7 @@ describe('?domain= from Billing (AGL-3955)', () => {
     }
   })
 
-  it('searches nothing while the site already has a domain bought for it', async () => {
+  it('still searches the name while the site already has a domain bought for it (AGL-4040)', async () => {
     opened('?domain=testbakery.com')
     answer({
       registrations: [
@@ -169,14 +210,15 @@ describe('?domain= from Billing (AGL-3955)', () => {
           domain: 'testbakery.net', hostId: 'host-1', status: 'active', autoRenew: true,
           renewalCents: 1599, expiresAtMs: Date.parse('2027-10-19T00:00:00Z'), registeredAtMs: 1,
           registrantEmail: 'alex@testbakery.com', verifyByMs: null, verificationEmail: null,
-          renewalFailing: false, failure: null,
+          renewalFailing: false, failure: null, registrantName: 'Alex Test', contactVerified: false,
+          contactPendingSinceMs: null, contactRejectedAtMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
         },
       ],
     })
     render(<BuyDomainCard {...props} entitled />)
     expect(await screen.findByText('Your domain')).toBeTruthy()
     await new Promise((resolve) => setTimeout(resolve, 500))
-    expect(searchedFor()).toEqual([])
+    expect(searchedFor()).toEqual(['testbakery.com'])
   })
 
   it('reads only a bare name under an ending the card sells', () => {

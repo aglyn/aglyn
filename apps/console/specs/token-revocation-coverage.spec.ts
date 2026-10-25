@@ -66,6 +66,15 @@ const WRAPPER = 'libs/tenant/data/admin/src/lib/server/firebase-admin.ts'
  */
 const CHECK_REVOKED_ALWAYS = 'libs/shared/util/fbserver/src/lib/fbserver.ts'
 
+/**
+ * Outside both nx boundaries: Cloud Functions are their own package and cannot
+ * import the wrapper. Each reads Auth for an account (`getUser`) and verifies
+ * no ID token at all — asserted below, so "exempt" still is not "unchecked".
+ * `beforeSignupCreate` asks whether an extra address's owner still exists
+ * (AGL-4041).
+ */
+const NO_TOKEN_VERIFICATION = new Set(['cloud/functions/src/index.ts'])
+
 function walk(absoluteDir: string, keep: (name: string) => boolean): string[] {
   const found: string[] = []
   if (!existsSync(absoluteDir)) return found
@@ -106,6 +115,7 @@ describe('every ID-token verification goes through the checked handle', () => {
         (f) =>
           f.path !== WRAPPER &&
           f.path !== CHECK_REVOKED_ALWAYS &&
+          !NO_TOKEN_VERIFICATION.has(f.path) &&
           f.text.includes("from 'firebase-admin/auth'") &&
           /\bgetAuth\s*\(/.test(f.text),
       )
@@ -119,6 +129,14 @@ describe('every ID-token verification goes through the checked handle', () => {
     // Both halves: the import could survive a refactor that dropped the call.
     expect(wrapper.text).toContain('assertIdTokenNotRevoked')
     expect(wrapper.text).toContain('revocationCheckedAuth(getAuth(app))')
+  })
+
+  it('keeps the functions that hold a raw handle from verifying any token', () => {
+    for (const path of NO_TOKEN_VERIFICATION) {
+      const file = sourceFiles.find((f) => f.path === path)
+      expect(file).toBeDefined()
+      expect(file.text).not.toMatch(/verifyIdToken\(|verifySessionCookie\(/)
+    }
   })
 
   it('keeps the boundary-crossing helper on Firebase-side checkRevoked', () => {

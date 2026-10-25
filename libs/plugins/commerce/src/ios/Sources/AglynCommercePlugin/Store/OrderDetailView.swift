@@ -403,7 +403,7 @@ struct OrderDetailView: View {
       .strikethrough(!active)
       HStack {
         if active, let link, let url = URL(string: link) {
-          Button("Track") { openURL(url) }.buttonStyle(.bordered)
+          Button("Track") { openURL(url) }.buttonStyle(.aglynSecondary)
         }
         if active, let label = shipment.labelUrl, !label.isEmpty {
           Button {
@@ -411,17 +411,17 @@ struct OrderDetailView: View {
           } label: {
             if printing == shipment.id { ProgressView() } else { Label("Print label", systemImage: "printer") }
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .disabled(printing != nil)
           .accessibilityIdentifier("order-print-label-\(shipment.id)")
         }
         if editable {
           Button("Edit tracking") { editingShipment = shipment }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(busy != nil || working)
             .accessibilityIdentifier("order-edit-tracking-\(shipment.id)")
           Button("Cancel shipment", role: .destructive) { cancelingShipment = shipment }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(busy != nil || working)
             .accessibilityIdentifier("order-cancel-shipment-\(shipment.id)")
         }

@@ -81,7 +81,8 @@ import {
   PaidDownloadAddButton,
   PaidMediaProtection,
 } from './paid-media'
-import { ProductRegisterFields } from './product-register-fields.component'
+import { ProductCheckInFields } from './product-check-in-fields.component'
+import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
 
 /**
  * What each picker in this dialog will offer.
@@ -1322,6 +1323,18 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       })),
     [replaceDraft],
   )
+  // The check-in section's view of the variants (AGL-4043): ids, options and
+  // their check-in setting only, so a keystroke in a price or a SKU leaves it
+  // alone (AGL-3423).
+  const checkInVariantsKey = JSON.stringify(
+    current.variants.map((variant) => [variant.id, variant.options ?? null, variant.checkIn ?? null]),
+  )
+  const checkInVariants = useMemo(
+    () => current.variants.map(({ id, options, checkIn }) => ({ id, options, checkIn })),
+    // Keyed on what it reads, not on the array the last keystroke replaced.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checkInVariantsKey],
+  )
   const setTags = useCallback(
     (tags: string[]) =>
       update({ tags: tags.map((tag) => String(tag).trim()).filter(Boolean) }),
@@ -1885,15 +1898,25 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           replaceDraft={replaceDraft}
         />
         {pos.ready && pos.entitled ? (
-          <ProductRegisterFields
-            posQuickKey={Boolean(current.posQuickKey)}
-            modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
-            update={update}
-          />
+          <>
+            <ProductRegisterFields
+              posQuickKey={Boolean(current.posQuickKey)}
+              sellOnline={CommerceModel.productSellsOnline(current)}
+              modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
+              update={update}
+            />
+            <ProductCheckInFields checkIn={current.checkIn} variants={checkInVariants} update={update} />
+          </>
         ) : pos.ready ? (
-          <EntitlementUpsell planLabel={pos.planLabel} upgradeHref={pos.upgradeHref}>
-            {'Register quick keys and modifier groups (sizes, add-ons) come with the point of sale.'}
-          </EntitlementUpsell>
+          <>
+            <EntitlementUpsell planLabel={pos.planLabel} upgradeHref={pos.upgradeHref}>
+              {'Register quick keys, modifier groups (sizes, add-ons), check-in at the window and selling a product in person only come with the point of sale.'}
+            </EntitlementUpsell>
+            {/* A product already set to in person only (AGL-4060) can always be put back online. */}
+            {!CommerceModel.productSellsOnline(current) ? (
+              <ProductSellOnlineField sellOnline={false} update={update} />
+            ) : null}
+          </>
         ) : null}
         {current.type === 'digital' ? (
           <ProductDigitalFields

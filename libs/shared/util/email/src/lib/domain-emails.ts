@@ -20,7 +20,8 @@
  *
  * The domains plugin writes every one of these: the purchase, the refund
  * when a registration fails, ICANN's registrant check, the renewal notice
- * and its outcome, the expiry, and the transfer code. Each is a key of its
+ * and its outcome, the expiry, the transfer code, and a transfer in from
+ * another registrar finishing or failing (AGL-4040). Each is a key of its
  * own so staff can redesign one without touching the others.
  *
  * They live here, beside the catalog, because system emails have no plugin
@@ -46,6 +47,8 @@ export const DOMAIN_EMAIL_KEYS = {
   expiring: 'domain-expiring',
   expired: 'domain-expired',
   transferCode: 'domain-transfer-code',
+  transferInCompleted: 'domain-transfer-in-completed',
+  transferInFailed: 'domain-transfer-in-failed',
 } as const
 
 const SOURCE = 'libs/plugins/domains/src/lib/server/domain-emails.ts'
@@ -57,7 +60,8 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     org: { name: 'org.name', description: 'The workspace', sample: 'Test Org' },
     manageUrl: {
       name: 'domain.manageUrl',
-      description: "The site's Custom Domain page",
+      description:
+        "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
       sample: `${origin}/test-org/hosts/test-bakery/admin/domain`,
     },
     billingUrl: {
@@ -115,6 +119,13 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
       description: 'Why the domain will not renew, in a sentence',
       sample: 'Auto-renew is turned off for it.',
     },
+    whereLine: {
+      name: 'domain.whereLine',
+      description:
+        'Where the new domain is going, in a sentence: being connected to its site, or into the workspace with no site yet',
+      sample:
+        'It is being connected to Test Bakery. It usually serves within a few minutes, with its security certificate set up for you. There are no DNS records to add.',
+    },
     requestedBy: {
       name: 'domain.requestedBy',
       description: 'Who asked for the transfer code',
@@ -135,18 +146,18 @@ export function domainSystemEmailTemplates(
       key: DOMAIN_EMAIL_KEYS.purchased,
       name: 'Domain purchased',
       description:
-        "Sent to a workspace's owners and admins when a domain bought for one " +
-        'of its sites is registered.',
+        "Sent to a workspace's owners and admins when a domain it bought, for " +
+        'one of its sites or for the workspace, is registered.',
       deliveredBy: 'resend',
       defaultSubject: '{{domain.name}} is yours',
       mergeTokens: [
         t.domain, t.site, t.org, t.firstYear, t.renewalPrice, t.renewsOn,
-        t.registrant, t.registrantEmail, t.manageUrl,
+        t.registrant, t.registrantEmail, t.whereLine, t.manageUrl,
       ],
       defaultBody: [
         { block: 'text', text: '{{site.name}}', variant: 'eyebrow' },
         { block: 'text', text: '{{domain.name}} is yours', variant: 'heading' },
-        { block: 'text', text: '{{domain.name}} is registered to you and is being connected to {{site.name}}. It usually serves within a few minutes, with its security certificate set up for you. There are no DNS records to add.', variant: 'body' },
+        { block: 'text', text: '{{domain.name}} is registered to you. {{domain.whereLine}}', variant: 'body' },
         { block: 'text', text: 'Domain: {{domain.name}}\nFirst year: {{domain.firstYear}}\nRenews: {{domain.renewsOn}} for {{domain.renewalPrice}} a year\nRegistered to: {{domain.registrant}}', variant: 'details' },
         { block: 'text', text: 'One thing for you to do', variant: 'subheading' },
         { block: 'text', text: 'The registrar will email {{domain.registrantEmail}} asking you to confirm the address. ICANN, which oversees domain names, requires it, and a domain whose owner never confirms can be suspended. Open that email and confirm when it arrives.', variant: 'body' },
@@ -307,6 +318,50 @@ export function domainSystemEmailTemplates(
         { block: 'button', label: 'Open the Custom Domain page', href: '{{domain.manageUrl}}' },
       ],
       footerReason: footer,
+      source: SOURCE,
+    },
+    {
+      key: DOMAIN_EMAIL_KEYS.transferInCompleted,
+      name: 'Domain transfer in completed',
+      description:
+        'Sent when a domain the workspace moved here from another registrar ' +
+        'has arrived, with its new expiry date.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{domain.name}} has moved here',
+      mergeTokens: [t.domain, t.org, t.amount, t.expiresOn, t.renewalPrice, t.manageUrl],
+      defaultBody: [
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{domain.name}} has moved here', variant: 'heading' },
+        { block: 'text', text: 'The transfer of {{domain.name}} is complete, and a year was added to its registration. It is now in your workspace’s domains, where it renews with your other domains.', variant: 'body' },
+        { block: 'text', text: 'Charged: {{domain.amount}}\nRegistered until: {{domain.expiresOn}}\nRenews for: {{domain.renewalPrice}} a year', variant: 'details' },
+        { block: 'text', text: 'Its DNS stays where it was, so anything already using the domain keeps working. To use it for a site, connect it from the Domains page.', variant: 'body' },
+        { block: 'button', label: 'Open the Domains page', href: '{{domain.manageUrl}}' },
+      ],
+      footerReason:
+        'You’re receiving this because you manage {{org.name}} on ' +
+        '{{brand.productName}} and it moved {{domain.name}} here.',
+      source: SOURCE,
+    },
+    {
+      key: DOMAIN_EMAIL_KEYS.transferInFailed,
+      name: 'Domain transfer in failed',
+      description:
+        'Sent when a domain the workspace paid to move here could not be ' +
+        'transferred, and the charge was refunded.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{domain.name}} couldn’t be moved here',
+      mergeTokens: [t.domain, t.org, t.failure, t.refund, t.manageUrl],
+      defaultBody: [
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{domain.name}} couldn’t be moved here', variant: 'heading' },
+        { block: 'text', text: '{{domain.failure}}', variant: 'body' },
+        { block: 'text', text: '{{domain.refund}}', variant: 'body' },
+        { block: 'text', text: 'The domain is still yours at your current registrar, and its website and email keep working. To try again, unlock it there, get a new transfer code, and start the transfer from the Domains page.', variant: 'body' },
+        { block: 'button', label: 'Open the Domains page', href: '{{domain.manageUrl}}' },
+      ],
+      footerReason:
+        'You’re receiving this because you manage {{org.name}} on ' +
+        '{{brand.productName}} and it asked to move {{domain.name}} here.',
       source: SOURCE,
     },
   ]

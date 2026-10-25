@@ -49,7 +49,7 @@ struct FirstRunView: View {
       message: "A workspace is your organization: its sites, team, billing and plan live together."
     ) {
       Button("Create an organization") { creating = true }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .accessibilityIdentifier("first-run-create")
     }
   }

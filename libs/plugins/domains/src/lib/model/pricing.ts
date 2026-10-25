@@ -58,6 +58,17 @@ export function domainRetailCents(costUsd: number): number {
   return Math.ceil(settled + 0.01) * 100 - 1
 }
 
+/**
+ * What moving a name here from another registrar costs (AGL-4040): the
+ * renewal formula, because a transfer IS a renewal at the registrar — the
+ * registry adds a year to the name and the registrar's transfer price is its
+ * cost for that year. So the customer pays exactly what renewing it here
+ * would cost, never a separate transfer fee.
+ */
+export function domainTransferCents(transferCostUsd: number): number {
+  return domainRetailCents(transferCostUsd)
+}
+
 /** `1599` → `$15.99`. */
 export function formatUsdCents(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`

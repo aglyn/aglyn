@@ -509,9 +509,12 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
+    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
   posOperations: {
+    '#check-in-at-the-window': 'For a track, a campground, a lot or an event: people who bought a day pass, camping or parking online, or at the register, are looked up at the window, checked in and handed a wristband.',
+    '#day-and-event-totals': 'When several people take payments on their own registers, Commerce → Orders → Day totals adds the whole day up across every register, shift and cashier.',
     '#shifts-and-the-cash-drawer': 'A shift is one stretch of trading on one register, counted against one cash drawer.',
     '#staff-pins': 'A shared tablet stays signed in; each person switches in with their own PIN instead of signing out.',
   },
@@ -677,6 +680,11 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   taxServices: {
     '#connect': 'Open Products → Taxes and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
     '#how-sales-are-taxed': 'A product you marked tax-exempt is sent as non-taxable and charged no tax.',
+  },
+  waivers: {
+    '#find-a-signature': 'The Signatures card lists the newest first.',
+    '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
+    '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
   },
   webhooks: {
     '#outbound-webhooks': 'Send an HTTP request to a URL you control when a site event fires — for example, post to a Slack endpoint or your own API when a form is submitted or a new booking comes in.',
