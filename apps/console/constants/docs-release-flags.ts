@@ -378,6 +378,12 @@ export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
   // less than they say, never more, so there is no rollout to disclose.
   release_crm_assist_whole_record:
     'Widens what CRM assistance sends the model provider without opening any surface. The legal pages (v10, October 5, 2026) and the docs describe the whole record, which is what the flag can send; with it off a record sends less than they say, never more.',
+  // AGL-4049. Phase 1 lands the vocabulary, the starter source seam and the
+  // picker zone, and nothing reads the flag yet, so there is no surface to
+  // document. The guide that names the starter picker lands with the picker,
+  // and moves this flag into FLAG_DOC_PAGES.
+  release_site_starters:
+    'Declares the starter picker ahead of its surface: nothing reads the flag yet and no page describes starters from the marketplace, so there is nothing to disclose until the picker ships with its guide.',
 }
 
 /**

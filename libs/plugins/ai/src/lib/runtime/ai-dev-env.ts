@@ -79,8 +79,9 @@ export function aiDevReplayMode(env: AiDevEnv = process.env): AiDevReplayMode {
  * The prompt-cache lifetime a development run asks for. An agent re-runs a
  * live eval every ten to forty minutes while it iterates, which is past the
  * default five-minute entry and inside an hour, so under the launcher the
- * breakpoints ask for the hour: the second run reads the prefix the first one
- * wrote instead of writing it again. A deployed server never reads this:
+ * shared breakpoints ask for the hour (a job's own keep five minutes,
+ * AGL-4050): the second run reads the prefix the first one wrote instead of
+ * writing it again. A deployed server never reads this:
  * `undefined` there, where the lifetime is the route's own
  * (`aiRequestCacheTtl`).
  */
