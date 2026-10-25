@@ -2723,6 +2723,11 @@
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []
+    },
+    "release_site_starters": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
     }
   },
   "flagCases": [
