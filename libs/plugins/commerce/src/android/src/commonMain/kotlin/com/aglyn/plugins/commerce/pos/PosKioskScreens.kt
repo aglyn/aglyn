@@ -30,12 +30,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -75,9 +73,11 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.KeepScreenOn
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.QuantityStepper
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -370,6 +370,7 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
                 val on = option.id in chosen
                 FilterChip(
                   selected = on,
+                  colors = com.aglyn.ui.aglynFilterChipColors(),
                   onClick = {
                     val others = picks.filter { it.groupId != group.id }
                     val mine = when {

@@ -330,6 +330,10 @@
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
     },
     {
+      "path": "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
+      "why": "The accounting plugin's id, permission key and its tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/accounting/src/lib/native-nav.ts",
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
@@ -400,6 +404,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "why": "Which buyer emails an order has sent, read by the app's order detail (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "why": "The product and variant check-in setting (whether an item needs check-in, people per item) and its normalize/validate rules (AGL-4043), no imports; ProductVariant carries it, so the native contracts read it."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
@@ -476,6 +484,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/paid-media.ts",
       "why": "What an author is told before a file becomes private paid media (the places that use it, and the sentence confirmed) and which library a media route is asked of. Pure string and list work; the native product page replays it from function-cases.generated.json."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/plugin-permissions.ts",
+      "why": "The commerce plugin's permission keys (managePos) and their tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
@@ -734,6 +746,10 @@
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
+      "path": "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
+      "why": "The Sequences plugin's id and permission key and its tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/outreach/src/lib/engine/click-tracking.ts",
       "why": "Reached by outreach.types and sequence-validation: the body's links."
     },
@@ -788,6 +804,18 @@
     {
       "path": "libs/plugins/sms/src/lib/native-nav.ts",
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
+      "path": "libs/plugins/waivers/src/lib/constants/bundle-common.ts",
+      "why": "The waivers plugin's id and permission key names, reached by its permission declarations; no imports (AGL-4047)."
+    },
+    {
+      "path": "libs/plugins/waivers/src/lib/constants/permissions.ts",
+      "why": "The waivers plugin's permission keys and their tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); imports only its pure bundle-common and a type."
+    },
+    {
+      "path": "libs/plugins/waivers/src/lib/native-nav.ts",
+      "why": "Where this plugin's console tab sits for the native apps (AGL-4042), assembled into the nav manifest by generate:native-contracts; imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",

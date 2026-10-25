@@ -57,7 +57,7 @@ struct FirstRunView: View {
             .buttonStyle(.borderless)
             .disabled(answering != nil)
           Button(answering == invite.id ? "Joining…" : "Accept") { answer(invite, accept: true) }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .disabled(answering != nil)
             .accessibilityIdentifier("first-run-accept-\(invite.id)")
         }
@@ -91,7 +91,7 @@ struct FirstRunView: View {
       message: "A workspace is your organization: its sites, team, billing and plan live together."
     ) {
       Button("Create an organization") { creating = true }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .accessibilityIdentifier("first-run-create")
     }
   }

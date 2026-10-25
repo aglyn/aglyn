@@ -183,7 +183,8 @@ export const DEFAULT_APP_THEME: AppThemePrefs = {
   accent: 'theme',
   density: 'comfortable',
   textSize: 'system',
-  sidebarStyle: 'tinted',
+  // Plain: a sidebar keeps the theme's neutral ground unless the person picks Tinted (AGL-3990).
+  sidebarStyle: 'plain',
   appIcon: 'aglyn',
   useWorkspaceBrand: true,
 }

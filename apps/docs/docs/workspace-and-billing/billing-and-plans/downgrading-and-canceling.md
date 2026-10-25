@@ -205,7 +205,9 @@ data**. It's intentional and reversible for a short window:
    account records — is permanently erased. This step is irreversible, and we
    keep no copy of the erased data. What we retain is an internal record that
    the erasure happened: which organization, when it was requested, and how
-   many sites, members and credentials were removed.
+   many sites, members and credentials were removed. Sales-tax records, and
+   Aglyn's records of [card readers you bought from Aglyn](../../commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records),
+   are kept because tax law requires it; they hold no names or street addresses.
 
 Deletion covers your organization's sites and their stored files and data. If you
 own an organization that still has **other members**, transfer or remove them

@@ -418,6 +418,16 @@ the signing secrets, and **Product catalog** → each price → its price id.
 `.env.selfhost` into a development checkout, swap in test keys.
 :::
 
+:::note Card reader start-up screens
+Readers show each store's chosen start-up screen with no extra variable. The
+default screen is uploaded on **Staff → Reader start-up screen** (a PNG or JPEG
+under 2 MB: 1080 × 1920 for the S700 and S710, 720 × 1280 for the WisePOS E,
+which is drawn from the first when left empty). In the Stripe Dashboard, leave
+your platform account's **default** Terminal configuration without a splash
+screen: a Location without its own screen inherits it, so it would also show on
+white-label workspaces' readers.
+:::
+
 #### Which events to subscribe {#stripe-webhook-events}
 
 A signing secret only proves the delivery is real. If the endpoint is not

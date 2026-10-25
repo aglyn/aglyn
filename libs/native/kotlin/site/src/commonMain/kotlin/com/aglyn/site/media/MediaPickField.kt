@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +25,9 @@ import com.aglyn.contracts.parseMediaRef
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.RemoteImage
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 
 /**
