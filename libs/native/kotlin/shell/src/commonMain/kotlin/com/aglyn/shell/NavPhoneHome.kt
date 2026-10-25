@@ -108,7 +108,7 @@ internal fun PhoneHome(
 internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState) {
   if (workspace.site != null) return
   val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
-  HomeUpgradeProposal(context, org, workspace.org?.name, workspace.org?.slug, Contracts.platformBrandName)
+  HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, Contracts.platformBrandName)
 }
 
 /** The numbers under a phone Home's tiles (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards. */
