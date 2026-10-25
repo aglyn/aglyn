@@ -41,7 +41,7 @@ jest.mock('@aglyn/tenant-data-admin/server/render-monitor', () => {
 
 const ENV = {
   RENDER_MONITOR_ORIGINS: 'https://aglyn.com',
-  RENDER_MONITOR_PAGES: 'ready-to-roll.aglyn.app/',
+  RENDER_MONITOR_PAGES: 'northwind-coffee.aglyn.app/',
   RENDER_MONITOR_RENDER_ORIGIN: 'https://render.example.test',
   OPERATOR_HEALTH_TENANT_ORIGIN: 'https://aglyn.com',
 }
@@ -68,7 +68,7 @@ describe('/api/health/pages (AGL-3580)', () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate'] })
     Object.assign(process.env, ENV)
-    mockStates = new Map([state('aglyn.com', {}), state('ready-to-roll.aglyn.app', {})])
+    mockStates = new Map([state('aglyn.com', {}), state('northwind-coffee.aglyn.app', {})])
   })
 
   afterEach(() => {
@@ -80,15 +80,15 @@ describe('/api/health/pages (AGL-3580)', () => {
     const { status, body } = await get()
     expect(status).toBe(200)
     expect(body.status).toBe('ok')
-    expect(Object.keys(body.checks).sort()).toEqual(['aglyn.com', 'ready-to-roll.aglyn.app'])
+    expect(Object.keys(body.checks).sort()).toEqual(['aglyn.com', 'northwind-coffee.aglyn.app'])
   })
 
   it('goes red when the monitor saw a site fail to render', async () => {
-    mockStates = new Map([state('aglyn.com', {}), state('ready-to-roll.aglyn.app', { status: 'degraded' })])
+    mockStates = new Map([state('aglyn.com', {}), state('northwind-coffee.aglyn.app', { status: 'degraded' })])
     const all = await get()
     expect(all.status).toBe(503)
     expect(all.body.status).toBe('degraded')
-    expect(all.body.checks['ready-to-roll.aglyn.app']).toMatchObject({ ok: false, code: 'not-rendering' })
+    expect(all.body.checks['northwind-coffee.aglyn.app']).toMatchObject({ ok: false, code: 'not-rendering' })
 
     // One site's monitor stays green while another site is down.
     const marketing = await get('?site=aglyn.com')

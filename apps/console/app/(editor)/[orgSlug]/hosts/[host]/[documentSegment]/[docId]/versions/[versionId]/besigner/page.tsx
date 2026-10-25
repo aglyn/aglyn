@@ -69,7 +69,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
-import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
@@ -108,7 +108,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
-import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
@@ -281,7 +281,13 @@ function PluginDocumentBesignerPage() {
   const versionIds = { hostId, collection: documentCollection, docId, versionId }
   const { doc: result } = useHostDocumentVersion(versionIds)
   const versionRef = useHostDocumentVersionRef(versionIds)
-  const { data, status, error, hasPendingWrites } = result
+  const {
+    data,
+    status,
+    error,
+    hasPendingWrites,
+    fromCache: versionFromCache,
+  } = result
   const nodes = data?.nodes
 
   // The canvas is a singleton shared by every editing session; without a
@@ -351,12 +357,15 @@ function PluginDocumentBesignerPage() {
     refuseOverUnopenedDraft,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // Every save converts a typed `{{name}}` to its id token (AGL-3481).
     bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: versionFromCache,
     status,
     error,
     save: saveVersion,
@@ -845,7 +854,7 @@ function PluginDocumentBesignerPage() {
                       >
                         <Typography>{'Not found'}</Typography>
                       </Stack>
-                    ) : status === 'loading' ? (
+                    ) : status === 'loading' || awaitingServer ? (
                       LOADING_OVERLAY_ELEMENT
                     ) : (
                       <>

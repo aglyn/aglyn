@@ -924,6 +924,23 @@ allow read, write: if false;
 
 
 
+
+
+match /hardwareOrders/{orderId} {
+allow read: if isStaff() ||
+(isOrgWideMember() && orgNotSuspended() &&
+orgMember().role in ['owner', 'admin', 'editor'] &&
+memberGrants('managePos'));
+allow write: if false;
+}
+
+
+
+
+
+
+
+
 match /postPurchaseHostSettings/{hostId} {
 allow read, write: if false;
 }

@@ -26,7 +26,7 @@
  * `/api/orgs/datasets` is where the record form's create and the CSV/JSON
  * import land. A JSON import hands a list cell over as its JSON text; split on
  * commas it was stored as `["[\"Residential\"", "\"Commercial\"]"]`, and
- * the EDR services grid's `categories contains Residential` filter matched
+ * a client's services grid's `categories contains Residential` filter matched
  * nothing. The firestore below is the write-scope suite's, so what is asserted
  * is the row the route actually wrote.
  */

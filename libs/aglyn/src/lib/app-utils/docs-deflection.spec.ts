@@ -72,6 +72,8 @@ const ANSWERABLE: readonly string[] = [
   'how do I create a redirect for an old url',
   'how do I put my site into maintenance mode',
   'how do I password protect a screen',
+  'how do I make my site private',
+  'how do I hide my whole site until launch',
   'how do I add search to my site',
   'how do I save a site template',
   'how do I edit my theme colours and fonts',

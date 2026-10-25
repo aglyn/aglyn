@@ -128,7 +128,22 @@ first. The same photo is stored only once, however many pages show it.
 - **The day's limit.** A workspace can start 12 waves a day, counting each time a site is
   read. Start the wave again the next day.
 - **The site could not be read.** If robots.txt could not be read, or no page answered,
-  nothing is read. Choose **Read the site again** once your site is up.
+  nothing is read. Choose **Read the site again** once your site is up. If your site's
+  bot protection turned AglynBot away, see [When your site turns AglynBot away](#turned-away).
 - **Out of AI credits.** The import pauses. Choose **Get more AI credits**, then **Resume**.
 
 Every import is also logged for the Trust & Safety team's review.
+
+## When your site turns AglynBot away {#turned-away}
+
+Many hosts protect a site with bot protection or a firewall that turns away visitors it
+takes for robots. If yours turns AglynBot away, the page is listed under **Not brought in**
+as turned away by your site's bot protection or firewall. If it turns away every page,
+nothing is read, and the import says so.
+
+To bring those pages in:
+
+1. Open your site's bot protection or firewall settings, wherever your host or your
+   domain's security service keeps them.
+2. Allow **AglynBot**. It reads only your own domain, and only pages robots.txt lets it read.
+3. Bring the site in again. If nothing was read, choose **Read the site again**.

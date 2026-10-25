@@ -48,7 +48,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
-    register: {"site":"registerCommercePlugin","console":"registerCommerceConsole"},
+    register: {"site":"registerCommercePlugin","console":"registerCommerceConsole","staff":"registerCommerceConsole"},
     contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember","transferResources"],"publicRoutes":["/pos-display","/pos-kiosk"]}},
     load: () => import('@aglyn/plugins-commerce'),
     loads: {
@@ -73,7 +73,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'outreach',
     apiPrefixes: ["outreach"],
     register: {"console":"registerOutreachConsole"},
-    contributes: {"console":{"slots":["transferResources"],"shell":true,"orgRoutes":["/outreach"]}},
+    contributes: {"console":{"slots":["crmRecordEmailActions","transferResources"],"shell":true,"orgRoutes":["/outreach"]}},
     load: () => import('@aglyn/plugins-outreach'),
   },
   {

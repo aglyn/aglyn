@@ -453,6 +453,7 @@
       "register": {
         "site": "registerCommercePlugin",
         "console": "registerCommerceConsole",
+        "staff": "registerCommerceConsole",
         "tenantApi": "registerCommerceApi",
         "consoleApi": "registerCommerceConsoleApi",
         "serverDeclarations": "registerCommerceServerDeclarations",
@@ -1576,6 +1577,7 @@
       "contributes": {
         "console": {
           "slots": [
+            "crmRecordEmailActions",
             "transferResources"
           ],
           "shell": true,

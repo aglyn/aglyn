@@ -75,6 +75,35 @@ const usd = (cents: number | undefined) =>
   `$${((cents ?? 0) / 100).toFixed(2)}`
 const day = (dayMs: number | undefined) =>
   dayMs ? new Date(dayMs).toISOString().slice(0, 10) : '—'
+const nightLabel = (dayMs: number) =>
+  new Date(dayMs).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+
+/** The Reservations card's look-ahead for a several-unit resource. */
+const UNITS_LOOKAHEAD_NIGHTS = 14
+
+/** The desk's calendar day as the UTC-midnight `dayMs` stays are stored in. */
+function localTodayDayMs(): number {
+  const now = new Date()
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+/** The units field's problem, or null when the typed value is a valid count. */
+function unitsProblem(units: number | undefined): string | null {
+  if (units === undefined) return null
+  if (
+    !Number.isInteger(units) ||
+    units < 1 ||
+    units > CommerceModel.MAX_RESOURCE_UNITS
+  ) {
+    return `A whole number from 1 to ${CommerceModel.MAX_RESOURCE_UNITS}`
+  }
+  return null
+}
 
 /**
  * Reservations console (AGL-311): resources CRUD (nightly pricing,
@@ -134,6 +163,59 @@ export function ReservationsCard(props: ReservationsCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  /*
+   * Units left on each of the next nights, for resources with several units
+   * (AGL-4044). One listen across the site's resources, on the stays that
+   * have not ended, nearest check-out first: a range and an order on the same
+   * field, which Firestore's automatic single-field index serves. Not read at
+   * all while every resource has one unit, so a cabin-only site pays nothing.
+   *
+   * The 500 cap is the booking door's: it can only leave out stays that end
+   * after 500 others that are all still running, which would be a stay far
+   * past the two weeks this draws.
+   */
+  const hasSeveralUnits = (resourceDocs ?? []).some(
+    (resource: any) => CommerceModel.resourceUnits(resource) > 1,
+  )
+  const todayDayMs = localTodayDayMs()
+  const { data: currentStays } = useFirestoreCollection<any>(
+    () =>
+      hasSeveralUnits
+        ? query(
+            collection(firestore, 'hosts', hostId, 'reservations'),
+            where('checkOutDayMs', '>', todayDayMs),
+            orderBy('checkOutDayMs'),
+            limit(500),
+          )
+        : null,
+    [firestore, hostId, hasSeveralUnits, todayDayMs],
+    { idField: '$id' },
+  )
+  const unitsAhead = useMemo(() => {
+    const byResource: Record<string, CommerceModel.ResourceNightUnits[]> = {}
+    if (!hasSeveralUnits) return byResource
+    const nowMs = Date.now()
+    for (const resource of resourceDocs ?? []) {
+      if (CommerceModel.resourceUnits(resource) === 1) continue
+      const stays = (currentStays ?? [])
+        .filter((stay: any) => stay.resourceId === resource.$id)
+        .map((stay: any) => ({
+          checkInDayMs: Number(stay.checkInDayMs),
+          checkOutDayMs: Number(stay.checkOutDayMs),
+          status: stay.status as CommerceModel.ReservationStatus,
+          createdAtMs: Number(stay.createdAtMs ?? 0),
+        }))
+      byResource[resource.$id] = CommerceModel.unitsLeftByNight(
+        resource,
+        stays,
+        todayDayMs,
+        UNITS_LOOKAHEAD_NIGHTS,
+        nowMs,
+      )
+    }
+    return byResource
+  }, [hasSeveralUnits, resourceDocs, currentStays, todayDayMs])
+
   const resourceNames = useMemo(() => {
     const map: Record<string, string> = {}
     for (const resource of resourceDocs ?? []) {
@@ -167,8 +249,15 @@ export function ReservationsCard(props: ReservationsCardProps) {
      * the listener's bookkeeping leaking into storage, and once there no
      * reader can tell it from a field the card meant to write.
      */
+    if (unitsProblem(resourceDraft.units)) return
     const seeded = resourceDraft as typeof resourceDraft & { $id?: string }
-    const { id, $id: _syntheticId, ...data } = seeded
+    const { id, $id: _syntheticId, units, ...fields } = seeded
+    // Units are written as the count the model reads (AGL-4044), and a
+    // cleared field as 1 rather than left out: `merge: true` would otherwise
+    // keep a stored 12 the merchant just removed.
+    const data = 'units' in seeded
+      ? { ...fields, units: CommerceModel.resourceUnits({ units }) }
+      : fields
     /**
      * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
      * `data` is the whole stored row spread out of the listener, so
@@ -295,10 +384,17 @@ export function ReservationsCard(props: ReservationsCardProps) {
         status: item.status,
         createdAtMs: item.createdAtMs,
       }))
+    // Count-based for a several-unit resource (AGL-4044): the walk-in takes
+    // any unit that is free on every night, and is refused only when some
+    // night has none left.
     if (
       !CommerceModel.isRangeAvailable(resource, existing, checkInDayMs, checkOutDayMs)
     ) {
-      return void enqueueSnackbar('Those dates are taken', {
+      const message =
+        CommerceModel.resourceUnits(resource) > 1
+          ? 'Every unit is taken on at least one of those nights'
+          : 'Those dates are taken'
+      return void enqueueSnackbar(message, {
         variant: 'warning',
         persist: false,
       })
@@ -347,48 +443,79 @@ export function ReservationsCard(props: ReservationsCardProps) {
         ) : null}
         <Typography variant="subtitle2">{'Resources'}</Typography>
         {(resourceDocs ?? []).map((resource: any) => (
-          <Stack
-            key={resource.$id}
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center' }}
-          >
-            <Stack sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" noWrap>
-                {`${resource.name} · $${resource.nightlyRateUsd}/night`}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {`id: ${resource.$id}`}
-              </Typography>
+          <Stack key={resource.$id} spacing={0.5}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center' }}
+            >
+              <Stack sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" noWrap>
+                  {[
+                    resource.name,
+                    `$${resource.nightlyRateUsd}/night`,
+                    ...(CommerceModel.resourceUnits(resource) > 1
+                      ? [`${CommerceModel.resourceUnits(resource)} units`]
+                      : []),
+                  ].join(' · ')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {`id: ${resource.$id}`}
+                </Typography>
+              </Stack>
+              <Button
+                size="small"
+                onClick={() => setResourceDraft({ id: resource.$id, ...resource })}
+              >
+                {'Edit'}
+              </Button>
+              <Button
+                size="small"
+                color="error"
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Remove this resource?',
+                    description:
+                      'Existing reservations keep their records; the widget ' +
+                      'stops accepting new stays.',
+                    confirmationText: 'Remove',
+                    confirmationButtonProps: { color: 'error' },
+                  })
+                    .then(() => true)
+                    .catch(() => false)
+                  if (!confirmed) return
+                  await deleteDoc(
+                    doc(firestore, 'hosts', hostId, 'resources', resource.$id),
+                  )
+                }}
+              >
+                {'Remove'}
+              </Button>
             </Stack>
-            <Button
-              size="small"
-              onClick={() => setResourceDraft({ id: resource.$id, ...resource })}
-            >
-              {'Edit'}
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              onClick={async () => {
-                const confirmed = await confirm({
-                  title: 'Remove this resource?',
-                  description:
-                    'Existing reservations keep their records; the widget ' +
-                    'stops accepting new stays.',
-                  confirmationText: 'Remove',
-                  confirmationButtonProps: { color: 'error' },
-                })
-                  .then(() => true)
-                  .catch(() => false)
-                if (!confirmed) return
-                await deleteDoc(
-                  doc(firestore, 'hosts', hostId, 'resources', resource.$id),
-                )
-              }}
-            >
-              {'Remove'}
-            </Button>
+            {unitsAhead[resource.$id] ? (
+              <Stack
+                direction="row"
+                useFlexGap
+                aria-label={`Units left on the next ${UNITS_LOOKAHEAD_NIGHTS} nights`}
+                sx={{ flexWrap: 'wrap', gap: 0.5 }}
+              >
+                {unitsAhead[resource.$id].map((night) => (
+                  <Chip
+                    key={night.dayMs}
+                    size="small"
+                    variant="outlined"
+                    color={
+                      night.unitsLeft === 0
+                        ? 'error'
+                        : night.unitsLeft <= CommerceModel.FEW_UNITS_LEFT
+                          ? 'warning'
+                          : 'default'
+                    }
+                    label={`${nightLabel(night.dayMs)} · ${night.unitsLeft} of ${night.units} left`}
+                  />
+                ))}
+              </Stack>
+            ) : null}
           </Stack>
         ))}
         <Stack direction="row" spacing={1}>
@@ -550,6 +677,53 @@ export function ReservationsCard(props: ReservationsCardProps) {
           />
           <Stack direction="row" spacing={1}>
             <TextField
+              label="Spots or units available"
+              placeholder="1"
+              value={resourceDraft?.units ?? ''}
+              onChange={(event) =>
+                setResourceDraft((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        units:
+                          event.target.value.replace(/\D/g, '') === ''
+                            ? undefined
+                            : Number(event.target.value.replace(/\D/g, '')),
+                      }
+                    : prev,
+                )
+              }
+              error={Boolean(unitsProblem(resourceDraft?.units))}
+              helperText={
+                unitsProblem(resourceDraft?.units) ??
+                'How many identical ones you have, like 12 RV hookups'
+              }
+              size="small"
+              fullWidth
+              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+            />
+            <TextField
+              label="Sleeps"
+              value={resourceDraft?.capacity ?? ''}
+              onChange={(event) =>
+                setResourceDraft((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        capacity:
+                          Math.round(Number(event.target.value)) || undefined,
+                      }
+                    : prev,
+                )
+              }
+              helperText="Guests per unit, for display"
+              size="small"
+              fullWidth
+              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+            />
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <TextField
               label="Nightly rate ($)"
               value={resourceDraft?.nightlyRateUsd ?? ''}
               onChange={(event) =>
@@ -646,7 +820,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
             color="primary"
             disabled={
               !resourceDraft?.name?.trim() ||
-              !((resourceDraft?.nightlyRateUsd ?? 0) > 0)
+              !((resourceDraft?.nightlyRateUsd ?? 0) > 0) ||
+              Boolean(unitsProblem(resourceDraft?.units))
             }
             onClick={handleResourceSave}
           >

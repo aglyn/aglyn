@@ -24,16 +24,41 @@ the thing itself, the space gets a photo of your craft instead, such as *handmad
 One start never uses the same photo twice.
 
 When a photo cannot be copied into your library, for example because Pixabay is busy and
-asks to wait, the job waits and tries again. If it still cannot, the space takes one of the
-photos the same start already placed on your site, on another page or on a dataset's
-records, chosen to suit the space and never the same one as the picture beside it. Only a
-start that has no photo of its own yet, or a deployment without stock photos, uses the
-**starter photos** that come with every site.
+asks to wait, the job waits and tries again. If it still cannot, the space takes another
+photo the same job already copied for your site, chosen to suit the space: one the page
+does not show yet where there is one, and never the same one as the picture beside it. On a
+new site, a page never shows a photo twice this way.
+
+A space with no such photo yet holds a starter photo for a moment. Once every page is
+built, and before the site goes live, the start asks Pixabay for that space's own photo
+again, at least a minute after Pixabay asked it to wait. If Pixabay still cannot send it,
+the space takes one of the photos the start copied for your other pages instead, one the
+page does not show yet:
+
+- a page's main picture takes a wide photo;
+- a dataset's record, such as a gallery on a photographer's site, takes a photo of the
+  same kind of record, or of the people it is about: a couple for a wedding gallery, a
+  family for a family session;
+- a page shows the same photo twice only when the start has no other photo for the space;
+- a record of one of your team only ever takes its own photo, never a photo of something
+  else. If Pixabay still cannot send it, the record keeps its starter portrait for you to
+  replace.
+
+Apart from those team portraits, your pages and your datasets' records keep the
+**starter photos** that come with every site only when the start copied no photo at all,
+or the deployment has no stock photos.
 
 When the search finds photos but none of them fits the space, the space is left without a
 picture: its section shows its own background, and the words take the space. A page whose
 every picture would be left out this way keeps one: its first picture takes one of the
 start's own photos, or a starter photo.
+
+## Your site's Social image {#social-image}
+
+When the site goes live with the **Social image** it was created with, or none, the start
+sets it to your home page's main photo, so a shared link shows your own work. A Social image
+you chose in **Setup** → **SEO** is never replaced. See
+[Social image](../building-sites/seo/overview.md#site-social-image).
 
 ## In your media library {#in-your-media-library}
 

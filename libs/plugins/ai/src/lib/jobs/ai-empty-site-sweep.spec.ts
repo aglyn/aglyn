@@ -124,6 +124,11 @@ function seedEmptySite() {
     hostId: HOST,
     kind: 'site',
     status: 'canceled',
+    brief: 'Trading cards and collectibles in Kansas City.',
+    inputs: { siteName: 'Kc x carder', subdomain: 'kc-x-carder', siteType: 'store' },
+    createdBy: 'uid-kc',
+    createdAt: new Date(SETTLED.getTime() - 13_000),
+    expiresAt: new Date(SETTLED.getTime() + 180 * 86_400_000),
     steps: [
       { name: 'plan', status: 'pending', creditsSpent: 0, attempts: 0 },
       { name: 'generate', status: 'pending', creditsSpent: 0, attempts: 0 },
@@ -146,6 +151,19 @@ function seedEmptySite() {
   })
 }
 
+/**
+ * What `core.site-erase` does to these documents: the site's tree goes, and
+ * so do the org's documents the site owns, its AI jobs among them (`aiJobs`
+ * is declared with `siteField: 'hostId'`).
+ */
+async function eraseLikeTheConsole({ hostId, orgId }: { hostId: string; orgId: string }) {
+  for (const path of [...docs.keys()]) {
+    const ownedJob = path.startsWith(`orgs/${orgId}/aiJobs/`) && docs.get(path)?.['hostId'] === hostId
+    if (path === `hosts/${hostId}` || path.startsWith(`hosts/${hostId}/`) || ownedJob) docs.delete(path)
+  }
+  return { erased: true as const }
+}
+
 const erase = jest.fn(async (..._args: unknown[]) => ({ erased: true as const }))
 const sweep = (at = AFTER_DUE, extra: Partial<Parameters<typeof sweepAiEmptySites>[0]> = {}) =>
   sweepAiEmptySites({ firestore, now: () => at, erase: erase as never, ...extra })
@@ -153,7 +171,7 @@ const sweep = (at = AFTER_DUE, extra: Partial<Parameters<typeof sweepAiEmptySite
 beforeEach(() => {
   docs = new Map()
   erase.mockReset()
-  erase.mockResolvedValue({ erased: true })
+  erase.mockImplementation((request) => eraseLikeTheConsole(request as { hostId: string; orgId: string }))
   jest.spyOn(console, 'info').mockImplementation(() => undefined)
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -177,10 +195,23 @@ describe('a cancelled start with its plan pending and nothing spent (kc-x-carder
       activity: AI_EMPTY_SITE_ACTIVITY,
       reason: AI_EMPTY_SITE_REASON,
     })
+    expect(docs.has(`hosts/${HOST}`)).toBe(false)
     expect(docs.has(`aiEmptySiteSweeps/${HOST}`)).toBe(false)
     expect(docs.get(`orgs/${ORG}/aiJobs/${JOB}`)?.['siteRemoved']).toEqual({
       at: new Date(AFTER_DUE),
       name: 'Kc x carder',
+    })
+  })
+
+  // NOVAREA TEXTILES BENIN, 2026-10-20: the erase took the job, and the
+  // `siteRemoved` merged onto it afterwards left a one-field stub (AGL-4015).
+  it('and the job outlives the site whole, so the drawer still lists it with Start again', async () => {
+    seedEmptySite()
+    const before = { ...docs.get(`orgs/${ORG}/aiJobs/${JOB}`) }
+    await sweep()
+    expect(docs.get(`orgs/${ORG}/aiJobs/${JOB}`)).toEqual({
+      ...before,
+      siteRemoved: { at: new Date(AFTER_DUE), name: 'Kc x carder' },
     })
   })
 })

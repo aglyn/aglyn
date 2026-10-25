@@ -77,6 +77,7 @@ const SAMPLE_SUPPORT_URL: string =
 import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 import { domainSystemEmailTemplates } from './domain-emails'
+import { posHardwareSystemEmailTemplates } from './pos-hardware-emails'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { retentionSystemEmailTemplates } from './retention-emails'
 import { SITE_CARE_SYSTEM_EMAIL_TEMPLATES } from './site-care-emails'
@@ -274,7 +275,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         {
           name: 'signInUrl',
-          description: 'Console URL to sign in and accept',
+          description: 'Console URL to sign in and join',
           sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
@@ -282,10 +283,10 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       defaultBody: [
         { block: 'text', text: 'Invitation · {{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: 'Join {{org.name}} on {{brand.productName}}', variant: 'heading' },
-        { block: 'text', text: 'You\'ve been invited to join {{org.name}} as {{invite.role}}. Sign in with this email address and the invitation is waiting on your dashboard.', variant: 'body' },
+        { block: 'text', text: 'You\'ve been invited to join {{org.name}} as {{invite.role}}. Sign in or create your account with this email address and you join it right away.', variant: 'body' },
         { block: 'text', text: 'Workspace: {{org.name}}\nYour role: {{invite.role}}', variant: 'details' },
-        { block: 'button', label: 'Accept the invitation', href: '{{signInUrl}}' },
-        { block: 'text', text: 'Not expecting this? You can ignore it. Nothing happens unless you accept.', variant: 'caption' },
+        { block: 'button', label: 'Open {{org.name}}', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Not expecting this? You can ignore it. Nothing happens unless you sign in with this address.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone invited you to join ' +
@@ -309,12 +310,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'handoff.previousOwner',
           description:
-            'What happens to the current owner once the handoff is accepted',
+            'What happens to the current owner once the handoff takes effect',
           sample: 'The current owner stays on as an admin.',
         },
         {
           name: 'signInUrl',
-          description: 'Console URL to sign in and accept',
+          description: 'Console URL to sign in and join',
           sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
@@ -324,8 +325,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{org.name}} is being handed to you', variant: 'heading' },
         { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
         { block: 'text', text: 'Workspace: {{org.name}}\nYour role: Owner', variant: 'details' },
-        { block: 'button', label: 'Review and accept', href: '{{signInUrl}}' },
-        { block: 'text', text: 'Nothing changes until you accept. Sign in with this email address to see the invitation.', variant: 'caption' },
+        { block: 'button', label: 'Open {{org.name}}', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Sign in or create your account with this email address and the workspace is yours. Nothing changes until you do.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone invited you to take over ' +
@@ -350,7 +351,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'handoff.previousOwner',
           description:
-            'What happens to the current owner once the handoff is accepted',
+            'What happens to the current owner once the handoff takes effect',
           sample: 'The current owner stays on as an admin.',
         },
         {
@@ -372,7 +373,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           name: 'billingUrl',
           description:
             'Billing page with the bundle preselected; signing in with this ' +
-            'address shows the invitation to accept first',
+            'address joins the workspace first',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
         },
       ],
@@ -383,13 +384,131 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
         { block: 'text', text: 'Your plan: {{proposal.summary}}', variant: 'details' },
-        { block: 'button', label: 'Accept and start the {{plan.name}} plan', href: '{{billingUrl}}' },
-        { block: 'text', text: 'Sign in with this email address, accept the invitation, and Billing opens with everything already chosen. Nothing is charged until you confirm.', variant: 'caption' },
+        { block: 'button', label: 'Start the {{plan.name}} plan', href: '{{billingUrl}}' },
+        { block: 'text', text: 'Sign in or create your account with this email address, and Billing opens with everything already chosen. Nothing is charged until you confirm.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because the {{brand.productName}} team invited ' +
         'you to take over {{org.name}}.',
       source: 'apps/console/app/api/orgs/invites/route.ts',
+    },
+    {
+      key: 'org-owner-handoff-new-owner',
+      name: 'Workspace handoff: you own it now',
+      description:
+        'Sent to the new owner the moment a workspace handoff takes effect ' +
+        '(AGL-4023): the workspace is theirs, what that covers, what happened ' +
+        'to the previous owner, and the next step, which is the proposed plan ' +
+        'on Billing when one was proposed with the handoff.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{org.name}} is yours on {{brand.productName}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The workspace that was handed over',
+          sample: 'Test Org',
+        },
+        {
+          name: 'handoff.previousOwner',
+          description: 'What happened to the previous owner, as one sentence',
+          sample: 'Pat Lee stays on as an admin.',
+        },
+        {
+          name: 'nextStep',
+          description:
+            'What to do now: the proposed plan when one stands, else a look ' +
+            'around the workspace',
+          sample:
+            'Your plan is ready to start: Starter with Site Care, billed ' +
+            'yearly. Billing opens with it already chosen, and nothing is ' +
+            'charged until you confirm.',
+        },
+        {
+          name: 'cta.label',
+          description: 'The button, naming what it opens',
+          sample: 'Start the Starter plan',
+        },
+        {
+          name: 'cta.url',
+          description: 'Billing with the plan chosen, or the workspace',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Workspace handoff · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{org.name}} is yours', variant: 'heading' },
+        { block: 'text', text: 'You now own {{org.name}} on {{brand.productName}}: the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nYour role: Owner', variant: 'details' },
+        { block: 'text', text: '{{nextStep}}', variant: 'body' },
+        { block: 'button', label: '{{cta.label}}', href: '{{cta.url}}' },
+        { block: 'text', text: 'Sign in with the address this email was sent to. Questions? Contact support: {{brand.supportUrl}}', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because {{org.name}} was handed to you on ' +
+        '{{brand.productName}}.',
+      source: 'libs/tenant/data/admin/src/lib/server/owner-handoff-emails.ts',
+    },
+    {
+      key: 'org-owner-handoff-previous-owner',
+      name: 'Workspace handoff: done',
+      description:
+        'Sent to the previous owner the moment a workspace handoff takes ' +
+        'effect (AGL-4023): who owns the workspace now, and whether they ' +
+        'stayed on as an admin or left.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{newOwner.name}} now owns {{org.name}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The workspace that was handed over',
+          sample: 'Test Org',
+        },
+        {
+          name: 'newOwner.name',
+          description: 'The new owner, by name when the account has one, else their address',
+          sample: 'Jordan Lee',
+        },
+        {
+          name: 'newOwner.email',
+          description: 'The new owner’s address',
+          sample: 'jordan@example.com',
+        },
+        {
+          name: 'previousOwner.role',
+          description: 'Where that leaves the previous owner',
+          sample: 'Admin',
+        },
+        {
+          name: 'previousOwner.outcome',
+          description: 'What that means for them, as one sentence',
+          sample:
+            'You stay on as an admin, so you can keep helping with the ' +
+            'workspace and its sites.',
+        },
+        {
+          name: 'cta.label',
+          description: 'The button, naming what it opens',
+          sample: 'Open the team',
+        },
+        {
+          name: 'cta.url',
+          description: 'The workspace’s Team page, or the console home if they left',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/team`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Workspace handoff · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{org.name}} has a new owner', variant: 'heading' },
+        { block: 'text', text: '{{newOwner.name}} took over {{org.name}}. They now hold the workspace, every site in it, and its billing.', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nNew owner: {{newOwner.email}}\nYour role: {{previousOwner.role}}', variant: 'details' },
+        { block: 'text', text: '{{previousOwner.outcome}}', variant: 'body' },
+        { block: 'button', label: '{{cta.label}}', href: '{{cta.url}}' },
+        { block: 'text', text: 'Didn’t expect this? Contact support: {{brand.supportUrl}}', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you handed {{org.name}} over on ' +
+        '{{brand.productName}}.',
+      source: 'libs/tenant/data/admin/src/lib/server/owner-handoff-emails.ts',
     },
     {
       key: 'org-upgrade-proposal',
@@ -1866,6 +1985,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     // A domain bought through the domains plugin (AGL-3962), whose keys and
     // copy live in `domain-emails.ts`.
     ...domainSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
+    // Card readers bought from the commerce plugin's POS hardware shop
+    // (AGL-4038), whose keys and copy live in `pos-hardware-emails.ts`.
+    ...posHardwareSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
   ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],

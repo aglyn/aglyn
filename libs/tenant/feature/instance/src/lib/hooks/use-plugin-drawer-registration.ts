@@ -21,7 +21,8 @@ import { pluginInstallToPresets, setKnownPluginInstalls } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
 import { runInAction } from 'mobx'
 import { useEffect, useMemo, useRef } from 'react'
-import { useFirestore, useHostOrgId } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from './firebase/firebase-services'
+import { useHostOrgId } from './use-host-org-id'
 import useFirestoreCollection from './use-firestore-collection'
 
 /**

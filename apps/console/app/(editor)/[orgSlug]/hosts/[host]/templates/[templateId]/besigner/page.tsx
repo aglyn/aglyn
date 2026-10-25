@@ -61,7 +61,7 @@ import {
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../hooks/use-host'
-import useDiscardChangesMenuItem from '../../../../../../../../hooks/use-discard-changes-menu-item'
+import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -96,7 +96,7 @@ import useScreenLinkRoutes, {
 import { useHostId, useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../hooks/use-firestore-collection'
-import usePluginDrawerRegistration from '../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../components/presence-avatars.component'
@@ -179,7 +179,13 @@ function TemplateBesignerPage(props) {
     templateId,
   })
   const templateRef = useHostTemplateRef({ hostId, templateId })
-  const { data, status, error, hasPendingWrites } = result
+  const {
+    data,
+    status,
+    error,
+    hasPendingWrites,
+    fromCache: versionFromCache,
+  } = result
   // The browser tab names THIS document, not just its site (AGL-2486).
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(templateId, data?.displayName)
@@ -288,12 +294,15 @@ function TemplateBesignerPage(props) {
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // Every save converts a typed `{{name}}` to its id token (AGL-3481).
     bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: versionFromCache,
     status,
     error,
     save: saveTemplateNodes,
@@ -572,7 +581,7 @@ function TemplateBesignerPage(props) {
           >
             <Typography>{'Not found'}</Typography>
           </Stack>
-        ) : status === 'loading' ? (
+        ) : status === 'loading' || awaitingServer ? (
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>

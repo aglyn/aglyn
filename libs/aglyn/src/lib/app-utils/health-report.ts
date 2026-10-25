@@ -1156,6 +1156,123 @@ export function signupLandingHealth(
 }
 
 /**
+ * Did each new verified account end up in a workspace (AGL-4021)?
+ *
+ * {@link SignupLandingCheck} grades orgs, so an account that never got an org
+ * is invisible to it. That is exactly how AGL-4021 hid: every phone Google
+ * sign-up for a day reached the console with no workspace, and nothing went
+ * red. The canary signs up through the password door, and the three failures
+ * sat among healthy desktop and password sign-ups, so a streak over everyone
+ * kept resetting.
+ *
+ * So the streak is taken per sign-up DOOR (`users/{uid}.acquisition.door`):
+ * red when the newest {@link MAX_WORKSPACELESS_SIGNUPS} graded accounts that
+ * came through any one door all have no workspace. A broken door strands
+ * every account it makes. A person who leaves still has the workspace their
+ * door made before they left, so leaving does not count here.
+ *
+ * Graded: verified accounts that accepted the Terms. An unverified password
+ * account gets its workspace on its first verified session (AGL-2590), so it
+ * waits by design. A Google account created from /signin is signed out and
+ * sent to /signup to accept the Terms (AGL-1497), and one that walks away
+ * there never agreed to anything, so it has no workspace by design too.
+ *
+ * Pure. The body carries counts only, never a uid or a door name, because the
+ * endpoint is public.
+ */
+export interface SignupWorkspaceCheck extends HealthCheck {
+  /** Graded accounts in the window with no workspace. Null when the read failed. */
+  workspacelessAccounts: number | null
+  /** The longest per-door streak of newest accounts with no workspace. */
+  workspacelessStreak: number | null
+  /** Graded accounts in the window, the context for the counts above. */
+  gradedInWindow: number | null
+  /** How far back the window reaches. */
+  windowHours: number
+  /** How old an account must be before having no workspace counts. */
+  graceMinutes: number
+  /** The per-door streak at which this goes red. */
+  maxWorkspaceless: number
+}
+
+/** One account the route read for {@link signupWorkspaceHealth}. */
+export interface SignupWorkspaceAccount {
+  /** The sign-up door, or null when the account recorded none. */
+  door: string | null
+  createdAtMs: number | null
+  verified: boolean
+  /** Whether the account has any Terms acceptance on record. */
+  accepted: boolean
+  hasWorkspace: boolean
+}
+
+/** Red when the two newest verified accounts through one door have no workspace. */
+export const MAX_WORKSPACELESS_SIGNUPS = 2
+
+/**
+ * Thirty-six hours of accounts, not the landing check's twelve. A door can be
+ * quiet for longer than twelve hours (AGL-4021's three phone sign-ups were
+ * 12 h and 5 h apart), and a window that never holds two of them can never
+ * see the streak.
+ */
+export const SIGNUP_WORKSPACE_WINDOW_HOURS = 36
+
+export function signupWorkspaceHealth(
+  accounts: SignupWorkspaceAccount[] | null,
+  ms: number,
+  maxWorkspaceless: number = MAX_WORKSPACELESS_SIGNUPS,
+  windowHours: number = SIGNUP_WORKSPACE_WINDOW_HOURS,
+  graceMinutes: number = SIGNUP_LANDING_GRACE_MINUTES,
+): SignupWorkspaceCheck {
+  const shape = { windowHours, graceMinutes, maxWorkspaceless }
+  if (accounts === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'accounts-unavailable',
+      workspacelessAccounts: null,
+      workspacelessStreak: null,
+      gradedInWindow: null,
+      ...shape,
+    }
+  }
+  const graded = accounts.filter(
+    (account) => account.verified === true && account.accepted === true,
+  )
+  const byDoor = new Map<string, SignupWorkspaceAccount[]>()
+  for (const account of graded) {
+    const door = account.door || 'unknown'
+    byDoor.set(door, [...(byDoor.get(door) ?? []), account])
+  }
+  let workspacelessStreak = 0
+  for (const doorAccounts of byDoor.values()) {
+    const newestFirst = [...doorAccounts].sort(
+      (a, b) => (Number(b.createdAtMs) || 0) - (Number(a.createdAtMs) || 0),
+    )
+    let streak = 0
+    while (
+      streak < newestFirst.length &&
+      newestFirst[streak].hasWorkspace !== true
+    ) {
+      streak += 1
+    }
+    workspacelessStreak = Math.max(workspacelessStreak, streak)
+  }
+  const stranded = workspacelessStreak >= maxWorkspaceless
+  return {
+    ok: !stranded,
+    ms,
+    ...(stranded ? { code: 'signups-without-workspace' } : {}),
+    workspacelessAccounts: graded.filter(
+      (account) => account.hasWorkspace !== true,
+    ).length,
+    workspacelessStreak,
+    gradedInWindow: graded.length,
+    ...shape,
+  }
+}
+
+/**
  * Rate-limiter degradation, reduced to a health verdict (AGL-1693).
  *
  * `consumeRateLimit` fails SOFT: when the Firestore counter is unreachable it
@@ -2460,8 +2577,9 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Five GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
- * the weekly jobs, for which hours of drift cost nothing — and the rows
+ * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
+ * the weekly jobs and the daily Site Care reconciliation, for which hours of
+ * drift cost nothing — and the rows
  * driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` and `consoleAiJobsBeat`
  * (every minute), the routes the `consoleFastCrons` job carries every
@@ -2713,6 +2831,26 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 1440,
     drives:
       'Reports documents with no visibleTo — invisible to every site-scoped read (AGL-1478). Detect-only by construction, so it has no output whose age could stand in for this mark.',
+  },
+  {
+    id: 'site-care-reconcile',
+    label: 'Site Care reconciliation',
+    cron: '15 14 * * *',
+    runner: 'github-actions',
+    target: '/api/admin/site-care/reconcile',
+    // TWELVE HOURS, measured rather than borrowed (AGL-4030). The route
+    // stamps its beat at the start of the POST, so the only lateness this
+    // row has to absorb is GitHub's dispatch. From 2026-10-20 it fired every
+    // day, three to four and a half hours late (17:25Z to 18:36Z for 14:15Z),
+    // and this workflow's own history is worse on Mondays: the 13:00 daily
+    // digest landed 8h32m late on 2026-10-12 and a 07:30 weekly 9h22m late
+    // the same morning. The old six-hour daily grace would have gone red on
+    // those days with nothing wrong. Twelve hours clears the worst dispatch
+    // seen by more than two and a half hours, and a dropped day still reads
+    // `job-silent` from 02:15Z the next morning until the next run lands.
+    graceMinutes: 720,
+    drives:
+      'Compares each Site Care month total and each pending extra-time charge against Stripe every day (AGL-3959). If it stops, a difference between what was billed and what Stripe holds is never found, and staff are never told about the drift.',
   },
   {
     id: 'campaigns-process-scheduled',

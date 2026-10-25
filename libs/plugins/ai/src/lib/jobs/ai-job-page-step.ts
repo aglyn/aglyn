@@ -98,10 +98,12 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures, type AiLayoutPicturePhoto } from '../layout-language/ai-layout-pictures'
+import type { AiSiteStarterSlot } from '../model/ai-site-photos'
 import { aiLayoutPagePhotosOf, aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
 import {
   AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_JOB_PHOTOS_INPUT,
+  AI_STOCK_PHOTO_LATE_PASS_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
   aiStockJobPhotosOf,
@@ -905,6 +907,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // is what a picture the library fails takes before any starter (AGL-3988).
       const { avoid, photos: jobPhotos } = await aiJobPlacedPhotos(firestore, { hostId, job, draftId })
       const photoWords = aiStockPhotoWordsOf(job)
+      // The pictures left on a starter, which a site start's late photo pass fills (AGL-3988).
+      const latePass = job.inputs?.[AI_STOCK_PHOTO_LATE_PASS_INPUT] === true
+      let starters: AiSiteStarterSlot[] = []
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
@@ -912,6 +917,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         seed,
         ...(jobPhotos.length ? { jobPhotos } : {}),
         ...(photoWords.language ? { language: photoWords.language } : {}),
+        ...(latePass
+          ? {
+              onStarters: (slots: AiSiteStarterSlot[]) => {
+                starters = slots
+              },
+            }
+          : {}),
         // The owner's own photos first (AGL-3957), the stock library for the rest.
         source: (deps.stockPhotos ?? aiLayoutSitePhotoSource)({
           hostId,
@@ -960,7 +972,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         })
         if (update.ok === false) return { ...spent, failure: AI_JOB_PAGE_DELETED_COPY }
       }
-      return { ...spent, continue: true }
+      // Which of its pictures took a starter, by its draft: none clears what an earlier pass said.
+      return {
+        ...spent,
+        continue: true,
+        ...(latePass ? { sitePhotos: { pages: [{ screen: draftId, slots: starters }], lists: [] } } : {}),
+      }
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)
     const maxElements = aiJobPageSectionMaxElements(maxTokens)

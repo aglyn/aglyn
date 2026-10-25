@@ -40,6 +40,16 @@ export interface RepeatRecordContextValue {
   datasetsByKey?: Record<string, RepeatableDataset | undefined>
 }
 
+/**
+ * Set by a repeating element with NO record to draw — an empty dataset, a
+ * filter that matches nothing, a dataset this site cannot read (AGL-3496) —
+ * around the template it keeps on screen. Its `{{item.*}}` tokens then draw as
+ * the same chips the text editors show, named for the field, rather than as
+ * raw braces an author cannot tell from a typo.
+ */
+export const RepeatTemplateContext = createContext<boolean>(false)
+RepeatTemplateContext.displayName = 'RepeatTemplateContext'
+
 export const RepeatRecordContext = createContext<
   RepeatRecordContextValue | undefined
 >(undefined)

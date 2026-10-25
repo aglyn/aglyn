@@ -254,16 +254,20 @@ export function gradeRenderProbe(
 
 /**
  * The pages Aglyn's own console renders fresh when `RENDER_MONITOR_PAGES` is
- * unset: the canary's real client pages (`tools/scripts/lib/prod-canary.mjs`
- * `DEFAULT_TENANT_HOSTS`), images, reusable components, repeats and a form
- * between them. Applied ONLY on that console deployment (`VERCEL_PROJECT_ID`),
- * so no other install ever requests them.
+ * unset: Aglyn's own marketing pages, images and a form between them, the
+ * same fallback as the canary's (`tools/scripts/lib/prod-canary.mjs`
+ * `DEFAULT_TENANT_HOSTS`). Applied ONLY on that console deployment
+ * (`VERCEL_PROJECT_ID`), so no other install ever requests them.
+ *
+ * The real client pages the platform watches are named in that console's
+ * `RENDER_MONITOR_PAGES` environment variable, never here: this repository
+ * is public, and a client's site address is theirs to publish, not ours.
  */
 export const PLATFORM_RENDER_PAGES = [
-  'ready-to-roll.aglyn.app/',
-  'edr-construction.aglyn.app/',
-  'edr-construction.aglyn.app/services',
-  'edr-construction.aglyn.app/contact',
+  'aglyn.com/',
+  'aglyn.com/press',
+  'aglyn.com/blog',
+  'aglyn.com/contact',
 ].join(' ')
 
 /** Aglyn's console project on Vercel, the one deployment the list above is for. */

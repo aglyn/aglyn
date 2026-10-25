@@ -621,14 +621,25 @@ included, taken from Stripe's own invoice preview rather than worked out here.
 #### What you will pay {#what-you-will-pay}
 
 The **What you will pay** card appears on the **Plan** tab once you pick a plan to move
-to, and quotes that plan's total for the billing interval you chose, tax included,
-straight from Stripe. With **Manage billing** you can enter a promotion code on the card
-and see it applied before you confirm.
+to, and quotes that plan's total for the billing interval you chose: with tax, straight
+from Stripe, once your billing address is on file, and before tax until then. With
+**Manage billing** you can enter a promotion code on the card and see it applied before
+you confirm.
 
 When you arrive from a link the Aglyn team gave you (a QR code at an event, or the
 button in a handoff email), the card comes first on the page with everything the link
-chose: the plan, monthly or yearly billing, each add-on as a switch you can turn off,
-and the promotion code already applied. The button in the card's header shows the total,
+chose, and only that:
+
+- the plan, with **Yearly** and **Monthly** to switch between;
+- each add-on the link named. Site Care, Aglyn AI and the Event Calendar are switches you
+  can turn off. Extra seats, datasets, extra sites and POS registers are counts you can
+  change;
+- the promotion code, already applied.
+
+When the link includes Aglyn AI, an **Aglyn AI tier** field beside its switch shows the
+tier chosen for you; pick another tier there, or turn the switch off. Whatever you
+change, the total changes with it. Until your billing address is on file, the card shows
+the **Total before tax**; with an address, it shows Stripe's total with tax. The button in the card's header shows the total,
 and pressing it pays with the card on file. If you have no card or billing address yet,
 it asks for them first. An add-on your plan does not include, or a code that has
 expired, is left off with a one-line note instead of an error.
@@ -782,12 +793,13 @@ of the recurring price, rounded up to two decimals, so a $10-a-month membership 
 a higher percentage than a $100-a-month one. The platform take itself does not move,
 and a 0% tier still takes 0%.
 
-**In-person sales carry the same rate.** The fee is charged on the sale, not on the
-tender, so a cash sale or a charge-to-room sale at the register is priced exactly like
-a card sale. Card payments have the fee deducted from the Stripe payout; cash, gift-card
-and room-charge payments have no payout to deduct from, so their fees are added to your
-next monthly invoice as a usage line. A split sale does each part its own way, and tips
-carry no platform fee. See
+**At the register, cash, gift cards and store credit carry no platform fee.** Card
+and charge-to-room payments carry the same rate as an online sale. Card payments have
+the fee deducted from the Stripe payout; a room charge has no payout to deduct from, so
+its fee is added to your next monthly invoice as a usage line. Cash is yours in full,
+the fee on a gift card is charged when the card is sold, not again when it is spent,
+and store credit is value you gave your customer. A split sale charges the fee only on
+its card and room-charge parts, and tips carry no platform fee. See
 [POS &amp; reservations](../../commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register).
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted

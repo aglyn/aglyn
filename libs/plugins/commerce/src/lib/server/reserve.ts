@@ -351,6 +351,12 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // here: the conflicting write lands BEFORE Stripe is contacted, so this
     // door can legitimately refuse rather than take the money and withhold the
     // room.
+    //
+    // The same re-read is what keeps a several-unit resource (AGL-4044) from
+    // selling its last unit twice: `isRangeAvailable` counts the stays on
+    // each night against `resource.units`, so two guests racing for the last
+    // RV hookup both read eleven of twelve taken, and the loser's transaction
+    // re-runs on the winner's write, counts twelve, and refuses.
     const reservationRef = hostRef.collection('reservations').doc()
     const booked = await firestore.runTransaction(async (transaction: any) => {
       const fresh = await transaction.get(availabilityQuery)

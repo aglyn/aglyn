@@ -430,7 +430,7 @@ compress worse. The structural fix removes them for free: write the imports
 inside a module that already loads what they share, so they become its
 children. `libs/plugins/mui/src/lib/element-tier.ts` does that for the mui
 elements, and the same sweep on top of it made most pages worse again:
-`minChunkSize: 10000` cost ready-to-roll's fifteen-element home page 18.5 KB
+`minChunkSize: 10000` cost a client's fifteen-element home page 18.5 KB
 gzip and a six-element page 16.5 KB, to save aglyn.com's 7.0 KB. The
 defaults stay. `check:tenant-wire-weight`'s `duplication` entry measures the
 copies a page placing every element holds, so a new sibling import shows up

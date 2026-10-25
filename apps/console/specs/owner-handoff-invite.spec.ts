@@ -36,6 +36,9 @@ const mockAcceptOwnerHandoff = jest.fn()
 const mockLockout = jest.fn()
 const mockLogOrgActivity = jest.fn()
 const mockResolveOrgMembership = jest.fn()
+const mockNotifyOrgAdmins = jest.fn()
+const mockNotifyUsers = jest.fn()
+const mockAccountForAddress = jest.fn()
 
 type Doc = Record<string, unknown>
 let mockStore = new Map<string, Doc>()
@@ -109,7 +112,7 @@ jest.mock('../app/api/_lib/sso-transfer-lockout', () => ({
 }))
 jest.mock('@aglyn/tenant-data-admin/server/account-addresses', () => ({
   __esModule: true,
-  attributableAccountForAddress: async () => null,
+  attributableAccountForAddress: (...args: unknown[]) => mockAccountForAddress(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -128,8 +131,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   memberHasOrgPermission: async (_orgId: string, member?: { role?: string }) =>
     member?.role === 'owner' || member?.role === 'admin',
   meterOrgEmail: async () => undefined,
-  notifyOrgAdmins: async () => undefined,
-  notifyUsers: async () => undefined,
+  notifyOrgAdmins: (...args: unknown[]) => mockNotifyOrgAdmins(...args),
+  notifyUsers: (...args: unknown[]) => mockNotifyUsers(...args),
   orgOwnerSeatRefusalResponse: () => null,
   ownerHandoffRefusalResponse: () => null,
   ownerHandoffSeatRefusal: (...args: unknown[]) => mockOwnerHandoffSeatRefusal(...args),
@@ -194,6 +197,9 @@ beforeEach(() => {
   mockManagerSeatRefusal.mockResolvedValue(null)
   mockLockout.mockResolvedValue({ refused: false, reason: null, verdict: 'allowed' })
   mockAcceptOwnerHandoff.mockResolvedValue({ previousOwnerUid: 'owner', previousOwner: 'stay' })
+  mockNotifyOrgAdmins.mockResolvedValue(undefined)
+  mockNotifyUsers.mockResolvedValue(undefined)
+  mockAccountForAddress.mockResolvedValue(null)
   mockResolveOrgMembership.mockImplementation(async (uid: string) => {
     const row = mockStore.get(`orgs/org-1/members/${uid}`)
     return row ? { orgId: 'org-1', member: { $id: uid, ...row } } : null
@@ -250,6 +256,35 @@ describe('sending an owner handoff (AGL-3466)', () => {
     signedInAs('owner', 'owner@acme.test')
     expect((await post({ ...handoff('stay'), handoff: undefined })).status).toBe(400)
     expect((await post(handoff('maybe'))).status).toBe(400)
+    expect(invites()).toHaveLength(0)
+  })
+
+  it('on a single sign-on workspace, runs the lockout check when SENDING (AGL-4023)', async () => {
+    mockStore.set('orgs/org-1', {
+      ...mockStore.get('orgs/org-1'),
+      sso: { enforced: true, tenantId: 't', providerId: 'p' },
+    })
+    signedInAs('owner', 'owner@acme.test')
+    // No account yet: it cannot be shown to sign in through SSO, so refused.
+    const noAccount = await post(handoff('stay'))
+    expect(noAccount.status).toBe(409)
+    expect(invites()).toHaveLength(0)
+    // An account the lockout check clears goes out.
+    mockAccountForAddress.mockResolvedValue('client')
+    const cleared = await post(handoff('stay'))
+    expect(cleared.status).toBe(200)
+    expect(mockLockout).toHaveBeenCalledWith('org-1', 'client', expect.anything())
+  })
+
+  it('an ordinary invitation to the owner’s own address is refused when sent (AGL-4023)', async () => {
+    signedInAs('admin', 'admin@acme.test')
+    const response = await post({
+      action: 'create',
+      email: 'owner@acme.test',
+      role: 'admin',
+    })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe('That address already owns this workspace')
     expect(invites()).toHaveLength(0)
   })
 
@@ -375,6 +410,49 @@ describe('accepting an owner handoff (AGL-3466)', () => {
     expect(response.status).toBe(409)
     expect(mockAcceptOwnerHandoff).not.toHaveBeenCalled()
     expect(mockLogOrgActivity).toHaveBeenCalled()
+  })
+
+  // AGL-4023: a join is no longer the invitee's to ask for, so a refusal at
+  // joining is the sender's to hear and to fix.
+  it('tells the SENDER why a join was refused, and the invitee only that it is being set up', async () => {
+    mockStore.set('orgs/org-1/invites/handoff-1', {
+      ...mockStore.get('orgs/org-1/invites/handoff-1'),
+      invitedBy: 'staff-sender',
+    })
+    mockLockout.mockResolvedValue({
+      refused: true,
+      reason: 'would strand',
+      verdict: 'would-strand',
+    })
+    const response = await post({ action: 'accept', inviteId: 'handoff-1' })
+    const payload = await response.json()
+    expect(response.status).toBe(409)
+    expect(payload.blocked).toBe(true)
+    expect(payload.error).not.toContain('would strand')
+    expect(mockStore.get('orgs/org-1/invites/handoff-1')).toMatchObject({
+      joinBlocked: { reason: 'would strand' },
+      acceptedAt: null,
+    })
+    expect(mockNotifyOrgAdmins).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({
+        title: "client@acme.test couldn't join Acme yet",
+        body: expect.stringContaining('would strand'),
+        link: '/acme/team',
+      }),
+    )
+    // Staff sent it and are no admin of the workspace: told directly too.
+    expect(mockNotifyUsers).toHaveBeenCalledWith(
+      ['staff-sender'],
+      expect.objectContaining({ title: "client@acme.test couldn't join Acme yet" }),
+    )
+
+    // The invitee's next visit tries again; the same reason is not re-sent.
+    mockNotifyOrgAdmins.mockClear()
+    mockNotifyUsers.mockClear()
+    await post({ action: 'accept', inviteId: 'handoff-1' })
+    expect(mockNotifyOrgAdmins).not.toHaveBeenCalled()
+    expect(mockNotifyUsers).not.toHaveBeenCalled()
   })
 
   it('somebody else cannot accept it', async () => {

@@ -45,7 +45,7 @@ import {
   markInteractiveSignIn,
   markInteractiveSignOut,
 } from '../utils/interactive-signin'
-import isMobileBrowser from '../utils/is-mobile-browser'
+import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
 import { createAuthProvider } from '../utils/oauth-providers'
 import {
   describePasskeySignInFailure,
