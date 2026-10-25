@@ -60,9 +60,6 @@ export const RECENT_ORGS_MAX = 8
 /** How many recent workspaces the rail shows below the pins. */
 export const RAIL_RECENT_ORGS = 3
 
-/** An account with this many workspaces or fewer sees them all on the rail. */
-export const RAIL_ALL_WORKSPACES_AT_MOST = 8
-
 /** `users/{uid}` field holding the person's starred screens and records. */
 export const STARRED_FIELD = 'starred'
 
@@ -169,6 +166,10 @@ export interface AppThemePrefs {
   density: AppDensity
   /** `system` follows Dynamic Type or the font scale; the rest are the Mac and Windows sizes. */
   textSize: AppTextSize
+  /**
+   * `plain` keeps the sidebar on the theme's surface; `tinted` lays the THEME's accent over it at 5%, on a theme other
+   * than Aglyn only (Aglyn's sidebar is always neutral). A workspace's color never tints it: that is its rail tile's.
+   */
   sidebarStyle: AppSidebarStyle
   /** The app icon's id: `aglyn`, or one of the alternates the apps ship. */
   appIcon: string
@@ -458,20 +459,26 @@ export interface RailWorkspaces {
   pinned: string[]
   /** Below the divider: recently opened and not pinned, at most {@link RAIL_RECENT_ORGS}. */
   recent: string[]
-  /** Every other workspace, for an account small enough to list them all. */
+  /**
+   * Workspaces listed on the rail beyond the pins and the recents. Always
+   * empty: every account reaches the rest through the All tile
+   * (AGL-3996). The field stays so the apps that read it need no change.
+   */
   rest: string[]
-  /** Whether the last tile is "All workspaces", opening the searchable switcher. */
+  /** Whether the last tile is "All workspaces", opening the searchable switcher: whenever there is a workspace. */
   allTile: boolean
   /** How many workspaces the person belongs to, shown under the All tile. */
   total: number
 }
 
 /**
- * The rail for one account: up to five pinned, a divider, up to three recent,
- * then an "All workspaces (N)" tile. An account with
- * {@link RAIL_ALL_WORKSPACES_AT_MOST} workspaces or fewer sees them all and
- * no All tile, since there is nothing to hide. `orgIds` is every membership,
- * in the switcher's order; an id the person no longer belongs to is ignored.
+ * The rail for one account, the same for every account however few
+ * workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
+ * pinned, a divider, up to three recent under "Recent", a divider, then the
+ * "All workspaces" tile with the total, which opens the switcher where pins
+ * are edited. A small account that saw every tile in one unlabeled column
+ * had no way into the switcher and no Recent label or divider. `orgIds` is every membership, in the switcher's order;
+ * an id the person no longer belongs to is ignored.
  */
 export function railWorkspaces(
   orgIds: readonly string[],
@@ -482,24 +489,26 @@ export function railWorkspaces(
   const belongs = new Set(members)
   const pins = effectivePinnedOrgs(pinned).filter((id) => belongs.has(id))
   const pinnedSet = new Set(pins)
-  if (members.length <= RAIL_ALL_WORKSPACES_AT_MOST) {
-    return {
-      pinned: pins,
-      recent: [],
-      rest: members.filter((id) => !pinnedSet.has(id)),
-      allTile: false,
-      total: members.length,
-    }
-  }
   return {
     pinned: pins,
     recent: idList(recent)
       .filter((id) => belongs.has(id) && !pinnedSet.has(id))
       .slice(0, RAIL_RECENT_ORGS),
     rest: [],
-    allTile: true,
+    allTile: members.length > 0,
     total: members.length,
   }
+}
+
+/**
+ * The one letter a workspace tile without a logo shows (Figma Rail/Workspace
+ * tile, Type=Initial): the first letter or digit of its name, upper-cased;
+ * "?" for a name with neither. One letter, not two: the tile's color, picked
+ * per workspace, tells two workspaces with the same letter apart.
+ */
+export function workspaceInitial(name: string): string {
+  const first = /[\p{L}\p{N}]/u.exec(name ?? '')
+  return first ? first[0].toUpperCase() : '?'
 }
 
 // ── Starred and recent items ────────────────────────────────────────────────
@@ -661,7 +670,44 @@ export function readWorkspaceColors(profile: unknown): Record<string, string> {
   return out
 }
 
-export type WorkspaceColorSource = 'picked' | 'brand' | 'logo' | 'none'
+/**
+ * The colors a workspace's tile takes when nothing else gives it one
+ * ({@link workspaceStableColor}): the console's blue for text on a light
+ * ground (primary.dark), deep tones of the brand palette's
+ * violet and pink, and a rose, orange, gold, green and teal beside them,
+ * each dark enough that the tile's white initial reads at 4.5:1 or more. The
+ * slate is left out: it is the tile of a workspace with no id at all.
+ */
+export const WORKSPACE_STABLE_COLORS: readonly string[] = [
+  '#0077AD',
+  '#6A4FD8',
+  '#A62BBF',
+  '#C2185B',
+  '#B4501A',
+  '#8A6A00',
+  '#2E7D5B',
+  '#00796B',
+]
+
+/**
+ * The color a workspace with no picked, brand or logo color shows on its
+ * tile: one of {@link WORKSPACE_STABLE_COLORS}, chosen by its id, so the same
+ * workspace has the same color on every device and in every app, and two
+ * workspaces with the same initial usually differ. The id is hashed with
+ * 32-bit FNV-1a over its UTF-16 code units, which each platform computes the
+ * same way. Null for an empty id.
+ */
+export function workspaceStableColor(orgId: unknown): string | null {
+  if (typeof orgId !== 'string' || orgId === '') return null
+  let hash = 0x811c9dc5
+  for (let i = 0; i < orgId.length; i++) {
+    hash ^= orgId.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return WORKSPACE_STABLE_COLORS[hash % WORKSPACE_STABLE_COLORS.length] ?? null
+}
+
+export type WorkspaceColorSource = 'picked' | 'brand' | 'logo' | 'stable' | 'none'
 
 export interface WorkspaceColor {
   /** `#RRGGBB`, or null when nothing gives the workspace a color. */
@@ -678,12 +724,18 @@ export interface WorkspaceColor {
  * it while you are in the workspace unless the person turned "Use each
  * workspace's brand" off, which stops the brand and logo colors tinting the
  * app (a picked color still does: the person chose it).
+ *
+ * Given the workspace's id, a workspace with none of the three still gets a
+ * color: its stable one ({@link workspaceStableColor}). That one colors only
+ * its tile (the rail, the pickers, the menus, the sidebar's header), never
+ * the app.
  */
 export function resolveWorkspaceColor(
   picked: unknown,
   brandColor: unknown,
   logoColor: unknown,
   useWorkspaceBrand: boolean,
+  orgId?: unknown,
 ): WorkspaceColor {
   if (isAccountColor(picked)) return { color: picked, source: 'picked', tintsApp: true }
   if (isAccountColor(brandColor)) {
@@ -692,6 +744,8 @@ export function resolveWorkspaceColor(
   if (isAccountColor(logoColor)) {
     return { color: logoColor, source: 'logo', tintsApp: useWorkspaceBrand }
   }
+  const stable = workspaceStableColor(orgId)
+  if (stable) return { color: stable, source: 'stable', tintsApp: false }
   return { color: null, source: 'none', tintsApp: false }
 }
 

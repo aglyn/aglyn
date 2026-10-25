@@ -161,9 +161,10 @@ final class ShellNavigation {
   var pinFull: PendingPin?
   /// The workspace whose color is being picked.
   var colorFor: ColorPickTarget?
-  /// The sidebar groups the person opened, remembered on this device; a group holding the screen in use is open too.
-  var openGroups: Set<String> {
-    didSet { UserDefaults.standard.set(Array(openGroups), forKey: Self.openGroupsKey) }
+  /// The sidebar groups as the person left them, open or folded, remembered on this device (AGL-3996): opening a place
+  /// opens only its own group, and only when it is folded.
+  var groups: AglynSidebarGroups {
+    didSet { UserDefaults.standard.set(groups.stored, forKey: Self.openGroupsKey) }
   }
 
   static let inSiteKey = "aglyn.shell.inSite"
@@ -171,7 +172,7 @@ final class ShellNavigation {
 
   init() {
     inSite = UserDefaults.standard.object(forKey: Self.inSiteKey) as? Bool ?? true
-    openGroups = Set(UserDefaults.standard.stringArray(forKey: Self.openGroupsKey) ?? [])
+    groups = AglynSidebarGroups(stored: UserDefaults.standard.stringArray(forKey: Self.openGroupsKey) ?? [])
   }
   /// An invitation a notification opened, waiting for its accept or decline.
   var pendingInvite: FeedNotification?

@@ -151,8 +151,8 @@ struct AccountMenuButton: View {
     .buttonStyle(.plain)
     .menuIndicator(.hidden)
     .fixedSize()
-    .help("Your account")
-    .accessibilityLabel("Your account")
+    // The rail names the account with its own bubble (AGL-3996), so no slow system help tag.
+    .accessibilityLabel(AccountIdentity(model: model).name)
     .accessibilityIdentifier("rail-account")
     .signOutConfirmation(isPresented: $confirmSignOut)
   }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynContracts
+import AglynCore
 import AglynPluginHost
 import AglynPluginManifest
 import AglynScreens
@@ -85,6 +86,25 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.mode, .main)
     XCTAssertEqual(navigation.section, .home)
     XCTAssertTrue(navigation.paths.values.allSatisfy(\.isEmpty))
+  }
+
+  /// Sidebar groups keep the state the person left them in (AGL-3996): with Website and Sell open, opening Products
+  /// leaves Website open, and opening a place in a folded group opens that group only.
+  func testOpeningAPlaceNeverFoldsAnotherGroup() throws {
+    let list = resolveNavList(.site, enabledPluginIds: NativePluginManifest.entries.map(\.id), hostAdmin: true)
+    let sell = try XCTUnwrap(list.groups.first { $0.id == "sell" })
+    let products = try XCTUnwrap(sell.rows.first { $0.screen.contains("product") } ?? sell.rows.first)
+    var groups = AglynSidebarGroups()
+    groups.set(ShellScope.groupKey("website", in: list), open: true)
+    groups.set(ShellScope.groupKey("sell", in: list), open: true)
+    ShellScope.reveal(ShellSection.opening(products.screen, products.params), in: list, groups: &groups)
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("website", in: list)))
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("sell", in: list)))
+    groups.set(ShellScope.groupKey("sell", in: list), open: false)
+    ShellScope.reveal(ShellSection.opening(products.screen, products.params), in: list, groups: &groups)
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("sell", in: list)))
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("website", in: list)))
+    XCTAssertFalse(groups.isOpen(ShellScope.groupKey("customers", in: list)))
   }
 
   /// Decision 5: a white-label workspace's brand color is the accent while you are in it (switch-off-able), never a

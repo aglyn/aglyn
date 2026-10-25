@@ -32589,15 +32589,14 @@
             ]
           ],
           "result": {
-            "allTile": false,
+            "allTile": true,
             "pinned": [
               "b"
             ],
-            "recent": [],
-            "rest": [
-              "a",
+            "recent": [
               "c"
             ],
+            "rest": [],
             "total": 3
           }
         },
@@ -32727,20 +32726,58 @@
             []
           ],
           "result": {
-            "allTile": false,
+            "allTile": true,
             "pinned": [],
             "recent": [],
-            "rest": [
-              "o1",
-              "o2",
-              "o3",
-              "o4",
-              "o5",
-              "o6",
-              "o7",
-              "o8"
-            ],
+            "rest": [],
             "total": 8
+          }
+        },
+        {
+          "args": [
+            [
+              "w1",
+              "w2",
+              "w3",
+              "w4",
+              "w5",
+              "w6"
+            ],
+            [
+              "w6"
+            ],
+            [
+              "w6",
+              "w2"
+            ]
+          ],
+          "result": {
+            "allTile": true,
+            "pinned": [
+              "w6"
+            ],
+            "recent": [
+              "w2"
+            ],
+            "rest": [],
+            "total": 6
+          }
+        },
+        {
+          "args": [
+            [
+              "w1",
+              "w2"
+            ],
+            [],
+            []
+          ],
+          "result": {
+            "allTile": true,
+            "pinned": [],
+            "recent": [],
+            "rest": [],
+            "total": 2
           }
         }
       ]
@@ -56740,6 +56777,76 @@
             "source": "picked",
             "tintsApp": true
           }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            true,
+            "Xk3pQ9vLmT2aBc7DeF1g"
+          ],
+          "result": {
+            "color": "#0077AD",
+            "source": "stable",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            false,
+            "Qm7tR2wXyZ4"
+          ],
+          "result": {
+            "color": "#0077AD",
+            "source": "stable",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            "#445566",
+            true,
+            "Xk3pQ9vLmT2aBc7DeF1g"
+          ],
+          "result": {
+            "color": "#445566",
+            "source": "logo",
+            "tintsApp": true
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            true,
+            ""
+          ],
+          "result": {
+            "color": null,
+            "source": "none",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            "#112233",
+            null,
+            null,
+            true,
+            "org-1"
+          ],
+          "result": {
+            "color": "#112233",
+            "source": "picked",
+            "tintsApp": true
+          }
         }
       ]
     },
@@ -68689,6 +68796,166 @@
               "slug": "/"
             }
           ]
+        }
+      ]
+    },
+    "workspaceInitial": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "Juniper Street Co."
+          ],
+          "result": "J"
+        },
+        {
+          "args": [
+            "acme builders"
+          ],
+          "result": "A"
+        },
+        {
+          "args": [
+            "Northwind Construction"
+          ],
+          "result": "N"
+        },
+        {
+          "args": [
+            "  42 Studio"
+          ],
+          "result": "4"
+        },
+        {
+          "args": [
+            "Ölstudio Berlin"
+          ],
+          "result": "Ö"
+        },
+        {
+          "args": [
+            "— Aglyn"
+          ],
+          "result": "A"
+        },
+        {
+          "args": [
+            "🌿 Fern & Fig"
+          ],
+          "result": "F"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "?"
+        },
+        {
+          "args": [
+            "—"
+          ],
+          "result": "?"
+        }
+      ]
+    },
+    "workspaceStableColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "Xk3pQ9vLmT2aBc7DeF1g"
+          ],
+          "result": "#0077AD"
+        },
+        {
+          "args": [
+            "Qm7tR2wXyZ4"
+          ],
+          "result": "#0077AD"
+        },
+        {
+          "args": [
+            "org-1"
+          ],
+          "result": "#00796B"
+        },
+        {
+          "args": [
+            "org-2"
+          ],
+          "result": "#A62BBF"
+        },
+        {
+          "args": [
+            "org-3"
+          ],
+          "result": "#8A6A00"
+        },
+        {
+          "args": [
+            "org-4"
+          ],
+          "result": "#0077AD"
+        },
+        {
+          "args": [
+            "org-5"
+          ],
+          "result": "#C2185B"
+        },
+        {
+          "args": [
+            "org-6"
+          ],
+          "result": "#2E7D5B"
+        },
+        {
+          "args": [
+            "org-7"
+          ],
+          "result": "#6A4FD8"
+        },
+        {
+          "args": [
+            "org-8"
+          ],
+          "result": "#B4501A"
+        },
+        {
+          "args": [
+            "a"
+          ],
+          "result": "#B4501A"
+        },
+        {
+          "args": [
+            "Ölstudio"
+          ],
+          "result": "#8A6A00"
+        },
+        {
+          "args": [
+            "🌿"
+          ],
+          "result": "#B4501A"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            42
+          ],
+          "result": null
         }
       ]
     }

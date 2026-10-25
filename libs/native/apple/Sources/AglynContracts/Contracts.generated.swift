@@ -5162,6 +5162,7 @@ public enum WorkspaceColorSource: String, Codable, CaseIterable, Hashable, Senda
   case logo = "logo"
   case none = "none"
   case picked = "picked"
+  case stable = "stable"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -5431,7 +5432,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
-  public let railAllWorkspacesAtMost: Int
   public let railRecentOrgs: Int
   public let recentOrgsField: String
   public let recentOrgsMax: Int
@@ -5491,6 +5491,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let workflowMaxSteps: Int
   public let workspaceColorsField: String
   public let workspaceColorsMax: Int
+  public let workspaceStableColors: [String]
 
   enum CodingKeys: String, CodingKey {
     case accountColorPattern = "ACCOUNT_COLOR_PATTERN"
@@ -5752,7 +5753,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
-    case railAllWorkspacesAtMost = "RAIL_ALL_WORKSPACES_AT_MOST"
     case railRecentOrgs = "RAIL_RECENT_ORGS"
     case recentOrgsField = "RECENT_ORGS_FIELD"
     case recentOrgsMax = "RECENT_ORGS_MAX"
@@ -5812,5 +5812,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
     case workspaceColorsField = "WORKSPACE_COLORS_FIELD"
     case workspaceColorsMax = "WORKSPACE_COLORS_MAX"
+    case workspaceStableColors = "WORKSPACE_STABLE_COLORS"
   }
 }

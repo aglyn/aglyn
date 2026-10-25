@@ -238,9 +238,9 @@ class ShellUiTest {
     onNodeWithTag("sign-in-submit").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 }
     onNodeWithTag("nav-sidebar").assertIsDisplayed()
-    // One workspace: its tile, and no All tile (eight or fewer show them all).
+    // One workspace: its tile, and the All tile every account gets (AGL-3996).
     onNodeWithTag("rail-tile-o1").assertIsDisplayed()
-    assertEquals(0, onAllNodesWithTagCount("rail-all"))
+    assertEquals(1, onAllNodesWithTagCount("rail-all"))
     // Inside the site: "‹ Acme" back to the whole workspace, then the site's picker.
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-picker-button") > 0 }
     onNodeWithTag("scope-back-to-workspace").assertTextContains("Acme", substring = true)

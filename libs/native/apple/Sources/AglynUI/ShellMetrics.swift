@@ -24,10 +24,18 @@ public enum AglynShellMetrics {
     public static let tileLogo: CGFloat = 22
     /// The account photo at the rail's foot.
     public static let avatar: CGFloat = 24
-    /// The rail's section labels ("PINNED").
+    /// The rail's section labels ("PINNED"): 9 points, tracked 4% (Figma Rail 97:14728).
     public static let railCaption: CGFloat = 9
-    /// The space between rail tiles.
+    public static let railCaptionTracking: CGFloat = 0.36
+    /// The space between rail tiles, labels and dividers.
     public static let railGap: CGFloat = 8
+    /// A divider between the rail's sections: a 24-point hairline in border/strong.
+    public static let railDivider: CGFloat = 24
+    /// The All workspaces tile: its box (the ring box's height, Figma 97:14737), the gap to its total, the total's size.
+    public static let allTileHeight: CGFloat = 66
+    public static let allTileGap: CGFloat = 3
+    public static let allTileTotal: CGFloat = 10
+    public static let allTileTotalWeight: Font.Weight = .bold
     /// The brand mark atop the rail.
     public static let railMark: CGFloat = 20
     /// Create new and the account photo at the rail's foot.
@@ -86,8 +94,15 @@ public enum AglynShellMetrics {
     /// A logo's box on its tile's paper plate (Figma Rail/Workspace tile, Type=Logo, Touch 5:47: 28 on 40).
     public static let tileLogo: CGFloat = 28
     public static let avatar: CGFloat = 32
-    public static let railCaption: CGFloat = 10
+    /// The rail's section labels: 11 points, tracked 0.6 (Figma Rail 12:295).
+    public static let railCaption: CGFloat = 11
+    public static let railCaptionTracking: CGFloat = 0.6
     public static let railGap: CGFloat = 8
+    public static let railDivider: CGFloat = 28
+    public static let allTileHeight: CGFloat = 66
+    public static let allTileGap: CGFloat = 4
+    public static let allTileTotal: CGFloat = 12
+    public static let allTileTotalWeight: Font.Weight = .semibold
     /// The brand mark atop the rail.
     public static let railMark: CGFloat = 24
     public static let utility: CGFloat = 36

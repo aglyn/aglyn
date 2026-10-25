@@ -118,7 +118,7 @@ public final class AglynThemeRuntime: @unchecked Sendable {
   private var accent: (light: AglynIntent, dark: AglynIntent)?
   private var shades: (light: AglynAccentShades, dark: AglynAccentShades)?
   private var compact = false
-  private var tintedSidebar = true
+  private var tintedSidebar = false
   private var scale: CGFloat = 1
 
   public init() {}

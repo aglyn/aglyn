@@ -85,26 +85,31 @@ fun recordRecentOrg(recent: List<String>, orgId: String): List<String> {
 }
 
 /**
- * The rail for one account: up to five pinned, a divider, up to three recent, then an "All workspaces (N)" tile; an
- * account with eight workspaces or fewer sees them all and no All tile. [orgIds] is every membership in the switcher's
- * order; an id the person no longer belongs to is ignored.
+ * The rail for one account, the same however few workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
+ * pinned, a divider, up to three recent, a divider, then "All workspaces (N)", which opens the switcher where pins are
+ * edited (AGL-3996). `rest` is always empty. [orgIds] is every membership in the switcher's order; an id the
+ * person no longer belongs to is ignored.
  */
 fun railWorkspaces(orgIds: List<String>, pinned: List<String>, recent: List<String>): RailWorkspaces {
   val members = idList(orgIds)
   val belongs = members.toSet()
   val pins = effectivePinnedOrgs(pinned).filter { it in belongs }
   val pinnedSet = pins.toSet()
-  if (members.size <= Contracts.railAllWorkspacesAtMost) {
-    return RailWorkspaces(allTile = false, pinned = pins, recent = emptyList(), rest = members.filter { it !in pinnedSet }, total = members.size.toLong())
-  }
   return RailWorkspaces(
-    allTile = true,
+    allTile = members.isNotEmpty(),
     pinned = pins,
     recent = idList(recent).filter { it in belongs && it !in pinnedSet }.take(Contracts.railRecentOrgs.toInt()),
     rest = emptyList(),
     total = members.size.toLong(),
   )
 }
+
+/**
+ * The one letter a workspace tile without a logo shows (Figma Rail/Workspace tile, Type=Initial): the first letter or
+ * digit of its name, upper-cased; "?" for a name with neither.
+ */
+fun workspaceInitial(name: String): String = name.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
+
 
 // ── Starred and recent items ────────────────────────────────────────────────
 
@@ -249,15 +254,42 @@ fun readWorkspaceColors(profile: Any?): Map<String, String> {
 }
 
 /**
+ * The color a workspace with no picked, brand or logo color shows on its tile: one of `WORKSPACE_STABLE_COLORS`, chosen
+ * by 32-bit FNV-1a over the id's UTF-16 code units, as the console chooses it, so the same workspace has the same color
+ * on every device and in both apps. Null for an empty id.
+ */
+fun workspaceStableColor(orgId: Any?): String? {
+  val palette = Contracts.workspaceStableColors
+  if (orgId !is String || orgId.isEmpty() || palette.isEmpty()) return null
+  var hash = 0x811C9DC5u
+  for (unit in orgId) {
+    hash = hash xor unit.code.toUInt()
+    hash *= 0x01000193u
+  }
+  return palette[(hash % palette.size.toUInt()).toInt()]
+}
+
+/**
  * A workspace's color: the one the person picked, else its brand color (`brandingProfile.primaryColor`), else a color
  * taken from its logo (Zach, 2026-10-18). A picked color always tints the app; brand and logo colors only while
- * "Use each workspace's brand" is on.
+ * "Use each workspace's brand" is on. Given the workspace's id, one with none of the three gets its stable color
+ * ([workspaceStableColor]), which colors only its tile, never the app.
  */
-fun resolveWorkspaceColor(picked: Any?, brandColor: Any?, logoColor: Any?, useWorkspaceBrand: Boolean): WorkspaceColor = when {
-  isAccountColor(picked) -> WorkspaceColor(picked as String, WorkspaceColorSource.PICKED, true)
-  isAccountColor(brandColor) -> WorkspaceColor(brandColor as String, WorkspaceColorSource.BRAND, useWorkspaceBrand)
-  isAccountColor(logoColor) -> WorkspaceColor(logoColor as String, WorkspaceColorSource.LOGO, useWorkspaceBrand)
-  else -> WorkspaceColor(null, WorkspaceColorSource.NONE, false)
+fun resolveWorkspaceColor(
+  picked: Any?,
+  brandColor: Any?,
+  logoColor: Any?,
+  useWorkspaceBrand: Boolean,
+  orgId: Any? = null,
+): WorkspaceColor {
+  val stable = workspaceStableColor(orgId)
+  return when {
+    isAccountColor(picked) -> WorkspaceColor(picked as String, WorkspaceColorSource.PICKED, true)
+    isAccountColor(brandColor) -> WorkspaceColor(brandColor as String, WorkspaceColorSource.BRAND, useWorkspaceBrand)
+    isAccountColor(logoColor) -> WorkspaceColor(logoColor as String, WorkspaceColorSource.LOGO, useWorkspaceBrand)
+    stable != null -> WorkspaceColor(stable, WorkspaceColorSource.STABLE, false)
+    else -> WorkspaceColor(null, WorkspaceColorSource.NONE, false)
+  }
 }
 
 // ── Theme ───────────────────────────────────────────────────────────────────
