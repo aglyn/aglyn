@@ -77,6 +77,11 @@ jest.mock('../components/create-org-dialog.component', () => ({
   __esModule: true,
   default: () => null,
 }))
+// The switcher never needs a plugin's declarations, and their lazy imports
+// would otherwise resolve after the suite tears down and crash the worker.
+jest.mock('../constants/plugins.declarations.generated', () => ({
+  registerPluginDeclarations: () => Promise.resolve(),
+}))
 
 async function openMenu() {
   const { OrgSwitcherNav } = await import(
