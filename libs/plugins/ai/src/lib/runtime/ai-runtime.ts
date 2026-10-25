@@ -23,6 +23,7 @@ import {
   AiRequestShapeError,
   AiUpstreamError,
   aiBase64Bytes,
+  aiCacheMarkerTtls,
   aiMessageImages,
   type AiMessage,
   type AiProvider,
@@ -421,7 +422,10 @@ async function runInDevelopment(
     return stream ? provider.stream(request) : provider.complete(request)
   }
   const dev = await import('./ai-dev-replay')
-  const ttlMs = request.cacheTtl === '1h' ? 60 * 60_000 : 5 * 60_000
+  // The prefix runs through the last system marker, so it stays warm as long
+  // as that marker's entry lives: five minutes behind a site's block (AGL-4050).
+  const lastMarker = aiCacheMarkerTtls(request).system.filter((ttl) => ttl !== null).pop()
+  const ttlMs = lastMarker === '1h' ? 60 * 60_000 : 5 * 60_000
   const prefix = dev.aiCachedPrefixKey(request)
   if (stream) {
     const live = () => dev.aiDevWarmPrefixFirst(prefix, ttlMs, () => provider.stream(request))

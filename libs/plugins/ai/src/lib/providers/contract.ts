@@ -353,13 +353,15 @@ export interface AiRequestBase {
   thinking?: AiThinking
   signal?: AbortSignal
   /**
-   * How long a cache entry the breakpoints write should live, where the
-   * provider offers a choice: the provider's default (five minutes on the
+   * How long a cache entry the SHARED breakpoints write should live, where
+   * the provider offers a choice: the provider's default (five minutes on the
    * Messages API) when absent. A step a site job runs asks for `1h` through
    * its routing row (`AiRoutingRow.cacheTtl`, AGL-3830), in production too,
    * and a development live run asks for it on every request
-   * (`runtime/ai-dev-env.ts`). It changes no answer, only what a request
-   * within the hour pays for the prefix, so a replay key does not read it.
+   * (`runtime/ai-dev-env.ts`). A job's own markers keep five minutes whatever
+   * this says (`aiCacheMarkerTtls`, AGL-4050). It changes no answer, only what
+   * a request within the hour pays for the prefix, so a replay key does not
+   * read it.
    */
   cacheTtl?: '1h'
   /**
@@ -378,6 +380,53 @@ export interface AiRequestBase {
 export interface AiProviderRequest extends AiRequestBase {
   /** The provider's own key, resolved by the runtime from the environment or the org's setting. */
   apiKey: string
+}
+
+/** How long one cache marker's entry lives: the provider's five minutes, or the hour. */
+export type AiCacheTtl = '5m' | '1h'
+
+/**
+ * Who reads a cache marker's entry (AGL-4050). A `shared` marker closes a
+ * span of the platform's own prompt (the tools, the doctrine, a door's
+ * rules), the same bytes for every org and every job, so the next job can
+ * read what this one wrote: it lives as long as the request's `cacheTtl`
+ * asks. A `job` marker closes bytes only one job reads: a site's block
+ * (`site`) or the request's own conversation (`cacheConversation`). That job
+ * reads it again within minutes and no other job ever does, so it keeps the
+ * provider's five minutes whatever the route asks; at the hour, its 2x write
+ * would never be read back.
+ */
+export type AiCacheScope = 'shared' | 'job'
+
+/** A system block's marker scope: a site's block is one job's, every other block the platform's. */
+export function aiCacheScopeOf(block: Pick<AiSystemBlock, 'site'>): AiCacheScope {
+  return block.site ? 'job' : 'shared'
+}
+
+/**
+ * The lifetime of every cache marker a request carries (AGL-4050), in prefix
+ * order: one per system block, `null` where the block marks none, then the
+ * conversation's, `null` where it is not cached. Tools carry no marker of
+ * their own; they sit ahead of the first system marker and live as long as it.
+ *
+ * A provider refuses a request whose longer-lived entry comes after a
+ * shorter-lived one, so once a marker is five minutes every marker after it
+ * is too. A shared marker behind a job's is downgraded, never sent at the
+ * hour. The runtime already keeps a site's block last among the system
+ * breakpoints, so a door's request never meets the downgrade; it is the
+ * adapter's guarantee all the same.
+ */
+export function aiCacheMarkerTtls(
+  request: Pick<AiRequestBase, 'system' | 'messages' | 'cacheTtl' | 'cacheConversation'>,
+): { system: Array<AiCacheTtl | null>; conversation: AiCacheTtl | null } {
+  let ceiling: AiCacheTtl = request.cacheTtl === '1h' ? '1h' : '5m'
+  const lifetime = (scope: AiCacheScope): AiCacheTtl => {
+    if (scope === 'job') ceiling = '5m'
+    return ceiling
+  }
+  const system = request.system.map((block) => (block.cacheBreakpoint ? lifetime(aiCacheScopeOf(block)) : null))
+  const conversation = request.cacheConversation && request.messages.length > 0 ? lifetime('job') : null
+  return { system, conversation }
 }
 
 /**

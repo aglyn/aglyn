@@ -140,6 +140,9 @@ export interface AiRoutingRow {
    * so a five-minute entry is gone before the next job could read it; at an
    * hour the next site job reads what the last one wrote. The write costs 2x
    * the input price instead of 1.25x, so a step no job runs leaves it out.
+   * The hour is the SHARED markers' alone (AGL-4050): a site's block and the
+   * plan's own conversation are read by one job only, so they keep five
+   * minutes on every row (`aiCacheMarkerTtls` in `providers/contract.ts`).
    * Read by `runValidatedGeneration` into the request's `cacheTtl`; a door
    * that sends its own request on the same step (the copy assistant's blog
    * draft) keeps five minutes.
@@ -148,9 +151,10 @@ export interface AiRoutingRow {
 }
 
 /**
- * The cache lifetime every step a site job runs asks for (AGL-3830): the
- * plan, the look, the header and footer, every page and its listing, the
- * creations, the first posts and products, and the welcome email.
+ * The cache lifetime every step a site job runs asks for its shared prompt
+ * (AGL-3830, AGL-4050): the plan, the look, the header and footer, every page
+ * and its listing, the creations, the first posts and products, and the
+ * welcome email.
  */
 const AI_SITE_JOB_CACHE_TTL = '1h' as const
 
