@@ -599,6 +599,7 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
             val on = option.id in chosen
             androidx.compose.material3.FilterChip(
               selected = on,
+              colors = com.aglyn.ui.aglynFilterChipColors(),
               onClick = {
                 val others = sheet.picks.filter { it.groupId != group.id }
                 val mine = when {
@@ -816,7 +817,7 @@ private fun HoldsDialog(model: RegisterModel, onDismiss: () -> Unit) {
               Column(Modifier.weight(1f)) {
                 Text(held.label, style = MaterialTheme.typography.titleSmall)
                 Text(
-                  "${held.cart.count} items · ${money(held.cart.subtotalCents - held.cart.discountCents, model.currency)}",
+                  "${held.cart.count} ${if (held.cart.count == 1) "item" else "items"} · ${money(held.cart.subtotalCents - held.cart.discountCents, model.currency)}",
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

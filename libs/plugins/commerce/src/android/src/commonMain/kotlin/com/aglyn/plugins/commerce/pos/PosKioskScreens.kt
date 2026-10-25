@@ -370,6 +370,7 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
                 val on = option.id in chosen
                 FilterChip(
                   selected = on,
+                  colors = com.aglyn.ui.aglynFilterChipColors(),
                   onClick = {
                     val others = picks.filter { it.groupId != group.id }
                     val mine = when {

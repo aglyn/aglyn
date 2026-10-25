@@ -24,6 +24,8 @@ import {
   THEME_DENSITIES,
   THEME_FIGMA_BASE,
   THEME_PALETTES,
+  THEME_PHONE_AGLYN,
+  THEME_PHONE_BOLD_ACCENT,
   THEME_PREVIEWS,
   THEME_RETIRED_ACCENTS,
   themeContrast,
@@ -188,6 +190,46 @@ describe('the themes', () => {
       expect([theme.id, 'light', readable(theme.light)]).toEqual([theme.id, 'light', true])
       expect([theme.id, 'dark', readable(theme.dark)]).toEqual([theme.id, 'dark', true])
     }
+  })
+})
+
+describe('the phone’s bold Aglyn look (AGL-3990)', () => {
+  const pairs: Array<[keyof ThemeColors, keyof ThemeColors]> = [
+    ['successFg', 'successBg'],
+    ['warningFg', 'warningBg'],
+    ['dangerFg', 'dangerBg'],
+    ['infoFg', 'infoBg'],
+    ['newFg', 'newBg'],
+  ]
+
+  it('holds Figma’s Theme mode 223:0: a sky-tinted ground under white panels, navy in dark', () => {
+    expect(THEME_PHONE_AGLYN.light).toMatchObject({ canvas: '#edf9ff', surface: '#ffffff', textPrimary: '#19202a' })
+    expect(THEME_PHONE_AGLYN.dark).toMatchObject({ canvas: '#07181f', surface: '#0d2029', raised: '#152b35' })
+    expect(THEME_PHONE_BOLD_ACCENT).toBe('#00b0ff')
+  })
+
+  it('holds every color to #RRGGBB(AA), with the same fields as every theme', () => {
+    const fields = Object.keys(THEME_PALETTES[0].light).sort()
+    for (const colors of [THEME_PHONE_AGLYN.light, THEME_PHONE_AGLYN.dark]) {
+      expect(Object.keys(colors).sort()).toEqual(fields)
+      for (const value of Object.values(colors)) expect(value).toEqual(expect.stringMatching(COLOR))
+    }
+  })
+
+  it('keeps text readable on every ground, and each status’s ink on its own wash', () => {
+    for (const colors of [THEME_PHONE_AGLYN.light, THEME_PHONE_AGLYN.dark]) {
+      for (const ground of [colors.canvas, colors.surface, colors.raised, colors.sunken]) {
+        expect(themeContrast(colors.textPrimary, ground)).toBeGreaterThanOrEqual(4.5)
+        expect(themeContrast(colors.textSecondary, ground)).toBeGreaterThanOrEqual(4.5)
+        expect(themeContrast(colors.textTertiary, ground)).toBeGreaterThanOrEqual(4.5)
+      }
+      for (const [fg, bg] of pairs) expect([fg, themeContrast(colors[fg], colors[bg]) >= 4.5]).toEqual([fg, true])
+    }
+  })
+
+  it('never writes the brand fill as text on the dark ground: info is the accent’s dark text shade', () => {
+    expect(THEME_PHONE_AGLYN.dark.infoFg).toBe('#4dc8ff')
+    expect(Object.values(THEME_PHONE_AGLYN.dark)).not.toContain('#00b0ff')
   })
 })
 

@@ -114,6 +114,7 @@ fun QuantityStepper(
     FilledTonalIconButton(
       onClick = { onChange(value - 1) },
       enabled = value > range.first,
+      colors = aglynTonalIconButtonColors(),
       modifier = Modifier.size(36.dp).testTag("stepper-minus"),
     ) {
       // At one, with zero allowed, the next press removes the line: say so.
@@ -129,6 +130,7 @@ fun QuantityStepper(
     FilledTonalIconButton(
       onClick = { onChange(value + 1) },
       enabled = value < range.last,
+      colors = aglynTonalIconButtonColors(),
       modifier = Modifier.size(36.dp).testTag("stepper-plus"),
     ) { Icon(AglynIcons.named("add"), contentDescription = "One more") }
   }
@@ -152,12 +154,7 @@ fun ChoiceChipRow(
       onClick = { onSelect(option.key) },
       label = { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
       leadingIcon = option.icon?.let { name -> { Icon(AglynIcons.named(name), null, Modifier.size(FilterChipDefaults.IconSize)) } },
-      // A picked chip is selected the way every selection in the app is: primaryContainer, never the pink secondary.
-      colors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-      ),
+      colors = aglynFilterChipColors(),
       modifier = Modifier.heightIn(min = 40.dp).testTag("chip-${option.key}"),
     )
   }
@@ -202,4 +199,43 @@ fun aglynTonalButtonColors(): androidx.compose.material3.ButtonColors =
   androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
     containerColor = MaterialTheme.colorScheme.primaryContainer,
     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+  )
+
+/** A tonal icon button's colors (the quantity stepper's − and +): primaryContainer, as [aglynTonalButtonColors]. */
+@Composable
+fun aglynTonalIconButtonColors(): androidx.compose.material3.IconButtonColors =
+  androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
+    containerColor = MaterialTheme.colorScheme.primaryContainer,
+    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+  )
+
+/** A tonal icon toggle's colors (the scanner's light): on reads primaryContainer, never the pink secondary. */
+@Composable
+fun aglynTonalIconToggleButtonColors(): androidx.compose.material3.IconToggleButtonColors =
+  androidx.compose.material3.IconButtonDefaults.filledTonalIconToggleButtonColors(
+    checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+  )
+
+/**
+ * A picked filter chip is selected the way every selection in the app is: primaryContainer. Material's default takes
+ * the secondary container, which in our palette is the brand pink, kept for AI.
+ */
+@Composable
+fun aglynFilterChipColors(): androidx.compose.material3.SelectableChipColors =
+  FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+  )
+
+/** A selected input chip (an applied filter): primaryContainer, as [aglynFilterChipColors]. */
+@Composable
+fun aglynInputChipColors(): androidx.compose.material3.SelectableChipColors =
+  androidx.compose.material3.InputChipDefaults.inputChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
   )
