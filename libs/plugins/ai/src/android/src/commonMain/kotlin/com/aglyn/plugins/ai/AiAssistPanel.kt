@@ -1,6 +1,40 @@
 package com.aglyn.plugins.ai
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
+import com.aglyn.screens.ScreenValues
+import com.aglyn.ui.LocalAccent
+import com.aglyn.ui.LocalAglynPalette
+import com.aglyn.ui.LocalThemeSurfaces
+import com.aglyn.ui.radius
+import com.aglyn.ui.shellMetrics
+import com.aglyn.ui.space
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,16 +45,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,8 +76,6 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.NeedsYouLine
 import com.aglyn.ui.StatusTone
-import com.aglyn.ui.TextButton
-import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -109,9 +137,10 @@ fun AssistPanel(context: NativePluginContext) {
     credits = runCatching {
       val answer = context.api.request("/api/ai/billing/credits", ApiMethod.GET, query = mapOf("orgId" to orgId)) as? JsonObject
       val standing = answer?.get("credits") as? JsonObject
+      // The footer's parenthesis (Figma 273:20323): "(1,240 left this month)".
       when {
-        (answer?.get("unlimited") as? JsonPrimitive)?.contentOrNull == "true" -> "AI credits are not capped on this workspace"
-        standing != null -> "${standing.str("remaining") ?: "0"} credits left this month"
+        (answer?.get("unlimited") as? JsonPrimitive)?.contentOrNull == "true" -> "(not capped on this workspace)"
+        standing != null -> "(${ScreenValues.grouped(standing.str("remaining")?.toDoubleOrNull() ?: 0.0)} left this month)"
         else -> null
       }
     }.getOrNull()
@@ -163,76 +192,247 @@ fun AssistPanel(context: NativePluginContext) {
     }
   }
 
+  val m = if (shellMetrics.compact) CompactAssist else TouchAssist
+  val canSend = question.isNotBlank() && !busy
+  val hairline = MaterialTheme.colorScheme.outlineVariant
   Column(Modifier.fillMaxSize().testTag("assist-panel")) {
-    // What it reads: the context chip.
-    looking?.let {
-      Row(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalAlignment = Alignment.CenterVertically) {
-        AssistChip(onClick = {}, label = { Text("Looking at: $it", maxLines = 1) }, leadingIcon = { Icon(AglynIcons.named("visibility"), null, Modifier.size(16.dp)) }, modifier = Modifier.testTag("assist-context"))
-      }
-    }
-    LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-      if (turns.isEmpty()) {
-        item {
-          Column(Modifier.padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-            Text("Try", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            for (suggestion in assistSuggestions(route)) {
-              TextButton(onClick = { ask(suggestion) }, modifier = Modifier.testTag("assist-suggestion")) {
-                Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(16.dp))
-                Text(suggestion, Modifier.padding(start = space(1f)))
-              }
-            }
-          }
-        }
-      }
+    looking?.takeIf { it.isNotBlank() }?.let { ContextChip(m, it, params["icon"]) }
+    LazyColumn(
+      Modifier.weight(1f).fillMaxWidth(),
+      state = listState,
+      contentPadding = PaddingValues(horizontal = m.edge, vertical = if (turns.isEmpty()) space(0f) else space(1f)),
+      verticalArrangement = Arrangement.spacedBy(space(1.75f)),
+    ) {
       itemsIndexed(turns) { i, turn ->
-        val mine = turn.role == "user"
-        Box(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(0.5f)), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
-          Column(
-            Modifier.widthIn(max = 520.dp)
-              .background(if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(com.aglyn.ui.shellMetrics.cardRadius))
-              .padding(space(1.5f))
-              .testTag("assist-turn-$i")
-              .semantics { if (!mine) liveRegion = LiveRegionMode.Polite },
-            verticalArrangement = Arrangement.spacedBy(space(0.5f)),
-          ) {
-            Text(turn.text.ifEmpty { if (busy && i == turns.lastIndex) "…" else "" }, style = MaterialTheme.typography.bodyMedium)
-            turn.proposal?.let { (label, href) -> TextButton(onClick = { context.openLink(href) }, modifier = Modifier.testTag("assist-proposal")) { Text(label) } }
-            if (turn.docs.isNotEmpty()) {
-              FlowRow(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
-                turn.docs.forEach { (title, url) -> AssistChip(onClick = { context.openLink(url) }, label = { Text(title, maxLines = 1) }) }
-              }
+        TurnView(m, turn, typing = busy && i == turns.lastIndex, tag = "assist-turn-$i") { href -> context.openLink(href) }
+      }
+    }
+    if (turns.isEmpty() || m.suggestionsStay) {
+      val place = params["place"].orEmpty()
+      Column(
+        Modifier.fillMaxWidth().padding(start = m.edge, end = m.edge, top = space(0.75f)),
+        verticalArrangement = Arrangement.spacedBy(m.suggestionGap),
+      ) {
+        Text(
+          if (m.suggestionsStay && place.isNotEmpty()) "Suggestions for $place" else "Try",
+          style = m.text(m.caption, m.captionWeight),
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        for (suggestion in assistSuggestions(route)) Suggestion(m, suggestion, enabled = !busy) { ask(suggestion) }
+      }
+    }
+    quota?.let { q ->
+      Text(
+        "${q.remaining} of ${q.limit} free messages left ${if (q.period == "day") "today" else "this month"}",
+        style = m.text(m.caption),
+        color = assistTertiaryText(),
+        modifier = Modifier.fillMaxWidth().padding(start = m.edge, end = m.edge, top = space(0.75f)).testTag("assist-quota"),
+      )
+    }
+    // The field and its Send, and under them what questions and builds cost.
+    Column(
+      Modifier.fillMaxWidth().then(
+        if (m.suggestionsStay) {
+          // The desktop's composer sits on its own band under a hairline (Figma 18:540).
+          Modifier.padding(top = space(0.75f)).drawBehind { drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
+            .padding(start = m.edge, end = m.edge, top = space(1.5f), bottom = space(1.75f))
+        } else {
+          Modifier.padding(start = m.edge, end = m.edge, top = space(0.75f), bottom = space(1.25f))
+        },
+      ),
+      verticalArrangement = Arrangement.spacedBy(space(0.75f)),
+    ) {
+      Row(
+        Modifier.fillMaxWidth().heightIn(min = m.composer)
+          .background(assistSunken(), RoundedCornerShape(m.composerRadius))
+          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(m.composerRadius))
+          .padding(start = m.composerLeading, end = space(0.75f)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space(1.25f)),
+      ) {
+        val prompt = params["scope"]?.takeIf { it.isNotBlank() }?.let { "Ask about $it" }
+          ?: context.hostId?.let { "Ask about this site" } ?: "Ask about this workspace"
+        val style = m.text(m.body).copy(color = MaterialTheme.colorScheme.onSurface)
+        BasicTextField(
+          question,
+          onValueChange = { question = it },
+          textStyle = style,
+          maxLines = 4,
+          cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+          keyboardActions = KeyboardActions(onSend = { ask(question) }),
+          modifier = Modifier.weight(1f).padding(vertical = space(1f)).testTag("assist-field"),
+          decorationBox = { field ->
+            Box(contentAlignment = Alignment.CenterStart) {
+              if (question.isEmpty()) Text(prompt, style = style, color = assistTertiaryText(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+              field()
             }
-          }
+          },
+        )
+        // Send: the accent's fill with a white paper plane (Figma Send 273:20321).
+        Box(
+          Modifier.size(m.send).alpha(if (canSend) 1f else 0.4f).clip(RoundedCornerShape(m.sendRadius))
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(enabled = canSend, role = Role.Button) { ask(question) }
+            .semantics { contentDescription = "Send" }
+            .testTag("assist-send"),
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(AglynIcons.named("send"), null, Modifier.size(m.sendIcon), tint = MaterialTheme.colorScheme.onPrimary)
         }
       }
-    }
-    // The credits strip and the day's free limit.
-    val standing = listOfNotNull(
-      quota?.let { q -> "${q.remaining} of ${q.limit} free messages left ${if (q.period == "day") "today" else "this month"}" },
-      credits,
-    ).joinToString(" · ")
-    if (standing.isNotEmpty()) {
-      Text(standing, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = space(2f)).testTag("assist-credits"))
-    }
-    Row(Modifier.fillMaxWidth().padding(space(1.5f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-      OutlinedTextField(
-        question,
-        onValueChange = { question = it },
-        placeholder = { Text(context.hostId?.let { "Ask about this site" } ?: "Ask about this workspace") },
-        modifier = Modifier.weight(1f).testTag("assist-field"),
-        maxLines = 4,
-        shape = RoundedCornerShape(com.aglyn.ui.shellMetrics.cardRadius),
+      Text(
+        listOfNotNull("Questions are free · builds and edits use credits", credits).joinToString(" "),
+        style = m.text(m.caption),
+        color = assistTertiaryText(),
+        modifier = Modifier.testTag("assist-credits"),
       )
-      FilledIconButton(onClick = { ask(question) }, enabled = question.isNotBlank() && !busy, modifier = Modifier.testTag("assist-send").semantics { contentDescription = "Send" }) {
-        Icon(AglynIcons.named("send"), null)
+    }
+  }
+}
+
+/** The panel's sizes, from Figma: one structure, two sets of numbers (the Apple panel's AssistMetrics, value for value). */
+private class AssistMetrics(
+  val chipText: TextUnit,
+  val chipWeight: FontWeight,
+  val chipPadding: PaddingValues,
+  /** Questions, answers and the field. */
+  val body: TextUnit,
+  val suggestion: TextUnit,
+  val suggestionIcon: Dp,
+  val suggestionHeight: Dp,
+  val suggestionPadding: Dp,
+  val suggestionRadius: Dp,
+  val suggestionGap: Dp,
+  val suggestionIconGap: Dp,
+  /** "Try" and the footer. */
+  val caption: TextUnit,
+  val captionWeight: FontWeight,
+  val composer: Dp,
+  val composerRadius: Dp,
+  val composerLeading: Dp,
+  val send: Dp,
+  val sendRadius: Dp,
+  val sendIcon: Dp,
+  val bubbleRadius: Dp,
+  val action: TextUnit,
+  val actionHeight: Dp,
+  val actionRadius: Dp,
+  /** The desktop keeps its suggestions under the thread (18:485); a phone gives the thread the room once it starts. */
+  val suggestionsStay: Boolean,
+) {
+  /** The one content edge: chip, thread, suggestions, field and footer all start and end on it. */
+  val edge = space(2f)
+
+  /** The brand face at a size (the theme's own family). */
+  @Composable
+  fun text(size: TextUnit, weight: FontWeight = FontWeight.Normal): TextStyle =
+    MaterialTheme.typography.bodyMedium.copy(fontSize = size, fontWeight = weight, lineHeight = size * 1.34f)
+}
+
+/** Touch, on phones and tablets: Figma Android / Sheet / AI 273:20299 and iPhone / Sheet / AI 21:314. */
+private val TouchAssist = AssistMetrics(
+  chipText = 13.sp, chipWeight = FontWeight.Normal, chipPadding = PaddingValues(start = space(1.25f), end = space(1.5f), top = space(0.625f), bottom = space(0.625f)),
+  body = 15.sp, suggestion = 15.sp, suggestionIcon = space(2f), suggestionHeight = space(5.75f), suggestionPadding = space(1.75f), suggestionRadius = radius(3f),
+  suggestionGap = space(0.75f), suggestionIconGap = space(1.25f), caption = 13.sp, captionWeight = FontWeight.Normal, composer = space(6.5f), composerRadius = radius(3f),
+  composerLeading = space(1.75f), send = space(5f), sendRadius = radius(2f), sendIcon = space(2f), bubbleRadius = radius(3f), action = 15.sp, actionHeight = space(4.5f),
+  actionRadius = radius(2f), suggestionsStay = false,
+)
+
+/** Compact, on the desktop: Figma AI panel 18:485. */
+private val CompactAssist = AssistMetrics(
+  chipText = 12.sp, chipWeight = FontWeight.SemiBold, chipPadding = PaddingValues(start = space(1f), end = space(1.25f), top = space(0.5f), bottom = space(0.5f)),
+  body = 14.sp, suggestion = 13.sp, suggestionIcon = space(1.75f), suggestionHeight = space(4.5f), suggestionPadding = space(1.25f), suggestionRadius = radius(1.5f),
+  suggestionGap = space(1.75f), suggestionIconGap = space(1f), caption = 12.sp, captionWeight = FontWeight.SemiBold, composer = space(5.5f), composerRadius = radius(2.5f),
+  composerLeading = space(1.5f), send = space(4f), sendRadius = radius(1.5f), sendIcon = space(1.75f), bubbleRadius = radius(2.5f), action = 13.sp, actionHeight = space(3.5f),
+  actionRadius = radius(1.5f), suggestionsStay = true,
+)
+
+/** Captions and the field's placeholder: the theme's tertiary text. */
+@Composable
+private fun assistTertiaryText(): Color = LocalThemeSurfaces.current?.textTertiary ?: LocalAglynPalette.current.textDisabled
+
+/** A recessed ground: the field, and your question in the thread. */
+@Composable
+private fun assistSunken(): Color = LocalThemeSurfaces.current?.sunken ?: MaterialTheme.colorScheme.surfaceVariant
+
+/** The accent as an icon (3:1): the chip's and the suggestions' marks. */
+@Composable
+private fun assistAccentIcon(): Color = LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary
+
+/** What the panel reads: the place's own icon and name on the accent's soft wash. */
+@Composable
+private fun ContextChip(m: AssistMetrics, looking: String, icon: String?) {
+  Row(
+    Modifier.padding(start = m.edge, end = m.edge, top = space(0.5f), bottom = space(0.75f))
+      .background(LocalAccent.current?.soft ?: MaterialTheme.colorScheme.primaryContainer, CircleShape)
+      .padding(m.chipPadding)
+      .semantics(mergeDescendants = true) {}
+      .testTag("assist-context"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(space(0.75f)),
+  ) {
+    Icon(AglynIcons.named(icon?.takeIf { AglynIcons.has(it) } ?: "visibility"), null, Modifier.size(space(1.75f)), tint = assistAccentIcon())
+    Text("Looking at: $looking", style = m.text(m.chipText, m.chipWeight), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  }
+}
+
+/** A question that fits the screen: an outlined card with ✦. */
+@Composable
+private fun Suggestion(m: AssistMetrics, text: String, enabled: Boolean, onClick: () -> Unit) {
+  val shape = RoundedCornerShape(m.suggestionRadius)
+  Row(
+    Modifier.fillMaxWidth().heightIn(min = m.suggestionHeight).clip(shape)
+      .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+      .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+      .padding(horizontal = m.suggestionPadding, vertical = space(0.75f))
+      .testTag("assist-suggestion"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(m.suggestionIconGap),
+  ) {
+    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(m.suggestionIcon), tint = assistAccentIcon())
+    Text(text, style = m.text(m.suggestion), color = MaterialTheme.colorScheme.onSurface)
+  }
+}
+
+/** One turn: your question on the sunken fill, the answer as plain text, then what it points to as outlined buttons. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: String, open: (String) -> Unit) {
+  val mine = turn.role == "user"
+  Column(
+    Modifier.fillMaxWidth()
+      .then(if (mine) Modifier.background(assistSunken(), RoundedCornerShape(m.bubbleRadius)).padding(horizontal = space(1.5f), vertical = space(1.25f)) else Modifier)
+      .testTag(tag)
+      .semantics { if (!mine) liveRegion = LiveRegionMode.Polite },
+    verticalArrangement = Arrangement.spacedBy(space(1f)),
+  ) {
+    Text(turn.text.ifEmpty { if (typing) "…" else "" }, style = m.text(m.body), color = MaterialTheme.colorScheme.onSurface)
+    if (turn.proposal != null || turn.docs.isNotEmpty()) {
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        turn.proposal?.let { (label, href) -> AssistAction(m, label, null, "assist-proposal") { open(href) } }
+        turn.docs.forEach { (title, url) -> AssistAction(m, title, "article", "assist-doc") { open(url) } }
       }
     }
-    Text(
-      "Questions are free; builds and edits use credits.",
-      style = MaterialTheme.typography.labelSmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      modifier = Modifier.padding(start = space(2f), end = space(2f), bottom = space(1f)),
-    )
+  }
+}
+
+/** An answer's next step or document: Figma Button, Secondary, Small (surface, border/strong, primary text), touch-sized on a phone. */
+@Composable
+private fun AssistAction(m: AssistMetrics, label: String, icon: String?, tag: String, onClick: () -> Unit) {
+  androidx.compose.material3.OutlinedButton(
+    onClick = onClick,
+    modifier = Modifier.height(m.actionHeight).testTag(tag),
+    shape = RoundedCornerShape(m.actionRadius),
+    colors = ButtonDefaults.outlinedButtonColors(
+      containerColor = LocalThemeSurfaces.current?.surface ?: MaterialTheme.colorScheme.surfaceContainerLowest,
+      contentColor = MaterialTheme.colorScheme.onSurface,
+    ),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    contentPadding = PaddingValues(horizontal = space(1.25f)),
+  ) {
+    icon?.let { Icon(AglynIcons.named(it), null, Modifier.size(space(2f))); Spacer(Modifier.width(space(0.75f))) }
+    Text(label, style = m.text(m.action, FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 

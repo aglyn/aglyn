@@ -417,6 +417,40 @@ class NavShellUiTest {
     }
   }
 
+  /**
+   * On a phone, Aglyn AI is one tap away on every screen, as the tablet's and the desktop's title bar has it (AGL-4001):
+   * the top bar's ✦ opens the AI sheet on a tab's first screen and on a pushed one, and the panel reads the place.
+   */
+  @Test
+  fun aPhonesAiIsOneTapAwayOnEveryScreen() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val navigator = ShellNavigator()
+    val params = mutableListOf<Map<String, String>>()
+    val ai = com.aglyn.pluginhost.NativePluginManifestEntry("ai", mapOf("widgets" to listOf("ai.assist-panel"))) { registrar ->
+      registrar.widget("ai.assist-panel", title = "Assist", order = 10, slot = ASSIST_PANEL_SLOT) {
+        params += com.aglyn.pluginhost.LocalSlotParams.current
+        androidx.compose.material3.Text("The panel", androidx.compose.ui.Modifier.testTag("fake-assist"))
+      }
+    }
+    setContent { AglynShell(testServices(userDoc = emptyMap(), plugins = listOf(ai)), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-ai") > 0 }
+    onNodeWithTag("phone-ai").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("fake-assist") > 0 }
+    // The sheet is titled with the brand's name, as Figma and the Apple apps have it, and reads Home in the site.
+    onNodeWithText("Aglyn AI").assertExists()
+    val home = params.last()
+    assertEquals("Home", home["place"])
+    assertEquals("home", home["icon"])
+    assertEquals("Acme Shop", home["scope"])
+    onNodeWithTag("ai-sheet-close").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("fake-assist") == 0 }
+    // A pushed screen keeps the top bar's ✦ under its back arrow.
+    navigator.push(Route.Screen("site.pages"))
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("title-back") > 0 }
+    onNodeWithTag("phone-ai").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("fake-assist") > 0 }
+  }
+
   @Test
   fun theCreateMenuListsTheManifestsItemsForTheScope() = runComposeUiTest {
     setContent { AglynShell(testServices(userDoc = emptyMap())) }

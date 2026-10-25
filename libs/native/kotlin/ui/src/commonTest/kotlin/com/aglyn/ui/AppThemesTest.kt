@@ -77,6 +77,26 @@ class AppThemesTest {
   }
 
   @Test
+  fun aPhoneInTheBrandsLookDrawsTheBoldGrounds() {
+    // Figma Theme mode 223:0 (AGL-3990): a sky-tinted ground under white panels in light, navy in dark.
+    assertEquals("#EDF9FF", phoneBoldSurfaces(dark = false).canvas.toHex().uppercase())
+    assertEquals(Color.White.toHex(), phoneBoldSurfaces(dark = false).surface.toHex())
+    assertEquals("#07181F", phoneBoldSurfaces(dark = true).canvas.toHex().uppercase())
+    // Only the Aglyn theme in the brand blue (a retired blue reads as it); a picked accent or another theme keeps its own.
+    assertTrue(isBrandLook(AppThemeName.AGLYN, null))
+    assertTrue(isBrandLook(AppThemeName.AGLYN, "#00B0FF"))
+    assertTrue(isBrandLook(AppThemeName.AGLYN, "#0073AE"))
+    assertEquals(false, isBrandLook(AppThemeName.AGLYN, "#7A5CF0"))
+    assertEquals(false, isBrandLook(AppThemeName.QUIET, null))
+    for (dark in listOf(false, true)) {
+      val s = phoneBoldSurfaces(dark)
+      for (ground in listOf(s.canvas, s.surface, s.raised, s.sunken)) {
+        assertTrue(contrastRatio(s.textPrimary, ground) >= 4.5f && contrastRatio(s.textTertiary, ground) >= 4.5f, "text on $ground dark=$dark")
+      }
+    }
+  }
+
+  @Test
   fun densityAndTextSize() {
     assertTrue(uiDensityOf(com.aglyn.contracts.AppDensity.COMPACT).row < uiDensityOf(com.aglyn.contracts.AppDensity.COMFORTABLE).row)
     assertEquals(1f, textScaleOf(com.aglyn.contracts.AppTextSize.SYSTEM))

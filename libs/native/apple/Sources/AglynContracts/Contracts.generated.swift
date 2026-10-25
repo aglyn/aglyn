@@ -5195,6 +5195,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let themeFigmaBase: ThemeColorsPair
   public let themeNonTextContrast: Int
   public let themePalettes: [ThemePalette]
+  public let themePhoneAglyn: ThemeColorsPair
+  public let themePhoneBoldAccent: String
   public let themePreviews: [String: ThemePreview]
   public let themeRetiredAccents: [String: String]
   public let themeTextContrast: Double
@@ -5506,6 +5508,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case themeFigmaBase = "THEME_FIGMA_BASE"
     case themeNonTextContrast = "THEME_NON_TEXT_CONTRAST"
     case themePalettes = "THEME_PALETTES"
+    case themePhoneAglyn = "THEME_PHONE_AGLYN"
+    case themePhoneBoldAccent = "THEME_PHONE_BOLD_ACCENT"
     case themePreviews = "THEME_PREVIEWS"
     case themeRetiredAccents = "THEME_RETIRED_ACCENTS"
     case themeTextContrast = "THEME_TEXT_CONTRAST"
