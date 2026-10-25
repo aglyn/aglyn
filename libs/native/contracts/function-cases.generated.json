@@ -56004,7 +56004,7 @@
             "Xk3pQ9vLmT2aBc7DeF1g"
           ],
           "result": {
-            "color": "#0073AE",
+            "color": "#0077AD",
             "source": "stable",
             "tintsApp": false
           }
@@ -56018,7 +56018,7 @@
             "Qm7tR2wXyZ4"
           ],
           "result": {
-            "color": "#0073AE",
+            "color": "#0077AD",
             "source": "stable",
             "tintsApp": false
           }
@@ -67966,13 +67966,13 @@
           "args": [
             "Xk3pQ9vLmT2aBc7DeF1g"
           ],
-          "result": "#0073AE"
+          "result": "#0077AD"
         },
         {
           "args": [
             "Qm7tR2wXyZ4"
           ],
-          "result": "#0073AE"
+          "result": "#0077AD"
         },
         {
           "args": [
@@ -67996,7 +67996,7 @@
           "args": [
             "org-4"
           ],
-          "result": "#0073AE"
+          "result": "#0077AD"
         },
         {
           "args": [

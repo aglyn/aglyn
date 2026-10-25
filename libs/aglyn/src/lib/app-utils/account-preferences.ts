@@ -673,13 +673,14 @@ export function readWorkspaceColors(profile: unknown): Record<string, string> {
 
 /**
  * The colors a workspace's tile takes when nothing else gives it one
- * ({@link workspaceStableColor}): deep tones of the brand palette's blue,
+ * ({@link workspaceStableColor}): the console's blue for text on a light
+ * ground (primary.dark), deep tones of the brand palette's
  * violet and pink, and a rose, orange, gold, green and teal beside them,
  * each dark enough that the tile's white initial reads at 4.5:1 or more. The
  * slate is left out: it is the tile of a workspace with no id at all.
  */
 export const WORKSPACE_STABLE_COLORS: readonly string[] = [
-  '#0073AE',
+  '#0077AD',
   '#6A4FD8',
   '#A62BBF',
   '#C2185B',
