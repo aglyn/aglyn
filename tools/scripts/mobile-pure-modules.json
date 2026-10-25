@@ -598,6 +598,10 @@
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
+      "path": "libs/plugins/domains/src/lib/native-nav.ts",
+      "why": "Where this plugin's workspace Domains tab sits for the native apps (AGL-4040), assembled into the nav manifest by generate:native-contracts; imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/email/src/lib/constants/list-queries.ts",
       "why": "The Email lists' declarations (lists, members, designs, suppressions) the apps plan (AGL-3669)."
     },
