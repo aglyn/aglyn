@@ -108,7 +108,7 @@ internal fun HomeScreen(
       }
       HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
       if (site == null) {
-        HomeUpgradeProposal(context, org, workspace.org?.name, workspace.org?.slug, com.aglyn.contracts.Contracts.platformBrandName)
+        HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, com.aglyn.contracts.Contracts.platformBrandName)
       }
 
       CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {

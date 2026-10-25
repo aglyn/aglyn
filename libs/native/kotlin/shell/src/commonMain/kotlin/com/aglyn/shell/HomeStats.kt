@@ -110,13 +110,15 @@ internal fun HomeSiteStats(services: ShellServices, context: NativePluginContext
 
 /**
  * The console's `OrgUpgradeProposalCard`: the plan the workspace's team proposed, only for the people who may buy it
- * (`billing.manage`, owner and admin by default), only while the proposal stands.
+ * (`billing.manage`, custom roles included), only while the proposal stands.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun HomeUpgradeProposal(context: NativePluginContext, org: Map<String, Any?>?, orgName: String?, orgSlug: String?, productName: String) {
+internal fun HomeUpgradeProposal(services: ShellServices, context: NativePluginContext, org: Map<String, Any?>?, orgName: String?, orgSlug: String?, productName: String) {
   val proposal = UpgradeProposal.standing(org) ?: return
-  if (context.orgRole !in setOf("owner", "admin") || orgSlug == null) return
+  val workspace = services.workspace.state.collectAsState().value
+  // `billing.manage` as the console resolves it: the role's grants, the custom role, the member's own overrides.
+  if (rememberCreateGates(services, workspace, context.uid).permissions["billing.manage"] != true || orgSlug == null) return
   StatsCard(Modifier.testTag("home-upgrade-proposal")) {
     FlowRow(
       Modifier.fillMaxWidth(),
@@ -142,6 +144,7 @@ internal fun HomeUpgradeProposal(context: NativePluginContext, org: Map<String, 
 internal fun HomeOrgGlance(services: ShellServices, context: NativePluginContext, orgId: String) {
   val member by remember(orgId, context.uid) { services.firestore.observeDoc("orgs/$orgId/members/${context.uid}") }.collectAsState(Live.Loading)
   val reach = (member as? Live.Ready)?.value?.data?.let { OrgAccess.isOrgWideMember(it) } == true
-  if (!reach || context.orgRole !in setOf("owner", "admin", "editor")) return
+  val workspace = services.workspace.state.collectAsState().value
+  if (!reach || rememberCreateGates(services, workspace, context.uid).permissions["data.manage"] != true) return
   HomeGlanceGrid(services, context, "At a glance", ORG_DASHBOARD_SLOT)
 }

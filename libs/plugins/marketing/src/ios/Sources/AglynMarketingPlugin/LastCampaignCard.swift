@@ -19,7 +19,7 @@ struct LastCampaignCard: View {
   static let searchCeiling = 30
 
   /// One of the send's counters, as the console prints it (`stats.sent ?? 0`).
-  static func figure(_ stats: [String: Any]?, _ key: String) -> String { ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted() }
+  private static func figure(_ stats: [String: Any]?, _ key: String) -> String { ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted() }
 
   private var lastSent: FirestoreDocument? {
     sends.rows.filter { $0.string("status") == "sent" }

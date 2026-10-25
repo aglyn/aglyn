@@ -97,12 +97,12 @@ struct HomeWorkspaceStats: View {
     }
   }
 
-  /// The console's `OrgUpgradeProposalCard`: only for the people who may buy it (`billing.manage`, owner and admin by
-  /// default), only while the proposal stands.
+  /// The console's `OrgUpgradeProposalCard`: only for the people who may buy it (`billing.manage`, custom roles
+  /// included), only while the proposal stands.
   @ViewBuilder
   private var proposal: some View {
-    let role = model.workspace?.org?.role ?? ""
-    if ["owner", "admin"].contains(role), let standing = UpgradeProposal.standing(org.document?.data),
+    if model.orgAccess.permissions(["billing.manage"])["billing.manage"] == true,
+      let standing = UpgradeProposal.standing(org.document?.data),
       let slug = model.workspace?.org?.slug
     {
       VStack(alignment: .leading, spacing: AglynSpace.one) {
@@ -146,11 +146,10 @@ struct HomeWorkspaceStats: View {
   /// the workspace's CRM (`data.manage`) sees the row.
   @ViewBuilder
   private var orgRow: some View {
-    let role = model.workspace?.org?.role ?? ""
-    let reach = member.ready && OrgAccess.isOrgWideMember(member.document?.data)
+    let reach = member.ready && AglynCore.OrgAccess.isOrgWideMember(member.document?.data)
     let enabled = Set(ShellScope(model: model, navigation: navigation).workspacePlugins)
     let widgets = model.registry.widgets(for: .aglyn, slot: orgDashboardSlot).filter { enabled.contains($0.pluginID) }
-    if reach, ["owner", "admin", "editor"].contains(role), !widgets.isEmpty, let context = model.context(for: navigation) {
+    if reach, model.orgAccess.permissions(["data.manage"])["data.manage"] == true, !widgets.isEmpty, let context = model.context(for: navigation) {
       VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
         AglynSectionHeader("At a glance")
         AglynCardGrid(minimum: AglynSpace.of(32), maxColumns: 2, spacing: AglynSpace.two) {
