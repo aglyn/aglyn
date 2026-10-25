@@ -1697,6 +1697,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   posHardware: {
     '#buy-a-reader-from-aglyn': 'Buy a reader from Aglyn',
+    '#reader-start-up-screen': 'Reader start-up screen',
     '#receipt-printers': 'Receipt printers',
   },
   posOperations: {
