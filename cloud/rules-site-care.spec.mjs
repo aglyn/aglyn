@@ -22,7 +22,10 @@
  *
  * `supportTickets/{id}` carries the request's minutes, approval and charge;
  * `supportTickets/{id}/siteCareHistory` is the append-only record of every
- * minute, approval, charge, email and correction; `orgs/{orgId}/siteCareMonths`
+ * minute, approval, charge, email and correction;
+ * `supportTickets/{id}/siteCareStaff` holds, for staff only, the other Site
+ * Care workspaces an emailed request's sender belongs to (AGL-4031);
+ * `orgs/{orgId}/siteCareMonths`
  * holds goodwill minutes, with its own `siteCareHistory`; and
  * `orgs/{orgId}/siteCareProjects` holds each flat-quoted project (AGL-3970),
  * with its own `siteCareHistory`. No rule names any of
@@ -83,6 +86,18 @@ const PATHS = [
     id: 'row-1',
     data: HISTORY_ROW,
     change: { summary: 'Rewritten' },
+  },
+  // Which other workspaces the sender belongs to is the sender's, not the
+  // filed workspace's to read (AGL-4031).
+  {
+    label: 'supportTickets/{id}/siteCareStaff',
+    collection: ['supportTickets', TICKET, 'siteCareStaff'],
+    id: 'intake',
+    data: {
+      candidates: [{ orgId: ORG, name: 'Site Care test', uid: OWNER }],
+      filedOnOrgId: ORG,
+    },
+    change: { filedOnOrgId: 'org-other' },
   },
   {
     label: 'orgs/{orgId}/siteCareMonths',

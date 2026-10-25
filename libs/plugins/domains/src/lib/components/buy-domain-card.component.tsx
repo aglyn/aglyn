@@ -23,35 +23,34 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
-  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
-  InputAdornment,
-  List,
-  ListItem,
-  ListItemText,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
 import { HOLDING_STATUSES, type DomainRegistrationView } from '../model/registration'
 import { isOfferedName } from '../model/search-candidates'
 import { BoughtDomainPanel } from './bought-domain-panel.component'
+import { replacementSentence } from './connect-site-dialog.component'
+import { DomainSearch } from './domain-search.component'
 import {
-  DomainsRequestError,
-  formatMoney,
   useDomainsFetch,
   type DomainOfferView,
   type RegistrationsAnswer,
 } from './domains-api'
 import { PurchaseDialog } from './purchase-dialog.component'
+
+export { priceLine } from './domain-search.component'
 
 /*
  * GET A DOMAIN, on the site's Custom Domain page (AGL-3962).
@@ -61,17 +60,20 @@ import { PurchaseDialog } from './purchase-dialog.component'
  * say who it is registered to, done. The site goes live at it with no DNS
  * step, because the name is bought in the account that hosts the site.
  *
+ * A site that already has a domain can still buy one (AGL-4040): the new
+ * name goes into the workspace, unassigned, and the card says so before the
+ * click. The workspace's Domains page, one click away in the header, lists
+ * every name the workspace holds and connects any of them to any site.
+ *
  * Every reason the site cannot buy right now is said BEFORE the click
- * (AGL-3853): the plan, the billing permission, a domain already connected,
- * a payment not yet cleared. A deployment that sells no names draws nothing.
+ * (AGL-3853): the plan, the billing permission, a payment not yet cleared.
+ * A deployment that sells no names draws nothing.
  *
  * `?domain=<name>` arrives with the owner from Billing, where a staff-made
  * bundle link named the name they chose together (AGL-3955): the box opens
  * with it and searches it once, so its price is in front of them.
  */
 
-/** Results shown before "Show more". */
-const FIRST_RESULTS = 6
 /** While a name is registering or connecting, the card re-reads this often. */
 const POLL_MS = 5000
 /** The address's name for a domain to open the search with. */
@@ -91,27 +93,24 @@ export function prefillDomainFrom(search: string): string {
 export type BuyDomainCardProps = ConsoleHostDomainZoneProps & ConsoleWidgetEntitlementProps
 
 export default function BuyDomainCard(props: BuyDomainCardProps) {
-  const { hostId, org, entitled, upgrade } = props
+  const { hostId, org, entitled, upgrade, connectedDomain } = props
   const request = useDomainsFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [state, setState] = useState<RegistrationsAnswer | null>(null)
-  const [query, setQuery] = useState('')
-  const [offers, setOffers] = useState<DomainOfferView[] | null>(null)
-  const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [showAll, setShowAll] = useState(false)
   const [buying, setBuying] = useState<DomainOfferView | null>(null)
-  const latestQuery = useRef('')
+  const [resetKey, setResetKey] = useState(0)
+  const [using, setUsing] = useState<DomainRegistrationView | null>(null)
+  const [usingBusy, setUsingBusy] = useState(false)
   // Read from the location in an effect rather than `useSearchParams`, which
   // would ask every page this zone sits on for a Suspense boundary.
   const [prefill, setPrefill] = useState('')
-  const prefilled = useRef(false)
   useEffect(() => {
     setPrefill(prefillDomainFrom(window.location.search))
   }, [])
 
   const orgSlug = typeof org?.['slug'] === 'string' ? (org['slug'] as string) : ''
   const billingHref = orgSlug ? `/${orgSlug}/billing` : null
+  const domainsHref = orgSlug ? `/${orgSlug}/domains` : null
 
   const refresh = useCallback(async () => {
     if (entitled === false) return
@@ -143,48 +142,12 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
     return () => clearInterval(timer)
   }, [settling, refresh])
 
-  // `?domain=`: once the card knows it shows the search box, open it with
-  // the name. Setting the query is the search, once; nothing else re-runs it.
-  const showsSearch = Boolean(state?.configured && !state.registrations.some(managedHere))
-  useEffect(() => {
-    if (prefilled.current || !prefill || !showsSearch) return
-    prefilled.current = true
-    setQuery(prefill)
-  }, [prefill, showsSearch])
-
-  // Search as they type, the last query winning.
-  useEffect(() => {
-    const value = query.trim()
-    latestQuery.current = value
-    setShowAll(false)
-    if (value.length < 2) {
-      setOffers(null)
-      setSearchError(null)
-      return
-    }
-    const timer = setTimeout(async () => {
-      setSearching(true)
-      setSearchError(null)
-      try {
-        const answer = await request<{ offers: DomainOfferView[] }>(DOMAINS_API_ROUTES.search, {
-          query: { hostId, q: value },
-        })
-        if (latestQuery.current === value) setOffers(answer.offers)
-      } catch (caught) {
-        if (latestQuery.current === value) {
-          setOffers(null)
-          setSearchError(
-            caught instanceof DomainsRequestError ? caught.message : 'Search isn’t answering right now.',
-          )
-        }
-      } finally {
-        if (latestQuery.current === value) setSearching(false)
-      }
-    }, 450)
-    return () => clearTimeout(timer)
-  }, [query, hostId, request])
-
   const help = pluginDocsHelp('buyADomain')
+  const headerAction = domainsHref ? (
+    <Button size="small" href={domainsHref}>
+      {'All domains'}
+    </Button>
+  ) : undefined
 
   // The plan does not include domains: say what would, and where.
   if (entitled === false) {
@@ -207,34 +170,67 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
   if (!state || !state.configured) return null
 
   const holding = state.registrations.filter(managedHere)
-  if (holding.length) {
-    return (
-      <CardDisplay header="Your domain" help={help} contentGutterX contentGutterY>
-        <Stack spacing={2} divider={<Divider flexItem />}>
-          {holding.map((registration) => (
-            <BoughtDomainPanel
-              key={registration.domain}
-              hostId={hostId}
-              registration={registration}
-              billingPermission={state.billingPermission}
-              billingHref={billingHref}
-              onChanged={() => void refresh()}
-            />
-          ))}
-        </Stack>
-      </CardDisplay>
-    )
-  }
-
+  const intoWorkspace = state.buyTarget === 'workspace'
   const blocked = !state.canBuy
   const blockedReason = state.refusal?.message ?? ''
-  const visible = offers ? (showAll ? offers : offers.slice(0, FIRST_RESULTS)) : []
+  const replacing = using && connectedDomain ? replacementSentence(using.domain, 'This site', connectedDomain) : null
+
+  const connectHere = async (registration: DomainRegistrationView) => {
+    setUsingBusy(true)
+    try {
+      await request(DOMAINS_API_ROUTES.reconnect, {
+        body: { hostId, domain: registration.domain },
+      })
+      enqueueSnackbar(`${registration.domain} is connecting to this site`, {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (caught) {
+      enqueueSnackbar((caught as Error).message, {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setUsingBusy(false)
+      setUsing(null)
+      void refresh()
+    }
+  }
 
   return (
-    <CardDisplay header="Get a domain" help={help} contentGutterX contentGutterY>
+    <CardDisplay
+      header={holding.length ? 'Your domain' : 'Get a domain'}
+      help={help}
+      contentGutterX
+      contentGutterY
+      HeaderProps={{ action: headerAction }}
+    >
       <Stack spacing={2}>
+        {holding.length ? (
+          <Stack spacing={2} divider={<Divider flexItem />}>
+            {holding.map((registration) => (
+              <BoughtDomainPanel
+                key={registration.domain}
+                scope={{ hostId }}
+                registration={registration}
+                billingPermission={state.billingPermission}
+                billingHref={billingHref}
+                domainsHref={domainsHref}
+                onChanged={() => void refresh()}
+              />
+            ))}
+          </Stack>
+        ) : null}
+        {holding.length ? <Divider flexItem /> : null}
+        {holding.length ? (
+          <Typography variant="subtitle1" component="h3">
+            {'Get another domain'}
+          </Typography>
+        ) : null}
         <Typography variant="body2" color="text.secondary">
-          {'Search for a name for your site. We register it to you and connect it for you, so there are no DNS records to add.'}
+          {intoWorkspace
+            ? 'This site already has a domain, so a name you buy here goes into your workspace’s domains, not connected. Connect it to any site from the Domains page.'
+            : 'Search for a name for your site. We register it to you and connect it for you, so there are no DNS records to add.'}
         </Typography>
         {state.refusal ? (
           <PrerequisiteNotice
@@ -256,24 +252,12 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
                   <strong>{registration.domain}</strong>
                   <Button
                     size="small"
-                    onClick={async () => {
-                      try {
-                        await request(DOMAINS_API_ROUTES.reconnect, {
-                          body: { hostId, domain: registration.domain },
-                        })
-                        enqueueSnackbar(`${registration.domain} is connecting to this site`, {
-                          variant: 'success',
-                          persist: false,
-                        })
-                      } catch (caught) {
-                        enqueueSnackbar((caught as Error).message, {
-                          variant: 'error',
-                          allowDuplicate: true,
-                        })
-                      } finally {
-                        void refresh()
-                      }
-                    }}
+                    disabled={usingBusy}
+                    onClick={() =>
+                      connectedDomain && connectedDomain !== registration.domain
+                        ? setUsing(registration)
+                        : void connectHere(registration)
+                    }
                   >
                     {'Use for this site'}
                   </Button>
@@ -283,97 +267,62 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
           </Alert>
         ) : null}
 
-        <TextField
-          label="Search for a domain"
-          placeholder="Your business name, or yourbusiness.com"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          slotProps={{
-            input: {
-              endAdornment: searching ? (
-                <InputAdornment position="end">
-                  <CircularProgress size={18} />
-                </InputAdornment>
-              ) : undefined,
-            },
-          }}
+        <DomainSearch
+          scope={{ hostId }}
+          blocked={blocked}
+          blockedReason={blockedReason}
+          prefill={prefill}
+          resetKey={resetKey}
+          onBuy={setBuying}
         />
-        {searchError ? <Alert severity="warning">{searchError}</Alert> : null}
-        {offers && offers.length === 0 && !searching ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No names to offer for that. Try a shorter version of the name.'}
-          </Typography>
-        ) : null}
-        {visible.length ? (
-          <List disablePadding>
-            {visible.map((offer) => (
-              <ListItem
-                key={offer.domain}
-                divider
-                disableGutters
-                secondaryAction={
-                  offer.available ? (
-                    <BlockedControl blocked={blocked} reason={blockedReason}>
-                      <Button variant="outlined" size="small" onClick={() => setBuying(offer)}>
-                        {'Buy'}
-                      </Button>
-                    </BlockedControl>
-                  ) : (
-                    <Typography variant="body2" color="text.disabled">
-                      {'Taken'}
-                    </Typography>
-                  )
-                }
-              >
-                <ListItemText
-                  primary={offer.domain}
-                  slotProps={{
-                    primary: { sx: { fontWeight: 600, color: offer.available ? undefined : 'text.disabled' } },
-                  }}
-                  secondary={offer.available ? priceLine(offer) : 'Someone already owns this name'}
-                />
-              </ListItem>
-            ))}
-          </List>
-        ) : null}
-        {offers && offers.length > FIRST_RESULTS && !showAll ? (
-          <Button size="small" onClick={() => setShowAll(true)} sx={{ alignSelf: 'flex-start' }}>
-            {`Show ${offers.length - FIRST_RESULTS} more`}
-          </Button>
-        ) : null}
       </Stack>
 
       <PurchaseDialog
         open={Boolean(buying)}
-        hostId={hostId}
+        scope={{ hostId }}
         offer={buying}
         defaults={state.contactDefaults}
+        intoWorkspace={intoWorkspace}
         onClose={() => setBuying(null)}
-        onBought={(registration) => {
+        onBought={(registration, workspace) => {
           setBuying(null)
-          setQuery('')
+          setResetKey((key) => key + 1)
           enqueueSnackbar(
-            registration.status === 'active'
-              ? `${registration.domain} is yours and connected to your site`
-              : `${registration.domain} is yours. We’re finishing the setup now.`,
+            workspace
+              ? `${registration.domain} is yours. It’s in your workspace’s domains.`
+              : registration.status === 'active'
+                ? `${registration.domain} is yours and connected to your site`
+                : `${registration.domain} is yours. We’re finishing the setup now.`,
             { variant: 'success', persist: false },
           )
           void refresh()
         }}
       />
+
+      <Dialog open={Boolean(using)} onClose={usingBusy ? undefined : () => setUsing(null)} fullWidth maxWidth="xs">
+        <DialogTitle>{using ? `Use ${using.domain} for this site?` : ''}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{replacing}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUsing(null)} disabled={usingBusy}>
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            disabled={usingBusy}
+            onClick={() => using && void connectHere(using)}
+          >
+            {connectedDomain ? `Replace ${connectedDomain}` : 'Connect'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </CardDisplay>
   )
 }
 
-/** A name the card manages instead of offering another: held, or lapsed. */
+/** A name the card manages: held, or lapsed. */
 function managedHere(registration: DomainRegistrationView): boolean {
   return HOLDING_STATUSES.includes(registration.status) || registration.status === 'expired'
-}
-
-/** "$15.99 a year", or the first year and the renewal when they differ. */
-export function priceLine(offer: DomainOfferView): string {
-  if (offer.firstYearCents === offer.renewalCents) {
-    return `${formatMoney(offer.firstYearCents)} a year`
-  }
-  return `${formatMoney(offer.firstYearCents)} the first year, then ${formatMoney(offer.renewalCents)} a year`
 }

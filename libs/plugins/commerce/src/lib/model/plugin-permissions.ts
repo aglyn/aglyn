@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginPermission } from '@aglyn/aglyn'
+import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 
 /**
  * Commerce's plugin-declared permissions (AGL-435) — the reference
@@ -29,5 +29,6 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
     label: 'Use the point of sale',
     description: 'Open the POS page and record in-person sales.',
     defaults: { admin: true, editor: true, viewer: false },
+    groupLabel: 'Commerce',
   },
 ]

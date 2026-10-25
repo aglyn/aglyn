@@ -20,7 +20,8 @@
  */
 
 /**
- * An org erasure must LEAVE the org's tax records standing (AGL-1811).
+ * An org erasure must LEAVE the org's tax records standing (AGL-1811), the
+ * POS hardware sale records among them (AGL-4038).
  *
  * `platformRevenue/{invoiceId}` is a top-level collection carrying `orgId`
  * as a field — byte-for-byte the shape `deleteDocsByOrgId` sweeps for
@@ -60,6 +61,8 @@ const SLUG = 'e2e-erase-tax-retention'
 const OWNER_UID = 'e2e-erase-tax-retention-uid'
 const CUSTOMER_ID = 'cus_e2eEraseTaxFixture'
 const INVOICE_IDS = ['in_e2eTaxKeep1', 'in_e2eTaxKeep2'] as const
+/** A POS hardware order (AGL-4038): the platform's own sale to the org. */
+const HARDWARE_ORDER_ID = 'hw_e2e0000000000taxkeep'
 
 // Before any module reads them — neither integration may be reachable.
 delete process.env.STRIPE_SECRET_KEY
@@ -125,6 +128,7 @@ describeEmulated(
       for (const invoiceId of INVOICE_IDS) {
         await db.collection('platformRevenue').doc(invoiceId).delete()
       }
+      await db.collection('posHardwareSales').doc(HARDWARE_ORDER_ID).delete()
 
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input instanceof Request ? input.url : input)
@@ -176,6 +180,50 @@ describeEmulated(
         })
       }
 
+      // A hardware order in the two shapes the commerce plugin writes them
+      // (AGL-4038): the order under the org, with the buyer on it, and the
+      // retained sale record beside it, org-keyed by FIELD with no buyer.
+      await db
+        .collection('orgs')
+        .doc(orgId)
+        .collection('hardwareOrders')
+        .doc(HARDWARE_ORDER_ID)
+        .set({
+          orgId,
+          hostId: 'host-e2e-tax',
+          createdBy: OWNER_UID,
+          contactEmail: 'buyer@example.com',
+          lines: [{ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 1, unitCents: 13000, lineCents: 13000 }],
+          shipping: {
+            method: 'standard',
+            label: 'Standard shipping',
+            cents: 1000,
+            name: 'Jordan Lee',
+            phone: '+15555550100',
+            address: { line1: '12 Main St', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+          },
+          taxCents: 1155,
+          totalCents: 15155,
+          status: 'delivered',
+        })
+      await db.collection('posHardwareSales').doc(HARDWARE_ORDER_ID).set({
+        orderId: HARDWARE_ORDER_ID,
+        orgId,
+        lines: [{ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 1, unitCents: 13000, lineCents: 13000 }],
+        subtotalCents: 13000,
+        shippingMethod: 'standard',
+        shippingCents: 1000,
+        taxCents: 1155,
+        totalCents: 15155,
+        currency: 'usd',
+        shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+        stripeCheckoutSessionId: 'cs_e2e_tax',
+        stripePaymentIntentId: 'pi_e2e_tax',
+        status: 'delivered',
+        paidAtMs: 1,
+        deliveredAtMs: 2,
+      })
+
       await db
         .collection('orgs')
         .doc(orgId)
@@ -198,6 +246,7 @@ describeEmulated(
       for (const invoiceId of INVOICE_IDS) {
         await db.collection('platformRevenue').doc(invoiceId).delete()
       }
+      await db.collection('posHardwareSales').doc(HARDWARE_ORDER_ID).delete()
       await db.recursiveDelete(db.collection('users').doc(OWNER_UID))
     }, 60_000)
 
@@ -214,6 +263,34 @@ describeEmulated(
         .get()
       expect(row.get('taxCents')).toBe(660)
       expect(row.get('customerAddress')).toMatchObject({ state: 'TX' })
+    }, 60_000)
+
+    it('THE RETENTION: the hardware sale record survives, and the order with the buyer on it does not (AGL-4038)', async () => {
+      const kept = await db.collection('posHardwareSales').where('orgId', '==', orgId).get()
+      expect(kept.docs.map((doc) => doc.id)).toEqual([HARDWARE_ORDER_ID])
+      const row = kept.docs[0].data()
+      expect(row).toMatchObject({
+        taxCents: 1155,
+        totalCents: 15155,
+        stripePaymentIntentId: 'pi_e2e_tax',
+        shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+      })
+      // Nothing about the person who bought it is in what survives.
+      expect(JSON.stringify(row)).not.toMatch(/Jordan|Main St|buyer@|5555550100/)
+      const order = await db
+        .collection('orgs')
+        .doc(orgId)
+        .collection('hardwareOrders')
+        .doc(HARDWARE_ORDER_ID)
+        .get()
+      expect(order.exists).toBe(false)
+    }, 60_000)
+
+    it('a second run changes nothing: the erasure refuses an org already gone, and the record stays', async () => {
+      const again = await erase.eraseOrg(orgId)
+      expect(again.ok).toBe(false)
+      const row = await db.collection('posHardwareSales').doc(HARDWARE_ORDER_ID).get()
+      expect(row.get('totalCents')).toBe(15155)
     }, 60_000)
 
     it('CONTROL: the org itself and its stripeCustomers row are genuinely gone', async () => {

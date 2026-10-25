@@ -1001,6 +1001,24 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Waivers (AGL-4042): the waivers a merchant wrote, the words of each
+      // version, and every signature taken — online, at the window or on
+      // paper. Server-written AND server-read: the waivers plugin's routes
+      // serve what the console shows, to a site's admins and editors whose
+      // `collectWaivers` or `manageWaivers` permission is on. A signature
+      // holds a signer's date of birth, address and phone, a minor's name and
+      // a drawn signature, so no client reads one, the owner and staff
+      // included; one that could write could forge a signature or void one.
+      match /waivers/{waiverId} {
+        allow read, write: if false;
+        match /versions/{version} {
+          allow read, write: if false;
+        }
+      }
+      match /waiverSignatures/{signatureId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
@@ -2894,6 +2912,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // POS hardware sale records (AGL-4038): the platform's OWN sales of card
+    // readers, one per `orgs/{orgId}/hardwareOrders/{orderId}`, written by
+    // the commerce plugin's webhook, staff route and account eraser on the
+    // Admin SDK. Deny ALL client access, the buying workspace and staff
+    // included: a row names the workspace beside its amounts and where the
+    // order shipped, and the merchant reads its orders through the order
+    // documents and the plugin's route, never these.
+    //
+    // Same retention rule as `platformRevenue` and `storefrontTaxCollected`
+    // above: these are the platform's sales-tax and accounting records,
+    // kept after the workspace is erased (GDPR Art. 17(3)(b)) with nothing
+    // about the buyer in them. They are org-keyed by FIELD, and they must
+    // NEVER be added to an org-keyed deletion pass.
+    match /posHardwareSales/{orderId} {
+      allow read, write: if false;
+    }
+
     // Hosts and everything under them (content-hardening review,
     // 2026-07-07: tenant sites read through the Admin SDK, so no public
     // read). Access resolves through the org membership projection
@@ -3900,6 +3935,13 @@ service cloud.firestore {
         // the only reader is the funnels results route, which turns visits into
         // counts on the Admin SDK. A member gets the counts, never the visits.
         // A result is that route's cache, served by the route.
+        //
+        // `checkIns` and `checkInDays` join it, and every write list below
+        // (AGL-4043): a check-in names a customer at the window (name, email,
+        // phone) and records who checked them in and their wristband. Only
+        // /api/commerce/pos-check-in reads or writes either, behind the
+        // register's own gate (`managePos`, the plan's POS); a client write
+        // would check somebody in, or out, with nobody at the window.
         allow read: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
@@ -3907,7 +3949,8 @@ service cloud.firestore {
           subcollection != 'reviewTokens' &&
           (isStaff() || (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
-              'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
+              'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults',
+              'checkIns', 'checkInDays'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
         // block) beside this catch-all decides nothing until the name is also
@@ -4055,7 +4098,7 @@ service cloud.firestore {
               'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-              'aiMemory', 'reviews', 'reviewTokens']) &&
+              'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
@@ -4225,7 +4268,7 @@ service cloud.firestore {
               'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-              'aiMemory', 'reviews', 'reviewTokens'])));
+              'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -4283,7 +4326,8 @@ service cloud.firestore {
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
               'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
               'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens'])));
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
+              'checkIns', 'checkInDays'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
