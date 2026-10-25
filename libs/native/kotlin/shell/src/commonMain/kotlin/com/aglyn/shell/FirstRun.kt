@@ -19,8 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.aglyn.core.SignUpRules
-import com.aglyn.core.answer
-import com.aglyn.core.pendingInvites
 import com.aglyn.core.WorkspaceName
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -43,49 +41,12 @@ internal fun FirstRunContent(services: ShellServices) {
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
-  var invites by remember { mutableStateOf<List<com.aglyn.core.PendingInvite>>(emptyList()) }
-  var answering by remember { mutableStateOf<String?>(null) }
-  var inviteError by remember { mutableStateOf<String?>(null) }
-  androidx.compose.runtime.LaunchedEffect(Unit) { invites = services.signUp.pendingInvites() }
-
-  fun answer(invite: com.aglyn.core.PendingInvite, accept: Boolean) {
-    answering = invite.id
-    inviteError = null
-    scope.launch {
-      try {
-        services.signUp.answer(invite, accept)
-        invites = invites.filterNot { it.id == invite.id }
-        if (accept) services.workspace.selectOrg(invite.orgId)
-      } catch (failure: kotlinx.coroutines.CancellationException) {
-        throw failure
-      } catch (failure: Throwable) {
-        inviteError = failure.message ?: if (accept) "Accepting the invite failed" else "Declining the invite failed"
-      } finally {
-        answering = null
-      }
-    }
-  }
+  InviteJoinEffect(services)
 
   Column(verticalArrangement = Arrangement.spacedBy(space(2f))) {
     // A pending invite is the reason this person just signed up — lead with it rather than creating a workspace (AGL-851).
-    // The invite email's link opens the app here.
-    if (invites.isNotEmpty() && flow.firstRun != FirstRunState.Provisioning) {
-      Text("You've been invited", style = MaterialTheme.typography.titleLarge)
-      Text(
-        "Accept your invitation to join the workspace, or start your own instead.",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-      for (invite in invites) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-          Text(invite.sentence, Modifier.weight(1f))
-          TextButton(onClick = { answer(invite, false) }, enabled = answering == null) { Text("Decline") }
-          Button(shape = com.aglyn.ui.controlShape(), onClick = { answer(invite, true) }, enabled = answering == null, modifier = Modifier.testTag("first-run-accept-${invite.id}")) {
-            Text(if (answering == invite.id) "Joining…" else "Accept")
-          }
-        }
-      }
-      inviteError?.let { AuthErrorText(it) }
-    }
+    // It joins on its own (AGL-4023): this says it is joining, or that access is almost ready.
+    if (flow.firstRun != FirstRunState.Provisioning) InviteJoinList(services)
     when (val state = flow.firstRun) {
       FirstRunState.Provisioning -> Row(
         Modifier.fillMaxWidth().padding(space(4f)),

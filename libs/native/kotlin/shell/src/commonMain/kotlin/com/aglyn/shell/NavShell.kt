@@ -184,6 +184,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
   val authState by services.auth.state.collectAsState()
   val user = (authState as? AuthState.SignedIn)?.user
+  // Invitations join on their own once the account is in use (AGL-4023), as the console's do on every load.
+  InviteJoinEffect(services)
   val screenSession = rememberScreenSession(services, navigator, workspace, user, claims) { claims = it }
 
   // The scope's lists, from the manifest.

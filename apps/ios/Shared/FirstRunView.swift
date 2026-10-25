@@ -11,16 +11,13 @@ struct FirstRunView: View {
   @Environment(AppModel.self) private var model
   @State private var creating = false
   @State private var name = ""
-  @State private var invites: [PendingInvite] = []
-  @State private var answering: String?
-  @State private var inviteError: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: AglynSpace.two) {
       // A pending invite is the reason this person just signed up — lead with it rather than creating a workspace
-      // (AGL-851). The invite email's link opens the app here.
-      if !invites.isEmpty && model.firstRun != .provisioning {
-        invitesSection
+      // (AGL-851). It joins on its own (AGL-4023): this says it is joining, or that access is almost ready.
+      if model.firstRun != .provisioning {
+        InviteJoinList()
       }
       switch model.firstRun {
       case .provisioning:
@@ -43,46 +40,7 @@ struct FirstRunView: View {
       }
     }
     .sheet(isPresented: $creating) { createSheet }
-    .task(id: model.auth?.user?.uid) { invites = await model.signUpService?.pendingInvites() ?? [] }
-  }
-
-  private var invitesSection: some View {
-    VStack(alignment: .leading, spacing: AglynSpace.one) {
-      Text("You've been invited").font(AglynFont.title2).accessibilityAddTraits(.isHeader)
-      Text("Accept your invitation to join the workspace, or start your own instead.").foregroundStyle(.secondary)
-      ForEach(invites) { invite in
-        HStack {
-          Text(invite.sentence).frame(maxWidth: .infinity, alignment: .leading)
-          Button("Decline") { answer(invite, accept: false) }
-            .buttonStyle(.borderless)
-            .disabled(answering != nil)
-          Button(answering == invite.id ? "Joining…" : "Accept") { answer(invite, accept: true) }
-            .buttonStyle(.aglynProminent)
-            .disabled(answering != nil)
-            .accessibilityIdentifier("first-run-accept-\(invite.id)")
-        }
-        .padding(AglynSpace.one)
-        .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous))
-      }
-      if let inviteError { AuthMessage(text: inviteError) }
-    }
-  }
-
-  private func answer(_ invite: PendingInvite, accept: Bool) {
-    guard let service = model.signUpService else { return }
-    answering = invite.id
-    inviteError = nil
-    Task {
-      do {
-        try await service.answer(invite, accept: accept)
-        invites.removeAll { $0.id == invite.id }
-        if accept { model.workspace?.selectOrg(invite.orgID) }
-      } catch {
-        inviteError = (error as? ConsoleAPIError)?.message
-          ?? (accept ? "Accepting the invite failed" : "Declining the invite failed")
-      }
-      answering = nil
-    }
+    .task(id: "\(model.auth?.user?.uid ?? "")-\(model.auth?.user?.emailVerified == true)") { await model.joinInvites() }
   }
 
   private var emptyState: some View {

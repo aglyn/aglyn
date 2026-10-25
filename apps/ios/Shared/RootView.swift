@@ -62,6 +62,8 @@ struct RootView<Shell: View>: View {
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()
+      // Invitations join on their own once the account is in use (AGL-4023), as the console's do on every load.
+      Task { await model.joinInvites() }
     }
     // Entering or leaving a support session starts from home: nothing open belonged to the other person.
     .onChange(of: model.auth?.impersonation) {
