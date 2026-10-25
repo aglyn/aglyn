@@ -36,6 +36,8 @@
  * carries and the status rules are specced without Firestore or Stripe.
  *=========================================*/
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+
 /** The register's currency, and so the shop's: US dollars. */
 export const POS_HARDWARE_CURRENCY = 'usd'
 
@@ -128,7 +130,7 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     kind: 'reader',
     stripeProductName: 'Stripe Reader M2',
     displayName: 'Stripe Reader M2',
-    use: 'Pairs with the Aglyn POS app on your phone or tablet by Bluetooth',
+    use: `Pairs with the ${PLATFORM_BRAND_NAME} POS app on your phone or tablet by Bluetooth`,
   },
   {
     id: 'stripe-reader-s700-dock',
