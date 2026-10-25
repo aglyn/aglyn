@@ -180,5 +180,9 @@
   "domains": {
     "baseline": 5422,
     "budget": 7168
+  },
+  "waivers": {
+    "baseline": 30361,
+    "budget": 38912
   }
 }
