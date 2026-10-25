@@ -51,15 +51,19 @@ func assistSuggestions(_ route: String) -> [String] {
 /// the Mac's compact panel (AI panel 18:485). One structure, two sets of numbers.
 private struct AssistMetrics {
   /// The one content edge: chip, suggestions, composer and footer all start and end on it.
-  let edge: CGFloat = 16
+  let edge: CGFloat = AglynSpace.two
   let chipText: CGFloat
   let chipWeight: Font.Weight
   let chipPadding: EdgeInsets
+  /// The chip's least height: 28 on touch (21:340), the text's own on the Mac.
+  let chipHeight: CGFloat
   /// Questions, answers, the field and suggestions.
   let body: CGFloat
   let suggestion: CGFloat
   let suggestionIcon: CGFloat
   let suggestionPadding: EdgeInsets
+  /// A suggestion card's least height: 46 on touch (21:347), 36 on the Mac (the Kotlin panel's suggestionHeight).
+  let suggestionHeight: CGFloat
   let suggestionRadius: CGFloat
   let suggestionGap: CGFloat
   /// Between a suggestion's ✦ and its words.
@@ -83,18 +87,26 @@ private struct AssistMetrics {
   static var current: AssistMetrics {
     #if os(macOS)
       AssistMetrics(
-        chipText: 12, chipWeight: .semibold, chipPadding: EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 10), body: 14,
-        suggestion: 13, suggestionIcon: 14, suggestionPadding: EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10),
-        suggestionRadius: 6, suggestionGap: 14, suggestionIconGap: 8, caption: 12, captionWeight: .semibold, composer: 44, composerRadius: 10,
-        composerLeading: 12, send: 32, sendRadius: 6, sendIcon: 14, bubbleRadius: 10, action: 13, actionHeight: 28,
-        actionRadius: 6, suggestionsStay: true)
+        chipText: 12, chipWeight: .semibold,
+        chipPadding: EdgeInsets(top: AglynSpace.half, leading: AglynSpace.one, bottom: AglynSpace.half, trailing: AglynSpace.of(1.25)),
+        chipHeight: 0, body: 14, suggestion: 13, suggestionIcon: AglynSpace.of(1.75),
+        suggestionPadding: EdgeInsets(top: AglynSpace.one, leading: AglynSpace.of(1.25), bottom: AglynSpace.one, trailing: AglynSpace.of(1.25)),
+        suggestionHeight: AglynSpace.of(4.5), suggestionRadius: AglynTokens.radius * 1.5, suggestionGap: AglynSpace.of(1.75),
+        suggestionIconGap: AglynSpace.one, caption: 12, captionWeight: .semibold, composer: AglynSpace.of(5.5),
+        composerRadius: AglynTokens.radius * 2.5, composerLeading: AglynSpace.oneAndHalf, send: AglynSpace.four,
+        sendRadius: AglynTokens.radius * 1.5, sendIcon: AglynSpace.of(1.75), bubbleRadius: AglynTokens.radius * 2.5,
+        action: 13, actionHeight: AglynSpace.of(3.5), actionRadius: AglynTokens.radius * 1.5, suggestionsStay: true)
     #else
       AssistMetrics(
-        chipText: 13, chipWeight: .regular, chipPadding: EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 12), body: 15,
-        suggestion: 15, suggestionIcon: 16, suggestionPadding: EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14),
-        suggestionRadius: 12, suggestionGap: 6, suggestionIconGap: 10, caption: 13, captionWeight: .regular, composer: 52, composerRadius: 12,
-        composerLeading: 14, send: 40, sendRadius: 8, sendIcon: 16, bubbleRadius: 12, action: 15, actionHeight: 36,
-        actionRadius: 8, suggestionsStay: false)
+        chipText: 13, chipWeight: .regular,
+        chipPadding: EdgeInsets(top: AglynSpace.of(0.625), leading: AglynSpace.of(1.25), bottom: AglynSpace.of(0.625), trailing: AglynSpace.oneAndHalf),
+        chipHeight: AglynSpace.of(3.5), body: 15, suggestion: 15, suggestionIcon: AglynSpace.two,
+        suggestionPadding: EdgeInsets(top: AglynSpace.oneAndHalf, leading: AglynSpace.of(1.75), bottom: AglynSpace.oneAndHalf, trailing: AglynSpace.of(1.75)),
+        suggestionHeight: AglynSpace.of(5.75), suggestionRadius: AglynTokens.radius * 3, suggestionGap: AglynSpace.of(0.75),
+        suggestionIconGap: AglynSpace.of(1.25), caption: 13, captionWeight: .regular, composer: AglynSpace.of(6.5),
+        composerRadius: AglynTokens.radius * 3, composerLeading: AglynSpace.of(1.75), send: AglynSpace.of(5),
+        sendRadius: AglynTokens.radius * 2, sendIcon: AglynSpace.two, bubbleRadius: AglynTokens.radius * 3,
+        action: 15, actionHeight: AglynSpace.of(4.5), actionRadius: AglynTokens.radius * 2, suggestionsStay: false)
     #endif
   }
 
@@ -136,13 +148,13 @@ struct AiAssistPanel: View {
       }
       ScrollViewReader { proxy in
         ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
+          VStack(alignment: .leading, spacing: AglynSpace.of(1.75)) {
             ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
               turnView(turn, last: index == turns.count - 1).id(turn.id)
             }
           }
           .padding(.horizontal, m.edge)
-          .padding(.vertical, turns.isEmpty ? 0 : 8)
+          .padding(.vertical, turns.isEmpty ? 0 : AglynSpace.one)
           .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -154,12 +166,14 @@ struct AiAssistPanel: View {
           .font(m.font(m.caption)).foregroundStyle(AglynColor.textTertiary)
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.horizontal, m.edge)
-          .padding(.top, 6)
+          .padding(.top, AglynSpace.of(0.75))
           .accessibilityIdentifier("assist-quota")
       }
       composer
     }
     .background(AglynColor.paper)
+    // A container, so the chip, suggestions, field and Send keep their own identifiers under the panel's.
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("assist-panel")
     .task(id: context.orgID) { await loadCredits() }
     .onDisappear { task?.cancel() }
@@ -167,7 +181,7 @@ struct AiAssistPanel: View {
 
   /// What the panel reads: the place's own icon and name on the accent's soft fill.
   private func contextChip(_ looking: String) -> some View {
-    HStack(spacing: 6) {
+    HStack(spacing: AglynSpace.of(0.75)) {
       Image(systemName: params["icon"].flatMap { $0.isEmpty ? nil : $0 } ?? "eye")
         .font(.system(size: m.chipText))
         .foregroundStyle(AglynColor.accentIcon)
@@ -176,11 +190,12 @@ struct AiAssistPanel: View {
         .lineLimit(1)
     }
     .padding(m.chipPadding)
+    .frame(minHeight: m.chipHeight)
     .background(Capsule().fill(AglynColor.accentSoft))
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, m.edge)
-    .padding(.top, 4)
-    .padding(.bottom, 6)
+    .padding(.top, AglynSpace.half)
+    .padding(.bottom, AglynSpace.of(0.75))
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("assist-context")
   }
@@ -201,7 +216,7 @@ struct AiAssistPanel: View {
             Spacer(minLength: 0)
           }
           .padding(m.suggestionPadding)
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(maxWidth: .infinity, minHeight: m.suggestionHeight, alignment: .leading)
           .background(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous).fill(AglynColor.paper))
           .overlay(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous).strokeBorder(AglynColor.divider))
           .contentShape(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous))
@@ -213,19 +228,19 @@ struct AiAssistPanel: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, m.edge)
-    .padding(.top, 6)
+    .padding(.top, AglynSpace.of(0.75))
   }
 
   /// The field and its Send, and under them what questions and builds cost.
   private var composer: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 10) {
+    VStack(alignment: .leading, spacing: AglynSpace.of(0.75)) {
+      HStack(spacing: AglynSpace.of(1.25)) {
         TextField(prompt, text: $question, axis: .vertical)
           .textFieldStyle(.plain)
           .font(m.font(m.body))
           .lineLimit(1...4)
           .onSubmit { ask(question) }
-          .padding(.vertical, 8)
+          .padding(.vertical, AglynSpace.one)
           .accessibilityIdentifier("assist-field")
         Button {
           ask(question)
@@ -243,7 +258,7 @@ struct AiAssistPanel: View {
         .accessibilityIdentifier("assist-send")
       }
       .padding(.leading, m.composerLeading)
-      .padding(.trailing, 6)
+      .padding(.trailing, AglynSpace.of(0.75))
       .frame(minHeight: m.composer)
       .background(RoundedRectangle(cornerRadius: m.composerRadius, style: .continuous).fill(AglynColor.sunken))
       .overlay(RoundedRectangle(cornerRadius: m.composerRadius, style: .continuous).strokeBorder(AglynColor.divider))
@@ -255,13 +270,13 @@ struct AiAssistPanel: View {
     .padding(.horizontal, m.edge)
     #if os(macOS)
       // The Mac's composer sits on its own band under a hairline (18:540).
-      .padding(.top, 12)
-      .padding(.bottom, 14)
+      .padding(.top, AglynSpace.oneAndHalf)
+      .padding(.bottom, AglynSpace.of(1.75))
       .overlay(alignment: .top) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
-      .padding(.top, 6)
+      .padding(.top, AglynSpace.of(0.75))
     #else
-      .padding(.top, 6)
-      .padding(.bottom, 10)
+      .padding(.top, AglynSpace.of(0.75))
+      .padding(.bottom, AglynSpace.of(1.25))
     #endif
   }
 
@@ -269,7 +284,7 @@ struct AiAssistPanel: View {
   private func turnView(_ turn: AssistTurn, last: Bool) -> some View {
     let mine = turn.role == "user"
     let shown = turn.text.isEmpty && busy && last ? "…" : turn.text
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
       Text(
         (try? AttributedString(markdown: shown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
           ?? AttributedString(shown)
@@ -284,7 +299,7 @@ struct AiAssistPanel: View {
       })
       if turn.proposal != nil || !turn.docs.isEmpty {
         // What the answer points to: outlined buttons (Figma Button, Secondary, Small), never a second primary.
-        AglynWrapRow(spacing: 8, lineSpacing: 8) {
+        AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.one) {
           if let proposal = turn.proposal {
             Button(proposal.label) { context.openLink(proposal.href) }
               .accessibilityIdentifier("assist-proposal")
@@ -297,7 +312,7 @@ struct AiAssistPanel: View {
       }
     }
     // Your question on the sunken fill; the answer as plain text on the panel (18:505, 18:507).
-    .padding(mine ? EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12) : EdgeInsets())
+    .padding(mine ? EdgeInsets(top: AglynSpace.of(1.25), leading: AglynSpace.oneAndHalf, bottom: AglynSpace.of(1.25), trailing: AglynSpace.oneAndHalf) : EdgeInsets())
     .background {
       if mine { RoundedRectangle(cornerRadius: m.bubbleRadius, style: .continuous).fill(AglynColor.sunken) }
     }
@@ -383,7 +398,7 @@ private struct AssistActionStyle: ButtonStyle {
       .font(m.font(m.action, .semibold))
       .foregroundStyle(AglynColor.textPrimary)
       .labelStyle(.titleAndIcon)
-      .padding(.horizontal, 10)
+      .padding(.horizontal, AglynSpace.of(1.25))
       .frame(height: m.actionHeight)
       .background(
         RoundedRectangle(cornerRadius: m.actionRadius, style: .continuous)

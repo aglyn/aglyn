@@ -1226,34 +1226,39 @@ struct PhoneTopBar: ViewModifier {
       content.toolbar {
         if sizeClass == .compact {
         ToolbarItem(placement: .topBarLeading) { ScopeChip() }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          Button {
-            navigation.showOneBox = true
-          } label: {
-            Label("Search or jump to", systemImage: "magnifyingglass")
+        // One item, not a group: with search, the bell, AI and your photo as separate items, a phone's bar folds the
+        // last of them into a "More" menu, and AI must stay one tap away (Figma Phone/Top bar 273:20194).
+        ToolbarItem(placement: .topBarTrailing) {
+          HStack(spacing: AglynSpace.one) {
+            Button {
+              navigation.showOneBox = true
+            } label: {
+              Label("Search or jump to", systemImage: "magnifyingglass")
+            }
+            // Grey, as Figma's top bar (22:499); the accent is for the action in use.
+            .tint(AglynColor.secondaryText)
+            .accessibilityIdentifier("topbar-search")
+            Button {
+              navigation.showNotifications = true
+            } label: {
+              Label("Notifications", systemImage: "bell")
+            }
+            .tint(AglynColor.secondaryText)
+            .accessibilityIdentifier("topbar-bell")
+            // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
+            // 273:20194): after the bell, before your photo.
+            if AssistSlot.available(model) {
+              PhoneAssistButton()
+            }
+            Button {
+              navigation.showAccount = true
+            } label: {
+              AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 28)
+            }
+            .accessibilityLabel("Your account")
+            .accessibilityIdentifier("topbar-account")
           }
-          // Grey, as Figma's top bar (22:499); the accent is for the action in use.
-          .tint(AglynColor.secondaryText)
-          .accessibilityIdentifier("topbar-search")
-          Button {
-            navigation.showNotifications = true
-          } label: {
-            Label("Notifications", systemImage: "bell")
-          }
-          .tint(AglynColor.secondaryText)
-          .accessibilityIdentifier("topbar-bell")
-          // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
-          // 273:20194): after the bell, before your photo.
-          if AssistSlot.available(model) {
-            PhoneAssistButton()
-          }
-          Button {
-            navigation.showAccount = true
-          } label: {
-            AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 28)
-          }
-          .accessibilityLabel("Your account")
-          .accessibilityIdentifier("topbar-account")
+          .labelStyle(.iconOnly)
         }
         }
       }

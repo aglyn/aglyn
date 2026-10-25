@@ -85,3 +85,6 @@ fun textScaleOf(size: AppTextSize): Float = when (size) {
 
 /** Spacing in units of the console's 8 dp grid. */
 fun space(units: Float) = (AglynTokens.SPACING * units).dp
+
+/** A corner radius in units of the console's 4 dp shape radius (2 = a touch control, 3 = a touch card). */
+fun radius(units: Float) = (AglynTokens.RADIUS * units).dp

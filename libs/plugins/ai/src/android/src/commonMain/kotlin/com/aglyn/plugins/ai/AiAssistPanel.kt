@@ -32,7 +32,9 @@ import com.aglyn.screens.ScreenValues
 import com.aglyn.ui.LocalAccent
 import com.aglyn.ui.LocalAglynPalette
 import com.aglyn.ui.LocalThemeSurfaces
+import com.aglyn.ui.radius
 import com.aglyn.ui.shellMetrics
+import com.aglyn.ui.space
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -198,8 +200,8 @@ fun AssistPanel(context: NativePluginContext) {
     LazyColumn(
       Modifier.weight(1f).fillMaxWidth(),
       state = listState,
-      contentPadding = PaddingValues(horizontal = m.edge, vertical = if (turns.isEmpty()) 0.dp else 8.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
+      contentPadding = PaddingValues(horizontal = m.edge, vertical = if (turns.isEmpty()) space(0f) else space(1f)),
+      verticalArrangement = Arrangement.spacedBy(space(1.75f)),
     ) {
       itemsIndexed(turns) { i, turn ->
         TurnView(m, turn, typing = busy && i == turns.lastIndex, tag = "assist-turn-$i") { href -> context.openLink(href) }
@@ -208,7 +210,7 @@ fun AssistPanel(context: NativePluginContext) {
     if (turns.isEmpty() || m.suggestionsStay) {
       val place = params["place"].orEmpty()
       Column(
-        Modifier.fillMaxWidth().padding(start = m.edge, end = m.edge, top = 6.dp),
+        Modifier.fillMaxWidth().padding(start = m.edge, end = m.edge, top = space(0.75f)),
         verticalArrangement = Arrangement.spacedBy(m.suggestionGap),
       ) {
         Text(
@@ -224,7 +226,7 @@ fun AssistPanel(context: NativePluginContext) {
         "${q.remaining} of ${q.limit} free messages left ${if (q.period == "day") "today" else "this month"}",
         style = m.text(m.caption),
         color = assistTertiaryText(),
-        modifier = Modifier.fillMaxWidth().padding(start = m.edge, end = m.edge, top = 6.dp).testTag("assist-quota"),
+        modifier = Modifier.fillMaxWidth().padding(start = m.edge, end = m.edge, top = space(0.75f)).testTag("assist-quota"),
       )
     }
     // The field and its Send, and under them what questions and builds cost.
@@ -232,21 +234,21 @@ fun AssistPanel(context: NativePluginContext) {
       Modifier.fillMaxWidth().then(
         if (m.suggestionsStay) {
           // The desktop's composer sits on its own band under a hairline (Figma 18:540).
-          Modifier.padding(top = 6.dp).drawBehind { drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
-            .padding(start = m.edge, end = m.edge, top = 12.dp, bottom = 14.dp)
+          Modifier.padding(top = space(0.75f)).drawBehind { drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
+            .padding(start = m.edge, end = m.edge, top = space(1.5f), bottom = space(1.75f))
         } else {
-          Modifier.padding(start = m.edge, end = m.edge, top = 6.dp, bottom = 10.dp)
+          Modifier.padding(start = m.edge, end = m.edge, top = space(0.75f), bottom = space(1.25f))
         },
       ),
-      verticalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(space(0.75f)),
     ) {
       Row(
         Modifier.fillMaxWidth().heightIn(min = m.composer)
           .background(assistSunken(), RoundedCornerShape(m.composerRadius))
           .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(m.composerRadius))
-          .padding(start = m.composerLeading, end = 6.dp),
+          .padding(start = m.composerLeading, end = space(0.75f)),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(space(1.25f)),
       ) {
         val prompt = params["scope"]?.takeIf { it.isNotBlank() }?.let { "Ask about $it" }
           ?: context.hostId?.let { "Ask about this site" } ?: "Ask about this workspace"
@@ -259,7 +261,7 @@ fun AssistPanel(context: NativePluginContext) {
           cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
           keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
           keyboardActions = KeyboardActions(onSend = { ask(question) }),
-          modifier = Modifier.weight(1f).padding(vertical = 8.dp).testTag("assist-field"),
+          modifier = Modifier.weight(1f).padding(vertical = space(1f)).testTag("assist-field"),
           decorationBox = { field ->
             Box(contentAlignment = Alignment.CenterStart) {
               if (question.isEmpty()) Text(prompt, style = style, color = assistTertiaryText(), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -320,7 +322,7 @@ private class AssistMetrics(
   val suggestionsStay: Boolean,
 ) {
   /** The one content edge: chip, thread, suggestions, field and footer all start and end on it. */
-  val edge = 16.dp
+  val edge = space(2f)
 
   /** The brand face at a size (the theme's own family). */
   @Composable
@@ -330,20 +332,20 @@ private class AssistMetrics(
 
 /** Touch, on phones and tablets: Figma Android / Sheet / AI 273:20299 and iPhone / Sheet / AI 21:314. */
 private val TouchAssist = AssistMetrics(
-  chipText = 13.sp, chipWeight = FontWeight.Normal, chipPadding = PaddingValues(start = 10.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
-  body = 15.sp, suggestion = 15.sp, suggestionIcon = 16.dp, suggestionHeight = 46.dp, suggestionPadding = 14.dp, suggestionRadius = 12.dp,
-  suggestionGap = 6.dp, suggestionIconGap = 10.dp, caption = 13.sp, captionWeight = FontWeight.Normal, composer = 52.dp, composerRadius = 12.dp,
-  composerLeading = 14.dp, send = 40.dp, sendRadius = 8.dp, sendIcon = 16.dp, bubbleRadius = 12.dp, action = 15.sp, actionHeight = 36.dp,
-  actionRadius = 8.dp, suggestionsStay = false,
+  chipText = 13.sp, chipWeight = FontWeight.Normal, chipPadding = PaddingValues(start = space(1.25f), end = space(1.5f), top = space(0.625f), bottom = space(0.625f)),
+  body = 15.sp, suggestion = 15.sp, suggestionIcon = space(2f), suggestionHeight = space(5.75f), suggestionPadding = space(1.75f), suggestionRadius = radius(3f),
+  suggestionGap = space(0.75f), suggestionIconGap = space(1.25f), caption = 13.sp, captionWeight = FontWeight.Normal, composer = space(6.5f), composerRadius = radius(3f),
+  composerLeading = space(1.75f), send = space(5f), sendRadius = radius(2f), sendIcon = space(2f), bubbleRadius = radius(3f), action = 15.sp, actionHeight = space(4.5f),
+  actionRadius = radius(2f), suggestionsStay = false,
 )
 
 /** Compact, on the desktop: Figma AI panel 18:485. */
 private val CompactAssist = AssistMetrics(
-  chipText = 12.sp, chipWeight = FontWeight.SemiBold, chipPadding = PaddingValues(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
-  body = 14.sp, suggestion = 13.sp, suggestionIcon = 14.dp, suggestionHeight = 36.dp, suggestionPadding = 10.dp, suggestionRadius = 6.dp,
-  suggestionGap = 14.dp, suggestionIconGap = 8.dp, caption = 12.sp, captionWeight = FontWeight.SemiBold, composer = 44.dp, composerRadius = 10.dp,
-  composerLeading = 12.dp, send = 32.dp, sendRadius = 6.dp, sendIcon = 14.dp, bubbleRadius = 10.dp, action = 13.sp, actionHeight = 28.dp,
-  actionRadius = 6.dp, suggestionsStay = true,
+  chipText = 12.sp, chipWeight = FontWeight.SemiBold, chipPadding = PaddingValues(start = space(1f), end = space(1.25f), top = space(0.5f), bottom = space(0.5f)),
+  body = 14.sp, suggestion = 13.sp, suggestionIcon = space(1.75f), suggestionHeight = space(4.5f), suggestionPadding = space(1.25f), suggestionRadius = radius(1.5f),
+  suggestionGap = space(1.75f), suggestionIconGap = space(1f), caption = 12.sp, captionWeight = FontWeight.SemiBold, composer = space(5.5f), composerRadius = radius(2.5f),
+  composerLeading = space(1.5f), send = space(4f), sendRadius = radius(1.5f), sendIcon = space(1.75f), bubbleRadius = radius(2.5f), action = 13.sp, actionHeight = space(3.5f),
+  actionRadius = radius(1.5f), suggestionsStay = true,
 )
 
 /** Captions and the field's placeholder: the theme's tertiary text. */
@@ -362,15 +364,15 @@ private fun assistAccentIcon(): Color = LocalAccent.current?.icon ?: MaterialThe
 @Composable
 private fun ContextChip(m: AssistMetrics, looking: String, icon: String?) {
   Row(
-    Modifier.padding(start = m.edge, end = m.edge, top = 4.dp, bottom = 6.dp)
+    Modifier.padding(start = m.edge, end = m.edge, top = space(0.5f), bottom = space(0.75f))
       .background(LocalAccent.current?.soft ?: MaterialTheme.colorScheme.primaryContainer, CircleShape)
       .padding(m.chipPadding)
       .semantics(mergeDescendants = true) {}
       .testTag("assist-context"),
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(6.dp),
+    horizontalArrangement = Arrangement.spacedBy(space(0.75f)),
   ) {
-    Icon(AglynIcons.named(icon?.takeIf { AglynIcons.has(it) } ?: "visibility"), null, Modifier.size(14.dp), tint = assistAccentIcon())
+    Icon(AglynIcons.named(icon?.takeIf { AglynIcons.has(it) } ?: "visibility"), null, Modifier.size(space(1.75f)), tint = assistAccentIcon())
     Text("Looking at: $looking", style = m.text(m.chipText, m.chipWeight), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
@@ -383,7 +385,7 @@ private fun Suggestion(m: AssistMetrics, text: String, enabled: Boolean, onClick
     Modifier.fillMaxWidth().heightIn(min = m.suggestionHeight).clip(shape)
       .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
       .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-      .padding(horizontal = m.suggestionPadding, vertical = 6.dp)
+      .padding(horizontal = m.suggestionPadding, vertical = space(0.75f))
       .testTag("assist-suggestion"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(m.suggestionIconGap),
@@ -400,14 +402,14 @@ private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: S
   val mine = turn.role == "user"
   Column(
     Modifier.fillMaxWidth()
-      .then(if (mine) Modifier.background(assistSunken(), RoundedCornerShape(m.bubbleRadius)).padding(horizontal = 12.dp, vertical = 10.dp) else Modifier)
+      .then(if (mine) Modifier.background(assistSunken(), RoundedCornerShape(m.bubbleRadius)).padding(horizontal = space(1.5f), vertical = space(1.25f)) else Modifier)
       .testTag(tag)
       .semantics { if (!mine) liveRegion = LiveRegionMode.Polite },
-    verticalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(space(1f)),
   ) {
     Text(turn.text.ifEmpty { if (typing) "…" else "" }, style = m.text(m.body), color = MaterialTheme.colorScheme.onSurface)
     if (turn.proposal != null || turn.docs.isNotEmpty()) {
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
         turn.proposal?.let { (label, href) -> AssistAction(m, label, null, "assist-proposal") { open(href) } }
         turn.docs.forEach { (title, url) -> AssistAction(m, title, "article", "assist-doc") { open(url) } }
       }
@@ -427,9 +429,9 @@ private fun AssistAction(m: AssistMetrics, label: String, icon: String?, tag: St
       contentColor = MaterialTheme.colorScheme.onSurface,
     ),
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-    contentPadding = PaddingValues(horizontal = 10.dp),
+    contentPadding = PaddingValues(horizontal = space(1.25f)),
   ) {
-    icon?.let { Icon(AglynIcons.named(it), null, Modifier.size(16.dp).padding(end = 0.dp)); Spacer(Modifier.width(6.dp)) }
+    icon?.let { Icon(AglynIcons.named(it), null, Modifier.size(space(2f))); Spacer(Modifier.width(space(0.75f))) }
     Text(label, style = m.text(m.action, FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
