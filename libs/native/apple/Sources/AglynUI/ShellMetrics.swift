@@ -217,6 +217,18 @@ public enum AglynShellMotion {
   public static let crossFade = Animation.easeInOut(duration: 0.15)
   /// A screen's content stepping in over its loading state (the in-app Besigner, AGL-4002): about 200 ms.
   public static let reveal = Animation.easeOut(duration: 0.2)
+
+  // The content area (AGL-4009; Figma Motion 121:6714, "Content" rows).
+
+  /// Another section, or another tab in front: the content cross-fades, as the sidebar does for another workspace.
+  public static let swap = crossFade
+  /// A content push or pop on the Mac: how far the screen slides in, while it fades.
+  public static let pushDistance: CGFloat = 40
+  /// The push's slide: the drill's spring, about 250 ms.
+  public static let pushDuration: TimeInterval = 0.25
+  public static let pushSpring = Spring(duration: 0.25, bounce: 0.1)
+  /// The push's fade, done before the slide settles so the screen is readable as it lands.
+  public static let pushFade: TimeInterval = 0.18
 }
 
 /// The sidebar's hairline (Figma Sidebar/Divider): the border token, inset to the rows' padding.

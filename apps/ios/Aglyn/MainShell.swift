@@ -62,6 +62,7 @@ struct ShellTabs: View {
       ShellChrome(strip: strip).environment(current).zIndex(1)
       // Every open tab stays alive, only the one in front shown and touchable, so each keeps its own path, selection,
       // scroll and unsaved fields while another is in front.
+      // Another tab in front, a new one or one closed, cross-fades (AGL-4009).
       ZStack {
         ForEach(strip.tabs, id: \.tabID) { tab in
           let front = tab === current
@@ -71,8 +72,10 @@ struct ShellTabs: View {
             .allowsHitTesting(front)
             .accessibilityHidden(!front)
             .zIndex(front ? 1 : 0)
+            .transition(.opacity)
         }
       }
+      .animation(AglynShellMotion.swap, value: current.tabID)
       .focusedSceneValue(\.shellNavigation, current)
     }
     // The search's dropdown, under the title bar's field and over everything else (P3).
@@ -595,14 +598,20 @@ struct WideShell: View {
           .overlay(alignment: .trailing) { Rectangle().fill(AglynColor.divider).frame(width: 1) }
           .transition(.move(edge: .leading).combined(with: .opacity))
       }
-      ShellStack(navigation: navigation, section: navigation.section)
-        .id(navigation.section)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AglynColor.paper)
-        .inspector(isPresented: $navigation.showAssist) {
-          AssistSlot()
-            .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
-        }
+      // Another section, or the drill between the workspace and a site, cross-fades the content as the sidebar's own
+      // drill does (AGL-4009; Figma Motion 121:6714). A push or pop within the section is the stack's own motion.
+      ZStack {
+        ShellStack(navigation: navigation, section: navigation.section)
+          .id(contentKey)
+          .transition(.opacity)
+      }
+      .animation(AglynShellMotion.swap, value: contentKey)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(AglynColor.paper)
+      .inspector(isPresented: $navigation.showAssist) {
+        AssistSlot()
+          .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
+      }
     }
     .environment(\.aglynWideChrome, true)
     .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
@@ -611,6 +620,8 @@ struct WideShell: View {
     }
   }
 
+  /// What the content area shows: the section, in the workspace or in the site. A new one draws a new stack.
+  private var contentKey: String { "\(navigation.section.id)|\(navigation.inSite)" }
 }
 
 /// The Mac's title bar as Figma draws it: one plain bar in the theme's title-bar color across the window, with a
@@ -682,12 +693,22 @@ struct ShellStack: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
   let section: ShellSection
+  /// The stack's depth as its screens last saw it, so the screen appearing knows whether it was pushed or uncovered.
+  @State private var ledger: AglynStackLedger
+
+  init(navigation: ShellNavigation, section: ShellSection) {
+    self.navigation = navigation
+    self.section = section
+    // A section opened again on the screen it was left on starts at that depth, so that screen does not slide in.
+    _ledger = State(initialValue: AglynStackLedger(depth: navigation.paths[section]?.count ?? 0))
+  }
 
   var body: some View {
     NavigationStack(path: navigation.path(section)) {
       ShellRoot(section: section)
         .phoneTopBar()
         .wideBarHidden()
+        .aglynStackEntrance()
         .navigationDestination(for: Route.self) { route in
           PushedScreen(section: section) {
             if case .area(let screen, let params) = route {
@@ -698,10 +719,18 @@ struct ShellStack: View {
           }
           .phoneAssistOnPushed(route)
           .wideBarHidden()
+          .aglynStackEntrance()
         }
     }
     // A detail a screen opens goes on this stack's path, so a later push (a page in the browser) never drops it.
     .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
+    #if os(macOS)
+      // The Mac's stack swaps its screens with no motion: the screen appearing slides in and fades (AGL-4009). iPhone
+      // and iPad keep the system's own push, with its edge swipe back.
+      .environment(
+        \.aglynStackMotion,
+        AglynStackMotion(ledger: ledger) { [weak navigation, section] in navigation?.paths[section]?.count ?? 0 })
+    #endif
   }
 }
 

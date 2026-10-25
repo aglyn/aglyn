@@ -11,6 +11,8 @@ struct POSShell: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
   @State private var confirmSignOut = false
+  /// The stack's depth as its screens last saw it: on the Mac a screen slides in as Aglyn's do (AGL-4009).
+  @State private var ledger = AglynStackLedger()
 
   var body: some View {
     NavigationStack(path: navigation.path(.home)) {
@@ -21,7 +23,8 @@ struct POSShell: View {
           StorePicker()
         }
       }
-      .navigationDestination(for: Route.self) { RouteView(route: $0) }
+      .aglynStackEntrance()
+      .navigationDestination(for: Route.self) { RouteView(route: $0).aglynStackEntrance() }
       .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
@@ -63,6 +66,10 @@ struct POSShell: View {
       navigation.showSwitcher = false
       navigation.picker = .workspace
     }
+    #if os(macOS)
+      .environment(
+        \.aglynStackMotion, AglynStackMotion(ledger: ledger) { [weak navigation] in navigation?.paths[.home]?.count ?? 0 })
+    #endif
     .signOutConfirmation(isPresented: $confirmSignOut)
     // Aglyn POS draws the same theme as the account's Aglyn.
     .aglynAppTheme(nonce: navigation.themeNonce)
