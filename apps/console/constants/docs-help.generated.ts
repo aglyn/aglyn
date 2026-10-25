@@ -529,6 +529,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/workspace-and-billing/manage-account',
     title: 'Manage Account',
   },
+  manageDomains: {
+    path: '/building-sites/custom-domains/manage-domains',
+    title: 'Manage your domains',
+  },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
     title: 'Manifests, trust lifecycle & environment',
@@ -980,7 +984,7 @@ export const DOCS_HELP_ANCHORS = {
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#routed-sections-agl-2501', '#which-registration-owns-a-path', '#gating-a-section', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
-  buyADomain: ['#steps', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
+  buyADomain: ['#steps', '#site-has-a-domain', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
@@ -1067,6 +1071,7 @@ export const DOCS_HELP_ANCHORS = {
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
   makeYourSitePrivate: ['#hide-the-whole-site-until-launch', '#keep-it-out-of-search-only', '#share-it-behind-a-password', '#only-signed-in-members', '#ask-aglyn-ai', '#check-whats-still-public', '#related'],
   manageAccount: ['#account-tabs', '#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#product-updates', '#profile-image', '#basic-info', '#contact-details', '#security', '#close-account', '#close-account-steps', '#close-account-in-the-apps', '#close-account-deleted', '#close-account-kept', '#close-account-help', '#delete-your-data', '#related'],
+  manageDomains: ['#the-list', '#a-domain', '#connect', '#transfer-in', '#contact', '#dns', '#transfer-out'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#review-queue', '#verification-requests', '#listed-plugins', '#submission-status', '#review-overview', '#review-checklist', '#review-verdict', '#review-versions', '#take-down', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#org-marketing-overview', '#org-overlays', '#related'],
   marketingWithAi: ['#write-overlay-copy', '#create-an-overlay', '#create-a-campaign', '#ask-about-these-numbers', '#what-is-sent', '#who-can-use-it', '#related'],

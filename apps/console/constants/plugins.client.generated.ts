@@ -321,7 +321,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'domains',
     apiPrefixes: ["domains"],
     register: {"console":"registerDomainsConsole"},
-    contributes: {"console":{"slots":["hostDomain","hostDomainConnect"]}},
+    contributes: {"console":{"shell":true,"orgRoutes":["/domains"],"slots":["hostDomain","hostDomainConnect"]}},
     load: () => import('@aglyn/plugins-domains'),
   },
 ]
