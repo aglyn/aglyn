@@ -453,6 +453,7 @@
       "register": {
         "site": "registerCommercePlugin",
         "console": "registerCommerceConsole",
+        "staff": "registerCommerceConsole",
         "tenantApi": "registerCommerceApi",
         "consoleApi": "registerCommerceConsoleApi",
         "serverDeclarations": "registerCommerceServerDeclarations",

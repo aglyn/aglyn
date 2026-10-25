@@ -47,6 +47,7 @@ import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
 import PosDevicesCard from './console/pos-devices-card.component'
+import PosHardwareCard from './console/pos-hardware-card.component'
 import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
 import ReturnsCard from './console/returns-card.component'
@@ -268,6 +269,14 @@ function sectionBody(
         <RegisterHardwareCards key="hardware" hostId={hostId} />,
         <PosDevicesCard
           key="devices"
+          hostId={hostId}
+          canManagePos={canManagePos}
+        />,
+        // Card readers bought from the platform (AGL-4038), after the card
+        // that registers them. Draws nothing until the deployment opens the
+        // shop.
+        <PosHardwareCard
+          key="hardware-shop"
           hostId={hostId}
           canManagePos={canManagePos}
         />,

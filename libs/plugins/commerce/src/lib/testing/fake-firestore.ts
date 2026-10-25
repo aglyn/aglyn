@@ -168,8 +168,32 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
   }
 }
 
+/**
+ * Every document in a collection named `name` at any depth, filtered by
+ * equality; order and limit are the caller's to assert (AGL-4038).
+ */
+function collectionGroupRef(name: string, filters: Array<[string, any]> = []): any {
+  const query = {
+    where: (field: string, _op: string, value: any) => collectionGroupRef(name, [...filters, [field, value]]),
+    orderBy: () => query,
+    limit: () => query,
+    get: async () => {
+      const docs = [...fakeDocs.keys()]
+        .filter((key) => {
+          const parts = key.split('/')
+          return parts.length >= 2 && parts.length % 2 === 0 && parts[parts.length - 2] === name
+        })
+        .filter((key) => filters.every(([field, value]) => fakeDocs.get(key)?.[field] === value))
+        .map(snapshotOf)
+      return { docs, empty: docs.length === 0, size: docs.length }
+    },
+  }
+  return query
+}
+
 export const fakeFirestore: any = {
   collection: (name: string) => collectionRef(name),
+  collectionGroup: (name: string) => collectionGroupRef(name),
   runTransaction: async (fn: (transaction: any) => Promise<any>) => {
     const writes: Array<() => void> = []
     const outcome = await fn({
@@ -179,6 +203,14 @@ export const fakeFirestore: any = {
       },
       update: (ref: any, value: any) => {
         writes.push(() => applyWrite(ref.path, value, 'update'))
+      },
+      create: (ref: any, value: any) => {
+        if (fakeDocs.has(ref.path)) {
+          const error: any = new Error(`ALREADY_EXISTS: ${ref.path}`)
+          error.code = 6
+          throw error
+        }
+        writes.push(() => applyWrite(ref.path, value, 'set'))
       },
       delete: (ref: any) => {
         writes.push(() => fakeDocs.delete(ref.path))

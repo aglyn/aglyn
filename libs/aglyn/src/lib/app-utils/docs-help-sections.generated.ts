@@ -509,6 +509,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
+    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
   posOperations: {
