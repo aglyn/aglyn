@@ -157,6 +157,44 @@ public struct AglynLoadingState<Actions: View>: View {
   }
 }
 
+/// A breadcrumb that opens its level (AGL-4058): secondary text that takes the primary text color, and the link pointer
+/// on the Mac, under the pointer.
+public struct AglynCrumbLink: View {
+  let label: String
+  let action: () -> Void
+  @State private var hovered = false
+
+  public init(_ label: String, action: @escaping () -> Void) {
+    self.label = label
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      Text(label)
+        .font(.system(size: AglynShellMetrics.rowText - 1))
+        .foregroundStyle(hovered ? AglynColor.textPrimary : AglynColor.secondaryText)
+        .underline(hovered)
+        .lineLimit(1)
+    }
+    .buttonStyle(.plain)
+    .onHover { hovered = $0 }
+    .modifier(LinkPointer())
+    .accessibilityAddTraits(.isLink)
+  }
+}
+
+/// The link pointer where the platform has one.
+private struct LinkPointer: ViewModifier {
+  func body(content: Content) -> some View {
+    #if os(macOS)
+      if #available(macOS 15.0, *) { content.pointerStyle(.link) } else { content }
+    #else
+      content.hoverEffect(.highlight)
+    #endif
+  }
+}
+
 /// What a detail column shows while nothing in its list is picked: quiet
 /// secondary text, the way Mail says "No Message Selected" (never a full-size
 /// empty state with a big symbol).

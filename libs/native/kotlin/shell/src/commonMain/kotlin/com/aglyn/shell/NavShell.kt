@@ -570,11 +570,15 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             if (route !is Route.Web) {
               // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
               val steps = if (row == null && route == null) null else {
-                val group = allGroups.firstOrNull { g -> row != null && row in g.rows }?.label
+                val holder = allGroups.firstOrNull { g -> row != null && row in g.rows }
                 val place = row?.label
                 buildList {
                   add(Crumb(workspace.site?.name ?: workspace.org?.name ?: "") { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) })
-                  group?.let { add(Crumb(it, null)) }
+                  // The group opens its first row, unless that is the place on screen (AGL-4058).
+                  holder?.label?.let { label ->
+                    val first = holder.rows.firstOrNull()?.takeIf { it != row }
+                    add(Crumb(label, first?.let { target -> { openRow(target) } }))
+                  }
                   place?.let { add(Crumb(it) { navigator.select(row?.key ?: navigator.top) }) }
                   // A section the row opens without tabs (Orders' Returns): the row leads back, then the section.
                   row?.sections?.firstOrNull { it.key == navigator.top && it.key != row.key }?.takeIf { row.rowId in SELF_SECTIONED_ROWS }?.let { add(Crumb(it.label, null)) }
@@ -933,7 +937,7 @@ private fun WideToolbar(
 /** The workspace switcher's shortcut: ⌃⌘S on a Mac, Ctrl+Alt+S elsewhere. */
 internal fun railToggleShortcut(): String = if (isMacPlatform) "⌃⌘S" else "Ctrl+Alt+S"
 
-/** One step of the breadcrumbs, and where it leads (none for a group heading or the page on screen). */
+/** One step of the breadcrumbs, and where it leads (none for the page on screen). */
 private data class Crumb(val label: String, val open: (() -> Unit)?)
 
 /** "Bakery › Sell › Orders": where the screen sits; every step but the last leads back to it. */
