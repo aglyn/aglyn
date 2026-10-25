@@ -115,6 +115,15 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       } else if (action === 'remove') {
         cart.lines = CommerceModel.removeCartLine(cart, line)
       } else {
+        // A product sold in person only (AGL-4060) never enters a basket: it
+        // answers as no product at all, as its page does. A line already in
+        // the cart stays removable and resolves as unavailable below.
+        if (line.quantity > 0 && isDocumentId(line.productId)) {
+          const productSnapshot = await hostRef.collection('products').doc(line.productId).get()
+          if (productSnapshot.exists && !CommerceModel.productSellsOnline(productSnapshot.data())) {
+            return res.status(404).json({ error: 'Unknown product' })
+          }
+        }
         cart.lines = CommerceModel.upsertCartLine(
           cart,
           line,
@@ -159,7 +168,7 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
     )
     const lines: ResolvedCartLine[] = cart.lines.map((line) => {
       const product = productsById.get(line.productId)
-      if (!product || product.deletedAt || product.status !== 'active') {
+      if (!product || !CommerceModel.productListedOnline(product)) {
         return {
           ...line,
           name: product?.name ?? 'Unavailable product',

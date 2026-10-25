@@ -84,6 +84,7 @@ import { resolveBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
 import {
   AI_SITE_CONTEXT_MAX_CHARS,
   aiInstructionsWithSiteContext,
+  aiSiteContextSystemBlock,
   type AiSiteContextInput,
 } from '../model/ai-site-context'
 import { aiComponentTool } from '../tools/ai-component-tool'
@@ -119,6 +120,7 @@ import {
   AI_CACHE_PREFIX_TOKEN_CHARS,
   aiCachedPrefixCaches,
   aiCachedPrefixChars,
+  aiConversationCacheFits,
   validateAiSystemBlocks,
 } from './ai-runtime'
 
@@ -1345,7 +1347,7 @@ describe('a site job’s routes keep their prefix for the hour, in production to
     return requests[0]
   }
 
-  it('sends the route’s hour on every breakpoint of a deployed server’s request, and five minutes elsewhere', async () => {
+  it('sends the route’s hour on every shared breakpoint of a deployed server’s request, and five minutes elsewhere', async () => {
     const saved = process.env['NODE_ENV']
     ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
     try {
@@ -1362,6 +1364,169 @@ describe('a site job’s routes keep their prefix for the hour, in production to
       }
       expect((await generationOn(undefined)).cacheTtl).toBeUndefined()
     } finally {
+      ;(process.env as Record<string, string | undefined>)['NODE_ENV'] = saved
+    }
+  })
+})
+
+/**
+ * EACH JOB'S OWN MARKERS KEEP FIVE MINUTES (AGL-4050).
+ *
+ * The hour a site job's route asks for pays back only on bytes the NEXT job
+ * reads: the tools, the doctrine and the door's rules. A site's block and a
+ * plan's own conversation are read by one job, within minutes, so at the hour
+ * their 2x write is never earned back. The route's lifetime goes on the shared
+ * markers, five minutes on the job's, and the API's rule that no hour-long
+ * entry follow a five-minute one holds on every request.
+ */
+describe('each job’s own markers keep five minutes, the shared prompt the hour (AGL-4050)', () => {
+  /** A wire body's markers in the API's prefix order: tools, system, then the turns' blocks. */
+  const markersOf = (body: Record<string, unknown>): string[] => {
+    const system = (body['system'] ?? []) as Array<Record<string, unknown>>
+    const turns = body['messages'] as Array<{ content: unknown }>
+    const blocks = turns.flatMap((turn) => (Array.isArray(turn.content) ? (turn.content as Array<Record<string, unknown>>) : []))
+    return [...((body['tools'] ?? []) as Array<Record<string, unknown>>), ...system, ...blocks]
+      .map((block) => block['cache_control'] as { ttl?: string } | undefined)
+      .filter((mark): mark is { ttl?: string } => Boolean(mark))
+      .map((mark) => mark.ttl ?? '5m')
+  }
+  /** Where a body carries a marker: each system block's index, and `m<turn>.<block>` for a turn's. */
+  const markerPlaces = (body: Record<string, unknown>): string[] => [
+    ...((body['system'] ?? []) as Array<Record<string, unknown>>).flatMap((block, index) =>
+      block['cache_control'] ? [String(index)] : [],
+    ),
+    ...(body['messages'] as Array<{ content: unknown }>).flatMap((turn, index) =>
+      Array.isArray(turn.content)
+        ? (turn.content as Array<Record<string, unknown>>).flatMap((block, at) => (block['cache_control'] ? [`m${index}.${at}`] : []))
+        : [],
+    ),
+  ]
+  const strip = (body: Record<string, unknown>) =>
+    JSON.stringify(body, (key, value) => (key === 'cache_control' ? undefined : value))
+
+  const CONTEXT = { profile: resolveBusinessProfile({ host: { displayName: 'Acme Roofing' }, site: {} }), preferences: [] }
+  const TURNS = [
+    { role: 'user' as const, content: 'Kind of job: site\nBrief: a roofer in Springfield' },
+    { role: 'assistant' as const, content: `Called ${AI_INVENTORY_LOOKUP_TOOL_NAME}.` },
+    { role: 'user' as const, content: 'the lookup answer' },
+  ]
+  /** A site plan (with its site block and conversation), a page step and an SEO listing, as their doors build them. */
+  const CASES: Record<string, Omit<AiProviderRequest, 'apiKey'>> = {
+    'site plan': {
+      model: aiModelForStep('job.plan'),
+      maxTokens: 1_000,
+      system: aiDoctrineSystemBlocks(SITE_A, { instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, CONTEXT) }),
+      tools: REQUESTS['site-plan'].tools(SITE_A),
+      messages: TURNS,
+      cacheConversation: true,
+    },
+    'page step': {
+      model: aiModelForStep('job.page'),
+      maxTokens: 1_000,
+      system: REQUESTS['layout-page'].blocks(SITE_A),
+      tools: REQUESTS['layout-page'].tools(SITE_A),
+      messages: TURNS.slice(0, 1),
+    },
+    'SEO listing': {
+      model: aiModelForStep('job.seo'),
+      maxTokens: 1_000,
+      system: REQUESTS['seo-fields'].blocks(SITE_A),
+      tools: REQUESTS['seo-fields'].tools(SITE_A),
+      messages: TURNS.slice(0, 1),
+    },
+  }
+  const STEP: Record<string, AiStepKind> = { 'site plan': 'job.plan', 'page step': 'job.page', 'SEO listing': 'job.seo' }
+  const wire = (name: string, hour: boolean) =>
+    buildAnthropicRequestBody({ ...CASES[name], ...(hour ? { cacheTtl: '1h' as const } : {}), stream: false })
+
+  it.each(Object.keys(CASES))('the %s sends the same prompt bytes, and markers in the same places, at its route’s hour as at five minutes', (name) => {
+    expect(AI_ROUTING_TABLE[STEP[name]].cacheTtl).toBe('1h')
+    const hour = wire(name, true)
+    const fiveMinutes = wire(name, false)
+    // Five minutes everywhere is the body every request sent before AGL-3830,
+    // cache_control included; the hour may change nothing else.
+    expect(strip(hour)).toBe(strip(fiveMinutes))
+    expect(markerPlaces(hour)).toEqual(markerPlaces(fiveMinutes))
+    expect(markersOf(fiveMinutes).every((ttl) => ttl === '5m')).toBe(true)
+  })
+
+  it('gives the site plan’s shared markers the hour, its site block and conversation five minutes', () => {
+    const system = CASES['site plan'].system
+    const siteAt = system.findIndex((block) => block.site)
+    expect(siteAt).toBeGreaterThan(0)
+    const marks = markersOf(wire('site plan', true))
+    const shared = system.slice(0, siteAt).filter((block) => block.cacheBreakpoint).length
+    expect(shared).toBeGreaterThan(0)
+    expect(marks).toEqual([...Array(shared).fill('1h'), '5m', '5m'])
+  })
+
+  it.each(['page step', 'SEO listing'])('keeps every marker of the %s at the hour: it has no marker of its own job', (name) => {
+    expect(CASES[name].system.some((block) => block.site)).toBe(false)
+    const marks = markersOf(wire(name, true))
+    expect(marks.length).toBeGreaterThan(0)
+    expect(new Set(marks)).toEqual(new Set(['1h']))
+  })
+
+  it('never sends an hour-long marker after a five-minute one on any ledger request, with or without a site block and conversation', () => {
+    for (const [name, row] of Object.entries(REQUESTS)) {
+      for (const context of [null, CONTEXT]) {
+        // The site's block goes where a door puts it: right after the last
+        // breakpoint, where the runtime's guard accepts it.
+        const blocks = row.blocks(SITE_A)
+        const last = blocks.map((block) => Boolean(block.cacheBreakpoint)).lastIndexOf(true)
+        const site = context && aiConversationCacheFits(blocks) ? aiSiteContextSystemBlock(context) : []
+        const system = [...blocks.slice(0, last + 1), ...site, ...blocks.slice(last + 1)]
+        expect(() => validateAiSystemBlocks(system)).not.toThrow()
+        const cacheConversation = aiConversationCacheFits(system)
+        const marks = markersOf(
+          buildAnthropicRequestBody({
+            model: aiModelForStep(row.step),
+            maxTokens: 1_000,
+            system: [...system],
+            tools: row.tools(SITE_A),
+            messages: TURNS,
+            cacheTtl: '1h',
+            ...(cacheConversation ? { cacheConversation } : {}),
+            stream: false,
+          }),
+        )
+        const firstShort = marks.indexOf('5m')
+        expect([name, Boolean(context), firstShort < 0 ? [] : marks.slice(firstShort).filter((ttl) => ttl === '1h')]).toEqual([
+          name,
+          Boolean(context),
+          [],
+        ])
+      }
+    }
+  })
+
+  it('sends a deployed plan generation’s hour on its shared markers alone, on every call', async () => {
+    const saved = process.env['NODE_ENV']
+    ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const { fake, requests } = recording([
+        answer([{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'card' } }]),
+        answer([]),
+        answer([]),
+      ])
+      await runValidatedGeneration('plan', {
+        step: 'job.plan',
+        model: 'claude-sonnet-5-5',
+        provider: fake,
+        instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, CONTEXT),
+        inventory: SITE_A,
+        messages: [TURNS[0]],
+        tool: aiBuildPlanToolFor('', { language: true }),
+        cacheConversation: true,
+      })
+      expect(requests).toHaveLength(3)
+      for (const request of requests) {
+        expect(request.cacheTtl).toBe('1h')
+        expect(markersOf(buildAnthropicRequestBody({ ...request, stream: false }))).toEqual(['1h', '1h', '5m', '5m'])
+      }
+    } finally {
+      warn.mockRestore()
       ;(process.env as Record<string, string | undefined>)['NODE_ENV'] = saved
     }
   })

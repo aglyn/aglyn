@@ -397,6 +397,22 @@ describe('sitemap index (AGL-2520)', () => {
     ])
   })
 
+  it('lists no product sold in person only, and every product stored before the switch (AGL-4060)', async () => {
+    givenSite({
+      store: { pdpScreenId: 'pdp' },
+      products: [
+        { id: 'p1', data: { status: 'active', slug: 'mug' } },
+        { id: 'p2', data: { status: 'active', slug: 'card-reader', sellOnline: false } },
+        { id: 'p3', data: { status: 'active', slug: 'tee', sellOnline: true } },
+      ],
+    })
+
+    expect(locsOf(await fetchXml('/sitemaps/products/1.xml'))).toEqual([
+      `${BASE}/products/mug`,
+      `${BASE}/products/tee`,
+    ])
+  })
+
   it('keeps every other section in the index when one declared section cannot be read', async () => {
     // Each declared section is counted on its own: products failing to count
     // must not take the catalog, or the content sections, out with it.

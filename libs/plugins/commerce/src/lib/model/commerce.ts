@@ -16,7 +16,7 @@
  */
 
 import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
-import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in'
+import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in-product'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
 import type { PickupLocationSettings } from './order-local-fulfillment'
@@ -325,6 +325,15 @@ export interface HostProduct {
   modifierGroups?: ProductModifierGroup[]
   /** Shown under Quick keys on the register's first screen (AGL-3607). */
   posQuickKey?: boolean
+  /**
+   * Whether the product is sold online (AGL-4060): its page, the site's
+   * product grids, search, the sitemap, the shopping feeds and marketplaces,
+   * carts and checkout. `false` keeps it on the register, the kiosk, the
+   * Aglyn POS apps and draft orders only. Absent reads as `true`, so every
+   * product stored before the switch sells online as it did; read it through
+   * {@link productSellsOnline}, never as a truthy field.
+   */
+  sellOnline?: boolean
   /**
    * A pass, a camping spot, parking: each item sold is somebody to check in
    * at the window on the day it was bought, `headcount` people per item
@@ -1249,6 +1258,27 @@ export function smartCollectionMatches(
   return collection.matchAll === false
     ? rules.some(matcher)
     : rules.every(matcher)
+}
+
+/**
+ * Whether a product is sold online (AGL-4060). Only an explicit `false` turns
+ * it off: a product stored before the switch existed carries no
+ * `sellOnline` at all and sells online exactly as it did.
+ */
+export function productSellsOnline(product: { sellOnline?: unknown } | null | undefined): boolean {
+  return product?.sellOnline !== false
+}
+
+/**
+ * Whether a shopper online may see or buy a product (AGL-4060): live, active
+ * and sold online. Every online surface (the product page, grids, search,
+ * the sitemap, feeds, carts, checkout) asks this; the register, the kiosk,
+ * the POS apps and draft orders ask only that it is live and active.
+ */
+export function productListedOnline(
+  product: { deletedAt?: unknown; status?: unknown; sellOnline?: unknown } | null | undefined,
+): boolean {
+  return Boolean(product) && !product?.deletedAt && product?.status === 'active' && productSellsOnline(product)
 }
 
 /**

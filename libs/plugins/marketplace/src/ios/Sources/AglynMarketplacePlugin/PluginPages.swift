@@ -373,14 +373,14 @@ struct PluginInstallationCard: View {
         let all = pluginUpdateAll(summary, stale: stale, latestVersion: latest)
         if summary.orgWide { AglynNotice(pluginOrgWideUpdateNote, tone: .info) }
         Button(all.label) { updating = PendingUpdate(hostIDs: all.hostIDs, label: all.target) }
-          .buttonStyle(.bordered).disabled(!canChange || runner.busy)
+          .buttonStyle(.aglynSecondary).disabled(!canChange || runner.busy)
           .accessibilityIdentifier("update-all")
       }
       if !summary.orgWide, !summary.availableHostIDs.isEmpty { addToSites(summary) }
       Divider()
       if summary.orgWide {
         Button("Split into per-site installs") { split(summary) }
-          .buttonStyle(.bordered).disabled(!canChange || runner.busy || model.sites.isEmpty)
+          .buttonStyle(.aglynSecondary).disabled(!canChange || runner.busy || model.sites.isEmpty)
         Text("Pins each site separately so you can update them one at a time. Sites you add later will not get this plugin automatically.")
           .font(AglynFont.caption).foregroundStyle(.secondary)
         Button("Uninstall org-wide", role: .destructive) {
@@ -390,7 +390,7 @@ struct PluginInstallationCard: View {
         .accessibilityIdentifier("uninstall-org")
       } else {
         Button("Install for the whole organization") { promote(summary) }
-          .buttonStyle(.bordered).disabled(!canChange || runner.busy)
+          .buttonStyle(.aglynSecondary).disabled(!canChange || runner.busy)
           .accessibilityIdentifier("install-org")
       }
       if !canChange {
@@ -416,7 +416,7 @@ struct PluginInstallationCard: View {
         let chosen = summary.availableHostIDs.filter { addHostIDs.contains($0) }
         install(steps: chosen.map { (InstallTarget.host, $0 as String?) }, updating: false, version: nil)
       }
-      .buttonStyle(.bordered).disabled(!canChange || runner.busy || addHostIDs.isEmpty)
+      .buttonStyle(.aglynSecondary).disabled(!canChange || runner.busy || addHostIDs.isEmpty)
       .accessibilityIdentifier("add-selected")
     }
   }

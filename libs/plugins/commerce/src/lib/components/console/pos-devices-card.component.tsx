@@ -39,6 +39,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { posDisplayCall, posReadersCall, PosRequestError } from './pos/pos-api'
 import { POS_DEVICES_ANCHOR } from './pos/pos-kiosk-readiness.component'
 import { POS_REGISTERS_ANCHOR, usePosPairing } from './pos/pos-pairing.component'
+import { PosReaderSplashSetting } from './pos-reader-splash-setting.component'
 
 interface ReaderRow {
   id: string
@@ -339,6 +340,9 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
             )}
           </Stack>
         ) : null}
+        {/* What the readers show while idle (AGL-4048); renders nothing
+            where card readers are not offered. */}
+        {showReaders ? <PosReaderSplashSetting hostId={hostId} canManagePos={canManagePos} /> : null}
         <Stack spacing={1}>
           <Typography variant="subtitle2">{'Customer displays and kiosks'}</Typography>
           {noRegisters ? (

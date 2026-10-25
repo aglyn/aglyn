@@ -143,34 +143,25 @@ fun deriveThemeFromPreview(preview: ThemePreview, darkRailSeed: String): ThemeCo
   )
 }
 
-/** Text and icons on a fill that keeps a light brand color. */
-private const val DARK_ON_LIGHTNESS = 0.08
-
 /**
- * Every control's shade of one accent color (`deriveAccent`): a Figma accent's ring answers with that mode exactly; any
- * other color keeps its fill when white reads on it, flips its ink to near-black when white reads only at 3:1 and
- * near-black reads at 4.5:1, and is darkened in 2% steps otherwise. Null for anything that is not `#RRGGBB`.
+ * Every control's shade of one accent color (`deriveAccent`): a retired blue reads as the color that replaced it
+ * (`THEME_RETIRED_ACCENTS`), a Figma accent's ring answers with that mode exactly; any
+ * other color keeps its fill when white reads on it at 3:1 and is darkened in 2% steps until white reads at 4.5:1
+ * otherwise; the content on the fill is always white. Null for anything that is not `#RRGGBB`.
  */
 fun deriveAccent(color: String?): ThemeAccent? {
   if (!isThemeColor(color)) return null
-  val raw = color!!.lowercase()
+  val raw = color!!.lowercase().let { Contracts.themeRetiredAccents[it] ?: it }
   Contracts.themeAccents.firstOrNull { it.accent.ring == raw }?.let { return it.accent }
   val white = "#ffffff"
   val text = Contracts.themeTextContrast
   val nonText = Contracts.themeNonTextContrast.toDouble()
-  val onWhite = themeContrast(raw, white)
-  var fill = raw
-  var on = white
-  if (onWhite < text) {
-    val hsl = toHsl(channels(raw)!!)
-    val nearBlack = fromHsl(hsl[0], min(hsl[1], 0.8), DARK_ON_LIGHTNESS)
-    if (onWhite >= nonText && themeContrast(raw, nearBlack) >= text) on = nearBlack else fill = walkToContrast(raw, white, text, -1)
-  }
+  val fill = if (themeContrast(raw, white) >= nonText) raw else walkToContrast(raw, white, text, -1)
   return ThemeAccent(
     fill = fill,
     hover = themeShiftLightness(fill, -0.04),
     icon = walkToContrast(raw, aglynLight.surface, nonText, -1),
-    on = on,
+    on = white,
     pressed = themeShiftLightness(fill, -0.08),
     ring = raw,
     soft = withAlpha(raw, 0.16),
