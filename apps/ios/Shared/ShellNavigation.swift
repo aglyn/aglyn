@@ -130,6 +130,12 @@ final class ShellNavigation {
   var showCreate = false
   /// The AI panel, docked on the right (a sheet on a phone).
   var showAssist = false
+  /// The in-app Besigner is the screen on show. Its own Assist launcher, which reads and edits the canvas, is then the
+  /// one AI there, so the title bar's ✦ steps aside (AGL-4057).
+  var besignerOnScreen: Bool {
+    if case .besigner? = paths[section]?.last { return true }
+    return false
+  }
   /// This navigation's identity, for a tab strip that keeps every tab's view alive.
   var tabID: ObjectIdentifier { ObjectIdentifier(self) }
   /// The sidebar folded away (View ▸ Hide Sidebar, ⌥⌘S), so the place in use takes the width.

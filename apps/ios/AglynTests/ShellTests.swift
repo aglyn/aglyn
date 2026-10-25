@@ -38,6 +38,19 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/screens"), .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop"]))
   }
 
+  /// The in-app Besigner's own Assist edits the canvas; the title bar's ✦ steps aside while it shows (AGL-4057).
+  func testTheBesignerOnScreenHidesTheAppsAILauncher() {
+    let navigation = ShellNavigation()
+    navigation.select(.plugin("forms.list"))
+    XCTAssertFalse(navigation.besignerOnScreen)
+    navigation.push(.besigner("/acme/hosts/shop/forms/contact/versions/v1/besigner"))
+    XCTAssertTrue(navigation.besignerOnScreen)
+    navigation.push(.screen("forms.detail", ["formId": "contact"]))
+    XCTAssertFalse(navigation.besignerOnScreen, "a screen the editor opened natively sits on top")
+    navigation.paths[navigation.section] = []
+    XCTAssertFalse(navigation.besignerOnScreen)
+  }
+
   func testANavigationPushLandsOnTheSelectedSection() {
     let navigation = ShellNavigation()
     navigation.section = .notifications

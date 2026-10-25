@@ -195,6 +195,8 @@ struct BesignerScreen: View {
     #endif
     .aglynScreenTitle("Besigner")
     .aglynPrimaryAction(id: "besigner-done", "Done", systemImage: "checkmark") { leave() }
+    // The editor's own Assist is the AI here; the app's panel closes rather than sit beside it (AGL-4057).
+    .onAppear { navigation.showAssist = false }
     .task { await start() }
   }
 
