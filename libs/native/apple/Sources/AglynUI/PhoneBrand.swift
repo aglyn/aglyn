@@ -42,20 +42,24 @@ public struct AglynPhoneGround: View {
   public init() {}
 
   public var body: some View {
-    AglynColor.page
-      .overlay(alignment: .top) {
-        if AglynThemeRuntime.shared.phoneBold {
-          Ellipse()
-            .fill(AglynBrandGradient.linear)
-            .frame(width: 640, height: 300)
-            .offset(y: -150)
-            .blur(radius: 40)
-            .opacity(scheme == .dark ? 0.42 : 0.30)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+    // The glow is anchored to the SCREEN's top edge, wherever this ground begins: a screen whose ground starts under
+    // the navigation bar (Orders) then continues the shell's one glow rather than drawing a second band of its own.
+    GeometryReader { proxy in
+      AglynColor.page
+        .overlay(alignment: .top) {
+          if AglynThemeRuntime.shared.phoneBold {
+            Ellipse()
+              .fill(AglynBrandGradient.linear)
+              .frame(width: 640, height: 300)
+              .offset(y: -150 - max(0, proxy.frame(in: .global).minY))
+              .blur(radius: 40)
+              .opacity(scheme == .dark ? 0.42 : 0.30)
+              .allowsHitTesting(false)
+              .accessibilityHidden(true)
+          }
         }
-      }
-      .clipped()
+        .clipped()
+    }
   }
 }
 

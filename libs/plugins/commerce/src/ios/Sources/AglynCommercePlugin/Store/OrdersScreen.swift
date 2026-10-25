@@ -308,7 +308,8 @@ struct OrdersScreen: View {
         }
         .aglynContentEdges()
       }
-      content(selectable: selectable)
+      // The list on the paper panel under the toolbar, as Figma's phone Orders (22:499) draws it.
+      content(selectable: selectable).aglynPhonePanel()
     }
     // The page ground, with the brand's glow under the title in the phone's bold look (AGL-3990).
     .aglynPhoneGround()
