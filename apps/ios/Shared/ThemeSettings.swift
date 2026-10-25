@@ -301,7 +301,7 @@ private struct ThemeTile: View {
         }
         .frame(height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(selected ? AglynColor.tint : AglynColor.divider, lineWidth: selected ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(selected ? AglynColor.primary : AglynColor.divider, lineWidth: selected ? 2 : 1))
         Text(label).font(AglynFont.subheadline)
       }
     }

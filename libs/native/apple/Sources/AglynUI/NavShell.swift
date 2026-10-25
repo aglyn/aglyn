@@ -329,7 +329,7 @@ public struct AglynColorSwatch: View {
     .frame(width: size, height: size)
     .overlay(Circle().strokeBorder(AglynColor.divider, lineWidth: 1))
     .padding(3)
-    .overlay(Circle().strokeBorder(selected ? AglynColor.tint : .clear, lineWidth: 2))
+    .overlay(Circle().strokeBorder(selected ? AglynColor.primary : .clear, lineWidth: 2))
   }
 }
 

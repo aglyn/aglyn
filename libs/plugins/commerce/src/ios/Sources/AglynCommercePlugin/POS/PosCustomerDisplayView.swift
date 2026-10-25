@@ -233,13 +233,22 @@ struct DisplayCartView: View {
 struct DeviceButtonStyle: ButtonStyle {
   var prominent = true
 
+  /// The kiosk's and the customer display's big buttons wear the app's two button looks at a counter's size: prominent
+  /// is `.aglynProminent`'s brand fill under white (pressed a shade deeper), secondary is `.aglynSecondary`'s paper with
+  /// a border/strong outline and primary text. Never the accent's text shade as a fill.
   func makeBody(configuration: Configuration) -> some View {
+    let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
     configuration.label
       .font(AglynFont.title2.weight(.semibold))
       .frame(maxWidth: .infinity, minHeight: 80)
-      .foregroundStyle(prominent ? Color.white : AglynColor.tint)
-      .background(prominent ? AglynColor.tint : AglynColor.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
-      .opacity(configuration.isPressed ? 0.8 : 1)
+      .foregroundStyle(prominent ? AglynColor.primaryContrast : AglynColor.textPrimary)
+      .background(
+        shape.fill(
+          prominent
+            ? (configuration.isPressed ? AglynColor.accent(\.pressed) : AglynColor.primary)
+            : (configuration.isPressed ? AglynColor.sunken : AglynColor.paper)))
+      .overlay { if !prominent { shape.strokeBorder(AglynColor.borderStrong, lineWidth: 1) } }
+      .contentShape(shape)
   }
 }
 
