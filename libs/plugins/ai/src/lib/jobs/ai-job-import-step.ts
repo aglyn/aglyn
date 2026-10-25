@@ -152,6 +152,8 @@ export const AI_SITE_IMPORT_COPY = {
   robots: (domain: string) =>
     `The robots.txt file of ${domain} could not be read just now, so nothing was read. Try again in a few minutes.`,
   nothing: (domain: string) => `No page of ${domain} could be read. Check that the site is up, then try again.`,
+  blocked: (domain: string) =>
+    `The bot protection or firewall of ${domain} turned AglynBot away, so no page could be read. Allow AglynBot in your site’s bot or firewall settings, then read the site again.`,
   unavailable: 'Bringing a site in is not available on this workspace right now.',
   frameUnavailable: 'The header and footer could not be built here; your pages use the site’s own layout.',
   pageUnavailable: 'Pages cannot be built here right now.',
@@ -453,7 +455,12 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       )
       if (crawled.refused) return unspent({ failure: AI_SITE_IMPORT_COPY.badDomain })
       if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
-      if (!crawled.pages.length) return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.nothing(domain)) })
+      const skipped = crawled.skipped.map((entry) => ({ url: entry.url, reason: siteImportLeftOutReason(entry.reason, entry.status) }))
+      if (!crawled.pages.length) {
+        // A site its bot protection keeps AglynBot off is up: say what lets AglynBot in, not to check that it is.
+        const blocked = skipped.some((entry) => entry.reason === 'blocked')
+        return unspent({ review: waveReview(AI_SITE_IMPORT_COPY[blocked ? 'blocked' : 'nothing'](domain)) })
+      }
       const inventory = aiSiteImportInventory({
         domain,
         siteName: await siteNameOf(firestore, hostId),
@@ -461,7 +468,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         readAt: nowIso,
         pages: crawled.pages.map(siteImportListedPage),
         menu: siteImportMenu(crawled),
-        skipped: crawled.skipped.map((entry) => ({ url: entry.url, reason: siteImportLeftOutReason(entry.reason) })),
+        skipped,
         skippedOverflow: crawled.skippedOverflow,
         stoppedBy: crawled.stoppedBy,
         pageLimit: room.limit,
@@ -697,7 +704,7 @@ export function siteImportWaveReads(
     }
   }
   const pages = new Map(crawled.pages.map((page) => [pathKey(page.url), page]))
-  const skipped = new Map(crawled.skipped.map((entry) => [pathKey(entry.url), entry.reason]))
+  const skipped = new Map(crawled.skipped.map((entry) => [pathKey(entry.url), entry]))
   const unmatched = [...crawled.pages]
   const take = (page: (typeof crawled.pages)[number]) => {
     const index = unmatched.indexOf(page)
@@ -711,9 +718,9 @@ export function siteImportWaveReads(
       reads.set(page.slot, siteImportReadOrEmpty(found, at))
       continue
     }
-    const reason = skipped.get(pathKey(page.url))
-    if (reason) {
-      reads.set(page.slot, siteImportLeftOutReason(reason))
+    const left = skipped.get(pathKey(page.url))
+    if (left) {
+      reads.set(page.slot, siteImportLeftOutReason(left.reason, left.status))
       continue
     }
     pending.push(page)

@@ -15,18 +15,23 @@
  * limitations under the License.
  */
 
+import type { RegistrarDnsRecord } from '../model/dns-records'
 import type {
+  RegistrantContact,
   RegistrarDriver,
+  RegistrarListedRecord,
   RegistrarOrderStatus,
   RegistrarQuote,
   RegistrarResult,
+  RegistrarTransferStatus,
 } from './registrar'
 
 /*
  * VERCEL'S REGISTRAR API as a {@link RegistrarDriver} (AGL-3962).
  *
- * `/v1/registrar/*` sells and renews; `/v5/domains/{name}` says whether the
- * name is ours and when it expires. Same `VERCEL_TOKEN` and `VERCEL_TEAM_ID`
+ * `/v1/registrar/*` sells, renews and transfers in; `/v5/domains/{name}` says
+ * whether the name is ours, when it expires and whose nameservers it uses;
+ * `/v5`, `/v2` and `/v1` `…/records` read and write its DNS (AGL-4040). Same `VERCEL_TOKEN` and `VERCEL_TEAM_ID`
  * the domain provider attaches names with, so a domain bought here lands in
  * the team whose project serves it and its DNS is Vercel's from the first
  * second — which is what lets the site go live with no DNS step at all.
@@ -52,7 +57,7 @@ function settings(): Settings | null {
 type Answer = { status: number; body: Record<string, unknown> | null }
 
 async function call(
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
   query: Record<string, string> = {},
@@ -92,7 +97,9 @@ async function call(
  * (`expected_price_mismatch`, `domain_not_available`…), so it is kept as is;
  * anything else is named by its status.
  */
-function refusal<T>(answer: Awaited<ReturnType<typeof call>>): RegistrarResult<T> {
+function refusal<T>(
+  answer: Awaited<ReturnType<typeof call>>,
+): Extract<RegistrarResult<T>, { ok: 'no' }> {
   if (answer.status === 0) {
     return { ok: 'no', code: 'network' in answer ? answer.network : 'network', retryable: true }
   }
@@ -108,6 +115,66 @@ function refusal<T>(answer: Awaited<ReturnType<typeof call>>): RegistrarResult<T
 }
 
 const ok = (status: number) => status >= 200 && status < 300
+
+/** The registrant contact as Vercel's `contactInformation` takes it. */
+export function contactInformation(contact: RegistrantContact): Record<string, string> {
+  return {
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    email: contact.email,
+    phone: contact.phone,
+    address1: contact.address1,
+    ...(contact.address2 ? { address2: contact.address2 } : {}),
+    city: contact.city,
+    state: contact.state,
+    zip: contact.zip,
+    country: contact.country,
+    ...(contact.companyName ? { companyName: contact.companyName } : {}),
+  }
+}
+
+/**
+ * The date in a `domain_cannot_be_transfered_out_until` refusal. Vercel puts
+ * it in the message alone, so it is read from there: an ISO date or
+ * timestamp first, then whatever follows "until". Null when none parses,
+ * and the page then says the registry's lock without a date.
+ */
+export function transferLockUntil(message: unknown): number | null {
+  const text = String(message ?? '')
+  const iso = /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?/.exec(text)
+  if (iso) {
+    const parsed = Date.parse(iso[0].includes('T') || iso[0].includes(' ') ? iso[0] : `${iso[0]}T00:00:00Z`)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  const after = /until\s+(.+?)\.?$/i.exec(text)
+  if (after) {
+    const parsed = Date.parse(after[1])
+    if (Number.isFinite(parsed)) return parsed
+  }
+  const epoch = /\b(1\d{12})\b/.exec(text)
+  return epoch ? Number(epoch[1]) : null
+}
+
+/** The registrar's transfer states, as the lifecycle reads them. */
+export function transferStatusOf(state: string): RegistrarTransferStatus['status'] {
+  if (state === 'completed') return 'completed'
+  if (['failed', 'rejected', 'canceled', 'canceled_pending_refund'].includes(state)) return 'failed'
+  return 'pending'
+}
+
+const host = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/\.$/, '')
+
+/** A record body as Vercel's create and update take it. */
+function recordBody(record: RegistrarDnsRecord): Record<string, unknown> {
+  return {
+    type: record.type,
+    name: record.name,
+    ...(record.value !== undefined ? { value: record.value } : {}),
+    ...(record.ttl !== undefined ? { ttl: record.ttl } : {}),
+    ...(record.mxPriority !== undefined ? { mxPriority: record.mxPriority } : {}),
+    ...(record.srv ? { srv: record.srv } : {}),
+  }
+}
 
 const num = (value: unknown): number => {
   const parsed = typeof value === 'string' ? Number(value) : value
@@ -168,19 +235,7 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
         autoRenew,
         years,
         expectedPrice: expectedPriceUsd,
-        contactInformation: {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          email: contact.email,
-          phone: contact.phone,
-          address1: contact.address1,
-          ...(contact.address2 ? { address2: contact.address2 } : {}),
-          city: contact.city,
-          state: contact.state,
-          zip: contact.zip,
-          country: contact.country,
-          ...(contact.companyName ? { companyName: contact.companyName } : {}),
-        },
+        contactInformation: contactInformation(contact),
       },
     )
     if (!ok(answer.status)) return refusal(answer)
@@ -229,11 +284,15 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
     }
   },
 
-  async renew({ domain, years, expectedPriceUsd }) {
+  async renew({ domain, years, expectedPriceUsd, contact }) {
     const answer = await call(
       'POST',
       `/v1/registrar/domains/${encodeURIComponent(domain)}/renew`,
-      { years, expectedPrice: expectedPriceUsd },
+      {
+        years,
+        expectedPrice: expectedPriceUsd,
+        ...(contact ? { contactInformation: contactInformation(contact) } : {}),
+      },
     )
     if (!ok(answer.status)) return refusal(answer)
     const orderId = String(answer.body?.['orderId'] ?? '')
@@ -274,9 +333,10 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
     }
     if (!ok(answer.status)) return refusal(answer)
     const row = (answer.body?.['domain'] ?? {}) as Record<string, unknown>
-    // `boughtAt` is set only on a name this team REGISTERED here; a name
-    // merely added to the team for its DNS has none, and is not ours to renew.
-    const boughtAt = msOrNull(row['boughtAt'])
+    // `boughtAt` is set only on a name this team REGISTERED here, and
+    // `transferredAt` on one it moved here (AGL-4040); a name merely added to
+    // the team for its DNS has neither, and is not ours to renew.
+    const boughtAt = msOrNull(row['boughtAt']) ?? msOrNull(row['transferredAt'])
     return {
       ok: 'yes',
       value: {
@@ -310,7 +370,13 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
       'GET',
       `/v1/registrar/domains/${encodeURIComponent(domain)}/auth-code`,
     )
-    if (!ok(answer.status)) return refusal(answer)
+    if (!ok(answer.status)) {
+      const refused = refusal<string>(answer)
+      if (refused.code === 'domain_cannot_be_transfered_out_until') {
+        return { ...refused, untilMs: transferLockUntil(answer.body?.['message']) }
+      }
+      return refused
+    }
     const code = String(answer.body?.['authCode'] ?? '')
     if (!code) return { ok: 'no', code: 'no-auth-code', retryable: true }
     return { ok: 'yes', value: code }
@@ -334,7 +400,7 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
         ? (answer.body?.['domains'] as Record<string, unknown>[])
         : []
       for (const row of rows) {
-        const boughtAtMs = msOrNull(row['boughtAt'])
+        const boughtAtMs = msOrNull(row['boughtAt']) ?? msOrNull(row['transferredAt'])
         if (boughtAtMs === null) continue
         owned.push({
           domain: String(row['name'] ?? '').toLowerCase(),
@@ -347,5 +413,129 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
       until = String(next)
     }
     return { ok: 'yes', value: owned }
+  },
+  async transferPrice(domain) {
+    const answer = await call(
+      'GET',
+      `/v1/registrar/domains/${encodeURIComponent(domain)}/price`,
+      undefined,
+      { years: '1' },
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    const price = num(answer.body?.['transferPrice'])
+    if (price <= 0) return { ok: 'no', code: 'no-transfer-price', retryable: false }
+    return { ok: 'yes', value: price }
+  },
+
+  async transferIn({ domain, authCode, years, expectedPriceUsd, autoRenew, contact }) {
+    const answer = await call(
+      'POST',
+      `/v1/registrar/domains/${encodeURIComponent(domain)}/transfer`,
+      {
+        authCode,
+        autoRenew,
+        years,
+        expectedPrice: expectedPriceUsd,
+        contactInformation: contactInformation(contact),
+      },
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    const orderId = String(answer.body?.['orderId'] ?? '')
+    if (!orderId) return { ok: 'no', code: 'no-order-id', retryable: false }
+    return { ok: 'yes', value: { orderId } }
+  },
+
+  async transferStatus(domain) {
+    const answer = await call(
+      'GET',
+      `/v1/registrar/domains/${encodeURIComponent(domain)}/transfer`,
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    const state = String(answer.body?.['status'] ?? '')
+    if (!state) return { ok: 'no', code: 'no-transfer-status', retryable: true }
+    return { ok: 'yes', value: { status: transferStatusOf(state), state } }
+  },
+
+  async nameservers(domain) {
+    const answer = await call('GET', `/v5/domains/${encodeURIComponent(domain)}`)
+    if (!ok(answer.status)) return refusal(answer)
+    const row = (answer.body?.['domain'] ?? {}) as Record<string, unknown>
+    const list = (value: unknown) => (Array.isArray(value) ? value.map(host).filter(Boolean) : [])
+    const nameservers = list(row['nameservers'])
+    const intended = list(row['intendedNameservers'])
+    const custom = list(row['customNameservers'])
+    const ours =
+      custom.length === 0 &&
+      (row['serviceType'] === 'zeit.world' ||
+        (nameservers.length > 0 &&
+          intended.length > 0 &&
+          nameservers.every((name) => intended.includes(name))))
+    return { ok: 'yes', value: { ours, nameservers, intended } }
+  },
+
+  async listDnsRecords(domain) {
+    const records: RegistrarListedRecord[] = []
+    let until: string | undefined
+    // Bounded, as `listOwned` is: a zone with more records than this is not
+    // one a form-at-a-time editor serves.
+    for (let page = 0; page < 5; page += 1) {
+      const answer = await call(
+        'GET',
+        `/v5/domains/${encodeURIComponent(domain)}/records`,
+        undefined,
+        until ? { limit: '100', until } : { limit: '100' },
+      )
+      if (!ok(answer.status)) return refusal(answer)
+      const rows = Array.isArray(answer.body?.['records'])
+        ? (answer.body?.['records'] as Record<string, unknown>[])
+        : []
+      for (const row of rows) {
+        const priority = row['mxPriority'] ?? row['priority']
+        records.push({
+          id: String(row['id'] ?? ''),
+          type: String(row['type'] ?? ''),
+          name: String(row['name'] ?? '').toLowerCase(),
+          value: String(row['value'] ?? ''),
+          ttl: typeof row['ttl'] === 'number' ? (row['ttl'] as number) : null,
+          priority: typeof priority === 'number' ? priority : null,
+          creator: typeof row['creator'] === 'string' ? (row['creator'] as string) : null,
+        })
+      }
+      const next = (answer.body?.['pagination'] as { next?: unknown } | undefined)?.next
+      if (typeof next !== 'number' && typeof next !== 'string') break
+      until = String(next)
+    }
+    return { ok: 'yes', value: records.filter((record) => record.id) }
+  },
+
+  async createDnsRecord(domain, record) {
+    const answer = await call(
+      'POST',
+      `/v2/domains/${encodeURIComponent(domain)}/records`,
+      recordBody(record),
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    const id = String(answer.body?.['uid'] ?? '')
+    if (!id) return { ok: 'no', code: 'no-record-id', retryable: false }
+    return { ok: 'yes', value: { id } }
+  },
+
+  async updateDnsRecord(recordId, record) {
+    const answer = await call(
+      'PATCH',
+      `/v1/domains/records/${encodeURIComponent(recordId)}`,
+      recordBody(record),
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    return { ok: 'yes', value: true }
+  },
+
+  async deleteDnsRecord(domain, recordId) {
+    const answer = await call(
+      'DELETE',
+      `/v2/domains/${encodeURIComponent(domain)}/records/${encodeURIComponent(recordId)}`,
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    return { ok: 'yes', value: true }
   },
 }

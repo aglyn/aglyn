@@ -982,6 +982,52 @@ describe('useBesignerDocument', () => {
     })
 
     /**
+     * The native apps' Besigner web view (AGL-4002): a cold persistent cache
+     * answers the version listen first with an EMPTY cached snapshot, then
+     * with the server's document. The first answer must never read as "not
+     * found"; only the server saying the document is absent may.
+     */
+    it('never reports notFound for an empty cached snapshot the server then fills', () => {
+      const { result, rerender } = setup({
+        nodes: undefined,
+        status: 'success',
+        fromCache: true,
+      })
+      expect(result.current.notFound).toBe(false)
+      expect(result.current.hasError).toBe(false)
+      expect(result.current.awaitingServer).toBe(true)
+
+      rerender({ nodes: NODES, fromCache: false })
+      expect(result.current.notFound).toBe(false)
+      expect(result.current.awaitingServer).toBe(false)
+      expect(mockCanvas.setNodes).toHaveBeenCalled()
+    })
+
+    it('still reports notFound once the server confirms the document is absent', () => {
+      const { result, rerender } = setup({
+        nodes: undefined,
+        status: 'success',
+        fromCache: true,
+      })
+      expect(result.current.notFound).toBe(false)
+
+      rerender({ fromCache: false })
+      expect(result.current.notFound).toBe(true)
+      expect(result.current.awaitingServer).toBe(false)
+    })
+
+    it('lets a refused read with nothing cached report hasError and notFound whatever the cache says', () => {
+      const { result } = setup({
+        nodes: undefined,
+        status: 'error',
+        fromCache: true,
+      })
+      expect(result.current.hasError).toBe(true)
+      expect(result.current.notFound).toBe(true)
+      expect(result.current.awaitingServer).toBe(false)
+    })
+
+    /**
      * The AGL-1066 constraint, at the hook that six editors read through.
      *
      * `hasError` is what each page swaps the canvas for "Not found" on, so it

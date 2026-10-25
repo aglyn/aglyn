@@ -10,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,6 +62,7 @@ import com.aglyn.ui.LiveListPane
 import com.aglyn.ui.LiveQueryList
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField

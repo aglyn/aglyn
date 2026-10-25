@@ -564,7 +564,11 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
     else flags.add('cashier-unverified')
   }
 
-  const takeFee = takeFeeCents(deps, staff, lineItems, totals)
+  // The offline register takes cash only, and cash carries no platform fee
+  // (AGL-4036): the plan's take is worked out and then settled by the one
+  // predicate every tender answers to, so a sale synced from the queue is
+  // charged exactly what the same sale rung online is.
+  const takeFee = CommerceModel.posTenderTakeCents('cash', takeFeeCents(deps, staff, lineItems, totals))
   totals = { ...totals, feeCents: takeFee }
   const changeCents = Math.max(0, sale.cashTenderedCents - totals.totalCents)
   const flagList = [...flags]

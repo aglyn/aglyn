@@ -358,6 +358,20 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
+describe('a cart holding a product sold in person only (AGL-4060)', () => {
+  it('refuses the checkout by name and opens no session', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      ...docs.get('hosts/host-1/products/product-1'),
+      sellOnline: false,
+    })
+    const result = await post({}, { 'idempotency-key': 'attempt-in-person' })
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('"Walnut desk" is no longer available')
+    expect(sessionCalls()).toHaveLength(0)
+    expect(checkoutDocs()).toHaveLength(0)
+  })
+})
+
 describe('cart checkout idempotency (AGL-1697)', () => {
   it('creates one session with a recoverable checkout doc and records the claim', async () => {
     const result = await post({}, { 'idempotency-key': 'attempt-a' })

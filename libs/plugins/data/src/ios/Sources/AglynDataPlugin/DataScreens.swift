@@ -295,7 +295,7 @@ struct DatasetsScreen: View {
           ? "Ask an owner or admin to share a dataset with one of your sites."
           : "Create a dataset, like Products, then add a repeating section to any page to show one item per record."
       ) {
-        if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.borderedProminent) }
+        if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.aglynProminent) }
       }
     } else if selectable {
       List { rows(selectable: true) }
@@ -559,14 +559,14 @@ struct DatasetDetailView: View {
           } label: {
             Label("Records", systemImage: DataSymbols.records)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .accessibilityIdentifier("dataset-records")
           Button {
             context.navigate(dataRecordsScreen, ["dataset": dataset.id, "new": "1"])
           } label: {
             Label("Add record", systemImage: "plus")
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .disabled(!canWrite)
           .accessibilityIdentifier("dataset-add-record")
         }

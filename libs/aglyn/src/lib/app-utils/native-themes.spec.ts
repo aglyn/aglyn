@@ -24,7 +24,10 @@ import {
   THEME_DENSITIES,
   THEME_FIGMA_BASE,
   THEME_PALETTES,
+  THEME_PHONE_AGLYN,
+  THEME_PHONE_BOLD_ACCENT,
   THEME_PREVIEWS,
+  THEME_RETIRED_ACCENTS,
   themeContrast,
   themeLerp,
   type ThemeColors,
@@ -39,11 +42,25 @@ import {
 
 const COLOR = /^#[0-9a-f]{6}([0-9a-f]{2})?$/
 
-/** Figma's Accent collection, mode by mode (variables read 2026-10-19). */
+/**
+ * Figma's Accent collection, mode by mode (variables read 2026-10-19, after
+ * Blue became the console's primary and every mode's on-accent went white,
+ * AGL-3990).
+ */
 const FIGMA_ACCENT_MODES = {
-  blue: { fill: '#0073ae', icon: '#0091d5', soft: '#00b0ff29', ring: '#00b0ff', on: '#ffffff', hover: '#00669b', pressed: '#005884' },
+  blue: {
+    fill: '#00b0ff',
+    icon: '#00b0ff',
+    soft: '#00b0ff29',
+    ring: '#00b0ff',
+    on: '#ffffff',
+    hover: '#0077ad',
+    pressed: '#006999',
+    textLight: '#0077ad',
+    textDark: '#4dc8ff',
+  },
   violet: { fill: '#5b3fd6', icon: '#8c72f5', soft: '#7a5cf02e', ring: '#7a5cf0', on: '#ffffff', hover: '#4e34c2', pressed: '#4129aa' },
-  pink: { fill: '#e040fb', icon: '#c93ae3', soft: '#e040fb29', ring: '#e040fb', on: '#1e0424', hover: '#cc2ee6', pressed: '#b523cf' },
+  pink: { fill: '#e040fb', icon: '#c93ae3', soft: '#e040fb29', ring: '#e040fb', on: '#ffffff', hover: '#cc2ee6', pressed: '#b523cf' },
   workspaceBrand: { fill: '#2e7d5b', icon: '#2e8f66', soft: '#2e7d5b2e', ring: '#3fa77a', on: '#ffffff', hover: '#276c4e', pressed: '#205a41' },
 }
 
@@ -58,14 +75,33 @@ describe('the accents', () => {
     expect(themeContrast('#00b0ff', '#ffffff')).toBeCloseTo(2.43, 2)
   })
 
-  it('keeps a light brand color that carries white only at 3:1 and flips its text to near-black, as Figma draws Pink', () => {
+  it('keeps a brand color that carries white at 3:1 with white on it, as Figma draws Pink', () => {
     const pinkish = deriveAccent('#e040fa')
     expect(pinkish?.fill).toBe('#e040fa')
-    expect(themeContrast(pinkish?.fill ?? '', pinkish?.on ?? '')).toBeGreaterThanOrEqual(4.5)
-    expect(themeContrast(pinkish?.on ?? '', '#000000')).toBeLessThan(1.5)
+    expect(pinkish?.on).toBe('#ffffff')
+    expect(themeContrast(pinkish?.fill ?? '', pinkish?.on ?? '')).toBeGreaterThanOrEqual(3)
   })
 
-  it('darkens a color under 3:1 until white text reads, as Figma draws Blue and the workspace green', () => {
+  it('never puts ink on a fill: every accent, named or derived, carries white (Zach, 2026-10-19)', () => {
+    for (const color of ['#00b0ff', '#e040fb', '#ffab40', '#ffffff', '#c2571a', '#7a5cf0', '#3fa77a']) {
+      expect([color, deriveAccent(color)?.on]).toEqual([color, '#ffffff'])
+    }
+  })
+
+  it('wears the console primary as the brand blue: #00B0FF under white, #0077AD and #4DC8FF as text (AGL-3990)', () => {
+    const blue = deriveAccent('#00b0ff')
+    expect(blue).toMatchObject({ fill: '#00b0ff', on: '#ffffff', textLight: '#0077ad', textDark: '#4dc8ff', hover: '#0077ad' })
+    expect(themeContrast(blue?.textLight ?? '', '#ffffff')).toBeGreaterThanOrEqual(4.5)
+    expect(themeContrast(blue?.textDark ?? '', '#2a3440')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('reads a retired blue as the brand blue: an accent saved from the old #0073AE swatch', () => {
+    expect(THEME_RETIRED_ACCENTS).toEqual({ '#0073ae': '#00b0ff' })
+    expect(deriveAccent('#0073ae')).toEqual(deriveAccent('#00b0ff'))
+    expect(deriveAccent('#0073AE')).toEqual(deriveAccent('#00b0ff'))
+  })
+
+  it('darkens a color under 3:1 until white text reads, as Figma draws the workspace green', () => {
     for (const color of ['#00b0fe', '#3fa779']) {
       const accent = deriveAccent(color)
       expect(accent?.on).toBe('#ffffff')
@@ -74,7 +110,7 @@ describe('the accents', () => {
     }
   })
 
-  it.each(['#0073ae', '#c2571a', '#087e8b', '#ffab40', '#4caf50', '#d2462f', '#404c5c', '#ffffff', '#000000'])(
+  it.each(['#0077ad', '#c2571a', '#087e8b', '#ffab40', '#4caf50', '#d2462f', '#404c5c', '#ffffff', '#000000'])(
     'derives %s so every shade reads where it is drawn',
     (color) => {
       const accent = deriveAccent(color)
@@ -83,7 +119,7 @@ describe('the accents', () => {
       for (const value of Object.values(accent)) expect(value).toMatch(COLOR)
       expect(accent.ring).toBe(color)
       expect(accent.soft).toBe(`${color}29`)
-      expect(themeContrast(accent.fill, accent.on)).toBeGreaterThanOrEqual(4.5)
+      expect(themeContrast(accent.fill, accent.on)).toBeGreaterThanOrEqual(3)
       expect(themeContrast(accent.textLight, '#ffffff')).toBeGreaterThanOrEqual(4.5)
       expect(themeContrast(accent.textDark, '#1e262e')).toBeGreaterThanOrEqual(color === '#000000' ? 1 : 4.5)
     },
@@ -94,10 +130,9 @@ describe('the accents', () => {
     expect(deriveAccent('#12345')).toBeNull()
   })
 
-  it('offers Figma’s six swatches', () => {
+  it('offers Figma’s five swatches, #00B0FF the one brand blue', () => {
     expect(THEME_ACCENT_SWATCHES.map((swatch) => [swatch.label, swatch.color])).toEqual([
-      ['Brand blue', '#0073ae'],
-      ['Sky', '#00b0ff'],
+      ['Brand blue', '#00b0ff'],
       ['Violet', '#7a5cf0'],
       ['Pink', '#e040fb'],
       ['Green', '#2e7d5b'],
@@ -155,6 +190,46 @@ describe('the themes', () => {
       expect([theme.id, 'light', readable(theme.light)]).toEqual([theme.id, 'light', true])
       expect([theme.id, 'dark', readable(theme.dark)]).toEqual([theme.id, 'dark', true])
     }
+  })
+})
+
+describe('the phone’s bold Aglyn look (AGL-3990)', () => {
+  const pairs: Array<[keyof ThemeColors, keyof ThemeColors]> = [
+    ['successFg', 'successBg'],
+    ['warningFg', 'warningBg'],
+    ['dangerFg', 'dangerBg'],
+    ['infoFg', 'infoBg'],
+    ['newFg', 'newBg'],
+  ]
+
+  it('holds Figma’s Theme mode 223:0: a sky-tinted ground under white panels, navy in dark', () => {
+    expect(THEME_PHONE_AGLYN.light).toMatchObject({ canvas: '#edf9ff', surface: '#ffffff', textPrimary: '#19202a' })
+    expect(THEME_PHONE_AGLYN.dark).toMatchObject({ canvas: '#07181f', surface: '#0d2029', raised: '#152b35' })
+    expect(THEME_PHONE_BOLD_ACCENT).toBe('#00b0ff')
+  })
+
+  it('holds every color to #RRGGBB(AA), with the same fields as every theme', () => {
+    const fields = Object.keys(THEME_PALETTES[0].light).sort()
+    for (const colors of [THEME_PHONE_AGLYN.light, THEME_PHONE_AGLYN.dark]) {
+      expect(Object.keys(colors).sort()).toEqual(fields)
+      for (const value of Object.values(colors)) expect(value).toEqual(expect.stringMatching(COLOR))
+    }
+  })
+
+  it('keeps text readable on every ground, and each status’s ink on its own wash', () => {
+    for (const colors of [THEME_PHONE_AGLYN.light, THEME_PHONE_AGLYN.dark]) {
+      for (const ground of [colors.canvas, colors.surface, colors.raised, colors.sunken]) {
+        expect(themeContrast(colors.textPrimary, ground)).toBeGreaterThanOrEqual(4.5)
+        expect(themeContrast(colors.textSecondary, ground)).toBeGreaterThanOrEqual(4.5)
+        expect(themeContrast(colors.textTertiary, ground)).toBeGreaterThanOrEqual(4.5)
+      }
+      for (const [fg, bg] of pairs) expect([fg, themeContrast(colors[fg], colors[bg]) >= 4.5]).toEqual([fg, true])
+    }
+  })
+
+  it('never writes the brand fill as text on the dark ground: info is the accent’s dark text shade', () => {
+    expect(THEME_PHONE_AGLYN.dark.infoFg).toBe('#4dc8ff')
+    expect(Object.values(THEME_PHONE_AGLYN.dark)).not.toContain('#00b0ff')
   })
 })
 

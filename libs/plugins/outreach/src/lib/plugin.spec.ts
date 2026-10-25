@@ -126,9 +126,10 @@ describe('outreach plugin (AGL-2974)', () => {
   it('is opened by outreach.use, a plugin-declared key owners and admins hold', () => {
     registerOutreachConsole()
     expect(registered()?.permission).toBe(OUTREACH_USE_PERMISSION)
-    // Declared by the plugin, not the catalog: the shell answers it from the
-    // resolved map, where plugin keys ride.
-    expect(ORG_PERMISSION_KEYS as readonly string[]).not.toContain(
+    // Declared by the plugin through `registerPluginPermissions`, and listed
+    // in the one permission catalog with the core keys (AGL-4047), so the
+    // role editor offers it and a custom role keeps it.
+    expect(ORG_PERMISSION_KEYS as readonly string[]).toContain(
       OUTREACH_USE_PERMISSION,
     )
     expect(
