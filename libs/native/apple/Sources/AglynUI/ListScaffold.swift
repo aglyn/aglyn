@@ -383,12 +383,16 @@ public struct AglynScreenChrome {
   public var entries: [AglynScreenToolbarEntry] = []
   /// The screen's own title, for the head of a screen pushed over a list (`aglynScreenTitle`).
   public var title: String?
+  /// Where a list column left room for the area's head (Figma 13:483: the head heads the list column), so the shell
+  /// draws the head there with the screen's own actions (`AglynListDetailColumns`, `aglynColumnHeadOffer`).
+  public var columnHeadSlot: Anchor<CGRect>?
 
   /// Adds what an outer modifier publishes to what the screen inside it already did: the screen's own primary action and
   /// title stay first, actions add up. Every chrome modifier merges this way, so stacking them never hides one.
   public mutating func merge(_ outer: AglynScreenChrome) {
     primary = primary ?? outer.primary
     title = title ?? outer.title
+    columnHeadSlot = columnHeadSlot ?? outer.columnHeadSlot
     entries.append(contentsOf: outer.entries)
   }
 }
@@ -633,6 +637,42 @@ public struct AglynAreaHead {
 extension EnvironmentValues {
   /// The area's head on the Mac and iPad when its screen draws the head in its own list column; nil otherwise.
   @Entry public var aglynAreaHead: AglynAreaHead? = nil
+  /// The area's head offered to any list column on the Mac and iPad (Figma 13:483): an `AglynListDetailColumns` that
+  /// shows a list beside its detail takes it, leaves room for the head atop its list column and draws the area's
+  /// section chips under it; the shell then draws the head in that room instead of across the content. Nil elsewhere.
+  @Entry public var aglynColumnHeadOffer: AglynAreaHead? = nil
+}
+
+/// Set by `AglynListDetailColumns` when it took the area's head into its list column (`aglynColumnHeadOffer`).
+public struct AglynListColumnHeadPlacedKey: PreferenceKey {
+  public static let defaultValue = false
+  public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// An area's sections as chips across a column (Inbox's Submissions, Members & leads and Campaigns): the selected one
+/// filled, each opening its section.
+public struct AglynAreaSectionChips: View {
+  let sections: [AglynAreaSection]
+  let inset: CGFloat
+
+  public init(_ sections: [AglynAreaSection], inset: CGFloat) {
+    self.sections = sections
+    self.inset = inset
+  }
+
+  public var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: AglynSpace.one) {
+        ForEach(sections) { section in
+          AglynChoiceChip(section.label, selected: section.selected) { section.open() }
+            .accessibilityIdentifier("area-section-\(section.id)")
+        }
+      }
+      .padding(.horizontal, inset)
+      .padding(.bottom, AglynSpace.one)
+    }
+    .background(AglynColor.paper)
+  }
 }
 
 /// The screens that head their own list column on the Mac and iPad. A plugin names its screen when it registers it, so
@@ -724,6 +764,9 @@ public struct AglynListColumnHeader<Actions: View>: View {
 
   /// The list column's side margins: the content edge, as every column's (`AglynContentInsets`).
   public static var inset: CGFloat { AglynContentInsets.horizontal }
+
+  /// The head's height in a list column on the Mac and iPad: 20 above the 28-point title row and 12 under it.
+  public static var columnHeight: CGFloat { 20 + 28 + 12 }
 }
 
 /// A phone title row's 40-point button (Figma 22:499): the create action filled with the accent, any other action

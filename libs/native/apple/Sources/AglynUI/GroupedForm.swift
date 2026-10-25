@@ -109,7 +109,7 @@ extension View {
   /// background in a `List`.
   @ViewBuilder
   public func aglynRowSelected(_ selected: Bool) -> some View {
-    let row = listRowBackground(selected ? AglynColor.tint.opacity(0.14) : nil)
+    let row = listRowBackground(selected ? AglynColor.selectedFill : nil)
     if #available(macOS 15, iOS 18, *) {
       row.containerValue(\.aglynFormRowSelected, selected)
     } else {
@@ -223,7 +223,7 @@ private struct AglynSectionedForm<Content: View>: View {
           .padding(.leading, edge)
           .padding(.trailing, trailing)
           .frame(maxWidth: .infinity, minHeight: bare ? 0 : AglynFormMetrics.rowMinHeight, alignment: .leading)
-          .background { if selected { AglynColor.tint.opacity(0.14) } }
+          .background { if selected { AglynColor.selectedFill } }
           .environment(\.aglynRowBleed, EdgeInsets(top: -vertical, leading: -edge, bottom: -vertical, trailing: -trailing))
           .overlay(alignment: .bottom) {
             // Between two rows of the section, never under a notice or the last row.

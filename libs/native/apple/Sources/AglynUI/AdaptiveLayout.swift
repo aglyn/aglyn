@@ -85,6 +85,8 @@ public struct ListDetailLayout<List: View, Detail: View>: View {
 public struct AglynListDetailColumns<List: View, Detail: View>: View {
   /// The screen's list toolbar (`aglynSearchable`), drawn atop the list column rather than across both columns.
   @Environment(\.aglynListColumnToolbar) private var toolbar
+  /// The area's head, when the shell offers it to the list column (Figma 13:483).
+  @Environment(\.aglynColumnHeadOffer) private var headOffer
   let list: List
   let detail: Detail
   let listWidth: CGFloat
@@ -121,6 +123,7 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
       }
     }
     .preference(key: AglynListToolbarPlacedKey.self, value: toolbar != nil)
+    .preference(key: AglynListColumnHeadPlacedKey.self, value: headOffer != nil)
     .animation(.snappy(duration: 0.2), value: showsDetail)
     #if os(iOS)
       // Two scroll views side by side leave the bar no single one to collapse a large title into, so the title
@@ -131,12 +134,31 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
     #endif
   }
 
-  /// The list, its toolbar atop it; the toolbar is not handed further down.
+  /// The list, its toolbar atop it; the toolbar is not handed further down. With the area's head offered (Figma
+  /// 13:483), the list column holds the head's room (the shell draws the head in it, with the screen's actions), then
+  /// the area's section chips, then the toolbar, and the hairline beside it runs from the top of the column.
   private var listColumn: some View {
     list
       .environment(\.aglynListColumn, true)
-      .safeAreaInset(edge: .top, spacing: 0) { toolbar }
+      .safeAreaInset(edge: .top, spacing: 0) {
+        VStack(spacing: 0) {
+          if let headOffer {
+            Color.clear
+              .frame(maxWidth: .infinity)
+              .frame(height: AglynListColumnHeader<EmptyView>.columnHeight)
+              .background(AglynColor.paper)
+              .transformAnchorPreference(key: AglynScreenChromeKey.self, value: .bounds) { chrome, slot in
+                chrome.columnHeadSlot = slot
+              }
+            if !headOffer.sections.isEmpty {
+              AglynAreaSectionChips(headOffer.sections, inset: AglynListColumnHeader<EmptyView>.inset)
+            }
+          }
+          toolbar
+        }
+      }
       .environment(\.aglynListColumnToolbar, nil)
+      .environment(\.aglynColumnHeadOffer, nil)
   }
 }
 
