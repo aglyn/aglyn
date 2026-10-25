@@ -7887,6 +7887,12 @@
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
   "PENDING_RESERVATION_HOLD_MS": 1800000,
+  "PHONE_HOME_GROUP_LABELS": {
+    "more": "Tools"
+  },
+  "PHONE_HOME_SITE_GROUP_LABEL": "Site & workspace",
+  "PHONE_HOME_TEAM_LABEL": "Team",
+  "PHONE_HOME_WORKSPACE_GROUP_LABEL": "Settings",
   "PINNED_ORGS_FIELD": "pinnedOrgs",
   "PINNED_ORGS_MAX": 5,
   "PLAN_CARD_ADVANCE_MS": 8000,
@@ -8581,6 +8587,11 @@
       }
     ]
   },
+  "TAB_BAR_AREAS_MAX": 4,
+  "TAB_BAR_CREATE": "create",
+  "TAB_BAR_HOME": "home",
+  "TAB_BARS_FIELD": "tabBars",
+  "TAB_BARS_MAX": 100,
   "TASK_LIST_DECLARATION": {
     "fields": [
       {
@@ -11916,6 +11927,19 @@
   "WORKFLOW_MAX_STEPS": 25,
   "WORKSPACE_COLORS_FIELD": "workspaceColors",
   "WORKSPACE_COLORS_MAX": 100,
+  "WORKSPACE_SETTINGS_ROW": {
+    "console": {
+      "id": "workspaceSettings",
+      "surface": "shell"
+    },
+    "icon": {
+      "android": "apartment",
+      "apple": "building.2"
+    },
+    "id": "workspaceSettings",
+    "label": "Workspace settings",
+    "screen": "shell.workspaceSettings"
+  },
   "WORKSPACE_STABLE_COLORS": [
     "#0077AD",
     "#6A4FD8",

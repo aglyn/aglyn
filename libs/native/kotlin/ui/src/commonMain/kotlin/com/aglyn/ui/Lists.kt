@@ -243,8 +243,8 @@ private fun ListColumnHead(title: String, modifier: Modifier, actions: @Composab
   val star = LocalPageStar.current
   if (star != null) {
     androidx.compose.runtime.DisposableEffect(star) {
-      star.claimed = true
-      onDispose { star.claimed = false }
+      star.claim()
+      onDispose { star.release() }
     }
   }
   val edge = LocalContentInset.current ?: contentInset()

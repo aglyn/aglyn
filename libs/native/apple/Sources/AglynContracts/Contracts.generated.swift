@@ -3166,6 +3166,18 @@ public enum PaymentRiskSignalKind: String, Codable, CaseIterable, Hashable, Send
   }
 }
 
+public struct PhoneHomeGroup: Codable, Hashable, Sendable {
+  public var id: String
+  public var label: String?
+  public var rows: [NativeNavRow]
+
+  public init(id: String, label: String? = nil, rows: [NativeNavRow]) {
+    self.id = id
+    self.label = label
+    self.rows = rows
+  }
+}
+
 public struct PickupLocationSettings: Codable, Hashable, Sendable {
   public var enabled: Bool?
   public var hours: String?
@@ -4921,6 +4933,51 @@ public enum StorefrontTaxMode: String, Codable, CaseIterable, Hashable, Sendable
   }
 }
 
+public struct TabBarLayout: Codable, Hashable, Sendable {
+  public var createInTopBar: Bool
+  public var slots: [String]
+
+  public init(createInTopBar: Bool, slots: [String]) {
+    self.createInTopBar = createInTopBar
+    self.slots = slots
+  }
+}
+
+public struct TabBarPins: Codable, Hashable, Sendable {
+  public var areas: [String]
+  public var chosen: Bool
+  public var scope: String
+
+  public init(areas: [String], chosen: Bool, scope: String) {
+    self.areas = areas
+    self.chosen = chosen
+    self.scope = scope
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum TabPinOutcome: String, Codable, CaseIterable, Hashable, Sendable {
+  case alreadyPinned = "alreadyPinned"
+  case full = "full"
+  case pinned = "pinned"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct TabPinResult: Codable, Hashable, Sendable {
+  public var outcome: TabPinOutcome
+  public var tabBars: [TabBarPins]
+
+  public init(outcome: TabPinOutcome, tabBars: [TabBarPins]) {
+    self.outcome = outcome
+    self.tabBars = tabBars
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum TenantEmailControl: String, Codable, CaseIterable, Hashable, Sendable {
   case besigner = "besigner"
@@ -5489,6 +5546,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachTaskTitleMax: Int
   public let paymentAcceptedMaxLength: Int
   public let pendingReservationHoldMs: Double
+  public let phoneHomeGroupLabels: [String: String]
+  public let phoneHomeSiteGroupLabel: String
+  public let phoneHomeTeamLabel: String
+  public let phoneHomeWorkspaceGroupLabel: String
   public let pinnedOrgsField: String
   public let pinnedOrgsMax: Int
   public let planCardAdvanceMs: Int
@@ -5576,6 +5637,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
   public let suppressionListQuery: ListQueryDeclaration
+  public let tabBarAreasMax: Int
+  public let tabBarCreate: String
+  public let tabBarHome: String
+  public let tabBarsField: String
+  public let tabBarsMax: Int
   public let taskListDeclaration: ListQueryDeclaration
   public let templateKindOptions: [ListFilterOption]
   public let templateListBase: [ListQueryFilter]
@@ -5600,6 +5666,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let workflowMaxSteps: Int
   public let workspaceColorsField: String
   public let workspaceColorsMax: Int
+  public let workspaceSettingsRow: NativeNavRow
   public let workspaceStableColors: [String]
 
   enum CodingKeys: String, CodingKey {
@@ -5822,6 +5889,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
     case pendingReservationHoldMs = "PENDING_RESERVATION_HOLD_MS"
+    case phoneHomeGroupLabels = "PHONE_HOME_GROUP_LABELS"
+    case phoneHomeSiteGroupLabel = "PHONE_HOME_SITE_GROUP_LABEL"
+    case phoneHomeTeamLabel = "PHONE_HOME_TEAM_LABEL"
+    case phoneHomeWorkspaceGroupLabel = "PHONE_HOME_WORKSPACE_GROUP_LABEL"
     case pinnedOrgsField = "PINNED_ORGS_FIELD"
     case pinnedOrgsMax = "PINNED_ORGS_MAX"
     case planCardAdvanceMs = "PLAN_CARD_ADVANCE_MS"
@@ -5909,6 +5980,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
     case suppressionListQuery = "SUPPRESSION_LIST_QUERY"
+    case tabBarAreasMax = "TAB_BAR_AREAS_MAX"
+    case tabBarCreate = "TAB_BAR_CREATE"
+    case tabBarHome = "TAB_BAR_HOME"
+    case tabBarsField = "TAB_BARS_FIELD"
+    case tabBarsMax = "TAB_BARS_MAX"
     case taskListDeclaration = "TASK_LIST_DECLARATION"
     case templateKindOptions = "TEMPLATE_KIND_OPTIONS"
     case templateListBase = "TEMPLATE_LIST_BASE"
@@ -5933,6 +6009,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
     case workspaceColorsField = "WORKSPACE_COLORS_FIELD"
     case workspaceColorsMax = "WORKSPACE_COLORS_MAX"
+    case workspaceSettingsRow = "WORKSPACE_SETTINGS_ROW"
     case workspaceStableColors = "WORKSPACE_STABLE_COLORS"
   }
 }
