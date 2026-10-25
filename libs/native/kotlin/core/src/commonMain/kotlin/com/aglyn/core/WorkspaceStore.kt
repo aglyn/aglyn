@@ -35,6 +35,12 @@ data class WorkspaceSite(
 ) {
   /** The address its rows show: the custom domain, else the platform address ([siteListAddress]). */
   val address: String? get() = siteListAddress(cname, subdomain)
+
+  /**
+   * The address with the host's own document at hand ([hostCname], its `cname`): that first, then the membership row's
+   * copy, then the platform address, the order every site address follows in both apps.
+   */
+  fun addressWith(hostCname: String?): String? = siteListAddress(hostCname?.trim()?.ifEmpty { null } ?: cname, subdomain)
 }
 
 /**

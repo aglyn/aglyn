@@ -263,7 +263,8 @@ private fun SiteHeader(
     return
   }
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, now) }
-  val address = site.address
+  // The host's own custom domain first, then the membership row's copy, then the platform address.
+  val address = site.addressWith((host as? Live.Ready)?.value?.data?.get("cname") as? String)
   SiteHeaderCard(
     workspaceName = workspace.org?.name,
     siteName = site.name,

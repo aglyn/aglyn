@@ -168,7 +168,7 @@ private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Bo
   // shows it), and the status.
   com.aglyn.ui.ScaffoldListRow(
     title = row.name,
-    detail = listOfNotNull(siteListAddress((host as? Live.Ready)?.value?.string("cname") ?: row.cname, row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
+    detail = listOfNotNull(siteListAddress((host as? Live.Ready)?.value?.string("cname")?.trim()?.ifEmpty { null } ?: row.cname, row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
     kind = com.aglyn.ui.ScaffoldRowKind.SITE,
     selected = selected,
     leading = { com.aglyn.ui.ScaffoldRowTile("public", mediaPreviewUrl(favicon, context.api.origin, row.id, 160)) },
