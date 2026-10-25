@@ -217,7 +217,9 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
         priced.lines.forEach((line, index) => {
           const sku = posHardwareSku(line.sku)
           params[`line_items[${index}][quantity]`] = line.quantity
-          params[`line_items[${index}][price_data][currency]`] = POS_HARDWARE_CURRENCY
+          // A literal, not POS_HARDWARE_CURRENCY: check:facilitator-charge-shape
+          // reads Stripe Tax beside a usd line item only when it says so (AGL-1956).
+          params[`line_items[${index}][price_data][currency]`] = 'usd'
           params[`line_items[${index}][price_data][unit_amount]`] = line.unitCents
           params[`line_items[${index}][price_data][product_data][name]`] = line.name
           if (sku) params[`line_items[${index}][price_data][product_data][description]`] = sku.use
