@@ -17,6 +17,7 @@
 'use client'
 
 import type { ConsoleStaffPageProps } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import { resolveStaffRoleGate } from '@aglyn/aglyn/app-utils/staff-role-gate'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
@@ -173,6 +174,7 @@ export function PosReaderSplashStaffPage(props: ConsoleStaffPageProps) {
   return (
     <CardDisplay
       header={'Reader start-up screen'}
+      help={pluginDocsHelp('posHardware', { anchor: '#reader-start-up-screen' })}
       HeaderProps={{
         action: (
           <BlockedControl blocked={Boolean(writeReason) || !state?.ready} reason={writeReason ?? 'Upload the S700 and S710 screen first.'}>

@@ -2705,7 +2705,7 @@
       "plans": []
     },
     "release_ai_site_import": {
-      "enabled": false,
+      "enabled": true,
       "rolloutPercent": 0,
       "plans": []
     },
@@ -2720,6 +2720,11 @@
       "plans": []
     },
     "release_ad_audience_sync": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
+    },
+    "release_site_starters": {
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []

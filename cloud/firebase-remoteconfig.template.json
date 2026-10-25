@@ -156,9 +156,9 @@
     },
     "release_ai_site_import": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
       },
-      "description": "Bring my site (AGL-3973): a paid workspace proves it owns a domain (DNS, meta tag or emailed code), then AglynBot reads the site within robots.txt. OFF by default; the doors answer 404 while off.",
+      "description": "Bring my site (AGL-3973): a paid workspace proves it owns a domain (DNS, meta tag or emailed code), then AglynBot reads the site within robots.txt. ON since 2026-10-25 (beta.282); turned off, the doors answer 404.",
       "valueType": "JSON"
     },
     "release_crm_assist_whole_record": {
@@ -187,6 +187,13 @@
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
       "description": "Nightly sync of US account holders, as SHA-256 hashed emails, to the operator's own Meta, Google and LinkedIn customer-list audiences (AGL-3780). OFF until the Privacy Policy disclosing it is published.",
+      "valueType": "JSON"
+    },
+    "release_site_starters": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Create site asks the person to choose a starter, every option a marketplace listing any publisher may list and price, the platform's own included (AGL-4049). OFF by default: Create site makes the default site.",
       "valueType": "JSON"
     }
   },

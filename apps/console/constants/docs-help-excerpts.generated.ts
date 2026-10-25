@@ -64,6 +64,7 @@ export const DOCS_HELP_EXCERPTS = {
   billing: 'How Aglyn\'s tiers, entitlements, quotas, usage meters, and seat add-ons work.',
   bindings: 'Live values in your content — typed variables, no-code functions, and rename-safe id tokens.',
   bookings: 'Offer services with availability, let visitors book, take payment, and send reminders.',
+  bringMySite: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.',
   buildABlog: 'Create a collection, publish rich entries, and design how its list and entries look with template pages.',
   buildAndPublishASurvey: 'Create a dataset with a typed schema, design a survey form with dropdowns, radios, checkboxes, and a star rating, publish it, and watch responses arrive.',
   buildAWorkflow: 'Create a multi-step workflow that runs when a site event fires.',
@@ -780,6 +781,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   posHardware: {
     '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
+    '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
   posOperations: {

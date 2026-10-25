@@ -462,6 +462,41 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "The printable day totals (AGL-4037), printed from the console's Orders page beside the shift history. The marker is its `<style>`, the receipt's own POS_RECEIPT_STYLES constant imported from pos-receipt.ts; the document carries no image and no URL, only the store name and the escaped report rows.",
   },
+  'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-check-ins-card.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The printable check-in list (AGL-4043), printed from the console's Orders page beside the day totals. The marker is its `<style>`, the receipt's own POS_RECEIPT_STYLES constant imported from pos-receipt.ts; the document carries no image and no URL, only the day and the escaped names, items and wristbands.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-reader-splash-setting.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The reader start-up screen choice on the console's POS devices card (AGL-4048). The preview `<img>` shows the workspace logo URL or the media-library image the merchant picked in the console's own media picker, to the signed-in manager choosing it; nothing here renders on a site.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-reader-splash-staff-page.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Staff → Reader start-up screen in the console (AGL-4048). The preview src is a `blob:` URL from URL.createObjectURL over the staff route's own rendered PNG (pos-reader-splash-api.ts), shown only to staff.",
+  },
+  'libs/plugins/commerce/src/lib/server/pos-reader-splash-admin.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The console's staff route for the default start-up screen (AGL-4048). The markers are `image` fields of the route's own types — a media-library reference staff uploaded and the plan it returns — sent to Stripe as a Terminal Configuration file, never into a site page.",
+  },
+  'libs/plugins/commerce/src/lib/server/pos-reader-splash.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "Server-side rendering of a store's reader start-up screen (AGL-4048) for Stripe Terminal. The markers are a cache key built from the image's media id, the read of that media-library asset through locateMediaAsset, and the planned image field; the result is uploaded to Stripe for the card reader's idle screen, never served to a site visitor.",
+  },
+  'libs/plugins/waivers/src/lib/components/paper-waiver-dialog.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Recording a paper waiver in the console (AGL-4042). The preview src is a `data:image/jpeg` URL from canvas.toDataURL — the photo the staff member just picked on their own device, read through a `blob:` URL and shrunk in the browser before upload; it is shown only in the console dialog.",
+  },
+  'libs/plugins/waivers/src/lib/components/signature-detail-dialog.component.tsx': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "A signed waiver's record in the console (AGL-4042). Both srcs are `blob:` URLs (URL.createObjectURL) over the drawn signature and the paper photo, fetched with the staff member's token from the waivers route out of private Storage; neither is a site URL, and the dialog is console-only.",
+  },
   'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-receipt.ts': {
     markers: 2,
     guard: 'off-tenant',

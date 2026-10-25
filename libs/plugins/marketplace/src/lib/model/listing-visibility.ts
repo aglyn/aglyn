@@ -89,6 +89,14 @@ export function isListingDeleted(listing: { deletedAt?: unknown }): boolean {
   return Boolean(listing.deletedAt)
 }
 
+/**
+ * The artifact types that wait for review before they are browsable: plugins,
+ * which execute code (AGL-432), and site starters, which create a whole site
+ * the moment they are picked, with no step between to catch what a publisher
+ * got wrong (AGL-4049).
+ */
+const REVIEWED_ARTIFACT_TYPES: ReadonlySet<MarketplaceArtifactType> = new Set(['plugin', 'siteStarter'])
+
 /** Whether a plugin listing is publicly browsable (AGL-432). */
 export function isListingBrowsable(listing: {
   artifactType?: string
@@ -100,10 +108,10 @@ export function isListingBrowsable(listing: {
   workspaceLockedAt?: unknown
 }): boolean {
   // Staff takedown applies to EVERY artifact type (AGL-658). Pre-publication
-  // review is plugin-only — plugins execute code, so they earn the wait —
-  // but a component or template that turns out to be abusive must be
-  // removable too, and before this it simply was not: the early return
-  // below meant anything non-plugin was permanently browsable.
+  // review is for plugins and site starters only (REVIEWED_ARTIFACT_TYPES),
+  // which earn the wait — but a component or template that turns out to be
+  // abusive must be removable too, and before this it simply was not: the
+  // early return below meant anything non-plugin was permanently browsable.
   if (listing.hiddenAt) return false
   // The publishing workspace is locked (AGL-3365), for any reason: its
   // listings leave browse, search and their pages until the lift. Its own
@@ -113,7 +121,7 @@ export function isListingBrowsable(listing: {
   if (listing.workspaceLockedAt) return false
   // Private listings never reach the marketplace (AGL-968).
   if (isPrivateListing(listing)) return false
-  if (listingArtifactType(listing) !== 'plugin') return true
+  if (!REVIEWED_ARTIFACT_TYPES.has(listingArtifactType(listing))) return true
   return (
     listing.reviewStatus === undefined ||
     listing.reviewStatus === 'listed' ||

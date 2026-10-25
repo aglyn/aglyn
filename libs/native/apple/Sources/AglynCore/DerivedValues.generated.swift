@@ -58,9 +58,10 @@ public enum ReleaseFlagDefaults {
     "release_video_uploads": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_video_delivery": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_ai_generative": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
-    "release_ai_site_import": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_ai_site_import": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_crm_assist_whole_record": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_ai_site_inspiration": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_ad_audience_sync": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_site_starters": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
   ]
 }

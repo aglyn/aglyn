@@ -115,7 +115,7 @@ export const PLUGIN_DOCS = {
   aiImport: {
     path: '/ai/bring-my-site',
     title: 'Bring my site',
-    excerpt: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours. Rolling out.',
+    excerpt: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.',
   },
   aiInsights: {
     path: '/marketing-and-automation/analytics/insights',
@@ -1174,6 +1174,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   posHardware: {
     '#buy-a-reader-from-aglyn': 'Buy a reader from Aglyn',
+    '#reader-start-up-screen': 'Reader start-up screen',
     '#receipt-printers': 'Receipt printers',
   },
   posOperations: {
