@@ -215,6 +215,14 @@ final class FunctionCasesTests: XCTestCase {
     for item in cases("posDayReportCsv") {
       XCTAssertEqual(posDayReportCsv(try report(item.args[0])), item.result as? String)
     }
+    for item in cases("posShiftsCsv") {
+      let rows = try (item.args[0] as? [[String: Any]] ?? []).map { raw in
+        PosShiftCsvRow(
+          id: string(raw["id"]) ?? "", registerName: string(raw["registerName"]),
+          shift: try JSONDecoder().decode(PosShift.self, from: JSONSerialization.data(withJSONObject: raw)))
+      }
+      XCTAssertEqual(posShiftsCsv(rows), item.result as? String)
+    }
   }
 
   func testASaleKeyIsAnIdTheOrderCanTake() {

@@ -29497,6 +29497,78 @@
           }
         ]
       ]
+    },
+    "posShiftsCsv": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "args": [
+        [
+          [
+            {
+              "id": "s1",
+              "registerName": "Front counter",
+              "hostId": "h1",
+              "registerId": "r1",
+              "status": "closed",
+              "openedBy": "u1",
+              "openedByName": "Hannah Reyes",
+              "openedAtMs": 1792929600000,
+              "openingFloatCents": 15000,
+              "cashEvents": [],
+              "closedBy": "u1",
+              "closedByName": "Hannah Reyes",
+              "closedAtMs": 1792958700000,
+              "countedCashCents": 20350,
+              "expectedCashCents": 20550,
+              "varianceCents": -200,
+              "netSalesCents": 23110,
+              "report": {
+                "orderCount": 11,
+                "grossSalesCents": 24360,
+                "discountsCents": 250,
+                "taxCents": 1840,
+                "tipsCents": 1260,
+                "salesByTender": {
+                  "card_present": 15810,
+                  "cash": 7300,
+                  "gift_card": 1250
+                },
+                "refundCount": 1,
+                "refundsCents": 1250,
+                "refundsByTender": {
+                  "cash": 1250
+                },
+                "netSalesCents": 23110,
+                "openingFloatCents": 15000,
+                "cashSalesCents": 7300,
+                "paidInCents": 0,
+                "paidOutCents": 500,
+                "dropsCents": 0,
+                "cashRefundsCents": 1250,
+                "expectedCashCents": 20550
+              }
+            },
+            {
+              "id": "s2",
+              "hostId": "h1",
+              "registerId": "r2",
+              "status": "open",
+              "openedBy": "u2",
+              "openedByName": "=Leo, \"Park\"",
+              "openedAtMs": 1793016900000,
+              "openingFloatCents": 10000,
+              "cashEvents": [],
+              "closedAtMs": null,
+              "countedCashCents": null,
+              "expectedCashCents": null,
+              "varianceCents": null,
+              "netSalesCents": null
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
     }
   }
 }

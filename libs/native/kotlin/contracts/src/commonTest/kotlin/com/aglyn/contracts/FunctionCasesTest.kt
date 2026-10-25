@@ -11,6 +11,7 @@ import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.long
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -140,6 +141,17 @@ class FunctionCasesTest {
     }
     cases("posDayReportIsEmpty").forEach { (args, result) -> assertEquals(result.jsonPrimitive.boolean, posDayReportIsEmpty(report(args[0]))) }
     cases("posDayReportCsv").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, posDayReportCsv(report(args[0]))) }
+    cases("posShiftsCsv").forEach { (args, result) ->
+      val rows = args[0].jsonArray.map { raw ->
+        val obj = raw.jsonObject
+        PosShiftCsvRow(
+          id = obj["id"]?.jsonPrimitive?.content ?: "",
+          registerName = obj["registerName"]?.jsonPrimitive?.contentOrNull,
+          shift = ContractJsonFormat.decodeFromJsonElement(PosShift.serializer(), raw),
+        )
+      }
+      assertEquals(result.jsonPrimitive.content, posShiftsCsv(rows))
+    }
   }
 
   @Test

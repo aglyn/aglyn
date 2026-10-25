@@ -106,3 +106,65 @@ public func posDayReportCsv(_ report: PosDayReport) -> String {
     .map { rows in rows.map { $0.map(posCsvCell).joined(separator: ",") }.joined(separator: "\r\n") }
     .joined(separator: "\r\n\r\n")
 }
+
+/// One shift of the history as the spreadsheet reads it: the shift, its id and its register's name.
+public struct PosShiftCsvRow: Equatable, Sendable {
+  public let id: String
+  public let registerName: String?
+  public let shift: PosShift
+
+  public init(id: String, registerName: String?, shift: PosShift) {
+    self.id = id
+    self.registerName = registerName
+    self.shift = shift
+  }
+}
+
+/// Minor units as dollars with two decimals, rounded half up as the console's `Math.round` rounds; empty for none.
+private func shiftDollars(_ cents: Double?) -> String {
+  guard let cents else { return "" }
+  return String(format: "%.2f", (cents + 0.5).rounded(.down) / 100)
+}
+
+/// The shift history as a spreadsheet: one row per shift, money in dollars (`posShiftsCsv`).
+public func posShiftsCsv(_ rows: [PosShiftCsvRow], memberName: (String) -> String = { $0 }) -> String {
+  let header = [
+    "Shift", "Register", "Opened", "Opened by", "Closed", "Closed by", "Orders", "Gross sales", "Refunds", "Net sales",
+    "Discounts", "Tax", "Tips", "Cash sales", "Card sales", "Gift card sales", "Room charges", "Opening float", "Paid in",
+    "Paid out", "Safe drops", "Cash refunds", "Expected cash", "Counted cash", "Variance",
+  ]
+  let lines: [[String]] = rows.map { row in
+    let shift = row.shift
+    let report = shift.report
+    let tender = { (key: String) in report?.salesByTender[key] ?? 0 }
+    let card: Double? = report.map { _ in tender("card_present") + tender("card_keyed") + tender("card_link") }
+    return [
+      row.id,
+      row.registerName ?? shift.registerId,
+      isoInstant(shift.openedAtMs),
+      shift.openedByName ?? memberName(shift.openedBy),
+      isoInstant(shift.closedAtMs),
+      shift.closedBy.map { shift.closedByName ?? memberName($0) } ?? "",
+      report.map { count($0.orderCount) } ?? "",
+      shiftDollars(report?.grossSalesCents),
+      shiftDollars(report?.refundsCents),
+      shiftDollars(report?.netSalesCents),
+      shiftDollars(report?.discountsCents),
+      shiftDollars(report?.taxCents),
+      shiftDollars(report?.tipsCents),
+      shiftDollars(report?.cashSalesCents),
+      shiftDollars(card),
+      shiftDollars(report.map { _ in tender("gift_card") }),
+      shiftDollars(report.map { _ in tender("folio") }),
+      shiftDollars(shift.openingFloatCents),
+      shiftDollars(report?.paidInCents),
+      shiftDollars(report?.paidOutCents),
+      shiftDollars(report?.dropsCents),
+      shiftDollars(report?.cashRefundsCents),
+      shiftDollars(shift.expectedCashCents ?? report?.expectedCashCents),
+      shiftDollars(shift.countedCashCents),
+      shiftDollars(shift.varianceCents),
+    ]
+  }
+  return ([header] + lines).map { $0.map(posCsvCell).joined(separator: ",") }.joined(separator: "\r\n")
+}

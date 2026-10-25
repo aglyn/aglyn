@@ -31889,6 +31889,84 @@
         }
       ]
     },
+    "posShiftsCsv": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "id": "s1",
+                "registerName": "Front counter",
+                "hostId": "h1",
+                "registerId": "r1",
+                "status": "closed",
+                "openedBy": "u1",
+                "openedByName": "Hannah Reyes",
+                "openedAtMs": 1792929600000,
+                "openingFloatCents": 15000,
+                "cashEvents": [],
+                "closedBy": "u1",
+                "closedByName": "Hannah Reyes",
+                "closedAtMs": 1792958700000,
+                "countedCashCents": 20350,
+                "expectedCashCents": 20550,
+                "varianceCents": -200,
+                "netSalesCents": 23110,
+                "report": {
+                  "orderCount": 11,
+                  "grossSalesCents": 24360,
+                  "discountsCents": 250,
+                  "taxCents": 1840,
+                  "tipsCents": 1260,
+                  "salesByTender": {
+                    "card_present": 15810,
+                    "cash": 7300,
+                    "gift_card": 1250
+                  },
+                  "refundCount": 1,
+                  "refundsCents": 1250,
+                  "refundsByTender": {
+                    "cash": 1250
+                  },
+                  "netSalesCents": 23110,
+                  "openingFloatCents": 15000,
+                  "cashSalesCents": 7300,
+                  "paidInCents": 0,
+                  "paidOutCents": 500,
+                  "dropsCents": 0,
+                  "cashRefundsCents": 1250,
+                  "expectedCashCents": 20550
+                }
+              },
+              {
+                "id": "s2",
+                "hostId": "h1",
+                "registerId": "r2",
+                "status": "open",
+                "openedBy": "u2",
+                "openedByName": "=Leo, \"Park\"",
+                "openedAtMs": 1793016900000,
+                "openingFloatCents": 10000,
+                "cashEvents": [],
+                "closedAtMs": null,
+                "countedCashCents": null,
+                "expectedCashCents": null,
+                "varianceCents": null,
+                "netSalesCents": null
+              }
+            ]
+          ],
+          "result": "Shift,Register,Opened,Opened by,Closed,Closed by,Orders,Gross sales,Refunds,Net sales,Discounts,Tax,Tips,Cash sales,Card sales,Gift card sales,Room charges,Opening float,Paid in,Paid out,Safe drops,Cash refunds,Expected cash,Counted cash,Variance\r\ns1,Front counter,2026-10-25T12:00:00.000Z,Hannah Reyes,2026-10-25T20:05:00.000Z,Hannah Reyes,11,243.60,12.50,231.10,2.50,18.40,12.60,73.00,158.10,12.50,0.00,150.00,0.00,5.00,0.00,12.50,205.50,203.50,-2.00\r\ns2,r2,2026-10-26T12:15:00.000Z,\"'=Leo, \"\"Park\"\"\",,,,,,,,,,,,,,100.00,,,,,,,"
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": "Shift,Register,Opened,Opened by,Closed,Closed by,Orders,Gross sales,Refunds,Net sales,Discounts,Tax,Tips,Cash sales,Card sales,Gift card sales,Room charges,Opening float,Paid in,Paid out,Safe drops,Cash refunds,Expected cash,Counted cash,Variance"
+        }
+      ]
+    },
     "posTipProblem": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
       "cases": [

@@ -110,3 +110,58 @@ fun posDayReportCsv(report: PosDayReport): String {
   return listOf(heading, sales, tenders, shifts, drawers)
     .joinToString("\r\n\r\n") { rows -> rows.joinToString("\r\n") { row -> row.joinToString(",", transform = ::posCsvCell) } }
 }
+
+/** One shift of the history as the spreadsheet reads it: the shift, its id and its register's name. */
+data class PosShiftCsvRow(val id: String, val registerName: String?, val shift: PosShift)
+
+/** Minor units as dollars with two decimals, rounded half up as the console's `Math.round` rounds; empty for none. */
+private fun shiftDollars(cents: Double?): String {
+  if (cents == null) return ""
+  val whole = kotlin.math.floor(cents + 0.5).toLong()
+  val sign = if (whole < 0) "-" else ""
+  val abs = kotlin.math.abs(whole)
+  return "$sign${abs / 100}.${(abs % 100).toString().padStart(2, '0')}"
+}
+
+/** The shift history as a spreadsheet: one row per shift, money in dollars (`posShiftsCsv`). */
+fun posShiftsCsv(rows: List<PosShiftCsvRow>, memberName: (String) -> String = { it }): String {
+  val header = listOf(
+    "Shift", "Register", "Opened", "Opened by", "Closed", "Closed by", "Orders", "Gross sales", "Refunds", "Net sales",
+    "Discounts", "Tax", "Tips", "Cash sales", "Card sales", "Gift card sales", "Room charges", "Opening float", "Paid in",
+    "Paid out", "Safe drops", "Cash refunds", "Expected cash", "Counted cash", "Variance",
+  )
+  val lines = rows.map { row ->
+    val shift = row.shift
+    val report = shift.report
+    fun tender(key: String) = report?.salesByTender?.get(key) ?: 0.0
+    val card = report?.let { tender("card_present") + tender("card_keyed") + tender("card_link") }
+    listOf(
+      row.id,
+      row.registerName ?: shift.registerId,
+      isoInstant(shift.openedAtMs),
+      shift.openedByName ?: memberName(shift.openedBy),
+      isoInstant(shift.closedAtMs),
+      shift.closedBy?.let { shift.closedByName ?: memberName(it) } ?: "",
+      report?.let { count(it.orderCount) } ?: "",
+      shiftDollars(report?.grossSalesCents),
+      shiftDollars(report?.refundsCents),
+      shiftDollars(report?.netSalesCents),
+      shiftDollars(report?.discountsCents),
+      shiftDollars(report?.taxCents),
+      shiftDollars(report?.tipsCents),
+      shiftDollars(report?.cashSalesCents),
+      shiftDollars(card),
+      shiftDollars(report?.let { tender("gift_card") }),
+      shiftDollars(report?.let { tender("folio") }),
+      shiftDollars(shift.openingFloatCents),
+      shiftDollars(report?.paidInCents),
+      shiftDollars(report?.paidOutCents),
+      shiftDollars(report?.dropsCents),
+      shiftDollars(report?.cashRefundsCents),
+      shiftDollars(shift.expectedCashCents ?: report?.expectedCashCents),
+      shiftDollars(shift.countedCashCents),
+      shiftDollars(shift.varianceCents),
+    )
+  }
+  return (listOf(header) + lines).joinToString("\r\n") { line -> line.joinToString(",") { posCsvCell(it) } }
+}
