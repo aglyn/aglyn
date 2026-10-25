@@ -33,7 +33,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     }
   }
 
-  private fun com.google.firebase.auth.FirebaseUser.toAuthUser() = AuthUser(uid, email, displayName, isEmailVerified)
+  private fun com.google.firebase.auth.FirebaseUser.toAuthUser() = AuthUser(uid, email, displayName, isEmailVerified, photoUrl?.toString())
 
   override suspend fun beginImpersonation(customToken: String, tenantId: String?) {
     // A support session already on ends first, so the state it set aside is back before the next one starts.
@@ -211,7 +211,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   override suspend fun updateDisplayName(name: String) {
     val user = auth.currentUser ?: return
     user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()
-    mutable.value = AuthState.SignedIn(AuthUser(user.uid, user.email, name.ifEmpty { null }, user.isEmailVerified))
+    mutable.value = AuthState.SignedIn(AuthUser(user.uid, user.email, name.ifEmpty { null }, user.isEmailVerified, user.photoUrl?.toString()))
   }
 
   override suspend fun signOut() {

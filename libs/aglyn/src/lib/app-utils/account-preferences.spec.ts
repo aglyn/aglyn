@@ -46,6 +46,8 @@ import {
   workspacePinnedHosts,
   type AccountItemRef,
   type PinnedHost,
+  readAccountName,
+  readAccountPhoto,
 } from './account-preferences'
 
 /**
@@ -194,7 +196,7 @@ describe('the synced theme', () => {
   })
 })
 
-describe("the phone's tab bar (AGL-4006, Zach 2026-10-20)", () => {
+describe("the phone's tab bar (AGL-4006)", () => {
   const site = tabBarScope('o1', 'h1')
 
   it('keys a site and the whole workspace apart', () => {
@@ -248,5 +250,28 @@ describe("the phone's tab bar (AGL-4006, Zach 2026-10-20)", () => {
     for (let i = 1; i <= TAB_BARS_MAX; i++) bars = setTabAreas(bars, `site:h${i}`, ['a'])
     expect(bars).toHaveLength(TAB_BARS_MAX)
     expect(bars[0].scope).toBe('site:h1')
+  })
+})
+
+describe('who is signed in (AGL-4010)', () => {
+  it('reads the profile photo first, then the sign-in record, never a blank', () => {
+    expect(readAccountPhoto({ photoUrl: ' /api/media/cdn/org:o/m ' }, 'https://a.example.com/p.jpg')).toBe(
+      '/api/media/cdn/org:o/m',
+    )
+    expect(readAccountPhoto({ photoUrl: '  ' }, ' https://a.example.com/p.jpg ')).toBe(
+      'https://a.example.com/p.jpg',
+    )
+    // The roster's casing is not the profile's field.
+    expect(readAccountPhoto({ photoURL: 'https://a.example.com/r.jpg' }, null)).toBeNull()
+    expect(readAccountPhoto(null, '')).toBeNull()
+  })
+
+  it('names the person from the profile, then the sign-in record, then the email', () => {
+    expect(readAccountName({ firstName: 'Jordan', lastName: 'Lee' }, 'J. Lee', 'j@example.com')).toBe(
+      'Jordan Lee',
+    )
+    expect(readAccountName({ firstName: ' ' }, ' Pat Lee ', 'p@example.com')).toBe('Pat Lee')
+    expect(readAccountName({}, '', ' p@example.com ')).toBe('p@example.com')
+    expect(readAccountName(null, null, null)).toBe('')
   })
 })

@@ -23,6 +23,10 @@ public final class AccountPreferencesStore {
   public private(set) var appTheme: AppThemePrefs = ContractValues.shared.defaultAppTheme
   /// The phone's tab bar per site and per workspace (AGL-4006).
   public private(set) var tabBars: [TabBarPins] = []
+  /// The profile's own picture, name and notification sound fields (`photoUrl`, `firstName`, `lastName`,
+  /// `notificationSound`), the picture and name read through `photo(…)` and
+  /// `name(…)` so the person shows as the console shows them (AGL-4010).
+  public private(set) var identity: [String: String] = [:]
   /// False until the account's document has arrived once.
   public private(set) var loaded = false
   /// The last write that did not save, in words for the screen.
@@ -65,7 +69,22 @@ public final class AccountPreferencesStore {
     workspaceColors = readWorkspaceColors(data)
     appTheme = readAppTheme(data)
     tabBars = readTabBars(data)
+    var identity: [String: String] = [:]
+    let fields = ContractValues.shared
+    for key in [fields.accountPhotoField, "firstName", "lastName", fields.notificationSoundField] {
+      if let value = data?[key] as? String { identity[key] = value }
+    }
+    if identity != self.identity { self.identity = identity }
     loaded = true
+  }
+
+  /// The person's own picture: the profile's, else the sign-in record's, else nil (draw initials). A library pick is
+  /// a `/api/media/cdn/...` path the caller resolves with `mediaPreviewURL`.
+  public func photo(authPhotoURL: String?) -> String? { readAccountPhoto(identity, authPhotoURL: authPhotoURL) }
+
+  /// The person's own name: the profile's first and last name, else the sign-in record's display name, else the email.
+  public func name(authDisplayName: String?, email: String?) -> String {
+    readAccountName(identity, authDisplayName: authDisplayName, email: email)
   }
 
   private var nowMs: Int { Int(now().timeIntervalSince1970 * 1000) }

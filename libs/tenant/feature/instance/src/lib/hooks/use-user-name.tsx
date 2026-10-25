@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { readAccountName } from '@aglyn/aglyn/app-utils/account-preferences'
 import { doc } from 'firebase/firestore'
 import { useFirestore, useUser } from './firebase/firebase-services'
 import { useFirestoreDoc } from './use-firestore-doc'
@@ -67,14 +68,13 @@ export function resolveUserName(sources: {
   authDisplayName?: string | null
   email?: string | null
 }): string {
-  const fromProfile = [sources.profileFirstName, sources.profileLastName]
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
-    .join(' ')
-  if (fromProfile) return fromProfile
-  const fromAuth = String(sources.authDisplayName ?? '').trim()
-  if (fromAuth) return fromAuth
-  return String(sources.email ?? '').trim()
+  // The order lives in the shared rule, which the native apps replay through
+  // the generated contracts (AGL-4010).
+  return readAccountName(
+    { firstName: sources.profileFirstName, lastName: sources.profileLastName },
+    sources.authDisplayName,
+    sources.email,
+  )
 }
 
 export function useUserName(): string {
