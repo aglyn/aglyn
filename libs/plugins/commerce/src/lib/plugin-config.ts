@@ -21,7 +21,7 @@ import {
   POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
   POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT,
   POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
-} from './model/commerce-pos-offline'
+} from './model/pos-offline-card-limits'
 import { POS_OPS_CONFIG_DEFAULTS, POS_OPS_CONFIG_FIELDS } from './pos-ops-config'
 import { POS_KIOSK_CONFIG_DEFAULTS, POS_KIOSK_CONFIG_FIELDS } from './pos-kiosk-config'
 
@@ -79,32 +79,12 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
     // returns. On by default, within the ceilings below.
     {
       key: 'posOfflineCardSales',
-      label: 'Take cards offline on the Aglyn POS app',
+      label: 'Take cards offline in the point of sale app',
       type: 'boolean',
-      description:
-        'When the register loses its connection, a card reader connected to the ' +
-        'Aglyn POS app keeps taking cards. Each card is saved on the device and ' +
-        'charged when the connection returns. If the bank declines it then, the ' +
-        'order is marked unpaid and the register says so.',
+      description: 'With no connection, the app\u2019s card reader saves each card and charges it once back online.',
     },
-    {
-      key: 'posOfflineCardMaxSale',
-      label: 'Largest card sale offline ($)',
-      type: 'number',
-      min: 1,
-      max: 10000,
-      description: 'A larger card sale needs the connection. Stripe allows at most $10,000.',
-    },
-    {
-      key: 'posOfflineCardMaxStored',
-      label: 'Most in cards one device holds offline ($)',
-      type: 'number',
-      min: 1,
-      max: 100000,
-      description:
-        'Once the cards waiting on one device add up to this, it takes only cash ' +
-        'until they are charged.',
-    },
+    { key: 'posOfflineCardMaxSale', label: 'Largest card sale offline ($)', type: 'number', min: 1, max: 10000 },
+    { key: 'posOfflineCardMaxStored', label: 'Most in cards one device holds offline ($)', type: 'number', min: 1, max: 100000 },
     // THE REGISTER'S TIPS, RECEIPTS AND CUSTOMER DISPLAY (AGL-3607, AGL-3608).
     // Off by default: a store that never asked for tips does not start
     // asking its customers for one on the day this ships.

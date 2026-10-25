@@ -18,6 +18,7 @@
 import { computeOrderTotals, type OrderLineItem, type OrderTotals } from './commerce-orders'
 import { computeTaxCents } from './commerce-tax'
 import type { ModifierSelection } from './product-modifiers'
+import { POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT } from './pos-offline-card-limits'
 
 /*==========================================
  * THE OFFLINE REGISTER (AGL-3625): the contract every register client — the
@@ -87,14 +88,11 @@ export const POS_OFFLINE_CLOCK_SKEW_MS = 10 * 60 * 1000
 /** What an offline sale was paid with. A sale with no tender is cash (the shape before AGL-4039). */
 export type PosOfflineTender = 'cash' | 'card'
 
-/** The default ceiling of one card sale rung offline, in cents, until the store sets its own. */
-export const POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT = 25_000
-
-/** The default ceiling of every card sale one device holds unsent, in cents. */
-export const POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT = 250_000
-
-/** Stripe's own ceiling for one payment collected offline (10,000 USD). */
-export const POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT = 1_000_000
+export {
+  POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
+  POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT,
+  POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
+} from './pos-offline-card-limits'
 
 /** The `metadata[kind]` of a PaymentIntent the app created for a card rung offline. */
 export const POS_OFFLINE_CARD_INTENT_KIND = 'pos-offline'

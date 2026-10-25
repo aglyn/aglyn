@@ -2654,24 +2654,24 @@
             },
             {
               "key": "posOfflineCardSales",
-              "label": "Take cards offline on the Aglyn POS app",
+              "label": "Take cards offline in the point of sale app",
               "kind": "toggle",
               "initial": "{item.posOfflineCardSales ?? const.defaults.posOfflineCardSales}",
-              "help": "When the register loses its connection, a card reader connected to the Aglyn POS app keeps taking cards. Each card is saved on the device and charged when the connection returns. If the bank declines it then, the order is marked unpaid and the register says so."
+              "help": "With no connection, the app’s card reader saves each card and charges it once back online."
             },
             {
               "key": "posOfflineCardMaxSale",
               "label": "Largest card sale offline ($)",
               "kind": "number",
               "initial": "{item.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
-              "help": "A larger card sale needs the connection. Stripe allows at most $10,000. Between 1 and 10000."
+              "help": "Between 1 and 10000."
             },
             {
               "key": "posOfflineCardMaxStored",
               "label": "Most in cards one device holds offline ($)",
               "kind": "number",
               "initial": "{item.posOfflineCardMaxStored ?? const.defaults.posOfflineCardMaxStored}",
-              "help": "Once the cards waiting on one device add up to this, it takes only cash until they are charged. Between 1 and 100000."
+              "help": "Between 1 and 100000."
             },
             {
               "key": "posTippingEnabled",
@@ -2873,17 +2873,17 @@
             },
             {
               "key": "ov_posOfflineCardSales",
-              "label": "Override Take cards offline on the Aglyn POS app for this site",
+              "label": "Override Take cards offline in the point of sale app for this site",
               "kind": "toggle",
               "initial": "{data.site.posOfflineCardSales:present}"
             },
             {
               "key": "posOfflineCardSales",
-              "label": "Take cards offline on the Aglyn POS app",
+              "label": "Take cards offline in the point of sale app",
               "kind": "toggle",
               "initial": "{data.site.posOfflineCardSales ?? data.org.posOfflineCardSales ?? const.defaults.posOfflineCardSales}",
               "when": "form.ov_posOfflineCardSales",
-              "help": "When the register loses its connection, a card reader connected to the Aglyn POS app keeps taking cards. Each card is saved on the device and charged when the connection returns. If the bank declines it then, the order is marked unpaid and the register says so."
+              "help": "With no connection, the app’s card reader saves each card and charges it once back online."
             },
             {
               "key": "ov_posOfflineCardMaxSale",
@@ -2897,7 +2897,7 @@
               "kind": "number",
               "initial": "{data.site.posOfflineCardMaxSale ?? data.org.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
               "when": "form.ov_posOfflineCardMaxSale",
-              "help": "A larger card sale needs the connection. Stripe allows at most $10,000. Between 1 and 10000."
+              "help": "Between 1 and 10000."
             },
             {
               "key": "ov_posOfflineCardMaxStored",
@@ -2911,7 +2911,7 @@
               "kind": "number",
               "initial": "{data.site.posOfflineCardMaxStored ?? data.org.posOfflineCardMaxStored ?? const.defaults.posOfflineCardMaxStored}",
               "when": "form.ov_posOfflineCardMaxStored",
-              "help": "Once the cards waiting on one device add up to this, it takes only cash until they are charged. Between 1 and 100000."
+              "help": "Between 1 and 100000."
             },
             {
               "key": "ov_posTippingEnabled",
