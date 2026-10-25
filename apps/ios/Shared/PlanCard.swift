@@ -262,7 +262,7 @@ struct PlanCard: View {
                 full
                   ? AglynColor.error
                   : meter.share >= ContractValues.shared.planCardWarningShare
-                    ? AglynColor.intent({ $0.warning }, \.main) : AglynColor.tint)
+                    ? AglynColor.intent({ $0.warning }, \.main) : AglynColor.primary)
               .frame(width: proxy.size.width * min(1, meter.share))
           }
         }
@@ -341,7 +341,7 @@ struct PlanCard: View {
           withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { index = offset }
         } label: {
           Circle()
-            .fill(offset == index ? AglynColor.tint : AglynColor.divider)
+            .fill(offset == index ? AglynColor.primary : AglynColor.divider)
             .frame(width: 6, height: 6)
             .padding(3)
             .contentShape(Rectangle())

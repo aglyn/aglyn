@@ -325,7 +325,7 @@ public struct ActivityRow: View {
           Text(subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
         }
       }
-      Circle().fill(unread ? AglynColor.tint : .clear).frame(width: 8, height: 8).padding(.top, 8)
+      Circle().fill(unread ? AglynColor.primary : .clear).frame(width: 8, height: 8).padding(.top, 8)
         .accessibilityHidden(true)
     }
     .contentShape(Rectangle())

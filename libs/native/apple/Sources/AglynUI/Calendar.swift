@@ -127,7 +127,7 @@ public struct AglynMonthGrid: View {
               .frame(maxWidth: .infinity, minHeight: 48)
               .overlay(
                 RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous)
-                  .strokeBorder(key == picked ? AglynColor.tint : Color.clear, lineWidth: 2))
+                  .strokeBorder(key == picked ? AglynColor.primary : Color.clear, lineWidth: 2))
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
