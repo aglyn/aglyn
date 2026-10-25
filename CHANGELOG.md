@@ -9,6 +9,36 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.283 — 2026-10-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.282...v1.0.0-beta.283)
+
+### Added
+
+- **media:** a Stock photos tab in the media picker ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+- **media:** a stock photo search and import route for the media picker ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+- **media:** the media ingest can file into the workspace's shared library ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+- **stock-photos:** a search result's preview, fetched by the server from the library's own hosts ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+
+### Fixed
+
+- **native:** an empty or over-30 list filter no longer aborts the Apple apps; empty matches nothing, longer lists take the first 30 ([AGL-4011](https://linear.app/aglyn/issue/AGL-4011))
+- **functions:** run Cloud Functions on Node 24 before Node 20 is retired ([AGL-4028](https://linear.app/aglyn/issue/AGL-4028))
+- **native:** the CRM glance card's closed-lead filter sends status strings, so opening a site no longer crashes the Mac app; Aglyn POS release builds leave out the development-only Tap to Pay entitlement ([AGL-4011](https://linear.app/aglyn/issue/AGL-4011))
+- **media:** stock photo copy names no brand; re-baseline the stock-photos plugin budget for previews ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+
+### Documentation
+
+- **media:** search and place stock photos from the media picker ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **media:** type the stock photo picker specs for core's strict spec config ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+- **tools:** raise the linear id ceiling to 4066, which exists ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
+
+</details>
+
 ## v1.0.0-beta.282 — 2026-10-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.281...v1.0.0-beta.282)
