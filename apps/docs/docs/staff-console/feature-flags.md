@@ -71,8 +71,8 @@ beside the flag's name.
   any page that is not about an on, beta-staged feature, so the label comes off
   the docs in the same change that takes the stage off the flag.
 
-Aglyn Assist and Aglyn AI generation are in beta. Every other released feature is
-generally available.
+Aglyn Assist, Aglyn AI generation and Bring my site are in beta. Every other
+released feature is generally available.
 
 ## Managing flags
 

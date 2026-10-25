@@ -35,9 +35,10 @@ import {
 } from './release-flags'
 
 describe('release flag stage (AGL-4052)', () => {
-  it('stages the generative doors and the assistant as beta', () => {
+  it('stages the generative doors, Bring my site and the assistant as beta', () => {
     expect(releaseFlagStage('release_ai_generative')).toBe('beta')
     expect(releaseFlagStage('release_assist')).toBe('beta')
+    expect(releaseFlagStage('release_ai_site_import')).toBe('beta')
     expect(isBetaStaged('release_assist')).toBe(true)
   })
 

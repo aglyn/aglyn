@@ -19,7 +19,8 @@ for the how-to.
 - **A Beta label, feature by feature.** A feature that is open to use and still
   changing says so where you meet it: a **Beta** chip beside its tab, its page
   heading or its panel title in the console, and a **Beta** note at the top of
-  its docs pages. Today that is [Aglyn AI](ai/overview.md) and
+  its docs pages. Today that is [Aglyn AI](ai/overview.md),
+  [Bring my site](ai/bring-my-site.md) and
   [Aglyn Assist](getting-started/aglyn-assist.md). New features will keep
   arriving this way, and the label comes off each one when it settles.
 - **Rolling out, until it opens.** A feature that is not open in your workspace

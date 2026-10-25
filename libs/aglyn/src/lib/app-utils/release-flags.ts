@@ -237,6 +237,9 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
     key: 'release_ai_site_import',
     label: 'Bring my site',
+    // Released on every paid plan and still changing: how pages are read,
+    // rewritten in the new design and brought in wave by wave.
+    stage: 'beta',
     description:
       'Bring an existing website into a workspace on a paid plan (AGL-3973): ' +
       'the workspace proves it owns the domain (a DNS record, a home page ' +
