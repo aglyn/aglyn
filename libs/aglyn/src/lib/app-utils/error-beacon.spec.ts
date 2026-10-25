@@ -43,10 +43,12 @@ import {
   isBenignBrowserNotice,
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
+  isRecaptchaTimeout,
   isWebDocument,
   pageTranslationSignal,
   watchPageTranslation,
   raiseStackTraceLimit,
+  RECAPTCHA_TIMEOUT_KIND,
   recoveredErrorKind,
 } from './error-beacon'
 
@@ -86,6 +88,18 @@ const ANDROID_INJECTED_STACK = [
 /** One frame in a script we served. */
 const OWN_FRAME =
   '    at rJ (https://aglyn.com/_next/static/immutable/chunks/3cuw.js:31:45769)'
+
+/** reCAPTCHA's own timeout as it arrived from production on 2026-10-25. */
+function recaptchaTimeout(stack?: string): Error {
+  const error = new Error('reCAPTCHA Timeout (b)')
+  error.stack =
+    stack ??
+    [
+      'Error: reCAPTCHA Timeout (b)',
+      '    at https://www.gstatic.com/recaptcha/releases/NhfdZHzre16wrc2m6BxEdu7J/recaptcha__en.js:1482:24',
+    ].join('\n')
+  return error
+}
 
 /**
  * An automation driver's `evaluate` on the sign-up page, captured verbatim out
@@ -341,6 +355,29 @@ describe('recoveredErrorKind (AGL-3423)', () => {
     ).toBe(CHUNK_LOAD_KIND)
   })
 
+  it("labels reCAPTCHA's own timeout, whose stack is only Google's script (AGL-4068)", () => {
+    expect(isRecaptchaTimeout(recaptchaTimeout())).toBe(true)
+    expect(recoveredErrorKind(recaptchaTimeout())).toBe(RECAPTCHA_TIMEOUT_KIND)
+    // The same script served from recaptcha.net, and a reason with no stack.
+    expect(
+      recoveredErrorKind(
+        recaptchaTimeout(
+          'Error: reCAPTCHA Timeout (b)\n    at https://www.recaptcha.net/recaptcha/releases/x/recaptcha__en.js:1:2',
+        ),
+      ),
+    ).toBe(RECAPTCHA_TIMEOUT_KIND)
+    expect(recoveredErrorKind({ message: 'reCAPTCHA Timeout (b)' })).toBe(
+      RECAPTCHA_TIMEOUT_KIND,
+    )
+  })
+
+  it('leaves the wording unlabeled when one of OUR frames threw it', () => {
+    const ours = recaptchaTimeout(['Error: reCAPTCHA Timeout (b)', OWN_FRAME].join('\n'))
+    expect(isRecaptchaTimeout(ours)).toBe(false)
+    expect(recoveredErrorKind(ours)).toBeUndefined()
+    expect(isRecaptchaTimeout(new Error('reCAPTCHA placeholder failed'))).toBe(false)
+  })
+
   it('labels nothing else, so every other auth error still pages', () => {
     expect(recoveredErrorKind({ code: 'auth/user-token-expired' })).toBeUndefined()
     expect(recoveredErrorKind(new Error('Minified React error #185'))).toBeUndefined()
@@ -363,6 +400,8 @@ describe('recoveredErrorKind (AGL-3423)', () => {
     expect(CHUNK_LOAD_KIND).toBe('chunk-load')
     expect(AUTH_DESYNC_KIND.length).toBeLessThanOrEqual(32)
     expect(CHUNK_LOAD_KIND.length).toBeLessThanOrEqual(32)
+    expect(RECAPTCHA_TIMEOUT_KIND).toBe('recaptcha-timeout')
+    expect(RECAPTCHA_TIMEOUT_KIND.length).toBeLessThanOrEqual(32)
   })
 })
 
@@ -690,6 +729,17 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
       message: 'Missing or insufficient permissions.',
     })
     expect(reported()).toHaveLength(1)
+  })
+
+  it("reports reCAPTCHA's timeout under its own kind, for the rate policy (AGL-4068)", () => {
+    rejectInPage(recaptchaTimeout())
+
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      kind: RECAPTCHA_TIMEOUT_KIND,
+      message: expect.stringContaining('reCAPTCHA Timeout (b)'),
+    })
   })
 
   describe('an import() of a dropped chunk that no boundary saw (AGL-3423)', () => {

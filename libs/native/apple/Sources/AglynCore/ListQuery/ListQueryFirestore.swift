@@ -32,8 +32,13 @@ public struct ListQueryConstraint: @unchecked Sendable {
     case .greaterThan: return query.whereField(field, isGreaterThan: firestoreValue(value))
     case .greaterThanOrEqual: return query.whereField(field, isGreaterThanOrEqualTo: firestoreValue(value))
     case .arrayContains: return query.whereField(field, arrayContains: firestoreValue(value))
-    case .arrayContainsAny: return query.whereField(field, arrayContainsAny: firestoreList(value))
-    case .in: return query.whereField(field, in: firestoreList(value))
+    case .arrayContainsAny, .in:
+      // Firestore throws an Objective-C exception (which aborts the app) on an empty list or one over 30 values.
+      // An empty list matches nothing, so the query asks for a document id no document has.
+      let values = firestoreList(value)
+      if values.isEmpty { return query.whereField(FieldPath.documentID(), isEqualTo: "aglyn-no-match") }
+      let capped = Array(values.prefix(firestoreListFilterMax))
+      return op == .in ? query.whereField(field, in: capped) : query.whereField(field, arrayContainsAny: capped)
     case .unknown: return query
     }
   }
@@ -42,6 +47,9 @@ public struct ListQueryConstraint: @unchecked Sendable {
 /// A filter's values as Firestore can encode them: a contract enum (`CrmLeadStatus`) is sent as its raw value.
 /// Firestore throws an Objective-C exception on a value it cannot encode, which no Swift `catch` stops, so the app
 /// would abort instead of the read failing.
+/// The most values Firestore takes in one `in` or `array-contains-any` filter.
+private let firestoreListFilterMax = 30
+
 private func firestoreList(_ value: Any) -> [Any] {
   (value as? [Any] ?? [value]).map(firestoreValue)
 }

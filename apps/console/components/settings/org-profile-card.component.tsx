@@ -28,7 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useEffect, useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import MediaUrlField from '../media-url-field.component'
 import { SITE_LOGO_HINT } from '../../constants/media-size-hints'
 import { docsHelp } from '../../constants/docs-links'
@@ -90,6 +90,13 @@ export function OrgProfileCard() {
       contactWebsite: String((org as any)?.contact?.website ?? ''),
     })
   }, [org])
+  // The previews follow a deferred copy of each URL, not the field. An MUI
+  // Avatar whose `src` changes resets its loaded state from an effect, so a
+  // preview fed per keystroke left an update pending after every keystroke's
+  // commit, and a fast burst of them tripped React's update-depth limit
+  // (#185). Deferred, they redraw once the typing lets them.
+  const logoPreview = useDeferredValue(profile.logoUrl)
+  const logoDarkPreview = useDeferredValue(profile.logoDarkUrl)
   // The stored billing address, shown but not edited. Structured since
   // AGL-1133, so it renders as lines rather than as one opaque blob.
   const billingAddress = ((org as any)?.contact?.address ?? null) as {
@@ -163,7 +170,7 @@ export function OrgProfileCard() {
   <Stack spacing={2}>
     <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
       <Avatar
-        src={profile.logoUrl || undefined}
+        src={logoPreview || undefined}
         variant="rounded"
         sx={{ width: 56, height: 56 }}
       >
@@ -184,7 +191,7 @@ export function OrgProfileCard() {
         the logo above. */}
     <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
       <Avatar
-        src={profile.logoDarkUrl || profile.logoUrl || undefined}
+        src={logoDarkPreview || logoPreview || undefined}
         variant="rounded"
         sx={{
           width: 56,
