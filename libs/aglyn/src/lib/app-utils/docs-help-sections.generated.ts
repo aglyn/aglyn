@@ -681,6 +681,11 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#connect': 'Open Products → Taxes and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
     '#how-sales-are-taxed': 'A product you marked tax-exempt is sent as non-taxable and charged no tax.',
   },
+  waivers: {
+    '#find-a-signature': 'The Signatures card lists the newest first.',
+    '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
+    '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
+  },
   webhooks: {
     '#outbound-webhooks': 'Send an HTTP request to a URL you control when a site event fires — for example, post to a Slack endpoint or your own API when a form is submitted or a new booking comes in.',
   },

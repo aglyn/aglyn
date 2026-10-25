@@ -21,7 +21,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { productPriceRange } from '../model'
+import { productPriceRange, productSellsOnline } from '../model'
 
 /**
  * What a product looks like in one line and one image, for a surface that is
@@ -43,7 +43,9 @@ export function productCard(
     ...(data['imageUrl'] ?? data['mediaUrls']?.[0]
       ? { imageUrl: data['imageUrl'] ?? data['mediaUrls']?.[0] }
       : {}),
-    ...(data['slug'] ? { path: `/products/${data['slug']}` } : {}),
+    // A product sold in person only (AGL-4060) has no page to link to: the
+    // card still shows it, and opens nothing.
+    ...(data['slug'] && productSellsOnline(data) ? { path: `/products/${data['slug']}` } : {}),
   }
 }
 

@@ -23,6 +23,7 @@ import {
   resolveRolePermissions,
   subscribePluginEntitlements,
   subscribePluginPermissions,
+  tierPermissionsOf,
   toLegacyPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -451,6 +452,9 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
               resolution.overrides,
             ),
             ...toLegacyPermissions(granted, resolution.role),
+            // The plugin keys as the one catalog resolved them, custom role
+            // included (AGL-4047), exactly as the server resolver lays them.
+            ...tierPermissionsOf(granted),
           }
         : resolution.status === 'error'
           ? deniedOnReadFailure()

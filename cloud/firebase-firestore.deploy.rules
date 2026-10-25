@@ -1009,6 +1009,24 @@ allow read, write: if false;
 
 
 
+match /waivers/{waiverId} {
+allow read, write: if false;
+match /versions/{version} {
+allow read, write: if false;
+}
+}
+match /waiverSignatures/{signatureId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
 
 
 match /outreachMailboxes/{mailboxId} {

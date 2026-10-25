@@ -14343,6 +14343,63 @@ describe('rewards records are the server’s alone (AGL-3640)', () => {
   })
 })
 
+describe('waivers and their signatures are the server’s alone (AGL-4042)', () => {
+  // The waivers a merchant wrote, the words of each version, and every
+  // signature: a signer's date of birth, address and phone, a minor's name
+  // and a drawn signature. Written and read through the Admin SDK by the
+  // waivers plugin's routes, which check the member's permission; the
+  // owner, an editor and staff are refused like everyone.
+  const ORG_DOCS = [
+    ['waivers', 'waiver-1'],
+    ['waivers/waiver-1/versions', '1'],
+    ['waiverSignatures', 'signature-1'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, ...name.split('/'), id), {
+          orgId: ORG,
+          hostId: HOST,
+          signer: { name: 'Jordan Lee', dateOfBirth: '1990-01-01' },
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const path = name.split('/')
+        const ref = doc(db, 'orgs', ORG, ...path, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, ...path), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { voidedAt: 1 }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, ...path, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+
+  it('no client reaches a document nested beneath a signature, either', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      const nested = doc(db, 'orgs', ORG, 'waiverSignatures', 'signature-1', 'anything', 'x')
+      await mustDeny(`${who} reading beneath a signature`, getDoc(nested))
+      await mustDeny(`${who} writing beneath a signature`, setDoc(nested, { signer: {} }))
+    }
+  })
+})
+
 describe('review platform records are the server’s alone (AGL-3699)', () => {
   // A site's Trustpilot invitation address and sealed API credentials, its
   // Yotpo keys, and whether each service was asked to invite one order's

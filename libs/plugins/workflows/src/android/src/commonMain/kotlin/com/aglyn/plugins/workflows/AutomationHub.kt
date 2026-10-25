@@ -293,7 +293,7 @@ fun AutomationRow(
           if (actions.isNotEmpty()) OverflowMenu(actions, contentDescription = "Actions for ${title.ifEmpty { "this row" }}")
         }
       },
-      colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+      colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent),
     )
     HorizontalDivider(Modifier.padding(start = space(2f)))
   }

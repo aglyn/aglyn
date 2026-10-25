@@ -43,6 +43,16 @@ describe('what a product looks like to a surface that is not commerce’s', () =
     })
   })
 
+  it('links no page for a product sold in person only (AGL-4060), and still shows it', () => {
+    expect(
+      productCard('p4', { name: 'Card Reader', slug: 'card-reader', sellOnline: false, variants: [{ priceUsd: 59 }] }),
+    ).toEqual({ title: 'Card Reader', caption: '$59' })
+    expect(productCard('p4', { name: 'Card Reader', slug: 'card-reader', sellOnline: true, variants: [] })).toEqual({
+      title: 'Card Reader',
+      path: '/products/card-reader',
+    })
+  })
+
   it('claims no price, image or address it does not have', () => {
     expect(productCard('p3', { name: 'Draft', variants: [{ priceUsd: 0 }] })).toEqual({
       title: 'Draft',

@@ -120,11 +120,12 @@ describe('the commerce console surfaces declare their own authorization', () => 
   it('names a key the plugin permission registry actually carries', () => {
     // A key in neither vocabulary is REFUSED by the shell, so a typo here
     // takes the register offline for everybody rather than failing loudly.
-    // `managePos` is camelCase and lives in the plugin registry, never in
-    // the dotted catalog — looking it up in the wrong space finds nothing.
+    // `managePos` is declared through the plugin registry, which feeds the
+    // one permission catalog (AGL-4047): it is in both, so the role editor
+    // lists it and a custom role can grant or revoke it.
     const key = navItem('/pos')?.permission as string
     expect(Aglyn.listPluginPermissionKeys()).toContain(key)
-    expect(Aglyn.ORG_PERMISSION_KEYS).not.toContain(key)
+    expect(Aglyn.ORG_PERMISSION_KEYS).toContain(key)
   })
 
   it('admits the tiers the sale route accepts, and not the viewer', () => {
