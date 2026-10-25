@@ -97,8 +97,23 @@ describe('a Pixabay answer', () => {
       photographerUrl: 'https://pixabay.com/users/StudioLight-101/',
       tags: ['yoga', 'studio', 'woman', 'meditation'],
       downloadUrl: 'https://pixabay.com/get/g7101001large_1280.jpg',
+      previewUrl: 'https://pixabay.com/get/g7101001web_340.jpg',
     })
     expect(parsePixabayAnswer(PIXABAY_CERAMIC_POTTERY_ANSWER)).toHaveLength(4)
+  })
+
+  it("keeps a hit's small copy at the preview size, only on Pixabay's hosts (AGL-4066)", () => {
+    const base = PIXABAY_YOGA_STUDIO_ANSWER.hits[0]
+    const [offHost, unsized, none] = parsePixabayAnswer({
+      hits: [
+        { ...base, webformatURL: 'https://evil.example/x_640.jpg' },
+        { ...base, webformatURL: 'https://cdn.pixabay.com/photo/x.jpg' },
+        { ...base, webformatURL: undefined },
+      ],
+    })
+    expect(offHost.previewUrl).toBeUndefined()
+    expect(unsized.previewUrl).toBe('https://cdn.pixabay.com/photo/x.jpg')
+    expect(none).not.toHaveProperty('previewUrl')
   })
 
   it('drops a hit whose image is not on Pixabay, or which lacks an id or a size', () => {
