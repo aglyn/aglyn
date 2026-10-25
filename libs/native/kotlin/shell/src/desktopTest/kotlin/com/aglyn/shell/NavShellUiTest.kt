@@ -162,8 +162,7 @@ class NavShellUiTest {
 
   @Test
   fun hoveringARailTargetNamesItFastAndTheBubbleFollowsThePointer() = runDesktopComposeUiTest(width = 1280, height = 800) {
-    // Zach, 2026-10-20: "it is really hard to tell which org is which just from the two letters". A hover names the
-    // tile in full after 150 ms; moving straight on to the next target names it at once; a right-click (a long press on
+    // Two letters alone do not say which workspace is which. A hover names the tile in full after 150 ms; moving straight on to the next target names it at once; a right-click (a long press on
     // touch) opens the menu headed by the full name.
     setContent { AglynShell(testServices(userDoc = emptyMap())) }
     signIn()
@@ -174,6 +173,15 @@ class NavShellUiTest {
     assertEquals(0, onAllNodesWithTag("fast-tooltip-label").fetchSemanticsNodes().size, "no bubble before 150 ms")
     mainClock.advanceTimeBy(120)
     onNodeWithTag("fast-tooltip-label").assertTextEquals("Acme")
+    // 8 dp clear of the rail's edge (the targets are the rail's full width), centered on the tile.
+    val rail = onNodeWithTag("workspace-rail").fetchSemanticsNode().boundsInWindow
+    val tile = onNodeWithTag("rail-tile-o1").fetchSemanticsNode().boundsInWindow
+    val bubble = onNodeWithTag("fast-tooltip").fetchSemanticsNode().boundsInWindow
+    val gapDp = (bubble.left - rail.right) / density.density
+    val offCenterDp = kotlin.math.abs(bubble.center.y - tile.center.y) / density.density
+    println("tooltip: gap ${gapDp} dp, off center ${offCenterDp} dp, bubble ${bubble.width / density.density}×${bubble.height / density.density} dp")
+    assertTrue(gapDp in 7.5f..8.5f, "the bubble sits 8 dp clear of the rail: $gapDp dp")
+    assertTrue(offCenterDp <= 1f, "the bubble is centered on the tile: $offCenterDp dp off")
     onNodeWithTag("rail-all").performMouseInput { moveTo(center) }
     mainClock.advanceTimeByFrame()
     onNodeWithTag("fast-tooltip-label").assertTextEquals("All workspaces")

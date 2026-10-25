@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.fastTooltipEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -101,12 +102,12 @@ internal fun WorkspaceRail(
   val m = com.aglyn.ui.shellMetrics
   val rail = railWorkspaces(workspace.orgs.map { it.id }, prefs.pinned, prefs.recentOrgs)
   val byId = workspace.orgs.associateBy { it.id }
-  // Every rail target names itself fast on hover (Zach, 2026-10-20), one bubble for the whole column.
+  // Every rail target names itself fast on hover, one bubble for the whole column, kept clear of the rail.
   val tips = com.aglyn.ui.rememberFastTooltipState()
   androidx.compose.runtime.CompositionLocalProvider(LocalRailTooltips provides tips) {
   Column(
     // PINNED starts the rail at the gap between its sections (17, Figma Rail 12:338); the brand's mark is the Home tab.
-    modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).padding(top = 17.dp, bottom = m.railFoot).testTag("workspace-rail"),
+    modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).fastTooltipEdge(tips).padding(top = 17.dp, bottom = m.railFoot).testTag("workspace-rail"),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(RailGap),
   ) {

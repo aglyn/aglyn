@@ -39,9 +39,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * The fast name bubble of a column of look-alike targets, the workspace rail's tiles (Zach, 2026-10-20: "it is really
- * hard to tell which org is which just from the two letters"): the platform tooltip waits too long and sits on top of
- * the next tile. Hovering a target shows its full name beside it after [delayMillis]; moving on to the next target while
+ * The fast name bubble of a column of look-alike targets, the workspace rail's tiles, whose one or two letters alone do
+ * not say which workspace is which: the platform tooltip waits too long and sits on top of the next tile. Hovering a target shows its full name beside it after [delayMillis]; moving on to the next target while
  * one shows (or within [graceMillis] of it hiding) shows the next name at once, so the bubble follows the pointer down
  * the column without waiting again. A press hides it. Touch screens never hover: there a long press opens the target's
  * menu, which carries the same name as its header.
@@ -56,6 +55,9 @@ class FastTooltipState internal constructor(
   var shown by mutableStateOf<Shown?>(null)
     private set
   private var warm = false
+
+  /** The column's trailing edge (window coordinates), set by [fastTooltipEdge]: the bubble sits clear of it. */
+  internal var edge by mutableStateOf<Float?>(null)
   private var job: Job? = null
 
   data class Shown(val label: String, val hint: String?, val target: Rect)
@@ -92,6 +94,9 @@ class FastTooltipState internal constructor(
   }
 }
 
+/** Marks the column whose edge the bubble keeps clear of (the rail), so it never overlaps the column's ground. */
+fun Modifier.fastTooltipEdge(state: FastTooltipState): Modifier = onGloballyPositioned { state.edge = it.boundsInWindow().right }
+
 /** The rail's bubble timing: 150 ms before the first name, none while the pointer moves on within 300 ms. */
 @Composable
 fun rememberFastTooltipState(delayMillis: Long = 150, graceMillis: Long = 300): FastTooltipState {
@@ -120,18 +125,19 @@ fun Modifier.fastTooltip(state: FastTooltipState, label: String, hint: String? =
 }
 
 /**
- * Draws [state]'s bubble: the name in a small label to the right of its target, centered on it, 8 dp clear of the rail's
- * edge-to-edge target box. Inverse colors (the theme's primary text as the ground) so it reads on any rail.
+ * Draws [state]'s bubble: the name in a small label to the right of its target, centered on it, 8 dp clear of the
+ * column's edge ([fastTooltipEdge]; of the target itself without one). Inverse colors (the theme's primary text as the ground) so it reads on any rail.
  */
 @Composable
 fun FastTooltipHost(state: FastTooltipState) {
   val shown = state.shown ?: return
   val m = LocalShellMetrics.current
   val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
-  val provider = remember(shown.target, gap) {
+  val edge = maxOf(shown.target.right, state.edge ?: shown.target.right)
+  val provider = remember(shown.target, edge, gap) {
     object : PopupPositionProvider {
       override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
-        val x = shown.target.right.roundToInt() + gap
+        val x = edge.roundToInt() + gap
         val y = (shown.target.center.y - popupContentSize.height / 2f).roundToInt()
         return IntOffset(x, y.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)))
       }
@@ -142,8 +148,8 @@ fun FastTooltipHost(state: FastTooltipState) {
       Modifier
         .clip(RoundedCornerShape(if (m.compact) 6.dp else 8.dp))
         .background(MaterialTheme.colorScheme.inverseSurface)
-        .padding(horizontal = if (m.compact) 8.dp else 10.dp, vertical = if (m.compact) 4.dp else 6.dp)
-        .testTag("fast-tooltip"),
+        .testTag("fast-tooltip")
+        .padding(horizontal = if (m.compact) 8.dp else 10.dp, vertical = if (m.compact) 4.dp else 6.dp),
     ) {
       Text(
         shown.label,
