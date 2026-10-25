@@ -194,6 +194,20 @@ const CATALOG_PAGE_DEFAULT = 24
 const MANUAL_COLLECTION_MAX = 1000
 /** Ids per `getAll`, well inside the Admin SDK's comfortable batch. */
 const GET_ALL_CHUNK = 100
+/**
+ * Reads one page may make to fill itself past products sold in person only
+ * (AGL-4060). `sellOnline` is absent on every product stored before the
+ * switch, and a query cannot ask for "absent or true", so the query reads
+ * the catalog's scope and the page drops what is not sold online — and reads
+ * on, up to this many times, so a run of in-person-only products does not
+ * leave a short page in the middle of the grid.
+ */
+const CATALOG_FILL_READS = 4
+/**
+ * Rows each price-bound read scans for the cheapest (or dearest) product
+ * sold online, past any sold in person only.
+ */
+const PRICE_BOUND_SCAN = 10
 
 /** One product as the catalog reads it: stored, lifted, and keyed. */
 interface CatalogRow {
@@ -234,9 +248,13 @@ function rowValue(row: CatalogRow, path: string): unknown {
   return row.values[path]
 }
 
-/** A held row a shopper may be shown: live and active, as the query's scope. */
+/**
+ * A held row a shopper may be shown: live and active, as the query's scope,
+ * and sold online (AGL-4060).
+ */
 const onSale = (row: CatalogRow) =>
-  STOREFRONT_CATALOG_BASE.every((filter) => rowMatches(row, filter))
+  STOREFRONT_CATALOG_BASE.every((filter) => rowMatches(row, filter)) &&
+  CommerceModel.productSellsOnline(row.product)
 
 /** One plan predicate over one row, with Firestore's meaning of each operator. */
 function rowMatches(row: CatalogRow, filter: ListQueryFilter): boolean {
@@ -641,9 +659,11 @@ async function runPublicCatalog(
    * lists — and its predicates are answered over every held row.
    */
   const answerHeld = (
-    held: CatalogRow[],
+    rows: CatalogRow[],
     options: { manualOrder?: Map<string, number>; notices?: string[] },
   ): PublicCatalogResult => {
+    // A member sold in person only is no row of the grid (AGL-4060).
+    const held = rows.filter((row) => CommerceModel.productSellsOnline(row.product))
     const request: ListQueryRequest = {
       base: STOREFRONT_CATALOG_BASE,
       clauses: [...otherClauses, ...priceClauses],
@@ -753,20 +773,40 @@ async function runPublicCatalog(
     ? planFor({ ...request, clauses: otherClauses, sort: byPrice }, byPrice)
     : null
   const pricedBy = (target: ListQueryPlan, direction: 'asc' | 'desc') =>
-    ordered({ ...target, orderBy: { path: 'priceFromCents', direction } }).limit(1).get()
+    ordered({ ...target, orderBy: { path: 'priceFromCents', direction } }).limit(PRICE_BOUND_SCAN).get()
+  // The first price sold online (AGL-4060): an in-person-only product's price
+  // never anchors the slider.
+  const boundOf = (snapshot: FirebaseFirestore.QuerySnapshot | null) =>
+    snapshot?.docs
+      .find((docSnapshot) => CommerceModel.productSellsOnline(docSnapshot.data()))
+      ?.get('priceFromCents')
 
-  const [snapshot, lowest, highest] = await Promise.all([
-    pageQuery.limit(max + 1).get(),
+  const bounds = Promise.all([
     unpriced ? pricedBy(unpriced, 'asc') : null,
     unpriced ? pricedBy(unpriced, 'desc') : null,
   ])
-  const docs = snapshot.docs.slice(0, max)
-  const rows = docs.map(toRow).filter((row): row is CatalogRow => Boolean(row))
-  const last = docs[docs.length - 1]
-  const low = lowest?.docs[0]?.get('priceFromCents')
-  const high = highest?.docs[0]?.get('priceFromCents')
+  // A page of rows sold online, read on past the ones sold in person only.
+  const rows: CatalogRow[] = []
+  let last: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  let more = false
+  for (let read = 0; read < CATALOG_FILL_READS && rows.length < max; read += 1) {
+    const need = max - rows.length
+    const snapshot = await pageQuery.limit(need + 1).get()
+    const docs = snapshot.docs.slice(0, need)
+    for (const docSnapshot of docs) {
+      last = docSnapshot
+      const row = toRow(docSnapshot)
+      if (row && CommerceModel.productSellsOnline(row.product)) rows.push(row)
+    }
+    more = snapshot.docs.length > need
+    if (!more || !last) break
+    pageQuery = ordered(plan).startAfter(last.get(plan.orderBy.path), last.id)
+  }
+  const [lowest, highest] = await bounds
+  const low = boundOf(lowest)
+  const high = boundOf(highest)
   return result(rows, plan, {
-    ...(last && snapshot.docs.length > max
+    ...(last && more
       ? { nextCursor: encodeCursor(last.get(plan.orderBy.path), last.id) }
       : {}),
     ...(typeof low === 'number' && typeof high === 'number'

@@ -411,6 +411,13 @@ describe('what the kiosk reads', () => {
     }
   })
 
+  it('sells a product sold in person only (AGL-4060)', async () => {
+    fakeDocs.set('hosts/host-1/products/reader', product({ name: 'Card reader', sellOnline: false }))
+    const token = await pair()
+    const result = await kiosk({ action: 'catalog' }, { token, method: 'GET' })
+    expect(result.body.products.map((item: any) => item.name).sort()).toEqual(['Card reader', 'Flat white'])
+  })
+
   it('a category is a clause on the query', async () => {
     fakeDocs.set('hosts/host-1/products/muffin', product({ name: 'Muffin', categoryIds: ['food'] }))
     const token = await pair()

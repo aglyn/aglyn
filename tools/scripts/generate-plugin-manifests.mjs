@@ -2216,7 +2216,7 @@ function sitemapSectionRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...declaration } = entry
-      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, lastmod } = declaration
+      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, skipWhenFalse, lastmod } = declaration
       const what = `${where} "${section ?? ''}"`
       if (typeof section !== 'string' || !/^[a-z][a-z0-9-]*$/.test(section)) throw new Error(`${where}: a section is a lowercase path segment`)
       if (CORE_SITEMAP_SECTIONS.includes(section) || section.startsWith('content-')) {
@@ -2239,7 +2239,7 @@ function sitemapSectionRows() {
       if (typeof path !== 'string' || !path.startsWith('/') || path.split('{slug}').length !== 2) {
         throw new Error(`${what}: "path" is a site path with exactly one {slug}`)
       }
-      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen]]) {
+      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen], ['skipWhenFalse', skipWhenFalse]]) {
         if (value !== undefined && !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
       }
       if (lastmod !== undefined) plainFieldList(lastmod, `${what} lastmod`)
