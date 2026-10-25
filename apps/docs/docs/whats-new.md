@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — no platform fee on cash at the register (newest)
+## October 2026 — one total for the day across every register (newest)
+
+- **[Day and event totals](commerce-and-bookings/commerce/pos-operations.md#day-and-event-totals)** —
+  when several staff take payments on their own registers, **Commerce → Orders
+  → Day totals** adds up the whole day, or an event of up to 31 days: sales,
+  tips, tax and refunds, split by tender, by register and by cashier, every
+  drawer's expected and counted cash, and each shift. Export it as a
+  spreadsheet or print it on your receipt printer.
+
+## October 2026 — no platform fee on cash at the register
 
 - **[Platform fees at the register](commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register)** —
   cash and gift card payments at the register now carry no platform fee, and
