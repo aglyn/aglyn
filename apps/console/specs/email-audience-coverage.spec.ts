@@ -79,6 +79,11 @@ const TENANT_ROOTS = [
  * could infer it wrongly.
  */
 const PLATFORM_SENDERS: Record<string, string> = {
+  [join('libs', 'plugins', 'commerce', 'src', 'lib', 'server', 'pos-hardware-notify.ts')]:
+    'A card reader order from the POS hardware shop (AGL-4038): received, ' +
+    "shipped, delivered. The SELLER is Aglyn and the recipient is Aglyn's " +
+    "customer, the workspace member who bought it — never a site's visitor " +
+    'or contact — so the mail is platform mail, metered as platform.',
   [join('apps', 'tenant', 'app', 'api', '_legal-intake', 'acknowledge.ts')]:
     'DMCA and abuse acknowledgements. The recipient is the REPORTER in ' +
     "Aglyn's own legal process, not the site's customer, and the mail is " +
@@ -295,7 +300,9 @@ describe('the platform senders are named, not inferred', () => {
    * moment to ask again.
    */
   it('keeps the exemption list short', () => {
-    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(7)
+    // 7 with the POS hardware shop's order mail (AGL-4038): Aglyn is the
+    // seller there, so it is platform mail by the same test as the rest.
+    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(8)
   })
 })
 

@@ -17,6 +17,7 @@
 'use client'
 
 import type { ConsoleStaffPageProps } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import { resolveStaffRoleGate } from '@aglyn/aglyn/app-utils/staff-role-gate'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
@@ -295,6 +296,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   return (
     <CardDisplay
       header={'Hardware orders'}
+      help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       subheader={'Card readers bought from the POS hardware shop'}
       HeaderProps={{
         action: (
