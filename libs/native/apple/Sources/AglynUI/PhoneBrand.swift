@@ -18,6 +18,9 @@ public enum AglynBrandGradient {
   /// The gradient's stops, from the generated auth tokens (the same stops the sign-in Facets draw).
   public static var stops: [Gradient.Stop] { AglynAuthTokens.Colors.gradientStops }
 
+  /// How strongly a glow of the gradient shows (Figma "Header glow" and "AI glow"): 30% in light, 42% in dark.
+  public static func glowOpacity(dark: Bool) -> Double { dark ? 0.42 : 0.30 }
+
   /// The gradient across a box, at the brand's angle.
   public static var linear: LinearGradient { gradient(stops) }
 
@@ -53,7 +56,7 @@ public struct AglynPhoneGround: View {
               .frame(width: 640, height: 300)
               .offset(y: -150 - max(0, proxy.frame(in: .global).minY))
               .blur(radius: 40)
-              .opacity(scheme == .dark ? 0.42 : 0.30)
+              .opacity(AglynBrandGradient.glowOpacity(dark: scheme == .dark))
               .allowsHitTesting(false)
               .accessibilityHidden(true)
           }
@@ -134,6 +137,38 @@ public struct AglynAIGlyph: View {
       Image(systemName: "sparkles").font(.system(size: size)).foregroundStyle(AglynBrandGradient.linear)
     } else {
       Image(systemName: "sparkles").font(.system(size: size)).foregroundStyle(AglynColor.accentIcon)
+    }
+  }
+}
+
+/// The highlight role (Figma `highlight/soft`, `/icon`, `/text`): the brand pink, the theme's secondary intent. Soft is the
+/// color at 16%, as the contract's `deriveAccent` makes every soft fill. The AI's context chip and its suggestion marks
+/// wear it in the bold look.
+public enum AglynHighlight {
+  public static let icon = AglynColor.intent({ $0.secondary }, \.main)
+  public static let text = AglynColor.secondary
+  public static let soft = AglynColor.intent({ $0.secondary }, \.main).opacity(0.16)
+}
+
+/// The AI sheet's glow (Figma "AI glow" 283:25261): the brand gradient as a 560 by 220 point ellipse centered on the
+/// sheet's top edge, blurred, at the header glow's strength. Drawn only in the bold look; put it behind the sheet's content.
+public struct AglynAIGlow: View {
+  @Environment(\.colorScheme) private var scheme
+
+  public init() {}
+
+  public var body: some View {
+    if AglynThemeRuntime.shared.phoneBold {
+      Ellipse()
+        .fill(AglynBrandGradient.linear)
+        .frame(width: AglynSpace.of(70), height: AglynSpace.of(27.5))
+        .offset(y: -AglynSpace.of(13.75))
+        .blur(radius: AglynSpace.of(5))
+        .opacity(AglynBrandGradient.glowOpacity(dark: scheme == .dark))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
   }
 }

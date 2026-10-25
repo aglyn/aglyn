@@ -1184,12 +1184,15 @@ struct PhoneShell: View {
           #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AglynColor.paper, for: .navigationBar)
+            // In the phone's bold look the bar lets the AI glow behind it show (Figma 21:314).
+            .toolbarBackground(AglynThemeRuntime.shared.phoneBold ? .hidden : .automatic, for: .navigationBar)
           #endif
           .toolbar {
             ToolbarItem(placement: .confirmationAction) {
               Button("Done") { navigation.showAssist = false }
                 .fontWeight(.semibold)
-                .tint(AglynColor.textPrimary)
+                // Done in the accent's text shade in the bold look (Figma 21:314), primary text otherwise.
+                .tint(AglynThemeRuntime.shared.phoneBold ? AglynColor.tint : AglynColor.textPrimary)
                 .accessibilityIdentifier("assist-done")
             }
           }
@@ -1277,7 +1280,8 @@ extension View {
   func phoneAssistOnPushed(_ route: Route) -> some View { modifier(PhoneAssistOnPushed(route: route)) }
 }
 
-/// The top bar's AI button: a grey line ✦ like the bell beside it, opening the AI sheet.
+/// The top bar's AI button: a grey line ✦ like the bell beside it (the brand gradient in the phone's bold look), opening
+/// the AI sheet.
 struct PhoneAssistButton: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
@@ -1286,7 +1290,16 @@ struct PhoneAssistButton: View {
     Button {
       navigation.showAssist = true
     } label: {
-      Label("\(model.brandName) AI", systemImage: "sparkles")
+      if AglynThemeRuntime.shared.phoneBold {
+        // The brand gradient ✦ in the phone's bold look (Figma Phone/Top bar 273:20194).
+        Label {
+          Text("\(model.brandName) AI")
+        } icon: {
+          AglynAIGlyph()
+        }
+      } else {
+        Label("\(model.brandName) AI", systemImage: "sparkles")
+      }
     }
     .tint(AglynColor.secondaryText)
     .accessibilityIdentifier("topbar-ai")

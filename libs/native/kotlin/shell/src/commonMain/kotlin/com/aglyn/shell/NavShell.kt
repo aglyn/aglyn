@@ -1001,6 +1001,18 @@ internal fun TitleBarButton(label: String, icon: String, tag: String, enabled: B
   }
 }
 
+/** The phone top bar's AI button: [TitleBarButton]'s ✦, which wears the brand gradient in the phone's bold look (Figma Phone/Top bar 273:20194). */
+@Composable
+internal fun TitleBarAIButton(label: String, tag: String, onClick: () -> Unit) {
+  if (!com.aglyn.ui.LocalPhoneBold.current) return TitleBarButton(label, "auto_awesome", tag, onClick = onClick)
+  val m = com.aglyn.ui.shellMetrics
+  WithTooltip(label) {
+    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(m.barButton).testTag(tag)) {
+      com.aglyn.ui.AIGlyph(size = m.barIcon, contentDescription = label)
+    }
+  }
+}
+
 /** Opens one of the person's recent items: set by the shell, which knows how to reach its workspace and site. */
 /** What a page with no trail of its own puts in the breadcrumbs slot. */
 private val NoCrumbs: @Composable () -> Unit = {}
