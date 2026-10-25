@@ -37,8 +37,10 @@ import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.UpgradeNotice
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -50,8 +52,31 @@ import kotlinx.serialization.json.longOrNull
  * packing kind and id, split once so the count and the send ask for the same
  * people; the count is the route's own `preview` dry run; a designed email
  * names its Besigner design and sends no body; Save draft is `draft` on an
- * existing email; Send is a send, or `schedule` with `sendAtMs`.
+ * existing email; Send is a send, or `schedule` with `sendAtMs`. The plan's
+ * answer (`planLock`) rides every preview, refused or not, and is drawn as it
+ * comes: the console's upgrade notice at the top, Send and Schedule off,
+ * drafts and tests still allowed (AGL-4055).
  */
+
+/**
+ * The plan's answer to this campaign, as the route's preview sends it (`campaignPlanLock` in the marketing plugin): the
+ * plan includes no campaign email, this month's allowance is spent, or the audience is bigger than what is left.
+ */
+data class CampaignPlanLock(val kind: String, val planLabel: String?, val reason: String, val notice: String) {
+  /** The upgrade notice's sentence, the console's: what is stopped and what still works, then the plan that includes it. */
+  val message: String get() = notice + (planLabel?.let { " Included from $it." } ?: "")
+
+  companion object {
+    /** The lock in a preview's answer or refusal body; null when the plan stops nothing. */
+    fun from(body: JsonElement?): CampaignPlanLock? {
+      val lock = (body as? JsonObject)?.get("planLock") as? JsonObject ?: return null
+      fun text(key: String) = (lock[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+      val kind = text("kind") ?: return null
+      val notice = text("notice") ?: return null
+      return CampaignPlanLock(kind, text("planLabel"), text("reason") ?: notice, notice)
+    }
+  }
+}
 
 /** The audience pick, as the composer stores it: `leads`, `members`, `list:{id}` or `segment:{id}`. */
 data class AudiencePick(val raw: String) {
@@ -94,6 +119,9 @@ data class AudiencePreview(
   val consentWithheld: Long = 0,
   val blocking: Boolean = false,
   val error: String? = null,
+  /** The plan's answer, when the route answered at all ([answered]); a request that never reached it says nothing. */
+  val planLock: CampaignPlanLock? = null,
+  val answered: Boolean = true,
 )
 
 data class ComposeDraft(
@@ -189,12 +217,18 @@ suspend fun CampaignSendApi.preview(draft: ComposeDraft): AudiencePreview = try 
     audienceTruncated = (answer?.get("audienceTruncated") as? JsonPrimitive)?.booleanOrNull == true,
     suppressed = answer.long("suppressed"),
     consentWithheld = answer.long("consentWithheld"),
+    planLock = CampaignPlanLock.from(answer),
   )
 } catch (error: ConsoleApiError) {
-  AudiencePreview(blocking = error.status == 409, error = error.message)
+  AudiencePreview(
+    blocking = error.status == 409,
+    error = error.message,
+    planLock = CampaignPlanLock.from(error.body),
+    answered = error.status != 0,
+  )
 } catch (error: Exception) {
   if (error is kotlinx.coroutines.CancellationException) throw error
-  AudiencePreview(error = problemText(error))
+  AudiencePreview(error = problemText(error), answered = false)
 }
 
 private fun nameOf(doc: FirestoreDoc, key: String): String = doc.string(key)?.takeIf { it.isNotEmpty() } ?: doc.id
@@ -211,6 +245,8 @@ fun ComposeDialog(context: NativePluginContext, send: EmailSend?, onDismiss: () 
     mutableStateOf(send?.let(ComposeDraft::of) ?: ComposeDraft(fromName = siteName.orEmpty(), campaignId = campaignId.orEmpty()))
   }
   var preview by remember { mutableStateOf<AudiencePreview?>(null) }
+  // The plan's last answer. Kept while the next preview is counted, so Send does not light up between two answers.
+  var planLock by remember { mutableStateOf<CampaignPlanLock?>(null) }
   var confirming by remember { mutableStateOf(false) }
 
   fun observe(path: String, limit: Int) = context.firestore.observe(FirestoreQuery(path, limit = limit))
@@ -238,7 +274,9 @@ fun ComposeDialog(context: NativePluginContext, send: EmailSend?, onDismiss: () 
   LaunchedEffect(draft.audience, draft.topicId, draft.senderId) {
     preview = null
     delay(350)
-    preview = api.preview(draft)
+    val answer = api.preview(draft)
+    preview = answer
+    if (answer.answered) planLock = answer.planLock
   }
 
   fun fields(action: String?): Map<String, Any?> = draft.messageFields() + buildMap {
@@ -251,20 +289,28 @@ fun ComposeDialog(context: NativePluginContext, send: EmailSend?, onDismiss: () 
     busy = busy,
     onDismiss = onDismiss,
     confirmLabel = if (draft.schedule) "Schedule" else "Send",
-    confirmEnabled = draft.canSend && preview?.blocking != true,
+    confirmEnabled = draft.canSend && preview?.blocking != true && planLock == null,
     modifier = Modifier.testTag("email-compose"),
-    secondary = if (send != null) ({
+    // A new email too: `draft` without an id makes one, so an email a plan cannot send yet is kept, not lost.
+    secondary = {
       OutlinedButton(
         onClick = { busy.run(coroutines, onDone = onDismiss) { api.compose("draft", fields(null)) } },
         enabled = !busy.busy,
         modifier = Modifier.testTag("compose-save-draft"),
       ) { Text("Save draft") }
-    }) else null,
+    },
     onConfirm = {
       val at = draft.sendAtMs
       if (draft.schedule && (at == null || at <= nowMillis())) busy.error = "Pick a future send time." else confirming = true
     },
   ) {
+    // Before anything is written: the plan stops this send, and the way to change that (the console's notice).
+    planLock?.let { lock ->
+      UpgradeNotice(lock.message, modifier = Modifier.testTag("compose-plan-lock")) {
+        onDismiss()
+        context.navigate("core.billing.plans")
+      }
+    }
     FieldEditor(FieldSpec("subject", "Subject", required = true), draft.subject, { draft = draft.copy(subject = it) })
     FieldEditor(FieldSpec("preheader", "Preview text"), draft.preheader, { draft = draft.copy(preheader = it) })
     ChoiceChipRow(listOf(ChipOption("plain", "Plain message"), ChipOption("designed", "Designed email")), if (draft.designed) "designed" else "plain", {

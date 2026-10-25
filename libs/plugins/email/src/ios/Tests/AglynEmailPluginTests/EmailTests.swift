@@ -89,6 +89,23 @@ final class EmailTests: XCTestCase {
     }
   }
 
+  /// The plan's answer as the preview route sends it (AGL-4055): drawn as it comes, with the plan named after the notice.
+  func testPlanLockReadsFromAnAnswerOrARefusal() throws {
+    func body(_ json: String) throws -> JSONValue { try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8)) }
+    let free = try body(
+      #"{"sendable":0,"planLock":{"kind":"not-on-plan","planLabel":"Pro","reason":"Campaign email is included from Pro.","notice":"Your plan does not include campaign email."}}"#
+    )
+    let lock = try XCTUnwrap(CampaignPlanLock.from(free))
+    XCTAssertEqual(lock.kind, "not-on-plan")
+    XCTAssertEqual(lock.reason, "Campaign email is included from Pro.")
+    XCTAssertEqual(lock.message, "Your plan does not include campaign email. Included from Pro.")
+    XCTAssertNil(CampaignPlanLock.from(try body(#"{"sendable":3,"planLock":null}"#)))
+    XCTAssertNil(CampaignPlanLock.from(try body(#"{"sendable":3}"#)))
+    XCTAssertNil(CampaignPlanLock.from(nil))
+    let unnamed = try body(#"{"error":"x","planLock":{"kind":"allowance-spent","planLabel":null,"reason":"r","notice":"n"}}"#)
+    XCTAssertEqual(CampaignPlanLock.from(unnamed)?.message, "n")
+  }
+
   func testAudiencePickSplitsOnce() {
     XCTAssertEqual(AudiencePick(raw: "list:abc").kind, "list")
     XCTAssertEqual(AudiencePick(raw: "list:abc").listID, "abc")
