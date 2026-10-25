@@ -30,8 +30,11 @@ struct HomeView: View {
         } else if !wide {
           // A phone's Home is every area of the scope as the same tile (AGL-4006, Figma 22:176); what needs you is the
           // bell's Activity and each tile's count.
+          // The tiles are the body; the numbers (AGL-4011) follow them, the same cards a Mac's Home draws.
           phoneSiteLine
+          if picked == nil { HomeWorkspaceStats(part: .proposal) }
           PhoneHomeTiles()
+          if let picked { HomeSiteStats(site: picked) } else { HomeWorkspaceStats(part: .glance) }
         } else {
           scopeLine
           if picked == nil { HomeWorkspaceStats(part: .proposal) }
@@ -44,7 +47,7 @@ struct HomeView: View {
       }
       .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynSpace.two)
       .padding(.vertical, wide ? 24 : AglynSpace.two)
-      // Home fills its column at every width, its cards on the content edges (Zach, 2026-10-19: no capped column).
+      // Home fills its column at every width, its cards on the content edges (no capped column).
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     // The content's ground is the surface on the Mac and iPad (Figma Home 2:6), the canvas on a phone (with the brand's

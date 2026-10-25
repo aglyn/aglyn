@@ -89,10 +89,11 @@ internal fun HomeScreen(
   val now = remember { nowMillis() }
   val prefs by services.accountPrefs.state.collectAsState()
   val openRecent = LocalOpenRecent.current
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      // The whole content area, on the content edge E (Zach 10/19: no left-aligned or capped column).
+      // The whole content area, on the content edge E (no left-aligned or capped column).
       Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
         .padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("home"),
       verticalArrangement = Arrangement.spacedBy(space(3f)),
@@ -144,7 +145,7 @@ private const val AI_CREATE_SCREEN_ID = "ai.create"
 
 /** The workspace's own document, live. */
 @Composable
-private fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
+internal fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
   if (orgId == null) return Live.Ready(null)
   val flow = remember(orgId) { services.firestore.observeDoc("orgs/$orgId") }
   val live by flow.collectAsState(Live.Loading)

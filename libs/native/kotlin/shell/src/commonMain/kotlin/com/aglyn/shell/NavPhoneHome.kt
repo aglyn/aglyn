@@ -52,11 +52,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
+import com.aglyn.core.Live
 import com.aglyn.core.PinAnswer
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AreaGroupHeader
 import com.aglyn.ui.AreaTile
 import com.aglyn.ui.SearchField
+import com.aglyn.ui.space
 import kotlin.math.roundToInt
 
 /*
@@ -79,15 +81,43 @@ internal fun PhoneHome(
   loaded: Boolean,
   onOpen: (NavItem) -> Unit,
   onEditTabBar: () -> Unit,
+  header: @Composable () -> Unit = {},
+  stats: @Composable () -> Unit = {},
 ) {
   var tipSeen by remember { mutableStateOf(services.prefs.get(PIN_TIP_SEEN) == "1") }
   Column(Modifier.fillMaxSize()) {
-    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 16.dp).testTag("home")) {
+    Column(
+      Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+        .padding(horizontal = space(2f)).padding(bottom = space(2f)).testTag("home"),
+      verticalArrangement = Arrangement.spacedBy(space(3f)),
+    ) {
+      header()
       AreaTiles(services, context, groups, tabScope, pinned, current = null, onOpen = onOpen, onEditTabBar = onEditTabBar)
+      // The tiles are the body; the numbers (AGL-4011) follow them, the same cards a tablet's Home draws.
+      stats()
     }
     if (loaded && pinned.isEmpty() && !tipSeen) {
       PinAreasTip { services.prefs.set(PIN_TIP_SEEN, "1"); tipSeen = true }
     }
+  }
+}
+
+/** The workspace's proposed plan, above a workspace Home's tiles (AGL-4011). */
+@Composable
+internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState) {
+  if (workspace.site != null) return
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
+  HomeUpgradeProposal(context, org, workspace.org?.name, workspace.org?.slug, Contracts.platformBrandName)
+}
+
+/** The numbers under a phone Home's tiles (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards. */
+@Composable
+internal fun PhoneHomeStats(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, openAnalytics: () -> Unit) {
+  val site = workspace.site
+  if (site != null) {
+    HomeSiteStats(services, context, site.id, openAnalytics)
+  } else {
+    workspace.org?.id?.let { HomeOrgGlance(services, context, it) }
   }
 }
 

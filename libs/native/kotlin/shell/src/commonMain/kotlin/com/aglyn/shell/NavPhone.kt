@@ -201,7 +201,12 @@ internal fun PhoneShell(
         when {
           settingsList -> PhoneMenu(services, workspace, chrome, sidebar, top, starred, onRow, onStar, assistTitle, help)
           atHome && workspace.ready && workspace.orgs.isNotEmpty() ->
-            PhoneHome(services, context, homeGroups, tabScope, pinned, prefs.loaded, onOpen = ::openTile) { chrome.tabBarSheet = true }
+            PhoneHome(
+              services, context, homeGroups, tabScope, pinned, prefs.loaded, onOpen = ::openTile,
+              onEditTabBar = { chrome.tabBarSheet = true },
+              header = { context?.let { PhoneHomeHeader(services, it, workspace) } },
+              stats = { context?.let { PhoneHomeStats(services, it, workspace) { navigator.select(NavKeys.of(NavKeys.ANALYTICS_SCREEN)) } } },
+            )
           top == ShellNavigator.NOTIFICATIONS && route == null && context != null -> Column(Modifier.fillMaxSize()) {
             NeedsYouBlock(services, context, workspace, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) { body() }
