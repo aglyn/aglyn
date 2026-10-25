@@ -333,9 +333,10 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
     }
     if (!ok(answer.status)) return refusal(answer)
     const row = (answer.body?.['domain'] ?? {}) as Record<string, unknown>
-    // `boughtAt` is set only on a name this team REGISTERED here; a name
-    // merely added to the team for its DNS has none, and is not ours to renew.
-    const boughtAt = msOrNull(row['boughtAt'])
+    // `boughtAt` is set only on a name this team REGISTERED here, and
+    // `transferredAt` on one it moved here (AGL-4040); a name merely added to
+    // the team for its DNS has neither, and is not ours to renew.
+    const boughtAt = msOrNull(row['boughtAt']) ?? msOrNull(row['transferredAt'])
     return {
       ok: 'yes',
       value: {
@@ -399,7 +400,7 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
         ? (answer.body?.['domains'] as Record<string, unknown>[])
         : []
       for (const row of rows) {
-        const boughtAtMs = msOrNull(row['boughtAt'])
+        const boughtAtMs = msOrNull(row['boughtAt']) ?? msOrNull(row['transferredAt'])
         if (boughtAtMs === null) continue
         owned.push({
           domain: String(row['name'] ?? '').toLowerCase(),

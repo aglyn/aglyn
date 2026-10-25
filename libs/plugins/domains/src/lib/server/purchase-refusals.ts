@@ -22,9 +22,12 @@
  * loading the gate's Admin SDK imports. `./gates` re-exports both.
  */
 
+/*
+ * A site that already has a domain is no refusal (AGL-4040): a name bought
+ * then goes into the workspace, unassigned, and can be connected to any of
+ * its sites from the Domains page.
+ */
 export type PurchaseRefusal =
-  | 'site-has-domain'
-  | 'site-has-bought-domain'
   | 'no-payment-history'
   | 'fraud-hold'
   | 'lookalike'
@@ -32,10 +35,6 @@ export type PurchaseRefusal =
   | 'too-many-held'
 
 export const PURCHASE_REFUSAL_COPY: Record<PurchaseRefusal, string> = {
-  'site-has-domain':
-    'This site already has a domain connected. Disconnect it first to give the site a new one.',
-  'site-has-bought-domain':
-    'This site already has a domain bought for it. Manage it below.',
   'no-payment-history':
     'Domains can be bought about three days after your workspace’s first plan payment, once it has cleared. You can connect a domain you already own in the meantime.',
   'fraud-hold':

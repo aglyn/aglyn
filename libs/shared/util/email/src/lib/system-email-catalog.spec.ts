@@ -133,8 +133,9 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       // AGL-4023 — the
       // five getting-started emails (AGL-3692), one per risk notice kind plus
       // the risk digest and review acknowledgment (AGL-3368, pinned in
-      // `risk-notice-catalog.spec.ts`), the nine emails of a domain bought
-      // through the domains plugin (AGL-3962, `domain-emails.ts`), the
+      // `risk-notice-catalog.spec.ts`), the eleven emails of a domain bought
+      // or transferred in through the domains plugin (AGL-3962, AGL-4040,
+      // `domain-emails.ts`), the
       // seven Site Care emails (AGL-3959; the eighth, to a sender the intake
       // did not recognize, retired when Site Care mail moved to the support
       // address in AGL-3997), the four Site Care project emails

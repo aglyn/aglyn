@@ -123,7 +123,7 @@ describe('Get a domain', () => {
           registrantEmail: 'alex@testbakery.com',
           verifyByMs: Date.parse('2026-11-02T00:00:00Z'), verificationEmail: 'alex@testbakery.com',
           renewalFailing: false, failure: null, registrantName: 'Alex Test', contactVerified: false,
-          contactPendingSinceMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
+          contactPendingSinceMs: null, contactRejectedAtMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
         },
       ],
     })
@@ -171,7 +171,7 @@ describe('?domain= from Billing (AGL-3955)', () => {
           renewalCents: 1599, expiresAtMs: Date.parse('2027-10-19T00:00:00Z'), registeredAtMs: 1,
           registrantEmail: 'alex@testbakery.com', verifyByMs: null, verificationEmail: null,
           renewalFailing: false, failure: null, registrantName: 'Alex Test', contactVerified: false,
-          contactPendingSinceMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
+          contactPendingSinceMs: null, contactRejectedAtMs: null, origin: 'purchase', transferStatus: null, transferStartedAtMs: null,
         },
       ],
     })

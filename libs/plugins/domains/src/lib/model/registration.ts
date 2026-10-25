@@ -104,6 +104,12 @@ export interface DomainRenewalState {
   lastChargeError?: string
   /** The registrar order the renewal placed. */
   orderId?: string
+  /**
+   * The contact change (its `contactChange.updatedAtMs`) the renewal order
+   * carried to the registrar (AGL-4040), so a change saved after the order
+   * waits for the next one rather than being marked applied.
+   */
+  contactSentForMs?: number
   renewedAtMs?: number
   /** Dunning ran out, or the customer turned auto-renew off: let it expire. */
   abandonedAtMs?: number
@@ -156,6 +162,8 @@ export interface DomainRegistrationDoc {
   registrantContact?: RegistrantContact | null
   /** Set while {@link registrantContact} waits for the next renewal. */
   contactChange?: { updatedAtMs: number; updatedBy: string } | null
+  /** When the registrar last refused a renewal that carried the edited contact. */
+  contactRejectedAtMs?: number | null
   /** ICANN's registrant email check, as last read from the registrar. */
   contactVerification?: {
     verified: boolean
@@ -208,6 +216,8 @@ export interface DomainRegistrationView {
   contactVerified: boolean | null
   /** When an edited contact was saved, while it waits for the next renewal. */
   contactPendingSinceMs: number | null
+  /** When the registrar refused the edited contact, until it is edited again. */
+  contactRejectedAtMs: number | null
   origin: DomainRegistrationOrigin
   /** The registrar's transfer status while a transfer in runs. */
   transferStatus: string | null
@@ -236,6 +246,7 @@ export function registrationView(doc: DomainRegistrationDoc): DomainRegistration
     registrantName: doc.registrant?.name ?? '',
     contactVerified: verification ? verification.verified === true : null,
     contactPendingSinceMs: doc.contactChange?.updatedAtMs ?? null,
+    contactRejectedAtMs: doc.contactRejectedAtMs ?? null,
     origin: doc.origin ?? 'purchase',
     transferStatus: doc.status === 'transferring-in' ? (doc.transfer?.lastStatus ?? null) : null,
     transferStartedAtMs: doc.transfer?.startedAtMs ?? null,

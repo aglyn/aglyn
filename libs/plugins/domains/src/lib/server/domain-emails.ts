@@ -59,8 +59,8 @@ interface Wording {
 const WORDING: Record<DomainEmailKind, Wording> = {
   purchased: {
     title: (domain) => `${domain} is yours`,
-    body: () =>
-      'It is being connected to {site}. Confirm the registrant email when the registrar’s message arrives.',
+    body: (merge) =>
+      `${merge['domain.whereLine'] ?? ''} Confirm the registrant email when the registrar’s message arrives.`.trim(),
     level: 'success',
     type: 'billing.domain',
   },
@@ -116,12 +116,29 @@ const WORDING: Record<DomainEmailKind, Wording> = {
     level: 'warning',
     type: 'billing.domain',
   },
+  transferInCompleted: {
+    title: (domain) => `${domain} has moved here`,
+    body: (merge) =>
+      `It is registered until ${merge['domain.expiresOn'] ?? ''}. Connect it to a site from the Domains page.`,
+    level: 'success',
+    type: 'billing.domain',
+  },
+  transferInFailed: {
+    title: (domain) => `${domain} couldn’t be moved here`,
+    body: (merge) => `${merge['domain.failure'] ?? ''} ${merge['domain.refund'] ?? ''}`.trim(),
+    level: 'warning',
+    type: 'billing.domain',
+  },
 }
 
-/** The console path of a site's Custom Domain page. */
+/**
+ * The console path where a name is managed: its site's Custom Domain page,
+ * or — for a name no site uses — the workspace's Domains page (AGL-4040).
+ */
 export async function domainPagePath(
   orgId: string,
   hostId: string | null,
+  domain = '',
 ): Promise<{ manage: string; billing: string; siteName: string; orgName: string }> {
   const firestore = db()
   const [org, host] = await Promise.all([
@@ -132,7 +149,12 @@ export async function domainPagePath(
   const subdomain = String(host?.get('subdomain') ?? '').trim()
   const base = slug ? `/${slug}` : ''
   return {
-    manage: slug && subdomain ? `${base}/hosts/${subdomain}/admin/domain` : `${base}/sites`,
+    manage:
+      slug && subdomain
+        ? `${base}/hosts/${subdomain}/admin/domain`
+        : slug
+          ? `${base}/domains${domain ? `/${encodeURIComponent(domain)}` : ''}`
+          : `${base}/sites`,
     billing: `${base}/billing`,
     siteName: host?.exists
       ? hostDisplayName(host.data() as Record<string, unknown>, hostId ?? '')
@@ -153,7 +175,7 @@ export async function sendDomainEmail(
     const lock = normalizeOrgLockdown(org?.data() as never)
     if (lock && isAccountBanLockdownReason(lock.reason)) return
     const wording = WORDING[kind]
-    const paths = await domainPagePath(registration.orgId, registration.hostId)
+    const paths = await domainPagePath(registration.orgId, registration.hostId, registration.domain)
     const origin = platformConsoleOrigin()
     const fullMerge: Record<string, string> = {
       'domain.name': registration.domain,
@@ -161,7 +183,10 @@ export async function sendDomainEmail(
       'org.name': paths.orgName,
       'domain.manageUrl': `${origin}${paths.manage}`,
       billingUrl: `${origin}${paths.billing}`,
-      ...merge,
+      // A sentence the lifecycle wrote names the site as `{site}`.
+      ...Object.fromEntries(
+        Object.entries(merge).map(([key, value]) => [key, value.split('{site}').join(paths.siteName)]),
+      ),
     }
     const title = wording.title(registration.domain, fullMerge)
     const body = wording.body(fullMerge).split('{site}').join(paths.siteName)

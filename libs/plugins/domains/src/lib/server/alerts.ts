@@ -27,6 +27,7 @@ const TYPE: Record<DomainAlertKind, string> = {
   renewalUnpaid: 'domains.renewalUnpaid',
   orphanRegistration: 'domains.orphanRegistration',
   disputed: 'domains.disputed',
+  transferStuck: 'domains.transferStuck',
 }
 
 /** Raises one alert, deduped per name. Never throws. */

@@ -90,14 +90,14 @@ export function platformEffects(): LifecycleEffects {
         retryable: RETRYABLE_CONNECT.has(connected.code),
       }
     },
-    async disconnect({ hostId, domain }) {
+    async disconnect({ hostId, domain, actor }) {
       // Only a site still showing THIS name is released: one that moved on
       // to another domain is not the expired name's to change.
       const host = await db().collection('hosts').doc(hostId).get()
       if (String(host.get('cname') ?? '').toLowerCase() !== domain) return true
       const released = await disconnectHostCustomDomain({
         hostId,
-        actor: DOMAINS_SYSTEM_ACTOR,
+        actor: actor ?? DOMAINS_SYSTEM_ACTOR,
       })
       return released.ok !== 'refused'
     },

@@ -30,6 +30,12 @@ import { readRegistration, registrationRef } from './db'
 import type { DomainsActor } from './gates'
 import {
   advanceRenewal,
+  advanceTransferIn,
+  connectToSite,
+  disconnectFromSite,
+  purchaseTarget,
+  startTransferIn,
+  transferInQuote,
   invalidContactFields,
   normalizePhone,
   purchaseDomain,
@@ -624,5 +630,244 @@ describe('registrant contact', () => {
     expect(normalizePhone('(512) 555-0123')).toBe('+1.5125550123')
     expect(normalizePhone('+1 512 555 0123')).toBe('+1.5125550123')
     expect(normalizePhone('+44 20 7946 0958')).toBe('+442079460958')
+  })
+})
+
+describe('buying while a site has a domain (AGL-4040)', () => {
+  it('goes to the site with none, and into the workspace otherwise', () => {
+    expect(purchaseTarget({ hostId: 'host-1', host: {} }, [])).toBe('site')
+    expect(purchaseTarget({ hostId: 'host-1', host: { cname: 'example.com' } }, [])).toBe('workspace')
+    expect(purchaseTarget({ hostId: 'host-1', host: {} }, [registrationDoc()])).toBe('workspace')
+    expect(purchaseTarget({ hostId: 'host-1', host: {} }, [registrationDoc({ status: 'refunded' })])).toBe('site')
+    expect(purchaseTarget({ hostId: null, host: null }, [])).toBe('workspace')
+  })
+
+  it('registers a name bought into the workspace without connecting any site', async () => {
+    const { effects, recorded } = effectsWith(fakeDriver())
+    const outcome = await purchaseDomain(effects, ACTOR, {
+      domain: 'testbakery.com',
+      expectedFirstYearCents: 1599,
+      contact: CONTACT,
+      intoWorkspace: true,
+    })
+    expect(outcome.ok).toBe('active')
+    expect(recorded.connects).toEqual([])
+    expect(await readRegistration('testbakery.com')).toMatchObject({ hostId: null, status: 'active', origin: 'purchase' })
+    const purchased = recorded.emails.find((email) => email.kind === 'purchased')
+    expect(purchased?.merge['domain.whereLine']).toMatch(/not connected to a site yet/)
+  })
+})
+
+describe('transferring a name in (AGL-4040)', () => {
+  const start = (effects: LifecycleEffects, expectedPriceCents = 1599) =>
+    startTransferIn(effects, { ...ACTOR, hostId: null, host: null }, {
+      domain: 'TestBakery.com',
+      authCode: ' CODE-1 ',
+      contact: CONTACT,
+      expectedPriceCents,
+    })
+
+  it('prices the transfer with the renewal formula', async () => {
+    expect(await transferInQuote(fakeDriver({ transferPrice: async () => yes(11.25) }), 'testbakery.com')).toEqual({
+      ok: 'yes',
+      priceCents: 1599,
+      renewalCents: 1599,
+      costUsd: 11.25,
+      renewalCostUsd: 11.25,
+    })
+    expect(await transferInQuote(fakeDriver(), 'testbakery.us')).toEqual({ ok: 'no', code: 'not-offered' })
+  })
+
+  it('charges the quoted price, asks the registrar at our cost, and holds the name into the workspace', async () => {
+    const driver = fakeDriver()
+    const { effects, recorded } = effectsWith(driver)
+    const outcome = await start(effects)
+    expect(outcome.ok).toBe('transferring')
+    expect(recorded.charges).toEqual([expect.objectContaining({ amountCents: 1599, kind: 'domain-transfer' })])
+    expect(driver.transferIn).toHaveBeenCalledWith(
+      expect.objectContaining({ domain: 'testbakery.com', authCode: 'CODE-1', years: 1, expectedPriceUsd: 11.25 }),
+    )
+    const held = await readRegistration('testbakery.com')
+    expect(held).toMatchObject({
+      status: 'transferring-in',
+      origin: 'transfer-in',
+      hostId: null,
+      transfer: { orderId: 'transfer-1' },
+    })
+    // The auth code is passed through, never stored.
+    expect(JSON.stringify(held)).not.toContain('CODE-1')
+  })
+
+  it('refuses a price that moved, before holding or charging', async () => {
+    const { effects, recorded } = effectsWith(fakeDriver())
+    expect(await start(effects, 999)).toMatchObject({ ok: 'refused', code: 'price-changed', priceCents: 1599 })
+    expect(recorded.charges).toEqual([])
+    expect(await readRegistration('testbakery.com')).toBeNull()
+  })
+
+  it.each([
+    ['domain_already_owned', 'already-here'],
+    ['dnssec_enabled', 'dnssec'],
+    ['expected_price_mismatch', 'price-changed'],
+    ['bad_request', 'transfer-refused'],
+  ])('refunds when the registrar refuses with %s', async (code, outcomeCode) => {
+    const { effects, recorded } = effectsWith(fakeDriver({ transferIn: async () => no(code) }))
+    expect(await start(effects)).toMatchObject({ ok: 'refused', code: outcomeCode })
+    expect(recorded.refunds).toEqual(['in_1'])
+    expect(await readRegistration('testbakery.com')).toMatchObject({ status: 'refunded' })
+    expect(recorded.emails.map((email) => email.kind)).toEqual(['transferInFailed'])
+  })
+
+  it('follows a transfer behind a lost answer instead of refunding it', async () => {
+    const { effects, recorded } = effectsWith(fakeDriver({ transferIn: async () => no('timeout', true) }))
+    expect((await start(effects)).ok).toBe('transferring')
+    expect(recorded.refunds).toEqual([])
+  })
+
+  it('records a declined card and never asks the registrar', async () => {
+    const driver = fakeDriver()
+    const { effects } = effectsWith(driver, {
+      charge: async () => ({ ok: false, invoiceId: null, paidCents: 0, code: 'declined' }),
+    })
+    expect(await start(effects)).toMatchObject({ ok: 'refused', code: 'declined' })
+    expect(driver.transferIn).not.toHaveBeenCalled()
+  })
+
+  it('the sweep finishes an arrived transfer with its new expiry, and tells the owners', async () => {
+    const driver = fakeDriver()
+    const { effects, recorded } = effectsWith(driver)
+    await start(effects)
+    driver.transferStatus.mockResolvedValue(yes({ status: 'pending', state: 'pending_unlock' }))
+    await runDomainsSweep(effects, { nowMs: T0, deadlineMs: Date.now() + 60_000 })
+    expect(await readRegistration('testbakery.com')).toMatchObject({
+      status: 'transferring-in',
+      transfer: { lastStatus: 'pending_unlock' },
+    })
+    driver.transferStatus.mockResolvedValue(yes({ status: 'completed', state: 'completed' }))
+    driver.info.mockResolvedValue(yes({ owned: true, registeredAtMs: T0, expiresAtMs: T0 + 400 * DAY, autoRenew: true }))
+    const report = await runDomainsSweep(effects, { nowMs: T0, deadlineMs: Date.now() + 60_000 })
+    expect(report.transferringIn).toBe(1)
+    expect(await readRegistration('testbakery.com')).toMatchObject({
+      status: 'active',
+      hostId: null,
+      expiresAtMs: T0 + 400 * DAY,
+    })
+    expect(recorded.emails.map((email) => email.kind)).toEqual(['transferInCompleted'])
+    expect(recorded.connects).toEqual([])
+  })
+
+  it('the sweep refunds a transfer the losing registrar rejected', async () => {
+    const driver = fakeDriver()
+    const { effects, recorded } = effectsWith(driver)
+    await start(effects)
+    driver.transferStatus.mockResolvedValue(yes({ status: 'failed', state: 'rejected' }))
+    await advanceTransferIn(effects, (await readRegistration('testbakery.com'))!)
+    expect(await readRegistration('testbakery.com')).toMatchObject({ status: 'refunded', failure: 'transfer-rejected' })
+    expect(recorded.refunds).toEqual(['in_1'])
+    const failed = recorded.emails.find((email) => email.kind === 'transferInFailed')
+    expect(failed?.merge['domain.failure']).toMatch(/declined to release it/)
+  })
+
+  it('tells staff about a transfer pending two weeks', async () => {
+    const driver = fakeDriver()
+    const { effects, recorded } = effectsWith(driver)
+    await start(effects)
+    jest.setSystemTime(T0 + 15 * DAY)
+    await advanceTransferIn(effects, (await readRegistration('testbakery.com'))!)
+    expect(recorded.alerts).toEqual(['transferStuck'])
+  })
+})
+
+describe('an edited registrant contact rides the next renewal (AGL-4040)', () => {
+  const expiry = T0 + 365 * DAY
+  const EDITED = { ...CONTACT, firstName: 'Jordan', lastName: 'Lee', country: 'US', phone: '+1.5125550123' }
+
+  it('is sent with the renewal order and marked applied once it completes', async () => {
+    const driver = fakeDriver()
+    const { effects } = effectsWith(driver)
+    await seed({
+      registrantContact: EDITED,
+      contactChange: { updatedAtMs: T0 + DAY, updatedBy: 'user-1' },
+    })
+    jest.setSystemTime(expiry - 30 * DAY)
+    driver.info.mockResolvedValue(yes({ owned: true, registeredAtMs: T0, expiresAtMs: expiry + 365 * DAY, autoRenew: true }))
+    await advanceRenewal(effects, (await readRegistration('testbakery.com'))!, { force: true })
+    expect(driver.renew).toHaveBeenCalledWith(expect.objectContaining({ contact: EDITED }))
+    await advanceRenewal(effects, (await readRegistration('testbakery.com'))!, { force: true })
+    expect(await readRegistration('testbakery.com')).toMatchObject({
+      contactChange: null,
+      registrant: { name: 'Jordan Lee' },
+    })
+  })
+
+  it('sends no contact when none was edited', async () => {
+    const driver = fakeDriver()
+    const { effects } = effectsWith(driver)
+    await seed()
+    await advanceRenewal(effects, (await readRegistration('testbakery.com'))!, { force: true })
+    expect(driver.renew).toHaveBeenCalledWith(expect.not.objectContaining({ contact: expect.anything() }))
+  })
+
+  it('sets a refused contact aside, so the name keeps renewing', async () => {
+    const driver = fakeDriver({ renew: async () => no('bad_request') })
+    const { effects } = effectsWith(driver)
+    await seed({ registrantContact: EDITED, contactChange: { updatedAtMs: T0, updatedBy: 'user-1' } })
+    await advanceRenewal(effects, (await readRegistration('testbakery.com'))!, { force: true })
+    const after = await readRegistration('testbakery.com')
+    expect(after?.contactChange).toBeNull()
+    expect(after?.contactRejectedAtMs).toBeGreaterThan(0)
+    expect(after?.registrantContact).toEqual(EDITED)
+  })
+})
+
+describe('connecting a workspace’s name to a site (AGL-4040)', () => {
+  beforeEach(async () => {
+    mockStore.current.docs.set('hosts/host-2', { orgId: 'org-1', cname: 'oldname.com' })
+    mockStore.current.docs.set('hosts/host-3', { orgId: 'org-2' })
+  })
+
+  it('swaps out the site’s current domain, sending a name we sold back to the workspace', async () => {
+    await registrationRef('oldname.com').set(registrationDoc({ domain: 'oldname.com', hostId: 'host-2' }) as never)
+    await seed({ hostId: null })
+    const { effects, recorded } = effectsWith(fakeDriver())
+    const outcome = await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-2', {
+      uid: 'user-1',
+      email: null,
+    })
+    expect(outcome).toMatchObject({ ok: 'connected', replaced: 'oldname.com' })
+    expect(recorded.disconnects).toEqual(['oldname.com'])
+    expect(recorded.connects).toEqual(['testbakery.com'])
+    expect(await readRegistration('oldname.com')).toMatchObject({ hostId: null })
+    expect(await readRegistration('testbakery.com')).toMatchObject({ hostId: 'host-2', status: 'active' })
+  })
+
+  it('moves a name off the site it serves first, and refuses another workspace’s site', async () => {
+    await seed({ hostId: 'host-1' })
+    const { effects, recorded } = effectsWith(fakeDriver())
+    expect(
+      await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-3', { uid: 'u', email: null }),
+    ).toMatchObject({ ok: 'refused', code: 'unknown-site' })
+    mockStore.current.docs.set('hosts/host-2', { orgId: 'org-1' })
+    await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-2', { uid: 'u', email: null })
+    expect(recorded.disconnects).toEqual(['testbakery.com'])
+  })
+
+  it('changes nothing when the old domain will not release', async () => {
+    await seed({ hostId: null })
+    const { effects, recorded } = effectsWith(fakeDriver())
+    effects.disconnect = async () => false
+    expect(
+      await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-2', { uid: 'u', email: null }),
+    ).toMatchObject({ ok: 'refused', code: 'release-failed' })
+    expect(recorded.connects).toEqual([])
+    expect(await readRegistration('testbakery.com')).toMatchObject({ hostId: null })
+  })
+
+  it('disconnects a name, which stays the workspace’s', async () => {
+    await seed({ hostId: 'host-1' })
+    const { effects, recorded } = effectsWith(fakeDriver())
+    const next = await disconnectFromSite(effects, (await readRegistration('testbakery.com'))!, { uid: 'u', email: null })
+    expect(recorded.disconnects).toEqual(['testbakery.com'])
+    expect(next).toMatchObject({ hostId: null, status: 'active' })
   })
 })

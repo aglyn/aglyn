@@ -55,6 +55,19 @@ export const DOMAINS_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    type: 'domains.transferStuck',
+    label: 'A domain transfer in has not finished in two weeks',
+    description:
+      'A workspace paid to move a domain here from another registrar and the transfer is still pending after two weeks (AGL-4040). The sweep keeps reading it and refunds it if the registrar reports it failed; ask the registrar what it is waiting on.',
+    tier: 'should',
+    category: 'ops',
+    title: 'Transfer in pending two weeks: {{domain}}',
+    body: 'The transfer of {{domain}} (workspace {{orgId}}) is still pending at the registrar ({{reason}}).',
+    delivery: 'digest',
+    dedupeWindowMinutes: 7 * DAY,
+    defaultEnabled: true,
+  },
+  {
     type: 'domains.renewalFailedAtRegistrar',
     label: 'A paid domain renewal was refused by the registrar',
     description:
