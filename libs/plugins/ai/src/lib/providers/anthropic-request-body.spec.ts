@@ -24,7 +24,7 @@ import {
 } from './catalog'
 import { AI_CACHE_WRITE_HOUR_FACTOR, aiCacheWriteHourSum, aiCacheWriteHourSurchargeUsd } from './cache-write-hour'
 import { anthropicResultFrom, anthropicUsageFrom, buildAnthropicRequestBody } from './anthropic'
-import type { AiTool } from './contract'
+import { aiCacheMarkerTtls, type AiMessage, type AiSystemBlock, type AiTool } from './contract'
 
 const TOOL: AiTool = {
   name: 'submit',
@@ -131,9 +131,99 @@ describe('the cache lifetime a request asks for', () => {
     expect(system[1]['cache_control']).toBeUndefined()
   })
 
-  it('asks for the hour on every breakpoint when the request does', () => {
+  it('asks for the hour on every shared breakpoint when the request does', () => {
     const system = body('claude-sonnet-5', { cacheTtl: '1h' })['system'] as Array<Record<string, unknown>>
     expect(system[0]['cache_control']).toEqual({ type: 'ephemeral', ttl: '1h' })
+  })
+})
+
+/** Every `cache_control` of a wire body in the API's prefix order (tools, system, messages), `null`-free. */
+function wireMarkers(sent: Record<string, unknown>): Array<Record<string, unknown>> {
+  const tools = (sent['tools'] ?? []) as Array<Record<string, unknown>>
+  const system = (sent['system'] ?? []) as Array<Record<string, unknown>>
+  const messages = sent['messages'] as Array<{ content: unknown }>
+  const blocks = messages.flatMap((turn) => (Array.isArray(turn.content) ? (turn.content as Array<Record<string, unknown>>) : []))
+  return [...tools, ...system, ...blocks]
+    .map((block) => block['cache_control'] as Record<string, unknown> | undefined)
+    .filter((mark): mark is Record<string, unknown> => Boolean(mark))
+}
+
+const HOUR = { type: 'ephemeral', ttl: '1h' }
+const FIVE_MINUTES = { type: 'ephemeral' }
+
+describe('each job’s own markers keep five minutes, the shared prompt the route’s hour (AGL-4050)', () => {
+  const PLAN_SYSTEM: AiSystemBlock[] = [
+    { text: 'doctrine', cacheBreakpoint: true },
+    { text: 'plan rules', cacheBreakpoint: true },
+    { text: 'Acme Roofing, a roofer', cacheBreakpoint: true, site: true },
+    { text: 'inventory', volatile: true },
+  ]
+  const turns: AiMessage[] = [
+    { role: 'user', content: 'brief' },
+    { role: 'assistant', content: 'Called look_up_site_inventory.' },
+    { role: 'user', content: 'the lookup answer' },
+  ]
+
+  it('sends the shared markers at the hour and the site’s block and the conversation at five minutes', () => {
+    const sent = body('claude-sonnet-5-5', { system: PLAN_SYSTEM, messages: turns, cacheConversation: true, cacheTtl: '1h' })
+    const system = sent['system'] as Array<Record<string, unknown>>
+    expect(system.map((block) => block['cache_control'] ?? null)).toEqual([HOUR, HOUR, FIVE_MINUTES, null])
+    expect(wireMarkers(sent)).toEqual([HOUR, HOUR, FIVE_MINUTES, FIVE_MINUTES])
+  })
+
+  it('keeps every marker at five minutes on a route that asks for no hour, as before', () => {
+    const sent = body('claude-sonnet-5-5', { system: PLAN_SYSTEM, messages: turns, cacheConversation: true })
+    expect(wireMarkers(sent)).toEqual([FIVE_MINUTES, FIVE_MINUTES, FIVE_MINUTES, FIVE_MINUTES])
+  })
+
+  it('changes only cache_control: the same bytes with the hour and without it', () => {
+    const strip = (sent: Record<string, unknown>) =>
+      JSON.stringify(sent, (key, value) => (key === 'cache_control' ? undefined : value))
+    const request = { system: PLAN_SYSTEM, messages: turns, cacheConversation: true }
+    expect(strip(body('claude-sonnet-5-5', { ...request, cacheTtl: '1h' }))).toBe(strip(body('claude-sonnet-5-5', request)))
+  })
+
+  it('downgrades a shared marker that would follow a five-minute one, which the API refuses', () => {
+    // The runtime refuses this order before an adapter sees it (a site's
+    // block closes the cached span); the adapter holds the rule on its own.
+    const system: AiSystemBlock[] = [
+      { text: 'doctrine', cacheBreakpoint: true },
+      { text: 'Acme Roofing', cacheBreakpoint: true, site: true },
+      { text: 'rules after the site', cacheBreakpoint: true },
+    ]
+    const sent = body('claude-sonnet-5-5', { system, cacheTtl: '1h' })
+    expect(wireMarkers(sent)).toEqual([HOUR, FIVE_MINUTES, FIVE_MINUTES])
+  })
+
+  it('never sends an hour-long marker after a five-minute one, for any order of markers', () => {
+    const kinds: Array<AiSystemBlock | null> = [
+      null,
+      { text: 'shared', cacheBreakpoint: true },
+      { text: 'site', cacheBreakpoint: true, site: true },
+      { text: 'plain' },
+    ]
+    let checked = 0
+    for (const a of kinds) for (const b of kinds) for (const c of kinds) {
+      const system = [a, b, c].filter((block): block is AiSystemBlock => block !== null)
+      for (const cacheConversation of [false, true]) {
+        for (const cacheTtl of [undefined, '1h'] as const) {
+          const request = { system, messages: turns, cacheConversation, ...(cacheTtl ? { cacheTtl } : {}) }
+          const marks = wireMarkers(body('claude-sonnet-5-5', request)).map((mark) => (mark['ttl'] === '1h' ? '1h' : '5m'))
+          const firstShort = marks.indexOf('5m')
+          expect([request, firstShort < 0 ? [] : marks.slice(firstShort).filter((ttl) => ttl === '1h')]).toEqual([request, []])
+          // Every shared marker ahead of the first job marker keeps the route's lifetime.
+          const ttls = aiCacheMarkerTtls(request)
+          const firstJob = system.findIndex((block) => block.site && block.cacheBreakpoint)
+          system.forEach((block, index) => {
+            if (block.cacheBreakpoint && !block.site && (firstJob < 0 || index < firstJob)) {
+              expect([request, index, ttls.system[index]]).toEqual([request, index, cacheTtl ?? '5m'])
+            }
+          })
+          checked += 1
+        }
+      }
+    }
+    expect(checked).toBe(4 * 4 * 4 * 2 * 2)
   })
 })
 
@@ -198,15 +288,15 @@ describe('a request that caches its conversation (AGL-3809)', () => {
     expect(sent.map((turn) => turn['content'])).toEqual(['brief', 'Called look_up_site_inventory.', 'the lookup answer'])
   })
 
-  it('marks the last block of the last turn alone, at the system breakpoints’ lifetime', () => {
-    const sent = body('claude-sonnet-5-5', { messages: turns, cacheConversation: true, cacheTtl: '1h' })['messages'] as Array<{
-      content: Array<Record<string, unknown>>
-    }>
-    expect(sent.map((turn) => turn.content.map((block) => block['cache_control'] ?? null))).toEqual([
+  it('marks the last block of the last turn alone, at five minutes while the system keeps the hour (AGL-4050)', () => {
+    const sent = body('claude-sonnet-5-5', { messages: turns, cacheConversation: true, cacheTtl: '1h' })
+    const messages = sent['messages'] as Array<{ content: Array<Record<string, unknown>> }>
+    expect(messages.map((turn) => turn.content.map((block) => block['cache_control'] ?? null))).toEqual([
       [null],
       [null],
-      [{ type: 'ephemeral', ttl: '1h' }],
+      [{ type: 'ephemeral' }],
     ])
+    expect((sent['system'] as Array<Record<string, unknown>>)[0]['cache_control']).toEqual({ type: 'ephemeral', ttl: '1h' })
   })
 
   it('renders a turn the same bytes on the call that marked it and on the next, where it is no longer last', () => {

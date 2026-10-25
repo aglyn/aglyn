@@ -38,6 +38,7 @@ jest.mock('firebase-admin/firestore', () => ({
 import { UNTRUSTED_TEXT_RULE, UNTRUSTED_TEXT_TAG } from '@aglyn/shared-util-tools/untrusted-text'
 import type { AiJob, AiJobItemLedger } from '../model/ai-jobs.types'
 import {
+  AI_SITE_IMPORT_LEFT_OUT_COPY,
   aiSiteImportInventory,
   aiSiteImportLedger,
   aiSiteImportWaveStarted,
@@ -321,6 +322,39 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
     expect(result.review).toEqual({ reason: 'wave', message: AI_SITE_IMPORT_COPY.robots(HARBOR_DOMAIN), findings: [] })
     expect(asked).toEqual([`${HARBOR_ORIGIN}/robots.txt`])
     expect(result.siteImport).toBeUndefined()
+  })
+
+  it('leaves out a page the site’s bot protection now turns away as blocked, saying how to let AglynBot in', async () => {
+    const state = harborState()
+    const ledger = aiSiteImportLedger(state)
+    const step = createAiJobImportStep(
+      deps({ crawlSeams: { fetch: harborFetch([], { [`${HARBOR_ORIGIN}/about`]: { status: 429, contentType: 'text/html', body: '' } }) } }),
+    )
+    const result = await run(step, importJob({ siteImport: state, items: ledger }))
+    expect(result.siteImport?.pages.find((page) => page.path === '/about')?.refused).toBe('blocked')
+    expect(result.items?.find((row) => row.label === 'about')).toMatchObject({ status: 'skipped', note: AI_SITE_IMPORT_LEFT_OUT_COPY.blocked })
+  })
+
+  it('lists a page the site’s bot protection turned away on the read as blocked, not unreadable', async () => {
+    const step = createAiJobImportStep(
+      deps({ crawlSeams: { fetch: harborFetch([], { [`${HARBOR_ORIGIN}/team`]: { status: 429, contentType: 'text/html', body: '' } }) } }),
+    )
+    const result = await run(step, importJob())
+    expect(result.siteImport?.leftOut).toContainEqual({ url: `${HARBOR_ORIGIN}/team`, path: '/team', title: '', reason: 'blocked' })
+    expect(result.siteImport?.leftOutCount.blocked).toBe(1)
+    expect(result.siteImport?.leftOutCount.unreadable).toBeUndefined()
+  })
+
+  it('says how to let AglynBot in when the site’s bot protection turns every page away, and that the site is down otherwise', async () => {
+    const answering = (status: number) => (url: string, options: Parameters<ReturnType<typeof harborFetch>>[1]) =>
+      url.endsWith('/robots.txt') || url.endsWith('/sitemap.xml')
+        ? harborFetch()(url, options)
+        : harborFetch([], { [url]: { status, contentType: 'text/html', body: '' } })(url, options)
+    const blocked = await run(createAiJobImportStep(deps({ crawlSeams: { fetch: answering(403) } })), importJob())
+    expect(blocked.review).toEqual({ reason: 'wave', message: AI_SITE_IMPORT_COPY.blocked(HARBOR_DOMAIN), findings: [] })
+    expect(blocked.siteImport).toBeUndefined()
+    const down = await run(createAiJobImportStep(deps({ crawlSeams: { fetch: answering(500) } })), importJob())
+    expect(down.review).toEqual({ reason: 'wave', message: AI_SITE_IMPORT_COPY.nothing(HARBOR_DOMAIN), findings: [] })
   })
 
   it('refuses a lookalike address outright', async () => {

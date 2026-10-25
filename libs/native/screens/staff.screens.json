@@ -9262,7 +9262,7 @@
           {
             "key": "domain-purchased",
             "name": "Domain purchased",
-            "description": "Sent to a workspace's owners and admins when a domain bought for one of its sites is registered.",
+            "description": "Sent to a workspace's owners and admins when a domain it bought, for one of its sites or for the workspace, is registered.",
             "deliveredBy": "resend",
             "editable": true
           },
@@ -9319,6 +9319,41 @@
             "key": "domain-transfer-code",
             "name": "Domain transfer code requested",
             "description": "Tells a workspace’s owners that someone asked for the code that moves a bought domain to another registrar.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-transfer-in-completed",
+            "name": "Domain transfer in completed",
+            "description": "Sent when a domain the workspace moved here from another registrar has arrived, with its new expiry date.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-transfer-in-failed",
+            "name": "Domain transfer in failed",
+            "description": "Sent when a domain the workspace paid to move here could not be transferred, and the charge was refunded.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "pos-hardware-order-received",
+            "name": "Card reader order received",
+            "description": "Sent to the person who ordered card readers or accessories from the POS hardware shop, once the payment goes through.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "pos-hardware-order-shipped",
+            "name": "Card reader order shipped",
+            "description": "Sent when a card reader order from the POS hardware shop ships, with the carrier and a tracking link.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "pos-hardware-order-delivered",
+            "name": "Card reader order delivered",
+            "description": "Sent when a card reader order from the POS hardware shop is delivered, with the way to set the reader up at a register.",
             "deliveredBy": "resend",
             "editable": true
           }
@@ -15250,8 +15285,13 @@
               "sample": "alex@testbakery.com"
             },
             {
+              "name": "domain.whereLine",
+              "description": "Where the new domain is going, in a sentence: being connected to its site, or into the workspace with no site yet",
+              "sample": "It is being connected to Test Bakery. It usually serves within a few minutes, with its security certificate set up for you. There are no DNS records to add."
+            },
+            {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15298,7 +15338,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15345,7 +15385,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15397,7 +15437,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15444,7 +15484,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15501,7 +15541,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15548,7 +15588,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15585,7 +15625,7 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
@@ -15627,8 +15667,263 @@
             },
             {
               "name": "domain.manageUrl",
-              "description": "The site's Custom Domain page",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-transfer-in-completed": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.amount",
+              "description": "An amount charged",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.expiresOn",
+              "description": "The date the domain expires",
+              "sample": "Oct 19, 2027"
+            },
+            {
+              "name": "domain.renewalPrice",
+              "description": "The yearly renewal price",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-transfer-in-failed": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.failure",
+              "description": "Why it did not happen, in a sentence",
+              "sample": "Someone else registered it a moment before your order reached the registrar."
+            },
+            {
+              "name": "domain.refund",
+              "description": "What was refunded, or that nothing was charged, in a sentence",
+              "sample": "We refunded $15.99 to the card it was charged to. A refund usually reaches the card within 5 to 10 business days."
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "Where the domain is managed: its site's Custom Domain page, or the workspace's Domains page for a domain no site uses",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-received": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.total",
+              "description": "What was charged, shipping and tax included",
+              "sample": "$123.45"
+            },
+            {
+              "name": "order.shipTo",
+              "description": "The name and address it ships to",
+              "sample": "Alex Test\n12 Main St\nSpringfield, IL 62701"
+            },
+            {
+              "name": "order.shippingMethod",
+              "description": "The shipping speed chosen",
+              "sample": "Standard shipping"
+            },
+            {
+              "name": "order.ordersUrl",
+              "description": "The Hardware card, where the order and its status are",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-shipped": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.shipTo",
+              "description": "The name and address it ships to",
+              "sample": "Alex Test\n12 Main St\nSpringfield, IL 62701"
+            },
+            {
+              "name": "order.carrier",
+              "description": "The carrier delivering the parcel",
+              "sample": "UPS"
+            },
+            {
+              "name": "order.trackingNumber",
+              "description": "The parcel’s tracking number",
+              "sample": "1Z999AA10123456784"
+            },
+            {
+              "name": "order.trackingUrl",
+              "description": "The carrier’s tracking page for the parcel",
+              "sample": "https://www.ups.com/track?tracknum=1Z999AA10123456784"
+            },
+            {
+              "name": "order.ordersUrl",
+              "description": "The Hardware card, where the order and its status are",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-delivered": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.setupUrl",
+              "description": "The POS devices card, where a reader is added to a register",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-devices"
+            },
+            {
+              "name": "order.ordersUrl",
+              "description": "The Hardware card, where the order and its status are",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
             },
             {
               "name": "brand.productName",
@@ -23777,6 +24072,28 @@
               "label": "Early access: Account-holder ad audiences",
               "kind": "select",
               "initial": "{item.releaseFlags.release_ad_audience_sync}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_site_starters",
+              "label": "Early access: Site starters from the marketplace",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_site_starters}",
               "when": "staff.super",
               "options": [
                 {

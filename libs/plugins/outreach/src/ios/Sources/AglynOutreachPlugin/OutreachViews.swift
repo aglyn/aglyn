@@ -222,11 +222,11 @@ struct SequenceDetail: View {
             PropertyRow("Sends from", mailboxes.first { $0.id == row.mailboxID }.map { $0.sendAs ?? $0.email })
             HStack {
               if row.status == "draft" || row.status == "paused" {
-                Button("Activate") { confirm = ("Activate this sequence?", "activate") }.buttonStyle(.borderedProminent)
+                Button("Activate") { confirm = ("Activate this sequence?", "activate") }.buttonStyle(.aglynProminent)
               }
-              if row.status == "active" { Button("Pause") { confirm = ("Pause this sequence?", "pause") }.buttonStyle(.bordered) }
-              if row.status != "archived" { Button("Archive") { confirm = ("Archive this sequence?", "archive") }.buttonStyle(.bordered) }
-              if row.status == "active" { Button("Enroll people") { enrolling = true }.buttonStyle(.bordered).accessibilityIdentifier("sequence-enroll") }
+              if row.status == "active" { Button("Pause") { confirm = ("Pause this sequence?", "pause") }.buttonStyle(.aglynSecondary) }
+              if row.status != "archived" { Button("Archive") { confirm = ("Archive this sequence?", "archive") }.buttonStyle(.aglynSecondary) }
+              if row.status == "active" { Button("Enroll people") { enrolling = true }.buttonStyle(.aglynSecondary).accessibilityIdentifier("sequence-enroll") }
             }
           }
           Section("Steps") {

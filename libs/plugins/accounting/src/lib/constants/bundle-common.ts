@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginPermission } from '@aglyn/aglyn'
+import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 
 /** Stable plugin id: persisted in `org.enabledPlugins`; never rename. */
 export const ACCOUNTING_PLUGIN_ID = 'accounting'
@@ -39,6 +39,7 @@ export const ACCOUNTING_PERMISSIONS: readonly PluginPermission[] = [
     description:
       'Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.',
     defaults: { admin: true, editor: false, viewer: false },
+    groupLabel: 'Accounting',
   },
 ]
 

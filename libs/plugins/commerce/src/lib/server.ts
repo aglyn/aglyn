@@ -430,6 +430,12 @@ export function registerCommerceConsoleApi(): void {
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/
   // subscriptions ride the platform webhook via the hook registry.
   registerBillingWebhookHandler(commerceBillingWebhookHandler)
+  // A paid card-reader order from the POS hardware shop (AGL-4038), on the
+  // same platform webhook: its own handler, self-selecting on the session's
+  // `metadata.type`, so the storefront sections above never see it.
+  registerBillingWebhookHandler(async (event) =>
+    (await import('./server/pos-hardware-webhook')).posHardwareBillingWebhookHandler(event),
+  )
   // Cancel + stock release in one transaction (AGL-1808). Server-side because
   // the release depends on the transition rule, and a client write could not
   // re-ask it under the same lock that flips the status.
@@ -462,6 +468,12 @@ export function registerCommerceConsoleApi(): void {
   )
   registerPluginApiRoute('commerce/products/stock', async (req, res) =>
     (await import('./server/products-write')).productStockHandler(req, res),
+  )
+  // A staff walk-in from the Reservations card and the native apps
+  // (AGL-4046): availability re-asked inside the transaction that writes, so
+  // two staff cannot hand out the last unit at once. Loaded on first call.
+  registerPluginApiRoute('commerce/reservations/walk-in', async (req, res) =>
+    (await import('./server/reservation-walk-in')).reservationWalkInHandler(req, res),
   )
   // The products list's Duplicate and Delete for the native apps (AGL-3841):
   // the console's own copy and soft delete, with the site-wide cache drop.
@@ -544,6 +556,26 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
   registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
+  // The POS hardware shop (AGL-4038): the Hardware card's catalog, Checkout
+  // and order list, gated like a sale and hidden until the deployment prices
+  // it; and the staff page's orders, which name no site. Loaded on first call.
+  registerPluginApiRoute('commerce/pos-hardware', async (req, res) =>
+    (await import('./server/pos-hardware')).posHardwareHandler(req, res),
+  )
+  // A store's card reader start-up screen (AGL-4048): the POS devices card's
+  // setting, gated like a sale, and the staff page's platform default. Both
+  // draw images, so each loads with its first call.
+  registerPluginApiRoute('commerce/pos-reader-splash', async (req, res) =>
+    (await import('./server/pos-reader-splash')).posReaderSplashHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/admin/reader-splash', {
+    web: async (request) =>
+      (await import('./server/pos-reader-splash-admin')).posReaderSplashAdmin(request),
+  })
+  registerPluginApiRoute('commerce/admin/hardware-orders', {
+    web: async (request) =>
+      (await import('./server/pos-hardware-admin')).posHardwareAdminOrders(request),
+  })
   // The self-service kiosk (AGL-3623): a register's paired screen where the
   // customer orders and pays. Its device token, never a staff session; the
   // register's queue of "pay at counter" orders is gated like a sale.

@@ -55,8 +55,24 @@ describe('the section a link names', () => {
     // A name one section has exactly is that section, though another holds its words too.
     expect(aiPageLinkSection('contact form', ['contact form', 'contact form and map'])).toBe(0)
     expect(aiPageLinkSection('#', SECTIONS)).toBeNull()
+    // Two titles holding the words is still two (AGL-4032).
+    expect(aiPageLinkSection('#builder', ['Site builder: a form', 'Invitation builder: a form'])).toBeNull()
     expect(aiPageLinkSection('   ', SECTIONS)).toBeNull()
     expect(aiPageLinkSection('practice areas', [])).toBeNull()
+  })
+
+  it('takes the section whose title holds the words when its description is not the only one that does (AGL-4032)', () => {
+    const sections = [
+      'Hero: h1 headline, short pitch and a button to the invitation builder',
+      'How it works: choose a template, fill in details and photos, share the private link',
+      'Invitation builder: create invitation form beside a live preview panel, with a create-invitation button',
+      'Closing call to action to start creating an invitation',
+    ]
+    expect(aiPageLinkSection('#builder', sections)).toBe(2)
+    expect(aiPageLinkSection('invitation builder', sections)).toBe(2)
+    expect(aiPageLinkTarget({ props: { href: '#builder' } }, sections)).toEqual({ kind: 'section', section: 2 })
+    // No title holds it, so it is still nobody's.
+    expect(aiPageLinkSection('#button', sections)).toBeNull()
   })
 
   it('reads an href as an anchor only when it is nothing but a fragment', () => {

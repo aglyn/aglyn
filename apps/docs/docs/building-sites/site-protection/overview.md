@@ -8,6 +8,12 @@ description: Password-protect pages, design custom error pages, and put your sit
 
 Control who can see your pages and what visitors see when something's not available.
 
+:::tip Making the whole site private?
+There's no single switch for it. [Make your site private](make-your-site-private.md)
+compares maintenance mode, hiding from search, page passwords and members-only pages,
+by who should still get in.
+:::
+
 :::info Plan availability
 Included on **every plan**. Per-page visibility, page passwords, custom error pages and
 maintenance mode are not tier-gated.
@@ -47,6 +53,7 @@ Flip your site into **maintenance mode** to show a designed 503 while you work, 
 it back when you're ready.
 
 :::tip How-tos
+- [Make your site private](make-your-site-private.md)
 - [Password-protect a page](password-a-screen.md)
 - [Design custom error pages](error-screens.md)
 - [Maintenance mode](maintenance-mode.md)

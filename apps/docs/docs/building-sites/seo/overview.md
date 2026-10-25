@@ -342,7 +342,8 @@ per-page visibility cannot.
 :::caution `noindex` is a request, not access control
 Both controls ask search engines not to list a page. Well-behaved crawlers honor that;
 nothing stops a person with the URL. If a page must be genuinely inaccessible, use
-[site protection](../site-protection/overview.md) instead.
+[site protection](../site-protection/overview.md) instead, or see
+[Make your site private](../site-protection/make-your-site-private.md) for the whole site.
 :::
 
 Walking through a staged launch end to end — coming-soon page, hidden site, signup
