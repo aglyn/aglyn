@@ -331,7 +331,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  WorkspaceBrandTheme(services, dark, accent) {
+  // A phone (never the desktop's narrow window) draws the brand's bold look in the Aglyn theme (AGL-3990).
+  WorkspaceBrandTheme(services, dark, accent, phone = !wide && !compactChrome) {
   val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
   // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
   val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
@@ -638,10 +639,20 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
 }
 
-/** The account's theme again with a white-label workspace's brand color as the accent, while you are in it. */
+/**
+ * The account's theme again with a white-label workspace's brand color as the accent, while you are in it; on a [phone],
+ * inside the phone's theme (`PhoneTheme`: the bold grounds in the brand's own look).
+ */
 @Composable
-private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, accent: androidx.compose.ui.graphics.Color?, content: @Composable () -> Unit) {
-  if (accent == null) content() else AccountTheme(services, dark, accent, content)
+private fun WorkspaceBrandTheme(
+  services: ShellServices,
+  dark: Boolean,
+  accent: androidx.compose.ui.graphics.Color?,
+  phone: Boolean = false,
+  content: @Composable () -> Unit,
+) {
+  val themed: @Composable () -> Unit = { com.aglyn.ui.PhoneTheme(enabled = phone, content = content) }
+  if (accent == null) themed() else AccountTheme(services, dark, accent, themed)
 }
 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */

@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
@@ -100,8 +101,13 @@ internal fun PhoneShell(
     return
   }
   val menuOpen = top == ShellNavigator.MENU && route == null
+  // In the phone's bold look the ground carries the brand's glow under the top bar (AGL-3990): the bars let it through.
+  val bold = com.aglyn.ui.LocalPhoneBold.current
+  val barGround = if (bold) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background
+  Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+  com.aglyn.ui.PhoneHeaderGlow()
   Scaffold(
-    containerColor = MaterialTheme.colorScheme.background,
+    containerColor = barGround,
     topBar = {
       Column {
         banner()
@@ -124,18 +130,14 @@ internal fun PhoneShell(
             if (assistTitle != null) TitleBarButton(assistTitle, "auto_awesome", "phone-ai") { chrome.toggleAiPanel(true) }
             AccountAvatar(user, size = 32, onClick = { chrome.accountMenu = true }, modifier = Modifier.padding(end = 8.dp).testTag("phone-account"))
           },
-          colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+          colors = TopAppBarDefaults.topAppBarColors(containerColor = barGround),
         )
         if (route == null) sections?.let { SectionTabs(it, top) { key -> navigator.select(key) } }
       }
     },
     bottomBar = {
-      NavigationBar(containerColor = shellColors.sidebar, modifier = Modifier.testTag("phone-tabs")) {
-        val colors = NavigationBarItemDefaults.colors(
-          indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-          selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-          selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+      NavigationBar(containerColor = com.aglyn.ui.phoneTabBarColor(shellColors.sidebar), modifier = Modifier.testTag("phone-tabs")) {
+        val colors = com.aglyn.ui.phoneTabItemColors()
         PhoneTab("Home", "home", top == ShellNavigator.HOME && settingsGroups == null, "tab-home", colors) { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
         busiest?.let { row ->
           PhoneTab(row.label, row.icon, top in row.keys, "tab-${row.rowId}", colors) { chrome.settingsMode = null; navigator.select(row.key) }
@@ -143,11 +145,7 @@ internal fun PhoneShell(
         NavigationBarItem(
           selected = false,
           onClick = { chrome.createMenu = true },
-          icon = {
-            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(40.dp, 32.dp)) {
-              Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("add"), contentDescription = "Create new") }
-            }
-          },
+          icon = { com.aglyn.ui.PhoneCreateTile() },
           modifier = Modifier.testTag("tab-create"),
         )
         inbox?.let { row ->
@@ -166,6 +164,7 @@ internal fun PhoneShell(
         body()
       }
     }
+  }
   }
   if (chrome.accountMenu) {
     ModalBottomSheet(onDismissRequest = { chrome.accountMenu = false }, modifier = Modifier.testTag("account-sheet")) {
@@ -203,7 +202,12 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneTab(
     selected = selected,
     onClick = onClick,
     icon = { Icon(AglynIcons.named(icon), contentDescription = null) },
-    label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+    label = {
+      Text(
+        label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        fontWeight = if (selected && com.aglyn.ui.LocalPhoneBold.current) FontWeight.Bold else null,
+      )
+    },
     colors = colors,
     modifier = Modifier.testTag(tag),
   )
@@ -219,7 +223,8 @@ private fun ScopeChip(services: ShellServices, workspace: WorkspaceState, prefs:
   Surface(
     onClick = onClick,
     shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    color = com.aglyn.ui.phoneChipColor(MaterialTheme.colorScheme.surfaceContainerHigh),
+    border = com.aglyn.ui.phoneChipBorder(),
     modifier = Modifier.widthIn(max = 260.dp).testTag("scope-chip").semantics { contentDescription = "$name. Switch workspace or site" },
   ) {
     Row(Modifier.padding(start = 6.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -252,7 +257,7 @@ private fun PhoneMenu(
     Text("Menu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
     // The AI panel and help sit here and under the scope chip, never floating over content.
     Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      assistTitle?.let { androidx.compose.material3.AssistChip(onClick = { chrome.toggleAiPanel(true) }, label = { Text(it) }, leadingIcon = { Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("menu-ai")) }
+      assistTitle?.let { androidx.compose.material3.AssistChip(onClick = { chrome.toggleAiPanel(true) }, label = { Text(it) }, leadingIcon = { com.aglyn.ui.AIGlyph(size = 18.dp) }, modifier = Modifier.testTag("menu-ai")) }
       Box {
         androidx.compose.material3.AssistChip(onClick = { helpOpen = true }, label = { Text("Help and docs") }, leadingIcon = { Icon(AglynIcons.named("help_outline"), null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("menu-help"))
         androidx.compose.material3.DropdownMenu(helpOpen, onDismissRequest = { helpOpen = false }) {
