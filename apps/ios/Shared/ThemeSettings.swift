@@ -120,7 +120,7 @@ enum ThemeApplier {
   /// The accent in force (Zach's decision 5, 10/18): your own accent when you picked one; else, in a white-label
   /// workspace with "Use each workspace's brand" on, its brand color (`brandingProfile.primaryColor`, which the console
   /// reads only for a white-label workspace); else the theme's. A picked or logo-derived workspace color never becomes
-  /// the accent: it colors the rail tile and the sidebar's wash only.
+  /// the accent, and washes no surface: it colors the workspace's rail tile only (AGL-3996).
   static func accent(_ prefs: AppThemePrefs, workspace: WorkspaceColor, whiteLabel: Bool) -> String? {
     if prefs.accent != "theme" { return prefs.accent }
     return whiteLabel && workspace.source == .brand && workspace.tintsApp ? workspace.color : nil
@@ -249,7 +249,7 @@ struct ThemeSettingsView: View {
       } header: {
         Text("Workspaces")
       } footer: {
-        Text("A white-label workspace's brand color tints the app while you are in it. Your pick for a workspace comes first, then its brand color, then a color from its logo.")
+        Text("A white-label workspace's brand color tints the app while you are in it. A workspace's rail tile shows your pick, else its brand color, else a color from its logo.")
       }
       Section {
         Toggle("Apply to this device only", isOn: $deviceOnly)

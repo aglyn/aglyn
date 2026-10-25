@@ -846,13 +846,13 @@
         "RECENT_ORGS_FIELD",
         "RECENT_ORGS_MAX",
         "RAIL_RECENT_ORGS",
-        "RAIL_ALL_WORKSPACES_AT_MOST",
         "STARRED_FIELD",
         "STARRED_MAX",
         "RECENTS_FIELD",
         "RECENTS_MAX",
         "WORKSPACE_COLORS_FIELD",
         "WORKSPACE_COLORS_MAX",
+        "WORKSPACE_STABLE_COLORS",
         "APP_THEME_FIELD",
         "ACCOUNT_ITEM_LABEL_MAX",
         "ACCOUNT_COLOR_PATTERN",
@@ -26540,6 +26540,63 @@
           ],
           [],
           []
+        ],
+        [
+          [
+            "w1",
+            "w2",
+            "w3",
+            "w4",
+            "w5",
+            "w6"
+          ],
+          [
+            "w6"
+          ],
+          [
+            "w6",
+            "w2"
+          ]
+        ],
+        [
+          [
+            "w1",
+            "w2"
+          ],
+          [],
+          []
+        ]
+      ]
+    },
+    "workspaceInitial": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "Juniper Street Co."
+        ],
+        [
+          "acme builders"
+        ],
+        [
+          "Northwind Construction"
+        ],
+        [
+          "  42 Studio"
+        ],
+        [
+          "Ölstudio Berlin"
+        ],
+        [
+          "— Aglyn"
+        ],
+        [
+          "🌿 Fern & Fig"
+        ],
+        [
+          ""
+        ],
+        [
+          "—"
         ]
       ]
     },
@@ -27606,6 +27663,94 @@
           null,
           null,
           false
+        ],
+        [
+          null,
+          null,
+          null,
+          true,
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          null,
+          null,
+          null,
+          false,
+          "Qm7tR2wXyZ4"
+        ],
+        [
+          null,
+          null,
+          "#445566",
+          true,
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          null,
+          null,
+          null,
+          true,
+          ""
+        ],
+        [
+          "#112233",
+          null,
+          null,
+          true,
+          "org-1"
+        ]
+      ]
+    },
+    "workspaceStableColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          "Qm7tR2wXyZ4"
+        ],
+        [
+          "org-1"
+        ],
+        [
+          "org-2"
+        ],
+        [
+          "org-3"
+        ],
+        [
+          "org-4"
+        ],
+        [
+          "org-5"
+        ],
+        [
+          "org-6"
+        ],
+        [
+          "org-7"
+        ],
+        [
+          "org-8"
+        ],
+        [
+          "a"
+        ],
+        [
+          "Ölstudio"
+        ],
+        [
+          "🌿"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          42
         ]
       ]
     },

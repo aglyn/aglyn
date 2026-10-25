@@ -125,7 +125,7 @@ private struct WorkspacePickerRow: View {
           AglynWorkspaceTile(
             name: org.name, logoURL: model.mediaURL(logo?.light, hostID: nil),
             darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org.id).color,
-            selected: false, size: 28)
+            selected: false, size: 28, initials: workspaceInitial(org.name))
           VStack(alignment: .leading, spacing: 1) {
             Text(org.name).font(AglynFont.body).lineLimit(1)
             if !subtitle.isEmpty { Text(subtitle).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1) }

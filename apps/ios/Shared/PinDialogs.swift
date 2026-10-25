@@ -141,10 +141,11 @@ struct PinTile: View {
 
   var body: some View {
     let logo = model.workspace?.orgLogos[orgID]
+    let name = model.workspace?.orgs.first { $0.id == orgID }?.name ?? "?"
     AglynWorkspaceTile(
-      name: model.workspace?.orgs.first { $0.id == orgID }?.name ?? "?", logoURL: model.mediaURL(logo?.light, hostID: nil),
+      name: name, logoURL: model.mediaURL(logo?.light, hostID: nil),
       darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(orgID).color, selected: false,
-      size: size)
+      size: size, initials: workspaceInitial(name))
   }
 }
 

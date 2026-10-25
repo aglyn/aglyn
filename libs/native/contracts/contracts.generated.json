@@ -8143,7 +8143,6 @@
     "status",
     "type"
   ],
-  "RAIL_ALL_WORKSPACES_AT_MOST": 8,
   "RAIL_RECENT_ORGS": 3,
   "RECENT_ORGS_FIELD": "recentOrgs",
   "RECENT_ORGS_MAX": 8,
@@ -11809,5 +11808,15 @@
   "TIME_ZONE_DEFAULT_LABEL": "UTC (default)",
   "WORKFLOW_MAX_STEPS": 25,
   "WORKSPACE_COLORS_FIELD": "workspaceColors",
-  "WORKSPACE_COLORS_MAX": 100
+  "WORKSPACE_COLORS_MAX": 100,
+  "WORKSPACE_STABLE_COLORS": [
+    "#0077AD",
+    "#6A4FD8",
+    "#A62BBF",
+    "#C2185B",
+    "#B4501A",
+    "#8A6A00",
+    "#2E7D5B",
+    "#00796B"
+  ]
 }
