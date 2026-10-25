@@ -23,6 +23,10 @@ import { claimAttempt } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
+import {
+  readLiveReservations,
+  reservationAvailabilityQuery,
+} from './reservation-availability-query'
 
 /**
  * Reserve a stay (AGL-310): server-side quote + availability check,
@@ -139,12 +143,14 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // "500 bookings in this resource's lifetime", but it is not zero, and the
     // sweep that would keep expired `pending` holds from filling those slots
     // is a scheduled job this change does not add (see the commit).
-    const availabilityQuery = hostRef
-      .collection('reservations')
-      .where('resourceId', '==', resourceId)
-      .where('checkOutDayMs', '>', checkInDayMs)
-      .orderBy('checkOutDayMs')
-      .limit(500)
+    //
+    // The query itself lives in `reservation-availability-query.ts`, shared
+    // with the staff walk-in route (AGL-4046) so both doors ask one question.
+    const availabilityQuery = reservationAvailabilityQuery(
+      hostRef.collection('reservations'),
+      resourceId,
+      checkInDayMs,
+    )
     const [resourceSnapshot, reservationsSnapshot, storeSnapshot] =
       await Promise.all([
         hostRef.collection('resources').doc(resourceId).get(),
@@ -172,17 +178,8 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // transaction cannot drift apart (AGL-2450). Two copies of a filter that
     // decides whether a room is free is exactly the shape where one of them
     // quietly stops matching the other.
-    const readLive = (snapshot: {
-      docs: any[]
-    }): CommerceModel.HostReservation[] =>
-      snapshot.docs.map((docSnapshot) => ({
-        checkInDayMs: Number(docSnapshot.get('checkInDayMs')),
-        checkOutDayMs: Number(docSnapshot.get('checkOutDayMs')),
-        status: String(
-          docSnapshot.get('status'),
-        ) as CommerceModel.ReservationStatus,
-        createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
-      })) as CommerceModel.HostReservation[]
+    // The staff walk-in route reads through the same helper (AGL-4046).
+    const readLive = readLiveReservations
     const now = Date.now()
     const live = readLive(reservationsSnapshot)
     if (
