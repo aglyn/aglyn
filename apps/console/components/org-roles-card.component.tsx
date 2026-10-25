@@ -18,9 +18,9 @@
 
 import {
   canManageOrg,
-  ORG_PERMISSIONS,
   type AglynOrgCustomRole,
 } from '@aglyn/aglyn'
+import { offeredOrgPermissions } from '@aglyn/aglyn/app-utils/org-permission-editor'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -36,11 +36,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { useReleaseFlags } from '../hooks/use-release-flags'
 
 interface RoleDraft extends AglynOrgCustomRole {
   $id?: string
@@ -63,6 +64,19 @@ export function OrgRolesCard() {
   const [roles, setRoles] = useState<Array<RoleDraft & { $id: string }>>([])
   const [editor, setEditor] = useState<RoleDraft | null>(null)
   const [busy, setBusy] = useState(false)
+  const releaseFlags = useReleaseFlags()
+  // The one catalog (AGL-4047): the core keys and every key the workspace's
+  // plugins declare, a plugin's keys only while it is on and released here.
+  const offered = useMemo(
+    () =>
+      offeredOrgPermissions({
+        org: currentOrg as { enabledPlugins?: string[] } | null,
+        isFlagOn: (flagKey) =>
+          (releaseFlags.flags as Record<string, { released?: boolean } | undefined>)[flagKey]?.released !== false,
+        staffBypass: releaseFlags.isStaff,
+      }),
+    [currentOrg, releaseFlags.flags, releaseFlags.isStaff],
+  )
 
   const request = useCallback(
     async (method: string, body?: Record<string, unknown>) => {
@@ -207,7 +221,7 @@ export function OrgRolesCard() {
             }
           />
           <Typography variant="subtitle2">{'Permissions'}</Typography>
-          {ORG_PERMISSIONS.map((definition) => {
+          {offered.map((definition) => {
             const value = editor?.permissions?.[definition.key]
             return (
               <FormControlLabel

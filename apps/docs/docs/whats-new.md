@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — digital waivers, signed before riders arrive (newest)
+## October 2026 — one permission catalog for custom roles (newest)
+
+- **[Custom roles cover plugin permissions](workspace-and-billing/teams-and-roles/custom-roles.md#create-a-custom-role)** —
+  a custom role can now grant or deny the permissions plugins add, such as
+  **Use the point of sale**, beside the organization's own. Each is listed
+  while its plugin is on for the workspace, and the server enforces what the
+  role says.
+
+## October 2026 — digital waivers, signed before riders arrive
 
 - **[Waivers](commerce-and-bookings/commerce/waivers.md)** — write your waiver once,
   in your own words, and riders sign it on their phones from a link or QR code, from

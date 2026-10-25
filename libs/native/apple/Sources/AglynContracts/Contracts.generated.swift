@@ -2939,28 +2939,66 @@ public struct OrderUnresolvedLine: Codable, Hashable, Sendable {
 }
 
 public struct OrgPermissionDeclaration: Codable, Hashable, Sendable {
-  public var description: String
+  public var defaults: OrgPermissionDeclarationDefaults?
+  public var description: String?
+  public var group: String?
+  public var groupLabel: String?
+  public var hostRoleDefaults: [String: Bool]?
   public var key: String
   public var label: String
-  public var roleDefaults: [String: Bool]
+  public var pluginId: String?
+  public var roleDefaults: [String: Bool]?
 
-  public init(description: String, key: String, label: String, roleDefaults: [String: Bool]) {
+  public init(defaults: OrgPermissionDeclarationDefaults? = nil, description: String? = nil, group: String? = nil, groupLabel: String? = nil, hostRoleDefaults: [String: Bool]? = nil, key: String, label: String, pluginId: String? = nil, roleDefaults: [String: Bool]? = nil) {
+    self.defaults = defaults
     self.description = description
+    self.group = group
+    self.groupLabel = groupLabel
+    self.hostRoleDefaults = hostRoleDefaults
     self.key = key
     self.label = label
+    self.pluginId = pluginId
     self.roleDefaults = roleDefaults
+  }
+}
+
+public struct OrgPermissionDeclarationDefaults: Codable, Hashable, Sendable {
+  public var admin: Bool
+  public var editor: Bool
+  public var viewer: Bool
+
+  public init(admin: Bool, editor: Bool, viewer: Bool) {
+    self.admin = admin
+    self.editor = editor
+    self.viewer = viewer
   }
 }
 
 public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var description: String
+  public var group: String?
   public var key: String
   public var label: String
   public var pluginId: String?
+  public var scope: OrgPermissionScope?
 
-  public init(description: String, key: String, label: String, pluginId: String? = nil) {
+  public init(description: String, group: String? = nil, key: String, label: String, pluginId: String? = nil, scope: OrgPermissionScope? = nil) {
     self.description = description
+    self.group = group
     self.key = key
+    self.label = label
+    self.pluginId = pluginId
+    self.scope = scope
+  }
+}
+
+public struct OrgPermissionGroup: Codable, Hashable, Sendable {
+  public var id: String
+  public var label: String
+  public var pluginId: String?
+
+  public init(id: String, label: String, pluginId: String? = nil) {
+    self.id = id
     self.label = label
     self.pluginId = pluginId
   }
@@ -2974,12 +3012,26 @@ public struct OrgPermissionLayer: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrgPermissionScope: String, Codable, CaseIterable, Hashable, Sendable {
+  case org = "org"
+  case site = "site"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct OrgRoleGrants: Codable, Hashable, Sendable {
   public var grants: [String: [String]]
+  public var groups: [OrgPermissionGroup]?
   public var permissions: [OrgPermissionEntry]
 
-  public init(grants: [String: [String]], permissions: [OrgPermissionEntry]) {
+  public init(grants: [String: [String]], groups: [OrgPermissionGroup]? = nil, permissions: [OrgPermissionEntry]) {
     self.grants = grants
+    self.groups = groups
     self.permissions = permissions
   }
 }

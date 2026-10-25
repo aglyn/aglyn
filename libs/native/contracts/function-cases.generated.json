@@ -55983,17 +55983,22 @@
             null
           ],
           "result": {
+            "accounting.manage": true,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": true,
             "billing.view": true,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": true,
             "org.auditLog": true,
             "org.settings": true,
+            "outreach.use": true,
             "plugins.install": true
           }
         },
@@ -56004,17 +56009,22 @@
             null
           ],
           "result": {
+            "accounting.manage": true,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": true,
             "billing.view": true,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": true,
             "org.auditLog": true,
             "org.settings": true,
+            "outreach.use": true,
             "plugins.install": true
           }
         },
@@ -56025,17 +56035,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": true
           }
         },
@@ -56046,17 +56061,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": false,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56067,17 +56087,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": false,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56088,17 +56113,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": false,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56116,17 +56146,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": true,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": true,
             "data.manage": false,
             "hosts.create": true,
             "hosts.delete": false,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": true
           }
         },
@@ -56146,17 +56181,22 @@
             }
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": true,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56171,17 +56211,22 @@
             }
           ],
           "result": {
+            "accounting.manage": true,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": true,
             "billing.view": true,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": true,
             "org.auditLog": true,
             "org.settings": true,
+            "outreach.use": true,
             "plugins.install": true
           }
         }
