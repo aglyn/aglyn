@@ -432,7 +432,7 @@ struct MediaLibrary: View {
         message: canEdit ? "Upload photos, videos and documents to use on your pages." : nil
       ) {
         if canEdit && model.search.isEmpty && model.type == nil && model.filters.count == 0 {
-          Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.borderedProminent)
+          Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.aglynProminent)
         }
       }
     case .ready(let items):
@@ -742,7 +742,7 @@ struct MediaDetailBody: View {
               try await api.saveDetails(item.id, fileName: name, alt: alt, description: details, tags: tags)
             }
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(!canEdit || !dirty || fileName.trimmed.isEmpty || runner.busy)
           .keyboardShortcut("s", modifiers: .command)
           .accessibilityIdentifier("media-save")
@@ -826,7 +826,7 @@ struct MediaDetailBody: View {
       } label: {
         Label("Copy link", systemImage: "link")
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
       .accessibilityIdentifier("media-copy-link")
     }
     Button {
@@ -841,14 +841,14 @@ struct MediaDetailBody: View {
     } label: {
       Label("Open file", systemImage: "arrow.down.circle")
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
     .accessibilityIdentifier("media-open")
     Button {
       replaceSource = .files
     } label: {
       Label("Replace file", systemImage: "arrow.triangle.2.circlepath")
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
     .disabled(!canEdit || runner.busy)
     .accessibilityIdentifier("media-replace")
     // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
@@ -859,7 +859,7 @@ struct MediaDetailBody: View {
       } label: {
         Label("Edit image", systemImage: "crop.rotate")
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
       .disabled(!canEdit || runner.busy)
       .accessibilityIdentifier("media-edit-image")
     }

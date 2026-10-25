@@ -135,7 +135,7 @@ struct DatasetImageInput: View {
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: AglynSpace.half) {
           Button(value.isEmpty ? "Choose from media" : "Change photo") { choosing = true }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .accessibilityIdentifier("image-choose")
           if !value.isEmpty {
             Button("Remove", role: .destructive) {
