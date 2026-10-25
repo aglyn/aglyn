@@ -24,11 +24,20 @@ import type { ModifierSelection } from './product-modifiers'
  * web register and the native Aglyn POS app — shares with
  * `POST /api/commerce/pos-offline-sync`.
  *
- * WHAT SELLS OFFLINE IS CASH, AND ONLY CASH.
+ * WHAT SELLS OFFLINE IS CASH, AND A CARD ON THE NATIVE APP'S OWN READER.
  *
- *  - Card tenders cannot: the reader, Tap to Pay, the typed card and the QR
- *    link are all server-driven Stripe payments, and Stripe does not take a
- *    server-driven card payment without the server.
+ *  - Cash, on every register client.
+ *  - A card, only on the native Aglyn POS app's own Stripe Terminal reader
+ *    (AGL-4039): Stripe's SDK stores the card on the device ("store and
+ *    forward") and forwards it once a connection returns. The app creates
+ *    the PaymentIntent itself, a destination charge with MANUAL capture and
+ *    NO application fee; the server captures it when the sale syncs and
+ *    sizes the platform fee then, exactly as for an online card sale. A bank
+ *    can still decline it at that point, after the customer left: the order
+ *    is then recorded unpaid and flagged, and the register says so.
+ *  - Every other card tender cannot: Tap to Pay on Android, the server's
+ *    smart readers, the typed card and the QR link are server-driven, and
+ *    Stripe does not take a server-driven card payment without the server.
  *  - Gift cards DO NOT, deliberately. A balance cannot be checked without the
  *    server, and a capped "allow it anyway" (Square's offer for cards) turns a
  *    short balance into a sale whose money nobody collected — discovered at
@@ -75,8 +84,39 @@ export const POS_OFFLINE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 /** How far ahead of the server a device clock may run before it is clamped. */
 export const POS_OFFLINE_CLOCK_SKEW_MS = 10 * 60 * 1000
 
-/** The one tender an offline sale takes. */
-export type PosOfflineTender = 'cash'
+/** What an offline sale was paid with. A sale with no tender is cash (the shape before AGL-4039). */
+export type PosOfflineTender = 'cash' | 'card'
+
+/** The default ceiling of one card sale rung offline, in cents, until the store sets its own. */
+export const POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT = 25_000
+
+/** The default ceiling of every card sale one device holds unsent, in cents. */
+export const POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT = 250_000
+
+/** Stripe's own ceiling for one payment collected offline (10,000 USD). */
+export const POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT = 1_000_000
+
+/** The `metadata[kind]` of a PaymentIntent the app created for a card rung offline. */
+export const POS_OFFLINE_CARD_INTENT_KIND = 'pos-offline'
+
+/**
+ * Where a card rung offline stands. `stored`: on the device, not yet sent to
+ * Stripe. `forwarded`: Stripe has it and it is authorized, waiting for the
+ * sync to capture it. `declined`: the bank refused it when it was forwarded.
+ * `failed`: Stripe could not take it at all (no PaymentIntent was made).
+ */
+export type PosOfflineCardForward = 'stored' | 'forwarded' | 'declined' | 'failed'
+
+/** The card side of a sale rung offline on the app's own reader. */
+export interface PosOfflineSaleCard {
+  forward: PosOfflineCardForward
+  /** Stripe's PaymentIntent id, once the SDK forwarded it. */
+  paymentIntentId?: string | null
+  brand?: string
+  last4?: string
+  /** The bank's or Stripe's words for a decline or failure. */
+  declineMessage?: string
+}
 
 /** Every tender the register turns off while offline, and why, in its words. */
 export const POS_OFFLINE_DISABLED_TENDERS: Readonly<Record<string, string>> = {
@@ -134,9 +174,14 @@ export interface PosOfflineSale {
   discountPct: number
   /** The totals the receipt printed and the customer paid. */
   totals: OrderTotals
+  /** Cash handed over; 0 for a card sale. */
   cashTenderedCents: number
   changeCents: number
   customer?: PosOfflineSaleCustomer
+  /** `card` only on the native app's own reader (AGL-4039); absent means cash. */
+  tender?: PosOfflineTender
+  /** The card, when `tender` is `card`. */
+  card?: PosOfflineSaleCard
 }
 
 /** What does not match, said on the order and back to the register. */
@@ -155,6 +200,8 @@ export type PosOfflineFlag =
   | 'late-sync'
   | 'clock-adjusted'
   | 'cashier-unverified'
+  | 'card-declined'
+  | 'card-not-charged'
 
 /** Each flag in the words the order and the register show. */
 export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
@@ -172,6 +219,8 @@ export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
   'late-sync': 'Synced more than a day after it was rung',
   'clock-adjusted': 'The device clock was off; the sale is dated when it synced',
   'cashier-unverified': 'The PIN-switched cashier could not be confirmed; the sale is under the signed-in member',
+  'card-declined': 'The card taken offline was declined when it was charged; the order is unpaid',
+  'card-not-charged': 'The card taken offline could not be charged; the order is unpaid',
 }
 
 /** A line whose stock went short when the sale synced. */
@@ -249,6 +298,20 @@ export interface PosOfflineKitRegister {
   openShiftId: string | null
 }
 
+/** What the native app needs to take a card offline on its own reader (AGL-4039). */
+export interface PosOfflineKitCard {
+  available: boolean
+  /** Why not, in the cashier's words, when it is not. */
+  unavailableReason?: string
+  /** The connected account the charge transfers to (a destination charge, as online). */
+  destination: string
+  currency: string
+  /** The ceiling of one card sale rung offline, in cents. */
+  maxSaleCents: number
+  /** The ceiling of every card sale one device holds unsent, in cents. */
+  maxStoredCents: number
+}
+
 /**
  * Everything a register needs to sell offline besides the catalog, from
  * `GET /api/commerce/pos-offline-sync?hostId=`: the server's own answers, so
@@ -268,6 +331,8 @@ export interface PosOfflineKit {
   maxDiscountPct: number
   requireOpenShift: boolean
   registers: PosOfflineKitRegister[]
+  /** Card sales on the app's own reader while offline; absent from a server that does not take them. */
+  card?: PosOfflineKitCard
   /** What the receipt prints at its head and foot. `logo` is the stored value. */
   receipt: {
     name: string
@@ -419,6 +484,12 @@ export function sanitizePosOfflineSale(
   const locationId = cleanId(input['locationId'])
   const assertion = bounded(input['cashierAssertion'], 2000)
   const orgId = bounded(input['orgId'], 128)
+  let card: PosOfflineSaleCard | undefined
+  if (input['tender'] === 'card') {
+    const read = sanitizePosOfflineSaleCard(input['card'])
+    if (!read) return { ok: false, error: 'The card of the sale cannot be read' }
+    card = read
+  }
   return {
     ok: true,
     sale: {
@@ -442,9 +513,10 @@ export function sanitizePosOfflineSale(
         totalCents: wholeCents(totals['totalCents']),
         feeCents: 0,
       },
-      cashTenderedCents: wholeCents(input['cashTenderedCents']),
-      changeCents: wholeCents(input['changeCents']),
+      cashTenderedCents: card ? 0 : wholeCents(input['cashTenderedCents']),
+      changeCents: card ? 0 : wholeCents(input['changeCents']),
       ...(Object.keys(customer).length ? { customer } : {}),
+      ...(card ? { tender: 'card' as const, card } : {}),
     },
   }
 }
@@ -472,4 +544,77 @@ export function posOfflineTotalsAddUp(sale: Pick<PosOfflineSale, 'lines' | 'disc
 /** The flags in the order and words the register lists them. */
 export function posOfflineFlagLabels(flags: readonly PosOfflineFlag[]): string[] {
   return flags.map((flag) => POS_OFFLINE_FLAG_LABELS[flag] ?? flag)
+}
+
+const CARD_FORWARDS: readonly PosOfflineCardForward[] = ['stored', 'forwarded', 'declined', 'failed']
+
+/** The card side of a queued sale, typed and bounded, or `null` when it cannot be read. */
+export function sanitizePosOfflineSaleCard(raw: unknown): PosOfflineSaleCard | null {
+  if (!raw || typeof raw !== 'object') return null
+  const input = raw as Record<string, unknown>
+  const forward = input['forward'] as PosOfflineCardForward
+  if (!CARD_FORWARDS.includes(forward)) return null
+  const intent = typeof input['paymentIntentId'] === 'string' ? input['paymentIntentId'].trim() : ''
+  if (intent && !/^pi_[A-Za-z0-9]{8,64}$/.test(intent)) return null
+  if (forward === 'forwarded' && !intent) return null
+  const brand = bounded(input['brand'], 24)
+  const last4 = typeof input['last4'] === 'string' && /^\d{4}$/.test(input['last4']) ? input['last4'] : ''
+  const declineMessage = bounded(input['declineMessage'], 300)
+  return {
+    forward,
+    ...(intent ? { paymentIntentId: intent } : {}),
+    ...(brand ? { brand } : {}),
+    ...(last4 ? { last4 } : {}),
+    ...(declineMessage ? { declineMessage } : {}),
+  }
+}
+
+/**
+ * Why a card cannot be taken offline for `totalCents`, in the cashier's
+ * words, or `null` when it can: the store turned it off, the sale is over
+ * the store's (or Stripe's) ceiling for one card, or the cards this device
+ * already holds unsent would pass the store's ceiling for all of them.
+ */
+export function posOfflineCardRefusal(input: {
+  card: Pick<PosOfflineKitCard, 'available' | 'unavailableReason' | 'maxSaleCents' | 'maxStoredCents'> | null | undefined
+  totalCents: number
+  storedCents: number
+}): string | null {
+  const card = input.card
+  if (!card) return 'Card sales offline need the register to connect once first.'
+  if (!card.available) return card.unavailableReason || 'Card sales offline are off for this store.'
+  const total = wholeCents(input.totalCents)
+  if (total <= 0) return 'There is nothing to charge.'
+  const perSale = Math.min(wholeCents(card.maxSaleCents), POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT)
+  if (total > perSale) return `Offline, a card sale can be up to ${dollars(perSale)}. Take cash, or charge it when you are back online.`
+  const stored = wholeCents(input.storedCents)
+  const ceiling = wholeCents(card.maxStoredCents)
+  if (stored + total > ceiling) {
+    return `This register already holds ${dollars(stored)} in cards to charge, and offline it can hold up to ${dollars(ceiling)}. Take cash, or wait for the connection.`
+  }
+  return null
+}
+
+/**
+ * What the app writes on the PaymentIntent it creates for a card rung
+ * offline: the sale key (the order's id once it syncs) and where it was rung,
+ * so the server can match the charge to the sale even if the sale's own sync
+ * never arrives.
+ */
+export function posOfflineCardIntentMetadata(
+  sale: Pick<PosOfflineSale, 'saleKey' | 'hostId' | 'orgId' | 'registerId'>,
+): Record<string, string> {
+  return {
+    kind: POS_OFFLINE_CARD_INTENT_KIND,
+    saleKey: sale.saleKey,
+    hostId: sale.hostId,
+    orgId: sale.orgId,
+    registerId: sale.registerId,
+  }
+}
+
+function dollars(cents: number): string {
+  const whole = Math.floor(cents / 100)
+  const rest = cents % 100
+  return `$${whole.toLocaleString('en-US')}.${String(rest).padStart(2, '0')}`
 }

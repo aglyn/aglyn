@@ -2307,8 +2307,23 @@ data class PosKioskVariant(
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineCardForwardSerializer::class)
+enum class PosOfflineCardForward(val raw: String) {
+    DECLINED("declined"),
+    FAILED("failed"),
+    FORWARDED("forwarded"),
+    STORED("stored"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineCardForwardSerializer :
+    RawEnumSerializer<PosOfflineCardForward>("com.aglyn.contracts.PosOfflineCardForward", PosOfflineCardForward.entries, PosOfflineCardForward.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosOfflineFlagSerializer::class)
 enum class PosOfflineFlag(val raw: String) {
+    CARD_DECLINED("card-declined"),
+    CARD_NOT_CHARGED("card-not-charged"),
     CASH_SHORT("cash-short"),
     CASHIER_UNVERIFIED("cashier-unverified"),
     CLOCK_ADJUSTED("clock-adjusted"),
@@ -2332,6 +2347,7 @@ internal object PosOfflineFlagSerializer :
 @Serializable
 data class PosOfflineKit(
     val available: Boolean,
+    val card: PosOfflineKitCard? = null,
     val hostId: String,
     val issuedAtMs: Double,
     val maxDiscountPct: Double,
@@ -2342,6 +2358,16 @@ data class PosOfflineKit(
     val tax: PosOfflineKitTax,
     val unavailableReason: String? = null,
     val v: Long,
+)
+
+@Serializable
+data class PosOfflineKitCard(
+    val available: Boolean,
+    val currency: String,
+    val destination: String,
+    val maxSaleCents: Double,
+    val maxStoredCents: Double,
+    val unavailableReason: String? = null,
 )
 
 @Serializable
@@ -2414,6 +2440,7 @@ internal object PosOfflineRefusalSerializer :
 
 @Serializable
 data class PosOfflineSale(
+    val card: PosOfflineSaleCard? = null,
     val cashierAssertion: String? = null,
     val cashTenderedCents: Double,
     val changeCents: Double,
@@ -2428,8 +2455,18 @@ data class PosOfflineSale(
     val shiftId: String? = null,
     val signedInUid: String,
     val soldAtMs: Double,
+    val tender: PosOfflineTender? = null,
     val totals: OrderTotals,
     val v: Long,
+)
+
+@Serializable
+data class PosOfflineSaleCard(
+    val brand: String? = null,
+    val declineMessage: String? = null,
+    val forward: PosOfflineCardForward,
+    val last4: String? = null,
+    val paymentIntentId: String? = null,
 )
 
 @Serializable
@@ -2486,6 +2523,17 @@ data class PosOfflineSyncRequest(
 data class PosOfflineSyncResponse(
     val results: List<PosOfflineSaleOutcome>,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineTenderSerializer::class)
+enum class PosOfflineTender(val raw: String) {
+    CARD("card"),
+    CASH("cash"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineTenderSerializer :
+    RawEnumSerializer<PosOfflineTender>("com.aglyn.contracts.PosOfflineTender", PosOfflineTender.entries, PosOfflineTender.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosReceiptChannelSerializer::class)
@@ -3425,19 +3473,23 @@ internal data class ContractValuesPart5(
     @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
+    @SerialName("POS_OFFLINE_CARD_INTENT_KIND") val posOfflineCardIntentKind: String,
+    @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT") val posOfflineCardMaxSaleCentsDefault: Long,
+    @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT") val posOfflineCardMaxSaleCentsLimit: Long,
+    @SerialName("POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT") val posOfflineCardMaxStoredCentsDefault: Long,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
     @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
-    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
-    @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
-    @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
-    @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
+    @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
+    @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
+    @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRINTER_BRAND_LABELS") val printerBrandLabels: Map<String, String>,
     @SerialName("PRINTER_BRANDS") val printerBrands: List<PrinterBrand>,
@@ -3482,14 +3534,14 @@ internal data class ContractValuesPart6(
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
-    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
-    @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
-    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
-    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
+    @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
+    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
+    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
@@ -3758,15 +3810,19 @@ class ContractValues internal constructor(
     val posKioskUnlockLockoutMs: Double get() = part5.posKioskUnlockLockoutMs
     val posKioskUnlockMaxAttempts: Long get() = part5.posKioskUnlockMaxAttempts
     val posKioskUnlockTtlMs: Double get() = part5.posKioskUnlockTtlMs
+    val posOfflineCardIntentKind: String get() = part5.posOfflineCardIntentKind
+    val posOfflineCardMaxSaleCentsDefault: Long get() = part5.posOfflineCardMaxSaleCentsDefault
+    val posOfflineCardMaxSaleCentsLimit: Long get() = part5.posOfflineCardMaxSaleCentsLimit
+    val posOfflineCardMaxStoredCentsDefault: Long get() = part5.posOfflineCardMaxStoredCentsDefault
     val posOfflineClockSkewMs: Double get() = part5.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part5.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part5.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part5.posOfflineLateSyncMs
     val posOfflineMaxAgeMs: Double get() = part5.posOfflineMaxAgeMs
-    val posOfflineSaleMaxLines: Long get() = part5.posOfflineSaleMaxLines
-    val posOfflineSyncBatchMax: Long get() = part5.posOfflineSyncBatchMax
-    val posOfflineSyncRoute: String get() = part5.posOfflineSyncRoute
-    val posTenderLabels: Map<String, String> get() = part5.posTenderLabels
+    val posOfflineSaleMaxLines: Long get() = part6.posOfflineSaleMaxLines
+    val posOfflineSyncBatchMax: Long get() = part6.posOfflineSyncBatchMax
+    val posOfflineSyncRoute: String get() = part6.posOfflineSyncRoute
+    val posTenderLabels: Map<String, String> get() = part6.posTenderLabels
     val priceRangeMaxLength: Long get() = part6.priceRangeMaxLength
     val printerBrandLabels: Map<String, String> get() = part6.printerBrandLabels
     val printerBrands: List<PrinterBrand> get() = part6.printerBrands
@@ -3811,10 +3867,10 @@ class ContractValues internal constructor(
     val starredField: String get() = part6.starredField
     val starredMax: Long get() = part6.starredMax
     val submissionFilterHeaders: Map<String, String> get() = part6.submissionFilterHeaders
-    val submissionListQuery: ListQueryDeclaration get() = part6.submissionListQuery
-    val submissionReadOptions: List<ListFilterOption> get() = part6.submissionReadOptions
-    val suppressionListQuery: ListQueryDeclaration get() = part6.suppressionListQuery
-    val taskListDeclaration: ListQueryDeclaration get() = part6.taskListDeclaration
+    val submissionListQuery: ListQueryDeclaration get() = part7.submissionListQuery
+    val submissionReadOptions: List<ListFilterOption> get() = part7.submissionReadOptions
+    val suppressionListQuery: ListQueryDeclaration get() = part7.suppressionListQuery
+    val taskListDeclaration: ListQueryDeclaration get() = part7.taskListDeclaration
     val templateKindOptions: List<ListFilterOption> get() = part7.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part7.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part7.templateListQuery

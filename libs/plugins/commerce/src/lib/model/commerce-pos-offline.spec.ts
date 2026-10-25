@@ -16,17 +16,23 @@
  */
 
 import {
+  posOfflineCardIntentMetadata,
+  posOfflineCardRefusal,
   posOfflineChangeCents,
   posOfflineFlagLabels,
   posOfflineSaleKeyIsValid,
   posOfflineSaleTotals,
   posOfflineSoldAt,
   posOfflineTotalsAddUp,
+  POS_OFFLINE_CARD_INTENT_KIND,
+  POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
+  POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
   POS_OFFLINE_CLOCK_SKEW_MS,
   POS_OFFLINE_DISABLED_TENDERS,
   POS_OFFLINE_FLAG_LABELS,
   POS_OFFLINE_MAX_AGE_MS,
   sanitizePosOfflineSale,
+  sanitizePosOfflineSaleCard,
 } from './commerce-pos-offline'
 
 /**
@@ -132,5 +138,82 @@ describe('what the register says', () => {
     expect(Object.keys(POS_OFFLINE_DISABLED_TENDERS).sort()).toEqual(
       ['card_keyed', 'card_link', 'card_present', 'credit', 'folio', 'gift_card'].sort(),
     )
+  })
+})
+
+describe('a card taken offline on the app reader (AGL-4039)', () => {
+  const card = {
+    available: true,
+    maxSaleCents: POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
+    maxStoredCents: POS_OFFLINE_CARD_MAX_STORED_CENTS_DEFAULT,
+  }
+  const SALE = {
+    v: 1,
+    saleKey: 'off8f2f9807c22c4fe3b1ed9042c497949d',
+    hostId: 'host_1',
+    orgId: 'org_1',
+    signedInUid: 'uid_1',
+    registerId: 'reg_1',
+    soldAtMs: 1_800_000_000_000,
+    lines: LINES,
+    discountPct: 0,
+    totals: { itemsCents: 4900, taxCents: 0, discountCents: 0, totalCents: 4900 },
+    cashTenderedCents: 5000,
+    changeCents: 100,
+  }
+
+  it('takes a card up to the store ceilings and says why not past them', () => {
+    expect(posOfflineCardRefusal({ card, totalCents: 2479, storedCents: 0 })).toBeNull()
+    expect(posOfflineCardRefusal({ card, totalCents: 25_000, storedCents: 0 })).toBeNull()
+    expect(posOfflineCardRefusal({ card, totalCents: 25_001, storedCents: 0 })).toMatch(/up to \$250\.00/)
+    expect(posOfflineCardRefusal({ card, totalCents: 2000, storedCents: 249_000 })).toMatch(/holds \$2,490\.00/)
+    expect(posOfflineCardRefusal({ card: null, totalCents: 2479, storedCents: 0 })).toMatch(/connect once/)
+    expect(posOfflineCardRefusal({ card: { ...card, available: false }, totalCents: 2479, storedCents: 0 })).toMatch(/off/)
+  })
+
+  it('never lets a store ceiling pass Stripe’s own ceiling for one offline card', () => {
+    const wide = { available: true, maxSaleCents: 5_000_000, maxStoredCents: 9_000_000 }
+    expect(posOfflineCardRefusal({ card: wide, totalCents: 1_200_000, storedCents: 0 })).toMatch(/\$10,000\.00/)
+  })
+
+  it('names the sale on the PaymentIntent so the charge can be matched without the sync', () => {
+    expect(posOfflineCardIntentMetadata(SALE)).toEqual({
+      kind: POS_OFFLINE_CARD_INTENT_KIND,
+      saleKey: SALE.saleKey,
+      hostId: 'host_1',
+      orgId: 'org_1',
+      registerId: 'reg_1',
+    })
+  })
+
+  it('reads the card of a queued card sale, and no cash on it', () => {
+    const read = sanitizePosOfflineSale({
+      ...SALE,
+      tender: 'card',
+      card: { forward: 'forwarded', paymentIntentId: 'pi_3Q0abcdEFGH12345', brand: 'visa', last4: '4242' },
+    })
+    expect(read.ok && read.sale.tender).toBe('card')
+    expect(read.ok && read.sale.card).toEqual({
+      forward: 'forwarded',
+      paymentIntentId: 'pi_3Q0abcdEFGH12345',
+      brand: 'visa',
+      last4: '4242',
+    })
+    expect(read.ok && [read.sale.cashTenderedCents, read.sale.changeCents]).toEqual([0, 0])
+    expect(sanitizePosOfflineSale({ ...SALE, tender: 'card', card: { forward: 'forwarded' } })).toEqual({
+      ok: false,
+      error: 'The card of the sale cannot be read',
+    })
+    const cash = sanitizePosOfflineSale(SALE)
+    expect(cash.ok && cash.sale.tender).toBeUndefined()
+  })
+
+  it('refuses a card it cannot trust', () => {
+    expect(sanitizePosOfflineSaleCard({ forward: 'lost' })).toBeNull()
+    expect(sanitizePosOfflineSaleCard({ forward: 'stored', paymentIntentId: '../charges' })).toBeNull()
+    expect(sanitizePosOfflineSaleCard({ forward: 'declined', last4: '42', declineMessage: 'Declined.' })).toEqual({
+      forward: 'declined',
+      declineMessage: 'Declined.',
+    })
   })
 })
