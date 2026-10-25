@@ -90,6 +90,33 @@ fun themeSurfaces(theme: AppThemeName, dark: Boolean): ThemeSurfaces? {
   return if (dark || palette.alwaysDark == true) darkSurfaces else light
 }
 
+private val phoneBoldPair: Pair<ThemeSurfaces, ThemeSurfaces> by lazy {
+  Contracts.themePhoneAglyn.light.toSurfaces() to Contracts.themePhoneAglyn.dark.toSurfaces()
+}
+
+/**
+ * The Aglyn theme's grounds on a PHONE (the contract's THEME_PHONE_AGLYN, Figma Theme mode 223:0, AGL-3990): a sky-tinted
+ * ground under white panels in light, navy in dark. Only [PhoneTheme] draws them.
+ */
+fun phoneBoldSurfaces(dark: Boolean): ThemeSurfaces = if (dark) phoneBoldPair.second else phoneBoldPair.first
+
+/**
+ * Whether [theme] with [accentHex] (the accent in force, null for the theme's own) is the brand's look the phone's bold
+ * grounds belong to: the Aglyn theme in the brand blue. A picked accent or a white-label brand keeps the console's grounds,
+ * since the bold ones are tinted with the brand blue.
+ */
+fun isBrandLook(theme: AppThemeName, accentHex: String?): Boolean {
+  if (themePalette(theme.raw).id != ThemePaletteId.AGLYN) return false
+  val raw = accentHex?.lowercase() ?: return true
+  return (Contracts.themeRetiredAccents[raw] ?: raw) == Contracts.themePhoneBoldAccent.lowercase()
+}
+
+/** Whether the app draws the brand's own look (see [isBrandLook]); set by [AglynTheme]. */
+val LocalBrandLook = staticCompositionLocalOf { false }
+
+/** Whether the phone's bold brand look is on: set by [PhoneTheme], read by the shared phone pieces. */
+val LocalPhoneBold = staticCompositionLocalOf { false }
+
 /** Whether [theme] is dark whatever the appearance says (Night). */
 fun themeIsAlwaysDark(theme: AppThemeName): Boolean = themePalette(theme.raw).alwaysDark == true
 

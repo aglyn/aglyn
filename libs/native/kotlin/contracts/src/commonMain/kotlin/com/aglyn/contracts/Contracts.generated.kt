@@ -813,6 +813,7 @@ data class HostOrderReceiptRequest(
 data class HostProduct(
     val categoryIds: List<String>? = null,
     val channel: ProductChannelFacts? = null,
+    val checkIn: ProductCheckIn? = null,
     val collectionIds: List<String>? = null,
     val createdAtMs: Double? = null,
     val description: String? = null,
@@ -831,6 +832,7 @@ data class HostProduct(
     val posQuickKey: Boolean? = null,
     val priceUsd: Double? = null,
     val relatedProductIds: List<String>? = null,
+    val sellOnline: Boolean? = null,
     val seo: HostProductSeo? = null,
     val shipping: ProductShippingFacts? = null,
     val slug: String? = null,
@@ -1964,16 +1966,37 @@ data class OrderUnresolvedLine(
 
 @Serializable
 data class OrgPermissionDeclaration(
-    val description: String,
+    val defaults: OrgPermissionDeclarationDefaults? = null,
+    val description: String? = null,
+    val group: String? = null,
+    val groupLabel: String? = null,
+    val hostRoleDefaults: Map<String, Boolean>? = null,
     val key: String,
     val label: String,
-    val roleDefaults: Map<String, Boolean>,
+    val pluginId: String? = null,
+    val roleDefaults: Map<String, Boolean>? = null,
+)
+
+@Serializable
+data class OrgPermissionDeclarationDefaults(
+    val admin: Boolean,
+    val editor: Boolean,
+    val viewer: Boolean,
 )
 
 @Serializable
 data class OrgPermissionEntry(
     val description: String,
+    val group: String? = null,
     val key: String,
+    val label: String,
+    val pluginId: String? = null,
+    val scope: OrgPermissionScope? = null,
+)
+
+@Serializable
+data class OrgPermissionGroup(
+    val id: String,
     val label: String,
     val pluginId: String? = null,
 )
@@ -1983,9 +2006,21 @@ data class OrgPermissionLayer(
     val permissions: Map<String, Boolean>? = null,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrgPermissionScopeSerializer::class)
+enum class OrgPermissionScope(val raw: String) {
+    ORG("org"),
+    SITE("site"),
+    UNKNOWN(""),
+}
+
+internal object OrgPermissionScopeSerializer :
+    RawEnumSerializer<OrgPermissionScope>("com.aglyn.contracts.OrgPermissionScope", OrgPermissionScope.entries, OrgPermissionScope.UNKNOWN, { it.raw })
+
 @Serializable
 data class OrgRoleGrants(
     val grants: Map<String, List<String>>,
+    val groups: List<OrgPermissionGroup>? = null,
     val permissions: List<OrgPermissionEntry>,
 )
 
@@ -2603,6 +2638,12 @@ internal object ProductChannelFactsConditionSerializer :
     RawEnumSerializer<ProductChannelFactsCondition>("com.aglyn.contracts.ProductChannelFactsCondition", ProductChannelFactsCondition.entries, ProductChannelFactsCondition.UNKNOWN, { it.raw })
 
 @Serializable
+data class ProductCheckIn(
+    val enabled: Boolean,
+    val headcount: Double? = null,
+)
+
+@Serializable
 data class ProductLabel(
     val code: String,
     val copies: Long,
@@ -2670,6 +2711,7 @@ internal object ProductTypeSerializer :
 @Serializable
 data class ProductVariant(
     val barcode: String? = null,
+    val checkIn: ProductCheckIn? = null,
     val compareAtPriceUsd: Double? = null,
     val id: String? = null,
     val imageUrl: String? = null,
@@ -3504,6 +3546,8 @@ internal data class ContractValuesPart7(
     @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
+    @SerialName("THEME_PHONE_AGLYN") val themePhoneAglyn: ThemeColorsPair,
+    @SerialName("THEME_PHONE_BOLD_ACCENT") val themePhoneBoldAccent: String,
     @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
     @SerialName("THEME_RETIRED_ACCENTS") val themeRetiredAccents: Map<String, String>,
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
@@ -3830,6 +3874,8 @@ class ContractValues internal constructor(
     val themeFigmaBase: ThemeColorsPair get() = part7.themeFigmaBase
     val themeNonTextContrast: Long get() = part7.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part7.themePalettes
+    val themePhoneAglyn: ThemeColorsPair get() = part7.themePhoneAglyn
+    val themePhoneBoldAccent: String get() = part7.themePhoneBoldAccent
     val themePreviews: Map<String, ThemePreview> get() = part7.themePreviews
     val themeRetiredAccents: Map<String, String> get() = part7.themeRetiredAccents
     val themeTextContrast: Double get() = part7.themeTextContrast

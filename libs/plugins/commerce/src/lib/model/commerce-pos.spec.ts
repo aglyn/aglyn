@@ -73,10 +73,11 @@ describe('which tenders carry the platform fee (AGL-4036)', () => {
       .reduce((sum, payment) => sum + Number(payment.takeFeeCents ?? 0), 0),
   })
 
-  it('names cash and gift card as the only fee-free tenders', () => {
+  it('names cash, gift card and store credit as the only fee-free tenders', () => {
     expect(paymentCarriesPlatformFee('cash')).toBe(false)
     expect(paymentCarriesPlatformFee('gift_card')).toBe(false)
-    for (const method of ['card_present', 'card_keyed', 'card_link', 'folio', 'credit'] as const) {
+    expect(paymentCarriesPlatformFee('credit')).toBe(false)
+    for (const method of ['card_present', 'card_keyed', 'card_link', 'folio'] as const) {
       expect(paymentCarriesPlatformFee(method)).toBe(true)
     }
   })
@@ -84,6 +85,7 @@ describe('which tenders carry the platform fee (AGL-4036)', () => {
   it('a single tender owes the whole take, or nothing for cash and gift card', () => {
     expect(posTenderTakeCents('cash', TAKE)).toBe(0)
     expect(posTenderTakeCents('gift_card', TAKE)).toBe(0)
+    expect(posTenderTakeCents('credit', TAKE)).toBe(0)
     expect(posTenderTakeCents('folio', TAKE)).toBe(TAKE)
     expect(posTenderTakeCents('card_link', TAKE)).toBe(TAKE)
   })
@@ -177,8 +179,13 @@ describe('which tenders carry the platform fee (AGL-4036)', () => {
     expect(posPaymentTakeShareCents({ method: 'card_present', takeFeeCents: 0, totalCents: TOTAL, amountCents: TOTAL })).toBe(0)
   })
 
-  it('store credit keeps its share, as before', () => {
-    expect(owed([part('a', 'credit', 5_000), part('b', 'cash', 5_000)])).toEqual({ owed: 100, invoice: 100, netted: 0 })
+  it('store credit carries no share, alone or beside cash', () => {
+    expect(owed([part('a', 'credit', TOTAL)])).toEqual({ owed: 0, invoice: 0, netted: 0 })
+    expect(owed([part('a', 'credit', 5_000), part('b', 'cash', 5_000)])).toEqual({ owed: 0, invoice: 0, netted: 0 })
+  })
+
+  it('store credit beside a room charge: only the room charge share is invoiced', () => {
+    expect(owed([part('a', 'credit', 5_000), part('b', 'folio', 5_000)])).toEqual({ owed: 100, invoice: 100, netted: 0 })
   })
 })
 

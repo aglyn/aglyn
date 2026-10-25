@@ -85,6 +85,7 @@ import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.shellColors
+import com.aglyn.ui.space
 import kotlinx.coroutines.launch
 
 /** The slot the AI panel's widget is drawn in (its plugin's, e.g. Assist). */
@@ -339,7 +340,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  WorkspaceBrandTheme(services, dark, accent) {
+  // A phone (never the desktop's narrow window) draws the brand's bold look in the Aglyn theme (AGL-3990).
+  WorkspaceBrandTheme(services, dark, accent, phone = !wide && !compactChrome) {
   // The sidebar is Plain (the theme's neutral surface) unless the person picked Tinted, and even then the Aglyn theme's
   // stays neutral: Tinted blends 5% of the accent in force into it, never a workspace's own color (Apple's
   // `AglynColor.sidebar`; AGL-4000).
@@ -600,8 +602,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                 Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
                   // Figma AI panel 18:485's header: ✦ in the accent, the title, Close.
                   Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) 18.dp else 20.dp), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
-                    Text(assistTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) space(2.25f) else space(2.5f)), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
+                    Text(assistTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = space(1f)))
                     TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
                   }
                   Box(Modifier.weight(1f)) { assistContent() }
@@ -651,10 +653,20 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
 }
 
-/** The account's theme again with a white-label workspace's brand color as the accent, while you are in it. */
+/**
+ * The account's theme again with a white-label workspace's brand color as the accent, while you are in it; on a [phone],
+ * inside the phone's theme (`PhoneTheme`: the bold grounds in the brand's own look).
+ */
 @Composable
-private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, accent: androidx.compose.ui.graphics.Color?, content: @Composable () -> Unit) {
-  if (accent == null) content() else AccountTheme(services, dark, accent, content)
+private fun WorkspaceBrandTheme(
+  services: ShellServices,
+  dark: Boolean,
+  accent: androidx.compose.ui.graphics.Color?,
+  phone: Boolean = false,
+  content: @Composable () -> Unit,
+) {
+  val themed: @Composable () -> Unit = { com.aglyn.ui.PhoneTheme(enabled = phone, content = content) }
+  if (accent == null) themed() else AccountTheme(services, dark, accent, themed)
 }
 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */

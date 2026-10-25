@@ -325,6 +325,7 @@ fun TimeSlotPicker(
           FilterChip(
             selected = slot == selected,
             onClick = { onSelect(slot) },
+            colors = aglynFilterChipColors(),
             label = { Text(formatClock(slot, timeZone)) },
             modifier = Modifier.testTag("slot-$slot"),
           )

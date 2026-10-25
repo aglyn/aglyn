@@ -710,14 +710,20 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       {
         field: 'status',
         headerName: 'Status',
-        width: 120,
+        width: 230,
         renderCell: ({ row }: { row: ProductRow }) => (
-          <Chip
-            label={row.status}
-            size="small"
-            color={STATUS_COLOR[row.status] ?? 'default'}
-            variant="outlined"
-          />
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', height: '100%' }}>
+            <Chip
+              label={row.status}
+              size="small"
+              color={STATUS_COLOR[row.status] ?? 'default'}
+              variant="outlined"
+            />
+            {/* Sold at the register, kiosk and POS apps, never online (AGL-4060). */}
+            {CommerceModel.productSellsOnline(row) ? null : (
+              <Chip label="In person only" size="small" variant="outlined" />
+            )}
+          </Stack>
         ),
       },
       { field: 'type', headerName: 'Type', width: 110 },

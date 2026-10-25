@@ -90,7 +90,8 @@ private struct PinButtonLook: ViewModifier {
 
   func body(content: Content) -> some View {
     if pinned {
-      content.buttonStyle(.plain).foregroundStyle(AglynColor.secondaryText)
+      // In the phone's bold look the pinned state reads in the accent's text shade (Figma Phone picker 21:2, AGL-3990).
+      content.buttonStyle(.plain).foregroundStyle(AglynThemeRuntime.shared.phoneBold ? AglynColor.tint : AglynColor.secondaryText)
     } else {
       content.buttonStyle(.aglynSecondary)
     }

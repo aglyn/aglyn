@@ -29,11 +29,14 @@ import {
   formatSiteCareMinutes,
   formatSiteCareUsd,
   SITE_CARE_LIVE_CHARGE_STATUSES,
+  siteCareCandidatesSentence,
   siteCareChargeWords,
   siteCarePublishSentence,
   type SiteCareRequest,
+  type SiteCareWorkspaceCandidate,
 } from '@aglyn/aglyn/app-utils/site-care'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -59,9 +62,13 @@ interface Panel {
   history: SiteCareHistoryEntry[]
   suggestedMinutes: number
   monthMinutesLeft: number
+  /** Other Site Care workspaces an emailed request's sender belongs to (AGL-4031). */
+  otherWorkspaces?: SiteCareWorkspaceCandidate[]
+  /** Why the request may not move, or null when it may. */
+  moveBlockedReason?: string | null
 }
 
-type Form = 'close' | 'approve' | 'correct' | 'reverse' | 'quote' | null
+type Form = 'close' | 'approve' | 'correct' | 'reverse' | 'quote' | 'move' | null
 
 interface Blocked {
   message: string
@@ -96,6 +103,11 @@ export interface SiteCareRequestPanelProps {
  * approval, voiding, crediting or refunding the charge, the quote reply — is
  * here too, each with a reason where it corrects something, and every one
  * lands in the append-only history below.
+ *
+ * An emailed request from a sender in several Site Care workspaces is filed
+ * on one of them; the panel names the others and offers "Move to workspace"
+ * while the request is open and nothing is billed or approved on it, and
+ * says why not otherwise (AGL-4031).
  */
 export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPanelProps) {
   const call = useSiteCareCall()
@@ -116,6 +128,7 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
   const [note, setNote] = useState('')
   const [amount, setAmount] = useState('')
   const [scope, setScope] = useState('')
+  const [moveTo, setMoveTo] = useState('')
 
   const load = useCallback(async () => {
     const answer = await call<Panel>(`/api/admin/site-care?ticketId=${encodeURIComponent(ticketId)}`)
@@ -158,6 +171,7 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
       setAbsorb(false)
       if (next === 'close') setMinutes(String(panel?.suggestedMinutes ?? 5))
       if (next === 'correct') setMinutes(String(panel?.request.minutesLogged ?? ''))
+      if (next === 'move') setMoveTo(panel?.otherWorkspaces?.[0]?.orgId ?? '')
       if (next === 'approve') {
         setHours(String(panel?.request.approval?.hours ?? 1))
         setChannel(panel?.request.approval?.channel ?? 'phone')
@@ -209,6 +223,9 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
   const chargeStuck = charge?.status === 'failed' || charge?.status === 'creating'
   const closed = request.state === 'closed'
   const elapsed = request.timerStartedAtMs ? Math.max(0, Math.round((now - request.timerStartedAtMs) / 60_000)) : null
+  const otherWorkspaces = panel.otherWorkspaces ?? []
+  const moveBlocked = panel.moveBlockedReason ?? null
+  const moveTarget = otherWorkspaces.find((workspace) => workspace.orgId === moveTo) ?? null
 
   const blockedAlert = blocked ? (
     <Alert
@@ -282,6 +299,13 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
             <Button size="small" disabled={busy} onClick={() => openForm('quote')}>
               {'Send quote'}
             </Button>
+            {otherWorkspaces.length ? (
+              <BlockedControl blocked={Boolean(moveBlocked)} reason={moveBlocked ?? ''}>
+                <Button size="small" disabled={busy} onClick={() => openForm('move')}>
+                  {'Move to workspace'}
+                </Button>
+              </BlockedControl>
+            ) : null}
           </Stack>
         ),
       }}
@@ -324,6 +348,11 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
         {request.publish ? (
           <Typography variant="body2" color="text.secondary">
             {`Shipped: ${siteCarePublishSentence(request.publish, formatSiteCareDate)}`}
+          </Typography>
+        ) : null}
+        {otherWorkspaces.length ? (
+          <Typography variant="body2" color="text.secondary">
+            {siteCareCandidatesSentence(otherWorkspaces)}
           </Typography>
         ) : null}
         {charge?.error ? <Alert severity="error">{`Stripe: ${charge.error}`}</Alert> : null}
@@ -390,7 +419,7 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
                 size="small"
                 value={channel}
                 onChange={(event) => setChannel(event.target.value as OwnerApprovalChannel)}
-                sx={{ minWidth: 180 }}
+                sx={{ minWidth: (theme) => theme.spacing(22.5) }}
               >
                 {OWNER_APPROVAL_CHANNELS.map((value) => (
                   <MenuItem key={value} value={value}>
@@ -490,6 +519,42 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
                 onClick={() => void act({ action: 'sendQuote', amountUsd: Number(amount), scope }, 'Quote sent')}
               >
                 {'Send quote'}
+              </Button>
+              <Button size="small" onClick={() => setForm(null)}>
+                {'Cancel'}
+              </Button>
+            </Stack>
+          </Stack>
+        ) : null}
+
+        {form === 'move' && !moveBlocked ? (
+          <Stack spacing={1.5}>
+            <Typography variant="body2" color="text.secondary">
+              {'The sender is a member of each of these workspaces. Moving the request makes its time count against the chosen workspace’s included hour, and its summary goes to that workspace’s owner when it is done.'}
+            </Typography>
+            <TextField
+              select
+              label="Move to"
+              size="small"
+              value={moveTo}
+              onChange={(event) => setMoveTo(event.target.value)}
+            >
+              {otherWorkspaces.map((workspace) => (
+                <MenuItem key={workspace.orgId} value={workspace.orgId}>
+                  {workspace.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                size="small"
+                disabled={busy || !moveTarget}
+                onClick={() =>
+                  void act({ action: 'move', orgId: moveTo }, `Moved to ${moveTarget?.name ?? 'the workspace'}`)
+                }
+              >
+                {'Move'}
               </Button>
               <Button size="small" onClick={() => setForm(null)}>
                 {'Cancel'}

@@ -331,8 +331,8 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
             {/* WHICH REGISTER TENDERS CARRY THE FEE, AND HOW EACH IS
                 COLLECTED (AGL-2111, AGL-4036).
 
-                Card, room-charge and store-credit payments at the register
-                carry the fee; cash and gift cards carry none
+                Card and room-charge payments at the register carry the fee;
+                cash, gift cards and store credit carry none
                 (`CommerceModel.paymentCarriesPlatformFee`). A room charge's
                 fee leaves by a door the merchant has never seen money leave
                 by, their monthly invoice, so it is said here BEFORE it
@@ -343,9 +343,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 on the card of the merchants who upgraded to escape fees. */}
             {physicalPct > 0 || digitalPct > 0 ? (
               <Typography variant="body2" color="text.secondary">
-                {'At the register, cash and gift card payments carry no fee. ' +
-                  'On card payments it is deducted from your Stripe payout; on ' +
-                  'room-charge and store-credit payments there is no payout to ' +
+                {'At the register, cash, gift card and store credit payments ' +
+                  'carry no fee. On card payments it is deducted from your ' +
+                  'Stripe payout; on room-charge payments there is no payout to ' +
                   'deduct from, so it is added to your monthly ' +
                   `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} invoice instead.`}
               </Typography>

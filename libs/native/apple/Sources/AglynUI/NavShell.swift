@@ -377,7 +377,8 @@ public struct AglynColorSwatch: View {
     .frame(width: size, height: size)
     .overlay(Circle().strokeBorder(AglynColor.divider, lineWidth: 1))
     .padding(3)
-    .overlay(Circle().strokeBorder(selected ? AglynColor.tint : .clear, lineWidth: 2))
+    // Figma Color swatch, Selected=Yes: a 2 pt text/primary ring, which reads around any swatch, the blue one too.
+    .overlay(Circle().strokeBorder(selected ? AglynColor.textPrimary : .clear, lineWidth: 2))
   }
 }
 

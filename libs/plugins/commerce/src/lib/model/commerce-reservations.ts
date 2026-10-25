@@ -43,8 +43,20 @@ export interface ResourceSeason {
 export interface HostResource {
   name: string
   description?: string
-  /** Sleeps N; display only. */
+  /**
+   * Sleeps N; display only. Never availability: how many guests one unit
+   * takes says nothing about how many units there are (see `units`).
+   */
   capacity?: number
+  /**
+   * How many identical units this one resource holds (AGL-4044): 12 RV
+   * hookups, 30 tent sites, 4 matching cabins. Each night can take this many
+   * stays at once. Absent means 1, which is every resource written before the
+   * field existed, and one unit behaves exactly as a resource always has.
+   * An integer from 1 to {@link MAX_RESOURCE_UNITS}; read it through
+   * {@link resourceUnits}, never raw.
+   */
+  units?: number
   photoUrls?: string[]
   amenities?: string[]
   nightlyRateUsd: number
@@ -252,42 +264,175 @@ export function reservationHoldsDates(
   return createdAtMs > 0 && nowMs - createdAtMs < PENDING_RESERVATION_HOLD_MS
 }
 
+/** The most identical units one resource can hold (AGL-4044). */
+export const MAX_RESOURCE_UNITS = 500
+
 /**
- * Availability: a candidate range conflicts when it overlaps a live
- * reservation ([checkIn, checkOut) semantics — back-to-back stays touch
- * without conflict) or a manual block.
+ * How many units a resource holds: the stored `units` as a whole number from 1
+ * to {@link MAX_RESOURCE_UNITS}, and 1 for anything else (absent, zero,
+ * negative, not a number). Closing a resource is what `blocks` are for, so no
+ * stored value can make a resource hold no units at all.
+ */
+export function resourceUnits(
+  resource: Pick<HostResource, 'units'> | null | undefined,
+): number {
+  const units = Math.floor(Number(resource?.units))
+  if (!Number.isFinite(units) || units < 1) return 1
+  return Math.min(MAX_RESOURCE_UNITS, units)
+}
+
+/** A reservation as an availability check reads it. */
+export type HeldStay = Pick<
+  HostReservation,
+  'checkInDayMs' | 'checkOutDayMs' | 'status'
+> & {
+  createdAtMs?: number
+}
+
+/**
+ * How many units are taken on each night from `fromDayMs` up to (not
+ * including) `toDayMs`, one entry per night, counting only the stays that
+ * still hold their dates ({@link reservationHoldsDates}). A stay takes a night
+ * when it overlaps it, with the same `[checkIn, checkOut)` semantics as
+ * {@link isRangeAvailable}: a stay that leaves the morning another arrives
+ * does not take that night.
+ */
+export function unitsTakenByNight(
+  reservations: HeldStay[],
+  fromDayMs: number,
+  toDayMs: number,
+  nowMs: number = Date.now(),
+): number[] {
+  const live = reservations.filter((reservation) =>
+    reservationHoldsDates(reservation, nowMs),
+  )
+  const taken: number[] = []
+  for (let night = fromDayMs; night < toDayMs; night += DAY_MS) {
+    const nightEnd = Math.min(night + DAY_MS, toDayMs)
+    let count = 0
+    for (const reservation of live) {
+      if (
+        reservation.checkInDayMs < nightEnd &&
+        reservation.checkOutDayMs > night
+      ) {
+        count++
+      }
+    }
+    taken.push(count)
+  }
+  return taken
+}
+
+/** One night of a resource: how many of its units are still free. */
+export interface ResourceNightUnits {
+  dayMs: number
+  unitsLeft: number
+  units: number
+}
+
+/**
+ * Units left on each of `nights` nights from `fromDayMs`: the resource's
+ * units less the stays holding that night, and none on a blocked night,
+ * because a block closes the whole resource.
+ */
+export function unitsLeftByNight(
+  resource: Pick<HostResource, 'units' | 'blocks'>,
+  reservations: HeldStay[],
+  fromDayMs: number,
+  nights: number,
+  nowMs: number = Date.now(),
+): ResourceNightUnits[] {
+  const units = resourceUnits(resource)
+  const toDayMs = fromDayMs + Math.max(0, Math.floor(nights)) * DAY_MS
+  return unitsTakenByNight(reservations, fromDayMs, toDayMs, nowMs).map(
+    (taken, index) => {
+      const dayMs = fromDayMs + index * DAY_MS
+      const blocked = (resource.blocks ?? []).some(
+        (block) => dayMs < block.toDayMs && dayMs + DAY_MS > block.fromDayMs,
+      )
+      return {
+        dayMs,
+        units,
+        unitsLeft: blocked ? 0 : Math.max(0, units - taken),
+      }
+    },
+  )
+}
+
+/**
+ * Availability: a candidate range is free when, on EVERY night in it, fewer
+ * live reservations overlap that night than the resource has units
+ * (AGL-4044), and no manual block touches it. `[checkIn, checkOut)`
+ * semantics, so back-to-back stays touch without conflict. A block closes the
+ * whole resource, every unit at once.
+ *
+ * One unit (the default, and every resource written before `units`) takes
+ * the original path unchanged: the range conflicts when it overlaps any live
+ * reservation at all.
  *
  * `nowMs` is a parameter so the pending lapse is testable without freezing the
  * clock. A caller passing reservations without `createdAtMs` gets the same
  * answer as before for every status but `pending`.
  */
 export function isRangeAvailable(
-  resource: Pick<HostResource, 'blocks'>,
-  reservations: Array<
-    Pick<HostReservation, 'checkInDayMs' | 'checkOutDayMs' | 'status'> & {
-      createdAtMs?: number
-    }
-  >,
+  resource: Pick<HostResource, 'blocks' | 'units'>,
+  reservations: HeldStay[],
   checkInDayMs: number,
   checkOutDayMs: number,
   nowMs: number = Date.now(),
 ): boolean {
   if (!(checkOutDayMs > checkInDayMs)) return false
-  for (const reservation of reservations) {
-    if (!reservationHoldsDates(reservation, nowMs)) continue
-    if (
-      checkInDayMs < reservation.checkOutDayMs &&
-      checkOutDayMs > reservation.checkInDayMs
-    ) {
-      return false
-    }
-  }
   for (const block of resource.blocks ?? []) {
     if (checkInDayMs < block.toDayMs && checkOutDayMs > block.fromDayMs) {
       return false
     }
   }
-  return true
+  const units = resourceUnits(resource)
+  if (units === 1) {
+    for (const reservation of reservations) {
+      if (!reservationHoldsDates(reservation, nowMs)) continue
+      if (
+        checkInDayMs < reservation.checkOutDayMs &&
+        checkOutDayMs > reservation.checkInDayMs
+      ) {
+        return false
+      }
+    }
+    return true
+  }
+  return unitsTakenByNight(
+    reservations,
+    checkInDayMs,
+    checkOutDayMs,
+    nowMs,
+  ).every((taken) => taken < units)
+}
+
+/**
+ * The widget's scarcity line starts at this many units left (AGL-4044):
+ * "Only 2 left". Never on a one-unit resource, where every free night would
+ * read "Only 1 left", and never on a night nothing is booked on.
+ */
+export const FEW_UNITS_LEFT = 3
+
+/**
+ * The fewest units left across `[checkInDayMs, checkOutDayMs)` when that is
+ * {@link FEW_UNITS_LEFT} or fewer and at least one, else null. `fewLeft`
+ * lists only the scarce nights, as the availability endpoint sends them; a
+ * night it leaves out has more than {@link FEW_UNITS_LEFT} free.
+ */
+export function fewestUnitsLeft(
+  fewLeft: Array<{ dayMs: number; unitsLeft: number }> | null | undefined,
+  checkInDayMs: number,
+  checkOutDayMs: number,
+): number | null {
+  let fewest: number | null = null
+  for (const night of fewLeft ?? []) {
+    if (night.dayMs < checkInDayMs || night.dayMs >= checkOutDayMs) continue
+    if (!(night.unitsLeft >= 1) || night.unitsLeft > FEW_UNITS_LEFT) continue
+    fewest = fewest === null ? night.unitsLeft : Math.min(fewest, night.unitsLeft)
+  }
+  return fewest
 }
 
 /** Free-cancellation check against the policy window. */
