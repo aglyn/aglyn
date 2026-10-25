@@ -466,6 +466,13 @@ function mountedZones(): Set<string> {
 
 const read = (file: string) => readFileSync(resolve(REPO_ROOT, file), 'utf8')
 
+/**
+ * Zones in the catalog before the page that draws them ships: the starter
+ * picker is declared with its props in phase 1 of AGL-4049 and mounted by the
+ * Create site dialog in a later phase, behind `release_site_starters`.
+ */
+const DECLARED_AHEAD_OF_MOUNT: ReadonlySet<string> = new Set(['hostStarterPicker'])
+
 describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
   it('names every new zone in CONSOLE_WIDGET_SLOTS', () => {
     for (const zone of NEW_ZONES) {
@@ -478,9 +485,12 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
     // ANTI-VACUITY: the grep found the zones that predate this issue.
     expect(mounted.has('hostDashboard')).toBe(true)
     const unmounted = Object.values(CONSOLE_WIDGET_SLOTS).filter(
-      (zone) => !mounted.has(zone),
+      (zone) => !mounted.has(zone) && !DECLARED_AHEAD_OF_MOUNT.has(zone),
     )
     expect(unmounted).toEqual([])
+    // A zone leaves the list the day it is mounted, so the list never excuses
+    // a zone that no longer needs it.
+    expect([...DECLARED_AHEAD_OF_MOUNT].filter((zone) => mounted.has(zone))).toEqual([])
   })
 
   it('mounts each new zone in the file the inventory names, the way it says', () => {

@@ -917,6 +917,7 @@ const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
   emailStarter:
     'A new email in your Email templates list, ready to edit and send',
   theme: 'A theme applied to the site you choose',
+  siteStarter: 'A new site, created from these pages and this theme',
 }
 
 /**

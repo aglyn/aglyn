@@ -114,8 +114,9 @@ block, volatile.
   On those routes a conversation marker would be a pure surcharge.
 - **Change.** `cacheConversation` on the request contract
   (`providers/contract.ts`). The Anthropic adapter sends every turn as content
-  blocks and marks the last block of the last turn, at the lifetime the system
-  markers use (`buildAnthropicRequestBody`). The runtime counts that marker
+  blocks and marks the last block of the last turn (`buildAnthropicRequestBody`).
+  It was sent at the lifetime the system markers use; since AGL-4050 it keeps
+  five minutes, because only its own job reads it. The runtime counts that marker
   against the four allowed (`aiConversationCacheFits`), and
   `runValidatedGeneration` drops it where the system blocks hold all four. The
   plan step turns it on. A replay key does not read the flag, so recorded
@@ -260,6 +261,15 @@ text keep five minutes. What it costs and saves, on the reference job:
   above.
 - **No prompt byte changed**, only `cache_control`'s `ttl`, which no replay
   key reads, so recorded answers still replay and no live eval was needed.
+- **The hour is the shared prompt's alone (AGL-4050).** At first every
+  marker of a request took the route's lifetime. A 10/24 re-read found the
+  hour on a job's own blocks, read by that job alone, costing more than it
+  saved: about $1.14 a month of write price against $0.21 saved on the Sonnet
+  routes. A plan's conversation, about 3.1k tokens, and a site's block
+  (`site`) now keep five minutes on every row, and the shared markers (the
+  doctrine and each route's rules) keep the hour. `aiCacheMarkerTtls` in
+  `providers/contract.ts` decides each marker, and it never sends an
+  hour-long marker after a five-minute one, which the API refuses.
 
 ## What needs a live eval
 

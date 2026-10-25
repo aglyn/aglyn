@@ -63,5 +63,6 @@ object ReleaseFlagDefaults {
     "release_crm_assist_whole_record" to ReleaseFlagValue(true, 0, listOf()),
     "release_ai_site_inspiration" to ReleaseFlagValue(false, 0, listOf()),
     "release_ad_audience_sync" to ReleaseFlagValue(false, 0, listOf()),
+    "release_site_starters" to ReleaseFlagValue(false, 0, listOf()),
   )
 }

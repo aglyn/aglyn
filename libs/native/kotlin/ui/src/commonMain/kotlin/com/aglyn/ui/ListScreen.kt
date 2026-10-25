@@ -25,7 +25,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -259,6 +258,7 @@ fun ListScreenScaffold(
           InputChip(
             selected = true,
             onClick = { groups[choice.group]?.firstOrNull()?.let(onPick) },
+            colors = aglynInputChipColors(),
             label = { Text(choice.label) },
             trailingIcon = { Icon(AglynIcons.named("close"), "Clear ${choice.label}", Modifier.size(14.dp)) },
             shape = if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else MaterialTheme.shapes.small,
@@ -302,26 +302,29 @@ fun ScaffoldListRow(
   val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
   // The tile and the trailing figure sit on the column's content inset E; the selection's fill reaches past them.
   val outer = ((LocalContentInset.current ?: contentInset()) - padH).coerceAtLeast(0.dp)
-  Row(
-    modifier.fillMaxWidth().padding(horizontal = outer, vertical = 1.dp).clip(shape)
-      .background(if (selected) shellColors.selected else Color.Transparent)
-      .clickable(onClick = onClick)
-      .heightIn(min = height)
-      .padding(horizontal = padH, vertical = padV)
-      .semantics(mergeDescendants = true) { if (selected) this.selected = true },
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(gap),
-  ) {
-    leading()
-    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      // Figma's line heights (14/18 over 12/16; the phone's 17/22 over 13/18), so the row keeps its 64 (68 on a phone).
-      Text(title, fontSize = if (phone) 17.sp else 14.sp, lineHeight = if (phone) 22.sp else 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      detail?.let { Text(it, fontSize = if (phone) 13.sp else 12.sp, lineHeight = if (phone) 18.sp else 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-    }
-    if (figure != null || status != null) {
-      Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        figure?.let { Text(it, fontSize = if (phone) 15.sp else 14.sp, lineHeight = if (phone) 20.sp else 18.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1) }
-        status?.invoke()
+  // The tile and the status chip read it, to stand off the selection's wash (Figma List/Order row Selected 11:343).
+  androidx.compose.runtime.CompositionLocalProvider(LocalRowSelected provides selected) {
+    Row(
+      modifier.fillMaxWidth().padding(horizontal = outer, vertical = 1.dp).clip(shape)
+        .background(if (selected) shellColors.selected else Color.Transparent)
+        .clickable(onClick = onClick)
+        .heightIn(min = height)
+        .padding(horizontal = padH, vertical = padV)
+        .semantics(mergeDescendants = true) { if (selected) this.selected = true },
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(gap),
+    ) {
+      leading()
+      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // Figma's line heights (14/18 over 12/16; the phone's 17/22 over 13/18), so the row keeps its 64 (68 on a phone).
+        Text(title, fontSize = if (phone) 17.sp else 14.sp, lineHeight = if (phone) 22.sp else 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        detail?.let { Text(it, fontSize = if (phone) 13.sp else 12.sp, lineHeight = if (phone) 18.sp else 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+      }
+      if (figure != null || status != null) {
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          figure?.let { Text(it, fontSize = if (phone) 15.sp else 14.sp, lineHeight = if (phone) 20.sp else 18.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1) }
+          status?.invoke()
+        }
       }
     }
   }
@@ -331,9 +334,21 @@ fun ScaffoldListRow(
 @Composable
 fun ScaffoldRowTile(icon: String, imageUrl: String? = null, darkImageUrl: String? = null) {
   BrandPicture(imageUrl, darkImageUrl, 32.dp, androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) {
-    // A soft ink wash, so the tile reads on the page ground in light and dark alike (Figma's List row tile).
-    Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)), contentAlignment = Alignment.Center) {
-      Icon(AglynIcons.named(icon), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    // A soft ink wash, so the tile reads on the page ground in light and dark alike (Figma's List row tile). On a selected
+    // row it is the paper with a 1 ring in the accent's text shade, so it stands off the selection's wash (3:1 and more,
+    // Figma 11:343, AGL-3990).
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+    val selected = LocalRowSelected.current
+    val tile = Modifier.size(32.dp).clip(shape).let {
+      if (selected) {
+        it.background(LocalThemeSurfaces.current?.surface ?: MaterialTheme.colorScheme.surfaceContainerLowest)
+          .border(1.dp, aglynAccentText, shape)
+      } else {
+        it.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+      }
+    }
+    Box(tile, contentAlignment = Alignment.Center) {
+      Icon(AglynIcons.named(icon), null, Modifier.size(16.dp), tint = if (selected) aglynAccentText else MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }

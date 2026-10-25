@@ -358,7 +358,7 @@ fun SiteHeaderCard(
           }
           Text(siteName, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
           if (address != null) {
-            Text(address, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(address, style = MaterialTheme.typography.bodyMedium, color = aglynAccentText, maxLines = 2, overflow = TextOverflow.Ellipsis)
           }
         }
         if (statusLabel != null && !largeText) StatusChip(statusLabel, statusTone, Modifier.testTag("site-status"))
@@ -376,7 +376,7 @@ fun SiteHeaderCard(
             Text("Visit site")
           }
         }
-        androidx.compose.material3.OutlinedButton(shape = controlShape(), onClick = onSwitch, modifier = Modifier.testTag("home-switcher")) {
+        OutlinedButton(shape = controlShape(), onClick = onSwitch, modifier = Modifier.testTag("home-switcher")) {
           Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp))
           Spacer(Modifier.width(space(1f)))
           Text("Switch site")

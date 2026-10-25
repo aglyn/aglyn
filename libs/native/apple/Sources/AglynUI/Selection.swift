@@ -167,6 +167,7 @@ public struct AglynSelectableRowStyle: ButtonStyle {
     var body: some View {
       configuration.label
         .environment(\.aglynRowPadding, density.vertical)
+        .environment(\.aglynRowSelected, selected)
         .fontWeight(selected && density == .sidebar ? .semibold : nil)
         .padding(.horizontal, density.horizontal)
         .padding(.vertical, density.vertical)
@@ -289,11 +290,22 @@ private struct AglynRowPaddingKey: EnvironmentKey {
   static let defaultValue: CGFloat = 0
 }
 
+private struct AglynRowSelectedKey: EnvironmentKey {
+  static let defaultValue = false
+}
+
 extension EnvironmentValues {
   /// The vertical padding the row a view sits in already gives it (a selectable row's), so a row drawn to a measured
   /// height (`AglynRecordRow`) keeps that height inside it.
   public var aglynRowPadding: CGFloat {
     get { self[AglynRowPaddingKey.self] }
     set { self[AglynRowPaddingKey.self] = newValue }
+  }
+
+  /// Whether the row a view sits in is selected: a tile or a status chip on the selection's wash takes the paper with
+  /// a ring, so it stands off the wash (Figma List/Order row Selected 11:343, AGL-3990).
+  public var aglynRowSelected: Bool {
+    get { self[AglynRowSelectedKey.self] }
+    set { self[AglynRowSelectedKey.self] = newValue }
   }
 }
