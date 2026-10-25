@@ -20,21 +20,32 @@ import {
   canManageOrg,
   type AglynOrgCustomRole,
 } from '@aglyn/aglyn'
-import { offeredOrgPermissions } from '@aglyn/aglyn/app-utils/org-permission-editor'
+import {
+  groupOrgPermissions,
+  offeredOrgPermissions,
+  permissionChoice,
+  searchOrgPermissions,
+  withPermissionChoice,
+} from '@aglyn/aglyn/app-utils/org-permission-editor'
+import type { OrgPermissionDefinition } from '@aglyn/aglyn/app-utils/org-permissions'
+import {
+  PermissionChoiceList,
+  type PermissionChoiceSection,
+} from '@aglyn/shared-ui-jsx/components/permission-choice-list.component'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -46,6 +57,37 @@ import { useReleaseFlags } from '../hooks/use-release-flags'
 interface RoleDraft extends AglynOrgCustomRole {
   $id?: string
   name?: string
+}
+
+const ROLE_WORDS = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: 'Viewer' } as const
+
+/** What "inherit" means for a key in a custom role: the org roles that hold it by default. */
+function inheritHint(definition: OrgPermissionDefinition): string {
+  const holders = (Object.keys(ROLE_WORDS) as Array<keyof typeof ROLE_WORDS>)
+    .filter((role) => definition.roleDefaults[role])
+    .map((role) => ROLE_WORDS[role])
+  return holders.length
+    ? `Inherit: allowed for ${holders.join(', ')} by default`
+    : 'Inherit: no org role holds it by default'
+}
+
+/** The editor's sections: the offered keys a search keeps, grouped, with the draft's choices. */
+function roleSections(
+  offered: readonly OrgPermissionDefinition[],
+  search: string,
+  permissions: Partial<Record<string, boolean>> | undefined,
+): PermissionChoiceSection[] {
+  return groupOrgPermissions(searchOrgPermissions(offered, search)).map((section) => ({
+    id: section.group.id,
+    label: section.group.label,
+    items: section.permissions.map((definition) => ({
+      key: definition.key,
+      label: definition.label,
+      description: definition.description,
+      choice: permissionChoice(permissions, definition.key),
+      inheritHint: inheritHint(definition),
+    })),
+  }))
 }
 
 /**
@@ -64,6 +106,9 @@ export function OrgRolesCard() {
   const [roles, setRoles] = useState<Array<RoleDraft & { $id: string }>>([])
   const [editor, setEditor] = useState<RoleDraft | null>(null)
   const [busy, setBusy] = useState(false)
+  const [search, setSearch] = useState('')
+  const theme = useTheme()
+  const phone = useMediaQuery(theme.breakpoints.down('sm'))
   const releaseFlags = useReleaseFlags()
   // The one catalog (AGL-4047): the core keys and every key the workspace's
   // plugins declare, a plugin's keys only while it is on and released here.
@@ -161,14 +206,27 @@ export function OrgRolesCard() {
     <CardDisplay
       header={'Custom roles'}
       help={docsHelp('customRoles', { anchor: '#create-a-custom-role' })}
+      HeaderProps={{
+        action: (
+          <Button
+            size="small"
+            color="primary"
+            variant="contained"
+            onClick={() => setEditor({ name: '', permissions: {} })}
+          >
+            {'New role'}
+          </Button>
+        ),
+      }}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'Fine-tune what members can do beyond the four org roles — e.g. ' +
-            'an editor who can also view billing, or an admin without ' +
-            'billing access. Assign roles from the members table.'}
+            'an editor who can also view billing, a viewer who can run the ' +
+            'point of sale, or an admin without billing access. Assign roles ' +
+            'from the members table.'}
         </Typography>
         <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
           {roles.map((role) => (
@@ -179,21 +237,20 @@ export function OrgRolesCard() {
               onDelete={() => void handleDelete(role)}
             />
           ))}
-          <Button
-            size="small"
-            color="primary"
-            variant="contained"
-            onClick={() => setEditor({ name: '', permissions: {} })}
-          >
-            {'New role'}
-          </Button>
+          {roles.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'No custom roles yet.'}
+            </Typography>
+          ) : null}
         </Stack>
       </Stack>
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
+        fullScreen={phone}
+        slotProps={{ transition: { onExited: () => setSearch('') } }}
       >
         <DialogTitle>{editor?.$id ? 'Edit role' : 'New role'}</DialogTitle>
         <DialogContent
@@ -221,48 +278,24 @@ export function OrgRolesCard() {
             }
           />
           <Typography variant="subtitle2">{'Permissions'}</Typography>
-          {offered.map((definition) => {
-            const value = editor?.permissions?.[definition.key]
-            return (
-              <FormControlLabel
-                key={definition.key}
-                control={
-                  <Checkbox
-                    checked={value === true}
-                    indeterminate={value === undefined}
-                    onChange={() =>
-                      setEditor((draft) => {
-                        if (!draft) return draft
-                        const permissions = { ...(draft.permissions ?? {}) }
-                        // Cycle: inherit → granted → denied → inherit.
-                        const current = permissions[definition.key]
-                        if (current === undefined) {
-                          permissions[definition.key] = true
-                        } else if (current === true) {
-                          permissions[definition.key] = false
-                        } else {
-                          delete permissions[definition.key]
-                        }
-                        return { ...draft, permissions }
-                      })
-                    }
-                  />
-                }
-                label={
-                  <Stack>
-                    <Typography variant="body2">
-                      {definition.label}
-                      {value === false ? ' (denied)' : ''}
-                      {value === undefined ? ' (inherit)' : ''}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {definition.description}
-                    </Typography>
-                  </Stack>
-                }
-              />
-            )
-          })}
+          <Typography variant="caption" color="text.secondary">
+            {'Allow or deny a permission for everyone on this role, or leave it on ' +
+              'Inherit to use each member’s org role default.'}
+          </Typography>
+          <PermissionChoiceList
+            sections={roleSections(offered, search, editor?.permissions)}
+            search={search}
+            onSearchChange={setSearch}
+            groupActions
+            disabled={busy}
+            onChange={(keys, choice) =>
+              setEditor((draft) =>
+                draft
+                  ? { ...draft, permissions: withPermissionChoice(draft.permissions as Record<string, boolean>, keys, choice) }
+                  : draft,
+              )
+            }
+          />
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={() => setEditor(null)}>
