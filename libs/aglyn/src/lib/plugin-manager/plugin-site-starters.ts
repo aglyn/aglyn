@@ -44,7 +44,8 @@ export interface SiteStarterSummary {
   listingId: string
   displayName: string
   description: string
-  publisherName: string
+  /** Who made it, as the search shows them. */
+  authorName: string
   /** Published by the platform itself; listed first. */
   official: boolean
   /** The price in US dollars; 0 for free. */

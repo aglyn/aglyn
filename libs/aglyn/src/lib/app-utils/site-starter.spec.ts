@@ -15,16 +15,25 @@
  * limitations under the License.
  */
 
+import { SITE_FONT_PAIRINGS } from './site-font-pairings'
 import {
   SITE_STARTER_ARTIFACT_TYPE,
+  SITE_THEME_BASES,
   SITE_STARTER_MAX_SCREENS,
   matchSiteStarterFacets,
   siteStarterFacetFields,
   siteStarterFacetsOf,
   siteStarterRefusal,
   type SiteStarterFacets,
+  type SiteStarterKnownIds,
   type SiteStarterPayload,
 } from './site-starter'
+
+const KNOWN: SiteStarterKnownIds = {
+  kinds: new Set(['trades', 'restaurant']),
+  bases: new Set(SITE_THEME_BASES),
+  fonts: new Set(SITE_FONT_PAIRINGS.map((pairing) => pairing.id)),
+}
 
 const FACETS: SiteStarterFacets = { kind: 'trades', base: 'bootstrap', fonts: 'oswald', pages: 4, mode: 'base' }
 
@@ -95,16 +104,27 @@ describe('siteStarterRefusal (AGL-4049)', () => {
     expect(siteStarterRefusal(payload({ screens: screens.slice(0, SITE_STARTER_MAX_SCREENS) }))).toBeNull()
   })
 
-  it('refuses an unknown kind, base or font pairing', () => {
-    expect(siteStarterRefusal(payload({ facets: { ...FACETS, kind: 'spaceport' } }))).toMatch(/Unknown site kind/)
-    expect(siteStarterRefusal(payload({ facets: { ...FACETS, base: 'win95' } }))).toMatch(/Unknown base theme/)
-    expect(siteStarterRefusal(payload({ facets: { ...FACETS, fonts: 'comic' } }))).toMatch(/Unknown font pairing/)
+  it('refuses a kind, base or font pairing outside the sets its caller knows', () => {
+    expect(siteStarterRefusal(payload(), KNOWN)).toBeNull()
+    expect(siteStarterRefusal(payload({ facets: { ...FACETS, kind: 'spaceport' } }), KNOWN)).toMatch(/Unknown site kind/)
+    expect(siteStarterRefusal(payload({ facets: { ...FACETS, base: 'win95' } }), KNOWN)).toMatch(/Unknown base theme/)
+    expect(siteStarterRefusal(payload({ facets: { ...FACETS, fonts: 'comic' } }), KNOWN)).toMatch(/Unknown font pairing/)
     expect(
-      siteStarterRefusal(payload({ theme: { kind: 'builtin', base: 'win95', brand: { light: {} }, fonts: null } })),
+      siteStarterRefusal(payload({ theme: { kind: 'builtin', base: 'win95', brand: { light: {} }, fonts: null } }), KNOWN),
     ).toMatch(/Unknown base theme/)
     expect(
-      siteStarterRefusal(payload({ theme: { kind: 'builtin', base: 'minimal', brand: { light: {} }, fonts: 'comic' } })),
+      siteStarterRefusal(payload({ theme: { kind: 'builtin', base: 'minimal', brand: { light: {} }, fonts: 'comic' } }), KNOWN),
     ).toMatch(/Unknown font pairing/)
+  })
+
+  it('checks no id its caller passes no set for: the core keeps no list of kinds', () => {
+    const odd = payload({
+      facets: { ...FACETS, kind: 'spaceport', base: 'win95', fonts: 'comic' },
+      theme: { kind: 'builtin', base: 'win95', brand: { light: {} }, fonts: 'comic' },
+    })
+    expect(siteStarterRefusal(odd)).toBeNull()
+    expect(siteStarterRefusal(odd, { kinds: KNOWN.kinds })).toMatch(/Unknown site kind/)
+    expect(siteStarterRefusal(payload({ facets: { ...FACETS, kind: null } }), KNOWN)).toBeNull()
   })
 
   it('refuses an AI starter without its answers', () => {

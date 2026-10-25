@@ -17,12 +17,10 @@
 
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { SCREEN_ROOT_PATH } from './screen-slug'
-import { siteFontPairing } from './site-font-pairings'
-import { siteKind } from './site-kinds'
 
 /**
  * Site starters (AGL-4049): a whole site a person picks before it exists,
- * every one of them a listing anyone may publish and price, Aglyn's own
+ * every one of them a listing anyone may publish and price, the platform's own
  * included.
  *
  * This module is the vocabulary every reader of a starter shares: the artifact
@@ -73,7 +71,7 @@ export function isSiteThemeBase(value: unknown): value is SiteThemeBase {
 /**
  * A starter's theme (AGL-4049), one of two shapes: a built-in theme with the
  * starter's brand colors and font pairing over it, which is how a person's own
- * pick and edits are stored, or a full theme of the publisher's own.
+ * pick and edits are stored, or a full theme of its author's own.
  */
 export type SiteStarterTheme =
   | {
@@ -82,15 +80,16 @@ export type SiteStarterTheme =
       base: string
       /** Palette overrides by scheme, as the theme editor stores them. */
       brand: { light: Record<string, string>; dark?: Record<string, string> }
-      /** A `SITE_FONT_PAIRINGS` id, or `null` for the base theme's own fonts. */
+      /** A font pairing id (`site-font-pairings.ts`), or `null` for the base theme's own fonts. */
       fonts: string | null
     }
   | { kind: 'full'; theme: HostTheme }
 
 /**
- * What a starter search filters on (AGL-4049). `kind` is a `SITE_KINDS`
- * id, `base` a {@link SITE_THEME_BASES} name and `fonts` a
- * `SITE_FONT_PAIRINGS` id, each `null` where the starter names none;
+ * What a starter search filters on (AGL-4049). `kind` is the kind of site it
+ * is, an id the core does not interpret (the AI plugin keeps the kinds),
+ * `base` a {@link SITE_THEME_BASES} name and `fonts` a font pairing id
+ * (`site-font-pairings.ts`), each `null` where the starter names none;
  * `pages` is how many pages it creates.
  */
 export interface SiteStarterFacets {
@@ -176,25 +175,39 @@ const isPublishedHome = (screen: unknown): boolean =>
   isRecord(screen) && screen['slug'] === SCREEN_ROOT_PATH && screen['published'] !== false
 
 /**
- * Why a starter's payload cannot start a site, in the words its publisher is
+ * The ids a caller knows, by facet. `siteStarterRefusal` checks a kind, base
+ * or font pairing id only against the set its caller passes: the core keeps
+ * no list of kinds, and which bases and pairings are offered is the caller's
+ * to say (`new Set(SITE_THEME_BASES)`, the ids of `SITE_FONT_PAIRINGS`).
+ */
+export interface SiteStarterKnownIds {
+  kinds?: ReadonlySet<string>
+  bases?: ReadonlySet<string>
+  fonts?: ReadonlySet<string>
+}
+
+/**
+ * Why a starter's payload cannot start a site, in the words its author is
  * told, or `null` when it can (AGL-4049). Checked when a starter is published
  * and again when one is resolved, since a site is created from it with no
  * step between to catch what is missing.
  */
-export function siteStarterRefusal(payload: SiteStarterPayload): string | null {
+export function siteStarterRefusal(payload: SiteStarterPayload, known: SiteStarterKnownIds = {}): string | null {
   const screens = Array.isArray(payload.screens) ? payload.screens : []
   if (!screens.some(isPublishedHome)) return 'A starter needs a published Home page at /'
   if (!isRecord(payload.layout)) return 'A starter needs a shared layout'
   if (screens.length > SITE_STARTER_MAX_SCREENS) {
     return `A starter can have at most ${SITE_STARTER_MAX_SCREENS} pages`
   }
+  const unknown = (id: string | null, ids: ReadonlySet<string> | undefined) =>
+    id !== null && ids !== undefined && !ids.has(id)
   const { facets, theme } = payload
-  if (facets.kind !== null && !siteKind(facets.kind)) return `Unknown site kind "${facets.kind}"`
-  if (facets.base !== null && !isSiteThemeBase(facets.base)) return `Unknown base theme "${facets.base}"`
-  if (facets.fonts !== null && !siteFontPairing(facets.fonts)) return `Unknown font pairing "${facets.fonts}"`
+  if (unknown(facets.kind, known.kinds)) return `Unknown site kind "${facets.kind}"`
+  if (unknown(facets.base, known.bases)) return `Unknown base theme "${facets.base}"`
+  if (unknown(facets.fonts, known.fonts)) return `Unknown font pairing "${facets.fonts}"`
   if (theme?.kind === 'builtin') {
-    if (!isSiteThemeBase(theme.base)) return `Unknown base theme "${theme.base}"`
-    if (theme.fonts !== null && !siteFontPairing(theme.fonts)) return `Unknown font pairing "${theme.fonts}"`
+    if (unknown(theme.base, known.bases)) return `Unknown base theme "${theme.base}"`
+    if (unknown(theme.fonts, known.fonts)) return `Unknown font pairing "${theme.fonts}"`
   }
   if (payload.mode === 'ai' && !isRecord(payload.answers)) {
     return 'An AI starter needs the questions it asks'
