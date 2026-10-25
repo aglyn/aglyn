@@ -488,6 +488,13 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     exported: true,
     note: 'Sales tax charged to shoppers on the org’s storefront (AGL-1904). Same statutory retention, same access obligation.',
   },
+  {
+    collection: 'posHardwareSales',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The platform’s record of each card reader order the org bought from the hardware shop (AGL-4038): lines, amounts, tax, Stripe ids, status dates and the country, state and postal code it shipped to — never the buyer. Kept past ERASURE as a tax and accounting record, GDPR Art. 17(3)(b); disclosed on ACCESS like the other two.',
+  },
   // ── Records of our own handling ───────────────────────────────────────
   {
     collection: 'adminAudit',
@@ -1177,6 +1184,7 @@ export async function exportOrgData(
     'publisherHandles',
     'platformRevenue',
     'storefrontTaxCollected',
+    'posHardwareSales',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

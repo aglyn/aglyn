@@ -139,6 +139,8 @@ export interface StaffHardwareOrderRow extends Omit<PosHardwareOrderRow, 'shippi
       postalCode: string
       country: string
     } | null
+    /** What an account erasure left of the address: where tax is sourced. */
+    taxRegion?: { country: string; state: string | null; postalCode: string | null } | null
   } | null
   stripeCheckoutSessionId: string | null
   stripePaymentIntentId: string | null

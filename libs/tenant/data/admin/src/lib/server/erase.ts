@@ -651,6 +651,15 @@ async function erasePluginOrgKeyedCollections(
  * including the tax a `mode: 'stripe'` store collects under AGLYN's own
  * Texas registration, which Aglyn must be able to account for long after the
  * merchant has gone.
+ *
+ * **`posHardwareSales` must NEVER be added either (AGL-4038).** Same shape,
+ * same trap: one row per card reader order a workspace bought from the
+ * platform's hardware shop — the platform's OWN sale, on which it owes the
+ * sales tax. The order under `orgs/{orgId}/hardwareOrders`, with the buyer's
+ * name, street, phone and email, dies with the tree as it should; the row
+ * keeps only the lines, amounts, tax, Stripe ids, status dates and the
+ * country, state and postal code it shipped to. The
+ * `erase-org-tax-retention.emulator.spec` pins its survival too.
  */
 async function deleteDocsByOrgId(
   collection: string,

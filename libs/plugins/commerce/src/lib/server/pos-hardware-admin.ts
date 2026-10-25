@@ -30,12 +30,13 @@ import {
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_STATUS_STAMP,
   posHardwareRefundable,
+  posHardwareSaleRecord,
   type PosHardwareOrder,
   type PosHardwareOrderStatus,
   type PosHardwareTracking,
 } from '../model/pos-hardware'
 import { fulfillmentTrackingUrl } from '../model/tracking-url'
-import { hardwareOrdersRef, posHardwareOrderNumber } from './pos-hardware'
+import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
 import { sendPosHardwareEmail } from './pos-hardware-notify'
 import { posStripe } from './pos-stripe'
 
@@ -52,7 +53,9 @@ import { posStripe } from './pos-stripe'
  *
  * Staff only. Reading is open to every staff role; every write is `super` or
  * `billing`, because each one changes what a customer is told or returns
- * their money. Every write is an `adminAudit` row.
+ * their money. Every write is an `adminAudit` row, and each one rewrites the
+ * order's retained sale record (`posHardwareSales/{orderId}`) from the order
+ * as it now stands, in the same transaction.
  *=========================================*/
 
 /** One page of the staff list. */
@@ -231,8 +234,10 @@ async function updateOrder(
       patch[POS_HARDWARE_STATUS_STAMP[advanceTo]] = now
       reached = advanceTo
     }
+    const after = { ...before, ...patch } as PosHardwareOrder
     transaction.update(ref, patch)
-    return { before, after: { ...before, ...patch } as PosHardwareOrder, reached }
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+    return { before, after, reached }
   })
 
   await addAdminAudit(firestore, {
@@ -311,17 +316,6 @@ async function refundOrder(
     refundedCents: Number(refund.body.amount ?? claim.order.totalCents ?? 0),
     refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete(),
   }
-  await ref.update(patch)
-  await addAdminAudit(firestore, {
-    action: `pos-hardware-order-${action}`,
-    ...actor,
-    scope: 'posHardwareOrder',
-    target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
-    orgId,
-    before: { status: claim.order.status },
-    after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
-    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-  })
   const settled = { ...claim.order }
   delete settled.refundRequestedAtMs
   const after: PosHardwareOrder = {
@@ -332,6 +326,22 @@ async function refundOrder(
     refundId: patch.refundId,
     refundedCents: patch.refundedCents,
   }
+  // The order and its retained sale record move together: the record is
+  // what the refund is accounted from once the workspace is gone.
+  await firestore.runTransaction(async (transaction: any) => {
+    transaction.update(ref, patch)
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+  })
+  await addAdminAudit(firestore, {
+    action: `pos-hardware-order-${action}`,
+    ...actor,
+    scope: 'posHardwareOrder',
+    target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+    orgId,
+    before: { status: claim.order.status },
+    after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
   return json({ ok: true, order: staffView(orderId, after) })
 }
 
