@@ -169,7 +169,7 @@
     {
       "kind": "early-access",
       "figmaNodeId": "1853:9307",
-      "eyebrow": null,
+      "eyebrow": "Included from Starter",
       "heading": "Datasets are included from Starter.",
       "subheading": null,
       "body": [
@@ -181,12 +181,12 @@
       ],
       "items": [
         { "title": "8", "body": "built-in field types", "meta": "stat" },
-        { "title": "2", "body": "ways to share: all or selected sites", "meta": "stat" },
+        { "title": "2", "body": "ways to share a dataset", "meta": "stat" },
         { "title": "2", "body": "formats, in and out", "meta": "stat" },
         { "title": "7", "body": "filter operators", "meta": "stat" }
       ],
       "image": null,
-      "notes": "The chip reads 'Included from Starter', matching the CRM page rather than the older 'Now in early access'. `dataStore` is false on Free and true from Starter, so 'included from Starter' is the accurate gate — do not soften it to 'every plan'. 'From Starter to Agency' is exact: those plans carry `extraDatasetMonthlyUsd` and `extraDataGbMonthlyUsd` rates, and Enterprise carries neither. The four stats are product facts, not roster counts: 8 is the built-in types in `AUTHORABLE_TYPES`, and the label says built-in because plugins add their own types to the same picker; the first 2 is the two sharing choices, All sites and Selected sites…; the second 2 is CSV and JSON on both import and export; 7 is `DATASET_QUERY_OPS`. The older decks' `9 / products built in` pair is deliberately absent. Figures are 44px ExtraBold in primary.dark — never author the retired brand-blue literal out of Figma."
+      "notes": "The chip reads 'Included from Starter', matching the CRM page rather than the older 'Now in early access'. `dataStore` is false on Free and true from Starter, so 'included from Starter' is the accurate gate — do not soften it to 'every plan'. 'From Starter to Agency' is exact: those plans carry `extraDatasetMonthlyUsd` and `extraDataGbMonthlyUsd` rates, and Enterprise carries neither. The four stats are product facts, not roster counts: 8 is the built-in types in `AUTHORABLE_TYPES`, and the label says built-in because plugins add their own types to the same picker; the first 2 is the two sharing choices, All sites and Selected sites…; the second 2 is CSV and JSON on both import and export; 7 is `DATASET_QUERY_OPS`. The older decks' `9 / products built in` pair is deliberately absent. Figures are 44px ExtraBold in primary.dark — never author the retired brand-blue literal out of Figma. Synced to the live page on 2026-10-25 (AGL-4052): the chip is now POURED from `eyebrow` rather than set by hand, so pasting a fresh skeleton cannot bring back 'Now in early access', and the second stat reads 'ways to share a dataset', as it does live."
     },
     {
       "kind": "cta",

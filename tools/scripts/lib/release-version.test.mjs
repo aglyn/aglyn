@@ -249,6 +249,22 @@ describe('nextVersion — prerelease series', () => {
   })
 })
 
+describe('leaving the beta series (AGL-4052)', () => {
+  it('accepts --set 1.0.0 from the beta series, and the bump policy then acts on the base', () => {
+    // The GA cut is `release:prepare --write --set 1.0.0`: forward of every
+    // beta, and refused once it has been cut.
+    assert.doesNotThrow(() => assertForward('1.0.0-beta.282', '1.0.0'))
+    assert.throws(() => assertForward('1.0.0', '1.0.0'), /not ahead of/)
+    // After it there is no series left to increment: the base moves.
+    assert.equal(formatVersion(nextVersion('1.0.0', 'none')), '1.0.1')
+    assert.equal(formatVersion(nextVersion('1.0.0', 'patch')), '1.0.1')
+    assert.equal(formatVersion(nextVersion('1.0.0', 'minor')), '1.1.0')
+    assert.equal(formatVersion(nextVersion('1.0.0', 'major')), '2.0.0')
+    // And it never drifts back into a prerelease on its own.
+    assert.equal(parseVersion(formatVersion(nextVersion('1.0.0', 'minor'))).prerelease, null)
+  })
+})
+
 describe('nextVersion — release series', () => {
   it('applies ordinary semver', () => {
     assert.equal(formatVersion(nextVersion('1.2.3', 'major')), '2.0.0')

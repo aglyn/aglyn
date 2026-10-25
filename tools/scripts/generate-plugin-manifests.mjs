@@ -1329,6 +1329,8 @@ function catalogRows() {
 const RELEASE_FLAGS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-release-flags.generated.ts'
 const HOST_EVENTS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-host-events.generated.ts'
 const RELEASE_FLAG_KEY = /^release_[a-z0-9_]+$/
+/** Core's `RELEASE_FLAG_STAGES` (release-flags.ts), which plain node cannot import. */
+const RELEASE_FLAG_STAGES = ['beta']
 
 function releaseFlagRows() {
   const rows = []
@@ -1343,14 +1345,22 @@ function releaseFlagRows() {
       }
       if (!RELEASE_FLAG_KEY.test(key)) throw new Error(`${where}: "releaseFlag" ${key} is not a release_* key`)
       if (!definition) throw new Error(`${where} names ${key} but no "releaseFlagDefinition" defines it`)
-      const { label, description, defaultEnabled, navTabId } = definition
+      const { label, description, defaultEnabled, navTabId, stage } = definition
       if (typeof label !== 'string' || !label) throw new Error(`${where} releaseFlagDefinition needs a "label"`)
       if (typeof description !== 'string' || !description) throw new Error(`${where} releaseFlagDefinition needs a "description"`)
       if (typeof defaultEnabled !== 'boolean') throw new Error(`${where} releaseFlagDefinition needs a boolean "defaultEnabled"`)
       if (navTabId !== undefined && (typeof navTabId !== 'string' || !navTabId)) {
         throw new Error(`${where} releaseFlagDefinition: "navTabId" is a nav tab id`)
       }
-      rows.push({ order: source.catalog.order, flag: { key, label, description, defaultEnabled, ...(navTabId ? { navTabId } : {}) } })
+      // The released feature's stage short of general availability (AGL-4052),
+      // core's `ReleaseFlagStage`. Data only: it labels, it never gates.
+      if (stage !== undefined && !RELEASE_FLAG_STAGES.includes(stage)) {
+        throw new Error(`${where} releaseFlagDefinition: "stage" is one of ${RELEASE_FLAG_STAGES.join(', ')}, or absent for a generally available feature`)
+      }
+      rows.push({
+        order: source.catalog.order,
+        flag: { key, label, description, defaultEnabled, ...(navTabId ? { navTabId } : {}), ...(stage ? { stage } : {}) },
+      })
     }
   }
   rows.sort((a, b) => a.order - b.order)

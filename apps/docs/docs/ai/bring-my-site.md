@@ -6,6 +6,13 @@ description: Bring the website you have now into Aglyn, its pages, words and pho
 
 # Bring my site
 
+:::note Beta
+**Bring my site is in beta.** It is available today on every plan that includes
+it, and it is still changing as we improve it. Beta means you can use it now,
+while how it reads and rebuilds your pages, and the steps on this page, may
+still change.
+:::
+
 **Bring my site** moves the website you have now into a new Aglyn site. Aglyn AI
 reads each of its pages and rewrites it in your new site's design, keeping its words,
 facts and photos. Pages come in a few at a time, in **waves**. You review each wave

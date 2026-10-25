@@ -53,6 +53,27 @@ stable verdict across sessions and different flags don't share buckets.
   deterministic per workspace (hashed from the org), so a workspace keeps the feature
   once its bucket is inside the rollout percentage — no flapping between sessions.
 
+## Beta: a released feature that is still changing {#beta-stage}
+
+A flag can also declare a **stage**. Today there is one, **Beta**: the feature is
+released and open on every plan that includes it, and it is still changing. The
+stage is part of the registry, not of the Remote Config value, so it never gates
+anything and it is not edited on this page; the page shows it as a **Beta** chip
+beside the flag's name.
+
+- While a beta-staged flag is **on** for a workspace, the console shows a **Beta**
+  chip beside the feature's nav tab, after its page heading, and (for Aglyn Assist)
+  beside the panel title. Its docs pages open with a **Beta** note.
+- While a flag is **off**, the feature is rolling out, whatever its stage says:
+  customers do not see it, staff see the flag icon, and its docs pages keep the
+  **Rolling out** note. A staff preview never shows the Beta chip.
+- A flag with no stage is generally available. A docs spec refuses a Beta note on
+  any page that is not about an on, beta-staged feature, so the label comes off
+  the docs in the same change that takes the stage off the flag.
+
+Aglyn Assist, Aglyn AI generation and Bring my site are in beta. Every other
+released feature is generally available.
+
 ## Managing flags
 
 Open **Staff → Feature flags**. Each registered flag shows its live value from Firebase

@@ -6,6 +6,12 @@ description: "An AI form generator inside Aglyn: describe the form you need and 
 
 # Generate a form from a description
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 An AI build job can make a form from a brief, such as *"a quote request form for a roofing
 company"*. The job proposes a plan first, and builds once you confirm it: the fields a
 visitor fills in, the answers the form needs, a marketing consent box when the form asks for

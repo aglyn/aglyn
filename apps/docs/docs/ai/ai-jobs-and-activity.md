@@ -6,6 +6,12 @@ description: "Review what Aglyn AI did: a site's AI jobs page lists every job wi
 
 # AI jobs and activity
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Everything Aglyn AI builds is done by an **AI job**, and every job is kept where you can
 review it: what was asked, what was planned, what was built, what it cost and who
 started it.
