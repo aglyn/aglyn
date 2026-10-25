@@ -186,8 +186,8 @@ export const DOCS_HELP_EXCERPTS = {
   pluginManagerApi: 'Every public registration and loading API a plugin can use, from `@aglyn/aglyn` and `@aglyn/aglyn/server`.',
   plugins: 'Extend Aglyn with sandboxed plugins — install from the marketplace, configure them, and publish your own.',
   pos: 'Sell in person from the console register and take date-range reservations with deposits.',
-  posHardware: 'Card readers, a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.',
-  posOperations: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
+  posHardware: 'Card readers (and buying them from Aglyn, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.',
+  posOperations: 'Shifts and the cash drawer with X and Z reports, day and event totals across every register, check-in at the window with wristbands, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
   printOnDemand: 'Connect your own Printful or Printify account, import its products into your store, and paid orders are sent to it to make and ship, with tracking written back to each order.',
   productsWithAi: 'An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review.',
   publishAPlugin: 'Ship your own plugin to the marketplace with version pinning.',
@@ -777,9 +777,12 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
+    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
   posOperations: {
+    '#check-in-at-the-window': 'For a track, a campground, a lot or an event: people who bought a day pass, camping or parking online, or at the register, are looked up at the window, checked in and handed a wristband.',
+    '#day-and-event-totals': 'When several people take payments on their own registers, Commerce → Orders → Day totals adds the whole day up across every register, shift and cashier.',
     '#shifts-and-the-cash-drawer': 'A shift is one stretch of trading on one register, counted against one cash drawer.',
     '#staff-pins': 'A shared tablet stays signed in; each person switches in with their own PIN instead of signing out.',
   },

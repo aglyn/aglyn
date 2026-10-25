@@ -50,7 +50,14 @@ export interface ReservationWidgetProps {
 
 interface Availability {
   resource: CommerceModel.HostResource
+  /**
+   * Closed ranges. On a several-unit resource (AGL-4044) only the nights with
+   * no unit left, so the one-unit overlap check below is the right one for
+   * both: the endpoint sends no `units`, and the resource reads as one.
+   */
   unavailable: Array<{ fromDayMs: number; toDayMs: number }>
+  /** Nights with only a few units left; several-unit resources only. */
+  fewLeft?: Array<{ dayMs: number; unitsLeft: number }>
 }
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
@@ -115,6 +122,18 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
           checkOutDayMs: range.toDayMs,
           status: 'confirmed' as const,
         })),
+        checkInDayMs,
+        checkOutDayMs,
+      )
+    }, [availability, checkInDayMs, checkOutDayMs])
+
+    // "Only 2 left" (AGL-4044): the fewest units free on any night of the
+    // stay, when that is a few. Never on a one-unit resource, which sends no
+    // `fewLeft`.
+    const unitsLeft = useMemo(() => {
+      if (!availability || !checkInDayMs || !checkOutDayMs) return null
+      return CommerceModel.fewestUnitsLeft(
+        availability.fewLeft,
         checkInDayMs,
         checkOutDayMs,
       )
@@ -317,6 +336,11 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
                   {usd(quote.depositCents)}
                 </Typography>
               </Box>
+            ) : null}
+            {unitsLeft !== null ? (
+              <Typography variant="body2" color="warning.main">
+                {`Only ${unitsLeft} left`}
+              </Typography>
             ) : null}
           </>
         ) : null}

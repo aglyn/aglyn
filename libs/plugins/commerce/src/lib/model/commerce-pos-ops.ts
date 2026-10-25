@@ -405,6 +405,8 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
 }
 
+export { csvCell as posCsvCell }
+
 const dollars = (cents: number | null | undefined): string =>
   cents == null ? '' : (Math.round(cents) / 100).toFixed(2)
 

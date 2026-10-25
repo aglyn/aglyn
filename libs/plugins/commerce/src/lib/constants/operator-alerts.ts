@@ -94,9 +94,32 @@ export const COMMERCE_FEE_REPRICE_REFUSED: OperatorAlertDefinition = {
   defaultEnabled: true,
 }
 
+/**
+ * A merchant paid for card readers in the POS hardware shop (AGL-4038). In
+ * phase 1 a person places the order in Stripe's Terminal hardware shop, so
+ * every paid order is work waiting on staff until it is marked ordered.
+ */
+export const COMMERCE_POS_HARDWARE_ORDER: OperatorAlertDefinition = {
+  type: 'commerce.posHardwareOrder',
+  pluginId: BUNDLE_ID,
+  label: 'New hardware order',
+  description:
+    'A workspace paid for card readers or accessories in the POS hardware shop. Place the order in the Stripe Dashboard’s Terminal hardware shop, shipping to the merchant’s address, then record the Stripe order id on Staff → Hardware orders.',
+  tier: 'should',
+  category: 'payments',
+  title: 'New hardware order {{orderNumber}} for {{amount}}',
+  body:
+    'Site {{site}} ordered {{items}} ({{amount}}, {{shipping}}). Place it in the Stripe Dashboard’s Terminal hardware shop, shipping to the address on the order, and record the Stripe order id on Staff → Hardware orders.',
+  link: '/admin/hardware-orders',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
   COMMERCE_SELLER_SHARE_NOT_REVERSED,
   COMMERCE_FEE_REPRICE_REFUSED,
+  COMMERCE_POS_HARDWARE_ORDER,
 ]
