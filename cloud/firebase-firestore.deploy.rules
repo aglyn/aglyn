@@ -4551,6 +4551,8 @@ match /users/{userId} {
 
 
 
+
+
 function prefsBefore() {
 return resource == null ? {} : resource.data;
 }
@@ -4597,6 +4599,7 @@ t.get('useWorkspaceBrand', true) is bool);
 function accountPrefsValid() {
 return pinnedOrgsValid() &&
 prefListWithin('pinnedHosts', 100) &&
+prefListWithin('tabBars', 100) &&
 prefListWithin('recentOrgs', 8) &&
 prefListWithin('starred', 50) &&
 prefListWithin('recents', 30) &&
