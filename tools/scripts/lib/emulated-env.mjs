@@ -106,6 +106,30 @@ export const LIVE_AI_CREDENTIALS = new Map([
   ['AI_OPENAI_COMPAT_API_KEY', 'the OpenAI-compatible provider, when AI_PROVIDER names it'],
 ])
 
+/*
+ * THE SECOND OPT-IN: STRIPE TEST MODE ON THE EMULATOR STACK (AGL-4039).
+ *
+ * The register's card readers (connection tokens, Terminal Locations, the
+ * capture of a card taken offline) need the platform's Stripe key, and the
+ * simulated reader answers only in test mode. So `--stripe-test` (or
+ * AGLYN_EMULATED_STRIPE_TEST=1) passes the Stripe key through, and ONLY a
+ * TEST key: a value that does not start with `sk_test_` / `pk_test_` is still
+ * set empty, and serve-emulated refuses to start, so a live key never reaches
+ * a server pointed at the emulators.
+ */
+export const STRIPE_TEST_CREDENTIALS = new Map([
+  ['STRIPE_SECRET_KEY', 'sk_test_'],
+  ['NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_test_'],
+])
+
+/** The environment variable that asks for {@link STRIPE_TEST_CREDENTIALS} without the flag. */
+export const STRIPE_TEST_ENV = 'AGLYN_EMULATED_STRIPE_TEST'
+
+/** Whether the launching shell asked for Stripe test mode. */
+export function stripeTestFromEnv(env) {
+  return env[STRIPE_TEST_ENV] === '1'
+}
+
 /** The environment variable that asks for {@link LIVE_AI_CREDENTIALS} without the flag. */
 export const LIVE_AI_ENV = 'AGLYN_EMULATED_LIVE_AI'
 
@@ -264,7 +288,7 @@ export const ADMIN_SDK_SERVICE_ACCOUNT = ['FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIE
  * named in `passedThrough`, and CRON_SECRET is the shell's or
  * {@link LOCAL_CRON_SECRET}.
  */
-export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false } = {}) {
+export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false, stripeTest = false } = {}) {
   const env = { ...inherited }
   for (const { parsed } of envFiles) {
     for (const [name, value] of Object.entries(parsed)) {
@@ -277,6 +301,11 @@ export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false }
     if (!isOutboundCredential(name)) continue
     if (liveAi && LIVE_AI_CREDENTIALS.has(name)) {
       if (env[name]) passedThrough.push(name)
+      continue
+    }
+    // Only a TEST key is passed; anything else is blanked like every other credential.
+    if (stripeTest && STRIPE_TEST_CREDENTIALS.has(name) && String(env[name]).startsWith(STRIPE_TEST_CREDENTIALS.get(name))) {
+      passedThrough.push(name)
       continue
     }
     if (env[name]) blanked.push(name)

@@ -21,6 +21,7 @@
 //   npm run serve:console:emulated                  # port from project.json
 //   npm run serve:tenant:emulated -- --port 4510    # any port
 //   npm run serve:console:emulated -- --live-ai     # + the AI provider key (AGL-3596)
+//   npm run serve:console:emulated -- --stripe-test # + Stripe's TEST key, for card readers (AGL-4039)
 //
 // The `serve:*:emulated` scripts run this instead of `nx serve <app>` because
 // the nx task runner refills a blanked credential: it loads the env files
@@ -47,11 +48,13 @@ import {
   emulatedServeEnvironment,
   LIVE_AI_CREDENTIALS,
   liveAiFromEnv,
+  STRIPE_TEST_CREDENTIALS,
+  stripeTestFromEnv,
 } from './lib/emulated-env.mjs'
 
 const ownRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const USAGE =
-  'Usage: node tools/scripts/serve-emulated.mjs <app> [--port <port>] [--live-ai] [--root <checkout>]'
+  'Usage: node tools/scripts/serve-emulated.mjs <app> [--port <port>] [--live-ai] [--stripe-test] [--root <checkout>]'
 
 function fail(message) {
   console.error(`${message}\n${USAGE}`)
@@ -62,6 +65,7 @@ let app
 let portArg
 let rootArg
 let liveAi = liveAiFromEnv(process.env)
+let stripeTest = stripeTestFromEnv(process.env)
 const args = process.argv.slice(2)
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index]
@@ -72,6 +76,8 @@ for (let index = 0; index < args.length; index += 1) {
     portArg = arg.slice('--port='.length)
   } else if (arg === '--live-ai') {
     liveAi = true
+  } else if (arg === '--stripe-test') {
+    stripeTest = true
   } else if (arg === '--root') {
     rootArg = args[index + 1]
     index += 1
@@ -137,11 +143,20 @@ if (modulesLink?.isSymbolicLink()) {
 if (liveAi && !process.env.FIRESTORE_EMULATOR_HOST) {
   fail('--live-ai needs FIRESTORE_EMULATOR_HOST: a live model is passed through only to a server on the emulators.')
 }
+if (stripeTest && !process.env.FIRESTORE_EMULATOR_HOST) {
+  fail('--stripe-test needs FIRESTORE_EMULATOR_HOST: the Stripe test key is passed through only to a server on the emulators.')
+}
 const { env, blanked, passedThrough, identityFilled, adminSdkMissing } = emulatedServeEnvironment(
   process.env,
   consoleEnvFiles(repoRoot, app),
-  { liveAi },
+  { liveAi, stripeTest },
 )
+// AGL-4039: the card readers need Stripe's TEST key; a live key (or none) refuses to start.
+if (stripeTest && !passedThrough.includes('STRIPE_SECRET_KEY')) {
+  fail(
+    `--stripe-test found no TEST key: ${[...STRIPE_TEST_CREDENTIALS.entries()].map(([name, prefix]) => `${name} must start with ${prefix}`).join(', ')}.`,
+  )
+}
 if (liveAi && passedThrough.length === 0) {
   fail(
     `--live-ai found no AI provider key (${[...LIVE_AI_CREDENTIALS.keys()].join(', ')}) ` +
@@ -157,7 +172,8 @@ if (pruned.status !== 0) process.exit(pruned.status ?? 1)
 console.log(
   `serve-emulated: ${app} on port ${port}; ${blanked.length} outbound credential(s) set empty` +
     (blanked.length > 0 ? `: ${blanked.join(', ')}` : '') +
-    (liveAi ? `; LIVE AI: ${passedThrough.join(', ')} passed through, the beat answers CRON_SECRET` : ''),
+    (liveAi ? `; LIVE AI: ${passedThrough.join(', ')} passed through, the beat answers CRON_SECRET` : '') +
+    (stripeTest ? '; STRIPE TEST MODE: the test key is passed through' : ''),
 )
 // What no env file gave this checkout (AGL-3910), said before the first
 // request rather than as a 500 or a browser-console error after it.

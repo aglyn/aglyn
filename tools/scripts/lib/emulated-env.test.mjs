@@ -158,6 +158,20 @@ describe('emulatedServeEnvironment', () => {
     assert.equal(env.CRON_SECRET, 'from-file')
   })
 
+  it('in Stripe test mode, passes a TEST key through and still blanks a live one (AGL-4039)', () => {
+    const files = [
+      { path: '/x', parsed: { STRIPE_SECRET_KEY: 'sk_test_abc', NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_test_abc', RESEND_API_KEY: 're_x' } },
+    ]
+    const test = emulatedServeEnvironment({}, files, { stripeTest: true })
+    assert.equal(test.env.STRIPE_SECRET_KEY, 'sk_test_abc')
+    assert.deepEqual(test.passedThrough, ['NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'STRIPE_SECRET_KEY'])
+    assert.equal(test.env.RESEND_API_KEY, '')
+    const live = emulatedServeEnvironment({}, [{ path: '/x', parsed: { STRIPE_SECRET_KEY: 'sk_live_abc' } }], { stripeTest: true })
+    assert.equal(live.env.STRIPE_SECRET_KEY, '')
+    assert.deepEqual(live.passedThrough, [])
+    assert.equal(emulatedServeEnvironment({}, files).env.STRIPE_SECRET_KEY, '')
+  })
+
   it('with live AI, passes only the AI provider keys through and still blanks billing and email', () => {
     const { env, blanked, passedThrough } = emulatedServeEnvironment({}, liveFiles, { liveAi: true })
     assert.equal(env.ANTHROPIC_API_KEY, 'placeholder')
