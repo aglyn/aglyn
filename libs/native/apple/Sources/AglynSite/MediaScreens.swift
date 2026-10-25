@@ -205,13 +205,9 @@ struct MediaLibrary: View {
       HStack(spacing: 0) {
         browser
         if wide && !selection.isEmpty {
-          Rectangle().fill(AglynColor.divider).frame(width: 1).ignoresSafeArea(edges: .bottom)
+          Rectangle().fill(AglynColor.divider).frame(width: AglynMediaMetrics.hairline).ignoresSafeArea(edges: .bottom)
           inspector
-            #if os(macOS)
-              .frame(width: 360)
-            #else
-              .frame(width: 400)
-            #endif
+            .frame(width: AglynMediaMetrics.inspectorWidth)
             .transition(.move(edge: .trailing).combined(with: .opacity))
         }
       }
@@ -310,7 +306,7 @@ struct MediaLibrary: View {
       head.crumbs
     } accessory: {
       head.star
-      Spacer(minLength: 8)
+      Spacer(minLength: AglynSpace.one)
       newFolderButton(icon: false).buttonStyle(AglynHeaderButtonStyle()).fixedSize()
       AglynPrimaryHeaderButton.blockable(uploadAction)
     }
@@ -353,7 +349,7 @@ struct MediaLibrary: View {
       )
       .modifier(MediaCrumbDrops(crumbs: crumbs, dropCrumb: $dropCrumb, onDrop: { ids, folder in move(ids, to: folder) }))
       .aglynContentEdges()
-      .padding(.bottom, 12)
+      .padding(.bottom, AglynSpace.oneAndHalf)
       notices
       content
     }
@@ -393,14 +389,14 @@ struct MediaLibrary: View {
     let lines =
       (scopeTokens != nil && !model.search.isEmpty ? [ContractValues.shared.mediaScopedSearchNotice] : []) + model.notices
     if !lines.isEmpty {
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: AglynSpace.half) {
         ForEach(lines, id: \.self) { notice in
           Text(notice).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
             .accessibilityIdentifier("media-filter-notice")
         }
       }
       .aglynContentEdges()
-      .padding(.bottom, 8)
+      .padding(.bottom, AglynSpace.one)
     }
   }
 
@@ -408,7 +404,7 @@ struct MediaLibrary: View {
   private var content: some View {
     switch model.rows {
     case .loading:
-      SkeletonGrid(count: 12, minimum: MediaTileMetrics.minWidth)
+      SkeletonGrid(count: 12, minimum: AglynMediaMetrics.tileMinWidth)
     case .failed(let message):
       AglynEmptyState("Could not load the library", systemImage: SiteSymbols.error, message: message) {
         Button("Try again") { model.refresh() }
@@ -468,66 +464,68 @@ struct MediaLibrary: View {
 
   private func columnCount(_ width: CGFloat) -> Int {
     if phone { return 3 }
-    return max(1, Int((width + MediaTileMetrics.gap) / (MediaTileMetrics.minWidth + MediaTileMetrics.gap)))
+    return max(1, Int((width + AglynMediaMetrics.gap) / (AglynMediaMetrics.tileMinWidth + AglynMediaMetrics.gap)))
   }
 
   private func gridView(_ items: [MediaItem], width: CGFloat) -> some View {
-    let gap: CGFloat = phone ? 12 : MediaTileMetrics.gap
+    let gap: CGFloat = phone ? AglynMediaMetrics.phoneGap : AglynMediaMetrics.gap
     let fileColumns = Array(repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: max(1, columnCount(width)))
     let folderColumns = phone ? Array(repeating: GridItem(.flexible(), spacing: gap), count: 2) : fileColumns
-    return VStack(alignment: .leading, spacing: 8) {
+    return VStack(alignment: .leading, spacing: AglynSpace.one) {
       if !visibleFolders.isEmpty {
         groupLabel("Folders")
         LazyVGrid(columns: folderColumns, spacing: gap) {
           ForEach(visibleFolders) { folder in folderTile(folder) }
         }
-        .padding(.bottom, items.isEmpty ? 0 : 12)
+        .padding(.bottom, items.isEmpty ? 0 : AglynSpace.oneAndHalf)
       }
       if !items.isEmpty {
         groupLabel("Files")
-        LazyVGrid(columns: fileColumns, spacing: phone ? 16 : 20) {
+        LazyVGrid(columns: fileColumns, spacing: phone ? AglynMediaMetrics.phoneFileRowGap : AglynMediaMetrics.fileRowGap) {
           ForEach(items) { item in fileTile(item) }
         }
       }
       if model.hasMore {
-        AglynLoadMoreRow("Show more files") { model.loadMore() }.padding(.top, 8)
+        AglynLoadMoreRow("Show more files") { model.loadMore() }.padding(.top, AglynSpace.one)
       }
     }
     .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone)
-    .padding(.bottom, 24)
+    .padding(.bottom, AglynSpace.three)
   }
 
   private func groupLabel(_ title: String) -> some View {
     Text(title)
-      .font(.system(size: phone ? 13 : 12, weight: .semibold))
+      .font(.system(size: phone ? AglynMediaMetrics.phoneGroupLabel : AglynMediaMetrics.groupLabel, weight: .semibold))
       .foregroundStyle(AglynColor.secondaryText)
       .accessibilityAddTraits(.isHeader)
   }
 
   private func listView(_ items: [MediaItem]) -> some View {
-    LazyVStack(alignment: .leading, spacing: 2) {
-      HStack(spacing: 12) {
-        Text("Name").frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 52)
-        Text("Type").frame(width: 56, alignment: .leading)
-        Text("Size").frame(width: 72, alignment: .trailing)
-        Text("Added").frame(width: 110, alignment: .trailing)
+    LazyVStack(alignment: .leading, spacing: AglynMediaMetrics.ring) {
+      HStack(spacing: AglynSpace.oneAndHalf) {
+        Text("Name").frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.leading, AglynMediaMetrics.rowThumb.width + AglynSpace.oneAndHalf)
+        Text("Type").frame(width: AglynMediaMetrics.typeColumn, alignment: .leading)
+        Text("Size").frame(width: AglynMediaMetrics.sizeColumn, alignment: .trailing)
+        Text("Added").frame(width: AglynMediaMetrics.addedColumn, alignment: .trailing)
       }
-      .font(.system(size: 12, weight: .semibold))
+      .font(.system(size: AglynMediaMetrics.groupLabel, weight: .semibold))
       .foregroundStyle(AglynColor.secondaryText)
-      .padding(.horizontal, 8)
-      .padding(.bottom, 4)
+      .padding(.horizontal, AglynSpace.one)
+      .padding(.bottom, AglynSpace.half)
       ForEach(visibleFolders) { folder in
         Button {
           open(folder.id)
         } label: {
-          HStack(spacing: 12) {
-            Image(systemName: "folder.fill").font(.system(size: 18)).foregroundStyle(AglynColor.primary).frame(width: 40, height: 30)
-            Text(folder.name).font(.system(size: MediaTileMetrics.nameSize, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
+          HStack(spacing: AglynSpace.oneAndHalf) {
+            Image(systemName: "folder.fill").font(.system(size: AglynMediaMetrics.rowFolderSymbol)).foregroundStyle(AglynColor.primary)
+              .frame(width: AglynMediaMetrics.rowThumb.width, height: AglynMediaMetrics.rowThumb.height)
+            Text(folder.name).font(.system(size: AglynMediaMetrics.name, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
               .frame(maxWidth: .infinity, alignment: .leading)
-            Text(counts[folder.id].map(mediaFilesCount) ?? "").font(.system(size: MediaTileMetrics.captionSize))
+            Text(counts[folder.id].map(mediaFilesCount) ?? "").font(.system(size: AglynMediaMetrics.caption))
               .foregroundStyle(AglynColor.secondaryText)
           }
-          .padding(.horizontal, 8).frame(minHeight: 40).contentShape(Rectangle())
+          .padding(.horizontal, AglynSpace.one).frame(minHeight: AglynMediaMetrics.rowHeight).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .modifier(MediaFolderDrop(folderID: folder.id, dropFolder: $dropFolder) { move($0, to: folder.id) })
@@ -535,7 +533,7 @@ struct MediaLibrary: View {
       }
       ForEach(items) { item in
         MediaFileRow(
-          item: item, thumbnail: item.thumbnail(origin: origin, width: 160).flatMap(URL.init(string:)),
+          item: item, thumbnail: item.thumbnail(origin: origin, width: AglynMediaMetrics.cdnRow).flatMap(URL.init(string:)),
           selected: selection.contains(item.id), badge: mediaTileBadge(private: item.isPrivate, disabled: disabled[item.id] != nil)
         )
         .onTapGesture { click(item) }
@@ -543,10 +541,10 @@ struct MediaLibrary: View {
         .contextMenu { fileMenu(item) }
         .accessibilityIdentifier("media-\(item.id)")
       }
-      if model.hasMore { AglynLoadMoreRow("Show more files") { model.loadMore() }.padding(.top, 8) }
+      if model.hasMore { AglynLoadMoreRow("Show more files") { model.loadMore() }.padding(.top, AglynSpace.one) }
     }
-    .padding(.horizontal, AglynContentInsets.horizontal - 8)
-    .padding(.bottom, 24)
+    .padding(.horizontal, AglynContentInsets.horizontal - AglynSpace.one)
+    .padding(.bottom, AglynSpace.three)
   }
 
   @ViewBuilder
@@ -759,18 +757,18 @@ struct MediaLibrary: View {
     VStack(spacing: AglynSpace.one) {
       if phone && selecting && !selection.isEmpty { phoneBulkBar }
       if let uploading {
-        VStack(alignment: .leading, spacing: 8) {
-          HStack(spacing: 8) {
-            Image(systemName: "square.and.arrow.up").font(.system(size: 13, weight: .medium))
+        VStack(alignment: .leading, spacing: AglynSpace.one) {
+          HStack(spacing: AglynSpace.one) {
+            Image(systemName: "square.and.arrow.up").font(.system(size: AglynMediaMetrics.control, weight: .medium))
             Text(uploading.total == 1 ? "Uploading \(uploading.name)…" : "Uploading \(uploading.done + 1) of \(uploading.total)…")
-              .font(.system(size: 13, weight: .medium)).lineLimit(1)
+              .font(.system(size: AglynMediaMetrics.control, weight: .medium)).lineLimit(1)
           }
           .foregroundStyle(AglynColor.textPrimary)
           ProgressView(value: Double(uploading.done), total: Double(max(uploading.total, 1)))
             .progressViewStyle(.linear).tint(AglynColor.primary)
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AglynColor.accentSoft))
+        .padding(.horizontal, AglynSpace.of(1.75)).padding(.vertical, AglynSpace.of(1.25))
+        .background(RoundedRectangle(cornerRadius: AglynMediaMetrics.tileRadius, style: .continuous).fill(AglynColor.accentSoft))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("media-uploading")
       }
@@ -801,9 +799,10 @@ struct MediaLibrary: View {
 
   /// A phone's bulk actions while picking several: how many, and the console's actions in one menu.
   private var phoneBulkBar: some View {
-    HStack(spacing: 12) {
-      Text("\(selection.count) selected").font(.system(size: 15, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
-      Spacer(minLength: 8)
+    HStack(spacing: AglynSpace.oneAndHalf) {
+      Text("\(selection.count) selected").font(.system(size: AglynMediaMetrics.panelTitle, weight: .semibold))
+        .foregroundStyle(AglynColor.textPrimary)
+      Spacer(minLength: AglynSpace.one)
       Menu {
         Menu("Move to folder…") {
           Button("No folder") { move(items.map(\.id).filter(selection.contains), to: nil) }
@@ -817,14 +816,13 @@ struct MediaLibrary: View {
         Divider()
         Button("Delete…", role: .destructive) { bulkDeleting = true }
       } label: {
-        Text("Actions").font(.system(size: 15, weight: .semibold))
+        Text("Actions").font(.system(size: AglynMediaMetrics.panelTitle, weight: .semibold))
       }
       .disabled(!canEdit || runner.busy)
       .accessibilityIdentifier("media-bulk-menu")
     }
-    .padding(.horizontal, 16).padding(.vertical, 12)
-    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.paper))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AglynColor.divider))
+    .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.oneAndHalf)
+    .aglynCardSurface()
   }
 
   private func deleted(_ id: String, _ name: String, _ restorable: Bool) {
@@ -1155,17 +1153,9 @@ private struct MediaDetailField: View {
   var enabled = true
   var identifier: String? = nil
 
-  private var touch: Bool {
-    #if os(macOS)
-      false
-    #else
-      true
-    #endif
-  }
-
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(label).font(.system(size: touch ? 13 : 12, weight: .medium)).foregroundStyle(AglynColor.secondaryText)
+    VStack(alignment: .leading, spacing: AglynSpace.half) {
+      Text(label).font(.system(size: AglynMediaMetrics.fieldLabel, weight: .medium)).foregroundStyle(AglynColor.secondaryText)
       Group {
         if multiline {
           TextField("", text: $text, axis: .vertical).lineLimit(1...5)
@@ -1174,12 +1164,11 @@ private struct MediaDetailField: View {
         }
       }
       .textFieldStyle(.plain)
-      .font(.system(size: touch ? 17 : 13))
+      .font(.system(size: AglynMediaMetrics.field))
       .foregroundStyle(AglynColor.textPrimary)
-      .padding(.horizontal, touch ? 12 : 8)
-      .padding(.vertical, touch ? 11 : 5)
-      .background(RoundedRectangle(cornerRadius: touch ? 10 : 6, style: .continuous).fill(AglynColor.paper))
-      .overlay(RoundedRectangle(cornerRadius: touch ? 10 : 6, style: .continuous).strokeBorder(AglynColor.divider))
+      .padding(AglynMediaMetrics.fieldPadding)
+      .background(RoundedRectangle(cornerRadius: AglynMediaMetrics.fieldRadius, style: .continuous).fill(AglynColor.paper))
+      .overlay(RoundedRectangle(cornerRadius: AglynMediaMetrics.fieldRadius, style: .continuous).strokeBorder(AglynColor.divider))
       .disabled(!enabled)
       .accessibilityLabel(label)
       .accessibilityIdentifier(identifier ?? "")
@@ -1227,7 +1216,7 @@ struct MediaDetailBody: View {
   private var orgWideEditor: Bool { !scope.isOrg || ["owner", "admin"].contains(context.orgRole ?? "") }
   /// The details' side margin: the inspector's 24, or the column's content edge where they are pushed.
   private var inset: CGFloat {
-    if onClose != nil { return 24 }
+    if onClose != nil { return AglynSpace.three }
     return wide ? AglynContentInsets.horizontal : AglynContentInsets.phone
   }
 
@@ -1274,7 +1263,7 @@ struct MediaDetailBody: View {
       }
       .disabled(!canEdit)
     } label: {
-      Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold)).frame(width: 28, height: 28)
+      Image(systemName: "ellipsis").font(.system(size: AglynMediaMetrics.control, weight: .semibold)).frame(width: AglynMediaMetrics.button, height: AglynMediaMetrics.button)
     }
     .menuStyle(.button)
     .buttonStyle(AglynHeaderButtonStyle())
@@ -1287,17 +1276,17 @@ struct MediaDetailBody: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: AglynSpace.two) {
         if let onClose {
-          HStack(spacing: 6) {
+          HStack(spacing: AglynSpace.of(0.75)) {
             Text(item.fileName)
-              .font(.system(size: 15, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
+              .font(.system(size: AglynMediaMetrics.panelTitle, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
               .lineLimit(1).truncationMode(.middle)
               .frame(maxWidth: .infinity, alignment: .leading)
               .accessibilityAddTraits(.isHeader)
             moreMenu
             Button(action: onClose) {
-              Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).frame(width: 28, height: 28)
+              Image(systemName: "xmark").font(.system(size: AglynMediaMetrics.symbol, weight: .semibold)).frame(width: AglynMediaMetrics.button, height: AglynMediaMetrics.button)
             }
             .buttonStyle(AglynHeaderButtonStyle())
             .keyboardShortcut(.cancelAction)
@@ -1310,14 +1299,17 @@ struct MediaDetailBody: View {
           AglynNotice("\(disabled.title). \(disabled.message)", tone: .error)
             .accessibilityIdentifier("media-quarantine")
         }
-        MediaPreview(item: item, url: item.thumbnail(origin: origin, width: 640).flatMap(URL.init(string:)), maxPixel: 1280, glyphSize: 40)
-          .aspectRatio(4 / 3, contentMode: .fit)
-          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-          .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.divider))
+        MediaPreview(
+          item: item, url: item.thumbnail(origin: origin, width: AglynMediaMetrics.cdnInspector).flatMap(URL.init(string:)),
+          maxPixel: AglynMediaMetrics.pixelsInspector, glyphSize: AglynMediaMetrics.glyphInspector
+        )
+        .aspectRatio(AglynMediaMetrics.previewAspect, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: AglynMediaMetrics.tileRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: AglynMediaMetrics.tileRadius, style: .continuous).strokeBorder(AglynColor.divider))
           .accessibilityLabel(item.alt.isEmpty ? item.fileName : item.alt)
-        Text(facts).font(.system(size: wide ? 12 : 13)).foregroundStyle(AglynColor.secondaryText)
+        Text(facts).font(.system(size: wide ? AglynMediaMetrics.note : AglynMediaMetrics.phoneNote)).foregroundStyle(AglynColor.secondaryText)
           .fixedSize(horizontal: false, vertical: true)
-        AglynWrapRow(spacing: 8, lineSpacing: 8) { fileButtons }
+        AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.one) { fileButtons }
         if orgWideEditor {
           Toggle(
             isOn: Binding(
@@ -1328,11 +1320,11 @@ struct MediaDetailBody: View {
                 }
               })
           ) {
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Private").font(.system(size: wide ? 13 : 17, weight: wide ? .medium : .regular))
+            VStack(alignment: .leading, spacing: AglynMediaMetrics.ring) {
+              Text("Private").font(.system(size: wide ? AglynMediaMetrics.switchLabel : AglynMediaMetrics.phoneSwitchLabel, weight: wide ? .medium : .regular))
                 .foregroundStyle(AglynColor.textPrimary)
               Text("A private file has no public link; pages cannot show it.")
-                .font(.system(size: wide ? 12 : 13)).foregroundStyle(AglynColor.secondaryText)
+                .font(.system(size: wide ? AglynMediaMetrics.note : AglynMediaMetrics.phoneNote)).foregroundStyle(AglynColor.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             }
           }
@@ -1344,12 +1336,12 @@ struct MediaDetailBody: View {
           .accessibilityIdentifier("media-private")
         }
         AglynHairline()
-        Text("Details").font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
+        Text("Details").font(.system(size: AglynMediaMetrics.groupLabel, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
           .accessibilityAddTraits(.isHeader)
         MediaDetailField(
           label: "File name", text: Binding(get: { fileName }, set: { fileName = $0.capped(200) }), enabled: canEdit,
           identifier: "media-file-name")
-        VStack(alignment: .trailing, spacing: 2) {
+        VStack(alignment: .trailing, spacing: AglynMediaMetrics.ring) {
           MediaDetailField(
             label: "Alt text", text: Binding(get: { alt }, set: { alt = $0.capped(altMax) }), multiline: true,
             enabled: canEdit, identifier: "media-alt")
@@ -1363,20 +1355,20 @@ struct MediaDetailBody: View {
           runner.error = nil
           moving = true
         } label: {
-          HStack(spacing: 8) {
+          HStack(spacing: AglynSpace.one) {
             Text("Folder").foregroundStyle(AglynColor.secondaryText)
-            Spacer(minLength: 8)
+            Spacer(minLength: AglynSpace.one)
             Text(item.folderID.flatMap { byID[$0] }.map { folderPath($0, byID: byID) } ?? "Not in a folder")
               .foregroundStyle(AglynColor.textPrimary).lineLimit(1)
-            Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
+            Image(systemName: "chevron.right").font(.system(size: AglynMediaMetrics.chevron, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
           }
-          .font(.system(size: wide ? 13 : 15))
+          .font(.system(size: wide ? AglynMediaMetrics.detailText : AglynMediaMetrics.phoneDetailText))
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!canEdit)
         .accessibilityIdentifier("media-folder")
-        HStack(spacing: 8) {
+        HStack(spacing: AglynSpace.one) {
           Button("Save") {
             let (name, alt, details, tags) = (fileName.trimmed, alt.trimmed, details.trimmed, parsedTags)
             runner.run("Details saved.") {
@@ -1392,11 +1384,11 @@ struct MediaDetailBody: View {
           }
         }
         Text("The file name is a display name only — the link stays the same. Alt text describes the image for screen readers and search.")
-          .font(.system(size: 12)).foregroundStyle(AglynColor.textTertiary)
+          .font(.system(size: AglynMediaMetrics.note)).foregroundStyle(AglynColor.textTertiary)
           .fixedSize(horizontal: false, vertical: true)
         AglynHairline()
         HStack {
-          Text("Used on").font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
+          Text("Used on").font(.system(size: AglynMediaMetrics.groupLabel, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
           Spacer()
           Button(references == nil ? "Check" : "Check again") {
             let api = api
@@ -1405,14 +1397,14 @@ struct MediaDetailBody: View {
           }
           .buttonStyle(.borderless)
           .disabled(runner.busy)
-          .font(.system(size: 12, weight: .medium))
+          .font(.system(size: AglynMediaMetrics.note, weight: .medium))
           .accessibilityIdentifier("media-references")
         }
         switch references {
         case nil:
-          Text("See which pages and components show this file.").font(.system(size: 13)).foregroundStyle(AglynColor.secondaryText)
+          Text("See which pages and components show this file.").font(.system(size: AglynMediaMetrics.detailText)).foregroundStyle(AglynColor.secondaryText)
         case let found? where found.isEmpty:
-          Text("Nothing uses this file yet.").font(.system(size: 13)).foregroundStyle(AglynColor.secondaryText)
+          Text("Nothing uses this file yet.").font(.system(size: AglynMediaMetrics.detailText)).foregroundStyle(AglynColor.secondaryText)
         case let found?:
           ForEach(found, id: \.self) { reference in
             AglynRow(reference.name, subtitle: reference.kind.capitalized, systemImage: SiteSymbols.page) {
@@ -1422,8 +1414,8 @@ struct MediaDetailBody: View {
         }
       }
       .padding(.horizontal, inset)
-      .padding(.top, onClose == nil ? 16 : 2)
-      .padding(.bottom, 24)
+      .padding(.top, onClose == nil ? AglynSpace.two : AglynMediaMetrics.ring)
+      .padding(.bottom, AglynSpace.three)
     }
     .accessibilityIdentifier("media-detail")
     .toolbar {

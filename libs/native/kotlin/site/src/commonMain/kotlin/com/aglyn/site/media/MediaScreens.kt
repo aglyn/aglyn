@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -153,6 +154,9 @@ import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.pickSourceLabel
 import com.aglyn.ui.space
+import com.aglyn.ui.mediaMetrics
+import com.aglyn.ui.OnMediaScrim
+import com.aglyn.ui.AglynTokens
 import kotlinx.coroutines.launch
 
 const val SITE_MEDIA_SCREEN = "site.media"
@@ -241,6 +245,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val phone = currentWidthClass() == WidthClass.COMPACT && !LocalShellMetrics.current.compact
   val compact = LocalShellMetrics.current.compact
   val edge = contentInset()
+  val metrics = mediaMetrics(phone)
   val uri = LocalUriHandler.current
   val clipboard = LocalClipboardManager.current
   val windowInfo = LocalWindowInfo.current
@@ -470,8 +475,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
                     },
                 ) {
                   val width = maxWidth - edge * 2
-                  val min = if (compact) 160.dp else 180.dp
-                  val across = if (phone) 3 else ((width + 16.dp) / (min + 16.dp)).toInt().coerceAtLeast(1)
+                  val across = if (phone) 3 else ((width + metrics.gap) / (metrics.tileMinWidth + metrics.gap)).toInt().coerceAtLeast(1)
                   LaunchedEffect(across) { columns = across }
                   MediaGrid(
                     rows, visibleFolders, counts, across, phone, edge, selection, selecting, focusedFolder, disabled, origin, model.hasMore,
@@ -499,7 +503,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
         }
         if (!phone && selection.isNotEmpty()) {
           VerticalDivider()
-          Box(Modifier.width(if (compact) 360.dp else 400.dp).fillMaxHeight()) {
+          Box(Modifier.width(metrics.inspectorWidth).fillMaxHeight()) {
             if (selection.size == 1) {
               key(selection.first()) {
                 MediaDetail(
@@ -574,6 +578,7 @@ private fun MediaHead(phone: Boolean, compact: Boolean, edge: Dp, enabled: Boole
     }
   }
   var sourcesOpen by remember { mutableStateOf(false) }
+  val metrics = mediaMetrics(phone)
   Row(
     Modifier.fillMaxWidth().padding(start = edge, end = edge, top = space(1f), bottom = space(1.5f)),
     verticalAlignment = Alignment.CenterVertically,
@@ -581,7 +586,7 @@ private fun MediaHead(phone: Boolean, compact: Boolean, edge: Dp, enabled: Boole
   ) {
     Text(
       "Media",
-      style = if (phone) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp),
+      style = if (phone) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineSmall.copy(fontSize = metrics.headTitle, lineHeight = metrics.headTitleLine),
       fontWeight = FontWeight.Bold,
       modifier = Modifier.semantics { heading() },
     )
@@ -623,16 +628,17 @@ private fun UploadSources(open: Boolean, sources: List<PickSource>, close: () ->
 @Composable
 private fun SquareAction(icon: String, label: String, filled: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val scheme = MaterialTheme.colorScheme
-  val shape = RoundedCornerShape(8.dp)
+  val metrics = mediaMetrics(phone = true)
+  val shape = RoundedCornerShape(LocalShellMetrics.current.controlRadius)
   Box(
-    modifier.size(40.dp).alpha(if (enabled) 1f else 0.38f).clip(shape)
+    modifier.size(metrics.squareAction).alpha(if (enabled) 1f else metrics.disabledAlpha).clip(shape)
       .background(if (filled) scheme.primary else scheme.surface)
-      .then(if (filled) Modifier else Modifier.border(1.dp, scheme.outlineVariant, shape))
+      .then(if (filled) Modifier else Modifier.border(metrics.hairline, scheme.outlineVariant, shape))
       .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
       .semantics { contentDescription = label },
     contentAlignment = Alignment.Center,
   ) {
-    Icon(AglynIcons.named(icon), null, Modifier.size(20.dp), tint = if (filled) scheme.onPrimary else scheme.onSurface)
+    Icon(AglynIcons.named(icon), null, Modifier.size(metrics.squareIcon), tint = if (filled) scheme.onPrimary else scheme.onSurface)
   }
 }
 
@@ -640,6 +646,7 @@ private fun SquareAction(icon: String, label: String, filled: Boolean, enabled: 
 @Composable
 private fun MediaToolbar(model: MediaListModel, edge: Dp, onMoreFilters: () -> Unit, filtering: Boolean, onClear: () -> Unit) {
   val compactHead = LocalShellMetrics.current.compact || currentWidthClass() != WidthClass.COMPACT
+  val metrics = mediaMetrics(phone = false)
   var open by remember { mutableStateOf(false) }
   val typeLabel = model.type?.let { type -> mediaTypeChoices().firstOrNull { it.first == type }?.second }
   val more = model.filters.count
@@ -659,12 +666,12 @@ private fun MediaToolbar(model: MediaListModel, edge: Dp, onMoreFilters: () -> U
         CompactButton(active ?: "Filter", "filter_list", { open = true }, Modifier.testTag("media-filter"))
       } else {
         OutlinedButton(onClick = { open = true }, shape = controlShape(), modifier = Modifier.testTag("media-filter")) {
-          Icon(AglynIcons.named("filter_list"), contentDescription = null, Modifier.size(18.dp))
+          Icon(AglynIcons.named("filter_list"), contentDescription = null, Modifier.size(metrics.buttonIcon))
           Text(active ?: "Filter", Modifier.padding(start = space(0.75f)))
         }
       }
       DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.testTag("media-filter-menu")) {
-        Text("Type", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        Text("Type", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = space(2f), vertical = space(0.75f)))
         for ((value, label) in mediaTypeChoices()) {
           DropdownMenuItem(
             text = { Text(label) },
@@ -674,7 +681,7 @@ private fun MediaToolbar(model: MediaListModel, edge: Dp, onMoreFilters: () -> U
           )
         }
         HorizontalDivider()
-        Text("Sort", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        Text("Sort", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = space(2f), vertical = space(0.75f)))
         for (sort in Contracts.mediaSorts.filter { it != MediaSort.UNKNOWN }) {
           DropdownMenuItem(
             text = { Text(Contracts.mediaSortLabels[sort.raw] ?: sort.raw) },
@@ -709,8 +716,9 @@ private fun MediaPathRow(
   onSelecting: (Boolean) -> Unit,
 ) {
   val compact = LocalShellMetrics.current.compact
-  val height = if (compact) 28.dp else 36.dp
-  val shape = RoundedCornerShape(if (compact) 6.dp else 8.dp)
+  val metrics = mediaMetrics(phone)
+  val height = metrics.button
+  val shape = RoundedCornerShape(LocalShellMetrics.current.controlRadius)
   val scheme = MaterialTheme.colorScheme
   Row(
     Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = space(1.5f)).heightIn(min = height),
@@ -721,13 +729,13 @@ private fun MediaPathRow(
       var open by remember { mutableStateOf(false) }
       Box {
         Row(
-          Modifier.height(height).clip(shape).background(scheme.surface).border(1.dp, scheme.outlineVariant, shape)
-            .clickable(role = Role.Button) { open = true }.padding(start = 10.dp, end = 8.dp).testTag("media-library"),
+          Modifier.height(height).clip(shape).background(scheme.surface).border(metrics.hairline, scheme.outlineVariant, shape)
+            .clickable(role = Role.Button) { open = true }.padding(start = space(1.25f), end = space(1f)).testTag("media-library"),
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
+          horizontalArrangement = Arrangement.spacedBy(space(0.5f)),
         ) {
-          Text(if (library.index == 0) "This site" else "Workspace", fontSize = if (compact) 13.sp else 15.sp, fontWeight = FontWeight.Medium)
-          Icon(AglynIcons.named("expand_more"), null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
+          Text(if (library.index == 0) "This site" else "Workspace", fontSize = metrics.control, fontWeight = FontWeight.Medium)
+          Icon(AglynIcons.named("expand_more"), null, Modifier.size(metrics.icon), tint = scheme.onSurfaceVariant)
         }
         DropdownMenu(open, onDismissRequest = { open = false }) {
           DropdownMenuItem(text = { Text("This site") }, trailingIcon = { if (library.index == 0) Icon(AglynIcons.named("check"), null) }, onClick = { open = false; library.pick(0) }, modifier = Modifier.testTag("media-tab-site"))
@@ -737,19 +745,19 @@ private fun MediaPathRow(
     }
     if (crumbs.isNotEmpty() && !phone) {
       Box(
-        Modifier.size(height).clip(shape).background(scheme.surface).border(1.dp, scheme.outlineVariant, shape)
+        Modifier.size(height).clip(shape).background(scheme.surface).border(metrics.hairline, scheme.outlineVariant, shape)
           .clickable(role = Role.Button) { onOpen(crumbs.dropLast(1).lastOrNull()?.id) }.semantics { contentDescription = "Back" }.testTag("media-back"),
         contentAlignment = Alignment.Center,
-      ) { Icon(AglynIcons.named("chevron_left"), null, Modifier.size(16.dp)) }
+      ) { Icon(AglynIcons.named("chevron_left"), null, Modifier.size(metrics.icon)) }
     }
-    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.75f))) {
       val all = listOf<MediaFolder?>(null) + crumbs
       all.forEachIndexed { index, folder ->
-        if (index > 0) Icon(AglynIcons.named("chevron_right"), null, Modifier.size(12.dp), tint = scheme.onSurfaceVariant)
+        if (index > 0) Icon(AglynIcons.named("chevron_right"), null, Modifier.size(metrics.crumbChevron), tint = scheme.onSurfaceVariant)
         val last = index == all.lastIndex
         Text(
           folder?.name ?: "All files",
-          fontSize = if (compact) 13.sp else 15.sp,
+          fontSize = metrics.control,
           fontWeight = if (last) FontWeight.SemiBold else FontWeight.Medium,
           color = if (last) scheme.onSurface else scheme.onSurfaceVariant,
           maxLines = 1,
@@ -758,24 +766,24 @@ private fun MediaPathRow(
       }
     }
     if (crumbs.isNotEmpty() && !phone) {
-      Row(Modifier.clickable { onInclude(!includeSubfolders) }.testTag("media-subfolders"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Checkbox(includeSubfolders, onInclude, Modifier.size(20.dp))
-        Text("Include subfolders", fontSize = if (compact) 13.sp else 15.sp)
+      Row(Modifier.clickable { onInclude(!includeSubfolders) }.testTag("media-subfolders"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.75f))) {
+        Checkbox(includeSubfolders, onInclude, Modifier.size(metrics.includeBox))
+        Text("Include subfolders", fontSize = metrics.control)
       }
     }
     if (!compact) {
       TextButton(onClick = { onSelecting(!selecting) }, modifier = Modifier.testTag("media-select")) { Text(if (selecting) "Done" else "Select") }
     }
     if (!phone) {
-      Row(Modifier.clip(shape).background(scheme.surfaceVariant).border(1.dp, scheme.outlineVariant, shape).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+      Row(Modifier.clip(shape).background(scheme.surfaceVariant).border(metrics.hairline, scheme.outlineVariant, shape).padding(metrics.ring), horizontalArrangement = Arrangement.spacedBy(metrics.ring)) {
         for ((mode, icon, label) in listOf(Triple(MediaView.GRID, "grid_view", "Grid"), Triple(MediaView.LIST, "view_list", "List"))) {
           val on = view == mode
           Box(
-            Modifier.size(width = if (compact) 28.dp else 36.dp, height = if (compact) 22.dp else 30.dp).clip(RoundedCornerShape(4.dp))
+            Modifier.size(metrics.segment).clip(RoundedCornerShape(AglynTokens.RADIUS.dp))
               .background(if (on) scheme.surface else Color.Transparent).clickable { onView(mode) }
               .semantics { contentDescription = label; this.selected = on }.testTag("media-view-${label.lowercase()}"),
             contentAlignment = Alignment.Center,
-          ) { Icon(AglynIcons.named(icon), null, Modifier.size(16.dp), tint = if (on) scheme.onSurface else scheme.onSurfaceVariant) }
+          ) { Icon(AglynIcons.named(icon), null, Modifier.size(metrics.icon), tint = if (on) scheme.onSurface else scheme.onSurfaceVariant) }
         }
       }
     }
@@ -802,7 +810,8 @@ private fun MediaGrid(
   onFile: (MediaItem) -> Unit,
   folderMenu: (MediaFolder) -> List<MenuAction>,
 ) {
-  val gap = if (phone) 12.dp else 16.dp
+  val metrics = mediaMetrics(phone)
+  val gap = metrics.gap
   val grid = rememberLazyGridState()
   val nearEnd by remember(grid) { derivedStateOf { (grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= grid.layoutInfo.totalItemsCount - 6 } }
   LaunchedEffect(nearEnd, hasMore) { if (nearEnd && hasMore) onLoadMore() }
@@ -814,7 +823,7 @@ private fun MediaGrid(
     GridCells.Fixed(tracks),
     Modifier.fillMaxSize().testTag("media-grid"),
     state = grid,
-    contentPadding = PaddingValues(start = edge, end = edge, bottom = 24.dp),
+    contentPadding = PaddingValues(start = edge, end = edge, bottom = space(3f)),
     horizontalArrangement = Arrangement.spacedBy(gap),
     verticalArrangement = Arrangement.spacedBy(gap),
   ) {
@@ -825,7 +834,7 @@ private fun MediaGrid(
       }
     }
     if (rows.isNotEmpty()) {
-      item(span = { GridItemSpan(maxLineSpan) }) { GroupLabel("Files", phone, Modifier.padding(top = if (folders.isEmpty()) 0.dp else 8.dp)) }
+      item(span = { GridItemSpan(maxLineSpan) }) { GroupLabel("Files", phone, Modifier.padding(top = if (folders.isEmpty()) 0.dp else space(1f))) }
       items(rows, key = { it.id }, span = { GridItemSpan(fileSpan) }) { item ->
         val state = when {
           selecting -> if (item.id in selection) TileSelection.CHECKED else TileSelection.UNCHECKED
@@ -842,7 +851,7 @@ private fun MediaGrid(
 
 @Composable
 private fun GroupLabel(title: String, phone: Boolean, modifier: Modifier = Modifier) {
-  Text(title, modifier.semantics { heading() }, fontSize = if (phone) 13.sp else 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  Text(title, modifier.semantics { heading() }, fontSize = mediaMetrics(phone).groupLabel, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** How a file tile shows its selection (Figma Media/File tile, State). */
@@ -851,20 +860,20 @@ private enum class TileSelection { NONE, SELECTED, CHECKED, UNCHECKED }
 /** A folder in the grid (Figma Media/Folder tile): the folder glyph, its name and how many files it holds. */
 @Composable
 private fun MediaFolderTile(name: String, count: Long?, selected: Boolean, phone: Boolean, menu: List<MenuAction>, onClick: () -> Unit) {
-  val compact = LocalShellMetrics.current.compact
+  val metrics = mediaMetrics(phone)
   val scheme = MaterialTheme.colorScheme
-  val shape = RoundedCornerShape(8.dp)
+  val shape = RoundedCornerShape(metrics.tileRadius)
   Row(
-    Modifier.fillMaxWidth().height(if (compact || phone) 56.dp else 64.dp).clip(shape).background(scheme.surface)
-      .border(if (selected) 2.dp else 1.dp, if (selected) scheme.primary else scheme.outlineVariant, shape)
-      .clickable(role = Role.Button, onClick = onClick).padding(start = 12.dp, end = 4.dp).testTag("media-folder-$name"),
+    Modifier.fillMaxWidth().height(metrics.folderHeight).clip(shape).background(scheme.surface)
+      .border(if (selected) metrics.ring else metrics.hairline, if (selected) scheme.primary else scheme.outlineVariant, shape)
+      .clickable(role = Role.Button, onClick = onClick).padding(start = space(1.5f), end = space(0.5f)).testTag("media-folder-$name"),
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
+    horizontalArrangement = Arrangement.spacedBy(space(1.25f)),
   ) {
-    Icon(AglynIcons.named("folder_filled"), null, Modifier.size(if (compact || phone) 26.dp else 30.dp), tint = scheme.primary)
+    Icon(AglynIcons.named("folder_filled"), null, Modifier.size(metrics.folderSymbol), tint = scheme.primary)
     Column(Modifier.weight(1f)) {
-      Text(name, fontSize = if (compact || phone) 13.sp else 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      Text(count?.let { mediaFilesCount(it.toInt()) } ?: " ", fontSize = if (compact || phone) 12.sp else 13.sp, color = scheme.onSurfaceVariant, maxLines = 1)
+      Text(name, fontSize = metrics.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(count?.let { mediaFilesCount(it.toInt()) } ?: " ", fontSize = metrics.caption, color = scheme.onSurfaceVariant, maxLines = 1)
     }
     if (menu.isNotEmpty() && !phone) OverflowMenu(menu, contentDescription = "Folder actions")
   }
@@ -873,22 +882,22 @@ private fun MediaFolderTile(name: String, count: Long?, selected: Boolean, phone
 /** A file in the grid (Figma Media/File tile): its whole preview on the sunken tile, then its name and "TYPE · size". */
 @Composable
 private fun MediaFileTile(item: MediaItem, thumbnail: String?, selection: TileSelection, disabled: Boolean, phone: Boolean, onClick: () -> Unit) {
-  val compact = LocalShellMetrics.current.compact
+  val metrics = mediaMetrics(phone)
   val scheme = MaterialTheme.colorScheme
-  val shape = RoundedCornerShape(8.dp)
+  val shape = RoundedCornerShape(metrics.tileRadius)
   val ring = selection == TileSelection.SELECTED || selection == TileSelection.CHECKED
   Column(
     Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick)
       .semantics(mergeDescendants = true) { this.selected = ring }.testTag("media-${item.id}"),
   ) {
     Box(
-      Modifier.fillMaxWidth().aspectRatio(4f / 3f)
-        .then(if (ring) Modifier.border(2.dp, scheme.primary, RoundedCornerShape(10.dp)).padding(2.dp) else Modifier)
-        .clip(shape).border(1.dp, scheme.outlineVariant, shape),
+      Modifier.fillMaxWidth().aspectRatio(metrics.previewAspect)
+        .then(if (ring) Modifier.border(metrics.ring, scheme.primary, RoundedCornerShape(metrics.tileRadius + metrics.ring)).padding(metrics.ring) else Modifier)
+        .clip(shape).border(metrics.hairline, scheme.outlineVariant, shape),
     ) {
       MediaPreview(item, thumbnail, Modifier.fillMaxSize())
       if (item.private || disabled) {
-        Column(Modifier.align(Alignment.TopEnd).padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.align(Alignment.TopEnd).padding(space(0.75f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
           // Not serving to anyone, so an error and not the Private advisory.
           if (disabled) StatusChip("Disabled", StatusTone.ERROR, Modifier.testTag("media-disabled-${item.id}")) else StatusChip("Private", StatusTone.WARNING)
         }
@@ -896,20 +905,20 @@ private fun MediaFileTile(item: MediaItem, thumbnail: String?, selection: TileSe
       if (selection == TileSelection.CHECKED || selection == TileSelection.UNCHECKED) {
         Icon(
           AglynIcons.named(if (selection == TileSelection.CHECKED) "check_box" else "check_box_outline_blank"), null,
-          Modifier.align(Alignment.TopStart).padding(6.dp).size(22.dp).background(scheme.surface, RoundedCornerShape(4.dp)),
+          Modifier.align(Alignment.TopStart).padding(space(0.75f)).size(metrics.checkbox).background(scheme.surface, RoundedCornerShape(AglynTokens.RADIUS.dp)),
           tint = if (selection == TileSelection.CHECKED) scheme.primary else scheme.onSurfaceVariant,
         )
       }
     }
     Text(
       item.fileName,
-      Modifier.padding(top = if (phone) 6.dp else 8.dp),
-      fontSize = if (compact || phone) 13.sp else 15.sp,
+      Modifier.padding(top = metrics.nameGap),
+      fontSize = metrics.name,
       fontWeight = FontWeight.Medium,
       maxLines = 1,
       overflow = TextOverflow.MiddleEllipsis,
     )
-    Text(item.caption, fontSize = if (compact || phone) 12.sp else 13.sp, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(item.caption, fontSize = metrics.caption, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -918,22 +927,23 @@ private fun MediaFileTile(item: MediaItem, thumbnail: String?, selection: TileSe
  * loads, or when it cannot. A film with a poster carries a play badge.
  */
 @Composable
-internal fun MediaPreview(item: MediaItem, url: String?, modifier: Modifier = Modifier, glyph: Dp = 30.dp) {
+internal fun MediaPreview(item: MediaItem, url: String?, modifier: Modifier = Modifier, glyph: Dp = mediaMetrics(phone = false).glyphTile) {
   val scheme = MaterialTheme.colorScheme
+  val metrics = mediaMetrics(phone = false)
   val bitmap = rememberRemoteBitmap(url)
   Box(modifier.background(scheme.surfaceVariant), contentAlignment = Alignment.Center) {
     if (bitmap != null) {
       Image(bitmap, item.alt.ifBlank { item.fileName }, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
     } else {
       val (icon, label) = mediaFileType(item.contentType)
-      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
         Icon(AglynIcons.named(icon), null, Modifier.size(glyph), tint = scheme.onSurfaceVariant)
-        if (glyph >= 24.dp) Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, color = scheme.onSurfaceVariant)
+        if (glyph >= metrics.labelledGlyph) Text(label, fontSize = metrics.typeLabel, fontWeight = FontWeight.SemiBold, letterSpacing = metrics.typeTracking, color = scheme.onSurfaceVariant)
       }
     }
     if (item.kind == "video" && url != null) {
-      Box(Modifier.size(32.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
-        Icon(AglynIcons.named("play_arrow"), null, Modifier.size(18.dp), tint = Color.White)
+      Box(Modifier.size(metrics.playBadge).clip(CircleShape).background(scheme.scrim.copy(alpha = metrics.scrimAlpha)), contentAlignment = Alignment.Center) {
+        Icon(AglynIcons.named("play_arrow"), null, Modifier.size(metrics.playIcon), tint = OnMediaScrim)
       }
     }
   }
@@ -953,38 +963,40 @@ private fun MediaListView(
   onFile: (MediaItem) -> Unit,
 ) {
   val scheme = MaterialTheme.colorScheme
+  val metrics = mediaMetrics(phone = false)
   val now = remember { nowMillis() }
-  LazyColumn(Modifier.fillMaxSize().testTag("media-list"), contentPadding = PaddingValues(start = edge - 8.dp, end = edge - 8.dp, bottom = 24.dp)) {
+  val rowShape = RoundedCornerShape(metrics.rowRadius)
+  LazyColumn(Modifier.fillMaxSize().testTag("media-list"), contentPadding = PaddingValues(start = edge - space(1f), end = edge - space(1f), bottom = space(3f))) {
     item {
-      Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Name", Modifier.weight(1f).padding(start = 52.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant)
-        Text("Type", Modifier.width(56.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant)
-        Text("Size", Modifier.width(72.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
-        Text("Added", Modifier.width(110.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
+      Row(Modifier.fillMaxWidth().padding(horizontal = space(1f), vertical = space(0.5f)), horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
+        Text("Name", Modifier.weight(1f).padding(start = metrics.rowThumb.width + space(1.5f)), fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant)
+        Text("Type", Modifier.width(metrics.typeColumn), fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant)
+        Text("Size", Modifier.width(metrics.sizeColumn), fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
+        Text("Added", Modifier.width(metrics.addedColumn), fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
       }
     }
     items(folders, key = { "folder:${it.id}" }) { folder ->
-      Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(6.dp)).clickable { onFolder(folder.id) }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(width = 40.dp, height = 30.dp), contentAlignment = Alignment.Center) { Icon(AglynIcons.named("folder_filled"), null, Modifier.size(20.dp), tint = scheme.primary) }
-        Text(folder.name, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(counts[folder.id]?.let { mediaFilesCount(it.toInt()) }.orEmpty(), fontSize = 12.sp, color = scheme.onSurfaceVariant)
+      Row(Modifier.fillMaxWidth().heightIn(min = metrics.rowHeight).clip(rowShape).clickable { onFolder(folder.id) }.padding(horizontal = space(1f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
+        Box(Modifier.size(metrics.rowThumb), contentAlignment = Alignment.Center) { Icon(AglynIcons.named("folder_filled"), null, Modifier.size(metrics.rowFolderSymbol), tint = scheme.primary) }
+        Text(folder.name, Modifier.weight(1f), fontSize = metrics.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(counts[folder.id]?.let { mediaFilesCount(it.toInt()) }.orEmpty(), fontSize = metrics.caption, color = scheme.onSurfaceVariant)
       }
     }
     items(rows, key = { it.id }) { item ->
       val selected = item.id in selection
       Row(
-        Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(6.dp))
+        Modifier.fillMaxWidth().heightIn(min = metrics.rowHeight).clip(rowShape)
           .background(if (selected) shellColors.selected else Color.Transparent)
-          .clickable { onFile(item) }.padding(horizontal = 8.dp).testTag("media-${item.id}"),
+          .clickable { onFile(item) }.padding(horizontal = space(1f)).testTag("media-${item.id}"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(space(1.5f)),
       ) {
-        MediaPreview(item, item.thumbnail(origin, 160), Modifier.size(width = 40.dp, height = 30.dp).clip(RoundedCornerShape(4.dp)), glyph = 16.dp)
-        Text(item.fileName, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+        MediaPreview(item, item.thumbnail(origin, metrics.cdnRow), Modifier.size(metrics.rowThumb).clip(RoundedCornerShape(metrics.rowThumbRadius)), glyph = metrics.glyphRow)
+        Text(item.fileName, Modifier.weight(1f), fontSize = metrics.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         if (item.id in disabled) StatusChip("Disabled", StatusTone.ERROR) else if (item.private) StatusChip("Private", StatusTone.WARNING)
-        Text(item.typeLabel, Modifier.width(56.dp), fontSize = 12.sp, color = scheme.onSurfaceVariant)
-        Text(formatBytes(item.sizeBytes ?: 0), Modifier.width(72.dp), fontSize = 12.sp, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
-        Text(item.createdAt?.let { relativeTime(it.epochMillis, now) } ?: "—", Modifier.width(110.dp), fontSize = 12.sp, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
+        Text(item.typeLabel, Modifier.width(metrics.typeColumn), fontSize = metrics.caption, color = scheme.onSurfaceVariant)
+        Text(formatBytes(item.sizeBytes ?: 0), Modifier.width(metrics.sizeColumn), fontSize = metrics.caption, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
+        Text(item.createdAt?.let { relativeTime(it.epochMillis, now) } ?: "—", Modifier.width(metrics.addedColumn), fontSize = metrics.caption, color = scheme.onSurfaceVariant, textAlign = TextAlign.End)
       }
     }
   }
@@ -1004,20 +1016,21 @@ private fun MediaBulkPanel(
   onClear: () -> Unit,
 ) {
   var moving by remember { mutableStateOf(false) }
-  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp).testTag("media-bulk"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+  val metrics = mediaMetrics(phone = false)
+  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = space(3f), end = space(3f), bottom = space(3f)).testTag("media-bulk"), verticalArrangement = Arrangement.spacedBy(space(2f))) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text("${items.size} selected", Modifier.weight(1f).semantics { heading() }, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+      Text("${items.size} selected", Modifier.weight(1f).semantics { heading() }, fontSize = metrics.panelTitle, fontWeight = FontWeight.SemiBold)
       AglynIconButton(AglynIcons.named("close"), "Clear", onClick = onClear, modifier = Modifier.testTag("media-bulk-clear"))
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       items.take(3).forEach { item ->
-        MediaPreview(item, item.thumbnail(origin), Modifier.weight(1f).aspectRatio(4f / 3f).clip(RoundedCornerShape(6.dp)), glyph = 18.dp)
+        MediaPreview(item, item.thumbnail(origin), Modifier.weight(1f).aspectRatio(metrics.previewAspect).clip(RoundedCornerShape(LocalShellMetrics.current.controlRadius)), glyph = metrics.glyphBulk)
       }
       repeat(3 - items.take(3).size) { Box(Modifier.weight(1f)) }
     }
     Box {
       OutlinedButton(onClick = { moving = true }, enabled = enabled, shape = controlShape(), modifier = Modifier.fillMaxWidth().testTag("media-bulk-move")) {
-        Icon(AglynIcons.named("drive_file_move"), null, Modifier.size(16.dp)); Text("Move to folder…", Modifier.padding(start = 6.dp))
+        Icon(AglynIcons.named("drive_file_move"), null, Modifier.size(metrics.icon)); Text("Move to folder…", Modifier.padding(start = space(0.75f)))
       }
       DropdownMenu(moving, onDismissRequest = { moving = false }) {
         DropdownMenuItem(text = { Text("No folder") }, onClick = { moving = false; onMove(null) })
@@ -1028,17 +1041,17 @@ private fun MediaBulkPanel(
       }
     }
     OutlinedButton(onClick = { onTag(true) }, enabled = enabled, shape = controlShape(), modifier = Modifier.fillMaxWidth().testTag("media-bulk-add-tag")) {
-      Icon(AglynIcons.named("label"), null, Modifier.size(16.dp)); Text("Add tag…", Modifier.padding(start = 6.dp))
+      Icon(AglynIcons.named("label"), null, Modifier.size(metrics.icon)); Text("Add tag…", Modifier.padding(start = space(0.75f)))
     }
     OutlinedButton(onClick = { onTag(false) }, enabled = enabled, shape = controlShape(), modifier = Modifier.fillMaxWidth().testTag("media-bulk-remove-tag")) {
-      Icon(AglynIcons.named("label_off"), null, Modifier.size(16.dp)); Text("Remove tag…", Modifier.padding(start = 6.dp))
+      Icon(AglynIcons.named("label_off"), null, Modifier.size(metrics.icon)); Text("Remove tag…", Modifier.padding(start = space(0.75f)))
     }
     Button(
       onClick = onDelete, enabled = enabled, shape = controlShape(),
       colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
       modifier = Modifier.fillMaxWidth().testTag("media-bulk-delete"),
     ) {
-      Icon(AglynIcons.named("delete"), null, Modifier.size(16.dp)); Text("Delete…", Modifier.padding(start = 6.dp))
+      Icon(AglynIcons.named("delete"), null, Modifier.size(metrics.icon)); Text("Delete…", Modifier.padding(start = space(0.75f)))
     }
   }
 }
@@ -1048,9 +1061,13 @@ private fun MediaBulkPanel(
 private fun PhoneBulkBar(count: Int, folders: List<MediaFolder>, byId: Map<String, MediaFolder>, enabled: Boolean, edge: Dp, onMove: (String?) -> Unit, onTag: (Boolean) -> Unit, onDelete: () -> Unit) {
   var open by remember { mutableStateOf(false) }
   var moving by remember { mutableStateOf(false) }
-  Surface(Modifier.fillMaxWidth().padding(horizontal = edge, vertical = 8.dp), shape = RoundedCornerShape(12.dp), tonalElevation = 2.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-      Text("$count selected", Modifier.weight(1f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+  val metrics = mediaMetrics(phone = true)
+  Surface(
+    Modifier.fillMaxWidth().padding(horizontal = edge, vertical = space(1f)), shape = RoundedCornerShape(LocalShellMetrics.current.cardRadius),
+    color = MaterialTheme.colorScheme.surface, border = BorderStroke(metrics.hairline, MaterialTheme.colorScheme.outlineVariant),
+  ) {
+    Row(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalAlignment = Alignment.CenterVertically) {
+      Text("$count selected", Modifier.weight(1f), fontSize = metrics.panelTitle, fontWeight = FontWeight.SemiBold)
       Box {
         TextButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.testTag("media-bulk-menu")) { Text("Actions") }
         DropdownMenu(open, onDismissRequest = { open = false }) {
@@ -1085,12 +1102,13 @@ private fun MediaBanners(
   Column(Modifier.padding(horizontal = edge).padding(bottom = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
     uploading?.let { (done, total, name) ->
       Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(shellColors.selected).padding(horizontal = 14.dp, vertical = 10.dp).testTag("media-uploading"),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(mediaMetrics(phone = false).tileRadius)).background(shellColors.selected)
+          .padding(horizontal = space(1.75f), vertical = space(1.25f)).testTag("media-uploading"),
+        verticalArrangement = Arrangement.spacedBy(space(1f)),
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Icon(AglynIcons.named("upload"), null, Modifier.size(16.dp))
-          Text(if (total == 1) "Uploading $name…" else "Uploading ${done + 1} of $total…", fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          Icon(AglynIcons.named("upload"), null, Modifier.size(mediaMetrics(phone = false).icon))
+          Text(if (total == 1) "Uploading $name…" else "Uploading ${done + 1} of $total…", fontSize = mediaMetrics(phone = false).control, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         LinearProgressIndicator(progress = { done.toFloat() / total.coerceAtLeast(1) }, Modifier.fillMaxWidth())
       }
@@ -1349,14 +1367,15 @@ private fun MediaDetailBody(
     MenuAction("delete", "Delete file", "delete", destructive = true, enabled = canEdit) { deleting = true },
   )
   // Beside the grid the details pad to the panel's 24; filling the screen, to the column's content edge.
-  val side = if (onClose != null) 24.dp else contentInset()
+  val metrics = mediaMetrics(phone = false)
+  val side = if (onClose != null) space(3f) else contentInset()
   Column(
-    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = side, end = side, top = if (onClose != null) 0.dp else space(2f), bottom = 24.dp).testTag("media-detail"),
+    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = side, end = side, top = if (onClose != null) 0.dp else space(2f), bottom = space(3f)).testTag("media-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
   ) {
     if (onClose != null) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(item.fileName, Modifier.weight(1f).semantics { heading() }, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.75f))) {
+        Text(item.fileName, Modifier.weight(1f).semantics { heading() }, fontSize = metrics.panelTitle, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         OverflowMenu(actions, boxed = true)
         AglynIconButton(AglynIcons.named("close"), "Close", onClick = onClose, modifier = Modifier.testTag("media-close"))
       }
@@ -1364,9 +1383,10 @@ private fun MediaDetailBody(
     disabled?.let { NoticeBanner("${it.title}. ${it.message}", StatusTone.ERROR, Modifier.testTag("media-quarantine")) }
     Column(verticalArrangement = Arrangement.spacedBy(space(2f))) {
       MediaPreview(
-        item, item.thumbnail(origin, 640),
-        Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(8.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
-        glyph = 40.dp,
+        item, item.thumbnail(origin, metrics.cdnInspector),
+        Modifier.fillMaxWidth().aspectRatio(metrics.previewAspect).clip(RoundedCornerShape(metrics.tileRadius))
+          .border(metrics.hairline, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(metrics.tileRadius)),
+        glyph = metrics.glyphInspector,
       )
       if (onClose == null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1461,19 +1481,19 @@ private fun MediaDetailBody(
     }
     HorizontalDivider()
     Column(verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-      Text("Details", Modifier.semantics { heading() }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text("Details", Modifier.semantics { heading() }, fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
       OutlinedTextField(fileName, { fileName = it.take(200) }, label = { Text("File name") }, supportingText = { Text("Display name only — the link stays the same.") }, singleLine = true, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-file-name"))
       OutlinedTextField(alt, { alt = it.take(altMax) }, label = { Text("Alt text") }, supportingText = { Text("Describes the image for screen readers and search. ${alt.length}/$altMax") }, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-alt"))
       OutlinedTextField(description, { description = it }, label = { Text("Description") }, enabled = canEdit, modifier = Modifier.fillMaxWidth())
       OutlinedTextField(tags, { tags = it }, label = { Text("Tags") }, supportingText = { Text("Separate tags with commas.") }, singleLine = true, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-tags"))
       Row(
-        Modifier.fillMaxWidth().clickable(enabled = canEdit) { moving = true }.padding(vertical = 4.dp).testTag("media-folder"),
+        Modifier.fillMaxWidth().clickable(enabled = canEdit) { moving = true }.padding(vertical = space(0.5f)).testTag("media-folder"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(space(1f)),
       ) {
         Text("Folder", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(item.folderId?.let { foldersById[it] }?.let { folderPath(it, foldersById) } ?: "Not in a folder", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(AglynIcons.named("chevron_right"), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(AglynIcons.named("chevron_right"), null, Modifier.size(metrics.icon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         Button(
@@ -1491,7 +1511,7 @@ private fun MediaDetailBody(
     HorizontalDivider()
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Used on", Modifier.weight(1f).semantics { heading() }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Used on", Modifier.weight(1f).semantics { heading() }, fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { runner.run { references = api.references(item.id) } }, enabled = !runner.busy, modifier = Modifier.testTag("media-references")) {
           Text(if (references == null) "Check" else "Check again")
         }
@@ -1526,7 +1546,7 @@ private fun MediaDetailBody(
       onDismiss = { moving = false },
       onConfirm = { runner.run("Moved.", onDone = { moving = false; onChanged() }) { api.move(listOf(item.id), target) } },
     ) {
-      LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+      LazyColumn(Modifier.fillMaxWidth().heightIn(max = metrics.pickerMaxHeight)) {
         item { AglynListItem("Not in a folder", icon = AglynIcons.named("folder_open"), trailing = { RadioButton(target == null, null) }, onClick = { target = null }) }
         items(folders.sortedBy { folderPath(it, foldersById).lowercase() }, key = { it.id }) { folder ->
           AglynListItem(folderPath(folder, foldersById), icon = AglynIcons.named("folder"), trailing = { RadioButton(target == folder.id, null) }, onClick = { target = folder.id })

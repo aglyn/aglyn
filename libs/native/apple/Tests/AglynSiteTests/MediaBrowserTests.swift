@@ -65,7 +65,7 @@ final class MediaBrowserTests: XCTestCase {
     XCTAssertEqual(dropped.ids, ["a"])
     XCTAssertTrue(dropped.dropped)
     let request = mediaRequest(folder: .one("a"), scopeTokens: nil, type: nil, sort: .newest, search: "", subtree: subtree)
-    XCTAssertEqual(request.base.first?.op, .in)
+    XCTAssertEqual(request.base?.first?.op, .in)
   }
 
   func testArrowsWalkTheGridByRowAndColumn() {
