@@ -55,11 +55,15 @@ private struct AssistMetrics {
   let chipText: CGFloat
   let chipWeight: Font.Weight
   let chipPadding: EdgeInsets
+  /// The chip's least height: 28 on touch (21:340), the text's own on the Mac.
+  let chipHeight: CGFloat
   /// Questions, answers, the field and suggestions.
   let body: CGFloat
   let suggestion: CGFloat
   let suggestionIcon: CGFloat
   let suggestionPadding: EdgeInsets
+  /// A suggestion card's least height: 46 on touch (21:347), 36 on the Mac (the Kotlin panel's suggestionHeight).
+  let suggestionHeight: CGFloat
   let suggestionRadius: CGFloat
   let suggestionGap: CGFloat
   /// Between a suggestion's ✦ and its words.
@@ -85,9 +89,9 @@ private struct AssistMetrics {
       AssistMetrics(
         chipText: 12, chipWeight: .semibold,
         chipPadding: EdgeInsets(top: AglynSpace.half, leading: AglynSpace.one, bottom: AglynSpace.half, trailing: AglynSpace.of(1.25)),
-        body: 14, suggestion: 13, suggestionIcon: AglynSpace.of(1.75),
+        chipHeight: 0, body: 14, suggestion: 13, suggestionIcon: AglynSpace.of(1.75),
         suggestionPadding: EdgeInsets(top: AglynSpace.one, leading: AglynSpace.of(1.25), bottom: AglynSpace.one, trailing: AglynSpace.of(1.25)),
-        suggestionRadius: AglynTokens.radius * 1.5, suggestionGap: AglynSpace.of(1.75),
+        suggestionHeight: AglynSpace.of(4.5), suggestionRadius: AglynTokens.radius * 1.5, suggestionGap: AglynSpace.of(1.75),
         suggestionIconGap: AglynSpace.one, caption: 12, captionWeight: .semibold, composer: AglynSpace.of(5.5),
         composerRadius: AglynTokens.radius * 2.5, composerLeading: AglynSpace.oneAndHalf, send: AglynSpace.four,
         sendRadius: AglynTokens.radius * 1.5, sendIcon: AglynSpace.of(1.75), bubbleRadius: AglynTokens.radius * 2.5,
@@ -96,9 +100,9 @@ private struct AssistMetrics {
       AssistMetrics(
         chipText: 13, chipWeight: .regular,
         chipPadding: EdgeInsets(top: AglynSpace.of(0.625), leading: AglynSpace.of(1.25), bottom: AglynSpace.of(0.625), trailing: AglynSpace.oneAndHalf),
-        body: 15, suggestion: 15, suggestionIcon: AglynSpace.two,
+        chipHeight: AglynSpace.of(3.5), body: 15, suggestion: 15, suggestionIcon: AglynSpace.two,
         suggestionPadding: EdgeInsets(top: AglynSpace.oneAndHalf, leading: AglynSpace.of(1.75), bottom: AglynSpace.oneAndHalf, trailing: AglynSpace.of(1.75)),
-        suggestionRadius: AglynTokens.radius * 3, suggestionGap: AglynSpace.of(0.75),
+        suggestionHeight: AglynSpace.of(5.75), suggestionRadius: AglynTokens.radius * 3, suggestionGap: AglynSpace.of(0.75),
         suggestionIconGap: AglynSpace.of(1.25), caption: 13, captionWeight: .regular, composer: AglynSpace.of(6.5),
         composerRadius: AglynTokens.radius * 3, composerLeading: AglynSpace.of(1.75), send: AglynSpace.of(5),
         sendRadius: AglynTokens.radius * 2, sendIcon: AglynSpace.two, bubbleRadius: AglynTokens.radius * 3,
@@ -168,6 +172,8 @@ struct AiAssistPanel: View {
       composer
     }
     .background(AglynColor.paper)
+    // A container, so the chip, suggestions, field and Send keep their own identifiers under the panel's.
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("assist-panel")
     .task(id: context.orgID) { await loadCredits() }
     .onDisappear { task?.cancel() }
@@ -184,6 +190,7 @@ struct AiAssistPanel: View {
         .lineLimit(1)
     }
     .padding(m.chipPadding)
+    .frame(minHeight: m.chipHeight)
     .background(Capsule().fill(AglynColor.accentSoft))
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, m.edge)
@@ -209,7 +216,7 @@ struct AiAssistPanel: View {
             Spacer(minLength: 0)
           }
           .padding(m.suggestionPadding)
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(maxWidth: .infinity, minHeight: m.suggestionHeight, alignment: .leading)
           .background(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous).fill(AglynColor.paper))
           .overlay(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous).strokeBorder(AglynColor.divider))
           .contentShape(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous))
