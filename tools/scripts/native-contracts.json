@@ -981,6 +981,16 @@
       "values": [
         "PLATFORM_BRAND_NAME"
       ]
+    },
+    "libs/plugins/ai/src/lib/model/ai-insight-ask.ts": {
+      "values": [
+        "AI_INSIGHT_WINDOWS",
+        "AI_INSIGHT_DEFAULT_DAYS",
+        "AI_INSIGHT_QUESTION_MAX_CHARS",
+        "AI_INSIGHT_CARD_COPY",
+        "AI_INSIGHT_PLACEHOLDERS",
+        "AI_INSIGHT_DIALOG_COPY"
+      ]
     }
   },
   "assembled": {

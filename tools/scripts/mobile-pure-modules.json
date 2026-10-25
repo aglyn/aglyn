@@ -342,6 +342,10 @@
       "why": "The AI activity codes and their words and sentences (AI_ACTIVITY_ACTION_LABELS, AI_ACTIVITY_ACTION_SENTENCES), so the native activity rows name an AI row as the console does (AGL-4011); imports only platform-brand."
     },
     {
+      "path": "libs/plugins/ai/src/lib/model/ai-insight-ask.ts",
+      "why": "The words and bounds of \"Ask AI about these numbers\" and its dialog (the windows, the placeholders, every label), so the native tile and dialog say what the console says (AGL-4011); no imports."
+    },
+    {
       "path": "libs/plugins/ai/src/lib/model/ai-permissions.ts",
       "why": "The AI plugin's org catalog keys and their role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-3950); type-only imports."
     },

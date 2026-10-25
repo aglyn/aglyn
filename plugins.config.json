@@ -2819,7 +2819,9 @@
             "ai.create-form",
             "ai.create-component",
             "ai.needs-you",
-            "ai.assist-panel"
+            "ai.assist-panel",
+            "ai.insight-ask",
+            "ai.org-insight-ask"
           ],
           "quickActions": [
             "ai.open"

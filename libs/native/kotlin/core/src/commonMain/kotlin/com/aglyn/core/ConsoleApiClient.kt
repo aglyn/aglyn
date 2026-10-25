@@ -7,6 +7,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.utils.io.readUTF8Line
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.preparePost
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
@@ -80,14 +81,28 @@ class ConsoleApiClient(
    * its answer) and hands each event's JSON to [onEvent] as it arrives. A refusal (not 2xx) is a [ConsoleApiError] with
    * the route's own words and its JSON body, before any event.
    */
-  suspend fun stream(path: String, body: JsonElement, onEvent: suspend (kotlinx.serialization.json.JsonObject) -> Unit) {
+  suspend fun stream(
+    path: String,
+    body: JsonElement?,
+    query: Map<String, Any?> = emptyMap(),
+    onEvent: suspend (kotlinx.serialization.json.JsonObject) -> Unit,
+  ) {
     val bearer = getIdToken(false) ?: throw ConsoleApiError("Sign in to continue.", 401, null)
-    http.preparePost(urlFor(path)) {
-      header("Accept", "text/event-stream")
-      header("Authorization", "Bearer $bearer")
-      contentType(ContentType.Application.Json)
-      setBody(body.toString())
-    }.execute { response ->
+    // With no body the stream is read with a GET (`/api/ai/jobs/{id}/events`, a job's state as it moves).
+    val prepared = if (body == null) {
+      http.prepareGet(urlFor(path, query)) {
+        header("Accept", "text/event-stream")
+        header("Authorization", "Bearer $bearer")
+      }
+    } else {
+      http.preparePost(urlFor(path, query)) {
+        header("Accept", "text/event-stream")
+        header("Authorization", "Bearer $bearer")
+        contentType(ContentType.Application.Json)
+        setBody(body.toString())
+      }
+    }
+    prepared.execute { response ->
       val status = response.status.value
       if (status !in 200..299) {
         val parsed = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()

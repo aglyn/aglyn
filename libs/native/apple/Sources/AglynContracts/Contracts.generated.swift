@@ -92,6 +92,64 @@ public struct AccountPushSettingsAccountValue: Codable, Hashable, Sendable {
   }
 }
 
+public struct AiInsightCardCopy: Codable, Hashable, Sendable {
+  public var action: String
+  public var site: String
+  public var title: String
+  public var workspace: String
+
+  public init(action: String, site: String, title: String, workspace: String) {
+    self.action = action
+    self.site = site
+    self.title = title
+    self.workspace = workspace
+  }
+}
+
+public struct AiInsightDialogCopy: Codable, Hashable, Sendable {
+  public var answerFailed: String
+  public var ask: String
+  public var askAnother: String
+  public var askFailed: String
+  public var cannotRun: String
+  public var close: String
+  public var digest: String
+  public var digestFailed: String
+  public var hideFigures: String
+  public var openJobs: String
+  public var promise: String
+  public var questionFailed: String
+  public var questionLabel: String
+  public var showFigures: String
+  public var stillWriting: String
+  public var title: String
+  public var unanswered: String
+  public var windowLabel: String
+  public var working: String
+
+  public init(answerFailed: String, ask: String, askAnother: String, askFailed: String, cannotRun: String, close: String, digest: String, digestFailed: String, hideFigures: String, openJobs: String, promise: String, questionFailed: String, questionLabel: String, showFigures: String, stillWriting: String, title: String, unanswered: String, windowLabel: String, working: String) {
+    self.answerFailed = answerFailed
+    self.ask = ask
+    self.askAnother = askAnother
+    self.askFailed = askFailed
+    self.cannotRun = cannotRun
+    self.close = close
+    self.digest = digest
+    self.digestFailed = digestFailed
+    self.hideFigures = hideFigures
+    self.openJobs = openJobs
+    self.promise = promise
+    self.questionFailed = questionFailed
+    self.questionLabel = questionLabel
+    self.showFigures = showFigures
+    self.stillWriting = stillWriting
+    self.title = title
+    self.unanswered = unanswered
+    self.windowLabel = windowLabel
+    self.working = working
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   case production = "production"
@@ -4870,6 +4928,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let activityTypeLabels: [String: String]
   public let aiActivityActionLabels: [String: String]
   public let aiActivityActionSentences: [String: String]
+  public let aiInsightCardCopy: AiInsightCardCopy
+  public let aiInsightDefaultDays: Int
+  public let aiInsightDialogCopy: AiInsightDialogCopy
+  public let aiInsightPlaceholders: [String: String]
+  public let aiInsightQuestionMaxChars: Int
+  public let aiInsightWindows: [Double]
   public let appAppearances: [AppAppearance]
   public let appDensities: [AppDensity]
   public let appIconIdMax: Int
@@ -5185,6 +5249,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case activityTypeLabels = "ACTIVITY_TYPE_LABELS"
     case aiActivityActionLabels = "AI_ACTIVITY_ACTION_LABELS"
     case aiActivityActionSentences = "AI_ACTIVITY_ACTION_SENTENCES"
+    case aiInsightCardCopy = "AI_INSIGHT_CARD_COPY"
+    case aiInsightDefaultDays = "AI_INSIGHT_DEFAULT_DAYS"
+    case aiInsightDialogCopy = "AI_INSIGHT_DIALOG_COPY"
+    case aiInsightPlaceholders = "AI_INSIGHT_PLACEHOLDERS"
+    case aiInsightQuestionMaxChars = "AI_INSIGHT_QUESTION_MAX_CHARS"
+    case aiInsightWindows = "AI_INSIGHT_WINDOWS"
     case appAppearances = "APP_APPEARANCES"
     case appDensities = "APP_DENSITIES"
     case appIconIdMax = "APP_ICON_ID_MAX"

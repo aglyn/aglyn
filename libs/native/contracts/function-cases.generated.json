@@ -50684,7 +50684,7 @@
                       "traffic",
                       "visitors"
                     ],
-                    "label": "Overview",
+                    "label": "Analytics",
                     "order": 20,
                     "screen": "shell.analytics"
                   }
@@ -51996,7 +51996,7 @@
                       "traffic",
                       "visitors"
                     ],
-                    "label": "Overview",
+                    "label": "Analytics",
                     "order": 20,
                     "screen": "shell.analytics"
                   }
@@ -52690,7 +52690,7 @@
                       "traffic",
                       "visitors"
                     ],
-                    "label": "Overview",
+                    "label": "Analytics",
                     "order": 20,
                     "screen": "shell.analytics"
                   }

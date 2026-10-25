@@ -48,6 +48,50 @@
     "ai.job.output": "Created {target} with Aglyn AI",
     "ai.seo.applied": "Applied Aglyn AI search fixes to {target}"
   },
+  "AI_INSIGHT_CARD_COPY": {
+    "action": "Ask a question",
+    "site": "Ask a question about this site’s traffic, sales, bookings, automation runs and pipeline. Every answer shows the figures it is built from.",
+    "title": "Ask AI about these numbers",
+    "workspace": "Ask a question about your workspace’s pipeline, the deals it closed and your datasets. Every answer shows the figures it is built from."
+  },
+  "AI_INSIGHT_DEFAULT_DAYS": 14,
+  "AI_INSIGHT_DIALOG_COPY": {
+    "answerFailed": "The answer could not be loaded. Try again.",
+    "ask": "Ask",
+    "askAnother": "Ask another",
+    "askFailed": "The question could not be asked. Try again.",
+    "cannotRun": "This workspace cannot run AI jobs right now.",
+    "close": "Close",
+    "digest": "Send me weekly insights for this workspace every Monday",
+    "digestFailed": "Your weekly insights setting could not be saved. Try again.",
+    "hideFigures": "Hide the figures",
+    "openJobs": "Open AI jobs",
+    "promise": "The answer is read from your own figures, and every number in it links to where it comes from. Nothing is changed or sent.",
+    "questionFailed": "The question could not be answered. Try again.",
+    "questionLabel": "What do you want to know?",
+    "showFigures": "Show the figures",
+    "stillWriting": "The answer is still being written. Find it in AI jobs in a minute.",
+    "title": "Ask about your numbers",
+    "unanswered": "The figures read here did not answer this question.",
+    "windowLabel": "Over the last",
+    "working": "Reading your figures. This usually takes a minute."
+  },
+  "AI_INSIGHT_PLACEHOLDERS": {
+    "analytics": "Which pages brought in the most visitors, and did anything change?",
+    "automations": "Which automations failed most this month?",
+    "bookings": "Which services were booked most, and how many were canceled?",
+    "crm-reports": "Which campaign or form brought in the most people this month?",
+    "datasets": "What is the average order total by state?",
+    "marketing": "Which campaign brought in the most form submissions, and what did it earn?",
+    "workspace": "How much is in the pipeline, and what closed this month?"
+  },
+  "AI_INSIGHT_QUESTION_MAX_CHARS": 1000,
+  "AI_INSIGHT_WINDOWS": [
+    7,
+    14,
+    30,
+    90
+  ],
   "APP_APPEARANCES": [
     "system",
     "light",
@@ -5246,7 +5290,7 @@
                   "traffic",
                   "visitors"
                 ],
-                "label": "Overview",
+                "label": "Analytics",
                 "order": 20,
                 "screen": "shell.analytics"
               }
