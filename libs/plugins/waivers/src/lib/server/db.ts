@@ -54,9 +54,13 @@ let storeOverride: WaiversFileStore | null = null
  */
 export class WaiverFileRefusedError extends Error {}
 
+/** The only types this plugin stores: a drawn signature and a photo of a paper waiver. */
+const WAIVER_FILE_TYPES = new Set(['image/png', 'image/jpeg'])
+
 function inspected(store: WaiversFileStore): WaiversFileStore {
   return {
     async save(path, bytes, contentType) {
+      if (!WAIVER_FILE_TYPES.has(contentType)) throw new WaiverFileRefusedError('Only a PNG or JPEG image can be kept with a waiver.')
       const refusal = inspectUploadBytes({ bytes, contentType, fileName: path.split('/').pop() ?? null })
       if (refusal) throw new WaiverFileRefusedError(refusal.message)
       await store.save(path, bytes, contentType)
