@@ -135,6 +135,14 @@ const product = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => docs.clear())
 
 describe('productOffers', () => {
+  it('offers nothing for a product sold in person only, unless the reader asks for the whole shelf (AGL-4060)', () => {
+    expect(productOffers('prod-1', product({ sellOnline: false }), context)).toEqual([])
+    const [offer] = productOffers('prod-1', product({ sellOnline: false }), { ...context, inPersonOnly: true })
+    expect(offer).toMatchObject({ id: 'prod-1', inPersonOnly: true })
+    // Absent is on: every product stored before the switch is offered as before.
+    expect(productOffers('prod-1', product(), context)[0]).not.toHaveProperty('inPersonOnly')
+  })
+
   it('offers a single-configuration product under its own id with every channel fact', () => {
     const [offer] = productOffers('prod-1', product(), context)
     expect(offer).toMatchObject({
@@ -350,6 +358,16 @@ describe('productCatalog', () => {
     const second = await productCatalog.page({ hostId: HOST, cursor: first.nextCursor, limit: 4 })
     expect(second.offers.map((offer) => offer.productId)).toEqual(['p0002', 'p0002', 'p0002'])
     expect(second.nextCursor).toBeNull()
+  })
+
+  it('leaves a product sold in person only out of every feed, and gives it to a stock sync marked (AGL-4060)', async () => {
+    seed(4, (n) => (n === 1 ? { sellOnline: false } : n === 2 ? { sellOnline: true } : {}))
+    const online = await productCatalog.page({ hostId: HOST, limit: 10 })
+    expect(online.offers.map((offer) => offer.productId)).toEqual(['p0000', 'p0002', 'p0003'])
+    expect(online.offers.some((offer) => 'inPersonOnly' in offer)).toBe(false)
+    const shelf = await productCatalog.page({ hostId: HOST, limit: 10, inPersonOnly: true })
+    expect(shelf.offers.map((offer) => offer.productId)).toEqual(['p0000', 'p0001', 'p0002', 'p0003'])
+    expect(shelf.offers.filter((offer) => offer.inPersonOnly).map((offer) => offer.productId)).toEqual(['p0001'])
   })
 
   it('answers an empty last page for an unknown site or a bad cursor', async () => {

@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — one permission catalog for custom roles (newest)
+## October 2026 — sell a product in person only (newest)
+
+- **[Sell in person only](commerce-and-bookings/commerce/catalog.md#sell-in-person-only)** —
+  turn off **Sell online** on a product and it sells only at your register, kiosk,
+  Aglyn POS apps and draft orders. It has no page on your site, stays out of product
+  grids, search, the sitemap, carts and checkout, and out of every shopping feed,
+  marketplace and delivery app. The products list marks it **In person only**.
+
+## October 2026 — one permission catalog for custom roles
 
 - **[Custom roles cover plugin permissions](workspace-and-billing/teams-and-roles/custom-roles.md#create-a-custom-role)** —
   a custom role can now grant or deny the permissions plugins add, such as

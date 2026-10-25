@@ -117,6 +117,18 @@ describe('a store with no product template', () => {
     expect(mockChrome).not.toHaveBeenCalled()
   })
 
+  it('answers nothing for a product sold in person only (AGL-4060), with or without a template', async () => {
+    mockProducts.splice(0, mockProducts.length, candle({ sellOnline: false }))
+    expect(await resolve('/products/signature-soy-candle')).toBeUndefined()
+    mockStore['pdpScreenId'] = 'pdp-template'
+    expect(await resolve('/products/signature-soy-candle')).toBeUndefined()
+    expect(mockChrome).not.toHaveBeenCalled()
+    // Absent and true both sell online: every product stored before the switch.
+    delete mockStore['pdpScreenId']
+    mockProducts.splice(0, mockProducts.length, candle({ sellOnline: true }))
+    expect(await resolve('/products/signature-soy-candle')).toBeDefined()
+  })
+
   it('draws the product block for the routed slug, then the related products', () => {
     const nodes = buildProductPageNodes('signature-soy-candle')
     const detail = Object.values(nodes).find((node) => node.componentId === 'product-detail')

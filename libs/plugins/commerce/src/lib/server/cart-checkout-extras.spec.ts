@@ -561,6 +561,15 @@ describe('the cart’s offers (AGL-3635)', () => {
     })
   })
 
+  it('offers nothing for a line sold in person only (AGL-4060), which checkout refuses', async () => {
+    seedStore(null, { product: { sellOnline: false } })
+    offerProtection()
+    const { res, result } = makeResponse()
+    await cartExtrasHandler(getRequest(), res)
+    expect(result.body).toEqual({ extras: [], credits: [] })
+    expect(asked).toHaveLength(0)
+  })
+
   it('offers nothing for a basket that does not ship, or no basket', async () => {
     seedStore(null, { product: { type: 'digital' } })
     offerProtection()
