@@ -77,6 +77,9 @@ copy, not an address on Pixabay. That means:
 - you replace it like any image: select it on the page and choose another from your
   library, or upload your own.
 
+You can search the same library yourself while you edit a page: the media picker's
+**Stock photos** tab. See [Stock photos](../content-and-data/media/overview.md#stock-photos).
+
 ## Credits {#credits}
 
 Stock photos **cost no AI credits**. Finding and copying them calls no AI model, so they

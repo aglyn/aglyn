@@ -402,6 +402,40 @@ the photos sent through a photo link in the page's hero, about and gallery pictu
 before it looks for stock photos. A product's photo, a person's portrait and
 a record's cover still come from stock.
 
+### Stock photos {#stock-photos}
+
+When you need a photo you do not have, search free stock photos from the media
+picker. Wherever you choose an image, such as an **Image** element in the Besigner,
+open the **Stock photos** tab.
+
+1. Type what the photo should show, such as *coffee shop counter* or *mountain lake*.
+   Choose **Any**, **Landscape** or **Portrait** for its shape, then choose **Search**.
+2. Click a photo to see it larger, with the photographer's name, the license and its
+   size.
+3. Choose **Use this image**. Aglyn copies the photo into your media library and
+   places that copy, so your page never loads the photo from the stock library.
+
+Good to know:
+
+- **Where it is saved.** A photo you use while editing a site is saved to that site's
+  library, at its top level rather than in a folder. When the picker has no site open, it is saved to your
+  workspace's shared library, shared as your
+  [Default sharing for new media](#default-media-sharing) decides.
+- **Each photo is stored once.** Use the same photo again and the copy already in the
+  library is placed. It counts toward your [storage](#storage) like an upload.
+- **The photographer's credit is kept.** The photo's description reads *Photo by* the
+  photographer's name *on Pixabay*, and its details keep the license. The license
+  does not require a credit on your page. See
+  [The photographer's credit](../../ai/stock-photos.md#the-photographers-credit).
+- **Who can use it.** Anyone who can upload to that library.
+- **What is sent.** Only the words you type are sent to Pixabay, never your name or
+  anything about your site or your visitors.
+- **If the tab says to try again,** Pixabay is busy for the moment. Wait a minute and
+  search again. If the tab says stock photos are not set up, this Aglyn deployment has
+  no stock photo library; upload your own photos instead.
+- The tab appears wherever an image can be chosen. A picker for a video, a PDF or
+  audio does not show it.
+
 ### Size and plan limits
 
 | Upload | Cap | Plan |
@@ -888,7 +922,8 @@ server. See [the Media API resource](/api/resources/media), including
 Everywhere you pick media — the Image and Video components, the logo, favicon and app
 icon pickers, and the organization logo field — the **same media picker** opens, with **This site** and
 **Organization (shared)** tabs so you can pull from either library without leaving the
-dialog.
+dialog. Wherever an image can be chosen, it also has a
+[Stock photos](#stock-photos) tab for finding a free photo.
 
 ## Related
 
