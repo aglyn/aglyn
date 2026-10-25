@@ -65,6 +65,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
+import com.aglyn.ui.ChoiceRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
@@ -339,14 +340,14 @@ private fun SpecBodyContent(
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {
-          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: action.label) to ScreenValues.render(instead.str("text") ?: "", after)
+          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: ScreenValues.render(action.label, after)) to ScreenValues.render(instead.str("text") ?: "", after)
           // The entry may also open a page the route named (an invoice the bank has to confirm).
           instead.str("open")?.let { key -> (ScreenValues.lookup(key, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         } else {
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
         // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
-        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = action.label to ScreenValues.text(it) } }
+        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = ScreenValues.render(action.label, after) to ScreenValues.text(it) } }
         action.file?.let { file ->
           file.contents(after)?.let { (name, text) ->
             if (exporter == null) show("Saving a file is not available here.", StatusTone.WARNING)
@@ -1199,6 +1200,19 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
           }, supporting = field.detail(id, context))
         }
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+      "choice" -> {
+        // One of a few rows, each with a line under it and a mark (the console's tier menu: price, credits, Current); a row
+        // that cannot be picked stays, dimmed, with its reason.
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        for (choice in field.choiceRows(context)) {
+          ChoiceRow(
+            choice.label, text == choice.value, { onChange(FieldValue.Text(choice.value)) },
+            Modifier.testTag("choice-${field.key}-${choice.value}"),
+            supporting = choice.detail, enabled = choice.enabled,
+            badge = choice.badge?.let { mark -> { StatusChip(mark.text, tone(mark.tone)) } },
+          )
+        }
       }
       "select", "country" -> {
         val choices = field.choices(context)

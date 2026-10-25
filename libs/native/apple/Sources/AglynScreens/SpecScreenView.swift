@@ -269,7 +269,7 @@ struct SpecScreenBody: View {
         titleVisibility: .visible
       ) {
         if let pending = confirming {
-          Button(pending.action.label, role: pending.action.destructive ? .destructive : nil) {
+          Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
             confirming = nil
             Task { await execute(pending.action, scope: pending.scope) }
           }
@@ -461,7 +461,7 @@ struct SpecScreenBody: View {
       AglynMoreMenu {
         ForEach(rest) { action in
           Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
-            Label(action.label, systemImage: action.icon ?? "circle")
+            Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "circle")
           }
           .disabled(running != nil)
         }
@@ -480,13 +480,13 @@ struct SpecScreenBody: View {
     if let first = actions.first {
       ToolbarItem(placement: .primaryAction) {
         if actions.count == 1 {
-          Button { trigger(first, scope: context) } label: { Label(first.label, systemImage: first.icon ?? "plus") }
+          Button { trigger(first, scope: context) } label: { Label(ScreenValues.render(first.label, in: context), systemImage: first.icon ?? "plus") }
             .disabled(running != nil)
         } else {
           Menu {
             ForEach(actions) { action in
               Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
-                Label(action.label, systemImage: action.icon ?? "circle")
+                Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "circle")
               }
             }
           } label: {
@@ -747,7 +747,7 @@ struct SpecScreenBody: View {
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (
-          instead["title"]?.stringValue.map { ScreenValues.render($0, in: after) } ?? action.label,
+          instead["title"]?.stringValue.map { ScreenValues.render($0, in: after) } ?? ScreenValues.render(action.label, in: after),
           ScreenValues.render(instead["text"]?.stringValue ?? "", in: after)
         )
         // The entry may also open a page the route named (an invoice the bank has to confirm).
@@ -761,7 +761,7 @@ struct SpecScreenBody: View {
       }
       // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
-        revealed = (action.label, ScreenValues.text(value))
+        revealed = (ScreenValues.render(action.label, in: after), ScreenValues.text(value))
       }
       if let file = action.file, let made = file.contents(in: after) {
         exporting = ExportedDownload(name: made.name, data: Data(made.text.utf8), contentType: file.type)
