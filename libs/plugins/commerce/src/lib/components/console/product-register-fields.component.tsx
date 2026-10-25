@@ -26,6 +26,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { memo, useCallback, useId } from 'react'
 import * as CommerceModel from '../../model'
 
@@ -79,7 +80,7 @@ export const ProductSellOnlineField = memo(function ProductSellOnlineField(
       <Typography id={helpId} variant="body2" color="text.secondary">
         {sellOnline
           ? 'Sold on your site — its product page, product grids, search, the cart and checkout — and in any shopping feeds and marketplaces you connect, as well as in person.'
-          : 'In person only: sold at the register, the kiosk, the Aglyn POS apps and on draft orders. It has no page on your site and is left out of product grids, search, the sitemap, the cart, checkout and every shopping feed.'}
+          : `In person only: sold at the register, the kiosk, the ${PLATFORM_BRAND_NAME} POS apps and on draft orders. It has no page on your site and is left out of product grids, search, the sitemap, the cart, checkout and every shopping feed.`}
       </Typography>
     </Stack>
   )

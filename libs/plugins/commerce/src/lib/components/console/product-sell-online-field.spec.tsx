@@ -39,7 +39,7 @@ describe('the Sell online switch', () => {
     const toggle = screen.getByRole('switch', { name: 'Sell online' }) as HTMLInputElement
     expect(toggle.checked).toBe(false)
     const help = document.getElementById(toggle.getAttribute('aria-describedby') ?? '')
-    expect(help?.textContent).toMatch(/^In person only: sold at the register, the kiosk, the Aglyn POS apps/)
+    expect(help?.textContent).toMatch(/^In person only: sold at the register, the kiosk, the \w+ POS apps/)
     fireEvent.click(toggle)
     expect(update).toHaveBeenCalledWith({ sellOnline: true })
   })
