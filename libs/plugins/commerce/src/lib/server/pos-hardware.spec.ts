@@ -461,6 +461,28 @@ describe('the staff route', () => {
     expect((await staff('nobody')).status).toBe(401)
   })
 
+  it('pages the staff list newest first, 25 at a time, by a cursor', async () => {
+    for (let index = 0; index < 27; index += 1) {
+      const id = `hw_${String(index).padStart(20, '0')}`
+      fakeDocs.set(`orgs/org-${index % 3}/hardwareOrders/${id}`, {
+        orgId: `org-${index % 3}`,
+        status: 'paid',
+        lines: [],
+        createdAtMs: 1_000 + index,
+      })
+    }
+    const first = await staff('staff-support')
+    expect(first.status).toBe(200)
+    expect(first.body.pageSize).toBe(25)
+    expect(first.body.orders).toHaveLength(25)
+    expect(first.body.orders[0].createdAtMs).toBe(1_026)
+    expect(first.body.next).toMatch(/^orgs\/org-\d\/hardwareOrders\/hw_/)
+    const second = await staff('staff-support', { query: `?after=${encodeURIComponent(first.body.next)}` })
+    expect(second.body.orders.map((order: any) => order.createdAtMs)).toEqual([1_001, 1_000])
+    expect(second.body.next).toBeNull()
+    expect((await staff('staff-support', { query: '?after=hosts%2Fx%2Forders%2Fy' })).status).toBe(400)
+  })
+
   it('lists every workspace’s orders, filtered by status on the query', async () => {
     seedOrder()
     fakeDocs.set('orgs/org-2/hardwareOrders/hw_ffffffffffffffffffff', { orgId: 'org-2', status: 'shipped', lines: [] })

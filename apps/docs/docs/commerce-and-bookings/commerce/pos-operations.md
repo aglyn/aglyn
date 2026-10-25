@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: Running the register
-description: Shifts and the cash drawer with X and Z reports, day and event totals across every register, check-in at the window with wristbands, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.
+description: Shifts and X/Z reports, day and event totals, check-in with wristbands, staff PINs, customers at the register, returns and exchanges, printed receipts, and selling cash while offline.
 ---
 
 # Running the register
