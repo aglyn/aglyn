@@ -20,8 +20,10 @@ import { aiCacheWriteHourSurchargeUsd } from './cache-write-hour'
 import {
   AiBatchUnfinishedError,
   AiUpstreamError,
+  aiCacheMarkerTtls,
   type AiAccountProblem,
   type AiBatchOptions,
+  type AiCacheTtl,
   type AiEffort,
   aiRawOutputOf,
   aiStoppedAtCeiling,
@@ -206,14 +208,14 @@ export function buildAnthropicRequestBody(
       `${breakpoints} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
     )
   }
-  // One lifetime for every breakpoint: the API refuses a longer-lived entry
-  // after a shorter one, and a request asks for one or the other.
-  const cacheControl = input.cacheTtl === '1h' ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' }
-  const system = input.system.map((block) => ({
-    type: 'text',
-    text: block.text,
-    ...(block.cacheBreakpoint ? { cache_control: cacheControl } : {}),
-  }))
+  // A lifetime per breakpoint (AGL-4050): the shared prompt's markers at the
+  // route's lifetime, a site's block and the conversation at five minutes,
+  // and never an hour after five minutes, which the API refuses.
+  const ttls = aiCacheMarkerTtls({ ...input, cacheConversation: conversation })
+  const system = input.system.map((block, index) => {
+    const ttl = ttls.system[index]
+    return { type: 'text', text: block.text, ...(ttl ? { cache_control: anthropicCacheControl(ttl) } : {}) }
+  })
   const tools = input.tools?.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -243,11 +245,19 @@ export function buildAnthropicRequestBody(
     messages: input.messages.map((message, index) => ({
       role: message.role,
       content: conversation
-        ? anthropicBlocksOf(message, index === input.messages.length - 1 ? cacheControl : null)
+        ? anthropicBlocksOf(
+            message,
+            index === input.messages.length - 1 && ttls.conversation ? anthropicCacheControl(ttls.conversation) : null,
+          )
         : anthropicContentOf(message),
     })),
     ...(tools?.length ? { tools, tool_choice: { type: 'auto' } } : {}),
   }
+}
+
+/** One marker's `cache_control`: the five minutes are the API's default, so only the hour is named. */
+function anthropicCacheControl(ttl: AiCacheTtl): Record<string, unknown> {
+  return ttl === '1h' ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' }
 }
 
 /**
