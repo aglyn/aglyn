@@ -1,0 +1,165 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
+import {
+  isAccountBanLockdownReason,
+  normalizeOrgLockdown,
+} from '@aglyn/aglyn/app-utils/lockdown'
+import { POS_HARDWARE_EMAIL_KEYS, sendEmail } from '@aglyn/shared-util-email'
+import {
+  firebaseAdmin,
+  hostDisplayName,
+  meterPlatformEmail,
+  raiseOperatorAlert,
+} from '@aglyn/tenant-data-admin'
+import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
+import {
+  orgSystemEmailBrand,
+  renderSystemEmailContent,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
+import { COMMERCE_POS_HARDWARE_ORDER } from '../constants/operator-alerts'
+import { carrierLabelFor } from '../model/tracking-url'
+import { formatPosHardwareCents, POS_HARDWARE_ANCHOR, type PosHardwareOrder } from '../model/pos-hardware'
+import { posHardwareOrderNumber, posSettingsUrl } from './pos-hardware'
+
+/*==========================================
+ * TELLING PEOPLE ABOUT A HARDWARE ORDER (AGL-4038).
+ *
+ * The buyer gets a system email at each step they wait on: received, shipped
+ * (with the carrier and tracking link) and delivered (with the way to set the
+ * reader up). Staff get the "New hardware order" operator alert, because in
+ * phase 1 a person places every order with Stripe.
+ *
+ * Never throws. The order is already recorded when any of these run, and a
+ * lost email must not undo it or turn a webhook into a redelivery.
+ *=========================================*/
+
+export type PosHardwareEmailKind = keyof typeof POS_HARDWARE_EMAIL_KEYS
+
+/** The lines as the emails list them, one per item. */
+function itemsText(order: PosHardwareOrder): string {
+  return (order.lines ?? []).map((line) => `${line.name} × ${line.quantity}`).join('\n')
+}
+
+function shipToText(order: PosHardwareOrder): string {
+  const address = order.shipping?.address
+  const cityLine = address
+    ? [address.city, [address.state, address.postalCode].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    : ''
+  return [order.shipping?.name, address?.line1, address?.line2, cityLine].filter(Boolean).join('\n')
+}
+
+async function siteAndOrgNames(order: PosHardwareOrder): Promise<{ site: string; org: string; ban: boolean }> {
+  const firestore = firebaseAdmin.app().firestore()
+  const [host, org] = await Promise.all([
+    firestore.collection('hosts').doc(order.hostId).get().catch(() => null),
+    firestore.collection('orgs').doc(order.orgId).get().catch(() => null),
+  ])
+  const lock = normalizeOrgLockdown(org?.data() as never)
+  return {
+    site: host?.exists ? hostDisplayName(host.data() as Record<string, unknown>, order.hostId) : 'your site',
+    org: String(org?.get('name') ?? '').trim() || 'your workspace',
+    ban: Boolean(lock && isAccountBanLockdownReason(lock.reason)),
+  }
+}
+
+/** The fallback subject and first line, when no design renders. */
+const FALLBACK: Record<PosHardwareEmailKind, (number: string) => string> = {
+  received: (number) => `We have your card reader order ${number}`,
+  shipped: (number) => `Your card reader order ${number} has shipped`,
+  delivered: (number) => `Your card reader order ${number} was delivered`,
+}
+
+/** The merge values for one order's emails. Exported for the render spec. */
+export async function posHardwareEmailMerge(
+  orderId: string,
+  order: PosHardwareOrder,
+  names: { site: string; org: string },
+): Promise<Record<string, string>> {
+  const base = await posSettingsUrl(order.hostId)
+  const [path] = base.split('#')
+  const ordersUrl = `${path}#${POS_HARDWARE_ANCHOR}`
+  return {
+    'org.name': names.org,
+    'site.name': names.site,
+    'order.number': posHardwareOrderNumber(orderId),
+    'order.items': itemsText(order),
+    'order.total': formatPosHardwareCents(order.totalCents ?? 0),
+    'order.shipTo': shipToText(order),
+    'order.shippingMethod': order.shipping?.label ?? '',
+    'order.carrier': carrierLabelFor(order.tracking?.carrier) || 'the carrier',
+    'order.trackingNumber': order.tracking?.number ?? '',
+    // An unknown carrier has no tracker to link; the card shows the number.
+    'order.trackingUrl': order.tracking?.url ?? ordersUrl,
+    'order.ordersUrl': ordersUrl,
+    'order.setupUrl': `${path}#pos-devices`,
+  }
+}
+
+export async function sendPosHardwareEmail(
+  kind: PosHardwareEmailKind,
+  orderId: string,
+  order: PosHardwareOrder,
+): Promise<void> {
+  try {
+    const to = String(order.contactEmail ?? '').trim()
+    if (!to) return
+    const names = await siteAndOrgNames(order)
+    // A ban is a ban (AGL-3420): after its notice the account is sent nothing.
+    if (names.ban) return
+    const [recipient] = await filterSuppressedEmails([to])
+    if (!recipient) return
+    const merge = await posHardwareEmailMerge(orderId, order, names)
+    const subject = FALLBACK[kind](merge['order.number'])
+    const brand = await orgSystemEmailBrand(order.orgId)
+    const content = await renderSystemEmailContent(POS_HARDWARE_EMAIL_KEYS[kind], merge, brand, {
+      subject,
+      text: `${subject}\n\n${merge['order.items']}\n\n${merge['order.ordersUrl']}`,
+    })
+    const result = await sendEmail({
+      to: recipient,
+      ...content,
+      ...(brand.fromName ? { fromName: brand.fromName } : {}),
+      context: POS_HARDWARE_EMAIL_KEYS[kind],
+    })
+    if (result.sent) await meterPlatformEmail(1)
+  } catch (error) {
+    console.error('[pos-hardware] email failed', kind, orderId, error)
+  }
+}
+
+/** "New hardware order", once per order. */
+export async function raisePosHardwareOrderAlert(orderId: string, order: PosHardwareOrder): Promise<void> {
+  try {
+    const names = await siteAndOrgNames(order)
+    await raiseOperatorAlert(COMMERCE_POS_HARDWARE_ORDER, {
+      dedupeKey: orderId,
+      orgId: order.orgId,
+      hostId: order.hostId,
+      context: {
+        orderNumber: posHardwareOrderNumber(orderId),
+        amount: formatOperatorAlertAmount(order.totalCents ?? 0),
+        site: `${names.site} (${order.hostId})`,
+        items: (order.lines ?? []).map((line) => `${line.quantity} × ${line.name}`).join(', '),
+        shipping: order.shipping?.label ?? 'shipping',
+      },
+    })
+  } catch (error) {
+    console.error('[pos-hardware] operator alert failed', orderId, error)
+  }
+}

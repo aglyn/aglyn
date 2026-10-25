@@ -430,6 +430,12 @@ export function registerCommerceConsoleApi(): void {
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/
   // subscriptions ride the platform webhook via the hook registry.
   registerBillingWebhookHandler(commerceBillingWebhookHandler)
+  // A paid card-reader order from the POS hardware shop (AGL-4038), on the
+  // same platform webhook: its own handler, self-selecting on the session's
+  // `metadata.type`, so the storefront sections above never see it.
+  registerBillingWebhookHandler(async (event) =>
+    (await import('./server/pos-hardware-webhook')).posHardwareBillingWebhookHandler(event),
+  )
   // Cancel + stock release in one transaction (AGL-1808). Server-side because
   // the release depends on the transition rule, and a client write could not
   // re-ask it under the same lock that flips the status.
@@ -544,6 +550,16 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
   registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
+  // The POS hardware shop (AGL-4038): the Hardware card's catalog, Checkout
+  // and order list, gated like a sale and hidden until the deployment prices
+  // it; and the staff page's orders, which name no site. Loaded on first call.
+  registerPluginApiRoute('commerce/pos-hardware', async (req, res) =>
+    (await import('./server/pos-hardware')).posHardwareHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/admin/hardware-orders', {
+    web: async (request) =>
+      (await import('./server/pos-hardware-admin')).posHardwareAdminOrders(request),
+  })
   // The self-service kiosk (AGL-3623): a register's paired screen where the
   // customer orders and pays. Its device token, never a staff session; the
   // register's queue of "pay at counter" orders is gated like a sale.

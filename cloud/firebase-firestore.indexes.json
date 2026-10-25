@@ -10419,6 +10419,34 @@
       ]
     },
     {
+      "collectionGroup": "hardwareOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hardwareOrders",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "printJobs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -10612,6 +10640,24 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "hardwareOrders",
+      "fieldPath": "createdAtMs",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "DESCENDING"
+        }
+      ]
+    },
     {
       "collectionGroup": "campaignAttributions",
       "fieldPath": "personKey",

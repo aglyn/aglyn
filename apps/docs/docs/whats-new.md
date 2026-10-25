@@ -356,6 +356,26 @@ for the how-to.
   their units off the same shelf, and the tracking goes back when you ship.
 -->
 
+<!--
+  AGL-4038 — The POS hardware shop is built and hidden until the console sets
+  POS_HARDWARE_SHOP_ENABLED=true with the item prices and shipping figures, and
+  card readers are live (STRIPE_TERMINAL_LIVE_ENABLED). This entry is held
+  unpublished: once the shop is open on aglyn.com, remove this comment's
+  markers, move "(newest)" here from the top heading, and delete the "Rolling
+  out" note from commerce-and-bookings/commerce/pos-hardware.md (and the
+  pointer to Stripe's own shop in its Getting a reader section, if buying from
+  Aglyn replaces it).
+
+## October 2026 — buy card readers from Aglyn
+
+- **[Buy a reader from Aglyn](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —
+  order Stripe card readers and accessories from the Hardware card on **Products →
+  Point of sale**, including the Stripe Reader S710 with its own 4G connection.
+  Stripe ships them straight to you, the card shows each order's status and
+  tracking, and you're emailed as it ships and arrives, with the steps to add the
+  reader to a register.
+-->
+
 ## October 2026 — send a DoorDash courier for your local deliveries
 
 - **[Couriers](commerce-and-bookings/commerce/couriers.md)** — connect your own
