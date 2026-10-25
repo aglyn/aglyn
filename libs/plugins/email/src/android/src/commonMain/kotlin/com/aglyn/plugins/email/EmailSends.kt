@@ -7,6 +7,7 @@ import com.aglyn.contracts.ListQueryOp
 import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
+import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreTimestamp
@@ -298,11 +299,19 @@ class CampaignSendApi(private val api: ConsoleApiClient, private val hostId: Str
   private fun JsonObject?.number(vararg keys: String): Long? = keys.firstNotNullOfOrNull { (this?.get(it) as? JsonPrimitive)?.longOrNull }
 
   /** How many a send now would reach (the route's dry run). */
-  suspend fun sendNowCount(campaignId: String): Long? = post(mapOf("action" to "sendNow", "campaignId" to campaignId, "dryRun" to true)).number("sendable", "sent")
+  suspend fun sendNowCount(campaignId: String): DryRunCount = dryRunCount(mapOf("action" to "sendNow", "campaignId" to campaignId, "dryRun" to true))
 
   suspend fun sendNow(campaignId: String) { post(mapOf("action" to "sendNow", "campaignId" to campaignId)) }
 
-  suspend fun followUpCount(campaignId: String): Long? = post(mapOf("action" to "followUp", "campaignId" to campaignId, "dryRun" to true)).number("sendable", "sent")
+  suspend fun followUpCount(campaignId: String): DryRunCount = dryRunCount(mapOf("action" to "followUp", "campaignId" to campaignId, "dryRun" to true))
+
+  /** Who a dry run reaches, or the plan that stops it: a refusal carrying `planLock` is an answer, not an error. */
+  private suspend fun dryRunCount(fields: Map<String, Any?>): DryRunCount = try {
+    val answer = post(fields)
+    DryRunCount(answer.number("sendable", "sent") ?: 0, CampaignPlanLock.from(answer))
+  } catch (error: ConsoleApiError) {
+    DryRunCount(0, CampaignPlanLock.from(error.body) ?: throw error)
+  }
 
   suspend fun followUp(campaignId: String) { post(mapOf("action" to "followUp", "campaignId" to campaignId)) }
 
@@ -356,3 +365,6 @@ fun testMessageOf(send: EmailSend): Map<String, Any?> {
 }
 
 private fun JsonArray?.orEmpty(): List<JsonElement> = this ?: emptyList()
+
+/** A "Send now" or "Send to more" dry run's answer. */
+data class DryRunCount(val reaching: Long, val planLock: CampaignPlanLock?)
