@@ -5,7 +5,16 @@ import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.automirrored.outlined.ViewQuilt
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.Folder as FilledFolder
 import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.LabelOff
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -55,6 +64,18 @@ internal val CONTENT_ICONS: Map<String, ImageVector> = mapOf(
   "dynamic_form" to Icons.Outlined.DynamicForm,
   "folder" to Icons.Outlined.Folder,
   "folder_open" to Icons.Outlined.FolderOpen,
+  // The media file browser (AGL-4004): a folder tile's filled folder, New folder, the file types' glyphs (the console's
+  // mediaFileTypeIcon), untagging, and a tile's selection box.
+  "folder_filled" to Icons.Filled.FilledFolder,
+  "create_new_folder" to Icons.Outlined.CreateNewFolder,
+  "folder_zip" to Icons.Outlined.FolderZip,
+  "slideshow" to Icons.Outlined.Slideshow,
+  "movie" to Icons.Outlined.Movie,
+  "audiotrack" to Icons.Outlined.Audiotrack,
+  "insert_drive_file" to Icons.Outlined.InsertDriveFile,
+  "label_off" to Icons.Outlined.LabelOff,
+  "check_box" to Icons.Filled.CheckBox,
+  "check_box_outline_blank" to Icons.Outlined.CheckBoxOutlineBlank,
   "edit" to Icons.Outlined.Edit,
   "content_copy" to Icons.Outlined.ContentCopy,
   "drive_file_move" to Icons.Outlined.DriveFileMove,

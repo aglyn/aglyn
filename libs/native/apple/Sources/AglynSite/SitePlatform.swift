@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynUI
 import SwiftUI
 
 /// The owner of the platform's own content screens: core, not a plugin.
@@ -108,6 +109,8 @@ public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.screen(sitePagesScreen, title: "Pages", requiresSite: true, icon: SiteSymbols.page) { context, params in
     PagesScreen(context: context, initialPageID: params["page"] ?? params["screenId"], startNew: params["new"] == "1")
   }
+  // Media draws its own head on the Mac and iPad (the browser splits under it) and its own title row on a phone.
+  AglynListColumnHead.register(siteMediaScreen)
   r.screen(siteMediaScreen, title: "Media", icon: SiteSymbols.media) { context, params in
     MediaScreen(context: context, params: params)
   }

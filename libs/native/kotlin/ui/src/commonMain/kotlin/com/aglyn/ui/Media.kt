@@ -87,25 +87,34 @@ fun RemoteImage(
   }
 }
 
+/** How long to wait before each further try of a picture that failed (a CDN variant still being made, a dropped connection). */
+private val REMOTE_IMAGE_RETRIES = listOf(1_000L, 3_000L, 8_000L)
+
 /**
  * The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. Art the decoders
- * cannot read (an SVG logo, which the media CDN serves unchanged) is read as the CDN's PNG of it ([mediaRasterUrl]).
+ * cannot read (an SVG logo, which the media CDN serves unchanged) is read as the CDN's PNG of it ([mediaRasterUrl]). A
+ * picture that fails is tried again after 1, 3 and 8 seconds: a media tile that failed once otherwise kept its placeholder
+ * until the screen was rebuilt (AGL-4004).
  */
 @Composable
-internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
+fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   val loader = LocalImageLoader.current
   var image by remember(url) { mutableStateOf(url?.let(ImageCache::get)) }
   LaunchedEffect(url, loader) {
     if (url == null || loader == null || image != null) return@LaunchedEffect
-    image = try {
-      val bytes = loader.load(url)
-      (bytes?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() }
-        ?: bytes?.let { com.aglyn.core.mediaRasterUrl(url) }?.let { png -> loader.load(png)?.decodeToImageBitmap() })
-        ?.also { ImageCache.put(url, it) }
-    } catch (error: CancellationException) {
-      throw error
-    } catch (_: Throwable) {
-      null
+    for (attempt in 0..REMOTE_IMAGE_RETRIES.size) {
+      if (attempt > 0) kotlinx.coroutines.delay(REMOTE_IMAGE_RETRIES[attempt - 1])
+      image = try {
+        val bytes = loader.load(url)
+        (bytes?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() }
+          ?: bytes?.let { com.aglyn.core.mediaRasterUrl(url) }?.let { png -> loader.load(png)?.decodeToImageBitmap() })
+          ?.also { ImageCache.put(url, it) }
+      } catch (error: CancellationException) {
+        throw error
+      } catch (_: Throwable) {
+        null
+      }
+      if (image != null) return@LaunchedEffect
     }
   }
   return image
