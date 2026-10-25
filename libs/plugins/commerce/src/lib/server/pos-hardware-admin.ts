@@ -55,7 +55,10 @@ import { posStripe } from './pos-stripe'
  * their money. Every write is an `adminAudit` row.
  *=========================================*/
 
-const WINDOW = 200
+/** One page of the staff list. */
+const PAGE = 25
+/** A page cursor is the path of the last order the previous page showed. */
+const CURSOR = /^orgs\/[^/]+\/hardwareOrders\/[^/]+$/
 const WRITE_ROLES = ['super', 'billing']
 
 const json = (body: unknown, status = 200) =>
@@ -136,11 +139,22 @@ async function handler(request: Request): Promise<Response> {
         if (!isPosHardwareOrderStatus(requested)) return json({ error: 'Unknown status' }, 400)
         ordersQuery = ordersQuery.where('status', '==', requested)
       }
-      const snapshot = await ordersQuery.orderBy('createdAtMs', 'desc').limit(WINDOW + 1).get()
-      const docs = snapshot.docs as Array<{ id: string; data: () => PosHardwareOrder }>
+      ordersQuery = ordersQuery.orderBy('createdAtMs', 'desc')
+      const after = String(query?.['after'] ?? '')
+      if (after) {
+        if (!CURSOR.test(after)) return json({ error: 'Unknown page' }, 400)
+        const cursor = await firestore.doc(after).get()
+        // An order deleted since the page was read starts the list over
+        // rather than answering an empty page.
+        if (cursor.exists) ordersQuery = ordersQuery.startAfter(cursor)
+      }
+      const snapshot = await ordersQuery.limit(PAGE + 1).get()
+      const docs = snapshot.docs as Array<{ id: string; ref: { path: string }; data: () => PosHardwareOrder }>
+      const shown = docs.slice(0, PAGE)
       return json({
-        orders: docs.slice(0, WINDOW).map((doc) => staffView(doc.id, doc.data())),
-        more: docs.length > WINDOW,
+        orders: shown.map((doc) => staffView(doc.id, doc.data())),
+        next: docs.length > PAGE ? (shown[shown.length - 1]?.ref.path ?? null) : null,
+        pageSize: PAGE,
         canWrite: WRITE_ROLES.includes(role),
       })
     }
