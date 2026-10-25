@@ -16,6 +16,7 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { logHostActivity, memberHasOrgPermission, resolveOrgMembership } from '@aglyn/tenant-data-admin'
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -775,8 +776,7 @@ export async function dnsRoute(request: Request): Promise<Response> {
   return domainsJson({ ours: true, nameservers: nameservers.value.nameservers, siteConnected, records })
 }
 
-const MANAGED_REFUSAL =
-  'That record is how your site is reached at this domain, so Aglyn keeps it. Disconnect the domain from its site first to change it.'
+const MANAGED_REFUSAL = `That record is how your site is reached at this domain, so ${PLATFORM_BRAND_NAME} keeps it. Disconnect the domain from its site first to change it.`
 
 /** POST: creates, changes or deletes one record. */
 async function dnsWriteRoute(request: Request): Promise<Response> {

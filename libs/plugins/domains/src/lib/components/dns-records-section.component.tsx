@@ -17,6 +17,7 @@
 
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ListTable, type ListTableProps } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -57,6 +58,9 @@ import { DomainsRequestError, useDomainsFetch, type DnsAnswer } from './domains-
  * A name on another provider's nameservers gets the reason and no editor:
  * its records live there.
  */
+
+/** The chip on a record the platform keeps, in the deployment's own brand. */
+export const MANAGED_LABEL = `Managed by ${PLATFORM_BRAND_NAME}`
 
 const CAA_TAG_LABELS: Record<CaaTag, string> = {
   issue: 'May issue certificates',
@@ -165,7 +169,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
         renderCell: ({ row }: { row: RecordRow }) => (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
             <span>{recordHostLabel(row.name, domain)}</span>
-            {row.managed ? <Chip size="small" label="Managed by Aglyn" /> : null}
+            {row.managed ? <Chip size="small" label={MANAGED_LABEL} /> : null}
           </Stack>
         ),
       },
@@ -265,7 +269,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
       </Stack>
       {answer.siteConnected ? (
         <Typography variant="body2" color="text.secondary">
-          {'Records marked Managed by Aglyn are how visitors reach your site at this domain, so they can’t be changed here.'}
+          {`Records marked ${MANAGED_LABEL} are how visitors reach your site at this domain, so they can’t be changed here.`}
         </Typography>
       ) : null}
       <ListTable
