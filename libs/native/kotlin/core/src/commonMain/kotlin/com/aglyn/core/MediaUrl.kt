@@ -36,8 +36,8 @@ val MEDIA_PNG_SIDES = listOf(16, 32, 48, 72, 96, 128, 144, 152, 192, 256, 384, 5
 
 /**
  * The media CDN's PNG of the picture at [url], at least as wide as the `w` it was asked at (160 when none), for art the
- * image decoders cannot read: the CDN serves an SVG unchanged at `?w=`, so a workspace logo uploaded as an SVG (Ready To
- * Roll's) drew its initials and gave the rail no color (AGL-4000, as Apple's AGL-3996). Null for an address that is not on
+ * image decoders cannot read: the CDN serves an SVG unchanged at `?w=`, so a workspace logo uploaded as an SVG drew
+ * its initials and gave the rail no color (AGL-4000, as Apple's AGL-3996). Null for an address that is not on
  * the media CDN, or one that already names a representation (`icon=`).
  */
 fun mediaRasterUrl(url: String): String? {
