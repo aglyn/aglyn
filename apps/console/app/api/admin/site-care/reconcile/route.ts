@@ -30,7 +30,8 @@ export const SITE_CARE_RECONCILE_JOB_ID = 'site-care-reconcile'
 /**
  * THE SITE CARE RECONCILIATION (AGL-3959), daily: each Site Care request's
  * billed hours against its Stripe invoice item, and each month's total
- * against its statement, for this month and the last. Any difference raises
+ * against its statement, for this month and the last, and each request against
+ * its own logged minutes and approval (AGL-4031). Any difference raises
  * `billing.siteCareReconciliation` (Should know). A GET compares and reports
  * and raises nothing; the POST raises. It never changes a charge — the fix
  * is made from the request.
