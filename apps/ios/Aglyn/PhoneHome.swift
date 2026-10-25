@@ -194,9 +194,15 @@ struct AreaSwitcherSheet: View {
           .padding(.horizontal, 16)
           .padding(.bottom, 24)
       }
+      #if os(iOS)
       .searchable(text: $filter, placement: .navigationBarDrawer(displayMode: .always), prompt: "Find an area")
+      #else
+      .searchable(text: $filter, prompt: "Find an area")
+      #endif
       .navigationTitle("Go to")
+      #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { dismiss() }.fontWeight(.semibold).accessibilityIdentifier("area-switcher-done")
@@ -272,9 +278,13 @@ struct TabBarSheet: View {
           }
         }
       }
+      #if os(iOS)
       .environment(\.editMode, .constant(.active))
+      #endif
       .navigationTitle("Tab bar")
+      #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
