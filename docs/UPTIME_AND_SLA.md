@@ -1382,12 +1382,12 @@ Notes that keep these honest:
   loop completed with undelivered notifications` (older wording: `…loop limit
   exceeded`) is the browser deferring resize callbacks to the next frame. It
   carries no error and no stack, and the beacon drops it on its exact wording.
-- **A fault we RECOVER from is labeled, not dropped (AGL-3423).** Both could
-  be ours, so both are written at full severity under their own top-level
+- **A fault we RECOVER from is labeled, not dropped (AGL-3423).** Each could
+  be ours, so all are written at full severity under their own top-level
   `jsonPayload.kind`, excluded from the per-entry `Client error beacon`
   policy, and watched by rate — the same split `hydration` has: the
   log-based metric `client_recovered_errors` (labelled by `kind`) backs
-  `Client recovered errors spiking (auth-desync / chunk-load, AGL-3423)`,
+  `Client recovered errors spiking (auth-desync / chunk-load / recaptcha-timeout, AGL-3423)`,
   which pages at **more than 10 of one kind in 30 minutes**. One storage event
   raises about three `auth-desync` reports and the beacon caps a pageview at
   10, so one visitor cannot reach it. Between 2026-09-21 and 09-30 the
@@ -1409,6 +1409,15 @@ Notes that keep these honest:
       reloads only once the tab is hidden, because that page is still up and
       may hold unsaved work (AGL-3423). What arrives is the failure the reload
       did not cure, and a burst of them is a broken deploy.
+    - `kind: "recaptcha-timeout"` — `reCAPTCHA Timeout`, rejected by Google's
+      reCAPTCHA script itself when the App Check provider's iframe does not
+      answer in time: a tab throttled in the background, a slow or blocked
+      `gstatic.com` (AGL-4068). No code of ours awaits that promise, so it
+      arrives as an unhandled rejection whose whole stack is Google's script,
+      and App Check retries on the next token request. The beacon labels it
+      only when every frame is a reCAPTCHA script, so our own code throwing
+      the same words still pages as itself. Two of these paged on 2026-10-25.
+      A burst means App Check is failing for everyone.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:

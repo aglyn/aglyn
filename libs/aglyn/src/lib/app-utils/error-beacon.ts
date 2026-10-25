@@ -318,6 +318,41 @@ export const AUTH_DESYNC_KIND = 'auth-desync'
 export const CHUNK_LOAD_KIND = 'chunk-load'
 
 /**
+ * `kind` for reCAPTCHA's own `reCAPTCHA Timeout` rejection (AGL-4068).
+ *
+ * App Check's reCAPTCHA provider loads Google's script, and that script
+ * rejects a promise of its own when its iframe does not answer in time: a
+ * tab throttled in the background, a slow or blocked `gstatic.com`. No call
+ * site of ours awaits it, so it lands as an unhandled rejection whose whole
+ * stack is Google's script. App Check retries with backoff on the next token
+ * request, so the visitor's page keeps working. One of these is a slow
+ * network; a burst is App Check failing for everyone, which only a rate can
+ * tell. Two arrived on 2026-10-25 and each paged.
+ */
+export const RECAPTCHA_TIMEOUT_KIND = 'recaptcha-timeout'
+
+const RECAPTCHA_TIMEOUT_MESSAGE = /^(?:Error: )?reCAPTCHA Timeout\b/
+
+/** Google's reCAPTCHA scripts, wherever the provider loads them from. */
+const RECAPTCHA_SCRIPT_URL =
+  /^https:\/\/(?:www\.)?(?:gstatic\.com|google\.com|recaptcha\.net)\/recaptcha\//
+
+/**
+ * reCAPTCHA's timeout, by its wording AND by a stack that is only Google's
+ * script. A message alone is not enough: one of our frames in the stack means
+ * our code chose to throw that text, and that stays reported as itself.
+ */
+export function isRecaptchaTimeout(error: unknown): boolean {
+  const message = (error as { message?: unknown } | null)?.message
+  if (typeof message !== 'string' || !RECAPTCHA_TIMEOUT_MESSAGE.test(message)) {
+    return false
+  }
+  const stack = (error as { stack?: unknown }).stack
+  if (typeof stack !== 'string') return true
+  return stackFrameUrls(stack).every((url) => RECAPTCHA_SCRIPT_URL.test(url))
+}
+
+/**
  * The label for a fault we RECOVER from and still want to see, or undefined.
  *
  * These could be ours, so unlike an injected stack they are never dropped:
@@ -329,6 +364,7 @@ export function recoveredErrorKind(error: unknown): string | undefined {
   try {
     if (isCrossPoolDesync(error)) return AUTH_DESYNC_KIND
     if (isStaleBuildError(error)) return CHUNK_LOAD_KIND
+    if (isRecaptchaTimeout(error)) return RECAPTCHA_TIMEOUT_KIND
   } catch {
     // A getter that throws leaves the event unlabeled, never unreported.
   }
