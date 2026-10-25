@@ -444,6 +444,9 @@ take that many stays:
   back, the same as for a single cabin.
 - Two guests can't both book the last unit: the second is told those dates
   just sold out before any payment is taken.
+- Two staff can't both hand out the last unit as walk-ins either, even from
+  different devices: the second is told every unit is taken on at least one
+  of those nights (or "Those dates are taken" for a single cabin).
 
 **Sleeps** is separate: it is how many guests one unit sleeps, shown for
 information. It never limits how many stays a night can take. Leave

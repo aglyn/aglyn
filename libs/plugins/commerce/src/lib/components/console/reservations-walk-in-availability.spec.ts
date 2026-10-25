@@ -81,7 +81,14 @@ describe('the walk-in refuses a stay the quote refuses (AGL-3794)', () => {
 
   it('says it before the availability query and before anything is written', () => {
     expect(problemAt).toBeLessThan(walkIn.indexOf('getDocs('))
-    expect(problemAt).toBeLessThan(walkIn.indexOf('setDoc('))
+    // The write is the walk-in route's since AGL-4046.
+    const postAt = walkIn.indexOf("'/api/commerce/reservations/walk-in'")
+    expect(postAt).toBeGreaterThan(-1)
+    expect(problemAt).toBeLessThan(postAt)
+  })
+
+  it('never writes the stay from the browser (AGL-4046)', () => {
+    expect(walkIn).not.toContain('setDoc(')
   })
 
   it('does not price the stay a second time after the check', () => {
