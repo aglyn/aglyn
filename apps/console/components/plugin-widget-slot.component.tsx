@@ -121,6 +121,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // A card above the first page a new site lands on, spaced from that page's
   // own cards as any other card on it would be.
   hostFirstRun: 'stack',
+  // The starter picker, a step of the Create site dialog, which lays it out
+  // (AGL-4049).
+  hostStarterPicker: 'bare',
   hostTheme: 'stack',
   // The font picker and the font installer among the theme editor's
   // Typography fields, which space them.

@@ -418,6 +418,16 @@ the signing secrets, and **Product catalog** → each price → its price id.
 `.env.selfhost` into a development checkout, swap in test keys.
 :::
 
+:::note Card reader start-up screens
+Readers show each store's chosen start-up screen with no extra variable. The
+default screen is uploaded on **Staff → Reader start-up screen** (a PNG or JPEG
+under 2 MB: 1080 × 1920 for the S700 and S710, 720 × 1280 for the WisePOS E,
+which is drawn from the first when left empty). In the Stripe Dashboard, leave
+your platform account's **default** Terminal configuration without a splash
+screen: a Location without its own screen inherits it, so it would also show on
+white-label workspaces' readers.
+:::
+
 #### Which events to subscribe {#stripe-webhook-events}
 
 A signing secret only proves the delivery is real. If the endpoint is not
@@ -1157,6 +1167,29 @@ Register each service's order webhook as
 `https://<console>/api/delivery-apps/webhooks/doordash`, `…/uber-eats` or
 `…/grubhub`. Uber's webhook notifications must include orders, cancels,
 failures and resolved fulfillment issues.
+
+### POS hardware shop {#pos-hardware-shop}
+
+Merchants can buy Stripe Terminal card readers and accessories from the
+deployment on **Products → Point of sale** (the **Hardware** card). The sale is
+the operator's: Checkout runs on the platform Stripe account with no connected
+account, and a staff member places each paid order in the Stripe Dashboard's
+Terminal hardware shop, shipping to the merchant, then records Stripe's order id
+and the tracking on **Staff → Hardware orders**. Set these on the **console
+only**. The shop stays hidden until it is switched on, at least one reader has a
+price, a shipping figure is set, and card readers are available (a test key, or
+`STRIPE_TERMINAL_LIVE_ENABLED`).
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `POS_HARDWARE_SHOP_ENABLED` | Optional | Runtime, console | Exactly `true` opens the shop. Anything else keeps it hidden. |
+| `POS_HARDWARE_PRICES` | Optional | Runtime, console | JSON of Stripe's own price for each item, in cents, keyed by `stripe-reader-s710`, `stripe-reader-s700`, `bbpos-wisepos-e`, `stripe-reader-m2`, `stripe-reader-s700-dock`, `bbpos-wisepos-e-dock` or `stripe-reader-m2-mount`. An item with no price, or a malformed one, is not offered. |
+| `POS_HARDWARE_MARKUP_BPS` | Optional | Runtime, console | The markup on Stripe's price as a whole number of basis points (hundredths of a percent). Unset is the default, `3000`. `0` sells at Stripe's price; a value that is not a whole number hides the shop. |
+| `POS_HARDWARE_SHIPPING` | Optional | Runtime, console | JSON of a flat shipping amount in cents for each speed offered: `standard`, `express`, `priority`. The merchant pays it. |
+| `POS_HARDWARE_AUTOMATIC_TAX` | Optional | Runtime, console | Exactly `true` turns on Stripe automatic tax for hardware checkouts, on the platform's own tax registrations. |
+
+Paid orders arrive on the platform webhook as `checkout.session.completed`, which
+the endpoint already subscribes to; there is no new endpoint.
 
 ---
 

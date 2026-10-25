@@ -40,6 +40,33 @@ Products created with the earlier single-price product block are lifted
 into this model automatically as a single default variant — nothing breaks
 and no migration step is needed.
 
+## Sell in person only {#sell-in-person-only}
+
+Every product sells online and in person unless you say otherwise. To sell a
+product **only in person**, open it in the product editor and, under **At the
+register** beside **Quick key at the register**, turn off **Sell online**. The
+products list marks it **In person only**.
+
+A product that is in person only:
+
+- **still sells in person**: at the register, at the self-service kiosk, in
+  the Aglyn POS apps, and on draft orders;
+- **has no page on your site**: its `/products/{slug}` address answers "page
+  not found", and it is left out of product grids, collections, search, related
+  products, wishlists, the sitemap, and the store-wide reviews' product links;
+- **cannot be bought online**: it can't be added to a cart, a cart that
+  already holds it can't check out until the line is removed, and **Buy now**
+  refuses it;
+- **is in no channel**: it is left out of every [sales channel](./sales-channels.md)
+  feed (Google, Meta, TikTok, Pinterest, Snapchat and Microsoft),
+  [marketplace](./marketplaces.md) and [delivery app](./delivery-apps.md)
+  menu. An [inventory sync](./inventory-and-erp-sync.md) still counts its stock.
+
+Back-in-stock emails for it wait until it sells online again. Turn **Sell
+online** back on and everything above returns. The switch comes with the point
+of sale; on a plan without it, a product already set to in person only still
+shows the switch so you can put it back online.
+
 ## Billing modes and subscriptions
 
 Each product's **Billing** setting picks how buyers pay:

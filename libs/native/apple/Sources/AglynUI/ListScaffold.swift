@@ -128,7 +128,8 @@ public struct AglynListToolbar<Filter: View>: View {
     }
     .padding(.horizontal, touch ? AglynContentInsets.phone : (inset ?? AglynContentInsets.horizontal))
     .padding(.bottom, touch ? 12 : 10)
-    .background(touch ? AglynColor.page : AglynColor.paper)
+    // On touch the row sits on the page ground; in the phone's bold look it lets the ground (and its glow) through.
+    .background(touch ? (AglynThemeRuntime.shared.phoneBold ? Color.clear : AglynColor.page) : AglynColor.paper)
   }
 }
 
@@ -169,7 +170,7 @@ public struct AglynFilterMenu<Content: View>: View {
           .fill(active == nil ? AglynColor.paper : AglynColor.accentSoft))
       .overlay(
         RoundedRectangle(cornerRadius: radius, style: .continuous)
-          .strokeBorder(active == nil ? AglynColor.divider : .clear))
+          .strokeBorder(active == nil ? AglynColor.borderStrong : .clear))
       .contentShape(Rectangle())
     }
     .menuStyle(.button)
@@ -541,8 +542,9 @@ public struct AglynHeaderButtonStyle: ButtonStyle {
       .background(
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
           .fill(configuration.isPressed ? AglynColor.hover : AglynColor.paper))
+      // Figma Button Secondary's outline, border/strong (never the platform's bright rim in dark).
       .overlay(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
+        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.borderStrong))
   }
 }
 
@@ -707,7 +709,7 @@ public struct AglynTouchIconButtonStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(filled ? AglynColor.primary : AglynColor.paper))
       .overlay {
-        if !filled { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.divider) }
+        if !filled { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.borderStrong) }
       }
       .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
       .opacity(configuration.isPressed ? 0.8 : 1)
@@ -785,6 +787,7 @@ public struct AglynDetailCrumbs: View {
 /// the tile is 36, the title 17 and the detail 13, 68 points tall.
 public struct AglynRecordRow<Trailing: View>: View {
   @Environment(\.aglynRowPadding) private var rowPadding
+  @Environment(\.aglynRowSelected) private var rowSelected
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
@@ -810,11 +813,16 @@ public struct AglynRecordRow<Trailing: View>: View {
 
   public var body: some View {
     HStack(spacing: 12) {
+      // Selected: the paper with a 1-point ring in the accent's text shade, so the tile stands off the selection's wash
+      // (Figma List/Order row Selected 11:343, AGL-3990).
       Image(systemName: systemImage)
         .font(.system(size: phone ? 16 : 14))
-        .foregroundStyle(AglynColor.secondaryText)
+        .foregroundStyle(rowSelected ? AglynColor.tint : AglynColor.secondaryText)
         .frame(width: phone ? 36 : 32, height: phone ? 36 : 32)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AglynColor.sunken))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(rowSelected ? AglynColor.paper : AglynColor.sunken))
+        .overlay {
+          if rowSelected { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.tint, lineWidth: 1) }
+        }
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(title).font(.system(size: phone ? 17 : 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)

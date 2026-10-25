@@ -85,6 +85,7 @@ import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.shellColors
+import com.aglyn.ui.space
 import com.aglyn.ui.workspaceTint
 import kotlinx.coroutines.launch
 
@@ -330,7 +331,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  WorkspaceBrandTheme(services, dark, accent) {
+  // A phone (never the desktop's narrow window) draws the brand's bold look in the Aglyn theme (AGL-3990).
+  WorkspaceBrandTheme(services, dark, accent, phone = !wide && !compactChrome) {
   val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
   // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
   val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
@@ -429,12 +431,21 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     )
     // The AI panel is a plugin's (slot "assistPanel"), shown while that plugin runs here; it reads where the person is.
     val assist = remember(version) { context.slotWidgets(ASSIST_PANEL_SLOT) }.firstOrNull { it.pluginId in enabled || it.pluginId in orgEnabled }
+    // "Aglyn AI" (a white-label workspace's own name in its place), as the Apple apps and Figma name it everywhere.
+    val assistTitle = assist?.let { "${services.config.brandName} AI" }
     val assistContent: @Composable () -> Unit = {
       assist?.let { widget ->
+        val atHome = navigator.top == ShellNavigator.HOME && route == null
+        val scopeName = workspace.site?.name ?: workspace.org?.name
         CompositionLocalProvider(
           com.aglyn.pluginhost.LocalSlotParams provides mapOf(
             "route" to consolePathOf(workspace.org?.slug, workspace.site?.subdomain?.ifEmpty { null }, row),
-            "title" to listOfNotNull(title.takeIf { it.isNotBlank() }, workspace.site?.name ?: workspace.org?.name).joinToString(" · "),
+            "title" to listOfNotNull(title.takeIf { it.isNotBlank() }, scopeName).joinToString(" · "),
+            // The context chip wears the place's own icon; the suggestions and the field name the place and the scope
+            // (Figma AI sheet 273:20299, AI panel 18:485).
+            "icon" to if (atHome) "home" else row?.icon ?: "visibility",
+            "place" to (if (atHome) "Home" else row?.label).orEmpty(),
+            "scope" to scopeName.orEmpty(),
           ),
         ) { widget.content(context) }
       }
@@ -506,7 +517,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
           },
         ) {
           HelpButton(help)
-          if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
+          if (assistTitle != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else assistTitle, "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }
         HorizontalDivider(color = shellColors.divider)
         Row(Modifier.weight(1f).fillMaxWidth().testTag("nav-shell-wide")) {
@@ -576,11 +587,13 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                   com.aglyn.ui.LocalContentInset provides com.aglyn.ui.DetailPanePadding,
                 ) { body() }
               }
-              if (assist != null && chrome.aiPanel && route !is Route.Web) {
+              if (assistTitle != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
                 Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
+                  // Figma AI panel 18:485's header: ✦ in the accent, the title, Close.
                   Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(assist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) space(2.25f) else space(2.5f)), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
+                    Text(assistTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = space(1f)))
                     TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
                   }
                   Box(Modifier.weight(1f)) { assistContent() }
@@ -597,7 +610,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       PhoneShell(
         services, navigator, chrome, workspace, prefs, user, uid, title, route, scopeGroups, settingsGroups, sidebar, starred,
         sections, banner, actions, enabled, onRow = { openRow(it) }, onStar = onStar, body = body,
-        assistTitle = assist?.title, assistContent = assistContent, help = help,
+        assistTitle = assistTitle, assistContent = assistContent, help = help,
       )
     }
     if (chrome.shortcuts) KeyboardShortcutsDialog { chrome.shortcuts = false }
@@ -630,10 +643,20 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
 }
 
-/** The account's theme again with a white-label workspace's brand color as the accent, while you are in it. */
+/**
+ * The account's theme again with a white-label workspace's brand color as the accent, while you are in it; on a [phone],
+ * inside the phone's theme (`PhoneTheme`: the bold grounds in the brand's own look).
+ */
 @Composable
-private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, accent: androidx.compose.ui.graphics.Color?, content: @Composable () -> Unit) {
-  if (accent == null) content() else AccountTheme(services, dark, accent, content)
+private fun WorkspaceBrandTheme(
+  services: ShellServices,
+  dark: Boolean,
+  accent: androidx.compose.ui.graphics.Color?,
+  phone: Boolean = false,
+  content: @Composable () -> Unit,
+) {
+  val themed: @Composable () -> Unit = { com.aglyn.ui.PhoneTheme(enabled = phone, content = content) }
+  if (accent == null) themed() else AccountTheme(services, dark, accent, themed)
 }
 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */
@@ -797,7 +820,7 @@ internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSel
             Text(
               section.label, maxLines = 1, fontSize = 14.sp, lineHeight = 20.sp,
               fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-              color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+              color = if (on) com.aglyn.ui.aglynAccentText else MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
           // The underline spans the label, the console's tab indicator.
@@ -1001,7 +1024,7 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
       onDismissRequest = { full = false },
       title = { Text("Starred is full") },
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
-      confirmButton = { androidx.compose.material3.TextButton(onClick = { full = false }) { Text("OK") } },
+      confirmButton = { com.aglyn.ui.TextButton(onClick = { full = false }) { Text("OK") } },
     )
   }
 }

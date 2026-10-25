@@ -4480,6 +4480,34 @@ export function planLabelGrantingFeature(
 }
 
 /**
+ * The cheapest plan whose base `quota` is at least `atLeast`, in the same
+ * ladder order as {@link planGrantingFeature} — the quota half of "which plan
+ * do I need for this?". `atLeast` of 1 asks which plan includes the quota at
+ * all (campaign email starts at Pro); a larger figure asks which plan holds
+ * a campaign of that size this month.
+ *
+ * Returns `undefined` when no plan's base tier reaches `atLeast`, and an
+ * upsell must then name no plan rather than the top one.
+ */
+export function planGrantingQuota(
+  quota: keyof Omit<ResolvedOrgEntitlements, 'features'>,
+  atLeast: number,
+): OrgPlan | undefined {
+  return [...SELF_SERVE_PLANS, 'enterprise' as OrgPlan].find(
+    (plan) => Number(PLAN_ENTITLEMENTS[plan][quota] ?? 0) >= atLeast,
+  )
+}
+
+/** {@link planGrantingQuota} as the plan name an upsell interpolates. */
+export function planLabelGrantingQuota(
+  quota: keyof Omit<ResolvedOrgEntitlements, 'features'>,
+  atLeast: number,
+): string | undefined {
+  const plan = planGrantingQuota(quota, atLeast)
+  return plan ? PLAN_LABELS[plan] : undefined
+}
+
+/**
  * True when the org's plan (or overrides) enables the boolean feature. A
  * key outside `OrgFeatureFlags` is one a plugin declared (AGL-2940) and is
  * answered the same way.

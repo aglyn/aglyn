@@ -44,6 +44,7 @@
     "emailTemplate": "Email template",
     "layout": "Layout",
     "plugin": "Plugin",
+    "siteStarter": "Site starter",
     "template": "Site template",
     "theme": "Theme"
   },
@@ -1725,7 +1726,7 @@
     "appIcon": "aglyn",
     "appearance": "system",
     "density": "comfortable",
-    "sidebarStyle": "tinted",
+    "sidebarStyle": "plain",
     "textSize": "system",
     "theme": "aglyn",
     "useWorkspaceBrand": true
@@ -2430,6 +2431,16 @@
       "siteOff": {
         "keeps": "The connections are kept, and everything already sent stays in the help desk.",
         "stops": "Switching Help desks off for this site stops its buyers, orders and contact form messages reaching the help desks it connected."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+      "id": "waivers",
+      "label": "Waivers",
+      "siteOff": {
+        "keeps": "Every signature already taken is kept, with its signed copy and audit trail, and Waivers keeps working on the workspace’s other sites.",
+        "stops": "Switching Waivers off for this site stops its Sign waiver elements rendering, closes its share links, and refuses new signatures, online or at the window."
       }
     },
     {
@@ -3185,6 +3196,9 @@
     ],
     "plugin": [
       "org",
+      "host"
+    ],
+    "siteStarter": [
       "host"
     ],
     "template": [
@@ -4681,6 +4695,13 @@
           "surface": "hostPluginTab"
         },
         "where": "The POS app"
+      },
+      {
+        "console": {
+          "id": "/waivers",
+          "surface": "hostPluginTab"
+        },
+        "where": "The console’s Waivers page; no native screen yet"
       }
     ],
     "lists": [
@@ -7181,14 +7202,22 @@
         "marketplace.publish",
         "plugins.install",
         "ai.use",
-        "ai.generate"
+        "ai.generate",
+        "managePos",
+        "outreach.use",
+        "accounting.manage",
+        "manageWaivers",
+        "collectWaivers"
       ],
       "editor": [
         "data.manage",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
-        "ai.generate"
+        "ai.generate",
+        "managePos",
+        "manageWaivers",
+        "collectWaivers"
       ],
       "owner": [
         "org.settings",
@@ -7202,70 +7231,179 @@
         "marketplace.publish",
         "plugins.install",
         "ai.use",
-        "ai.generate"
+        "ai.generate",
+        "managePos",
+        "outreach.use",
+        "accounting.manage",
+        "manageWaivers",
+        "collectWaivers"
       ],
       "viewer": []
     },
+    "groups": [
+      {
+        "id": "organization",
+        "label": "Organization"
+      },
+      {
+        "id": "billing",
+        "label": "Billing"
+      },
+      {
+        "id": "team",
+        "label": "Team"
+      },
+      {
+        "id": "sites",
+        "label": "Sites"
+      },
+      {
+        "id": "datasets",
+        "label": "Data"
+      },
+      {
+        "id": "extensions",
+        "label": "Marketplace and plugins"
+      },
+      {
+        "id": "ai",
+        "label": "AI"
+      },
+      {
+        "id": "commerce",
+        "label": "Commerce",
+        "pluginId": "commerce"
+      },
+      {
+        "id": "outreach",
+        "label": "Sequences",
+        "pluginId": "outreach"
+      },
+      {
+        "id": "accounting",
+        "label": "Accounting",
+        "pluginId": "accounting"
+      },
+      {
+        "id": "waivers",
+        "label": "Waivers",
+        "pluginId": "waivers"
+      }
+    ],
     "permissions": [
       {
         "description": "Rename the organization, change its slug, transfer it.",
+        "group": "organization",
         "key": "org.settings",
         "label": "Organization settings"
       },
       {
         "description": "See the organization activity feed.",
+        "group": "organization",
         "key": "org.auditLog",
         "label": "Activity & audit log"
       },
       {
         "description": "See the plan, usage meters, and invoices.",
+        "group": "billing",
         "key": "billing.view",
         "label": "View billing"
       },
       {
         "description": "Change plans, buy add-ons, update payment details.",
+        "group": "billing",
         "key": "billing.manage",
         "label": "Manage billing"
       },
       {
         "description": "Invite, remove, and re-role organization members.",
+        "group": "team",
         "key": "members.manage",
         "label": "Manage members"
       },
       {
         "description": "Create new sites in the organization.",
+        "group": "sites",
         "key": "hosts.create",
         "label": "Create sites"
       },
       {
         "description": "Delete sites the member can access.",
+        "group": "sites",
         "key": "hosts.delete",
         "label": "Delete sites"
       },
       {
         "description": "Create, edit, and delete organization datasets.",
+        "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
       },
       {
         "description": "Publish listings under the organization profile.",
+        "group": "extensions",
         "key": "marketplace.publish",
         "label": "Publish to marketplace"
       },
       {
         "description": "Install or remove marketplace plugins.",
+        "group": "extensions",
         "key": "plugins.install",
         "label": "Install plugins"
       },
       {
         "description": "Ask the assistant, rewrite copy with AI, and generate a section.",
+        "group": "ai",
         "key": "ai.use",
-        "label": "Use AI assistance"
+        "label": "Use AI assistance",
+        "scope": "site"
       },
       {
         "description": "Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.",
+        "group": "ai",
         "key": "ai.generate",
-        "label": "Generate with AI"
+        "label": "Generate with AI",
+        "scope": "site"
+      },
+      {
+        "description": "Open the POS page and record in-person sales.",
+        "group": "commerce",
+        "key": "managePos",
+        "label": "Use the point of sale",
+        "pluginId": "commerce",
+        "scope": "org"
+      },
+      {
+        "description": "Open Sequences, and work its email sequences and connected mailboxes.",
+        "group": "outreach",
+        "key": "outreach.use",
+        "label": "Use Sequences",
+        "pluginId": "outreach",
+        "scope": "org"
+      },
+      {
+        "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",
+        "group": "accounting",
+        "key": "accounting.manage",
+        "label": "Manage accounting",
+        "pluginId": "accounting",
+        "scope": "org"
+      },
+      {
+        "description": "Write, publish and retire waivers, and void a signature.",
+        "group": "waivers",
+        "key": "manageWaivers",
+        "label": "Manage waivers",
+        "pluginId": "waivers",
+        "scope": "org"
+      },
+      {
+        "description": "See who signed, take signatures at the window and record paper waivers.",
+        "group": "waivers",
+        "key": "collectWaivers",
+        "label": "Collect waivers",
+        "pluginId": "waivers",
+        "scope": "org"
       }
     ]
   },
@@ -10498,18 +10636,82 @@
       "name": "Referral reward",
       "plugin": "Rewards",
       "pluginId": "loyalty"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "{{host.businessName}} · Waiver",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Your signed waiver",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Thanks, {{name}}. You signed {{waiver.title}} for {{host.businessName}}. Your signed copy is attached to this email as a PDF.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Signed: {{waiver.signedAt}}\nCovers: {{waiver.people}}\n{{waiver.validity}}",
+          "variant": "details"
+        },
+        {
+          "block": "text",
+          "text": "You don’t need to print it: staff can find your waiver by name when you arrive. If anything on it is wrong, contact {{host.businessName}}.",
+          "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{host.url}}",
+          "label": "Visit {{host.businessName}}"
+        }
+      ],
+      "defaultSubject": "Your signed waiver for {{host.businessName}}",
+      "description": "Sends a signer their signed waiver as a PDF, with who it covers and for how long.",
+      "footerReason": "You’re receiving this because you signed a waiver for {{host.businessName}}.",
+      "key": "waiver-signed",
+      "mergeTokens": [
+        {
+          "description": "The signer’s name",
+          "name": "name",
+          "sample": "Alex Rivera"
+        },
+        {
+          "description": "The waiver’s title",
+          "name": "waiver.title",
+          "sample": "Rider release and waiver"
+        },
+        {
+          "description": "When it was signed, in the site’s time zone",
+          "name": "waiver.signedAt",
+          "sample": "Oct 24, 2026, 9:14 AM"
+        },
+        {
+          "description": "Everyone it covers: the signer and any minors",
+          "name": "waiver.people",
+          "sample": "Alex Rivera, Sam Rivera"
+        },
+        {
+          "description": "The days it covers",
+          "name": "waiver.validity",
+          "sample": "Good for Oct 24, 2026"
+        }
+      ],
+      "name": "Signed waiver copy",
+      "plugin": "Waivers",
+      "pluginId": "waivers"
     }
   ],
   "THEME_ACCENT_SWATCHES": [
     {
-      "color": "#0073ae",
+      "color": "#00b0ff",
       "id": "aglynBlue",
       "label": "Brand blue"
-    },
-    {
-      "color": "#00b0ff",
-      "id": "sky",
-      "label": "Sky"
     },
     {
       "color": "#7a5cf0",
@@ -10535,15 +10737,15 @@
   "THEME_ACCENTS": [
     {
       "accent": {
-        "fill": "#0073ae",
-        "hover": "#00669b",
-        "icon": "#0091d5",
+        "fill": "#00b0ff",
+        "hover": "#0077ad",
+        "icon": "#00b0ff",
         "on": "#ffffff",
-        "pressed": "#005884",
+        "pressed": "#006999",
         "ring": "#00b0ff",
         "soft": "#00b0ff29",
-        "textDark": "#00b0ff",
-        "textLight": "#0078ad"
+        "textDark": "#4dc8ff",
+        "textLight": "#0077ad"
       },
       "id": "blue",
       "label": "Blue"
@@ -10568,7 +10770,7 @@
         "fill": "#e040fb",
         "hover": "#cc2ee6",
         "icon": "#c93ae3",
-        "on": "#1e0424",
+        "on": "#ffffff",
         "pressed": "#b523cf",
         "ring": "#e040fb",
         "soft": "#e040fb29",
@@ -11111,6 +11313,65 @@
       "source": "figma"
     }
   ],
+  "THEME_PHONE_AGLYN": {
+    "dark": {
+      "borderStrong": "#395460",
+      "borderSubtle": "#263f4a",
+      "canvas": "#07181f",
+      "dangerBg": "#452228",
+      "dangerFg": "#ee7b78",
+      "dangerFill": "#c93a31",
+      "dangerFillHover": "#b3261e",
+      "dangerFillPressed": "#9c211a",
+      "hover": "#213a45",
+      "infoBg": "#0a3d54",
+      "infoFg": "#4dc8ff",
+      "newBg": "#442860",
+      "newFg": "#ea7cfc",
+      "rail": "#061319",
+      "raised": "#152b35",
+      "scrim": "#0000008c",
+      "successBg": "#1d4433",
+      "successFg": "#72c275",
+      "sunken": "#1a323d",
+      "surface": "#0d2029",
+      "textPrimary": "#f2f7fb",
+      "textSecondary": "#c1d0d7",
+      "textTertiary": "#8ba5b1",
+      "titlebar": "#0a1c24",
+      "warningBg": "#4c432f",
+      "warningFg": "#ffab40"
+    },
+    "light": {
+      "borderStrong": "#66d0ff",
+      "borderSubtle": "#dbf4ff",
+      "canvas": "#edf9ff",
+      "dangerBg": "#fbdddc",
+      "dangerFg": "#ba1c18",
+      "dangerFill": "#b3261e",
+      "dangerFillHover": "#9c211a",
+      "dangerFillPressed": "#861c16",
+      "hover": "#f2fbff",
+      "infoBg": "#ccefff",
+      "infoFg": "#07171f",
+      "newBg": "#fae0fe",
+      "newFg": "#a604c2",
+      "rail": "#e0f6ff",
+      "raised": "#ffffff",
+      "scrim": "#0f172152",
+      "successBg": "#e2f2e3",
+      "successFg": "#306f33",
+      "sunken": "#e6f7ff",
+      "surface": "#ffffff",
+      "textPrimary": "#19202a",
+      "textSecondary": "#404c5c",
+      "textTertiary": "#5d6d85",
+      "titlebar": "#f7fdff",
+      "warningBg": "#ffebd1",
+      "warningFg": "#975400"
+    }
+  },
+  "THEME_PHONE_BOLD_ACCENT": "#00b0ff",
   "THEME_PREVIEWS": {
     "ocean": {
       "accent": "#087e8b",
@@ -11124,6 +11385,9 @@
       "rail": "#e9dccb",
       "surface": "#fffaf3"
     }
+  },
+  "THEME_RETIRED_ACCENTS": {
+    "#0073ae": "#00b0ff"
   },
   "THEME_TEXT_CONTRAST": 4.5,
   "TIME_ZONE_CHOICES": [
