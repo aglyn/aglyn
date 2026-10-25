@@ -2614,6 +2614,9 @@
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
+          "posOfflineCardSales": true,
+          "posOfflineCardMaxSale": 250,
+          "posOfflineCardMaxStored": 2500,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2648,6 +2651,27 @@
               "kind": "number",
               "initial": "{item.posMaxDiscountPct ?? const.defaults.posMaxDiscountPct}",
               "help": "The largest discount the point of sale will accept on a sale. A register that asks for more is refused, and the sale is not rung up. Set to 0 to stop staff discounting at the register entirely. Between 0 and 100."
+            },
+            {
+              "key": "posOfflineCardSales",
+              "label": "Take cards offline on the Aglyn POS app",
+              "kind": "toggle",
+              "initial": "{item.posOfflineCardSales ?? const.defaults.posOfflineCardSales}",
+              "help": "When the register loses its connection, a card reader connected to the Aglyn POS app keeps taking cards. Each card is saved on the device and charged when the connection returns. If the bank declines it then, the order is marked unpaid and the register says so."
+            },
+            {
+              "key": "posOfflineCardMaxSale",
+              "label": "Largest card sale offline ($)",
+              "kind": "number",
+              "initial": "{item.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
+              "help": "A larger card sale needs the connection. Stripe allows at most $10,000. Between 1 and 10000."
+            },
+            {
+              "key": "posOfflineCardMaxStored",
+              "label": "Most in cards one device holds offline ($)",
+              "kind": "number",
+              "initial": "{item.posOfflineCardMaxStored ?? const.defaults.posOfflineCardMaxStored}",
+              "help": "Once the cards waiting on one device add up to this, it takes only cash until they are charged. Between 1 and 100000."
             },
             {
               "key": "posTippingEnabled",
@@ -2761,6 +2785,9 @@
               "doc": "orgs/{org.id}/pluginSettings/commerce",
               "fields": {
                 "posMaxDiscountPct": "{form.posMaxDiscountPct}",
+                "posOfflineCardSales": "{form.posOfflineCardSales}",
+                "posOfflineCardMaxSale": "{form.posOfflineCardMaxSale}",
+                "posOfflineCardMaxStored": "{form.posOfflineCardMaxStored}",
                 "posTippingEnabled": "{form.posTippingEnabled}",
                 "posTipPercentages": "{form.posTipPercentages}",
                 "posReceiptDefault": "{form.posReceiptDefault}",
@@ -2796,6 +2823,9 @@
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
+          "posOfflineCardSales": true,
+          "posOfflineCardMaxSale": 250,
+          "posOfflineCardMaxStored": 2500,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2840,6 +2870,48 @@
               "initial": "{data.site.posMaxDiscountPct ?? data.org.posMaxDiscountPct ?? const.defaults.posMaxDiscountPct}",
               "when": "form.ov_posMaxDiscountPct",
               "help": "The largest discount the point of sale will accept on a sale. A register that asks for more is refused, and the sale is not rung up. Set to 0 to stop staff discounting at the register entirely. Between 0 and 100."
+            },
+            {
+              "key": "ov_posOfflineCardSales",
+              "label": "Override Take cards offline on the Aglyn POS app for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardSales:present}"
+            },
+            {
+              "key": "posOfflineCardSales",
+              "label": "Take cards offline on the Aglyn POS app",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardSales ?? data.org.posOfflineCardSales ?? const.defaults.posOfflineCardSales}",
+              "when": "form.ov_posOfflineCardSales",
+              "help": "When the register loses its connection, a card reader connected to the Aglyn POS app keeps taking cards. Each card is saved on the device and charged when the connection returns. If the bank declines it then, the order is marked unpaid and the register says so."
+            },
+            {
+              "key": "ov_posOfflineCardMaxSale",
+              "label": "Override Largest card sale offline ($) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardMaxSale:present}"
+            },
+            {
+              "key": "posOfflineCardMaxSale",
+              "label": "Largest card sale offline ($)",
+              "kind": "number",
+              "initial": "{data.site.posOfflineCardMaxSale ?? data.org.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
+              "when": "form.ov_posOfflineCardMaxSale",
+              "help": "A larger card sale needs the connection. Stripe allows at most $10,000. Between 1 and 10000."
+            },
+            {
+              "key": "ov_posOfflineCardMaxStored",
+              "label": "Override Most in cards one device holds offline ($) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardMaxStored:present}"
+            },
+            {
+              "key": "posOfflineCardMaxStored",
+              "label": "Most in cards one device holds offline ($)",
+              "kind": "number",
+              "initial": "{data.site.posOfflineCardMaxStored ?? data.org.posOfflineCardMaxStored ?? const.defaults.posOfflineCardMaxStored}",
+              "when": "form.ov_posOfflineCardMaxStored",
+              "help": "Once the cards waiting on one device add up to this, it takes only cash until they are charged. Between 1 and 100000."
             },
             {
               "key": "ov_posTippingEnabled",
@@ -3047,6 +3119,27 @@
                 "posMaxDiscountPct": {
                   "$if": "form.ov_posMaxDiscountPct",
                   "then": "{form.posMaxDiscountPct}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posOfflineCardSales": {
+                  "$if": "form.ov_posOfflineCardSales",
+                  "then": "{form.posOfflineCardSales}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posOfflineCardMaxSale": {
+                  "$if": "form.ov_posOfflineCardMaxSale",
+                  "then": "{form.posOfflineCardMaxSale}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posOfflineCardMaxStored": {
+                  "$if": "form.ov_posOfflineCardMaxStored",
+                  "then": "{form.posOfflineCardMaxStored}",
                   "else": {
                     "$delete": true
                   }
