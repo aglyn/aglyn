@@ -25,6 +25,8 @@ import {
   type PosOfflineSaleOutcome,
 } from '../model/commerce-pos-offline'
 import { mintPosAssertion } from './pos-ops-gate'
+import { posCardApplicationFeeCents } from './pos-stripe'
+import type { PosOfflineCardIntent } from './pos-terminal'
 import {
   handlePosOfflineSync,
   posInPersonTax,
@@ -43,6 +45,7 @@ jest.mock('./order-events', () => ({ raiseOrderEvent: jest.fn() }))
 jest.mock('./low-stock', () => ({ alertLowStockCrossing: jest.fn() }))
 jest.mock('./reserve-stock', () => ({ decrementVariantStock: jest.fn() }))
 jest.mock('./pos-sale', () => ({ notifyPosSaleCompleted: jest.fn() }))
+jest.mock('./pos-terminal', () => ({}))
 
 /**
  * The offline register's sync (AGL-3625): a cash sale rung offline lands as
@@ -455,5 +458,144 @@ describe('a sync that dies part-way', () => {
     await results([queued])
     expect(after).toHaveLength(1)
     expect(h.memory.read('hosts/shop/counters/orders')).toEqual({ next: 1002 })
+  })
+})
+
+describe('a card taken offline on the app reader (AGL-4039)', () => {
+  let intents: Record<string, PosOfflineCardIntent>
+  let captures: Array<{ id: string; fee: number; key: string }>
+  let offlineEnabled: boolean
+
+  const intentFor = (queued: PosOfflineSale, overrides: Partial<PosOfflineCardIntent> = {}): PosOfflineCardIntent => ({
+    id: `pi_${queued.saleKey.slice(-12)}abc`,
+    status: 'requires_capture',
+    amount: queued.totals.totalCents,
+    currency: 'usd',
+    metadata: { kind: 'pos-offline', saleKey: queued.saleKey, hostId: 'shop', orgId: 'org-1', registerId: 'front' },
+    destination: 'acct_merchant',
+    applicationFeeCents: 0,
+    livemode: false,
+    brand: 'visa',
+    last4: '4242',
+    ...overrides,
+  })
+
+  const cardSale = (forward: 'stored' | 'forwarded' | 'declined' | 'failed', intent?: Partial<PosOfflineCardIntent>) => {
+    const queued = sale({ cashTenderedCents: 0, changeCents: 0 })
+    queued.tender = 'card'
+    const made = intentFor(queued, intent)
+    if (forward !== 'stored' && forward !== 'failed') intents[made.id] = made
+    queued.card = {
+      forward,
+      ...(forward === 'forwarded' || forward === 'declined' ? { paymentIntentId: made.id } : {}),
+      brand: 'visa',
+      last4: '4242',
+    }
+    return { queued, intent: made }
+  }
+
+  beforeEach(() => {
+    intents = {}
+    captures = []
+    offlineEnabled = true
+    deps.card = {
+      terminal: async () => ({ available: true, locationId: 'tml_1' }),
+      merchantAccount: async () => 'acct_merchant',
+      enableOffline: async () => offlineEnabled,
+      retrieve: async (id) => (intents[id] ? { ok: true, intent: intents[id] } : { ok: false, error: 'No such payment' }),
+      capture: async (id, fee, key) => {
+        captures.push({ id, fee, key })
+        intents[id] = { ...intents[id], status: 'succeeded', applicationFeeCents: fee }
+        return { ok: true, intent: intents[id] }
+      },
+    }
+  })
+
+  const kit = async () =>
+    (
+      await handlePosOfflineSync(deps, { ...h.request('cashier', {}), method: 'GET', query: { hostId: 'shop' } } as any)
+    ).body['kit'] as any
+
+  it('is off until the store turns it on, then hands the register the destination and its two limits (none set: Stripe’s ceiling, no daily limit)', async () => {
+    expect((await kit()).card).toMatchObject({ available: false, unavailableReason: expect.stringMatching(/not turned on/) })
+    h.config['posOfflineCardSales'] = true
+    expect((await kit()).card).toEqual({
+      available: true,
+      destination: 'acct_merchant',
+      currency: 'usd',
+      maxSaleCents: 1_000_000,
+      maxDeviceDailyCents: 0,
+    })
+    h.config['posOfflineCardMaxSale'] = ''
+    h.config['posOfflineCardDailyLimit'] = null
+    expect((await kit()).card).toMatchObject({ maxSaleCents: 1_000_000, maxDeviceDailyCents: 0 })
+    h.config['posOfflineCardMaxSale'] = 250
+    h.config['posOfflineCardDailyLimit'] = 2000
+    expect((await kit()).card).toMatchObject({ maxSaleCents: 25_000, maxDeviceDailyCents: 200_000 })
+    h.config['posOfflineCardMaxSale'] = 50_000
+    h.config['posOfflineCardDailyLimit'] = 250_000
+    expect((await kit()).card).toMatchObject({ maxSaleCents: 1_000_000, maxDeviceDailyCents: 25_000_000 })
+  })
+
+  it('says why not when Stripe would not turn offline mode on', async () => {
+    h.config['posOfflineCardSales'] = true
+    offlineEnabled = false
+    expect((await kit()).card).toMatchObject({ available: false, destination: '' })
+  })
+
+  it('captures the card with the card tender’s fee and records a paid order', async () => {
+    const { queued, intent } = cardSale('forwarded')
+    const [result] = await results([queued])
+    expect(result).toMatchObject({ status: 'recorded', flags: [] })
+    const lineTake = Math.round((2400 * 2) / 100) + Math.round((2500 * 2) / 100)
+    const take = Math.max(1, Math.round((lineTake * (4900 - 490)) / 4900))
+    const fee = posCardApplicationFeeCents({ takeShareCents: take, chargeCents: intent.amount })
+    expect(captures).toEqual([{ id: intent.id, fee, key: `pos-offline-capture:shop:${queued.saleKey}` }])
+    const recorded = order(queued.saleKey)!
+    expect(recorded['status']).toBe('paid')
+    expect(recorded['feeCollection']).toBe('payout')
+    expect(recorded['payments'][0]).toMatchObject({
+      method: 'card_present',
+      status: 'succeeded',
+      paymentIntentId: intent.id,
+      takeFeeCents: take,
+      feeCents: fee,
+      cardBrand: 'visa',
+      last4: '4242',
+    })
+    expect(after).toHaveLength(1)
+    // Replayed, it is not captured twice.
+    expect((await results([queued]))[0].status).toBe('replayed')
+    expect(captures).toHaveLength(1)
+  })
+
+  it('records a card the bank declined as an unpaid, flagged order with no receipt', async () => {
+    const { queued } = cardSale('declined', {
+      status: 'requires_payment_method',
+      failureMessage: 'Your card was declined.',
+    })
+    const [result] = await results([queued])
+    expect(result).toMatchObject({ status: 'recorded', flags: ['card-declined'] })
+    const recorded = order(queued.saleKey)!
+    expect(recorded['status']).toBe('pending')
+    expect(recorded['payments'][0]).toMatchObject({ status: 'failed', failureMessage: 'Your card was declined.' })
+    expect(captures).toHaveLength(0)
+    expect(after).toHaveLength(0)
+  })
+
+  it('records a card Stripe never took as unpaid', async () => {
+    const { queued } = cardSale('failed')
+    const [result] = await results([queued])
+    expect(result).toMatchObject({ status: 'recorded', flags: ['card-not-charged'] })
+    expect(order(queued.saleKey)!['status']).toBe('pending')
+  })
+
+  it('keeps a card still on the device, and refuses an intent from another sale', async () => {
+    const stored = cardSale('stored').queued
+    expect((await results([stored]))[0]).toMatchObject({ status: 'refused', reason: 'failed', retry: true })
+    const { queued, intent } = cardSale('forwarded')
+    intents[intent.id] = { ...intent, metadata: { ...intent.metadata, saleKey: 'someoneelse0000000' } }
+    expect((await results([queued]))[0]).toMatchObject({ status: 'refused', reason: 'invalid', retry: false })
+    expect(order(queued.saleKey)).toBeUndefined()
   })
 })

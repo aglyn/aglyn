@@ -2342,8 +2342,23 @@ data class PosKioskVariant(
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineCardForwardSerializer::class)
+enum class PosOfflineCardForward(val raw: String) {
+    DECLINED("declined"),
+    FAILED("failed"),
+    FORWARDED("forwarded"),
+    STORED("stored"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineCardForwardSerializer :
+    RawEnumSerializer<PosOfflineCardForward>("com.aglyn.contracts.PosOfflineCardForward", PosOfflineCardForward.entries, PosOfflineCardForward.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosOfflineFlagSerializer::class)
 enum class PosOfflineFlag(val raw: String) {
+    CARD_DECLINED("card-declined"),
+    CARD_NOT_CHARGED("card-not-charged"),
     CASH_SHORT("cash-short"),
     CASHIER_UNVERIFIED("cashier-unverified"),
     CLOCK_ADJUSTED("clock-adjusted"),
@@ -2367,6 +2382,7 @@ internal object PosOfflineFlagSerializer :
 @Serializable
 data class PosOfflineKit(
     val available: Boolean,
+    val card: PosOfflineKitCard? = null,
     val hostId: String,
     val issuedAtMs: Double,
     val maxDiscountPct: Double,
@@ -2377,6 +2393,16 @@ data class PosOfflineKit(
     val tax: PosOfflineKitTax,
     val unavailableReason: String? = null,
     val v: Long,
+)
+
+@Serializable
+data class PosOfflineKitCard(
+    val available: Boolean,
+    val currency: String,
+    val destination: String,
+    val maxDeviceDailyCents: Double,
+    val maxSaleCents: Double,
+    val unavailableReason: String? = null,
 )
 
 @Serializable
@@ -2449,6 +2475,7 @@ internal object PosOfflineRefusalSerializer :
 
 @Serializable
 data class PosOfflineSale(
+    val card: PosOfflineSaleCard? = null,
     val cashierAssertion: String? = null,
     val cashTenderedCents: Double,
     val changeCents: Double,
@@ -2463,8 +2490,18 @@ data class PosOfflineSale(
     val shiftId: String? = null,
     val signedInUid: String,
     val soldAtMs: Double,
+    val tender: PosOfflineTender? = null,
     val totals: OrderTotals,
     val v: Long,
+)
+
+@Serializable
+data class PosOfflineSaleCard(
+    val brand: String? = null,
+    val declineMessage: String? = null,
+    val forward: PosOfflineCardForward,
+    val last4: String? = null,
+    val paymentIntentId: String? = null,
 )
 
 @Serializable
@@ -2521,6 +2558,17 @@ data class PosOfflineSyncRequest(
 data class PosOfflineSyncResponse(
     val results: List<PosOfflineSaleOutcome>,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineTenderSerializer::class)
+enum class PosOfflineTender(val raw: String) {
+    CARD("card"),
+    CASH("cash"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineTenderSerializer :
+    RawEnumSerializer<PosOfflineTender>("com.aglyn.contracts.PosOfflineTender", PosOfflineTender.entries, PosOfflineTender.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosReceiptChannelSerializer::class)
@@ -3470,6 +3518,9 @@ internal data class ContractValuesPart5(
     @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
+    @SerialName("POS_OFFLINE_CARD_INTENT_KIND") val posOfflineCardIntentKind: String,
+    @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT") val posOfflineCardMaxSaleCentsLimit: Long,
+    @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
@@ -3808,6 +3859,9 @@ class ContractValues internal constructor(
     val posKioskUnlockLockoutMs: Double get() = part5.posKioskUnlockLockoutMs
     val posKioskUnlockMaxAttempts: Long get() = part5.posKioskUnlockMaxAttempts
     val posKioskUnlockTtlMs: Double get() = part5.posKioskUnlockTtlMs
+    val posOfflineCardIntentKind: String get() = part5.posOfflineCardIntentKind
+    val posOfflineCardMaxSaleCentsLimit: Long get() = part5.posOfflineCardMaxSaleCentsLimit
+    val posOfflineCardReconnectWithinMs: Double get() = part5.posOfflineCardReconnectWithinMs
     val posOfflineClockSkewMs: Double get() = part5.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part5.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part5.posOfflineFlagLabels

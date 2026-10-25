@@ -74,7 +74,7 @@ struct RegisterScreen: View {
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
     .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
-    .sheet(isPresented: $showOfflineCash) { OfflineCashSheet(model: model) }
+    .sheet(isPresented: $showOfflineCash) { OfflineSaleSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
     .simultaneousGesture(TapGesture().onEnded { model.cashier.touch() })
@@ -300,9 +300,9 @@ struct BasketPanel: View {
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("charge")
         } else {
-          // Offline: cash is the one tender that still sells, saved on this register until the connection returns.
+          // Offline: cash, and a card on this device's reader (AGL-4039), saved on this register until the connection returns.
           Button(action: onOfflineCash) {
-            Text("Take cash offline").frame(maxWidth: .infinity)
+            Text("Charge offline").frame(maxWidth: .infinity)
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.large)

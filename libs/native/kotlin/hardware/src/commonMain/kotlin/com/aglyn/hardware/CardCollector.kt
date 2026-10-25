@@ -70,6 +70,9 @@ enum class CardReaderSetupCode(val wire: String) {
   UNAVAILABLE("terminal-unavailable"),
   MERCHANT_NOT_READY("merchant-not-ready"),
   LOCATION_REQUIRED("location-required"),
+
+  /** The console could not be reached: the device is offline (AGL-4039). */
+  UNREACHABLE("unreachable"),
   ;
 
   companion object {

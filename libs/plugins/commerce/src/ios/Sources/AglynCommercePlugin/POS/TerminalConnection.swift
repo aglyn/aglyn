@@ -27,8 +27,13 @@ struct TerminalReadiness: Equatable {
   var ready: Bool { available && merchantReady && locationReady }
 }
 
-/// The route's 409 as a setup error the screen can act on; anything else unchanged.
+/// The route's 409 as a setup error the screen can act on, no answer at all
+/// as `unreachable` (the reader may then start offline, AGL-4039); anything
+/// else unchanged.
 func asSetupError(_ error: Error) -> Error {
+  if let api = error as? ConsoleAPIError, api.status == 0 {
+    return CardReaderSetupError(code: .unreachable, message: api.message)
+  }
   guard let api = error as? ConsoleAPIError, api.status == 409, case .object(let body)? = api.body,
     case .string(let raw)? = body["code"], let code = CardReaderSetupCode(rawValue: raw)
   else { return error }

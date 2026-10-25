@@ -105,6 +105,30 @@ class FunctionCasesTest {
   }
 
   @Test
+  fun aCardTakenOfflineIsRefusedAsTheConsoleRefusesIt() {
+    cases("posOfflineCardRefusal").forEach { (args, result) ->
+      val input = args[0].jsonObject
+      val card = input["card"]?.takeIf { it !is JsonNull }?.jsonObject?.let {
+        PosOfflineKitCard(
+          available = it.getValue("available").jsonPrimitive.boolean,
+          currency = "usd",
+          destination = "acct_test",
+          maxSaleCents = it.getValue("maxSaleCents").jsonPrimitive.double,
+          maxDeviceDailyCents = it.getValue("maxDeviceDailyCents").jsonPrimitive.double,
+          unavailableReason = it["unavailableReason"]?.jsonPrimitive?.content,
+        )
+      }
+      val expected = result.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+      assertEquals(expected, posOfflineCardRefusal(card, input.getValue("totalCents").jsonPrimitive.double, input.getValue("takenTodayCents").jsonPrimitive.double), args.toString())
+    }
+    cases("posOfflineCardIntentMetadata").forEach { (args, result) ->
+      val input = args[0].jsonObject
+      val expected = result.jsonObject.mapValues { it.value.jsonPrimitive.content }
+      assertEquals(expected, posOfflineCardIntentMetadata(str(input["saleKey"]) ?: "", str(input["hostId"]) ?: "", str(input["orgId"]) ?: "", str(input["registerId"]) ?: ""), args.toString())
+    }
+  }
+
+  @Test
   fun aSaleKeyIsAnIdTheOrderCanTake() = cases("posOfflineSaleKeyIsValid").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.boolean, posOfflineSaleKeyIsValid(str(args[0])), args.toString())
   }

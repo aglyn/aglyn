@@ -70,3 +70,54 @@ public func posOfflineSaleTotals(
     discountCents: appliedDiscount, feeCents: 0, itemsCents: items, shippingCents: 0, taxCents: wholeCents(tax),
     totalCents: items + wholeCents(tax) - appliedDiscount)
 }
+
+/*
+ * A CARD TAKEN OFFLINE ON THE APP'S OWN READER (AGL-4039): the console's
+ * `posOfflineCardRefusal` and `posOfflineCardIntentMetadata`, replayed in
+ * function-cases.generated.json.
+ */
+
+/// `$1,234.56` for whole cents, as the console's rule words an amount.
+private func offlineDollars(_ cents: Double) -> String {
+  let value = Int(cents)
+  let whole = value / 100
+  let rest = value % 100
+  var digits = String(whole)
+  var grouped = ""
+  while digits.count > 3 {
+    grouped = "," + digits.suffix(3) + grouped
+    digits = String(digits.dropLast(3))
+  }
+  return "$" + digits + grouped + "." + (rest < 10 ? "0" : "") + String(rest)
+}
+
+/// Why a card cannot be taken offline for `totalCents`, in the cashier's words; nil when it can.
+public func posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, takenTodayCents: Double) -> String? {
+  guard let card else { return "Card sales offline need the register to connect once first." }
+  guard card.available else {
+    let reason = card.unavailableReason ?? ""
+    return reason.isEmpty ? "Card sales offline are not turned on for this store." : reason
+  }
+  let total: Double = wholeCents(totalCents)
+  guard total > 0 else { return "There is nothing to charge." }
+  let storeCeiling: Double = wholeCents(card.maxSaleCents)
+  let perSale = min(storeCeiling, Double(ContractValues.shared.posOfflineCardMaxSaleCentsLimit))
+  if total > perSale {
+    return "Offline, a card sale can be up to \(offlineDollars(perSale)). Take cash, or charge it when you are back online."
+  }
+  let today: Double = wholeCents(takenTodayCents)
+  let daily: Double = wholeCents(card.maxDeviceDailyCents)
+  if daily > 0, today + total > daily {
+    return
+      "This device has taken \(offlineDollars(today)) in cards offline today, and its daily limit is \(offlineDollars(daily)). Take cash, or wait for the connection."
+  }
+  return nil
+}
+
+/// What the app writes on the PaymentIntent it creates for a card rung offline.
+public func posOfflineCardIntentMetadata(saleKey: String, hostID: String, orgID: String, registerID: String) -> [String: String] {
+  [
+    "kind": ContractValues.shared.posOfflineCardIntentKind, "saleKey": saleKey, "hostId": hostID, "orgId": orgID,
+    "registerId": registerID,
+  ]
+}

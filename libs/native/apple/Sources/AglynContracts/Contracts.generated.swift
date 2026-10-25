@@ -3530,7 +3530,23 @@ public struct PosKioskVariant: Codable, Hashable, Sendable {
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosOfflineCardForward: String, Codable, CaseIterable, Hashable, Sendable {
+  case declined = "declined"
+  case failed = "failed"
+  case forwarded = "forwarded"
+  case stored = "stored"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
+  case cardDeclined = "card-declined"
+  case cardNotCharged = "card-not-charged"
   case cashShort = "cash-short"
   case cashierUnverified = "cashier-unverified"
   case clockAdjusted = "clock-adjusted"
@@ -3555,6 +3571,7 @@ public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
 
 public struct PosOfflineKit: Codable, Hashable, Sendable {
   public var available: Bool
+  public var card: PosOfflineKitCard?
   public var hostId: String
   public var issuedAtMs: Double
   public var maxDiscountPct: Double
@@ -3566,8 +3583,9 @@ public struct PosOfflineKit: Codable, Hashable, Sendable {
   public var unavailableReason: String?
   public var v: Int
 
-  public init(available: Bool, hostId: String, issuedAtMs: Double, maxDiscountPct: Double, orgId: String, receipt: PosOfflineKitReceipt, registers: [PosOfflineKitRegister], requireOpenShift: Bool, tax: PosOfflineKitTax, unavailableReason: String? = nil, v: Int) {
+  public init(available: Bool, card: PosOfflineKitCard? = nil, hostId: String, issuedAtMs: Double, maxDiscountPct: Double, orgId: String, receipt: PosOfflineKitReceipt, registers: [PosOfflineKitRegister], requireOpenShift: Bool, tax: PosOfflineKitTax, unavailableReason: String? = nil, v: Int) {
     self.available = available
+    self.card = card
     self.hostId = hostId
     self.issuedAtMs = issuedAtMs
     self.maxDiscountPct = maxDiscountPct
@@ -3578,6 +3596,24 @@ public struct PosOfflineKit: Codable, Hashable, Sendable {
     self.tax = tax
     self.unavailableReason = unavailableReason
     self.v = v
+  }
+}
+
+public struct PosOfflineKitCard: Codable, Hashable, Sendable {
+  public var available: Bool
+  public var currency: String
+  public var destination: String
+  public var maxDeviceDailyCents: Double
+  public var maxSaleCents: Double
+  public var unavailableReason: String?
+
+  public init(available: Bool, currency: String, destination: String, maxDeviceDailyCents: Double, maxSaleCents: Double, unavailableReason: String? = nil) {
+    self.available = available
+    self.currency = currency
+    self.destination = destination
+    self.maxDeviceDailyCents = maxDeviceDailyCents
+    self.maxSaleCents = maxSaleCents
+    self.unavailableReason = unavailableReason
   }
 }
 
@@ -3683,6 +3719,7 @@ public enum PosOfflineRefusal: String, Codable, CaseIterable, Hashable, Sendable
 }
 
 public struct PosOfflineSale: Codable, Hashable, Sendable {
+  public var card: PosOfflineSaleCard?
   public var cashierAssertion: String?
   public var cashTenderedCents: Double
   public var changeCents: Double
@@ -3697,10 +3734,12 @@ public struct PosOfflineSale: Codable, Hashable, Sendable {
   public var shiftId: String?
   public var signedInUid: String
   public var soldAtMs: Double
+  public var tender: PosOfflineTender?
   public var totals: OrderTotals
   public var v: Int
 
-  public init(cashierAssertion: String? = nil, cashTenderedCents: Double, changeCents: Double, customer: PosOfflineSaleCustomer? = nil, discountPct: Double, hostId: String, lines: [PosOfflineSaleLine], locationId: String? = nil, orgId: String, registerId: String, saleKey: String, shiftId: String? = nil, signedInUid: String, soldAtMs: Double, totals: OrderTotals, v: Int) {
+  public init(card: PosOfflineSaleCard? = nil, cashierAssertion: String? = nil, cashTenderedCents: Double, changeCents: Double, customer: PosOfflineSaleCustomer? = nil, discountPct: Double, hostId: String, lines: [PosOfflineSaleLine], locationId: String? = nil, orgId: String, registerId: String, saleKey: String, shiftId: String? = nil, signedInUid: String, soldAtMs: Double, tender: PosOfflineTender? = nil, totals: OrderTotals, v: Int) {
+    self.card = card
     self.cashierAssertion = cashierAssertion
     self.cashTenderedCents = cashTenderedCents
     self.changeCents = changeCents
@@ -3715,8 +3754,25 @@ public struct PosOfflineSale: Codable, Hashable, Sendable {
     self.shiftId = shiftId
     self.signedInUid = signedInUid
     self.soldAtMs = soldAtMs
+    self.tender = tender
     self.totals = totals
     self.v = v
+  }
+}
+
+public struct PosOfflineSaleCard: Codable, Hashable, Sendable {
+  public var brand: String?
+  public var declineMessage: String?
+  public var forward: PosOfflineCardForward
+  public var last4: String?
+  public var paymentIntentId: String?
+
+  public init(brand: String? = nil, declineMessage: String? = nil, forward: PosOfflineCardForward, last4: String? = nil, paymentIntentId: String? = nil) {
+    self.brand = brand
+    self.declineMessage = declineMessage
+    self.forward = forward
+    self.last4 = last4
+    self.paymentIntentId = paymentIntentId
   }
 }
 
@@ -3815,6 +3871,18 @@ public struct PosOfflineSyncResponse: Codable, Hashable, Sendable {
 
   public init(results: [PosOfflineSaleOutcome]) {
     self.results = results
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosOfflineTender: String, Codable, CaseIterable, Hashable, Sendable {
+  case card = "card"
+  case cash = "cash"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -5128,6 +5196,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posKioskUnlockLockoutMs: Double
   public let posKioskUnlockMaxAttempts: Int
   public let posKioskUnlockTtlMs: Double
+  public let posOfflineCardIntentKind: String
+  public let posOfflineCardMaxSaleCentsLimit: Int
+  public let posOfflineCardReconnectWithinMs: Double
   public let posOfflineClockSkewMs: Double
   public let posOfflineDisabledTenders: [String: String]
   public let posOfflineFlagLabels: [String: String]
@@ -5444,6 +5515,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posKioskUnlockLockoutMs = "POS_KIOSK_UNLOCK_LOCKOUT_MS"
     case posKioskUnlockMaxAttempts = "POS_KIOSK_UNLOCK_MAX_ATTEMPTS"
     case posKioskUnlockTtlMs = "POS_KIOSK_UNLOCK_TTL_MS"
+    case posOfflineCardIntentKind = "POS_OFFLINE_CARD_INTENT_KIND"
+    case posOfflineCardMaxSaleCentsLimit = "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT"
+    case posOfflineCardReconnectWithinMs = "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
     case posOfflineClockSkewMs = "POS_OFFLINE_CLOCK_SKEW_MS"
     case posOfflineDisabledTenders = "POS_OFFLINE_DISABLED_TENDERS"
     case posOfflineFlagLabels = "POS_OFFLINE_FLAG_LABELS"

@@ -1197,3 +1197,113 @@ export async function handlePosStripeEvent(input: {
 }
 
 export type { PosLiftedOrder }
+
+/*==========================================
+ * CARDS TAKEN OFFLINE ON THE APP'S OWN READER (AGL-4039).
+ *
+ * The Aglyn POS app creates these PaymentIntents itself (Stripe stores the
+ * card on the device and forwards it once a connection returns), so the
+ * server meets them only at the sale's sync: it reads the intent, checks it
+ * is the sale's, and captures it with the platform fee, the same capture an
+ * online reader payment gets after its tip is known.
+ *=========================================*/
+
+/** A PaymentIntent the offline sync reads, reduced to what it checks. */
+export interface PosOfflineCardIntent {
+  id: string
+  status: string
+  amount: number
+  currency: string
+  metadata: Record<string, string>
+  destination: string
+  applicationFeeCents: number
+  livemode: boolean
+  brand?: string
+  last4?: string
+  failureMessage?: string
+}
+
+function offlineCardIntent(body: any): PosOfflineCardIntent {
+  const charge = body?.latest_charge && typeof body.latest_charge === 'object' ? body.latest_charge : null
+  const present = charge?.payment_method_details?.card_present ?? {}
+  const error = body?.last_payment_error ?? null
+  return {
+    id: String(body?.id ?? ''),
+    status: String(body?.status ?? ''),
+    amount: Number(body?.amount ?? 0),
+    currency: String(body?.currency ?? ''),
+    metadata: (body?.metadata ?? {}) as Record<string, string>,
+    destination: String(body?.transfer_data?.destination ?? ''),
+    applicationFeeCents: Number(body?.application_fee_amount ?? 0),
+    livemode: Boolean(body?.livemode),
+    ...(present.brand ? { brand: String(present.brand) } : {}),
+    ...(present.last4 ? { last4: String(present.last4) } : {}),
+    ...(error ? { failureMessage: String(error.message ?? error.decline_code ?? 'The card was declined.') } : {}),
+  }
+}
+
+/** Reads one offline card's PaymentIntent, with its charge's card details. */
+export async function retrievePosOfflineCardIntent(
+  paymentIntentId: string,
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+  const fetched = await posStripe('GET', `payment_intents/${encodeURIComponent(paymentIntentId)}`, {
+    params: { 'expand[]': ['latest_charge'] },
+  })
+  if (!fetched.ok) return { ok: false, error: posStripeErrorMessage(fetched.body, 'The card payment could not be read.') }
+  return { ok: true, intent: offlineCardIntent(fetched.body) }
+}
+
+/** Captures one authorized offline card with the platform's fee; a repeat finds the first capture. */
+export async function capturePosOfflineCardIntent(
+  paymentIntentId: string,
+  applicationFeeCents: number,
+  idempotencyKey: string,
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+  const captured = await posStripe('POST', `payment_intents/${encodeURIComponent(paymentIntentId)}/capture`, {
+    idempotencyKey,
+    params: {
+      ...(applicationFeeCents > 0 ? { application_fee_amount: applicationFeeCents } : {}),
+      'expand[]': ['latest_charge'],
+    },
+  })
+  if (!captured.ok) return { ok: false, error: posStripeErrorMessage(captured.body, 'The card payment could not be captured.') }
+  return { ok: true, intent: offlineCardIntent(captured.body) }
+}
+
+/**
+ * Turns Stripe's offline mode on for the site's readers: the same per-site
+ * Terminal Configuration the reader tipping uses, with `offline[enabled]`,
+ * assigned to the site's Location. Done once; a reader picks it up the next
+ * time it connects online. False when Stripe refused it.
+ */
+export async function ensurePosOfflineCardConfiguration(hostId: string): Promise<boolean> {
+  const ref = terminalConfigRef(hostId)
+  const config = await ref.get()
+  if (config.get('offlineEnabled') === true) return true
+  const locationId = String(config.get('stripeLocationId') ?? '')
+  if (!locationId) return false
+  const configurationId = String(config.get('stripeConfigurationId') ?? '')
+  const saved = await posStripe(
+    'POST',
+    configurationId ? `terminal/configurations/${configurationId}` : 'terminal/configurations',
+    {
+      params: { 'offline[enabled]': true },
+      ...(configurationId ? {} : { idempotencyKey: `pos-configuration:${hostId}:offline` }),
+    },
+  )
+  if (!saved.ok || !saved.body?.id) {
+    console.error('[pos-terminal] offline configuration failed', hostId, saved.body?.error)
+    return false
+  }
+  if (!configurationId) {
+    const assigned = await posStripe('POST', `terminal/locations/${locationId}`, {
+      params: { configuration_overrides: String(saved.body.id) },
+    })
+    if (!assigned.ok) {
+      console.error('[pos-terminal] offline configuration assignment failed', hostId, assigned.body?.error)
+      return false
+    }
+  }
+  await ref.set({ stripeConfigurationId: String(saved.body.id), offlineEnabled: true }, { merge: true })
+  return true
+}

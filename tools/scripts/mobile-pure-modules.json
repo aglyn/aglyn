@@ -422,6 +422,10 @@
       "why": "The self-service kiosk's catalog, cart, sale and context shapes and their pure checks (AGL-3623); imports only commerce-pos and product-modifiers. The native POS app reads the kiosk route through these."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/pos-offline-card-limits.ts",
+      "why": "The ceilings of cards taken offline on the app reader (AGL-4039): three numbers and no imports, re-exported by commerce-pos-offline so the native contracts carry them and the eager commerce settings can read them without the offline model."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "why": "The offline register's sale, sync answer and kit shapes and its totals arithmetic (AGL-3625); the Aglyn POS app queues offline cash sales and syncs them through the same route."
     },

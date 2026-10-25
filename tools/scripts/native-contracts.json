@@ -324,6 +324,9 @@
       "types": [
         "PosOfflineSaleLine",
         "PosOfflineSaleCustomer",
+        "PosOfflineTender",
+        "PosOfflineCardForward",
+        "PosOfflineSaleCard",
         "PosOfflineSale",
         "PosOfflineFlag",
         "PosOfflineStockConflict",
@@ -334,7 +337,8 @@
         "PosOfflineSyncRequest",
         "PosOfflineSyncResponse",
         "PosOfflineKitRegister",
-        "PosOfflineKit"
+        "PosOfflineKit",
+        "PosOfflineKitCard"
       ],
       "values": [
         "POS_OFFLINE_SYNC_ROUTE",
@@ -344,7 +348,10 @@
         "POS_OFFLINE_MAX_AGE_MS",
         "POS_OFFLINE_CLOCK_SKEW_MS",
         "POS_OFFLINE_DISABLED_TENDERS",
-        "POS_OFFLINE_FLAG_LABELS"
+        "POS_OFFLINE_FLAG_LABELS",
+        "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT",
+        "POS_OFFLINE_CARD_INTENT_KIND",
+        "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
       ]
     },
     "libs/plugins/inbox/src/lib/model/reply-policy.ts": {
@@ -28865,6 +28872,217 @@
         [
           [],
           true
+        ]
+      ]
+    },
+    "posOfflineCardRefusal": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 10000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 10001,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2000,
+            "takenTodayCents": 499000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 1000,
+            "takenTodayCents": 499000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": false,
+              "unavailableReason": "Card sales offline are not turned on in this store’s point of sale settings.",
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": false,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": null,
+            "totalCents": 2479,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 10000,
+              "maxDeviceDailyCents": 500000
+            },
+            "totalCents": 0,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 5000000,
+              "maxDeviceDailyCents": 9000000
+            },
+            "totalCents": 1200000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 500000,
+              "maxDeviceDailyCents": 12345678
+            },
+            "totalCents": 200000,
+            "takenTodayCents": 12300000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 1000000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 900000,
+            "takenTodayCents": 50000000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 1000001,
+            "takenTodayCents": 0
+          }
+        ]
+      ]
+    },
+    "posOfflineCardIntentMetadata": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d",
+            "hostId": "host_1",
+            "orgId": "org_1",
+            "registerId": "reg_1"
+          }
+        ]
+      ]
+    },
+    "sanitizePosOfflineSaleCard": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "forward": "stored",
+            "brand": "visa",
+            "last4": "4242"
+          }
+        ],
+        [
+          {
+            "forward": "forwarded",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345"
+          }
+        ],
+        [
+          {
+            "forward": "forwarded"
+          }
+        ],
+        [
+          {
+            "forward": "declined",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345",
+            "declineMessage": "Your card was declined.",
+            "last4": "42"
+          }
+        ],
+        [
+          {
+            "forward": "lost"
+          }
+        ],
+        [
+          {
+            "forward": "stored",
+            "paymentIntentId": "../charges"
+          }
         ]
       ]
     }

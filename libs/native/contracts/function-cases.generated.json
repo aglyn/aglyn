@@ -30915,6 +30915,226 @@
         }
       ]
     },
+    "posOfflineCardIntentMetadata": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d",
+              "hostId": "host_1",
+              "orgId": "org_1",
+              "registerId": "reg_1"
+            }
+          ],
+          "result": {
+            "hostId": "host_1",
+            "kind": "pos-offline",
+            "orgId": "org_1",
+            "registerId": "reg_1",
+            "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d"
+          }
+        }
+      ]
+    },
+    "posOfflineCardRefusal": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 2479,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 10000,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 10001,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Offline, a card sale can be up to $100.00. Take cash, or charge it when you are back online."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 2000,
+              "takenTodayCents": 499000
+            }
+          ],
+          "result": "This device has taken $4,990.00 in cards offline today, and its daily limit is $5,000.00. Take cash, or wait for the connection."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 1000,
+              "takenTodayCents": 499000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": false,
+                "unavailableReason": "Card sales offline are not turned on in this store’s point of sale settings.",
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 2479,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Card sales offline are not turned on in this store’s point of sale settings."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": false,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 2479,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Card sales offline are not turned on for this store."
+        },
+        {
+          "args": [
+            {
+              "card": null,
+              "totalCents": 2479,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Card sales offline need the register to connect once first."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 10000,
+                "maxDeviceDailyCents": 500000
+              },
+              "totalCents": 0,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "There is nothing to charge."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 5000000,
+                "maxDeviceDailyCents": 9000000
+              },
+              "totalCents": 1200000,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Offline, a card sale can be up to $10,000.00. Take cash, or charge it when you are back online."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 500000,
+                "maxDeviceDailyCents": 12345678
+              },
+              "totalCents": 200000,
+              "takenTodayCents": 12300000
+            }
+          ],
+          "result": "This device has taken $123,000.00 in cards offline today, and its daily limit is $123,456.78. Take cash, or wait for the connection."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 1000000,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 900000,
+              "takenTodayCents": 50000000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 1000001,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Offline, a card sale can be up to $10,000.00. Take cash, or charge it when you are back online."
+        }
+      ]
+    },
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -57444,6 +57664,77 @@
             ],
             "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           }
+        }
+      ]
+    },
+    "sanitizePosOfflineSaleCard": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "forward": "stored",
+              "brand": "visa",
+              "last4": "4242"
+            }
+          ],
+          "result": {
+            "brand": "visa",
+            "forward": "stored",
+            "last4": "4242"
+          }
+        },
+        {
+          "args": [
+            {
+              "forward": "forwarded",
+              "paymentIntentId": "pi_3Q0abcdEFGH12345"
+            }
+          ],
+          "result": {
+            "forward": "forwarded",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345"
+          }
+        },
+        {
+          "args": [
+            {
+              "forward": "forwarded"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "forward": "declined",
+              "paymentIntentId": "pi_3Q0abcdEFGH12345",
+              "declineMessage": "Your card was declined.",
+              "last4": "42"
+            }
+          ],
+          "result": {
+            "declineMessage": "Your card was declined.",
+            "forward": "declined",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345"
+          }
+        },
+        {
+          "args": [
+            {
+              "forward": "lost"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "forward": "stored",
+              "paymentIntentId": "../charges"
+            }
+          ],
+          "result": null
         }
       ]
     },

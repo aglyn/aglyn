@@ -7907,6 +7907,9 @@
   "POS_KIOSK_UNLOCK_LOCKOUT_MS": 900000,
   "POS_KIOSK_UNLOCK_MAX_ATTEMPTS": 5,
   "POS_KIOSK_UNLOCK_TTL_MS": 300000,
+  "POS_OFFLINE_CARD_INTENT_KIND": "pos-offline",
+  "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT": 1000000,
+  "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS": 86400000,
   "POS_OFFLINE_CLOCK_SKEW_MS": 600000,
   "POS_OFFLINE_DISABLED_TENDERS": {
     "card_keyed": "Typed cards need the connection.",
@@ -7917,6 +7920,8 @@
     "gift_card": "A gift card balance can only be checked online."
   },
   "POS_OFFLINE_FLAG_LABELS": {
+    "card-declined": "The card taken offline was declined when it was charged; the order is unpaid",
+    "card-not-charged": "The card taken offline could not be charged; the order is unpaid",
     "cash-short": "The cash recorded is less than the total",
     "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
     "clock-adjusted": "The device clock was off; the sale is dated when it synced",
