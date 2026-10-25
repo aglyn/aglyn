@@ -107,7 +107,10 @@ describe('what the server accepts from the Stock photos tab', () => {
 
 describe('the Stock photos client', () => {
   const answering = (status: number, body: unknown, type = 'application/json') =>
-    jest.fn(async () => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'content-type': type } }))
+    jest.fn(async (sent: Record<string, unknown>) => {
+      expect(sent).toHaveProperty('action')
+      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'content-type': type } })
+    })
 
   it('posts every request for its one library', async () => {
     const post = answering(200, { status: 'ready', library: { label: 'Pixabay' } })

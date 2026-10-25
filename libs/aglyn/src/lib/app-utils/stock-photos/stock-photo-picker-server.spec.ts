@@ -109,7 +109,7 @@ const MEDIA_DOCS: Record<string, Record<string, unknown>> = {
 function deps(overrides: Partial<StockPhotoPickerServerDeps> = {}): StockPhotoPickerServerDeps {
   return {
     uid: 'member-1',
-    authorize: jest.fn(async () => null),
+    authorize: jest.fn(async (): Promise<null> => null),
     readMedia: jest.fn(async (_target, mediaId) => MEDIA_DOCS[mediaId] ?? null),
     memo: createStockPhotoHitMemo(),
     ...overrides,
@@ -138,7 +138,7 @@ describe('the Stock photos route (AGL-4066)', () => {
   })
 
   it('refuses a request that names no library, or two, or no action', async () => {
-    const authorize = jest.fn(async () => null)
+    const authorize = jest.fn(async (): Promise<null> => null)
     expect((await ask({ action: 'status' }, deps({ authorize }))).status).toBe(400)
     expect((await ask({ action: 'status', hostId: 'h', orgId: 'o' }, deps({ authorize }))).status).toBe(400)
     expect((await ask({ action: 'delete', hostId: 'h' }, deps({ authorize }))).status).toBe(400)
@@ -190,7 +190,7 @@ describe('the Stock photos route (AGL-4066)', () => {
   })
 
   it('answers a library that cannot be asked as busy, never as a 5xx', async () => {
-    const { provider } = fakeProvider({ search: jest.fn(async () => null) })
+    const { provider } = fakeProvider({ search: jest.fn(async (): Promise<null> => null) })
     const answer = await ask({ action: 'search', hostId: 'host-1', query: 'yoga' }, deps({ provider: () => provider }))
     expect(answer.status).toBe(200)
     expect(await answer.json()).toEqual({ status: 'busy', message: 'Pixabay is busy right now. Try again in a minute.' })
@@ -221,7 +221,7 @@ describe('the Stock photos route (AGL-4066)', () => {
   })
 
   it('answers a preview it cannot have with no content', async () => {
-    const { provider } = fakeProvider({ preview: jest.fn(async () => null) })
+    const { provider } = fakeProvider({ preview: jest.fn(async (): Promise<null> => null) })
     expect((await ask({ action: 'preview', hostId: 'host-1', ref: REF }, deps({ provider: () => provider }))).status).toBe(204)
     const without = fakeProvider({ preview: undefined }).provider
     expect((await ask({ action: 'preview', hostId: 'host-1', ref: REF }, deps({ provider: () => without }))).status).toBe(204)
@@ -313,13 +313,13 @@ describe('the Stock photos route (AGL-4066)', () => {
     expect(gone.status).toBe(404)
     expect(await gone.json()).toMatchObject({ status: 'gone' })
 
-    const silent = fakeProvider({ download: jest.fn(async () => null) }).provider
+    const silent = fakeProvider({ download: jest.fn(async (): Promise<null> => null) }).provider
     const busy = await ask({ action: 'import', hostId: 'host-1', ref: REF }, deps({ provider: () => silent, ingest: () => ingest }))
     expect(busy.status).toBe(200)
     expect(await busy.json()).toMatchObject({ status: 'busy' })
     expect(ingest.ingest).not.toHaveBeenCalled()
 
-    const down = fakeProvider({ search: jest.fn(async () => null) }).provider
+    const down = fakeProvider({ search: jest.fn(async (): Promise<null> => null) }).provider
     expect(await (await ask({ action: 'import', hostId: 'host-1', ref: REF }, deps({ provider: () => down, ingest: () => ingest }))).json()).toMatchObject({
       status: 'busy',
     })
