@@ -991,6 +991,7 @@
         "libs/plugins/outreach/src/lib/native-nav.ts",
         "libs/plugins/redirects/src/lib/native-nav.ts",
         "libs/plugins/sms/src/lib/native-nav.ts",
+      "libs/plugins/waivers/src/lib/native-nav.ts",
         "libs/plugins/workflows/src/lib/native-nav.ts"
       ]
     },

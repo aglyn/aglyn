@@ -794,6 +794,10 @@
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
+      "path": "libs/plugins/waivers/src/lib/native-nav.ts",
+      "why": "Where this plugin's console tab sits for the native apps (AGL-4042), assembled into the nav manifest by generate:native-contracts; imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",
       "why": "A webhook's shape and the delivery URL hint the native webhook form shows (AGL-3670)."
     },

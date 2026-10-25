@@ -552,6 +552,11 @@ export const PLUGIN_DOCS = {
     title: 'Tax services (Avalara AvaTax and TaxJar)',
     excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there.',
   },
+  waivers: {
+    path: '/commerce-and-bookings/commerce/waivers',
+    title: 'Waivers',
+    excerpt: 'Write your waiver once. Riders sign it on their phones before they arrive, on a tablet at the window or on paper, parents sign for minors, and every signer gets a signed PDF.',
+  },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
@@ -671,6 +676,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#client-build-screen', '#bundle-link', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#org-activity', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   taxServices: ['#before-you-start', '#connect', '#when-the-service-is-not-used', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
+  waivers: ['#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   zapier: ['#connect-aglyn-to-zapier', '#triggers', '#actions-and-searches', '#what-each-needs', '#see-and-disconnect-your-zaps'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
@@ -1332,6 +1338,11 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   taxServices: {
     '#connect': 'Connect',
     '#how-sales-are-taxed': 'How sales are taxed',
+  },
+  waivers: {
+    '#find-a-signature': 'Find a signature',
+    '#versions': 'Versions',
+    '#write-a-waiver': 'Write a waiver',
   },
   webhooks: {
     '#outbound-webhooks': 'Outbound webhooks',

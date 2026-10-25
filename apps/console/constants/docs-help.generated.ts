@@ -913,6 +913,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/content-and-data/crm/views',
     title: 'Saved views',
   },
+  waivers: {
+    path: '/commerce-and-bookings/commerce/waivers',
+    title: 'Waivers',
+  },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
@@ -1159,6 +1163,7 @@ export const DOCS_HELP_ANCHORS = {
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#layout-versions', '#scheduled-publishing', '#plan-requirements', '#related'],
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
+  waivers: ['#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   weglot: ['#seo', '#before-you-start', '#turn-it-on', '#settings', '#what-visitors-see', '#page-speed', '#cookies-and-privacy', '#security', '#turn-it-off', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#email-footer', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
@@ -1977,6 +1982,11 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#publish--roll-back': 'Publish & roll back',
     '#scheduled-publishing': 'Scheduled publishing',
     '#the-versions-dialog': 'The versions dialog',
+  },
+  waivers: {
+    '#find-a-signature': 'Find a signature',
+    '#versions': 'Versions',
+    '#write-a-waiver': 'Write a waiver',
   },
   webhooks: {
     '#outbound-webhooks': 'Outbound webhooks',
