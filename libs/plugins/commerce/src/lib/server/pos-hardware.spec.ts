@@ -36,9 +36,9 @@ import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
 let mockManagePos = true
 let mockPlan = 'business'
-const mockSendEmail = jest.fn(async (_message: Record<string, unknown>) => ({ sent: true }))
-const mockRaiseAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'sent' }))
-const mockAudit = jest.fn(async (..._args: unknown[]) => ({ id: 'audit-1' }))
+const mockSendEmail = jest.fn<Promise<{ sent: boolean }>, [Record<string, unknown>]>(async () => ({ sent: true }))
+const mockRaiseAlert = jest.fn<Promise<{ outcome: string }>, unknown[]>(async () => ({ outcome: 'sent' }))
+const mockAudit = jest.fn<Promise<{ id: string }>, unknown[]>(async () => ({ id: 'audit-1' }))
 
 /** Token → decoded claims, so each test names who is calling. */
 const TOKENS: Record<string, Record<string, unknown>> = {

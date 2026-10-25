@@ -308,7 +308,8 @@ async function refundOrder(
     after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
-  const { refundRequestedAtMs: _claimed, ...settled } = claim.order
+  const settled = { ...claim.order }
+  delete settled.refundRequestedAtMs
   const after: PosHardwareOrder = {
     ...settled,
     status: finalStatus,

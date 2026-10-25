@@ -167,7 +167,7 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
         if (!attemptKey) return res.status(400).json({ error: 'Missing Idempotency-Key' })
         if (!staff.orgId) return res.status(409).json({ error: 'This site has no workspace.' })
         const priced = pricePosHardwareCart(config, body['lines'])
-        if (!priced.ok) return res.status(400).json({ error: priced.error })
+        if ('error' in priced) return res.status(400).json({ error: priced.error })
         const method = body['shippingMethod']
         const shipping = isPosHardwareShippingMethod(method)
           ? config.shipping.find((option) => option.method === method)
