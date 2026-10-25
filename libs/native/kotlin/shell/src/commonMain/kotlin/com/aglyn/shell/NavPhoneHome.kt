@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
 import com.aglyn.core.Live
 import com.aglyn.core.PinAnswer
+import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AreaGroupHeader
 import com.aglyn.ui.AreaTile
