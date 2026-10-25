@@ -25,6 +25,11 @@ struct CheckoutView: View {
           if let notice = checkout.notice {
             AglynNotice(notice.message, tone: notice.tone) { checkout.dismissNotice() }
           }
+          if case .tender = checkout.step {
+            if let declined = checkout.declined { declinedReceipt(declined) }
+            // Pinned at the top, above the tip, so it never needs a scroll (Apple 5.1, 5.2).
+            if model.offersTapToPay { TapToPayCheckoutButton(model: model, checkout: checkout) }
+          }
           switch checkout.step {
           case .tender: tender
           case .cash: cash
@@ -61,6 +66,20 @@ struct CheckoutView: View {
     .sensoryFeedback(.success, trigger: isPaid)
     // A typed card: the register's own card fields, over the checkout.
     .sheet(item: cardForm) { session in CardFieldsSheet(session: session) }
+  }
+
+  /// A card that was not approved can still be sent its receipt (Apple 5.10), through the share sheet.
+  private func declinedReceipt(_ declined: DeclinedCard) -> some View {
+    HStack {
+      Text("Not approved · \(model.money(declined.amountCents))").font(AglynFont.subheadline)
+      Spacer()
+      ShareLink(item: declined.receipt(store: model.storeName, money: model.money)) {
+        Label("Send receipt", systemImage: "square.and.arrow.up")
+      }
+      .accessibilityIdentifier("declined-receipt-share")
+    }
+    .padding(AglynSpace.two)
+    .aglynCardSurface()
   }
 
   private var cardForm: Binding<CardFormSession?> {

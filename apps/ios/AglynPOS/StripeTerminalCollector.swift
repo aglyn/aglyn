@@ -178,6 +178,11 @@
       send { $0.batteryChanged(Double(batteryLevel), charging: isCharging) }
     }
 
+    /// Apple's Tap to Pay on iPhone terms were accepted on this device: Apple's education follows (Apple 4.2).
+    func tapToPayReaderDidAcceptTermsOfService(_ reader: Reader) {
+      send { $0.termsAccepted() }
+    }
+
     // MARK: OfflineDelegate (AGL-4039)
 
     func terminal(_ terminal: Terminal, didChange offlineStatus: OfflineStatus) {}
@@ -248,6 +253,13 @@
     2860: "OFFLINE_PAYMENTS_DATABASE_TOO_LARGE", 2890: "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT", 3971: "TAP_TO_PAY_READER_OFFLINE_MODE_NOT_ALLOWED",
     6901: "INTERAC_NOT_SUPPORTED_OFFLINE", 6902: "OFFLINE_AND_CARD_EXPIRED", 6903: "OFFLINE_TRANSACTION_DECLINED",
     6905: "ONLINE_PIN_NOT_SUPPORTED_OFFLINE", 10106: "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE",
+    // Tap to Pay on iPhone: worded by AglynHardware's `tapToPayNotice`.
+    2910: "UNSUPPORTED_MOBILE_DEVICE_CONFIGURATION", 2920: "PASSCODE_NOT_ENABLED",
+    2960: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_REQUIRES_ICLOUD_SIGN_IN", 2970: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_CANCELED",
+    3100: "NFC_DISABLED", 3905: "TAP_TO_PAY_READER_REQUEST_INTERRUPTED", 3910: "TAP_TO_PAY_READER_FAILED_TO_PREPARE",
+    3920: "TAP_TO_PAY_READER_DEVICE_BANNED", 3930: "TAP_TO_PAY_READER_TOS_NOT_YET_ACCEPTED",
+    3940: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_FAILED", 3950: "TAP_TO_PAY_READER_MERCHANT_BLOCKED",
+    3960: "TAP_TO_PAY_READER_INVALID_MERCHANT", 3970: "TAP_TO_PAY_READER_ACCOUNT_DEACTIVATED",
   ]
 
   private func terminalError(_ error: Error, intent: PaymentIntent? = nil) -> TerminalError {
@@ -332,6 +344,16 @@
     private(set) var discovery: ReaderDiscovery = .idle
     private(set) var connectedReader: DeviceReader?
     fileprivate(set) var update: ReaderUpdate?
+    /// Why Tap to Pay on iPhone could not connect last time (the checkout button says it).
+    private(set) var tapToPayNotice: TapToPayNotice?
+    /// Apple's terms were just accepted here; the register shows Apple's education, then clears it.
+    private(set) var tapToPayTermsJustAccepted = false
+    /// Only Aglyn staff may accept Apple's terms (`tapToPayTermsPermitted`); a warm-up never shows them.
+    @ObservationIgnored private var termsPermitted = false
+    @ObservationIgnored private var silent = false
+    /// The kind being connected, so Tap to Pay's setup reads as its own and not as a reader update.
+    @ObservationIgnored private var connectingKind: CardCollectorKind?
+    private var osMajor: Int { ProcessInfo.processInfo.operatingSystemVersion.majorVersion }
 
     @ObservationIgnored private let tokens = TerminalTokens()
     @ObservationIgnored private let events = TerminalEvents()
@@ -432,6 +454,11 @@
         discovery = .failed("This device cannot use that card reader.")
         return
       }
+      if kind == .tapToPay, osMajor < TapToPayIPhone.minimumOSMajor {
+        tapToPayNotice = .needsUpdate
+        discovery = .failed(TapToPayNotice.needsUpdate.message)
+        return
+      }
       guard await prepare(hostID: hostID, sessions: sessions, ask: true) else { return }
       _ = await scan(kind, stopWhen: kind == .tapToPay ? { _ in true } : { _ in false })
     }
@@ -505,12 +532,16 @@
       guard let locationID else { return false }
       generation += 1
       await cancelDiscovery()
-      state = .connecting("Connecting \(deviceReader(reader).label)…")
+      state = .connecting(kind == .tapToPay ? "Getting \(TapToPayIPhone.title) ready…" : "Connecting \(deviceReader(reader).label)…")
+      connectingKind = kind
+      defer { connectingKind = nil }
       do {
         let config: ConnectionConfiguration
         if kind == .tapToPay {
+          // Aglyn accepts Apple's terms once for every store; a store member, or a warm-up, never sees them.
           config = try TapToPayConnectionConfigurationBuilder(delegate: events, locationId: locationID)
             .setMerchantDisplayName(merchantName)
+            .setTosAcceptancePermitted(termsPermitted && !silent)
             .build()
         } else {
           // A simulated Bluetooth reader stays at its own mock location.
@@ -527,6 +558,7 @@
           config = try builder.build()
         }
         let connected = try await connectReader(reader, config)
+        if kind == .tapToPay { tapToPayNotice = nil }
         didConnect(connected)
         defaults.set(kind.rawValue, forKey: Self.rememberedKind)
         defaults.set(readerID(connected), forKey: Self.rememberedReader)
@@ -534,8 +566,10 @@
         return true
       } catch {
         state = .disconnected
-        discovery = .failed(
-          friendlyConnectError(code: terminalError(error).code, message: (error as NSError).localizedDescription))
+        let code = terminalError(error).code
+        let words = friendlyConnectError(code: code, message: (error as NSError).localizedDescription)
+        if kind == .tapToPay { tapToPayNotice = noticeForTapToPay(code: code) ?? .failed(words) }
+        discovery = .failed(words)
         return false
       }
     }
@@ -552,7 +586,38 @@
       Terminal.shared.installAvailableUpdate()
     }
 
+    /// Gets the reader ready when the app opens or comes back to the front (Apple 1.5): the reader connected last
+    /// time, else Tap to Pay on iPhone on an iPhone that can take it. Silent: no permission and no terms are asked for.
+    func warmUp(hostID: String, sessions: CardReaderSessionSource) async {
+      guard !state.isConnected, discovering == nil else { return }
+      if defaults.string(forKey: Self.rememberedKind) != nil {
+        await reconnectRemembered(hostID: hostID, sessions: sessions)
+        return
+      }
+      guard kinds.contains(.tapToPay), osMajor >= TapToPayIPhone.minimumOSMajor, location.allowed,
+        tapToPayNotice != .notTurnedOn
+      else { return }
+      silent = true
+      defer { silent = false }
+      guard await prepare(hostID: hostID, sessions: sessions, ask: false) else { return }
+      if let first = await scan(.tapToPay, stopWhen: { _ in true }).first {
+        _ = await connectSDK(first, kind: .tapToPay)
+      }
+      if !state.isConnected { discovery = .idle }
+    }
+
+    func permitTapToPayTerms(_ permitted: Bool) { termsPermitted = permitted }
+
+    func clearTapToPayTermsJustAccepted() { tapToPayTermsJustAccepted = false }
+
+    fileprivate func termsAccepted() {
+      tapToPayTermsJustAccepted = true
+      tapToPayNotice = nil
+    }
+
     func reconnectRemembered(hostID: String, sessions: CardReaderSessionSource) async {
+      silent = true
+      defer { silent = false }
       guard !state.isConnected, location.allowed,
         let raw = defaults.string(forKey: Self.rememberedKind), let kind = CardCollectorKind(rawValue: raw),
         kinds.contains(kind)
@@ -580,11 +645,15 @@
         return state
       }
       if siteID == hostID, state.isConnected { return state }
+      if kind == .tapToPay, osMajor < TapToPayIPhone.minimumOSMajor {
+        tapToPayNotice = .needsUpdate
+        return state
+      }
       guard await prepare(hostID: hostID, sessions: sessions, ask: true) else {
         if case .failed(let words) = discovery, !state.isConnected { state = .unavailable(words) }
         return state
       }
-      state = .connecting(kind == .tapToPay ? "Starting Tap to Pay…" : "Looking for card readers…")
+      state = .connecting(kind == .tapToPay ? "Getting \(TapToPayIPhone.title) ready…" : "Looking for card readers…")
       guard let first = await scan(kind, stopWhen: { _ in true }).first else {
         if case .failed(let words) = discovery { state = .unavailable(words) } else { state = .disconnected }
         return state
@@ -664,14 +733,19 @@
 
     fileprivate func updateStarted(_ offered: ReaderUpdate) {
       update = ReaderUpdate(progress: 0, required: offered.required, version: offered.version, duration: offered.duration)
-      prompt = "Updating the card reader. Keep it close and charged."
+      prompt =
+        connectingKind == .tapToPay
+        ? TapToPayNotice.preparing(progress: 0).title + "…" : "Updating the card reader. Keep it close and charged."
     }
 
     fileprivate func updateProgress(_ progress: Double) {
       var next = update ?? ReaderUpdate()
       next.progress = progress
       update = next
-      prompt = "Updating the card reader: \(Int((progress * 100).rounded()))%."
+      let percent = Int((progress * 100).rounded())
+      prompt =
+        connectingKind == .tapToPay
+        ? "\(TapToPayNotice.preparing(progress: progress).title): \(percent)%." : "Updating the card reader: \(percent)%."
     }
 
     fileprivate func updateFinished(_ reader: Reader, failed: String?) {
@@ -868,4 +942,7 @@
       }
     }
   }
+
+  /// AglynHardware's `tapToPayNotice(code:)`, under a name the collector's own `tapToPayNotice` property does not shadow.
+  private func noticeForTapToPay(code: String) -> TapToPayNotice? { tapToPayNotice(code: code) }
 #endif

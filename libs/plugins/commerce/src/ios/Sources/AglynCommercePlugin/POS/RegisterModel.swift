@@ -61,11 +61,12 @@ final class RegisterModel {
   /// smart readers.
   var readers: [any CardReaderService] {
     var all: [any CardReaderService] = []
-    if let deviceService, collector?.state.isConnected == true { all.append(deviceService) }
+    // Tap to Pay on iPhone has its own button at the top of checkout (`offersTapToPay`), never a second row here.
+    if let deviceService, collector?.state.isConnected == true, !deviceIsTapToPay { all.append(deviceService) }
     return all + smartReaders
   }
   private(set) var smartReaders: [SmartReaderService] = []
-  @ObservationIgnored private let deviceService: DeviceReaderService?
+  @ObservationIgnored let deviceService: DeviceReaderService?
   /// The checked-in stays a sale can be charged to.
   private(set) var stays: [PosStay] = []
 
@@ -306,9 +307,7 @@ final class RegisterModel {
       smartReaders = loaded.readers.filter(\.online).map { SmartReaderService($0) }
       // The reader connected last time comes back on its own; nothing is
       // asked of the cashier here (connecting one is the readers screen's job).
-      if let controls = collector?.deviceReaders, collector?.state.isConnected == false {
-        await controls.reconnectRemembered(hostID: hostID, sessions: terminal)
-      }
+      await warmUpReader()
       // The console answered: get the offline rules, then send whatever was rung while it did not.
       if offline.kitIsStale { await offline.refreshKit() }
       applyCardForwards(sync: false)
@@ -463,7 +462,14 @@ final class RegisterModel {
 
   /// Applies the ledger of card forwards to the queue, then sends what became ready.
   func applyCardForwards(sync: Bool = true) {
-    let applied = offline.applyForwards(cardForwards.all())
+    let forwards = cardForwards.all()
+    let applied = offline.applyForwards(forwards)
+    // A card the bank declined once it was sent, while the app was away, is notified (Apple 5.12).
+    for forward in forwards where applied.contains(forward.saleKey) && forward.status != .authorized {
+      if let entry = offline.queue.first(where: { $0.id == forward.saleKey }) {
+        PosCardNotifier.notifyIfAway(CardNotApprovedNotification(amount: money(entry.totalCents), place: register?.name))
+      }
+    }
     cardForwards.remove(applied)
     if sync, !applied.isEmpty, online { Task { await offline.syncNow() } }
   }
@@ -506,9 +512,12 @@ final class RegisterModel {
 
   private func startCheckout(_ opened: PosOpenedSale) {
     let currency = currency
-    checkout = Checkout(
+    let next = Checkout(
       api: api, opened: opened, settings: context?.settings ?? PosRegisterSettings(),
       formatMoney: { posMoney($0, currency: currency) })
+    let place = register?.name
+    next.onCardNotApproved = { amount in PosCardNotifier.notifyIfAway(CardNotApprovedNotification(amount: amount, place: place)) }
+    checkout = next
   }
 
   /// A sale this register left open (the app closed mid-checkout): read it and pick up where it stopped.
