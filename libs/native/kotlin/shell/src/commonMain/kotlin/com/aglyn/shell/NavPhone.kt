@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.rememberModalBottomSheetState
-import com.aglyn.ui.LocalAccent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -165,7 +164,7 @@ internal fun PhoneShell(
             if (tabs.createInTopBar) TitleBarButton("Create new", "add", "phone-create") { chrome.createMenu = true }
             // Your AI, one tap away on every screen as the tablet's and the desktop's title bar has it (Figma Phone/Top
             // bar 273:20194, Root and Pushed): after the bell, before your photo. The in-app browser keeps its own bar.
-            if (assistTitle != null) TitleBarButton(assistTitle, "auto_awesome", "phone-ai") { chrome.toggleAiPanel(true) }
+            if (assistTitle != null) TitleBarAIButton(assistTitle, "phone-ai") { chrome.toggleAiPanel(true) }
             AccountAvatar(user, size = 32, onClick = { chrome.accountMenu = true }, modifier = Modifier.padding(end = 8.dp).testTag("phone-account"))
           },
           colors = TopAppBarDefaults.topAppBarColors(containerColor = barGround),
@@ -349,35 +348,46 @@ private fun PhoneMenu(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PhoneAiSheet(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
+  // In the phone's bold look (Figma 273:20299): the sheet on bg/sheet, the AI glow behind its top, the handle in
+  // border/strong and ✦ in the brand gradient; otherwise as before.
+  val bold = com.aglyn.ui.LocalPhoneBold.current
+  val surfaces = com.aglyn.ui.LocalThemeSurfaces.current
   ModalBottomSheet(
     onDismissRequest = onClose,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     // The sheet stops 16 under the status bar, the scrim showing above it.
     modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top)).padding(top = space(2f)).testTag("ai-sheet"),
-    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    containerColor = if (bold) surfaces?.raised ?: MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainer,
     contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
-    dragHandle = {
-      Box(Modifier.padding(top = space(1.5f), bottom = space(0.75f)).size(width = space(4f), height = space(0.5f)).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(radius(0.5f))))
-    },
+    // The handle is drawn in the content, so the glow reaches behind it.
+    dragHandle = null,
   ) {
-    Column(Modifier.fillMaxSize()) {
-      Row(Modifier.fillMaxWidth().height(space(4.5f)).padding(start = space(2f), end = space(1f)), verticalAlignment = Alignment.CenterVertically) {
-        Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(space(2.5f)), tint = LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
-        Text(
-          title,
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.SemiBold,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f).padding(start = space(1f)),
+    Box(Modifier.fillMaxSize()) {
+      com.aglyn.ui.PhoneHeaderGlow(width = space(70f), height = space(27.5f))
+      Column(Modifier.fillMaxSize()) {
+        val handle = if (bold) surfaces?.borderStrong ?: MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outline
+        Box(
+          Modifier.align(Alignment.CenterHorizontally).padding(top = space(1.5f), bottom = space(0.75f))
+            .size(width = space(4f), height = space(0.5f)).background(handle, RoundedCornerShape(radius(0.5f))),
         )
-        WithTooltip("Close") {
-          IconButton(onClick = onClose, modifier = Modifier.size(space(4.5f)).testTag("ai-sheet-close")) {
-            Icon(AglynIcons.named("close"), contentDescription = "Close", Modifier.size(space(2.5f)), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().height(space(4.5f)).padding(start = space(2f), end = space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          com.aglyn.ui.AIGlyph(size = space(2.5f))
+          Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = space(1f)),
+          )
+          WithTooltip("Close") {
+            IconButton(onClick = onClose, modifier = Modifier.size(space(4.5f)).testTag("ai-sheet-close")) {
+              Icon(AglynIcons.named("close"), contentDescription = "Close", Modifier.size(space(2.5f)), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
           }
         }
+        Box(Modifier.fillMaxWidth().weight(1f).padding(top = space(0.25f))) { content() }
       }
-      Box(Modifier.fillMaxWidth().weight(1f).padding(top = space(0.25f))) { content() }
     }
   }
 }

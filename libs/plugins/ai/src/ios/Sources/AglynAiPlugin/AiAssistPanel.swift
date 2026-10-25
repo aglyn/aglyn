@@ -171,7 +171,7 @@ struct AiAssistPanel: View {
       }
       composer
     }
-    .background(AglynColor.paper)
+    .background { assistGround }
     // A container, so the chip, suggestions, field and Send keep their own identifiers under the panel's.
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("assist-panel")
@@ -179,19 +179,38 @@ struct AiAssistPanel: View {
     .onDisappear { task?.cancel() }
   }
 
-  /// What the panel reads: the place's own icon and name on the accent's soft fill.
+  private var bold: Bool { AglynThemeRuntime.shared.phoneBold }
+
+  /// The panel's ground: paper, and in the phone's bold look the AI glow behind the sheet's top, under its bar (21:314).
+  @ViewBuilder
+  private var assistGround: some View {
+    if bold {
+      ZStack(alignment: .top) {
+        AglynColor.paper
+        AglynAIGlow()
+      }
+      .ignoresSafeArea(edges: .top)
+    } else {
+      AglynColor.paper
+    }
+  }
+
+  /// The marks on the chip and the suggestions: the brand pink in the phone's bold look, the accent otherwise.
+  private var markColor: Color { bold ? AglynHighlight.icon : AglynColor.accentIcon }
+
+  /// What the panel reads: the place's own icon and name on the accent's soft fill (the highlight's pink in the bold look).
   private func contextChip(_ looking: String) -> some View {
     HStack(spacing: AglynSpace.of(0.75)) {
       Image(systemName: params["icon"].flatMap { $0.isEmpty ? nil : $0 } ?? "eye")
         .font(.system(size: m.chipText))
-        .foregroundStyle(AglynColor.accentIcon)
+        .foregroundStyle(markColor)
         .accessibilityHidden(true)
-      Text("Looking at: \(looking)").font(m.font(m.chipText, m.chipWeight)).foregroundStyle(AglynColor.textPrimary)
+      Text("Looking at: \(looking)").font(m.font(m.chipText, m.chipWeight)).foregroundStyle(bold ? AglynHighlight.text : AglynColor.textPrimary)
         .lineLimit(1)
     }
     .padding(m.chipPadding)
     .frame(minHeight: m.chipHeight)
-    .background(Capsule().fill(AglynColor.accentSoft))
+    .background(Capsule().fill(bold ? AglynHighlight.soft : AglynColor.accentSoft))
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, m.edge)
     .padding(.top, AglynSpace.half)
@@ -211,7 +230,7 @@ struct AiAssistPanel: View {
           ask(text)
         } label: {
           HStack(spacing: m.suggestionIconGap) {
-            Image(systemName: "sparkles").font(.system(size: m.suggestionIcon)).foregroundStyle(AglynColor.accentIcon)
+            Image(systemName: "sparkles").font(.system(size: m.suggestionIcon)).foregroundStyle(markColor)
             Text(text).font(m.font(m.suggestion)).foregroundStyle(AglynColor.textPrimary).multilineTextAlignment(.leading)
             Spacer(minLength: 0)
           }
@@ -249,7 +268,11 @@ struct AiAssistPanel: View {
             .font(.system(size: m.sendIcon, weight: .semibold))
             .foregroundStyle(AglynColor.primaryContrast)
             .frame(width: m.send, height: m.send)
-            .background(RoundedRectangle(cornerRadius: m.sendRadius, style: .continuous).fill(AglynColor.primary))
+            .background {
+              // The brand gradient under the white plane in the phone's bold look (Figma Send 21:366).
+              let shape = RoundedRectangle(cornerRadius: m.sendRadius, style: .continuous)
+              if bold { shape.fill(AglynBrandGradient.linear) } else { shape.fill(AglynColor.primary) }
+            }
         }
         .buttonStyle(.plain)
         .opacity(canSend ? 1 : 0.4)

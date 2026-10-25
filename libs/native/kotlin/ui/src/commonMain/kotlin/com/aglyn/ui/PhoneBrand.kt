@@ -76,14 +76,19 @@ fun brandGradientBrush(box: Rect, alpha: Float = 1f): Brush {
  * ellipse with a soft falloff, which every Android version draws the same. Put it first in a box that fills the screen.
  */
 @Composable
-fun PhoneHeaderGlow(modifier: Modifier = Modifier) {
+fun PhoneHeaderGlow(
+  modifier: Modifier = Modifier,
+  width: androidx.compose.ui.unit.Dp = space(80f),
+  height: androidx.compose.ui.unit.Dp = space(37.5f),
+) {
   if (!LocalPhoneBold.current) return
   val opacity = if (LocalAglynDark.current) 0.42f else 0.30f
-  // Tall enough for the glow's lower half and its blur: 150 + 80 dp under the screen's top edge.
-  Canvas(modifier.fillMaxWidth().height(240.dp).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; alpha = opacity }.testTag("phone-header-glow")) {
-    val blur = 80.dp.toPx()
-    val w = 640.dp.toPx() + blur * 2
-    val h = 300.dp.toPx() + blur * 2
+  val blurWidth = space(10f)
+  // Tall enough for the glow's lower half and its blur under the edge it is centered on.
+  Canvas(modifier.fillMaxWidth().height(height / 2 + blurWidth).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; alpha = opacity }.testTag("phone-header-glow")) {
+    val blur = blurWidth.toPx()
+    val w = width.toPx() + blur * 2
+    val h = height.toPx() + blur * 2
     val box = Rect(Offset(size.width / 2 - w / 2, -h / 2), Size(w, h))
     drawOval(brandGradientBrush(box), topLeft = box.topLeft, size = box.size)
     // The blur: the ellipse fades out across the blur's width on both sides of its edge.
@@ -184,3 +189,20 @@ private fun Modifier.drawWithBrandGradient(): Modifier = drawWithContent {
   drawContent()
   drawRect(brandGradientBrush(Rect(Offset.Zero, size)), blendMode = BlendMode.SrcIn)
 }
+
+/** The highlight role (Figma `highlight/soft`, `/icon`, `/text`): the brand pink, the theme's secondary intent. */
+@androidx.compose.runtime.Immutable
+data class PhoneHighlight(val soft: Color, val icon: Color, val text: Color)
+
+/**
+ * The highlight's shades in force: the theme's secondary color through the contract's accent derivation (soft at 16%, the
+ * icon at 3:1, the text at 4.5:1 for the appearance). The AI's context chip and its suggestion marks wear it in the bold look.
+ */
+@Composable
+fun phoneHighlight(): PhoneHighlight {
+  val shades = deriveAccent(LocalAglynPalette.current.secondary.main, LocalAglynDark.current)
+  return PhoneHighlight(soft = shades.soft, icon = shades.icon, text = shades.text)
+}
+
+/** Fills with the brand gradient across the element's own box (the AI's Send in the bold look, Figma Send 273:20321). */
+fun Modifier.brandGradientBackground(): Modifier = drawBehind { drawRect(brandGradientBrush(Rect(Offset.Zero, size))) }
