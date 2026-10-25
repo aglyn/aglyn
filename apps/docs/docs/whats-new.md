@@ -10,7 +10,24 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — sell a product in person only (newest)
+## November 2026 — Aglyn 1.0 (newest)
+
+- **Aglyn is generally available.** The platform is out of beta: building and
+  publishing sites, the store and point of sale, forms and the inbox, the CRM,
+  media, datasets, marketing and automation are released for every workspace on
+  the plans that include them.
+- **A Beta label, feature by feature.** A feature that is open to use and still
+  changing says so where you meet it: a **Beta** chip beside its tab, its page
+  heading or its panel title in the console, and a **Beta** note at the top of
+  its docs pages. Today that is [Aglyn AI](ai/overview.md),
+  [Bring my site](ai/bring-my-site.md) and
+  [Aglyn Assist](getting-started/aglyn-assist.md). New features will keep
+  arriving this way, and the label comes off each one when it settles.
+- **Rolling out, until it opens.** A feature that is not open in your workspace
+  yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
+  console until it is released.
+
+## October 2026 — sell a product in person only
 
 - **[Sell in person only](commerce-and-bookings/commerce/catalog.md#sell-in-person-only)** —
   turn off **Sell online** on a product and it sells only at your register, kiosk,

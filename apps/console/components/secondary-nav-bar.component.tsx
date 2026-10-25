@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
+import {
+  RELEASE_FLAGS,
+  type ReleaseFlagKey,
+  type ReleaseFlagStage,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { Stack } from '@mui/material'
 import { useMemo } from 'react'
@@ -56,12 +60,15 @@ export interface GatedNavTabItem extends NavTabItem {
   icon?: { path: string }
   title?: string
   [STAFF_ONLY_ATTRIBUTE]?: string
+  /** `beta` when the tab's feature is released and still changing (AGL-4052). */
+  stage?: ReleaseFlagStage
 }
 
 /**
  * Release-flag gating (AGL-229): flagged-off tabs disappear for customers;
  * staff keep them with a flag badge so unreleased surfaces are recognizably
- * unlaunched.
+ * unlaunched. A released tab whose flag is staged `beta` carries
+ * `stage: 'beta'`, which the strip draws as the Beta chip (AGL-4052).
  *
  * Pure so the marker can be asserted where it is DECLARED — rendering the
  * bar takes the whole provider stack, and a test that needs that much setup
@@ -81,7 +88,15 @@ export function gateNavTabItems(
       flags[definition?.key as ReleaseFlagKey]?.released ??
       definition?.defaultEnabled ??
       false
-    if (!definition || released) return [item]
+    if (!definition) return [item]
+    // A released feature still changing wears the Beta chip (AGL-4052). Read
+    // from `released`, never the staff bypass: a flagged-off tab a staff
+    // member previews is rolling out, and the flag badge below says so.
+    if (released) {
+      return [
+        definition.stage === 'beta' ? { ...item, stage: 'beta' as const } : item,
+      ]
+    }
     if (!isStaff) return []
     return [
       {

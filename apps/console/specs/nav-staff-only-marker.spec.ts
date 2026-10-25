@@ -93,6 +93,25 @@ describe('release-flagged nav tabs', () => {
     expect(contacts.icon).toBeUndefined()
   })
 
+  it('leaves generally available and staff-preview tabs unstaged (AGL-4052)', () => {
+    // A released CRM is generally available and stays unmarked; the same tab
+    // off, previewed by staff, is rolling out and never reads Beta. The beta
+    // half, with a staged registry, is nav-tab-beta-stage.spec.ts.
+    const [released] = gateNavTabItems(
+      [CONTACTS_TAB],
+      { release_crm: { released: true } },
+      false,
+    )
+    expect(released.stage).toBeUndefined()
+
+    const [preview] = gateNavTabItems(
+      [CONTACTS_TAB],
+      { release_crm: { released: false } },
+      true,
+    )
+    expect(preview.stage).toBeUndefined()
+  })
+
   /**
    * The capture preflight only has a marker to find while a flag with a nav
    * tab ships off, so it reads that list from the registry's SOURCE (plain

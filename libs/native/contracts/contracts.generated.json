@@ -4792,6 +4792,13 @@
       },
       {
         "console": {
+          "id": "/domains",
+          "surface": "orgPluginTab"
+        },
+        "where": "The console’s Domains page; no native screen yet"
+      },
+      {
+        "console": {
           "id": "/waivers",
           "surface": "hostPluginTab"
         },

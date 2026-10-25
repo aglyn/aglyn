@@ -33,7 +33,7 @@ import {
   type WaiverMinor,
   type WaiverSignMethod,
 } from '../model/waiver-signature'
-import { waiversFiles, waiversRefs } from './db'
+import { WaiverFileRefusedError, waiversFiles, waiversRefs } from './db'
 import { sendWaiverEmail, signedCopyEmail } from './emails'
 
 /*==========================================
@@ -194,7 +194,12 @@ export async function recordSignature(
     const image = decodeImageDataUrl(body['signatureImage'], { maxBytes: 300_000 })
     if (image) {
       imagePath = waiverSignatureImagePath(context.orgId, id)
-      await waiversFiles().save(imagePath, image.bytes, image.contentType)
+      try {
+        await waiversFiles().save(imagePath, image.bytes, image.contentType)
+      } catch (caught) {
+        if (caught instanceof WaiverFileRefusedError) return { ok: false, status: 400, error: caught.message }
+        throw caught
+      }
     }
   }
   const signedText = waiverSignedText(waiver, { consent: true })
@@ -313,7 +318,12 @@ export async function recordPaperSignature(
   const photo = decodeImageDataUrl(body['photo'], { maxBytes: 6_000_000, allowJpeg: true })
   if (!photo) return { ok: false, status: 400, error: 'Add a photo of the signed page.' }
   const photoPath = waiverPaperPhotoPath(context.orgId, id, photo.extension)
-  await waiversFiles().save(photoPath, photo.bytes, photo.contentType)
+  try {
+    await waiversFiles().save(photoPath, photo.bytes, photo.contentType)
+  } catch (caught) {
+    if (caught instanceof WaiverFileRefusedError) return { ok: false, status: 400, error: caught.message }
+    throw caught
+  }
   const signedText = waiverSignedText(waiver, { consent: false })
   const minors: WaiverMinor[] = checked.input.minors
   const signature: StoredWaiverSignature = {

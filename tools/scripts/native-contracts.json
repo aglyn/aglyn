@@ -1057,6 +1057,7 @@
         "libs/plugins/commerce/src/lib/native-nav.ts",
         "libs/plugins/crm/src/lib/native-nav.ts",
         "libs/plugins/data/src/lib/native-nav.ts",
+        "libs/plugins/domains/src/lib/native-nav.ts",
         "libs/plugins/email/src/lib/native-nav.ts",
         "libs/plugins/events-calendar/src/lib/native-nav.ts",
         "libs/plugins/forms/src/lib/native-nav.ts",

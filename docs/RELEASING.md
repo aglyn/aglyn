@@ -63,6 +63,22 @@ Leaving a prerelease is a product decision, never an inference from commits:
 npm run release:prepare -- --write --set 1.0.0
 ```
 
+### Leaving the beta series
+
+The `1.0.0-beta.N` series ends with the promotion cut for general availability
+on 2026-11-01, and that promotion is cut with exactly the command above:
+`npm run release:prepare -- --write --set 1.0.0`. `--set` is checked like any
+other version (it must be ahead of the current one, and `1.0.0` is ahead of
+every `1.0.0-beta.N`); the rest of the cut, the pinned `release/v1.0.0` branch,
+the promotion PR titled `Release v1.0.0`, the tag and the changelog entry, is
+the ordinary procedure below. After it, the version is a release, so the
+prerelease rules above no longer apply and the bump policy acts on the base:
+a batch with a `feat` makes `1.1.0`, one with only fixes or chores `1.0.1`,
+and a breaking change `2.0.0`. Platform GA does not end per-feature beta:
+a released feature that is still changing carries a `beta` stage on its
+release flag, which the console and the docs label, and that never touches the
+version.
+
 ## Cutting a release
 
 The bump is a **deliberate step in the promotion**, not a per-commit

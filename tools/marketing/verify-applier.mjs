@@ -21,9 +21,11 @@ const TEN_CARD_PAGES = ['datasets', 'ai']
 
 /** Early-access is section 6; its 4 stat pairs start after eyebrow+heading+intro+2 actions. */
 const SLOT_INDEX = { earlyaccess: { section: 6, first: 5 } }
+// The live band's stats (AGL-4052): 'All products built in' replaced the
+// '9' the frame drew, so the band states no count.
 const EXPECTED_STATS = [
   '1', 'platform, not a stack',
-  '9', 'products built in',
+  'All', 'products built in',
   '0', 'plugins to wire up',
   '1-click', 'to publish',
 ]
@@ -82,7 +84,15 @@ for (const page of PAGES) {
   const res = applyPageCopy(COPY, { dryRun: false })
 
   console.log(`${page} — ${res.wrote} writes`)
-  check(res.wrote >= 73 && res.wrote <= 74, `73-74 writes (got ${res.wrote})`)
+  // 74: every slot, the early-access chip included. It is poured since the
+  // band became 'Free to start' (AGL-4052), so a fresh skeleton's 'Now in
+  // early access' never survives a pour.
+  check(res.wrote === 74, `74 writes (got ${res.wrote})`)
+  const chip = canvas._nodes.get(`${SLOT_INDEX.earlyaccess.section}:0`).props.children
+  check(
+    !/early access/i.test(String(chip)),
+    `the early-access chip is poured over the skeleton (got ${JSON.stringify(chip)})`,
+  )
   // The regression AGL-1227 was: authored props gone after a write.
   const lost = Object.entries(AUTHORED).filter(([id, want]) => {
     const p = canvas._nodes.get(id).props

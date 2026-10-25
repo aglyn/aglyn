@@ -6,6 +6,12 @@ description: Describe a change to your site's theme and get a proposal for the t
 
 # Change your site's theme with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 The **Theme assistant** sits on your site's **Setup → Theme** section, above the
 [theme editor](../building-sites/theme-builder/edit-your-theme.md). Describe what you
 want and it proposes values for the editor's own controls — the same colors, font,

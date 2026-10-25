@@ -192,24 +192,24 @@
     {
       "kind": "early-access",
       "figmaNodeId": "120:1712",
-      "eyebrow": null,
-      "heading": "Be among the first to build on Aglyn.",
+      "eyebrow": "Free to start",
+      "heading": "Start free. Add capacity when your website needs it.",
       "subheading": null,
       "body": [
-        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+        "The free plan includes one website, up to five pages, forms, the media library and a monthly allowance of Aglyn AI credits. Paid plans add your own domain, a store, the CRM and more capacity. No credit card to start."
       ],
       "actions": [
-        { "label": "Join early access", "variant": "contained" },
-        { "label": "See what’s included", "variant": "outlined" }
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "outlined" }
       ],
       "items": [
         { "title": "1", "body": "platform, not a stack", "meta": "stat" },
-        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "All", "body": "products built in", "meta": "stat" },
         { "title": "0", "body": "plugins to wire up", "meta": "stat" },
         { "title": "1-click", "body": "to publish", "meta": "stat" }
       ],
       "image": null,
-      "notes": "Byte-identical to the Console and Commerce versions — build it once and share it. Centred stack: pill badge 'Now in early access' (rounded 999px, subtle grey fill, 1px border, 8px dot on the left), heading, body, two buttons. Below, a 4-up stat row separated by 1px vertical hairline dividers; figures are 44px ExtraBold in the primary.dark token (the Figma frame pins the old brand blue; AGL-1293 RETIRED that hex for failing AA at 3.51:1 — never author the literal, and do not copy it back out of Figma), labels 16px text/secondary. Section background is bg/default (#F8F9FA)."
+      "notes": "Byte-identical to the Console and Commerce versions — build it once and share it. Centred stack: pill badge 'Now in early access' (rounded 999px, subtle grey fill, 1px border, 8px dot on the left), heading, body, two buttons. Below, a 4-up stat row separated by 1px vertical hairline dividers; figures are 44px ExtraBold in the primary.dark token (the Figma frame pins the old brand blue; AGL-1293 RETIRED that hex for failing AA at 3.51:1 — never author the literal, and do not copy it back out of Figma), labels 16px text/secondary. Section background is bg/default (#F8F9FA). Synced to the live page on 2026-10-25 (AGL-4052): the early-access wording (the 'Now in early access' chip, 'Aglyn is pre-release…' and 'Join early access') came off aglyn.com on 2026-10-05, when the band became 'Free to start'. The chip is now POURED from `eyebrow` rather than kept from the skeleton, the buttons are Start free and See pricing, and the second stat reads 'All products built in', which states no count. The Figma frame still draws the old band; this file follows the live page."
     },
     {
       "kind": "cta",

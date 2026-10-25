@@ -6,6 +6,12 @@ description: "How a site started with AI gets its look: the style you choose set
 
 # Looks and themes for AI sites
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Every site [started with AI](./start-with-ai.md) gets a look of its own: a base theme,
 colors, a pair of fonts, and the style of its buttons, cards and forms. The **style** you
 choose decides the family that look comes from. The details are picked fresh for each

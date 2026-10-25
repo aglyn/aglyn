@@ -543,3 +543,22 @@ describe('the launcher and the open action (AGL-3593)', () => {
     expect(screen.queryByLabelText('Hide AI jobs')).toBeNull()
   })
 })
+
+describe('the Beta label on the panel (AGL-4052)', () => {
+  it('wears Beta beside its title while Assist is released', async () => {
+    render(<AssistPanelComponent {...dockProps()} />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    await screen.findByPlaceholderText('How do I…')
+    const chips = document.querySelectorAll('[data-release-stage="beta"]')
+    expect(chips).toHaveLength(1)
+    expect(chips[0].textContent).toBe('Beta')
+  })
+
+  it('never reads Beta in a staff preview of an assistant that is off', async () => {
+    render(<AssistPanelComponent {...dockProps()} assistStaffPreview />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    await screen.findByPlaceholderText('How do I…')
+    expect(screen.getByText('Staff preview')).toBeTruthy()
+    expect(document.querySelector('[data-release-stage]')).toBeNull()
+  })
+})

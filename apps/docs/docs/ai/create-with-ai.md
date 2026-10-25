@@ -6,6 +6,12 @@ description: "The Create with AI button sits beside the create button on every l
 
 # Create with AI on every list
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Wherever Aglyn AI can make the thing a list holds, the list has a **Create with AI**
 button with a sparkle icon, beside its own create button. An empty list shows it in its
 empty state too, so the first item can be one you describe.

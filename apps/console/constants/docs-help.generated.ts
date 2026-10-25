@@ -1037,7 +1037,7 @@ export const DOCS_HELP_ANCHORS = {
   errorScreens: ['#the-error-screens', '#design-one', '#what-the-built-in-fallback-gives-you', '#error-screens-are-free', '#tips', '#related'],
   events: ['#manage-events', '#import-and-export-events', '#columns', '#how-a-row-finds-an-existing-event', '#conflicts-the-dry-run-and-undo', '#files-from-other-calendars', '#show-events-on-a-screen', '#ask-aglyn-ai', '#search-engines', '#related'],
   export: ['#the-fields', '#the-records', '#the-format', '#bringing-it-back-in', '#related'],
-  featureFlags: ['#what-a-release-flag-is', '#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood', '#a-flag-is-not-always-sufficient-on-its-own'],
+  featureFlags: ['#what-a-release-flag-is', '#how-a-flag-is-evaluated', '#how-gating-behaves', '#beta-stage', '#managing-flags', '#under-the-hood', '#a-flag-is-not-always-sufficient-on-its-own'],
   firstPartySurfaces: ['#register', '#include', '#what-the-capture-does-so-you-can-check-it', '#on-a-self-hosted-install'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#place-a-saved-form', '#saved-forms-per-site', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#style-a-field', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#consent-group-disclosure', '#where-submissions-go', '#the-inbox', '#filter-the-inbox', '#who-a-submission-is-from', '#what-it-links-to', '#where-this-one-went', '#replying-to-a-submission', '#inbox-card', '#every-sites-inbox-at-once', '#one-forms-own-page', '#form-details', '#form-crm-routing', '#form-versions', '#form-collected', '#form-submissions', '#form-saves-to-contact-fields', '#export-submissions', '#find-a-form', '#duplicate-a-form', '#switch-forms-off-for-one-site', '#related'],
@@ -1173,7 +1173,7 @@ export const DOCS_HELP_ANCHORS = {
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#layout-versions', '#scheduled-publishing', '#plan-requirements', '#related'],
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
-  waivers: ['#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#related'],
+  waivers: ['#your-waivers', '#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   weglot: ['#seo', '#before-you-start', '#turn-it-on', '#settings', '#what-visitors-see', '#page-speed', '#cookies-and-privacy', '#security', '#turn-it-off', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#email-footer', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
@@ -1697,6 +1697,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   posHardware: {
     '#buy-a-reader-from-aglyn': 'Buy a reader from Aglyn',
+    '#hardware-purchase-records': 'Records of your purchases',
     '#reader-start-up-screen': 'Reader start-up screen',
     '#receipt-printers': 'Receipt printers',
   },
@@ -1998,6 +1999,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#find-a-signature': 'Find a signature',
     '#versions': 'Versions',
     '#write-a-waiver': 'Write a waiver',
+    '#your-waivers': 'Your waivers',
   },
   webhooks: {
     '#outbound-webhooks': 'Outbound webhooks',

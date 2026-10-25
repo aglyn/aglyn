@@ -51,9 +51,11 @@ applier asserts the slot count of every section up front and returns the
 mismatch instead of writing a partial page.
 
 `null` in a flattened slot means **keep what the skeleton already has**, for
-values that are invariant across the product pages (the Early-access chip
-reads "Now in early access" on every one). Blanking a node because the copy
-JSON happened not to name it would be the worst reading of a missing value.
+values that are invariant across the product pages. Blanking a node because the
+copy JSON happened not to name it would be the worst reading of a missing value.
+The Early-access chip was the first such value, when it read "Now in early
+access" on every page. It is not any more: see "The early-access band is the
+live 'Free to start' band" below.
 
 Run it with `{dryRun: true}` first — it returns the before/after pairs.
 
@@ -329,10 +331,10 @@ differences from the older ones:
 - **Ten Explore cards**, like `copy-datasets.json`: Aglyn AI is not one of the
   roster of ten, so there is no self-link to omit. Grow the grid to ten before
   pouring — the applier takes that section's count from `explore.items`.
-- **The early-access chip is poured**, not kept. `eyebrow` is set, so the
-  applier writes over the skeleton's "Now in early access"; every other deck
-  leaves it null. That is why the page writes 80 slots where Datasets writes
-  79, and the harness derives the figure rather than pinning it.
+- **The early-access chip is poured**, not kept, as on every deck now (see
+  "The early-access band is the live 'Free to start' band" below). Here it
+  reads "Included on every plan", and the page writes 80 slots, as Datasets
+  does; the harness derives the figure rather than pinning it.
 
 It also carries three keys the applier never reads and a besigner pass must
 place by hand: `seo` (title and description are fields on the screen's detail
@@ -342,6 +344,13 @@ missed twice), `disclosure` (the rolling-out notice, below), and `placements`
 belong to the layout and to another page).
 
 ### The rolling-out line is a slot, not a sentence
+
+**Retired.** `release_ai_generative` has been on for every workspace since
+2026-09-29, and the live `/product/ai` page carries no rolling-out band.
+`disclosure` stays in the file as the record of what was placed and why, with a
+`status` that says it is removed; do not place it again. Aglyn AI is in beta,
+which the console and the docs say per feature (AGL-4052); the marketing page
+carries no stage label. What follows is the history.
 
 `disclosure` is a **discrete, removable** element: its own notice band under
 the hero, not a qualifier threaded through the prose. Generative building is
@@ -360,6 +369,34 @@ the `/product` index, not a detail page — no Statement, no Capabilities/
 Deep-dive pair, a centred hero with the mockup below, and three sections the
 detail pages never have (a logo strip, a pricing teaser and a roadmap band). The
 applier refuses it by design; it needs its own build.
+
+## The early-access band is the live "Free to start" band (AGL-4052)
+
+aglyn.com dropped its pre-release copy on 2026-10-05: the early-access band's
+"Now in early access" chip, "Aglyn is pre-release. Join early access…" and the
+"Join early access" button, the "Beta" pill beside the logo in the nav, and the
+footer's "Beta notice". The band became **Free to start**. The copy files kept
+the old wording, so a re-pour would have put it back, and on 2026-10-25 they
+were brought to what the live pages say (read with
+`curl -A GPTBot -H 'Accept: text/markdown' https://aglyn.com/product/<slug>`):
+
+- **The eight detail decks and `/product`**: chip "Free to start", heading
+  "Start free. Add capacity when your website needs it.", the free-plan body,
+  Start free and See pricing, and the second stat "All products built in",
+  which states no count. `verify-applier.mjs` asserts those stats and that the
+  chip is poured.
+- **Datasets** and **Aglyn AI** keep their own bands, with their chips poured
+  ("Included from Starter", "Included on every plan") and their wording as live.
+- **Nav and footer** entries (recorded on three decks, never poured, because
+  they are the layout's): no Beta pill, no Beta notice, and the footer's
+  columns as live.
+
+Only those parts were synced. The heroes, statements and the FAQ band the
+live pages added since the SEO arc are **not** in these files, which still
+record the frames; re-extract a page from the live site before pouring it
+whole. `pricing-copy/` carries no beta wording: its "Beta pricing — plans and
+limits may change" line came out of the extractions with the site care card
+(AGL-3954), and the live `/pricing` page does not carry it either.
 
 ## Blog posts are prose, so the contract is the links (AGL-2922)
 

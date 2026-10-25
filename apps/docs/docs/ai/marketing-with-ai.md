@@ -6,6 +6,12 @@ description: "Use Aglyn AI on your site's Marketing page: write announcement bar
 
 # Marketing with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Your site's **Marketing** page has its own AI doors. Each one sits beside the thing it
 works on, and each one stops short of anything a visitor or a recipient would see: an
 overlay it creates is switched off, a campaign it drafts is aimed at nobody, and copy it
