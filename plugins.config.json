@@ -569,6 +569,7 @@
               "relatedProductIds",
               "giftCard",
               "lowStockThreshold",
+              "sellOnline",
               "shipping",
               "createdAtMs",
               "updatedAtMs",
@@ -779,7 +780,7 @@
       ],
       "sitemapSections": [
         {
-          "$comment": "A product page for each active product with a slug, once the store names the template products render through (AGL-299). Soft deletes keep `status: active`, hence skipWhen. Commerce stamps epoch milliseconds.",
+          "$comment": "A product page for each active product with a slug, once the store names the template products render through (AGL-299). Soft deletes keep `status: active`, hence skipWhen. A product sold in person only stores `sellOnline: false` and has no page (AGL-4060), hence skipWhenFalse; the field is absent on every product written before it. Commerce stamps epoch milliseconds.",
           "section": "products",
           "collection": "products",
           "where": {
@@ -792,6 +793,7 @@
           },
           "path": "/products/{slug}",
           "skipWhen": "deletedAt",
+          "skipWhenFalse": "sellOnline",
           "lastmod": ["updatedAtMs", "createdAtMs"]
         },
         {

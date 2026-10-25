@@ -1227,6 +1227,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var posQuickKey: Bool?
   public var priceUsd: Double?
   public var relatedProductIds: [String]?
+  public var sellOnline: Bool?
   public var seo: HostProductSeo?
   public var shipping: ProductShippingFacts?
   public var slug: String?
@@ -1240,7 +1241,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var updatedAtMs: Double?
   public var variants: [ProductVariant]?
 
-  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, imageUrl: String? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, imageUrl: String? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
     self.categoryIds = categoryIds
     self.channel = channel
     self.checkIn = checkIn
@@ -1262,6 +1263,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
     self.posQuickKey = posQuickKey
     self.priceUsd = priceUsd
     self.relatedProductIds = relatedProductIds
+    self.sellOnline = sellOnline
     self.seo = seo
     self.shipping = shipping
     self.slug = slug

@@ -26,13 +26,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useId } from 'react'
 import * as CommerceModel from '../../model'
 
 type Patch = Partial<CommerceModel.HostProduct>
 
 export interface ProductRegisterFieldsProps {
   posQuickKey: boolean
+  /** `productSellsOnline` of the product: absent reads as on. */
+  sellOnline: boolean
   modifierGroups: readonly CommerceModel.ProductModifierGroup[]
   update: (patch: Patch) => void
 }
@@ -46,6 +48,42 @@ function centsFromDollars(value: string): number {
   const number = Math.round(Number(String(value).replace(/[^0-9.]/g, '')) * 100)
   return Number.isFinite(number) && number > 0 ? number : 0
 }
+
+export interface ProductSellOnlineFieldProps {
+  sellOnline: boolean
+  update: (patch: Patch) => void
+}
+
+/**
+ * The product's "Sell online" switch (AGL-4060). On (the default, and what
+ * every product stored before it reads as) the product sells on the site and
+ * its channels as it always has; off, it sells in person only.
+ */
+export const ProductSellOnlineField = memo(function ProductSellOnlineField(
+  props: ProductSellOnlineFieldProps,
+) {
+  const { sellOnline, update } = props
+  const helpId = useId()
+  return (
+    <Stack spacing={0.5}>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={sellOnline}
+            onChange={(event) => update({ sellOnline: event.target.checked })}
+            slotProps={{ input: { 'aria-describedby': helpId } }}
+          />
+        }
+        label="Sell online"
+      />
+      <Typography id={helpId} variant="body2" color="text.secondary">
+        {sellOnline
+          ? 'Sold on your site — its product page, product grids, search, the cart and checkout — and in any shopping feeds and marketplaces you connect, as well as in person.'
+          : 'In person only: sold at the register, the kiosk, the Aglyn POS apps and on draft orders. It has no page on your site and is left out of product grids, search, the sitemap, the cart, checkout and every shopping feed.'}
+      </Typography>
+    </Stack>
+  )
+})
 
 /**
  * The product's register settings (AGL-3607): whether it is a quick key on
@@ -93,6 +131,7 @@ export const ProductRegisterFields = memo(function ProductRegisterFields(
         }
         label="Quick key at the register"
       />
+      <ProductSellOnlineField sellOnline={props.sellOnline} update={update} />
       <Typography variant="body2" color="text.secondary">
         {'Modifiers are choices added as the item is rung up, such as a milk or an extra shot. ' +
           'Each can be free or add to the price.'}

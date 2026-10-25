@@ -602,6 +602,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "relatedProductIds",
         "giftCard",
         "lowStockThreshold",
+        "sellOnline",
         "shipping",
         "createdAtMs",
         "updatedAtMs",
@@ -1246,6 +1247,7 @@ export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSec
     },
     "path": "/products/{slug}",
     "skipWhen": "deletedAt",
+    "skipWhenFalse": "sellOnline",
     "lastmod": [
       "updatedAtMs",
       "createdAtMs"
