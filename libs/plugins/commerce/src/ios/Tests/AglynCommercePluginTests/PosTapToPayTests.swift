@@ -171,3 +171,54 @@ final class PosTapToPayTests: XCTestCase {
     XCTAssertTrue(receipt.hasSuffix("Nothing was charged."))
   }
 }
+
+/// Answers every request with one status and body, and keeps what was sent.
+private final class OneAnswer: HTTPTransport, @unchecked Sendable {
+  private let lock = NSLock()
+  private(set) var requests: [URLRequest] = []
+  let status: Int
+  let body: String
+  init(_ status: Int, _ body: String) {
+    self.status = status
+    self.body = body
+  }
+
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    lock.withLock { requests.append(request) }
+    return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+  }
+}
+
+final class PaymentsSetupTests: XCTestCase {
+  private func setup(_ transport: OneAnswer) -> PaymentsSetupAPI {
+    PaymentsSetupAPI(
+      api: ConsoleAPIClient(
+        origin: "https://console.test", getIDToken: { _ in "token" }, transport: transport, sleep: { _ in }, maxAttempts: 1),
+      hostID: "h1")
+  }
+
+  func testTheConsolesOwnRouteHandsBackStripesOnboardingPage() async throws {
+    let transport = OneAnswer(200, #"{"accountId":"acct_1","chargesEnabled":false,"url":"https://connect.stripe.com/setup/e/acct_1/abc"}"#)
+    let page = try await setup(transport).setupPage()
+    XCTAssertEqual(page?.absoluteString, "https://connect.stripe.com/setup/e/acct_1/abc")
+    let request = try XCTUnwrap(transport.requests.first)
+    XCTAssertEqual(request.url?.path(), "/api/commerce/connect")
+    XCTAssertEqual(request.httpMethod, "POST")
+    let sent = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+    XCTAssertEqual(sent?["hostId"] as? String, "h1")
+  }
+
+  func testPaymentsAlreadySetUpOpenNoPage() async throws {
+    let page = try await setup(OneAnswer(200, #"{"accountId":"acct_1","chargesEnabled":true}"#)).setupPage()
+    XCTAssertNil(page)
+  }
+
+  func testSomeoneOtherThanTheOwnerReadsTheRoutesOwnWords() async {
+    do {
+      _ = try await setup(OneAnswer(403, #"{"error":"Only the organization owner can set up payments"}"#)).setupPage()
+      XCTFail("a refusal is thrown")
+    } catch {
+      XCTAssertEqual((error as? ConsoleAPIError)?.message, "Only the organization owner can set up payments")
+    }
+  }
+}

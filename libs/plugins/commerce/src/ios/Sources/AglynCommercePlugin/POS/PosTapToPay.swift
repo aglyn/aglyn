@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynCore
 import AglynHardware
 import AglynUI
 import Foundation
@@ -239,5 +240,58 @@ struct TapToPayEducationAfterTerms: ViewModifier {
 extension View {
   func tapToPayEducationAfterTerms(_ collector: CardCollector?) -> some View {
     modifier(TapToPayEducationAfterTerms(collector: collector))
+  }
+}
+
+// MARK: Payments setup on the iPhone (Apple 2.1 to 2.3, 3.4)
+
+/// The console's own payments setup route: the store owner's Stripe account and the Stripe page that finishes it.
+let commerceConnectRoute = "/api/commerce/connect"
+
+/// Setting up payments from the app, through the SAME route and Stripe-hosted onboarding the console uses. The page
+/// opens in the secure browser (a provider's account step, never a web view of ours); only the store's owner may
+/// set payments up, and anyone else reads the route's own words.
+struct PaymentsSetupAPI {
+  let api: ConsoleAPIClient
+  let hostID: String
+
+  /// The Stripe page that finishes payments setup, or nil when payments are already set up.
+  func setupPage() async throws -> URL? {
+    let answer = try await api.request(commerceConnectRoute, method: .post, body: ["hostId": .string(hostID)])
+    guard let text = answer?["url"]?.stringValue, let url = URL(string: text), url.scheme == "https" else { return nil }
+    return url
+  }
+}
+
+/// After payments are set up on this iPhone: the way to turn on Tap to Pay on iPhone, at once (Apple 3.4).
+struct TapToPayEnableSheet: View {
+  let setUp: () -> Void
+  let notNow: () -> Void
+
+  var body: some View {
+    VStack(spacing: AglynSpace.two) {
+      Image(systemName: TapToPayIPhone.symbol)
+        .font(.largeTitle)
+        .foregroundStyle(.tint)
+      Text("Payments are set up. Turn on \(TapToPayIPhone.title)")
+        .font(AglynFont.title3)
+        .multilineTextAlignment(.center)
+      Text("Customers tap a contactless card, phone or watch on this iPhone. Set it up now, so it is ready before the first sale.")
+        .font(AglynFont.body)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+      Button("Set up \(TapToPayIPhone.title)", action: setUp)
+        .buttonStyle(.aglynProminent)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("tap-to-pay-enable")
+      Button("Not now", action: notNow)
+        .buttonStyle(.aglynSecondary)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+    }
+    .padding(AglynSpace.three)
+    .presentationDetents([.medium])
+    .accessibilityIdentifier("tap-to-pay-enable-sheet")
   }
 }

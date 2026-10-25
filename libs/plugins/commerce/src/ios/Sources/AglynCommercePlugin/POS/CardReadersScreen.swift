@@ -5,6 +5,7 @@ import AglynCore
 import AglynHardware
 import AglynPluginHost
 import AglynUI
+import AuthenticationServices
 import SwiftUI
 #if canImport(UIKit)
   import UIKit
@@ -122,6 +123,11 @@ struct CardReadersScreen: View {
   @State private var removing: PosReaderRow?
   @State private var smartError: String?
   @State private var collector = DeviceCardCollector.make()
+  /// Payments setup on this iPhone: in progress, its words when it could not start, and the Tap to Pay offer after it.
+  @State private var settingUpPayments = false
+  @State private var paymentsSetupError: String?
+  @State private var offerTapToPay = false
+  @Environment(\.webAuthenticationSession) private var webAuthentication
 
   private var hostID: String { context.hostID ?? "" }
   private var smart: SmartReadersAPI { SmartReadersAPI(api: context.api, hostID: hostID) }
@@ -138,8 +144,21 @@ struct CardReadersScreen: View {
         case .ready(let value):
           check("Card payments offered here", value.available, value.testMode ? "Test mode: no real cards are charged." : nil)
           check(
-            "Payments set up in the console", value.merchantReady,
-            value.merchantReady ? nil : "Finish payments setup in the console before taking cards.")
+            "Payments set up", value.merchantReady,
+            value.merchantReady ? nil : "Finish payments setup to take cards.")
+          if !value.merchantReady {
+            Button {
+              Task { await setUpPayments() }
+            } label: {
+              AglynRow(
+                "Set up payments", subtitle: "With Stripe, on this device. Only the store’s owner can do this.",
+                systemImage: "creditcard.fill")
+            }
+            .buttonStyle(.aglynRow)
+            .disabled(settingUpPayments)
+            .accessibilityIdentifier("payments-set-up")
+            if let paymentsSetupError { AglynNotice(paymentsSetupError, tone: .error) }
+          }
           check(
             "Store address for card readers", value.locationReady,
             value.locationReady ? nil : "Pair a smart reader below with the store's address, or add it in the console's register settings.")
@@ -169,6 +188,17 @@ struct CardReadersScreen: View {
     .refreshable { refresh += 1 }
     .task { collector?.deviceReaders?.permitTapToPayTerms(tapToPayTermsPermitted(isStaff: context.staff != nil)) }
     .tapToPayEducationAfterTerms(collector)
+    .sheet(isPresented: $offerTapToPay) {
+      TapToPayEnableSheet {
+        offerTapToPay = false
+        Task {
+          await PosCardNotifier.askPermission()
+          _ = await collector?.connect(hostID: hostID, kind: .tapToPay, sessions: CommerceTerminalConnection(api: context.api))
+        }
+      } notNow: {
+        offerTapToPay = false
+      }
+    }
     .task(id: refresh) { await load(fresh: refresh > 0) }
     .task { await loadRegisters() }
     .sheet(isPresented: $pairing) {
@@ -269,6 +299,31 @@ struct CardReadersScreen: View {
       smartError =
         (error as? ConsoleAPIError).flatMap { $0.status == 0 ? nil : $0.message }
         ?? "That did not go through. Check the connection and try again."
+    }
+  }
+
+  /// Payments setup from this device (Apple 2.1 to 2.3): Stripe's hosted onboarding through the console's own route,
+  /// in the secure browser; back here, the store is checked again and Tap to Pay on iPhone is offered (Apple 3.4).
+  private func setUpPayments() async {
+    guard !settingUpPayments else { return }
+    settingUpPayments = true
+    paymentsSetupError = nil
+    defer { settingUpPayments = false }
+    do {
+      if let page = try await PaymentsSetupAPI(api: context.api, hostID: hostID).setupPage() {
+        await webAuthentication.openHostedPage(page)
+      }
+    } catch {
+      paymentsSetupError =
+        (error as? ConsoleAPIError).flatMap { $0.status == 0 ? nil : $0.message }
+        ?? "Payments setup could not start. Check the connection and try again."
+      return
+    }
+    await load(fresh: true)
+    if readiness.value?.merchantReady == true, collector?.kinds.contains(.tapToPay) == true,
+      collector?.state.isConnected != true
+    {
+      offerTapToPay = true
     }
   }
 
