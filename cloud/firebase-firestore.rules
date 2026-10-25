@@ -3940,7 +3940,7 @@ service cloud.firestore {
         // (AGL-4043): a check-in names a customer at the window (name, email,
         // phone) and records who checked them in and their wristband. Only
         // /api/commerce/pos-check-in reads or writes either, behind the
-        // register's own gate (`managePos`, the plan's POS); a client write
+        // register's own gate (`managePos`, the plan's POS), and a client write
         // would check somebody in, or out, with nobody at the window.
         allow read: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
