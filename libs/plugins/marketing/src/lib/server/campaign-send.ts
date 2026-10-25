@@ -41,6 +41,7 @@ import {
   CAMPAIGN_PLAN_CAP_REASON,
   campaignPlanCapMessage,
   campaignPlanLock,
+  type CampaignPlanLock,
 } from '../model/campaign-plan-lock'
 import {
   campaignHeldForReviewNotice,
@@ -323,6 +324,8 @@ export class CampaignSendError extends Error {
     message: string,
     public readonly status: number,
     public readonly reason?: string,
+    /** The plan lock behind a plan-cap refusal, for a client to draw. */
+    public readonly planLock?: CampaignPlanLock | null,
   ) {
     super(message)
   }
@@ -2071,6 +2074,7 @@ export async function performCampaignSend(
             'booking reminders, password resets — keeps sending.',
       403,
       CAMPAIGN_PLAN_CAP_REASON,
+      lock,
     )
   }
   // Read before the pre-check below and kept, so the race refusal after the
@@ -4287,6 +4291,33 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     }
 
     if (action === 'preview') {
+      /*
+       * THE PLAN'S ANSWER RIDES EVERY PREVIEW, refused or not.
+       *
+       * A composer asks for a preview the moment it opens, so this is where
+       * a plan without campaign email is said before anything is written.
+       * The native composers draw `planLock` as it comes rather than porting
+       * the rule; the console computes the same `campaignPlanLock` from the
+       * same limit and counter. Read only when the answer is assembled, and
+       * a refusal that already carries its own lock (the cap) keeps it.
+       *
+       * A site outside an organization holds no campaign allowance to read.
+       */
+      const previewPlanLock = async (sendable?: number) =>
+        siteOrgId
+          ? campaignPlanLock({
+              limit: checkQuota(
+                orgForSite?.org as never,
+                'emailSendsPerMonth',
+                0,
+              ).limit,
+              used: await orgCampaignEmailSendsForMonth(
+                siteOrgId,
+                new Date().toISOString().slice(0, 7),
+              ),
+              sendable,
+            })
+          : null
       // Read-only, and it needs the same admin/editor role as a send: the
       // audience size of someone else's site is not public information.
       const result = await performCampaignSend({
@@ -4312,8 +4343,23 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         ...(senderId ? { senderId } : {}),
         senderUid: decoded.uid,
         dryRun: true,
+      }).catch(async (error: unknown) => {
+        if (error instanceof CampaignSendError && !error.planLock) {
+          throw new CampaignSendError(
+            error.message,
+            error.status,
+            error.reason,
+            await previewPlanLock(),
+          )
+        }
+        throw error
       })
-      return res.status(200).json(result)
+      return res.status(200).json({
+        ...result,
+        planLock: await previewPlanLock(
+          Number((result as { sendable?: number }).sendable ?? 0),
+        ),
+      })
     }
 
     if (action === 'followUp') {
@@ -4813,6 +4859,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       return res.status(error.status).json({
         error: error.message,
         ...(error.reason ? { reason: error.reason } : {}),
+        ...(error.planLock ? { planLock: error.planLock } : {}),
       })
     }
     console.error(error)

@@ -650,6 +650,25 @@ describe('the ordinary campaign still sends', () => {
     }
   })
 
+  it('answers every preview with the plan lock, refused or not', async () => {
+    // The native composers draw this as it comes, so a Free plan is said
+    // the moment the composer opens, whatever the audience resolves to.
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({ hostId: HOST, action: 'preview' })
+
+      expect(result.body.planLock).toMatchObject({
+        kind: 'not-on-plan',
+        planLabel: 'Pro',
+        reason: 'Campaign email is included from Pro.',
+      })
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+    const paid = await post({ hostId: HOST, action: 'preview' })
+    expect(paid.body.planLock ?? null).toBeNull()
+  })
+
   it('still saves a draft on a plan with no campaign email', async () => {
     mockOrgPlan = 'free'
     try {

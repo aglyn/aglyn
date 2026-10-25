@@ -18,8 +18,31 @@ import SwiftUI
  *   - a designed email names its Besigner design (`templateScreenId`) and
  *     sends no body; "Edit design" opens that design in the Besigner;
  *   - Save draft is `draft` on an existing email; Send is a send, or
- *     `schedule` with `sendAtMs` when a time is picked.
+ *     `schedule` with `sendAtMs` when a time is picked;
+ *   - the plan's answer (`planLock`) rides every preview, refused or not, and
+ *     is drawn as it comes: the console's upgrade notice at the top, Send and
+ *     Schedule off, drafts and tests still allowed (AGL-4055).
  */
+
+/// The plan's answer to this campaign, as the route's preview sends it (`campaignPlanLock` in the marketing plugin):
+/// the plan includes no campaign email, this month's allowance is spent, or the audience is bigger than what is left.
+struct CampaignPlanLock: Equatable {
+  var kind: String
+  var planLabel: String?
+  var reason: String
+  var notice: String
+
+  /// The upgrade notice's sentence, the console's: what is stopped and what still works, then the plan that includes it.
+  var message: String { notice + (planLabel.map { " Included from \($0)." } ?? "") }
+
+  /// The lock in a preview's answer or refusal body; nil when the plan stops nothing.
+  static func from(_ body: JSONValue?) -> CampaignPlanLock? {
+    guard let lock = body?["planLock"], let kind = lock["kind"]?.stringValue, let notice = lock["notice"]?.stringValue
+    else { return nil }
+    return CampaignPlanLock(
+      kind: kind, planLabel: lock["planLabel"]?.stringValue, reason: lock["reason"]?.stringValue ?? notice, notice: notice)
+  }
+}
 
 /// The audience pick, as the composer stores it.
 struct AudiencePick: Equatable {
@@ -62,6 +85,9 @@ struct AudiencePreview: Equatable {
   var consentWithheld: Int
   var blocking: Bool = false
   var error: String?
+  /// The plan's answer, when the route answered at all (`answered`); a request that never reached it says nothing.
+  var planLock: CampaignPlanLock? = nil
+  var answered: Bool = true
 }
 
 struct ComposeDraft: Equatable {
@@ -137,14 +163,15 @@ extension CampaignSendAPI {
       return AudiencePreview(
         sendable: Int(answer?["sendable"]?.numberValue ?? 0), audienceSize: Int(answer?["audienceSize"]?.numberValue ?? 0),
         audienceTruncated: answer?["audienceTruncated"]?.boolValue == true, suppressed: Int(answer?["suppressed"]?.numberValue ?? 0),
-        consentWithheld: Int(answer?["consentWithheld"]?.numberValue ?? 0))
+        consentWithheld: Int(answer?["consentWithheld"]?.numberValue ?? 0), planLock: CampaignPlanLock.from(answer))
     } catch let error as ConsoleAPIError {
       return AudiencePreview(
         sendable: 0, audienceSize: 0, audienceTruncated: false, suppressed: 0, consentWithheld: 0, blocking: error.status == 409,
-        error: error.message)
+        error: error.message, planLock: CampaignPlanLock.from(error.body), answered: error.status != 0)
     } catch {
       return AudiencePreview(
-        sendable: 0, audienceSize: 0, audienceTruncated: false, suppressed: 0, consentWithheld: 0, error: problemText(error))
+        sendable: 0, audienceSize: 0, audienceTruncated: false, suppressed: 0, consentWithheld: 0, error: problemText(error),
+        answered: false)
     }
   }
 
@@ -213,6 +240,8 @@ struct ComposeSheet: View {
   @State private var draft = ComposeDraft()
   @State private var options = ComposeOptions()
   @State private var preview: AudiencePreview?
+  /// The plan's last answer. Kept while the next preview is counted, so Send does not light up between two answers.
+  @State private var planLock: CampaignPlanLock?
   @State private var confirming = false
   @State private var busy = false
   @State private var error: String?
@@ -223,6 +252,18 @@ struct ComposeSheet: View {
   var body: some View {
     NavigationStack {
       Form {
+        if let planLock {
+          // Before anything is written: the plan stops this send, and the way to change that (the console's notice).
+          Section {
+            AglynUpgradeNotice(planLock.message) {
+              dismiss()
+              context.navigate("core.billing.plans")
+            }
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .accessibilityIdentifier("compose-plan-lock")
+          }
+        }
         if let error { AglynNotice(error, tone: .error) }
         Section("Message") {
           TextField("Subject", text: $draft.subject).accessibilityIdentifier("compose-subject")
@@ -304,14 +345,15 @@ struct ComposeSheet: View {
       #endif
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
-        if send != nil {
-          ToolbarItem(placement: .secondaryAction) {
-            Button("Save draft") { Task { await saveDraft() } }.disabled(busy).accessibilityIdentifier("compose-save-draft")
-          }
+        // A new email too: `draft` without an id makes one, so an email a plan cannot send yet is kept, not lost.
+        ToolbarItem(placement: .secondaryAction) {
+          Button("Save draft") { Task { await saveDraft() } }.disabled(busy).accessibilityIdentifier("compose-save-draft")
         }
         ToolbarItem(placement: .confirmationAction) {
           Button(draft.schedule ? "Schedule" : "Send") { confirming = true }
-            .disabled(busy || !draft.canSend || preview?.blocking == true)
+            .disabled(busy || !draft.canSend || preview?.blocking == true || planLock != nil)
+            .help(planLock?.reason ?? "")
+            .accessibilityHint(planLock?.reason ?? "")
             .accessibilityIdentifier("compose-send")
         }
       }
@@ -335,7 +377,9 @@ struct ComposeSheet: View {
         preview = nil
         try? await Task.sleep(for: .milliseconds(350))
         if Task.isCancelled { return }
-        preview = await api.preview(draft)
+        let answer = await api.preview(draft)
+        preview = answer
+        if answer.answered { planLock = answer.planLock }
       }
       .onDisappear { options.stop() }
     }

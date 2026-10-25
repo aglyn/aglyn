@@ -133,4 +133,21 @@ class EmailCasesTest {
     assertEquals("Reached 10 — canceled with 30 not addressed", campaignSendDisplay(partly).label)
     assertNull(deliveryPlaceholder(partly))
   }
+
+  /** The plan's answer as the preview route sends it (AGL-4055): drawn as it comes, with the plan named after the notice. */
+  @Test
+  fun planLockReadsFromAnAnswerOrARefusal() {
+    val free = Json.parseToJsonElement(
+      """{"sendable":0,"planLock":{"kind":"not-on-plan","planLabel":"Pro","reason":"Campaign email is included from Pro.","notice":"Your plan does not include campaign email."}}""",
+    )
+    val lock = CampaignPlanLock.from(free)
+    assertEquals("not-on-plan", lock?.kind)
+    assertEquals("Campaign email is included from Pro.", lock?.reason)
+    assertEquals("Your plan does not include campaign email. Included from Pro.", lock?.message)
+    assertNull(CampaignPlanLock.from(Json.parseToJsonElement("""{"sendable":3,"planLock":null}""")))
+    assertNull(CampaignPlanLock.from(Json.parseToJsonElement("""{"sendable":3}""")))
+    assertNull(CampaignPlanLock.from(null))
+    val unnamed = Json.parseToJsonElement("""{"error":"x","planLock":{"kind":"allowance-spent","planLabel":null,"reason":"r","notice":"n"}}""")
+    assertEquals("n", CampaignPlanLock.from(unnamed)?.message)
+  }
 }
