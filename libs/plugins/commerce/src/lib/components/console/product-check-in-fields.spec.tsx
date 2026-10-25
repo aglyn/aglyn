@@ -61,7 +61,7 @@ describe('the check-in fields', () => {
 
   it('shows no per-variant choice for a product with one variant', () => {
     render(
-      <ProductCheckInFields checkIn={{ enabled: true }} variants={[{ id: 'default', priceUsd: 1 }]} update={jest.fn()} />,
+      <ProductCheckInFields checkIn={{ enabled: true }} variants={[{ id: 'default' }]} update={jest.fn()} />,
     )
     expect(screen.queryByRole('combobox')).toBeNull()
   })
