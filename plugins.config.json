@@ -3279,6 +3279,7 @@
         "console": "registerWaiversConsole",
         "tenantApi": "registerWaiversApi",
         "consoleApi": "registerWaiversConsoleApi",
+        "declarations": "registerWaiversDeclarations",
         "serverDeclarations": "registerWaiversServerDeclarations",
         "tenantEmails": "waiversTenantEmails"
       },

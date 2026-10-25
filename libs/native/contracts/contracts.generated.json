@@ -7201,7 +7201,9 @@
         "ai.generate",
         "managePos",
         "outreach.use",
-        "accounting.manage"
+        "accounting.manage",
+        "manageWaivers",
+        "collectWaivers"
       ],
       "editor": [
         "data.manage",
@@ -7209,7 +7211,9 @@
         "plugins.install",
         "ai.use",
         "ai.generate",
-        "managePos"
+        "managePos",
+        "manageWaivers",
+        "collectWaivers"
       ],
       "owner": [
         "org.settings",
@@ -7226,7 +7230,9 @@
         "ai.generate",
         "managePos",
         "outreach.use",
-        "accounting.manage"
+        "accounting.manage",
+        "manageWaivers",
+        "collectWaivers"
       ],
       "viewer": []
     },
@@ -7273,6 +7279,11 @@
         "id": "accounting",
         "label": "Accounting",
         "pluginId": "accounting"
+      },
+      {
+        "id": "waivers",
+        "label": "Waivers",
+        "pluginId": "waivers"
       }
     ],
     "permissions": [
@@ -7372,6 +7383,22 @@
         "key": "accounting.manage",
         "label": "Manage accounting",
         "pluginId": "accounting",
+        "scope": "org"
+      },
+      {
+        "description": "Write, publish and retire waivers, and void a signature.",
+        "group": "waivers",
+        "key": "manageWaivers",
+        "label": "Manage waivers",
+        "pluginId": "waivers",
+        "scope": "org"
+      },
+      {
+        "description": "See who signed, take signatures at the window and record paper waivers.",
+        "group": "waivers",
+        "key": "collectWaivers",
+        "label": "Collect waivers",
+        "pluginId": "waivers",
         "scope": "org"
       }
     ]

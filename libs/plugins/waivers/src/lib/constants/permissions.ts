@@ -32,6 +32,7 @@ export const WAIVERS_PERMISSION_DECLARATIONS: readonly PluginPermission[] = [
     label: 'Manage waivers',
     description: 'Write, publish and retire waivers, and void a signature.',
     defaults: { admin: true, editor: true, viewer: false },
+    groupLabel: 'Waivers',
   },
   {
     key: WAIVERS_PERMISSIONS.collect,
@@ -39,5 +40,6 @@ export const WAIVERS_PERMISSION_DECLARATIONS: readonly PluginPermission[] = [
     label: 'Collect waivers',
     description: 'See who signed, take signatures at the window and record paper waivers.',
     defaults: { admin: true, editor: true, viewer: false },
+    groupLabel: 'Waivers',
   },
 ]

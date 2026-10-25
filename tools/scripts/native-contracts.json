@@ -1002,13 +1002,15 @@
         "AI_ORG_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
-        "ACCOUNTING_PERMISSIONS"
+        "ACCOUNTING_PERMISSIONS",
+        "WAIVERS_PERMISSION_DECLARATIONS"
       ],
       "parts": [
         "libs/plugins/ai/src/lib/model/ai-permissions.ts",
         "libs/plugins/commerce/src/lib/model/plugin-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
-        "libs/plugins/accounting/src/lib/constants/bundle-common.ts"
+        "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
+        "libs/plugins/waivers/src/lib/constants/permissions.ts"
       ]
     }
   },
@@ -1098,8 +1100,6 @@
   ],
   "omit": [
     "HostProduct.deletedAt",
-    "HostProduct.checkIn",
-    "ProductVariant.checkIn",
     "TenantEmailEntry.mergeTokens",
     "TenantEmailEntry.defaultBody"
   ],

@@ -806,6 +806,14 @@
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
+      "path": "libs/plugins/waivers/src/lib/constants/bundle-common.ts",
+      "why": "The waivers plugin's id and permission key names, reached by its permission declarations; no imports (AGL-4047)."
+    },
+    {
+      "path": "libs/plugins/waivers/src/lib/constants/permissions.ts",
+      "why": "The waivers plugin's permission keys and their tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); imports only its pure bundle-common and a type."
+    },
+    {
       "path": "libs/plugins/waivers/src/lib/native-nav.ts",
       "why": "Where this plugin's console tab sits for the native apps (AGL-4042), assembled into the nav manifest by generate:native-contracts; imports only the core's plain nav module."
     },
