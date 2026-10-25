@@ -218,9 +218,10 @@ export const BUNDLE_ADDON_TOKENS: Record<AddonKind, string> = {
 
 /**
  * Every spelling the parser accepts, lower-cased: the written token, the
- * stored kind, and the plurals a person types.
+ * stored kind, and the plurals a person types. Exported for the native apps'
+ * generated words (AGL-4011), which read a stored proposal the same way.
  */
-const TOKEN_KINDS: Record<string, AddonKind> = (() => {
+export const TOKEN_KINDS: Readonly<Record<string, AddonKind>> = (() => {
   const map: Record<string, AddonKind> = {}
   const add = (kind: AddonKind, ...words: string[]) => {
     for (const word of [kind, BUNDLE_ADDON_TOKENS[kind], ...words]) {

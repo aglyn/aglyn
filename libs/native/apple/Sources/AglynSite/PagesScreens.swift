@@ -547,6 +547,17 @@ struct PageDetail: View {
         }
         PageVersionsSection(
           context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
+        // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
+        Section {
+          PageTrafficCard(reader: context.firestore, api: context.api, hostID: hostID, screenID: page.id) {
+            context.navigate("core.billing.plans")
+          }
+        }
+        .aglynBareFormRow()
+        Section {
+          SiteActivityCard(reader: context.firestore, api: context.api, hostID: hostID, targetID: page.id, title: "Page Activity")
+        }
+        .aglynBareFormRow()
       }
     }
     .formStyle(.aglynGrouped)

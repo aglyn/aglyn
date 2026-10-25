@@ -27,6 +27,7 @@ import { Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiUpsellDialog } from './ai-upsell-dialog.component'
+import { AI_INSIGHT_CARD_COPY } from '../model/ai-insight-ask'
 
 /**
  * "Ask AI about these numbers" (AGL-3603): a tile on a site's dashboard and
@@ -39,12 +40,7 @@ import { AiUpsellDialog } from './ai-upsell-dialog.component'
  * without the AI add-on the same tile opens the add-on's dialog.
  */
 
-export const AI_INSIGHT_CARD_COPY = {
-  title: 'Ask AI about these numbers',
-  site: 'Ask a question about this site’s traffic, sales, bookings, automation runs and pipeline. Every answer shows the figures it is built from.',
-  workspace: 'Ask a question about your workspace’s pipeline, the deals it closed and your datasets. Every answer shows the figures it is built from.',
-  action: 'Ask a question',
-} as const
+export { AI_INSIGHT_CARD_COPY }
 
 function InsightTile(props: {
   text: string

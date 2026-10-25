@@ -479,7 +479,7 @@
         "contributes": {
           "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
-          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you"],
+          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you", "commerce.newest-site-users"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
           "deepLinks": ["commerce.orders-page", "commerce.products-page"]
         }
@@ -1196,12 +1196,12 @@
         "crm"
       ],
       "mobile": {
-        "$comment": "AGL-3669: the CRM hub natively. Contacts, leads, companies and deals (search, the console's chips, a record beside its list on wide windows; create, edit, delete, lead status, unqualify and convert, contact stage, deal stage moves, won and lost, notes, calls and email on the record), the deals pipeline as a board, tasks by view, reports, custom fields and picklists, and the CRM settings; the glance and tasks-due Home cards.",
+        "$comment": "AGL-3669: the CRM hub natively. Contacts, leads, companies and deals (search, the console's chips, a record beside its list on wide windows; create, edit, delete, lead status, unqualify and convert, contact stage, deal stage moves, won and lost, notes, calls and email on the record), the deals pipeline as a board, tasks by view, reports, custom fields and picklists, and the CRM settings; the glance and tasks-due Home cards, on a site's Home and totaled on the workspace's Home (AGL-4011).",
         "ios": { "module": "AglynCrmPlugin", "register": "registerCrmNative" },
         "android": { "package": "com.aglyn.plugins.crm", "register": "registerCrmNative" },
         "contributes": {
           "screens": ["crm.contacts", "crm.leads", "crm.companies", "crm.deals", "crm.tasks", "crm.reports", "crm.fields", "crm.settings", "crm.contact", "crm.lead", "crm.company", "crm.deal"],
-          "widgets": ["crm.glance", "crm.tasks-due"],
+          "widgets": ["crm.glance", "crm.tasks-due", "crm.org-glance", "crm.org-tasks-due"],
           "quickActions": ["crm.open", "crm.deals-action", "crm.tasks-action"],
           "deepLinks": ["crm.page", "crm.legacy-contacts", "crm.contacts-page", "crm.leads-page", "crm.companies-page", "crm.deals-page", "crm.tasks-page", "crm.reports-page", "crm.fields-page", "crm.settings-page", "crm.contact-page", "crm.lead-page", "crm.company-page", "crm.deal-page"]
         }
@@ -2269,11 +2269,12 @@
         "experiments"
       ],
       "mobile": {
-        "$comment": "AGL-3669: the Marketing page natively. Overview; Campaigns (new, edit, delete; a campaign's emails, opening in Emails); Conversions; Overlays (announcement bars and popups: new, edit, on and off, order, delete, each re-rendering the site); A/B testing (new, start, pause, pick a winner, delete, the results against the control). Overlays and A/B testing lock on the plans the console locks them on.",
+        "$comment": "AGL-3669: the Marketing page natively. Overview; Campaigns (new, edit, delete; a campaign's emails, opening in Emails); Conversions; Overlays (announcement bars and popups: new, edit, on and off, order, delete, each re-rendering the site); A/B testing (new, start, pause, pick a winner, delete, the results against the control). Overlays and A/B testing lock on the plans the console locks them on. The site Home's Last campaign card (AGL-4011).",
         "ios": { "module": "AglynMarketingPlugin", "register": "registerMarketingNative" },
         "android": { "package": "com.aglyn.plugins.marketing", "register": "registerMarketingNative" },
         "contributes": {
           "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments"],
+          "widgets": ["marketing.last-campaign"],
           "quickActions": ["marketing.open"],
           "deepLinks": ["marketing.page", "marketing.overview-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.overlays-page", "marketing.experiments-page", "marketing.campaign-page", "marketing.inbox-campaigns-page"]
         }
@@ -2835,7 +2836,9 @@
             "ai.create-form",
             "ai.create-component",
             "ai.needs-you",
-            "ai.assist-panel"
+            "ai.assist-panel",
+            "ai.insight-ask",
+            "ai.org-insight-ask"
           ],
           "quickActions": [
             "ai.open"

@@ -92,6 +92,64 @@ public struct AccountPushSettingsAccountValue: Codable, Hashable, Sendable {
   }
 }
 
+public struct AiInsightCardCopy: Codable, Hashable, Sendable {
+  public var action: String
+  public var site: String
+  public var title: String
+  public var workspace: String
+
+  public init(action: String, site: String, title: String, workspace: String) {
+    self.action = action
+    self.site = site
+    self.title = title
+    self.workspace = workspace
+  }
+}
+
+public struct AiInsightDialogCopy: Codable, Hashable, Sendable {
+  public var answerFailed: String
+  public var ask: String
+  public var askAnother: String
+  public var askFailed: String
+  public var cannotRun: String
+  public var close: String
+  public var digest: String
+  public var digestFailed: String
+  public var hideFigures: String
+  public var openJobs: String
+  public var promise: String
+  public var questionFailed: String
+  public var questionLabel: String
+  public var showFigures: String
+  public var stillWriting: String
+  public var title: String
+  public var unanswered: String
+  public var windowLabel: String
+  public var working: String
+
+  public init(answerFailed: String, ask: String, askAnother: String, askFailed: String, cannotRun: String, close: String, digest: String, digestFailed: String, hideFigures: String, openJobs: String, promise: String, questionFailed: String, questionLabel: String, showFigures: String, stillWriting: String, title: String, unanswered: String, windowLabel: String, working: String) {
+    self.answerFailed = answerFailed
+    self.ask = ask
+    self.askAnother = askAnother
+    self.askFailed = askFailed
+    self.cannotRun = cannotRun
+    self.close = close
+    self.digest = digest
+    self.digestFailed = digestFailed
+    self.hideFigures = hideFigures
+    self.openJobs = openJobs
+    self.promise = promise
+    self.questionFailed = questionFailed
+    self.questionLabel = questionLabel
+    self.showFigures = showFigures
+    self.stillWriting = stillWriting
+    self.title = title
+    self.unanswered = unanswered
+    self.windowLabel = windowLabel
+    self.working = working
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   case production = "production"
@@ -447,6 +505,21 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   case commit = "commit"
   case omitted = "omitted"
   case pipeline = "pipeline"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CrmLeadStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case new = "new"
+  case nurturing = "nurturing"
+  case qualified = "qualified"
+  case unqualified = "unqualified"
+  case working = "working"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -4576,6 +4649,16 @@ public enum ReturnReason: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct ScreenReferrerCount: Codable, Hashable, Sendable {
+  public var count: Double
+  public var referrer: String
+
+  public init(count: Double, referrer: String) {
+    self.count = count
+    self.referrer = referrer
+  }
+}
+
 public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   public var devices: [String: Double]
   public var referrers: [String: Double]
@@ -4586,6 +4669,20 @@ public struct ScreenTrafficRow: Codable, Hashable, Sendable {
     self.devices = devices
     self.referrers = referrers
     self.screenId = screenId
+    self.total = total
+  }
+}
+
+public struct ScreenTrafficSummary: Codable, Hashable, Sendable {
+  public var avgDwellMs: Double?
+  public var deviceLine: String
+  public var topReferrers: [ScreenReferrerCount]
+  public var total: Double
+
+  public init(avgDwellMs: Double? = nil, deviceLine: String, topReferrers: [ScreenReferrerCount], total: Double) {
+    self.avgDwellMs = avgDwellMs
+    self.deviceLine = deviceLine
+    self.topReferrers = topReferrers
     self.total = total
   }
 }
@@ -5176,6 +5273,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let accountColorPattern: String
   public let accountItemLabelMax: Int
   public let accountPhotoField: String
+  public let activityTypeLabels: [String: String]
+  public let aiActivityActionLabels: [String: String]
+  public let aiActivityActionSentences: [String: String]
+  public let aiInsightCardCopy: AiInsightCardCopy
+  public let aiInsightDefaultDays: Int
+  public let aiInsightDialogCopy: AiInsightDialogCopy
+  public let aiInsightPlaceholders: [String: String]
+  public let aiInsightQuestionMaxChars: Int
+  public let aiInsightWindows: [Double]
   public let appAppearances: [AppAppearance]
   public let appDensities: [AppDensity]
   public let appIconIdMax: Int
@@ -5224,6 +5330,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmFieldObjectLabels: [String: String]
+  public let crmLeadClosedStatuses: [CrmLeadStatus]
   public let crmLeadStatusLabels: [String: String]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
@@ -5393,6 +5500,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardMeters: [String]
   public let planCardScreenContexts: [String: String]
   public let planCardWarningShare: Double
+  public let platformBrandName: String
   public let posCashEventLabels: [String: String]
   public let posDayReportMaxDays: Int
   public let posDayReportRoute: String
@@ -5498,6 +5606,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case accountColorPattern = "ACCOUNT_COLOR_PATTERN"
     case accountItemLabelMax = "ACCOUNT_ITEM_LABEL_MAX"
     case accountPhotoField = "ACCOUNT_PHOTO_FIELD"
+    case activityTypeLabels = "ACTIVITY_TYPE_LABELS"
+    case aiActivityActionLabels = "AI_ACTIVITY_ACTION_LABELS"
+    case aiActivityActionSentences = "AI_ACTIVITY_ACTION_SENTENCES"
+    case aiInsightCardCopy = "AI_INSIGHT_CARD_COPY"
+    case aiInsightDefaultDays = "AI_INSIGHT_DEFAULT_DAYS"
+    case aiInsightDialogCopy = "AI_INSIGHT_DIALOG_COPY"
+    case aiInsightPlaceholders = "AI_INSIGHT_PLACEHOLDERS"
+    case aiInsightQuestionMaxChars = "AI_INSIGHT_QUESTION_MAX_CHARS"
+    case aiInsightWindows = "AI_INSIGHT_WINDOWS"
     case appAppearances = "APP_APPEARANCES"
     case appDensities = "APP_DENSITIES"
     case appIconIdMax = "APP_ICON_ID_MAX"
@@ -5546,6 +5663,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmFieldObjectLabels = "CRM_FIELD_OBJECT_LABELS"
+    case crmLeadClosedStatuses = "CRM_LEAD_CLOSED_STATUSES"
     case crmLeadStatusLabels = "CRM_LEAD_STATUS_LABELS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
@@ -5715,6 +5833,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardMeters = "PLAN_CARD_METERS"
     case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
+    case platformBrandName = "PLATFORM_BRAND_NAME"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
     case posDayReportMaxDays = "POS_DAY_REPORT_MAX_DAYS"
     case posDayReportRoute = "POS_DAY_REPORT_ROUTE"

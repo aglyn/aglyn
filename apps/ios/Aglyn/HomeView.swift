@@ -7,9 +7,10 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-/// Home answers one question: what needs me now? (AGL-3945, Figma Home "Needs you" 2:6; Calm rules.) The site in one
-/// line, then only what is waiting on the person (each line opens its list, already filtered), then where they left off,
-/// then the one-line AI prompt that starts Create with AI. No charts here: those are Overview's.
+/// Home is the overview (AGL-3945, AGL-4011; Figma Home 2:6 "Stats"): the site or workspace in one line, then what is
+/// waiting on the person (each line opens its list, already filtered), then the numbers — a site's Traffic, its cards and
+/// its recent activity, or the workspace's proposed plan and the cards that total every site — then where they left off,
+/// then the one-line AI prompt that starts Create with AI. Analytics holds the full drill-down.
 struct HomeView: View {
   @Environment(\.aglynWideChrome) private var wide
   @Environment(AppModel.self) private var model
@@ -31,7 +32,10 @@ struct HomeView: View {
           FirstRunView()
         } else {
           scopeLine
+          if picked == nil { HomeWorkspaceStats(part: .proposal) }
           needsYou
+          // The numbers (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards.
+          if let picked { HomeSiteStats(site: picked) } else { HomeWorkspaceStats(part: .glance) }
           pickUp
           if picked != nil, model.registry.screen("ai.create") != nil { aiPrompt }
         }
@@ -58,7 +62,8 @@ struct HomeView: View {
   @ViewBuilder
   private var scopeLine: some View {
     if let picked {
-      let address = HostStatus.siteAddress(picked.subdomain)
+      // The custom domain when the site has one, else its platform address (the Sites list's order).
+      let address: String? = picked.shownAddress(hostCname: site.cname)
       HStack(spacing: AglynSpace.one) {
         AglynBrandPicture(model.mediaURL(picked.favicon, hostID: picked.id), size: 28, cornerRadius: 14) {
           IconBadge("globe", tone: .neutral, size: 28, circle: true)

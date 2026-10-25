@@ -13,6 +13,8 @@ final class SiteStatus {
   private(set) var loaded = false
   private(set) var failed = false
   private(set) var status: HostStatus?
+  /// The site's own custom domain (`cname`), once read.
+  private(set) var cname: String?
   @ObservationIgnored private var listener: FirestoreListening?
 
   func start(reader: FirestoreReader?, hostID: String?) {
@@ -20,11 +22,14 @@ final class SiteStatus {
     loaded = false
     failed = false
     status = nil
+    cname = nil
     guard let reader, let hostID else { return }
     listener = reader.listenDocument(["hosts", hostID]) { [weak self] result in
       guard let self else { return }
       switch result {
-      case .success(let doc): self.status = HostStatus.describe(doc?.data)
+      case .success(let doc):
+        self.status = HostStatus.describe(doc?.data)
+        self.cname = doc?.string("cname")
       case .failure: self.failed = true
       }
       self.loaded = true

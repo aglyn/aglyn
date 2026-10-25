@@ -68,10 +68,11 @@ const val HOME_NEEDS_YOU_SLOT = "homeNeedsYou"
 private const val PICK_UP_SHOWN = 4
 
 /**
- * Home answers one question: what needs me now? The site in one line; then "Needs you", only what waits (each line opens
- * its list, already filtered; the plugins draw their own lines in [HOME_NEEDS_YOU_SLOT], the shell adds the plan's
- * failed payment); then where the person left off; then the one-line prompt that starts Create with AI. No charts: those
- * stay in Overview.
+ * Home is the overview (AGL-4011). The site or workspace in one line (the workspace's proposed plan under it); then
+ * "Needs you", only what waits (each line opens its list, already filtered; the plugins draw their own lines in
+ * [HOME_NEEDS_YOU_SLOT], the shell adds the plan's failed payment); then the numbers (a site's Traffic, its cards and its
+ * recent activity, or the cards that total the workspace); then where the person left off; then the one-line prompt that
+ * starts Create with AI. Analytics holds the full drill-down.
  */
 @Composable
 internal fun HomeScreen(
@@ -105,6 +106,9 @@ internal fun HomeScreen(
         return@Column
       }
       HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
+      if (site == null) {
+        HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, com.aglyn.contracts.Contracts.platformBrandName)
+      }
 
       CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {
         Column(verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
@@ -122,6 +126,13 @@ internal fun HomeScreen(
             )
           }
         }
+      }
+
+      // The numbers (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards.
+      if (site != null) {
+        HomeSiteStats(services, context, site.id) { navigator.select(NavKeys.of(NavKeys.ANALYTICS_SCREEN)) }
+      } else {
+        workspace.org?.id?.let { HomeOrgGlance(services, context, it) }
       }
 
       val recents = prefs.recents.filter { it.orgId == workspace.org?.id }.take(PICK_UP_SHOWN)

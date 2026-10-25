@@ -54,7 +54,7 @@ class NavShellUiTest {
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-overview") > 0 }
     onNodeWithTag("nav-site-home").assertIsDisplayed()
-    onNodeWithTag("nav-site-overview").assertTextContains("Overview")
+    onNodeWithTag("nav-site-overview").assertTextContains("Analytics")
     // Website is folded until opened (it holds nothing in use yet); it lists the site's Pages and Media.
     assertEquals(0, onAllNodesWithTagCount("nav-site-pages"))
     onNodeWithTag("nav-group-website").performClick()

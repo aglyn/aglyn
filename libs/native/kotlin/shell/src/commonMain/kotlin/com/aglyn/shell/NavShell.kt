@@ -804,7 +804,7 @@ private fun openOneBoxLine(
 private fun titleFor(services: ShellServices, navigator: ShellNavigator, route: Route?, row: NavItem?, named: String?): String = when (route) {
   is Route.Screen -> named ?: services.registry.screen(route.screenId)?.title ?: "Not found"
   is Route.Besigner -> "Besigner"
-  Route.Analytics -> "Overview"
+  Route.Analytics -> "Analytics"
   Route.Switcher -> "Switch workspace or site"
   Route.NotificationSettings -> "Notifications"
   Route.ThemeSettings -> "Theme"

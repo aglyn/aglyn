@@ -201,6 +201,7 @@ const areas = [
   ['email', 'seedEmail'],
   ['store', 'seedCommerce'],
   ['insights', 'seedInsights'],
+  ['homestats', 'seedHomestats'],
   ['site-rules', 'seedAutomation'],
   ['pos', 'seedPos'],
   ['notifications', 'seedNotifications'],

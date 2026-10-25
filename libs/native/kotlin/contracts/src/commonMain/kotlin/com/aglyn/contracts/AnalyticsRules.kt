@@ -100,3 +100,52 @@ fun analyticsDayId(atMs: Long): String = localParts(atMs, "UTC").dayKey
 
 /** The ids of the [days] UTC days ending today, newest first (`recentDayIds`). */
 fun recentDayIds(nowMs: Long, days: Int): List<String> = (0 until days).map { analyticsDayId(nowMs - it * 86_400_000L) }
+
+/** One UTC day of one page's traffic (`hosts/{id}/screenAnalytics/{screenId}:{day}`), what [summarizeScreenTraffic] reads. */
+data class ScreenTrafficDay(
+  val total: Double,
+  val referrers: Map<String, Double>,
+  val devices: Map<String, Double>,
+  val dwellMs: Double,
+  val dwellSamples: Double,
+) {
+  companion object {
+    /** A day document's fields, a missing document or field reading as zero (the console card's read). */
+    fun of(data: Map<String, Any?>?): ScreenTrafficDay {
+      fun number(value: Any?) = (value as? Number)?.toDouble() ?: 0.0
+      fun counts(value: Any?): Map<String, Double> =
+        (value as? Map<*, *>).orEmpty().mapNotNull { (k, v) -> (v as? Number)?.let { k.toString() to it.toDouble() } }.toMap()
+      return ScreenTrafficDay(
+        number(data?.get("total")), counts(data?.get("referrers")), counts(data?.get("devices")),
+        number(data?.get("dwellMs")), number(data?.get("dwellSamples")),
+      )
+    }
+  }
+}
+
+/**
+ * A page's "Page traffic" figures over its days, oldest first (`summarizeScreenTraffic`): total, the dwell averaged over
+ * the visits that reported one, the `desktop · mobile · tablet` line and the five top referrers.
+ */
+fun summarizeScreenTraffic(days: List<ScreenTrafficDay>): ScreenTrafficSummary {
+  val total = days.sumOf { it.total }
+  val dwellTotal = days.sumOf { it.dwellMs }
+  val samples = days.sumOf { it.dwellSamples }
+  val referrers = linkedMapOf<String, Double>()
+  val devices = mutableMapOf<String, Double>()
+  for (day in days) {
+    for ((key, count) in day.referrers.entries.sortedBy { it.key }) referrers[key] = (referrers[key] ?: 0.0) + count
+    for ((key, count) in day.devices) devices[key] = (devices[key] ?: 0.0) + count
+  }
+  val deviceSum = devices.values.sum()
+  val deviceLine = if (deviceSum > 0) {
+    listOf("desktop", "mobile", "tablet").filter { (devices[it] ?: 0.0) != 0.0 }
+      .joinToString(" · ") { "$it ${jsRound((devices[it] ?: 0.0) / deviceSum * 100)}%" }
+  } else ""
+  return ScreenTrafficSummary(
+    avgDwellMs = if (samples > 0) dwellTotal / samples else null,
+    deviceLine = deviceLine,
+    topReferrers = referrers.entries.sortedByDescending { it.value }.take(5).map { ScreenReferrerCount(count = it.value, referrer = it.key) },
+    total = total,
+  )
+}

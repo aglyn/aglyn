@@ -235,7 +235,9 @@
     },
     "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts": {
       "types": [
-        "ScreenTrafficRow"
+        "ScreenTrafficRow",
+        "ScreenReferrerCount",
+        "ScreenTrafficSummary"
       ]
     },
     "libs/aglyn/src/lib/app-utils/functions.ts": {
@@ -380,7 +382,8 @@
         "CRM_LEAD_STATUS_LABELS",
         "CRM_ACTIVITIES_PER_RECORD_CEILING",
         "CRM_EMAIL_SUBJECT_MAX",
-        "CRM_EMAIL_BODY_MAX"
+        "CRM_EMAIL_BODY_MAX",
+        "CRM_LEAD_CLOSED_STATUSES"
       ]
     },
     "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
@@ -995,6 +998,32 @@
         "PLAN_CARD_ADVANCE_MS",
         "PLAN_CARD_WARNING_SHARE"
       ]
+    },
+    "libs/plugins/ai/src/lib/activity/ai-activity-words.ts": {
+      "values": [
+        "AI_ACTIVITY_ACTION_LABELS",
+        "AI_ACTIVITY_ACTION_SENTENCES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/activity-type-labels.ts": {
+      "values": [
+        "ACTIVITY_TYPE_LABELS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/platform-brand.ts": {
+      "values": [
+        "PLATFORM_BRAND_NAME"
+      ]
+    },
+    "libs/plugins/ai/src/lib/model/ai-insight-ask.ts": {
+      "values": [
+        "AI_INSIGHT_WINDOWS",
+        "AI_INSIGHT_DEFAULT_DAYS",
+        "AI_INSIGHT_QUESTION_MAX_CHARS",
+        "AI_INSIGHT_CARD_COPY",
+        "AI_INSIGHT_PLACEHOLDERS",
+        "AI_INSIGHT_DIALOG_COPY"
+      ]
     }
   },
   "assembled": {
@@ -1024,7 +1053,7 @@
         "libs/plugins/outreach/src/lib/native-nav.ts",
         "libs/plugins/redirects/src/lib/native-nav.ts",
         "libs/plugins/sms/src/lib/native-nav.ts",
-      "libs/plugins/waivers/src/lib/native-nav.ts",
+        "libs/plugins/waivers/src/lib/native-nav.ts",
         "libs/plugins/workflows/src/lib/native-nav.ts"
       ]
     },
@@ -29138,6 +29167,155 @@
         [
           [],
           true
+        ]
+      ]
+    },
+    "summarizeScreenTraffic": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "total": 0,
+              "referrers": {},
+              "devices": {},
+              "dwellMs": 0,
+              "dwellSamples": 0
+            },
+            {
+              "total": 0,
+              "referrers": {},
+              "devices": {},
+              "dwellMs": 0,
+              "dwellSamples": 0
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 5,
+              "referrers": {
+                "google_com": 2,
+                "bing_com": 1
+              },
+              "devices": {
+                "mobile": 3,
+                "desktop": 2
+              },
+              "dwellMs": 120000,
+              "dwellSamples": 4
+            },
+            {
+              "total": 4,
+              "referrers": {
+                "google_com": 1,
+                "yelp_com": 3
+              },
+              "devices": {
+                "mobile": 1,
+                "tablet": 1
+              },
+              "dwellMs": 0,
+              "dwellSamples": 0
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 3,
+              "referrers": {
+                "a_com": 1,
+                "b_com": 1,
+                "c_com": 1,
+                "d_com": 1,
+                "e_com": 1,
+                "f_com": 1
+              },
+              "devices": {
+                "desktop": 1,
+                "mobile": 1,
+                "tablet": 1
+              },
+              "dwellMs": 3725000,
+              "dwellSamples": 1
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 2,
+              "referrers": {},
+              "devices": {
+                "tv": 2
+              },
+              "dwellMs": 5000,
+              "dwellSamples": 2
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "total": 7,
+              "referrers": {
+                "x_com": 3
+              },
+              "devices": {
+                "desktop": 2,
+                "mobile": 1,
+                "watch": 4
+              },
+              "dwellMs": 9000,
+              "dwellSamples": 3
+            },
+            {
+              "total": 1,
+              "referrers": {
+                "x_com": 1,
+                "y_com": 4
+              },
+              "devices": {
+                "desktop": 1
+              },
+              "dwellMs": 0,
+              "dwellSamples": 0
+            }
+          ]
+        ]
+      ]
+    },
+    "describeAutomationRunAction": {
+      "module": "libs/plugins/workflows/src/lib/model/run-activity-words.ts",
+      "args": [
+        [
+          "Action ran on order.created"
+        ],
+        [
+          "Workflow failed on form.submitted: timeout"
+        ],
+        [
+          "Org automation skipped on booking.created"
+        ],
+        [
+          "Action is waiting, on order.paid"
+        ],
+        [
+          "Action ran on webhook with errors: step 2"
+        ],
+        [
+          "Saved the screen"
+        ],
+        [
+          "  Workflow ran on contactCreated  "
+        ],
+        [
+          ""
         ]
       ]
     },

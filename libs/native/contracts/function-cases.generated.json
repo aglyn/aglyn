@@ -6494,6 +6494,59 @@
         }
       ]
     },
+    "describeAutomationRunAction": {
+      "module": "libs/plugins/workflows/src/lib/model/run-activity-words.ts",
+      "cases": [
+        {
+          "args": [
+            "Action ran on order.created"
+          ],
+          "result": "Automation ran: Order created"
+        },
+        {
+          "args": [
+            "Workflow failed on form.submitted: timeout"
+          ],
+          "result": "Workflow failed: Form submitted"
+        },
+        {
+          "args": [
+            "Org automation skipped on booking.created"
+          ],
+          "result": "Org automation skipped: Booking created"
+        },
+        {
+          "args": [
+            "Action is waiting, on order.paid"
+          ],
+          "result": "Automation is waiting: Order paid"
+        },
+        {
+          "args": [
+            "Action ran on webhook with errors: step 2"
+          ],
+          "result": "Automation failed: Webhook"
+        },
+        {
+          "args": [
+            "Saved the screen"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "  Workflow ran on contactCreated  "
+          ],
+          "result": "Workflow ran: Contact created"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        }
+      ]
+    },
     "describeFulfillmentLines": {
       "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "cases": [
@@ -51604,7 +51657,7 @@
                       "traffic",
                       "visitors"
                     ],
-                    "label": "Overview",
+                    "label": "Analytics",
                     "order": 20,
                     "screen": "shell.analytics"
                   }
@@ -52916,7 +52969,7 @@
                       "traffic",
                       "visitors"
                     ],
-                    "label": "Overview",
+                    "label": "Analytics",
                     "order": 20,
                     "screen": "shell.analytics"
                   }
@@ -53610,7 +53663,7 @@
                       "traffic",
                       "visitors"
                     ],
-                    "label": "Overview",
+                    "label": "Analytics",
                     "order": 20,
                     "screen": "shell.analytics"
                   }
@@ -61072,6 +61125,217 @@
             }
           ],
           "result": ""
+        }
+      ]
+    },
+    "summarizeScreenTraffic": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": {
+            "avgDwellMs": null,
+            "deviceLine": "",
+            "topReferrers": [],
+            "total": 0
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "total": 0,
+                "referrers": {},
+                "devices": {},
+                "dwellMs": 0,
+                "dwellSamples": 0
+              },
+              {
+                "total": 0,
+                "referrers": {},
+                "devices": {},
+                "dwellMs": 0,
+                "dwellSamples": 0
+              }
+            ]
+          ],
+          "result": {
+            "avgDwellMs": null,
+            "deviceLine": "",
+            "topReferrers": [],
+            "total": 0
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "total": 5,
+                "referrers": {
+                  "google_com": 2,
+                  "bing_com": 1
+                },
+                "devices": {
+                  "mobile": 3,
+                  "desktop": 2
+                },
+                "dwellMs": 120000,
+                "dwellSamples": 4
+              },
+              {
+                "total": 4,
+                "referrers": {
+                  "google_com": 1,
+                  "yelp_com": 3
+                },
+                "devices": {
+                  "mobile": 1,
+                  "tablet": 1
+                },
+                "dwellMs": 0,
+                "dwellSamples": 0
+              }
+            ]
+          ],
+          "result": {
+            "avgDwellMs": 30000,
+            "deviceLine": "desktop 29% · mobile 57% · tablet 14%",
+            "topReferrers": [
+              {
+                "count": 3,
+                "referrer": "google_com"
+              },
+              {
+                "count": 3,
+                "referrer": "yelp_com"
+              },
+              {
+                "count": 1,
+                "referrer": "bing_com"
+              }
+            ],
+            "total": 9
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "total": 3,
+                "referrers": {
+                  "a_com": 1,
+                  "b_com": 1,
+                  "c_com": 1,
+                  "d_com": 1,
+                  "e_com": 1,
+                  "f_com": 1
+                },
+                "devices": {
+                  "desktop": 1,
+                  "mobile": 1,
+                  "tablet": 1
+                },
+                "dwellMs": 3725000,
+                "dwellSamples": 1
+              }
+            ]
+          ],
+          "result": {
+            "avgDwellMs": 3725000,
+            "deviceLine": "desktop 33% · mobile 33% · tablet 33%",
+            "topReferrers": [
+              {
+                "count": 1,
+                "referrer": "a_com"
+              },
+              {
+                "count": 1,
+                "referrer": "b_com"
+              },
+              {
+                "count": 1,
+                "referrer": "c_com"
+              },
+              {
+                "count": 1,
+                "referrer": "d_com"
+              },
+              {
+                "count": 1,
+                "referrer": "e_com"
+              }
+            ],
+            "total": 3
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "total": 2,
+                "referrers": {},
+                "devices": {
+                  "tv": 2
+                },
+                "dwellMs": 5000,
+                "dwellSamples": 2
+              }
+            ]
+          ],
+          "result": {
+            "avgDwellMs": 2500,
+            "deviceLine": "",
+            "topReferrers": [],
+            "total": 2
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "total": 7,
+                "referrers": {
+                  "x_com": 3
+                },
+                "devices": {
+                  "desktop": 2,
+                  "mobile": 1,
+                  "watch": 4
+                },
+                "dwellMs": 9000,
+                "dwellSamples": 3
+              },
+              {
+                "total": 1,
+                "referrers": {
+                  "x_com": 1,
+                  "y_com": 4
+                },
+                "devices": {
+                  "desktop": 1
+                },
+                "dwellMs": 0,
+                "dwellSamples": 0
+              }
+            ]
+          ],
+          "result": {
+            "avgDwellMs": 3000,
+            "deviceLine": "desktop 38% · mobile 13%",
+            "topReferrers": [
+              {
+                "count": 4,
+                "referrer": "x_com"
+              },
+              {
+                "count": 4,
+                "referrer": "y_com"
+              }
+            ],
+            "total": 8
+          }
         }
       ]
     },

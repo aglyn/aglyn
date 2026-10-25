@@ -44,6 +44,13 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
 
   /// The address a person knows the site by: its custom domain, else its platform address (the Sites list's rule).
   public var shownAddress: String { cname ?? HostStatus.siteAddress(subdomain) ?? subdomain }
+
+  /// The same once the host document is read (the Sites list's order): the host's own custom domain, else the
+  /// membership mirror's, else `<slug>.aglyn.app`, so a mirror written before it carried `cname` still shows the address
+  /// the live site answers on.
+  public func shownAddress(hostCname: String?) -> String {
+    hostCname.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? shownAddress
+  }
 }
 
 /// What a workspace's own document says about how it looks: its logos (`logoUrl`, `logoDarkUrl`), its brand color

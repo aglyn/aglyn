@@ -34,7 +34,10 @@ import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
 import { formatDwell } from '@aglyn/aglyn/app-utils/analytics-summary'
-import { referrerLabel } from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
+import {
+  referrerLabel,
+  summarizeScreenTraffic,
+} from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
 import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -205,40 +208,13 @@ export function ScreenAnalyticsCard(props: {
     )
   }
 
-  const total = (days ?? []).reduce((sum, day) => sum + day.total, 0)
-  // Averaged over SAMPLES, not over views (AGL-2182). Not every visit
-  // reports a dwell — a killed tab sends nothing — so dividing by views
-  // would report a number lower than any visit actually spent.
-  const dwellTotalMs = (days ?? []).reduce((sum, day) => sum + day.dwellMs, 0)
-  const dwellSamples = (days ?? []).reduce(
-    (sum, day) => sum + day.dwellSamples,
-    0,
-  )
-  const avgDwell = dwellSamples > 0 ? dwellTotalMs / dwellSamples : null
+  // The card's figures (AGL-4011): one function, shared with the native page detail, so both read the same numbers.
+  // The dwell is averaged over the visits that reported one (AGL-2182), never over views.
+  const summary = summarizeScreenTraffic(days ?? [])
+  const total = summary.total
+  const avgDwell = summary.avgDwellMs
   const max = Math.max(1, ...(days ?? []).map((day) => day.total))
-  const topReferrers = Object.entries(
-    (days ?? []).reduce<Record<string, number>>((acc, day) => {
-      for (const [host, count] of Object.entries(day.referrers)) {
-        acc[host] = (acc[host] ?? 0) + count
-      }
-      return acc
-    }, {}),
-  )
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-  const deviceTotals = (days ?? []).reduce<Record<string, number>>(
-    (acc, day) => {
-      for (const [device, count] of Object.entries(day.devices)) {
-        acc[device] = (acc[device] ?? 0) + count
-      }
-      return acc
-    },
-    {},
-  )
-  const deviceSum = Object.values(deviceTotals).reduce(
-    (sum, count) => sum + count,
-    0,
-  )
+  const topReferrers = summary.topReferrers
 
   return (
     <CardDisplay
@@ -297,23 +273,15 @@ export function ScreenAnalyticsCard(props: {
               </Tooltip>
             ))}
           </Stack>
-          {deviceSum ? (
+          {summary.deviceLine ? (
             <Typography variant="caption" color="text.secondary">
-              {['desktop', 'mobile', 'tablet']
-                .filter((device) => deviceTotals[device])
-                .map(
-                  (device) =>
-                    `${device} ${Math.round(
-                      ((deviceTotals[device] ?? 0) / deviceSum) * 100,
-                    )}%`,
-                )
-                .join(' · ')}
+              {summary.deviceLine}
             </Typography>
           ) : null}
           {topReferrers.length ? (
             <Stack spacing={0.5}>
               <Typography variant="subtitle2">{'Top referrers'}</Typography>
-              {topReferrers.map(([host, count]) => (
+              {topReferrers.map(({ referrer: host, count }) => (
                 <Stack
                   key={host}
                   direction="row"

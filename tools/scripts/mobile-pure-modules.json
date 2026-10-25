@@ -6,6 +6,10 @@
       "why": "The preferences a person keeps on users/{uid} (pins capped at five, recent workspaces, starred and recent items, workspace colors, the synced theme) and the pure rules over them, so the apps write the shape the console and the rules hold (AGL-3943); no imports at all."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/activity-type-labels.ts",
+      "why": "The nouns an activity row names its target by (ACTIVITY_TYPE_LABELS): the native Recent activity and Page Activity rows read them (AGL-4011); no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
     },
@@ -38,6 +42,10 @@
       "why": "Which sites present as one sender, read by the CRM's scope (crmScopeTokens, crmReadTokens) in the apps (AGL-3669)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "why": "A CRM custom field's types, labels and the currency field's minor-unit rules (the currency's own decimals, a typed amount's parse), read by the native field editors and replayed by their function cases (AGL-3971); imports only crm and a type."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
       "why": "Reached by crm.ts: a contact's shape and its holder facets."
     },
@@ -56,10 +64,6 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
       "why": "Reached by crm.ts: the CRM's fixed vocabularies, no imports."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
-      "why": "A CRM custom field's types, labels and the currency field's minor-unit rules (the currency's own decimals, a typed amount's parse), read by the native field editors and replayed by their function cases (AGL-3971); imports only crm and a type."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm.ts",
@@ -196,6 +200,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/picklists.ts",
       "why": "Reached by crm.ts: the picklist value rules over plain data."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "why": "The native plan card's meters (AGL-3992): which usage meters it rotates through, the one each screen leads with, and their order, for both apps. Pure constants and three functions; imports nothing."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/platform-brand.ts",
@@ -336,6 +344,14 @@
     {
       "path": "libs/plugins/accounting/src/lib/native-nav.ts",
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/activity/ai-activity-words.ts",
+      "why": "The AI activity codes and their words and sentences (AI_ACTIVITY_ACTION_LABELS, AI_ACTIVITY_ACTION_SENTENCES), so the native activity rows name an AI row as the console does (AGL-4011); imports only platform-brand."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/model/ai-insight-ask.ts",
+      "why": "The words and bounds of \"Ask AI about these numbers\" and its dialog (the windows, the placeholders, every label), so the native tile and dialog say what the console says (AGL-4011); no imports."
     },
     {
       "path": "libs/plugins/ai/src/lib/model/ai-permissions.ts",
@@ -830,6 +846,10 @@
       "why": "Where this plugin's console tab sits for the native apps (AGL-4042), assembled into the nav manifest by generate:native-contracts; imports only the core's plain nav module."
     },
     {
+      "path": "libs/plugins/workflows/src/lib/model/run-activity-words.ts",
+      "why": "An automation run line in words (describeAutomationRunAction), replayed by the native activity rows' function cases (AGL-4011); imports only host-events."
+    },
+    {
       "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",
       "why": "A webhook's shape and the delivery URL hint the native webhook form shows (AGL-3670)."
     },
@@ -908,10 +928,6 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
-      "why": "The native plan card's meters (AGL-3992): which usage meters it rotates through, the one each screen leads with, and their order, for both apps. Pure constants and three functions; imports nothing."
     }
   ]
 }

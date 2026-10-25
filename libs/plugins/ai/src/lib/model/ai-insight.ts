@@ -22,6 +22,13 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import { weeklySummaryPeriod } from '@aglyn/aglyn/app-utils/weekly-summary'
 import type { AiJob, AiJobOutput } from './ai-jobs.types'
+import { AI_INSIGHT_DEFAULT_DAYS, AI_INSIGHT_WINDOWS } from './ai-insight-ask'
+
+export {
+  AI_INSIGHT_DEFAULT_DAYS,
+  AI_INSIGHT_QUESTION_MAX_CHARS,
+  AI_INSIGHT_WINDOWS,
+} from './ai-insight-ask'
 
 /**
  * Insights (AGL-2915): what an `insight` job answers, in the shape the step
@@ -141,12 +148,6 @@ export const AI_INSIGHT_DIGEST_READERS: readonly string[] = [
   'bookings.services',
 ]
 
-/** The windows, in days, an insight reads: the Traffic card's own ranges. */
-export const AI_INSIGHT_WINDOWS: readonly number[] = [7, 14, 30, 90]
-
-/** The window a question that names none reads: the Traffic card's default. */
-export const AI_INSIGHT_DEFAULT_DAYS = 14
-
 /** The window a weekly digest reads. */
 export const AI_INSIGHT_DIGEST_DAYS = 7
 
@@ -189,9 +190,6 @@ export const AI_INSIGHT_MAX_CITED_ROWS = 10
 
 /** The most readers one answer reads. */
 export const AI_INSIGHT_MAX_READS = 4
-
-/** The longest question an insight job admits. */
-export const AI_INSIGHT_QUESTION_MAX_CHARS = 1_000
 
 /**
  * A table as an insight job keeps it: the figures a reader returned, the
