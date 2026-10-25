@@ -18,6 +18,9 @@ struct LastCampaignCard: View {
   /// How many sends the card searches for the last SENT one (`SEARCH_CEILING`).
   static let searchCeiling = 30
 
+  /// One of the send's counters, as the console prints it (`stats.sent ?? 0`).
+  static func figure(_ stats: [String: Any]?, _ key: String) -> String { ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted() }
+
   private var lastSent: FirestoreDocument? {
     sends.rows.filter { $0.string("status") == "sent" }
       .max { ($0.date("sentAt") ?? .distantPast) < ($1.date("sentAt") ?? .distantPast) }
@@ -27,7 +30,6 @@ struct LastCampaignCard: View {
     Group {
       if let campaign = lastSent {
         let stats = campaign.data["stats"] as? [String: Any]
-        func figure(_ key: String) -> String { ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted() }
         VStack(alignment: .leading, spacing: AglynSpace.one) {
           HStack(alignment: .firstTextBaseline) {
             Text("Last campaign").font(AglynFont.headline).accessibilityAddTraits(.isHeader)
@@ -38,9 +40,9 @@ struct LastCampaignCard: View {
           }
           Text(campaign.string("subject") ?? "").font(AglynFont.subheadline).lineLimit(1)
           HStack(spacing: AglynSpace.three) {
-            AglynStatTile(figure("sent"), label: "Sent")
-            AglynStatTile(figure("opens"), label: "Opens")
-            AglynStatTile(figure("clicks"), label: "Clicks")
+            AglynStatTile(Self.figure(stats, "sent"), label: "Sent")
+            AglynStatTile(Self.figure(stats, "opens"), label: "Opens")
+            AglynStatTile(Self.figure(stats, "clicks"), label: "Clicks")
           }
           .fixedSize(horizontal: false, vertical: true)
         }
