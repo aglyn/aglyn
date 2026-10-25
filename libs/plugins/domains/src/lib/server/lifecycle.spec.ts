@@ -76,6 +76,15 @@ function fakeDriver(overrides: Partial<RegistrarDriver> = {}): jest.Mocked<Regis
     contactVerification: async () => yes({ verified: true, verifyByMs: null, email: null }),
     authCode: async () => yes('AUTH'),
     listOwned: async () => yes([]),
+    transferPrice: async () => yes(11.25),
+    transferIn: async () => yes({ orderId: 'transfer-1' }),
+    transferStatus: async () => yes({ status: 'pending' as const, state: 'pending_transfer' }),
+    nameservers: async () =>
+      yes({ ours: true, nameservers: ['ns1.vercel-dns.com'], intended: ['ns1.vercel-dns.com'] }),
+    listDnsRecords: async () => yes([]),
+    createDnsRecord: async () => yes({ id: 'rec-1' }),
+    updateDnsRecord: async () => yes(true as const),
+    deleteDnsRecord: async () => yes(true as const),
     ...overrides,
   }
   for (const key of Object.keys(driver) as (keyof RegistrarDriver)[]) {
