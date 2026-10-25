@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Card readers (and buying them from Aglyn, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.
+description: Card readers (and buying them, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, barcode scanning, and product and shipping labels.
 ---
 
 # POS hardware
@@ -153,6 +153,21 @@ card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
 
 **Who can buy:** an admin or editor of the site with the **Use the point of
 sale** permission, on a plan that includes POS.
+
+### Records of your purchases {#hardware-purchase-records}
+
+Aglyn is the seller of these readers, so it keeps a record of each sale for tax
+and accounting: the items and their prices, shipping, tax, the total, the order's
+status dates, Stripe's payment references, and the state, ZIP code and country it
+shipped to. That record stays after the workspace is
+[deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
+for as long as tax law requires. It never holds the buyer's name, email, phone,
+street address or tracking number.
+
+If the person who placed an order
+[closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
+the workspace keeps the order and its amounts, and their name, email, phone,
+street address and the tracking are removed from it.
 
 ## Receipt printers
 

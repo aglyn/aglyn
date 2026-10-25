@@ -46,7 +46,8 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useMerchantPayments } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useMerchantPayments, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import {
   useFirestoreCollection,
@@ -117,6 +118,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
   // charge turns each guest away; the card says so up front.
   const payments = useMerchantPayments(hostId)
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const {
@@ -232,7 +234,10 @@ export function ReservationsCard(props: ReservationsCardProps) {
     checkIn: string
     checkOut: string
     guestName: string
+    /** One walk-in attempt: a retry of it finds its own stay (AGL-4046). */
+    attemptId: string
   } | null>(null)
+  const [walkInBusy, setWalkInBusy] = useState(false)
 
   const handleResourceSave = useCallback(async () => {
     if (!resourceDraft?.name?.trim() || !(resourceDraft.nightlyRateUsd! > 0)) {
@@ -399,34 +404,56 @@ export function ReservationsCard(props: ReservationsCardProps) {
         persist: false,
       })
     }
-    await setDoc(
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'reservations',
-        Aglyn.createResourceUid(),
-      ),
-      {
-        resourceId: walkIn.resourceId,
-        status: 'confirmed',
-        checkInDayMs,
-        checkOutDayMs,
-        guestName: walkIn.guestName || null,
-        guestEmail: null,
-        nights: quote.nights,
-        totalCents: quote.totalCents,
-        depositCents: 0,
-        paidCents: 0,
-        createdAtMs: Date.now(),
-      } satisfies CommerceModel.HostReservation,
-    )
+    /*
+     * The check above is the instant answer; the WRITE goes through
+     * `/api/commerce/reservations/walk-in` (AGL-4046), which re-asks the same
+     * question inside the transaction that books the stay. A client
+     * read-then-write let two staff on two devices both take the last unit.
+     */
+    setWalkInBusy(true)
+    try {
+      const response = await authorizedFetch(
+        user,
+        '/api/commerce/reservations/walk-in',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId,
+            resourceId: walkIn.resourceId,
+            checkInDayMs,
+            checkOutDayMs,
+            guestName: walkIn.guestName || undefined,
+            reservationId: walkIn.attemptId,
+          }),
+        },
+      )
+      const answer = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(
+          answer?.error ?? 'Could not reserve the walk-in — try again',
+          {
+            variant: response.status === 409 || response.status === 400
+              ? 'warning'
+              : 'error',
+            persist: false,
+          },
+        )
+      }
+    } catch {
+      return void enqueueSnackbar('Could not reserve the walk-in — try again', {
+        variant: 'error',
+        persist: false,
+      })
+    } finally {
+      setWalkInBusy(false)
+    }
     setWalkIn(null)
     enqueueSnackbar('Walk-in reserved — collect payment at POS', {
       variant: 'success',
       persist: false,
     })
-  }, [walkIn, resourceDocs, firestore, hostId, enqueueSnackbar])
+  }, [walkIn, resourceDocs, firestore, hostId, user, enqueueSnackbar])
 
   return (
     <CardDisplay
@@ -542,6 +569,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
                 checkIn: '',
                 checkOut: '',
                 guestName: '',
+                attemptId: Aglyn.createResourceUid(),
               })
             }
           >
@@ -900,7 +928,12 @@ export function ReservationsCard(props: ReservationsCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!walkIn?.resourceId || !walkIn?.checkIn || !walkIn?.checkOut}
+            disabled={
+              walkInBusy ||
+              !walkIn?.resourceId ||
+              !walkIn?.checkIn ||
+              !walkIn?.checkOut
+            }
             onClick={handleWalkIn}
           >
             {'Reserve'}

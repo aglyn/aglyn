@@ -42,12 +42,16 @@ import {
   formatSiteCareUsd,
   isSiteCareMonthKey,
   isSiteCarePublishAction,
+  otherSiteCareCandidates,
+  readSiteCareCandidates,
   readSiteCareMinutes,
   SITE_CARE_BODY_MAX,
   SITE_CARE_LIVE_CHARGE_STATUSES,
   SITE_CARE_RESPONSE_BUSINESS_DAYS,
+  SITE_CARE_STAFF_COLLECTION,
   SITE_CARE_SUBJECT_MAX,
   SITE_CARE_TICKET_KIND,
+  siteCareCandidatesSentence,
   siteCareChargeWords,
   siteCareCloseVerdict,
   siteCareExtraTimeCents,
@@ -56,6 +60,7 @@ import {
   siteCareMonthKey,
   siteCareMonthSentence,
   siteCareMonthStatement,
+  siteCareMoveBlockedReason,
   siteCareOrgMonth,
   siteCarePublishSentence,
   siteCareStatementRequest,
@@ -65,6 +70,7 @@ import {
   type SiteCarePublishLink,
   type SiteCareRequest,
   type SiteCareSource,
+  type SiteCareWorkspaceCandidate,
 } from '@aglyn/aglyn/app-utils/site-care'
 import { addBusinessDays } from '@aglyn/aglyn/app-utils/support-tiers'
 import {
@@ -110,7 +116,11 @@ import {
  * the publish that shipped it. Beside it, an append-only history
  * (`supportTickets/{id}/siteCareHistory`), and per workspace and month a
  * document for goodwill minutes with its own history
- * (`orgs/{orgId}/siteCareMonths/{YYYY-MM}`). None of it is in the Firestore
+ * (`orgs/{orgId}/siteCareMonths/{YYYY-MM}`). An emailed request from a
+ * sender in several Site Care workspaces also keeps every one of them, for
+ * staff only, at `supportTickets/{id}/siteCareStaff/intake` (AGL-4031): the
+ * ticket itself is returned to the workspace's members, and which other
+ * workspaces the sender belongs to is not theirs to read. None of it is in the Firestore
  * rules: every read and write passes the console's routes, as the rest of
  * the support system does.
  *
@@ -129,6 +139,7 @@ import {
 const TICKETS = 'supportTickets'
 export const SITE_CARE_HISTORY_COLLECTION = 'siteCareHistory'
 export const SITE_CARE_MONTHS_COLLECTION = 'siteCareMonths'
+const SITE_CARE_INTAKE_DOC = 'intake'
 
 /** Who did something. `uid` null is the platform itself. */
 export interface SiteCareActor {
@@ -164,6 +175,10 @@ function ticketRef(firestore: FirebaseFirestore.Firestore, ticketId: string) {
 
 function ticketHistory(firestore: FirebaseFirestore.Firestore, ticketId: string) {
   return ticketRef(firestore, ticketId).collection(SITE_CARE_HISTORY_COLLECTION)
+}
+
+function intakeRef(firestore: FirebaseFirestore.Firestore, ticketId: string) {
+  return ticketRef(firestore, ticketId).collection(SITE_CARE_STAFF_COLLECTION).doc(SITE_CARE_INTAKE_DOC)
 }
 
 function monthRef(firestore: FirebaseFirestore.Firestore, orgId: string, month: string) {
@@ -325,6 +340,12 @@ export interface OpenSiteCareRequestInput {
    * twice.
    */
   dedupeKey?: string | null
+  /**
+   * Every Site Care workspace an emailed request's sender belongs to, the
+   * one it is filed on included (AGL-4031). Kept, for staff only, when there
+   * is more than one, so staff can move the request to the right one.
+   */
+  candidates?: readonly SiteCareWorkspaceCandidate[]
 }
 
 /** A document id derived from a received message, alphanumeric so it fits a reply address. */
@@ -356,6 +377,8 @@ export async function openSiteCareRequest(
     ? firestore.collection(TICKETS).doc(siteCareMessageDocId('care', input.dedupeKey))
     : firestore.collection(TICKETS).doc(createResourceUid())
   if (input.dedupeKey && (await ref.get()).exists) return { ticketId: ref.id, dueAtMs, duplicate: true }
+  const candidates = readSiteCareCandidates(input.candidates)
+  const others = candidates.length > 1 ? otherSiteCareCandidates(candidates, input.orgId) : []
   const now = FieldValue.serverTimestamp()
   const batch = firestore.batch()
   batch.create(ref, {
@@ -389,6 +412,13 @@ export async function openSiteCareRequest(
     source: input.source,
     createdAt: now,
   })
+  if (others.length) {
+    batch.create(ref.collection(SITE_CARE_STAFF_COLLECTION).doc(SITE_CARE_INTAKE_DOC), {
+      candidates,
+      filedOnOrgId: input.orgId,
+      createdAt: now,
+    })
+  }
   appendHistoryRow(
     batch,
     firestore,
@@ -412,7 +442,12 @@ export async function openSiteCareRequest(
     body:
       `${input.requester.email ?? 'An owner'} asked ${input.source === 'email' ? 'by email' : 'from the console'} ` +
       `for workspace ${String(input.org['name'] ?? input.orgId)} (${input.orgId}). ` +
-      `It is due done by ${formatSiteCareDate(dueAtMs)}.`,
+      `It is due done by ${formatSiteCareDate(dueAtMs)}.` +
+      (others.length
+        ? ` The sender is in more than one Site Care workspace. ${siteCareCandidatesSentence(
+            others.map((other) => ({ ...other, name: `${other.name} (${other.orgId})` })),
+          )}. If it belongs to one of those, move it from the Site Care card on the request.`
+        : ''),
     link: `/admin/support?ticketId=${ref.id}`,
     orgId: input.orgId,
   })
@@ -527,6 +562,109 @@ export async function startSiteCareTimer(
       requestAudit(ticket.orgId, input.ticketId, 'timer.started'),
     )
     return request
+  })
+}
+
+// ── Moving to another workspace ─────────────────────────────────────────────
+
+/** The candidates recorded for a request, or none. */
+export async function readSiteCareCandidatesFor(
+  firestore: FirebaseFirestore.Firestore,
+  ticketId: string,
+): Promise<SiteCareWorkspaceCandidate[]> {
+  const snapshot = await intakeRef(firestore, ticketId).get()
+  return readSiteCareCandidates(snapshot.get('candidates'))
+}
+
+export interface MoveSiteCareResult {
+  request: SiteCareRequest
+  fromOrgId: string
+  orgId: string
+}
+
+/**
+ * Moves an open request to another Site Care workspace its sender belongs
+ * to (AGL-4031): an emailed request from a sender in several is filed on a
+ * default one, and staff move it when it belongs to another.
+ *
+ * Refused for a closed request, one with a charge or an owner's approval on
+ * it ({@link siteCareMoveBlockedReason}), and for any workspace that is not
+ * one of the candidates recorded at intake, no longer has Site Care, or no
+ * longer has the sender as a member.
+ *
+ * What moves is everything the request holds against a workspace: the
+ * ticket's `orgId` and plan, and its month key (`siteCareOrgMonth`), which
+ * is what puts a request in a workspace's month. A month's totals are not
+ * stored: they are read from the requests that carry its key, and an open
+ * request has logged no minutes yet (they are logged at close), so changing
+ * the key in this one write takes it out of the old workspace's month and
+ * into the new one's at once. A site it named is cleared, since that site
+ * is the old workspace's. The `request.moved` row and the staff audit row
+ * commit in the same transaction; nothing earlier is rewritten.
+ */
+export async function moveSiteCareRequest(
+  firestore: FirebaseFirestore.Firestore,
+  input: { ticketId: string; actor: SiteCareActor; orgId: unknown },
+  deps: SiteCareDeps = {},
+): Promise<MoveSiteCareResult> {
+  const targetOrgId = typeof input.orgId === 'string' ? input.orgId.trim() : ''
+  if (!targetOrgId) throw new SiteCareError('Choose the workspace to move it to.', 400)
+  const target = await readSiteCareOrg(firestore, targetOrgId)
+  if (!orgHasSiteCare(target)) {
+    throw new SiteCareError('That workspace does not have Site Care, so the request cannot move there.', 409)
+  }
+  const nowMs = nowOf(deps)
+  return firestore.runTransaction(async (tx) => {
+    const [ticketSnap, intakeSnap] = await Promise.all([
+      tx.get(ticketRef(firestore, input.ticketId)),
+      tx.get(intakeRef(firestore, input.ticketId)),
+    ])
+    const ticket = loadedTicket(ticketSnap)
+    const candidates = readSiteCareCandidates(intakeSnap.get('candidates'))
+    const others = otherSiteCareCandidates(candidates, ticket.orgId)
+    const blocked = siteCareMoveBlockedReason(ticket.request, others)
+    if (blocked) throw new SiteCareError(blocked, 409)
+    const candidate = others.find((other) => other.orgId === targetOrgId)
+    if (!candidate) {
+      throw new SiteCareError(
+        targetOrgId === ticket.orgId
+          ? 'The request is already on that workspace.'
+          : 'The sender is not recorded as a member of that workspace, so the request cannot move there.',
+        409,
+      )
+    }
+    const member = await tx.get(firestore.collection('orgs').doc(targetOrgId).collection('members').doc(candidate.uid))
+    if (!member.exists) {
+      throw new SiteCareError('The sender is no longer a member of that workspace, so the request cannot move there.', 409)
+    }
+    const fromOrgId = ticket.orgId
+    const toName = String(target?.['name'] ?? '') || candidate.name
+    const request: SiteCareRequest = { ...ticket.request, hostId: null }
+    tx.update(ticket.ref, {
+      orgId: targetOrgId,
+      plan: resolveEffectivePlan(target as never),
+      siteCare: request,
+      siteCareOrgMonth: siteCareOrgMonth(targetOrgId, request.month),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    appendHistoryRow(
+      tx,
+      firestore,
+      ticketHistory(firestore, input.ticketId),
+      historyRow({
+        atMs: nowMs,
+        by: input.actor,
+        kind: 'request.moved',
+        // The new workspace's statement and export read this row, so it
+        // names only that workspace; the one it left is an id in `before`.
+        summary: `Moved to ${toName}, the workspace it belongs to.`,
+        before: { orgId: fromOrgId, hostId: ticket.request.hostId },
+        after: { orgId: targetOrgId, hostId: null, month: request.month },
+        subjectId: input.ticketId,
+      }),
+      requestAudit(targetOrgId, input.ticketId, 'request.moved'),
+    )
+    return { request, fromOrgId, orgId: targetOrgId }
   })
 }
 
@@ -1728,6 +1866,10 @@ export interface SiteCareRequestPanel {
   suggestedMinutes: number
   /** What this request's month looks like with its other requests. */
   monthMinutesLeft: number
+  /** Other Site Care workspaces the sender belongs to (AGL-4031). */
+  otherWorkspaces: SiteCareWorkspaceCandidate[]
+  /** Why "Move to workspace" is refused, or null when it is offered. */
+  moveBlockedReason: string | null
 }
 
 /** Everything the staff panel shows for one request. */
@@ -1739,10 +1881,12 @@ export async function readSiteCareRequestPanel(
   const ticket = loadedTicket(await ticketRef(firestore, ticketId).get())
   const nowMs = nowOf(deps)
   const month = ticket.request.state === 'closed' ? ticket.request.month : siteCareMonthKey(nowMs)
-  const [history, context] = await Promise.all([
+  const [history, context, candidates] = await Promise.all([
     readHistoryRows(ticketHistory(firestore, ticketId)),
     readMonthContext(null, firestore, ticket.orgId, month, ticketId),
+    readSiteCareCandidatesFor(firestore, ticketId),
   ])
+  const otherWorkspaces = otherSiteCareCandidates(candidates, ticket.orgId)
   const pool = siteCareIncludedPool(context.goodwillMinutes)
   return {
     ticketId,
@@ -1752,5 +1896,7 @@ export async function readSiteCareRequestPanel(
     history,
     suggestedMinutes: closeMinutesFromTimer(ticket.request.timerStartedAtMs, nowMs),
     monthMinutesLeft: Math.max(0, pool - context.otherIncludedUsed),
+    otherWorkspaces,
+    moveBlockedReason: otherWorkspaces.length ? siteCareMoveBlockedReason(ticket.request, otherWorkspaces) : null,
   }
 }

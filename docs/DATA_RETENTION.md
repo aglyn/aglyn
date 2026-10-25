@@ -240,7 +240,7 @@ has a sweep in `eraseOrg` or is a defect.
 | `stripeCustomers` | yes (AGL-1448) | billing-identity → workspace correlation |
 | `orgSlugs` | yes (AGL-1448) | current slug **and every rename tombstone** |
 | `hostIndex` | yes, via `eraseHost` | subdomain/cname routing |
-| `platformRevenue`, `storefrontTaxCollected` | **never, deliberately** | tax records — see below |
+| `platformRevenue`, `storefrontTaxCollected`, `posHardwareSales` | **never, deliberately** | tax records — see below |
 | `contactSuppressions` | **never, deliberately** | do-not-contact list — see below |
 | `supportTickets` + `messages` | yes (AGL-1971), by `eraseOrg` — `eraseUser` redacts instead | subject, body (≤5000 chars), `authorEmail` |
 | `profiles/{uid}` | yes (AGL-1970), by `eraseUser` | handle, display name, `stripeAccountId` |
@@ -273,6 +273,18 @@ happened", which is precisely what Privacy Policy §5 reserves, and it carries n
 byte that sentence calls content. An org with no surviving listing keeps nothing
 at all. Both branches, and the emptiness of the tombstone, are pinned by
 `erase-publisher-identity.emulator.spec.ts`.
+
+**Hardware orders are erased by the org and redacted by the person (AGL-4038).**
+`eraseUser` runs commerce's user eraser, which finds every
+`hardwareOrders` document whose `createdBy` is the person (a collection-group
+query, so a workspace they have left is reached) and replaces `createdBy`,
+`contactEmail`, the shipping name, phone and address and the tracking with
+`null`, keeping the ship-to country, state and postal code as
+`shipping.taxRegion` and every amount; the `posHardwareSales` row is rewritten
+from the redacted order in the same transaction. It needs the
+`hardwareOrders.createdBy` `COLLECTION_GROUP` override; until that is deployed
+the eraser falls back to the workspaces the person belonged to and reports
+`formerWorkspacesReached: false`.
 
 **Support threads are erased by the org and redacted by the person (AGL-1971),
 and the asymmetry is deliberate.** `eraseOrg` `recursiveDelete`s each
@@ -307,9 +319,10 @@ whose instruction, and how many threads it destroyed.
 | --- | --- | --- |
 | `platformRevenue` | Per-transaction **tax filing records** (gross, tax, jurisdiction); the quarterly Texas return is their sum. GDPR Art. 17(3)(b) exempts records kept to comply with a legal obligation. Texas requires four years. It is org-keyed **by field** — exactly the shape `deleteDocsByOrgId` eats — which is the trap. | `erase-org-tax-retention.emulator.spec.ts`; the `$never` note at `erase.ts:188` (AGL-1811) |
 | `storefrontTaxCollected` | Same shape, same reason: sales tax charged to shoppers on an org's storefront, including tax a `mode: 'stripe'` store collects under Aglyn's own Texas registration. | `erase.ts:199` (AGL-1904) |
+| `posHardwareSales` | Aglyn's OWN sale of each card reader order a workspace placed in the POS hardware shop (Aglyn is seller of record): lines, amounts, tax, Stripe ids, status dates and the ship-to **country, state and postal code** (the sales-tax sourcing input). Written beside `orgs/{orgId}/hardwareOrders/{orderId}` in the same transaction as every write to it. Holds **no** buyer: no uid, name, email, phone, street or tracking. The order under the org, which does hold them, dies with `recursiveDelete(orgs/{orgId})` as before. | `erase-org-tax-retention.emulator.spec.ts`; the `$never` note in `erase.ts` (AGL-4038) |
 | `contactSuppressions` | A do-not-contact record must **keep** the identifier in order to recognise it and avoid contacting it again. Privacy Policy §11 states this in terms: "we will delete it from your account and keep it only on a limited internal do-not-contact list, used for nothing else". | `contact-suppression.ts` (AGL-1592) |
 
-These three are the only intended survivors. Everything else that survives an
+These four are the only intended survivors. Everything else that survives an
 erasure today is a defect, and they are listed below.
 
 ## Storage (`gs://aglyn-main.appspot.com`)

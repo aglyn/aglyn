@@ -17,7 +17,8 @@
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
-import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiAddonName, checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { HostScreenVisibility } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
@@ -91,7 +92,7 @@ export const AI_PRIVACY_ADMIN_COPY = 'Only a site admin can turn maintenance mod
 export const AI_PRIVACY_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_PRIVACY_NOTHING_COPY = 'The request named no privacy change this could make.'
 export const AI_PRIVACY_PASSWORD_COPY =
-  'To put a page behind a password, set it in that page’s Page Access card; Aglyn AI never handles passwords.'
+  `To put a page behind a password, set it in that page’s Page Access card; ${aiAddonName()} never handles passwords.`
 
 /** The most pages one item may change. */
 export const AI_PRIVACY_MAX_PAGES = 20
@@ -270,7 +271,7 @@ export async function writeAiSitePrivacy(
         done.push({
           output: 'maintenance',
           said: maintenance
-            ? `Maintenance mode is on: every address shows ${assigned ? 'your 503 page' : 'Aglyn’s plain “undergoing maintenance” notice, because no 503 page is assigned yet'} to every visitor.`
+            ? `Maintenance mode is on: every address shows ${assigned ? 'your 503 page' : `${PLATFORM_BRAND_NAME}’s plain “undergoing maintenance” notice, because no 503 page is assigned yet`} to every visitor.`
             : 'Maintenance mode is off: the site is open to visitors again.',
         })
       }

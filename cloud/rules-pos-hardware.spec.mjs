@@ -23,6 +23,11 @@
  * viewer, an editor whose `managePos` is switched off, a member of another
  * workspace and a signed-out visitor are refused.
  *
+ * The retained sale records beside them, `posHardwareSales/{orderId}`, are
+ * the platform's tax and accounting records and outlive the workspace: NO
+ * client reads, lists or writes one — not the buying workspace's owner, and
+ * not staff, who read them through the server.
+ *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-pos-hardware.spec.mjs
  */
@@ -73,6 +78,15 @@ const check = async (label, fn) => {
 }
 
 const orderRef = (db, id = ORDER) => doc(db, 'orgs', ORG, 'hardwareOrders', id)
+const saleRef = (db, id = ORDER) => doc(db, 'posHardwareSales', id)
+const SALE_DATA = {
+  orderId: ORDER,
+  orgId: ORG,
+  status: 'paid',
+  taxCents: 0,
+  totalCents: 12345,
+  shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+}
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
@@ -94,6 +108,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   })
   await setDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER), { role: 'owner', allHosts: true })
   await setDoc(orderRef(db), ORDER_DATA)
+  await setDoc(saleRef(db), SALE_DATA)
 })
 
 const as = (uid, claims = {}) => env.authenticatedContext(uid, { email_verified: true, ...claims }).firestore()
@@ -134,9 +149,30 @@ for (const [who, db] of [...mayRead, ...mayNotRead]) {
   await check(`${who} cannot delete an order`, () => assertFails(deleteDoc(orderRef(db()))))
 }
 
+for (const [who, db] of [...mayRead, ...mayNotRead]) {
+  await check(`${who} cannot read a retained sale record`, () => assertFails(getDoc(saleRef(db()))))
+  await check(`${who} cannot list the retained sale records`, () =>
+    assertFails(getDocs(collection(db(), 'posHardwareSales'))),
+  )
+  await check(`${who} cannot create a sale record`, () =>
+    assertFails(setDoc(saleRef(db(), 'hw_ffffffffffffffffffff'), SALE_DATA)),
+  )
+  await check(`${who} cannot change a sale record`, () => assertFails(updateDoc(saleRef(db()), { totalCents: 1 })))
+  await check(`${who} cannot delete a sale record`, () => assertFails(deleteDoc(saleRef(db()))))
+}
+// The record outlives the workspace: with the org and its roster gone, it
+// is still unreadable to the former owner.
+await env.withSecurityRulesDisabled(async (context) => {
+  await deleteDoc(doc(context.firestore(), 'orgs', ORG, 'members', OWNER))
+})
+await check('the former owner of an erased workspace cannot read its sale record', () =>
+  assertFails(getDoc(saleRef(as(OWNER)))),
+)
+
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
   await deleteDoc(orderRef(db))
+  await deleteDoc(saleRef(db))
   for (const uid of [OWNER, ADMIN, EDITOR, EDITOR_NO_POS, VIEWER, SCOPED]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }

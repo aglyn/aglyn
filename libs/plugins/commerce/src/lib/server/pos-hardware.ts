@@ -27,6 +27,7 @@ import {
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_METADATA_TYPE,
   POS_HARDWARE_ORDERS_COLLECTION,
+  POS_HARDWARE_SALES_COLLECTION,
   POS_HARDWARE_SHIP_COUNTRIES,
   POS_HARDWARE_SHIPPING_LABELS,
   posHardwareOffers,
@@ -84,6 +85,15 @@ export function hardwareOrdersRef(orgId: string) {
     .collection('orgs')
     .doc(orgId)
     .collection(POS_HARDWARE_ORDERS_COLLECTION)
+}
+
+/**
+ * `posHardwareSales/{orderId}`, the retained sale record beside each order
+ * (see `PosHardwareSaleRecord`). Top-level on purpose: the workspace erasure
+ * cannot reach it.
+ */
+export function posHardwareSaleRef(orderId: string) {
+  return firebaseAdmin.app().firestore().collection(POS_HARDWARE_SALES_COLLECTION).doc(orderId)
 }
 
 /** An order as the merchant's card shows it: no Stripe ids, no staff notes. */
@@ -217,7 +227,9 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
         priced.lines.forEach((line, index) => {
           const sku = posHardwareSku(line.sku)
           params[`line_items[${index}][quantity]`] = line.quantity
-          params[`line_items[${index}][price_data][currency]`] = POS_HARDWARE_CURRENCY
+          // A literal, not POS_HARDWARE_CURRENCY: check:facilitator-charge-shape
+          // reads Stripe Tax beside a usd line item only when it says so (AGL-1956).
+          params[`line_items[${index}][price_data][currency]`] = 'usd'
           params[`line_items[${index}][price_data][unit_amount]`] = line.unitCents
           params[`line_items[${index}][price_data][product_data][name]`] = line.name
           if (sku) params[`line_items[${index}][price_data][product_data][description]`] = sku.use

@@ -304,9 +304,10 @@ Do this **before** deleting a workspace. Deletion keeps no copy, and the 7-day h
 the window in which this export is still possible.
 
 :::note What survives a deletion
-Sales-tax records for transactions on your storefront are kept after an erasure, because
-tax law requires it. They are included in the export — it is the one place you can see
-what remains.
+Sales-tax records for transactions on your storefront, and Aglyn's records of
+[card readers you bought from Aglyn](../commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records),
+are kept after an erasure, because tax law requires it. They are included in the
+export — it is the one place you can see what remains.
 :::
 
 ## Privacy requests {#privacy-requests}

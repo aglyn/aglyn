@@ -20,6 +20,7 @@ import type { ConsoleStaffPageProps } from '@aglyn/aglyn'
 import { resolveStaffRoleGate } from '@aglyn/aglyn/app-utils/staff-role-gate'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -74,7 +75,13 @@ const when = (ms: number) => (ms ? new Date(ms).toLocaleString() : '—')
 
 function shipTo(order: StaffHardwareOrderRow): string {
   const address = order.shipping?.address
-  if (!address) return '—'
+  if (!address) {
+    // The buyer's account was erased: only the tax region is left (AGL-4038).
+    const region = order.shipping?.taxRegion
+    return region
+      ? [[region.state, region.postalCode].filter(Boolean).join(' '), region.country].filter(Boolean).join('\n')
+      : '—'
+  }
   return [
     order.shipping?.name,
     address.line1,
@@ -101,7 +108,13 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const { confirm } = useConfirmationContext()
   const [status, setStatus] = useState<PosHardwareOrderStatus | ''>('paid')
   const [orders, setOrders] = useState<StaffHardwareOrderRow[] | null>(null)
-  const [more, setMore] = useState(false)
+  // The cursor that opens each page: `cursors[page]` is the `after` its
+  // request carries, so Previous re-reads a page rather than keeping every
+  // page read so far in memory.
+  const [cursors, setCursors] = useState<Array<string | null>>([null])
+  const [page, setPage] = useState(0)
+  const [nextPage, setNextPage] = useState<string | null>(null)
+  const [pageSize, setPageSize] = useState(25)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<StaffHardwareOrderRow | null>(null)
   const [busy, setBusy] = useState(false)
@@ -109,13 +122,19 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const gate = resolveStaffRoleGate(staffRole, WRITE_ROLES)
   const uid = user?.uid ?? ''
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = 0, after: string | null = null) => {
     if (!user) return
     setError(null)
     try {
-      const answer = await staffHardwareOrders(user, status)
+      const answer = await staffHardwareOrders(user, status, after)
       setOrders(answer.orders)
-      setMore(answer.more)
+      setPage(targetPage)
+      setNextPage(answer.next)
+      setPageSize(answer.pageSize)
+      setCursors((existing) => {
+        const kept = existing.slice(0, targetPage + 1)
+        return answer.next ? [...kept, answer.next] : kept
+      })
     } catch (caught) {
       setOrders([])
       setError(caught instanceof PosHardwareRequestError ? caught.message : 'Hardware orders could not be read')
@@ -147,7 +166,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
       const { order } = await staffHardwareOrderAction(user, { ...body, orgId: open.orgId, orderId: open.id })
       setOpen(order)
       enqueueSnackbar(done, { variant: 'success', persist: false })
-      await load()
+      await load(page, cursors[page] ?? null)
     } catch (caught) {
       enqueueSnackbar(
         caught instanceof PosHardwareRequestError ? caught.message : 'The order could not be changed',
@@ -300,9 +319,6 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     >
       <Stack spacing={2}>
         {error ? <Alert severity="error">{error}</Alert> : null}
-        {more ? (
-          <Alert severity="info">{'Showing the newest 200 orders. Pick a status to narrow the list.'}</Alert>
-        ) : null}
         {orders && orders.length === 0 && !error ? (
           <Typography variant="body2" color="text.secondary">
             {status ? `No orders are ${POS_HARDWARE_STAFF_STATUS_LABELS[status].toLowerCase()}.` : 'No hardware orders yet.'}
@@ -316,6 +332,15 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
             onOpen={(_id, row) => openOrder(row as StaffHardwareOrderRow)}
           />
         )}
+        {orders && (orders.length || page > 0) ? (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={orders.length}
+            hasMore={Boolean(nextPage)}
+            onPageChange={(target) => void load(target, cursors[target] ?? null)}
+          />
+        ) : null}
       </Stack>
 
       <Dialog open={Boolean(open)} onClose={() => setOpen(null)} maxWidth="sm" fullWidth>

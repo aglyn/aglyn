@@ -496,11 +496,22 @@ describe('fileSiteCareInboundEmail', () => {
     expect(mockAppend.mock.calls[0][1]).toMatchObject({ from: { uid: 'u-owner', email: 'owner+site@example.com' } })
   })
 
-  it('files a member of several Site Care workspaces on the first by id, as before', async () => {
+  it('files a member of several Site Care workspaces on the first by id, with every candidate recorded', async () => {
     member('u-owner', 'org-a-care')
     buySiteCare('org-a-care')
     expect(await file(MESSAGE)).toEqual({ outcome: 'opened', requestId: 'ticket-new' })
-    expect(mockOpen.mock.calls[0][1]).toMatchObject({ orgId: 'org-a-care' })
+    expect(mockOpen.mock.calls[0][1]).toMatchObject({
+      orgId: 'org-a-care',
+      candidates: [
+        { orgId: 'org-a-care', name: 'org-a-care', uid: 'u-owner' },
+        { orgId: 'org-care', name: 'org-care', uid: 'u-owner' },
+      ],
+    })
+  })
+
+  it('records the one workspace of a sender in only one, which keeps nothing for staff', async () => {
+    await file(MESSAGE)
+    expect(mockOpen.mock.calls[0][1].candidates).toEqual([{ orgId: 'org-care', name: 'org-care', uid: 'u-owner' }])
   })
 
   it('files nothing for a member’s message with no words and no subject', async () => {

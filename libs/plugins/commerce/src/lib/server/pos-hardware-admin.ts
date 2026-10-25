@@ -30,12 +30,13 @@ import {
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_STATUS_STAMP,
   posHardwareRefundable,
+  posHardwareSaleRecord,
   type PosHardwareOrder,
   type PosHardwareOrderStatus,
   type PosHardwareTracking,
 } from '../model/pos-hardware'
 import { fulfillmentTrackingUrl } from '../model/tracking-url'
-import { hardwareOrdersRef, posHardwareOrderNumber } from './pos-hardware'
+import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
 import { sendPosHardwareEmail } from './pos-hardware-notify'
 import { posStripe } from './pos-stripe'
 
@@ -52,10 +53,15 @@ import { posStripe } from './pos-stripe'
  *
  * Staff only. Reading is open to every staff role; every write is `super` or
  * `billing`, because each one changes what a customer is told or returns
- * their money. Every write is an `adminAudit` row.
+ * their money. Every write is an `adminAudit` row, and each one rewrites the
+ * order's retained sale record (`posHardwareSales/{orderId}`) from the order
+ * as it now stands, in the same transaction.
  *=========================================*/
 
-const WINDOW = 200
+/** One page of the staff list. */
+const PAGE = 25
+/** A page cursor is the path of the last order the previous page showed. */
+const CURSOR = /^orgs\/[^/]+\/hardwareOrders\/[^/]+$/
 const WRITE_ROLES = ['super', 'billing']
 
 const json = (body: unknown, status = 200) =>
@@ -136,11 +142,22 @@ async function handler(request: Request): Promise<Response> {
         if (!isPosHardwareOrderStatus(requested)) return json({ error: 'Unknown status' }, 400)
         ordersQuery = ordersQuery.where('status', '==', requested)
       }
-      const snapshot = await ordersQuery.orderBy('createdAtMs', 'desc').limit(WINDOW + 1).get()
-      const docs = snapshot.docs as Array<{ id: string; data: () => PosHardwareOrder }>
+      ordersQuery = ordersQuery.orderBy('createdAtMs', 'desc')
+      const after = String(query?.['after'] ?? '')
+      if (after) {
+        if (!CURSOR.test(after)) return json({ error: 'Unknown page' }, 400)
+        const cursor = await firestore.doc(after).get()
+        // An order deleted since the page was read starts the list over
+        // rather than answering an empty page.
+        if (cursor.exists) ordersQuery = ordersQuery.startAfter(cursor)
+      }
+      const snapshot = await ordersQuery.limit(PAGE + 1).get()
+      const docs = snapshot.docs as Array<{ id: string; ref: { path: string }; data: () => PosHardwareOrder }>
+      const shown = docs.slice(0, PAGE)
       return json({
-        orders: docs.slice(0, WINDOW).map((doc) => staffView(doc.id, doc.data())),
-        more: docs.length > WINDOW,
+        orders: shown.map((doc) => staffView(doc.id, doc.data())),
+        next: docs.length > PAGE ? (shown[shown.length - 1]?.ref.path ?? null) : null,
+        pageSize: PAGE,
         canWrite: WRITE_ROLES.includes(role),
       })
     }
@@ -217,8 +234,10 @@ async function updateOrder(
       patch[POS_HARDWARE_STATUS_STAMP[advanceTo]] = now
       reached = advanceTo
     }
+    const after = { ...before, ...patch } as PosHardwareOrder
     transaction.update(ref, patch)
-    return { before, after: { ...before, ...patch } as PosHardwareOrder, reached }
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+    return { before, after, reached }
   })
 
   await addAdminAudit(firestore, {
@@ -297,17 +316,6 @@ async function refundOrder(
     refundedCents: Number(refund.body.amount ?? claim.order.totalCents ?? 0),
     refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete(),
   }
-  await ref.update(patch)
-  await addAdminAudit(firestore, {
-    action: `pos-hardware-order-${action}`,
-    ...actor,
-    scope: 'posHardwareOrder',
-    target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
-    orgId,
-    before: { status: claim.order.status },
-    after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
-    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-  })
   const settled = { ...claim.order }
   delete settled.refundRequestedAtMs
   const after: PosHardwareOrder = {
@@ -318,6 +326,22 @@ async function refundOrder(
     refundId: patch.refundId,
     refundedCents: patch.refundedCents,
   }
+  // The order and its retained sale record move together: the record is
+  // what the refund is accounted from once the workspace is gone.
+  await firestore.runTransaction(async (transaction: any) => {
+    transaction.update(ref, patch)
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+  })
+  await addAdminAudit(firestore, {
+    action: `pos-hardware-order-${action}`,
+    ...actor,
+    scope: 'posHardwareOrder',
+    target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+    orgId,
+    before: { status: claim.order.status },
+    after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
   return json({ ok: true, order: staffView(orderId, after) })
 }
 

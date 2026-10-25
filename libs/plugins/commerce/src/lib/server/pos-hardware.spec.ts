@@ -28,7 +28,11 @@
  *   second order, sends no second email and raises no second alert;
  * - the staff route admits staff only, writes only for super or billing,
  *   moves an order one step at a time, emails at shipped and delivered, and
- *   refunds in full only before the order ships.
+ *   refunds in full only before the order ships;
+ * - every write to an order rewrites its retained sale record
+ *   (`posHardwareSales/{orderId}`), which holds the amounts, the tax and the
+ *   tax region and nothing about the buyer, and an account erasure takes the
+ *   buyer off the order and keeps the rest (AGL-4038 retention).
  */
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
@@ -108,7 +112,16 @@ import { posHardwareHandler, posHardwareOrderId } from './pos-hardware'
 import { posHardwareBillingWebhookHandler } from './pos-hardware-webhook'
 import { posHardwareAdminOrders } from './pos-hardware-admin'
 import { posHardwareEmailMerge } from './pos-hardware-notify'
-import { POS_HARDWARE_ENV, type PosHardwareOrder } from '../model/pos-hardware'
+import { createPosHardwareUserEraser } from './pos-hardware-user-eraser'
+import { fakeFirestore } from '../testing/fake-firestore'
+import {
+  POS_HARDWARE_ENV,
+  posHardwareSaleRecord,
+  type PosHardwareOrder,
+  type PosHardwareSaleRecord,
+} from '../model/pos-hardware'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { POS_HARDWARE_EMAIL_KEYS, posHardwareSystemEmailTemplates } from '@aglyn/shared-util-email/pos-hardware-emails'
 
 interface StripeCall {
@@ -233,6 +246,10 @@ function paidSession(overrides: Record<string, unknown> = {}) {
 
 const ORDER_ID = 'hw_0123456789abcdef0123'
 const ORDER_PATH = `orgs/org-1/hardwareOrders/${ORDER_ID}`
+const SALE_PATH = `posHardwareSales/${ORDER_ID}`
+
+/** Every personal detail the fixtures carry, none of which a sale record may hold. */
+const PERSONAL = /Jordan|Pat Lee|Main St|Elm St|buyer@example|5555550100|manager-1|1Z/
 
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
@@ -461,6 +478,28 @@ describe('the staff route', () => {
     expect((await staff('nobody')).status).toBe(401)
   })
 
+  it('pages the staff list newest first, 25 at a time, by a cursor', async () => {
+    for (let index = 0; index < 27; index += 1) {
+      const id = `hw_${String(index).padStart(20, '0')}`
+      fakeDocs.set(`orgs/org-${index % 3}/hardwareOrders/${id}`, {
+        orgId: `org-${index % 3}`,
+        status: 'paid',
+        lines: [],
+        createdAtMs: 1_000 + index,
+      })
+    }
+    const first = await staff('staff-support')
+    expect(first.status).toBe(200)
+    expect(first.body.pageSize).toBe(25)
+    expect(first.body.orders).toHaveLength(25)
+    expect(first.body.orders[0].createdAtMs).toBe(1_026)
+    expect(first.body.next).toMatch(/^orgs\/org-\d\/hardwareOrders\/hw_/)
+    const second = await staff('staff-support', { query: `?after=${encodeURIComponent(first.body.next)}` })
+    expect(second.body.orders.map((order: any) => order.createdAtMs)).toEqual([1_001, 1_000])
+    expect(second.body.next).toBeNull()
+    expect((await staff('staff-support', { query: '?after=hosts%2Fx%2Forders%2Fy' })).status).toBe(400)
+  })
+
   it('lists every workspace’s orders, filtered by status on the query', async () => {
     seedOrder()
     fakeDocs.set('orgs/org-2/hardwareOrders/hw_ffffffffffffffffffff', { orgId: 'org-2', status: 'shipped', lines: [] })
@@ -607,5 +646,238 @@ describe('the emails', () => {
     expect(merge['order.carrier']).toBe('UPS')
     expect(merge['order.shipTo']).toBe('Jordan Lee\n12 Main St\nSpringfield, IL 62701')
     expect(merge['order.setupUrl']).toBe('https://console.example.com/acme/hosts/host-1/products/pos#pos-devices')
+  })
+})
+
+describe('the retained sale record (AGL-4038)', () => {
+  const deliver = (object: Record<string, unknown>) =>
+    posHardwareBillingWebhookHandler({
+      type: 'checkout.session.completed',
+      object,
+      event: { type: 'checkout.session.completed', data: { object } },
+    })
+  const sale = () => fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord | undefined
+
+  it('is written with the order, with the amounts and the tax region and nothing about the buyer', async () => {
+    await deliver(paidSession({ total_details: { amount_tax: 1_705 }, amount_total: 24_825 }))
+    expect(sale()).toMatchObject({
+      orderId: ORDER_ID,
+      orgId: 'org-1',
+      subtotalCents: 20_670,
+      shippingMethod: 'standard',
+      shippingCents: 1_000,
+      taxCents: 1_705,
+      totalCents: 24_825,
+      currency: 'usd',
+      shipTo: { country: 'US', state: 'IL', postalCode: '62701' },
+      stripeCheckoutSessionId: 'cs_test_1',
+      stripePaymentIntentId: 'pi_test_1',
+      status: 'paid',
+    })
+    expect(sale()?.lines.map((line) => [line.sku, line.quantity, line.unitCents])).toEqual([
+      ['stripe-reader-s710', 1, 13_000],
+      ['stripe-reader-m2', 1, 7_670],
+    ])
+    expect(sale()?.paidAtMs).toEqual(expect.any(Number))
+    expect(JSON.stringify(sale())).not.toMatch(PERSONAL)
+    for (const field of ['hostId', 'createdBy', 'contactEmail', 'shipping', 'tracking']) {
+      expect([field, field in (sale() ?? {})]).toEqual([field, false])
+    }
+  })
+
+  it('is written once when Stripe redelivers, and not at all for an unreadable session', async () => {
+    await deliver(paidSession())
+    const first = JSON.stringify(sale())
+    await deliver(paidSession())
+    expect(JSON.stringify(sale())).toBe(first)
+    expect([...fakeDocs.keys()].filter((key) => key.startsWith('posHardwareSales/'))).toHaveLength(1)
+    resetFakeFirestore()
+    await deliver(paidSession({ metadata: { ...paidSession().metadata, lines: 'nope*1*1' } }))
+    expect([...fakeDocs.keys()].filter((key) => key.startsWith('posHardwareSales/'))).toHaveLength(0)
+  })
+
+  it('follows every staff step, tracking excluded, and the refund', async () => {
+    await deliver(paidSession())
+    await staff('staff-billing', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, stripeHardwareOrderId: 'thor_1', status: 'ordered' },
+    })
+    expect(sale()).toMatchObject({ status: 'ordered', stripeHardwareOrderId: 'thor_1', orderedAtMs: expect.any(Number) })
+    await staff('staff-billing', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 999' } },
+    })
+    expect(JSON.stringify(sale())).not.toMatch(/1Z/)
+    await staff('staff-super', { method: 'POST', body: { action: 'refund', orgId: 'org-1', orderId: ORDER_ID } })
+    expect(sale()).toMatchObject({
+      status: 'refunded',
+      refundId: 're_1',
+      refundedCents: 23_120,
+      refundedAtMs: expect.any(Number),
+      totalCents: 23_120,
+    })
+    // The record says what the order says, field by field.
+    expect(sale()).toEqual(posHardwareSaleRecord(ORDER_ID, fakeDocs.get(ORDER_PATH) as PosHardwareOrder))
+  })
+
+  it('heals a missing record on the next staff write', async () => {
+    await deliver(paidSession())
+    fakeDocs.delete(SALE_PATH)
+    await staff('staff-billing', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'ordered' },
+    })
+    expect(sale()).toMatchObject({ status: 'ordered', totalCents: 23_120 })
+  })
+
+  it('is never something a staff route refusal half-writes', async () => {
+    await deliver(paidSession())
+    const before = JSON.stringify(sale())
+    const skipped = await staff('staff-billing', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'delivered' },
+    })
+    expect(skipped.status).toBe(409)
+    expect(JSON.stringify(sale())).toBe(before)
+  })
+})
+
+describe('an account erasure of the buyer (AGL-4038)', () => {
+  const eraser = createPosHardwareUserEraser({ firestore: () => fakeFirestore, now: () => 9_999 })
+  const deliver = (object: Record<string, unknown>) =>
+    posHardwareBillingWebhookHandler({
+      type: 'checkout.session.completed',
+      object,
+      event: { type: 'checkout.session.completed', data: { object } },
+    })
+  const OTHER_ORDER = 'hw_ffffffffffffffffffff'
+  const OTHER_PATH = `orgs/org-1/hardwareOrders/${OTHER_ORDER}`
+
+  beforeEach(async () => {
+    await deliver(paidSession())
+    // A colleague's order in the same workspace, which is not theirs to lose.
+    await deliver(
+      paidSession({
+        id: 'cs_test_2',
+        metadata: { ...paidSession().metadata, orderId: OTHER_ORDER, uid: 'colleague-1' },
+        customer_details: { email: 'colleague@example.com', name: 'Sam Roe', phone: null },
+      }),
+    )
+    await staff('staff-super', {
+      method: 'POST',
+      body: {
+        action: 'update',
+        orgId: 'org-1',
+        orderId: ORDER_ID,
+        status: 'ordered',
+      },
+    })
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 999' } },
+    })
+  })
+
+  it('takes the buyer off the order and keeps every amount, the status dates and the tax region', async () => {
+    const before = fakeDocs.get(ORDER_PATH) as PosHardwareOrder
+    const report = await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    expect(report).toEqual({ hardwareOrdersRedacted: 1, formerWorkspacesReached: true })
+    const after = fakeDocs.get(ORDER_PATH) as PosHardwareOrder
+    expect(after).toMatchObject({
+      createdBy: null,
+      contactEmail: null,
+      tracking: null,
+      buyerErasedAtMs: 9_999,
+      // A field the erasure did NOT write: the order is the same order.
+      lines: before.lines,
+      subtotalCents: before.subtotalCents,
+      taxCents: before.taxCents,
+      totalCents: before.totalCents,
+      stripeCheckoutSessionId: 'cs_test_1',
+      stripePaymentIntentId: 'pi_test_1',
+      status: 'ordered',
+      paidAtMs: before.paidAtMs,
+      orderedAtMs: before.orderedAtMs,
+      createdAtMs: before.createdAtMs,
+    })
+    expect(after.shipping).toEqual({
+      method: 'standard',
+      label: before.shipping.label,
+      cents: 1_000,
+      name: null,
+      phone: null,
+      address: null,
+      taxRegion: { country: 'US', state: 'IL', postalCode: '62701' },
+    })
+    expect(JSON.stringify(after)).not.toMatch(PERSONAL)
+    // The sale record still names the region, and still holds no one.
+    const record = fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
+    expect(record).toMatchObject({ shipTo: { country: 'US', state: 'IL', postalCode: '62701' }, status: 'ordered' })
+    expect(JSON.stringify(record)).not.toMatch(PERSONAL)
+  })
+
+  it('leaves a colleague’s order alone', async () => {
+    const before = JSON.stringify(fakeDocs.get(OTHER_PATH))
+    await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    expect(JSON.stringify(fakeDocs.get(OTHER_PATH))).toBe(before)
+    expect((fakeDocs.get(OTHER_PATH) as PosHardwareOrder).contactEmail).toBe('colleague@example.com')
+  })
+
+  it('reaches a workspace the person has left', async () => {
+    const report = await eraser({ uid: 'manager-1', orgIds: [] })
+    expect(report.hardwareOrdersRedacted).toBe(1)
+  })
+
+  it('does nothing the second time', async () => {
+    await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    const once = JSON.stringify([...fakeDocs.entries()])
+    const again = await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    expect(again).toEqual({ hardwareOrdersRedacted: 0, formerWorkspacesReached: true })
+    expect(JSON.stringify([...fakeDocs.entries()])).toBe(once)
+  })
+
+  it('still works, and says it could not look further, where the collection-group index is not deployed', async () => {
+    const refusing = {
+      ...fakeFirestore,
+      collectionGroup: () => ({
+        where: () => ({
+          get: async () => {
+            throw Object.assign(new Error('FAILED_PRECONDITION: The query requires an index.'), { code: 9 })
+          },
+        }),
+      }),
+    }
+    const fallback = createPosHardwareUserEraser({ firestore: () => refusing, now: () => 1 })
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const report = await fallback({ uid: 'manager-1', orgIds: ['org-1'] })
+      expect(report).toEqual({ hardwareOrdersRedacted: 1, formerWorkspacesReached: false })
+    } finally {
+      spy.mockRestore()
+    }
+    expect((fakeDocs.get(ORDER_PATH) as PosHardwareOrder).contactEmail).toBeNull()
+  })
+
+  it('a staff step after the erasure keeps the tax region on the record', async () => {
+    await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 777' } },
+    })
+    expect((fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord).shipTo).toEqual({
+      country: 'US',
+      state: 'IL',
+      postalCode: '62701',
+    })
+  })
+
+  it('has the collection-group index it asks for declared', () => {
+    const indexes = JSON.parse(
+      readFileSync(join(__dirname, '../../../../../../cloud/firebase-firestore.indexes.json'), 'utf8'),
+    ) as { fieldOverrides: Array<{ collectionGroup: string; fieldPath: string; indexes: Array<{ queryScope: string }> }> }
+    const override = indexes.fieldOverrides.find(
+      (entry) => entry.collectionGroup === 'hardwareOrders' && entry.fieldPath === 'createdBy',
+    )
+    expect(override?.indexes.map((index) => index.queryScope)).toContain('COLLECTION_GROUP')
   })
 })
