@@ -25,8 +25,7 @@ import {
   posOfflineSoldAt,
   posOfflineTotalsAddUp,
   POS_OFFLINE_CARD_INTENT_KIND,
-  POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
-  POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
+  POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT,
   POS_OFFLINE_CLOCK_SKEW_MS,
   POS_OFFLINE_DISABLED_TENDERS,
   POS_OFFLINE_FLAG_LABELS,
@@ -142,11 +141,10 @@ describe('what the register says', () => {
 })
 
 describe('a card taken offline on the app reader (AGL-4039)', () => {
-  const card = {
-    available: true,
-    maxSaleCents: POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
-    maxDeviceDailyCents: POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
-  }
+  // A store that set its own limits: $100 a sale, $5,000 a day on one device.
+  const card = { available: true, maxSaleCents: 10_000, maxDeviceDailyCents: 500_000 }
+  // A store that set none: Stripe's ceiling per sale, no daily limit.
+  const unset = { available: true, maxSaleCents: POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT, maxDeviceDailyCents: 0 }
   const SALE = {
     v: 1,
     saleKey: 'off8f2f9807c22c4fe3b1ed9042c497949d',
@@ -169,6 +167,12 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     expect(posOfflineCardRefusal({ card, totalCents: 2000, takenTodayCents: 499_000 })).toMatch(/taken \$4,990\.00 .* daily limit is \$5,000\.00/)
     expect(posOfflineCardRefusal({ card: null, totalCents: 2479, takenTodayCents: 0 })).toMatch(/connect once/)
     expect(posOfflineCardRefusal({ card: { ...card, available: false }, totalCents: 2479, takenTodayCents: 0 })).toMatch(/not turned on/)
+  })
+
+  it('with no limits set, takes any card up to Stripe’s $10,000 and any number of them in a day', () => {
+    expect(posOfflineCardRefusal({ card: unset, totalCents: 1_000_000, takenTodayCents: 0 })).toBeNull()
+    expect(posOfflineCardRefusal({ card: unset, totalCents: 900_000, takenTodayCents: 50_000_000 })).toBeNull()
+    expect(posOfflineCardRefusal({ card: unset, totalCents: 1_000_001, takenTodayCents: 0 })).toMatch(/up to \$10,000\.00/)
   })
 
   it('never lets a store limit pass Stripe’s own limit for one offline card', () => {

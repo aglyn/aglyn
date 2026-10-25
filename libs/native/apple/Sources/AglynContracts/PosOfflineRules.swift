@@ -107,7 +107,7 @@ public func posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, 
   }
   let today: Double = wholeCents(takenTodayCents)
   let daily: Double = wholeCents(card.maxDeviceDailyCents)
-  if today + total > daily {
+  if daily > 0, today + total > daily {
     return
       "This device has taken \(offlineDollars(today)) in cards offline today, and its daily limit is \(offlineDollars(daily)). Take cash, or wait for the connection."
   }

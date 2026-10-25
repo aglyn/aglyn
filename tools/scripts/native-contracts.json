@@ -349,10 +349,8 @@
         "POS_OFFLINE_CLOCK_SKEW_MS",
         "POS_OFFLINE_DISABLED_TENDERS",
         "POS_OFFLINE_FLAG_LABELS",
-        "POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT",
         "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT",
         "POS_OFFLINE_CARD_INTENT_KIND",
-        "POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT",
         "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
       ]
     },
@@ -28978,6 +28976,39 @@
             },
             "totalCents": 200000,
             "takenTodayCents": 12300000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 1000000,
+            "takenTodayCents": 0
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 900000,
+            "takenTodayCents": 50000000
+          }
+        ],
+        [
+          {
+            "card": {
+              "available": true,
+              "maxSaleCents": 1000000,
+              "maxDeviceDailyCents": 0
+            },
+            "totalCents": 1000001,
+            "takenTodayCents": 0
           }
         ]
       ]

@@ -286,9 +286,7 @@ struct OfflineSaleSheet: View {
       } else if let refusal {
         AglynNotice(refusal, tone: .warning).accessibilityIdentifier("offline-card-refusal")
       } else {
-        AglynNotice(
-          "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to \(model.money(perSale)), and this device can take up to \(model.money(perDay)) in cards a day.",
-          tone: .info)
+        AglynNotice(offlineCardLimitsNote(perSaleCents: perSale, perDayCents: perDay, money: model.money), tone: .info)
       }
       if let failed {
         AglynNotice(failed, tone: .error)

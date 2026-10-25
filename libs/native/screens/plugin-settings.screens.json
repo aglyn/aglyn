@@ -2615,8 +2615,6 @@
         "defaults": {
           "posMaxDiscountPct": 100,
           "posOfflineCardSales": false,
-          "posOfflineCardMaxSale": 100,
-          "posOfflineCardDailyLimit": 5000,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2664,14 +2662,14 @@
               "label": "Limit per sale ($)",
               "kind": "number",
               "initial": "{item.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
-              "help": "Between 1 and 10000."
+              "help": "Empty: up to $10,000, the most one card can be charged offline. Between 1 and 10000."
             },
             {
               "key": "posOfflineCardDailyLimit",
               "label": "Daily limit per device ($)",
               "kind": "number",
               "initial": "{item.posOfflineCardDailyLimit ?? const.defaults.posOfflineCardDailyLimit}",
-              "help": "Between 1 and 100000."
+              "help": "Empty: no daily limit. Between 1 and 1000000."
             },
             {
               "key": "posTippingEnabled",
@@ -2824,8 +2822,6 @@
         "defaults": {
           "posMaxDiscountPct": 100,
           "posOfflineCardSales": false,
-          "posOfflineCardMaxSale": 100,
-          "posOfflineCardDailyLimit": 5000,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2897,7 +2893,7 @@
               "kind": "number",
               "initial": "{data.site.posOfflineCardMaxSale ?? data.org.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
               "when": "form.ov_posOfflineCardMaxSale",
-              "help": "Between 1 and 10000."
+              "help": "Empty: up to $10,000, the most one card can be charged offline. Between 1 and 10000."
             },
             {
               "key": "ov_posOfflineCardDailyLimit",
@@ -2911,7 +2907,7 @@
               "kind": "number",
               "initial": "{data.site.posOfflineCardDailyLimit ?? data.org.posOfflineCardDailyLimit ?? const.defaults.posOfflineCardDailyLimit}",
               "when": "form.ov_posOfflineCardDailyLimit",
-              "help": "Between 1 and 100000."
+              "help": "Empty: no daily limit. Between 1 and 1000000."
             },
             {
               "key": "ov_posTippingEnabled",
