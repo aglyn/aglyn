@@ -510,6 +510,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   posHardware: {
     '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
+    '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
     '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
@@ -684,6 +685,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   waivers: {
     '#find-a-signature': 'The Signatures card lists the newest first.',
+    '#share-it-before-riders-arrive': 'On the Waivers card, select Share beside a waiver: Copy link gives you a link to send in a confirmation, a text or a post.',
     '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
     '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
   },

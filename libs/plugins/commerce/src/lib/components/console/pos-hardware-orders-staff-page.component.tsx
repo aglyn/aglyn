@@ -296,7 +296,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   return (
     <CardDisplay
       header={'Hardware orders'}
-      help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
+      help={pluginDocsHelp('posHardware', { anchor: '#hardware-purchase-records' })}
       subheader={'Card readers bought from the POS hardware shop'}
       HeaderProps={{
         action: (

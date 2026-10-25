@@ -1174,6 +1174,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   posHardware: {
     '#buy-a-reader-from-aglyn': 'Buy a reader from Aglyn',
+    '#hardware-purchase-records': 'Records of your purchases',
     '#reader-start-up-screen': 'Reader start-up screen',
     '#receipt-printers': 'Receipt printers',
   },
@@ -1348,6 +1349,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   waivers: {
     '#find-a-signature': 'Find a signature',
+    '#share-it-before-riders-arrive': 'Share it before riders arrive',
     '#versions': 'Versions',
     '#write-a-waiver': 'Write a waiver',
   },
