@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { planLabelGrantingQuota } from '@aglyn/aglyn'
+import { planLabelGrantingQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * The `reason` a campaign refusal carries when the plan's monthly campaign
