@@ -6,6 +6,10 @@
       "why": "The preferences a person keeps on users/{uid} (pins capped at five, recent workspaces, starred and recent items, workspace colors, the synced theme) and the pure rules over them, so the apps write the shape the console and the rules hold (AGL-3943); no imports at all."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/activity-type-labels.ts",
+      "why": "The nouns an activity row names its target by (ACTIVITY_TYPE_LABELS): the native Recent activity and Page Activity rows read them (AGL-4011); no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
     },
@@ -332,6 +336,10 @@
     {
       "path": "libs/plugins/accounting/src/lib/native-nav.ts",
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/activity/ai-activity-words.ts",
+      "why": "The AI activity codes and their words and sentences (AI_ACTIVITY_ACTION_LABELS, AI_ACTIVITY_ACTION_SENTENCES), so the native activity rows name an AI row as the console does (AGL-4011); imports only platform-brand."
     },
     {
       "path": "libs/plugins/ai/src/lib/model/ai-permissions.ts",
@@ -788,6 +796,10 @@
     {
       "path": "libs/plugins/sms/src/lib/native-nav.ts",
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/run-activity-words.ts",
+      "why": "An automation run line in words (describeAutomationRunAction), replayed by the native activity rows' function cases (AGL-4011); imports only host-events."
     },
     {
       "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",

@@ -5,6 +5,49 @@
   ],
   "ACCOUNT_COLOR_PATTERN": "^#[0-9A-Fa-f]{6}$",
   "ACCOUNT_ITEM_LABEL_MAX": 120,
+  "ACTIVITY_TYPE_LABELS": {
+    "company": "Company",
+    "component": "Component",
+    "contact": "Contact",
+    "content": "Content",
+    "deal": "Deal",
+    "function": "Function",
+    "host": "Site",
+    "invite": "Invitation",
+    "layout": "Layout",
+    "lead": "Lead",
+    "media": "Media",
+    "member": "Member",
+    "org": "Organization",
+    "role": "Role",
+    "screen": "Page",
+    "subscription": "Subscription",
+    "template": "Template",
+    "theme": "Theme",
+    "variable": "Variable",
+    "workflow": "Workflow"
+  },
+  "AI_ACTIVITY_ACTION_LABELS": {
+    "ai.addon.purchased": "Added the AI add-on",
+    "ai.addon.removed": "Removed the AI add-on",
+    "ai.allotment.changed": "AI allotment changed",
+    "ai.assist.section": "AI generated a section",
+    "ai.edit.applied": "Applied AI edits",
+    "ai.job.canceled": "Canceled an AI generation",
+    "ai.job.created": "Started an AI generation",
+    "ai.job.needs_input": "AI generation paused for input",
+    "ai.job.output": "AI generated",
+    "ai.overage.cap": "AI overage ceiling",
+    "ai.overage.hardCap": "AI stop-at-band switch",
+    "ai.permission.changed": "AI permission changed",
+    "ai.seo.applied": "Applied AI SEO fixes as drafts"
+  },
+  "AI_ACTIVITY_ACTION_SENTENCES": {
+    "ai.assist.section": "Added a section to {target} with Aglyn AI",
+    "ai.edit.applied": "Applied Aglyn AI edits to {target}",
+    "ai.job.output": "Created {target} with Aglyn AI",
+    "ai.seo.applied": "Applied Aglyn AI search fixes to {target}"
+  },
   "APP_APPEARANCES": [
     "system",
     "light",
@@ -1533,6 +1576,10 @@
     "deal": "Deals",
     "lead": "Leads"
   },
+  "CRM_LEAD_CLOSED_STATUSES": [
+    "qualified",
+    "unqualified"
+  ],
   "CRM_LEAD_STATUS_LABELS": {
     "new": "New",
     "nurturing": "Nurturing",
@@ -7746,6 +7793,7 @@
     "site.sites": "sites"
   },
   "PLAN_CARD_WARNING_SHARE": 0.8,
+  "PLATFORM_BRAND_NAME": "Aglyn",
   "POS_CASH_EVENT_LABELS": {
     "drop": "Safe drop",
     "paid_in": "Paid in",

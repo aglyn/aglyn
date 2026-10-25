@@ -75,7 +75,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "crm",
-            contributes = mapOf("screens" to listOf("crm.companies", "crm.company", "crm.contact", "crm.contacts", "crm.deal", "crm.deals", "crm.fields", "crm.lead", "crm.leads", "crm.reports", "crm.settings", "crm.tasks"), "widgets" to listOf("crm.glance", "crm.tasks-due"), "quickActions" to listOf("crm.deals-action", "crm.open", "crm.tasks-action"), "deepLinks" to listOf("crm.companies-page", "crm.company-page", "crm.contact-page", "crm.contacts-page", "crm.deal-page", "crm.deals-page", "crm.fields-page", "crm.lead-page", "crm.leads-page", "crm.legacy-contacts", "crm.page", "crm.reports-page", "crm.settings-page", "crm.tasks-page")),
+            contributes = mapOf("screens" to listOf("crm.companies", "crm.company", "crm.contact", "crm.contacts", "crm.deal", "crm.deals", "crm.fields", "crm.lead", "crm.leads", "crm.reports", "crm.settings", "crm.tasks"), "widgets" to listOf("crm.glance", "crm.org-glance", "crm.org-tasks-due", "crm.tasks-due"), "quickActions" to listOf("crm.deals-action", "crm.open", "crm.tasks-action"), "deepLinks" to listOf("crm.companies-page", "crm.company-page", "crm.contact-page", "crm.contacts-page", "crm.deal-page", "crm.deals-page", "crm.fields-page", "crm.lead-page", "crm.leads-page", "crm.legacy-contacts", "crm.page", "crm.reports-page", "crm.settings-page", "crm.tasks-page")),
             register = ::registerCrmNative,
         ),
         NativePluginManifestEntry(

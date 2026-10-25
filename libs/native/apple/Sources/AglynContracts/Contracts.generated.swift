@@ -455,6 +455,21 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CrmLeadStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case new = "new"
+  case nurturing = "nurturing"
+  case qualified = "qualified"
+  case unqualified = "unqualified"
+  case working = "working"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct DatasetFieldDefinition: Codable, Hashable, Sendable {
   public var customType: String?
   public var `default`: ContractJSON?
@@ -4230,6 +4245,16 @@ public enum ReturnReason: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct ScreenReferrerCount: Codable, Hashable, Sendable {
+  public var count: Double
+  public var referrer: String
+
+  public init(count: Double, referrer: String) {
+    self.count = count
+    self.referrer = referrer
+  }
+}
+
 public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   public var devices: [String: Double]
   public var referrers: [String: Double]
@@ -4240,6 +4265,20 @@ public struct ScreenTrafficRow: Codable, Hashable, Sendable {
     self.devices = devices
     self.referrers = referrers
     self.screenId = screenId
+    self.total = total
+  }
+}
+
+public struct ScreenTrafficSummary: Codable, Hashable, Sendable {
+  public var avgDwellMs: Double?
+  public var deviceLine: String
+  public var topReferrers: [ScreenReferrerCount]
+  public var total: Double
+
+  public init(avgDwellMs: Double? = nil, deviceLine: String, topReferrers: [ScreenReferrerCount], total: Double) {
+    self.avgDwellMs = avgDwellMs
+    self.deviceLine = deviceLine
+    self.topReferrers = topReferrers
     self.total = total
   }
 }
@@ -4828,6 +4867,9 @@ public enum WorkspaceColorSource: String, Codable, CaseIterable, Hashable, Senda
 public struct ContractValues: Codable, Hashable, Sendable {
   public let accountColorPattern: String
   public let accountItemLabelMax: Int
+  public let activityTypeLabels: [String: String]
+  public let aiActivityActionLabels: [String: String]
+  public let aiActivityActionSentences: [String: String]
   public let appAppearances: [AppAppearance]
   public let appDensities: [AppDensity]
   public let appIconIdMax: Int
@@ -4876,6 +4918,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmFieldObjectLabels: [String: String]
+  public let crmLeadClosedStatuses: [CrmLeadStatus]
   public let crmLeadStatusLabels: [String: String]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
@@ -5042,6 +5085,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardMeters: [String]
   public let planCardScreenContexts: [String: String]
   public let planCardWarningShare: Double
+  public let platformBrandName: String
   public let posCashEventLabels: [String: String]
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
@@ -5138,6 +5182,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   enum CodingKeys: String, CodingKey {
     case accountColorPattern = "ACCOUNT_COLOR_PATTERN"
     case accountItemLabelMax = "ACCOUNT_ITEM_LABEL_MAX"
+    case activityTypeLabels = "ACTIVITY_TYPE_LABELS"
+    case aiActivityActionLabels = "AI_ACTIVITY_ACTION_LABELS"
+    case aiActivityActionSentences = "AI_ACTIVITY_ACTION_SENTENCES"
     case appAppearances = "APP_APPEARANCES"
     case appDensities = "APP_DENSITIES"
     case appIconIdMax = "APP_ICON_ID_MAX"
@@ -5186,6 +5233,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmFieldObjectLabels = "CRM_FIELD_OBJECT_LABELS"
+    case crmLeadClosedStatuses = "CRM_LEAD_CLOSED_STATUSES"
     case crmLeadStatusLabels = "CRM_LEAD_STATUS_LABELS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
@@ -5352,6 +5400,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardMeters = "PLAN_CARD_METERS"
     case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
+    case platformBrandName = "PLATFORM_BRAND_NAME"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
