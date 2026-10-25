@@ -6,8 +6,8 @@ import Foundation
 
 /// When the in-app Besigner's loading state steps aside for the editor (AGL-4002).
 ///
-/// The cover lifts only on the editor's own painted signal: its app bar's wordmark laid out on screen, the page
-/// loaded, and no console loading overlay over it. A slow load never uncovers a blank or half-drawn editor. Past
+/// The cover lifts only on the editor's own painted signal: its app bar's wordmark mounted, the page loaded, and no
+/// console loading overlay over it. A slow load never uncovers a blank or half-drawn editor. Past
 /// `stillOpeningAfter` the cover says it is still opening and offers to try again, and keeps waiting for the signal.
 public enum BesignerReveal {
   public enum Phase: Equatable, Sendable {
@@ -22,16 +22,15 @@ public enum BesignerReveal {
   /// How long the plain loading state shows before it says it is still opening.
   public static let stillOpeningAfter: Duration = .seconds(12)
 
-  /// True on the page once the editor has painted: the Besigner wordmark (`#aglyn-besigner-logo-full`, drawn only by
-  /// the editor's app bar) has a box on screen and is visible, the document has loaded, and no console loading overlay
-  /// (`LoadingModal`, its top progress bar `.progress-bar-top`) shows over it.
+  /// True on the page once the editor has painted: the Besigner wordmark (`#aglyn-besigner-logo-full`, which only the
+  /// editor's app bar mounts) is in the page, the document has loaded, and no console loading overlay (`LoadingModal`,
+  /// its top progress bar `.progress-bar-top`) shows over it. The wordmark only has to be mounted, not visible: the
+  /// editor's compact bar (an iPad split or a phone) hides it with `display: none`, and requiring it on screen held the
+  /// cover over a drawn editor there.
   public static let paintedScript = """
     (() => {
       const shows = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
-      const logo = document.getElementById('aglyn-besigner-logo-full');
-      if (!logo || document.readyState !== 'complete') return false;
-      const box = logo.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0 || !shows(logo)) return false;
+      if (!document.getElementById('aglyn-besigner-logo-full') || document.readyState !== 'complete') return false;
       return ![...document.querySelectorAll('.progress-bar-top')].some(shows);
     })()
     """
