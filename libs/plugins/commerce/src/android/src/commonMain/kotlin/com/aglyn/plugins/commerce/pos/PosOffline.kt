@@ -320,6 +320,9 @@ class PosOfflineModel(
     return OfflineCardRequest(
       key, (totals.totalCents ?: 0.0).toLong(), card.currency, card.destination,
       posOfflineCardIntentMetadata(key, current.hostId, current.orgId, register),
+      maxSaleCents = minOf(card.maxSaleCents.toLong(), Contracts.posOfflineCardMaxSaleCentsLimit),
+      maxDeviceDailyCents = card.maxDeviceDailyCents.toLong(),
+      takenTodayCents = cardsTakenTodayCents,
     )
   }
 

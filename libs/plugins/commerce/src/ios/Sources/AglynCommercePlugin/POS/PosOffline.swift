@@ -318,7 +318,9 @@ final class PosOfflineModel {
     let key = mintKey()
     return OfflineCardRequest(
       saleKey: key, amountCents: Int(totals.totalCents ?? 0), currency: card.currency, destination: card.destination,
-      metadata: posOfflineCardIntentMetadata(saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register))
+      metadata: posOfflineCardIntentMetadata(saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register),
+      maxSaleCents: min(Int(card.maxSaleCents), ContractValues.shared.posOfflineCardMaxSaleCentsLimit),
+      maxDeviceDailyCents: Int(card.maxDeviceDailyCents), takenTodayCents: cardsTakenTodayCents)
   }
 
   /// Reads the site's offline rules while online.

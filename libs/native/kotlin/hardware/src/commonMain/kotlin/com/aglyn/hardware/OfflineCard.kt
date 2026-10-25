@@ -32,6 +32,11 @@ data class OfflineCardRequest(
   /** The connected account the charge transfers to. */
   val destination: String,
   val metadata: Map<String, String>,
+  /** The store's limit per sale offline, in cents: above it the SDK is told to require a connection. */
+  val maxSaleCents: Long = Long.MAX_VALUE,
+  /** The store's daily limit per device, in cents, and what this device took offline today before this card. */
+  val maxDeviceDailyCents: Long = Long.MAX_VALUE,
+  val takenTodayCents: Long = 0,
 ) {
   /** Null when the request is well formed. */
   val problem: String?
@@ -146,7 +151,31 @@ suspend fun collectOfflineCardPayment(port: OfflineTerminalPort, request: Offlin
 }
 
 private fun offlineFailed(error: TerminalError, fallback: String) =
-  OfflineCardOutcome.Failed(collectErrorMessage(error, fallback), error.code)
+  OfflineCardOutcome.Failed(offlineCardErrorMessage(error, fallback), error.code)
+
+/**
+ * Whether the SDK may store this card offline, or must take it online: the
+ * store's limits enforced once more at the SDK (`offlineBehavior`), counting
+ * what the SDK itself still holds unsent (`offlinePaymentAmountsByCurrency`).
+ */
+fun offlineCardRequiresOnline(request: OfflineCardRequest, sdkStoredCents: Long): Boolean =
+  request.amountCents > request.maxSaleCents ||
+    maxOf(request.takenTodayCents, sdkStoredCents) + request.amountCents > request.maxDeviceDailyCents
+
+/** An SDK error on a card taken offline, as the cashier reads it: never the SDK's own words for an offline limit. */
+fun offlineCardErrorMessage(error: TerminalError, fallback: String): String = when (error.code.uppercase()) {
+  "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT" ->
+    "This card is over Stripe's $10,000 limit for a card taken offline. Take it when you're back online, or take cash."
+  "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE", "NOT_CONNECTED_TO_INTERNET_AND_REQUIRE_ONLINE_SET" ->
+    "This sale is over your offline card limit. Take it when you're back online, or take cash."
+  "ONLINE_PIN_NOT_SUPPORTED_OFFLINE" -> "This card needs its PIN checked online. Take another card or cash, or take it when you're back online."
+  "INTERAC_NOT_SUPPORTED_OFFLINE" -> "Interac cards can't be taken offline. Take another card or cash."
+  "OFFLINE_AND_CARD_EXPIRED" -> "This card has expired. Take another card or cash."
+  "OFFLINE_TRANSACTION_DECLINED" -> "The card was declined. Take another card or cash."
+  "OFFLINE_PAYMENTS_DATABASE_TOO_LARGE" -> "This device holds too many cards taken offline. Reconnect to send them, or take cash."
+  "TAP_TO_PAY_READER_OFFLINE_MODE_NOT_ALLOWED" -> "Tap to Pay cannot take cards offline. Connect a Bluetooth card reader, or take cash."
+  else -> collectErrorMessage(error, fallback)
+}
 
 /**
  * What a forward the SDK reported means for the sale: authorized when Stripe

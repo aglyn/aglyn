@@ -415,6 +415,26 @@ final class PosOfflineCardTests: XCTestCase {
     XCTAssertEqual(offline.cardRefusal(for: cart()), "Card sales offline need the register to connect once first.")
   }
 
+  func testASaleOverTheLimitPerSaleIsRefusedBeforeTheCardIsAskedFor() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit(maxSale: 1000)
+    let offline = await ready(api, keys: [key])
+    XCTAssertNil(offline.cardRequest(for: cart()), "no card request reaches the reader")
+    XCTAssertEqual(
+      offline.cardRefusal(for: cart()),
+      "Offline, a card sale can be up to $10.00. Take cash, or charge it when you are back online.")
+  }
+
+  func testTheRequestCarriesTheStoreLimitsForTheSDK() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit()
+    let offline = await ready(api, keys: [key])
+    let request = offline.cardRequest(for: cart())
+    XCTAssertEqual(request?.maxSaleCents, 10_000)
+    XCTAssertEqual(request?.maxDeviceDailyCents, 500_000)
+    XCTAssertEqual(request?.takenTodayCents, 0)
+  }
+
   func testTheRequestNamesItsSaleAndTheStoreDestination() async {
     let api = FakeOfflineAPI()
     api.kitAnswer = cardKit()

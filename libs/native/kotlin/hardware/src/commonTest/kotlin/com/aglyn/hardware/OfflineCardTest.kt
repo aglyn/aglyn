@@ -85,6 +85,29 @@ class OfflineCardTest {
   }
 
   @Test
+  fun stripesOfflineLimitIsSaidInTheRegistersWordsNeverTheSdks() = runTest {
+    val port = FakeOfflinePort(confirmed = OfflineTerminalResult.Error(TerminalError("AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT", apiMessage = "Amount exceeds max offline amount.")))
+    assertEquals(
+      OfflineCardOutcome.Failed("This card is over Stripe's $10,000 limit for a card taken offline. Take it when you're back online, or take cash.", "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT"),
+      collectOfflineCardPayment(port, request(), m2),
+    )
+    assertEquals(
+      "This sale is over your offline card limit. Take it when you're back online, or take cash.",
+      offlineCardErrorMessage(TerminalError("NOT_CONNECTED_TO_INTERNET_AND_REQUIRE_ONLINE_SET"), "x"),
+    )
+  }
+
+  @Test
+  fun theStoreLimitsAreEnforcedAgainAtTheSdk() {
+    fun limited(amount: Long, today: Long = 0) =
+      OfflineCardRequest(key, amount, "usd", "acct_merchant", mapOf("saleKey" to key), maxSaleCents = 10_000, maxDeviceDailyCents = 500_000, takenTodayCents = today)
+    assertEquals(false, offlineCardRequiresOnline(limited(10_000), 0))
+    assertEquals(true, offlineCardRequiresOnline(limited(10_001), 0))
+    assertEquals(true, offlineCardRequiresOnline(limited(2_000, today = 499_000), 0))
+    assertEquals(true, offlineCardRequiresOnline(limited(2_000), 499_000))
+  }
+
+  @Test
   fun whatAForwardMeans() {
     assertEquals(OfflineCardForward.Status.AUTHORIZED, offlineForwardStatus("pi_1", "requires_capture"))
     assertEquals(OfflineCardForward.Status.AUTHORIZED, offlineForwardStatus("pi_1", "succeeded"))

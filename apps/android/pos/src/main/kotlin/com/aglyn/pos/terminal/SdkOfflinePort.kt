@@ -6,6 +6,7 @@ import com.aglyn.hardware.OfflineTerminalIntent
 import com.aglyn.hardware.OfflineTerminalPort
 import com.aglyn.hardware.OfflineTerminalResult
 import com.aglyn.hardware.TerminalError
+import com.aglyn.hardware.offlineCardRequiresOnline
 import com.aglyn.hardware.offlineForwardStatus
 import com.stripe.stripeterminal.Terminal
 import com.stripe.stripeterminal.external.callable.Cancelable
@@ -41,8 +42,11 @@ internal class SdkOfflinePort(
       .setTransferDataDestination(request.destination)
       .setMetadata(request.metadata)
       .build()
+    // The store's limits once more at the SDK: above them the card must be taken online.
+    val held = terminal.offlineStatus.sdk.offlinePaymentAmountsByCurrency[request.currency] ?: 0L
+    val behavior = if (offlineCardRequiresOnline(request, held)) OfflineBehavior.REQUIRE_ONLINE else OfflineBehavior.PREFER_ONLINE
     return call { callback ->
-      terminal.createPaymentIntent(params, callback, CreateConfiguration(OfflineBehavior.PREFER_ONLINE))
+      terminal.createPaymentIntent(params, callback, CreateConfiguration(behavior))
       null
     }
   }

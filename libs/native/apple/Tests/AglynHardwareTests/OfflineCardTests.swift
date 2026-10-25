@@ -105,6 +105,38 @@ final class OfflineCardTests: XCTestCase {
     XCTAssertEqual(port.calls, ["create"])
   }
 
+  func testStripesOfflineLimitIsSaidInTheRegistersWordsNeverTheSDKs() async {
+    let port = FakeOfflinePort(
+      confirmed: .failure(TerminalError(code: "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT", apiMessage: "Amount exceeds max offline amount.")))
+    let outcome = await collectOfflineCardPayment(port, request(), readerDeviceType: "STRIPE_M2")
+    XCTAssertEqual(
+      outcome,
+      .failed(
+        message: "This card is over Stripe's $10,000 limit for a card taken offline. Take it when you're back online, or take cash.",
+        code: "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT"))
+    XCTAssertEqual(
+      offlineCardErrorMessage(TerminalError(code: "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE"), fallback: "x"),
+      "This sale is over your offline card limit. Take it when you're back online, or take cash.")
+  }
+
+  func testTheStoreLimitsAreEnforcedAgainAtTheSDK() {
+    func limited(_ amount: Int, today: Int = 0) -> OfflineCardRequest {
+      OfflineCardRequest(
+        saleKey: key, amountCents: amount, currency: "usd", destination: "acct_merchant", metadata: ["saleKey": key],
+        maxSaleCents: 10_000, maxDeviceDailyCents: 500_000, takenTodayCents: today)
+    }
+    XCTAssertFalse(offlineCardRequiresOnline(limited(10_000), sdkStoredCents: 0))
+    XCTAssertTrue(offlineCardRequiresOnline(limited(10_001), sdkStoredCents: 0), "over the limit per sale")
+    XCTAssertTrue(offlineCardRequiresOnline(limited(2_000, today: 499_000), sdkStoredCents: 0), "over the daily limit")
+    XCTAssertTrue(offlineCardRequiresOnline(limited(2_000), sdkStoredCents: 499_000), "the SDK's own unsent cards count")
+  }
+
+  func testAReaderAsksForTheWaysItTakesTheCard() {
+    XCTAssertEqual(readerInputPrompt(["TAP", "INSERT"]), "Ready: tap, insert the card.")
+    XCTAssertEqual(readerInputPrompt(["INSERT"]), "Ready: insert the card.")
+    XCTAssertEqual(readerInputPrompt([]), "Present the card.")
+  }
+
   func testWhatAForwardMeans() {
     XCTAssertEqual(offlineForwardStatus(intentID: "pi_1", status: "requires_capture"), .authorized)
     XCTAssertEqual(offlineForwardStatus(intentID: "pi_1", status: "succeeded"), .authorized)

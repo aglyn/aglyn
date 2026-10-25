@@ -141,7 +141,13 @@
     }
 
     func reader(_ reader: Reader, didRequestReaderInput inputOptions: ReaderInputOptions) {
-      send { $0.prompt = "Present the card." }
+      // The ways the reader takes the card right now: a large tap can ask for the chip instead (AGL-4039).
+      var ways: [String] = []
+      if inputOptions.contains(.tapCard) { ways.append("TAP") }
+      if inputOptions.contains(.insertCard) { ways.append("INSERT") }
+      if inputOptions.contains(.swipeCard) { ways.append("SWIPE") }
+      let words = readerInputPrompt(ways)
+      send { $0.prompt = words }
     }
 
     func reader(_ reader: Reader, didRequestReaderDisplayMessage displayMessage: ReaderDisplayMessage) {
@@ -238,6 +244,10 @@
     2321: "BLUETOOTH_ACCESS_DENIED", 2330: "BLUETOOTH_SCAN_TIMED_OUT", 3010: "READER_BUSY",
     3850: "UNSUPPORTED_READER_VERSION", 4020: "READER_CONNECTED_TO_ANOTHER_DEVICE",
     6000: "DECLINED_BY_STRIPE_API", 6500: "DECLINED_BY_READER",
+    // Cards taken offline (AGL-4039): worded by AglynHardware's `offlineCardErrorMessage`, never the SDK's own text.
+    2860: "OFFLINE_PAYMENTS_DATABASE_TOO_LARGE", 2890: "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT", 3971: "TAP_TO_PAY_READER_OFFLINE_MODE_NOT_ALLOWED",
+    6901: "INTERAC_NOT_SUPPORTED_OFFLINE", 6902: "OFFLINE_AND_CARD_EXPIRED", 6903: "OFFLINE_TRANSACTION_DECLINED",
+    6905: "ONLINE_PIN_NOT_SUPPORTED_OFFLINE", 10106: "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE",
   ]
 
   private func terminalError(_ error: Error, intent: PaymentIntent? = nil) -> TerminalError {
@@ -737,7 +747,10 @@
           .setTransferDataDestination(request.destination)
           .setMetadata(request.metadata)
           .build()
-        config = try CreateConfigurationBuilder().setOfflineBehavior(.preferOnline).build()
+        // The store's limits once more at the SDK: above them the card must be taken online.
+        let held = Terminal.shared.offlineStatus.sdk.paymentAmountsByCurrency[request.currency]?.intValue ?? 0
+        let behavior: OfflineBehavior = offlineCardRequiresOnline(request, sdkStoredCents: held) ? .requireOnline : .preferOnline
+        config = try CreateConfigurationBuilder().setOfflineBehavior(behavior).build()
       } catch {
         return .failure(terminalError(error))
       }

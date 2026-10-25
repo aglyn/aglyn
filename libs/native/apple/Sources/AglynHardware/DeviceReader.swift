@@ -155,6 +155,19 @@ public func readerPrompt(_ display: String) -> String {
   }
 }
 
+/// The ways the reader is ready to take the card (the SDK's `ReaderInputOptions`), as the Kotlin kit says them.
+public func readerInputPrompt(_ options: [String]) -> String {
+  let ways = options.compactMap { option -> String? in
+    switch option.uppercased() {
+    case "TAP", "TAP_CARD": "tap"
+    case "INSERT", "INSERT_CARD": "insert"
+    case "SWIPE", "SWIPE_CARD": "swipe"
+    default: nil
+    }
+  }
+  return ways.isEmpty ? "Present the card." : "Ready: \(ways.joined(separator: ", ")) the card."
+}
+
 /// Discovery's failure, as the cashier reads it.
 public func friendlyDiscoveryError(code: String, message: String?) -> String {
   switch code.uppercased() {

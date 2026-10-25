@@ -34,13 +34,24 @@ public struct OfflineCardRequest: Equatable, Sendable {
   /// The connected account the charge transfers to.
   public let destination: String
   public let metadata: [String: String]
+  /// The store's limit per sale offline, in cents: above it the SDK is told to require a connection.
+  public let maxSaleCents: Int
+  /// The store's daily limit per device, in cents, and what this device took offline today before this card.
+  public let maxDeviceDailyCents: Int
+  public let takenTodayCents: Int
 
-  public init(saleKey: String, amountCents: Int, currency: String, destination: String, metadata: [String: String]) {
+  public init(
+    saleKey: String, amountCents: Int, currency: String, destination: String, metadata: [String: String],
+    maxSaleCents: Int = Int.max, maxDeviceDailyCents: Int = Int.max, takenTodayCents: Int = 0
+  ) {
     self.saleKey = saleKey
     self.amountCents = amountCents
     self.currency = currency
     self.destination = destination
     self.metadata = metadata
+    self.maxSaleCents = maxSaleCents
+    self.maxDeviceDailyCents = maxDeviceDailyCents
+    self.takenTodayCents = takenTodayCents
   }
 
   /// Nil when the request is well formed.
@@ -188,7 +199,35 @@ public func collectOfflineCardPayment(
 }
 
 private func offlineFailed(_ error: TerminalError, _ fallback: String) -> OfflineCardOutcome {
-  .failed(message: collectErrorMessage(error, fallback: fallback), code: error.code)
+  .failed(message: offlineCardErrorMessage(error, fallback: fallback), code: error.code)
+}
+
+/// Whether the SDK may store this card offline, or must take it online: the
+/// store's limits enforced once more at the SDK (`offlineBehavior`), counting
+/// what the SDK itself still holds unsent (`offlinePaymentAmountsByCurrency`).
+public func offlineCardRequiresOnline(_ request: OfflineCardRequest, sdkStoredCents: Int) -> Bool {
+  request.amountCents > request.maxSaleCents
+    || max(request.takenTodayCents, sdkStoredCents) + request.amountCents > request.maxDeviceDailyCents
+}
+
+/// An SDK error on a card taken offline, as the cashier reads it: never the SDK's own words for an offline limit.
+public func offlineCardErrorMessage(_ error: TerminalError, fallback: String) -> String {
+  switch error.code.uppercased() {
+  case "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT":
+    return "This card is over Stripe's $10,000 limit for a card taken offline. Take it when you're back online, or take cash."
+  case "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE", "NOT_CONNECTED_TO_INTERNET_AND_REQUIRE_ONLINE_SET":
+    return "This sale is over your offline card limit. Take it when you're back online, or take cash."
+  case "ONLINE_PIN_NOT_SUPPORTED_OFFLINE":
+    return "This card needs its PIN checked online. Take another card or cash, or take it when you're back online."
+  case "INTERAC_NOT_SUPPORTED_OFFLINE": return "Interac cards can't be taken offline. Take another card or cash."
+  case "OFFLINE_AND_CARD_EXPIRED": return "This card has expired. Take another card or cash."
+  case "OFFLINE_TRANSACTION_DECLINED": return "The card was declined. Take another card or cash."
+  case "OFFLINE_PAYMENTS_DATABASE_TOO_LARGE":
+    return "This device holds too many cards taken offline. Reconnect to send them, or take cash."
+  case "TAP_TO_PAY_READER_OFFLINE_MODE_NOT_ALLOWED":
+    return "Tap to Pay cannot take cards offline. Connect a Bluetooth card reader, or take cash."
+  default: return collectErrorMessage(error, fallback: fallback)
+  }
 }
 
 /// What a forward the SDK reported means for the sale: authorized when Stripe

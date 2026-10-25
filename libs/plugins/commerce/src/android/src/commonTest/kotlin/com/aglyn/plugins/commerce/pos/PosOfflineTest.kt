@@ -427,6 +427,26 @@ class PosOfflineCardTest {
   }
 
   @Test
+  fun aSaleOverTheLimitPerSaleIsRefusedBeforeTheCardIsAskedFor() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit(maxSale = 1000.0) }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    assertNull(offline.cardRequest(cart()), "no card request reaches the reader")
+    assertEquals("Offline, a card sale can be up to $10.00. Take cash, or charge it when you are back online.", offline.cardRefusal(cart()))
+  }
+
+  @Test
+  fun theRequestCarriesTheStoreLimitsForTheSdk() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    val request = assertNotNull(offline.cardRequest(cart()))
+    assertEquals(10_000L, request.maxSaleCents)
+    assertEquals(500_000L, request.maxDeviceDailyCents)
+    assertEquals(0L, request.takenTodayCents)
+  }
+
+  @Test
   fun theRequestNamesItsSaleAndTheStoreDestination() = runTest {
     val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
     val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
