@@ -47,6 +47,19 @@ struct FieldsBlock: View {
 }
 
 /// The tone a row or badge takes: a fixed `tone`, or `tones` keyed by its value.
+/// A list row's badge as chips: one, or with `each` (a path to a list) one per row of that list, the row read as `row` (a
+/// resource's units left on each of the next nights). `when` is read once, against the list row.
+func rowBadges(_ badge: JSONValue, in scope: JSONValue) -> [(String, AglynTone)] {
+  guard ScreenValues.condition(badge["when"]?.stringValue, in: scope) else { return [] }
+  let scopes = badge["each"]?.stringValue.map { path in
+    ScreenValues.rows(ScreenValues.lookup(path, in: scope)).map { ScreenContext.with(scope, "row", $0) }
+  } ?? [scope]
+  return scopes.compactMap { here in
+    let text = ScreenValues.render(badge["text"]?.stringValue ?? "", in: here)
+    return text.isEmpty ? nil : (text, toneFor(badge, value: text, in: here))
+  }
+}
+
 func toneFor(_ spec: JSONValue, value: String, in context: JSONValue) -> AglynTone {
   if case .object(let map)? = spec["tones"] {
     return tone(map[value]?.stringValue ?? map["*"]?.stringValue)
@@ -298,15 +311,15 @@ struct ListRow: View {
   }
 
   var body: some View {
-    let primary = ScreenValues.render(block["primary"]?.stringValue ?? "{item.name|item.$id}", in: scope)
+    // A template, or a list of parts joined with ` · ` as `secondary` takes them (a part shown only while its `when` holds).
+    let primary: String = {
+      if case .array(_)? = block["primary"] { return rowLine(block["primary"], in: scope) ?? "" }
+      return ScreenValues.render(block["primary"]?.stringValue ?? "{item.name|item.$id}", in: scope)
+    }()
     let secondary = rowLine(block["secondary"], in: scope)
     let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
-    let badges = block["badges"].array.compactMap { badge -> (String, AglynTone)? in
-      guard ScreenValues.condition(badge["when"]?.stringValue, in: scope) else { return nil }
-      let text = ScreenValues.render(badge["text"]?.stringValue ?? "", in: scope)
-      return text.isEmpty ? nil : (text, toneFor(badge, value: text, in: scope))
-    }
+    let badges = block["badges"].array.flatMap { badge in rowBadges(badge, in: scope) }
     let row = HStack(alignment: .center, spacing: 12) {
       if let icon = block["icon"]?.stringValue {
         IconBadge(ScreenSpec.appleIcon(ScreenValues.render(icon, in: scope)), tone: .info, size: 30, circle: true)
@@ -324,7 +337,7 @@ struct ListRow: View {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
         }
         if !badges.isEmpty {
-          HStack(spacing: 6) {
+          AglynWrapRow(spacing: AglynSpace.of(0.75), lineSpacing: AglynSpace.of(0.75)) {
             ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
           }
         }
@@ -595,7 +608,7 @@ struct FieldInput: View {
           .buttonStyle(.borderless)
           .accessibilityIdentifier("generate-\(field.key)")
       }
-      if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.mismatches(.string(text.wrappedValue), in: context) {
+      if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.refuses(.string(text.wrappedValue), in: context) {
         Text(ScreenValues.render(mismatch, in: context)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
       } else if let help = field.help {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)

@@ -656,10 +656,7 @@ public struct FieldSpec: Sendable, Identifiable {
       let typed = ScreenValues.text(value)
       if !typed.isEmpty, typed.range(of: pattern, options: .regularExpression) == nil { return true }
     }
-    if kind == "number", let number = ScreenValues.number(value) {
-      if let min, number < min { return true }
-      if let max, number > max { return true }
-    }
+    if outOfBounds(value) { return true }
     if coversAll, kind == "multiselect" {
       let chosen = Set(Optional(value).array.compactMap { $0.stringValue })
       if choices(in: context).contains(where: { !chosen.contains($0.value) }) { return true }
@@ -743,6 +740,22 @@ public struct FieldSpec: Sendable, Identifiable {
           options: yesno ? [("", "No"), ("true", "Yes")] : choices)
       }
     }
+  }
+
+  /// Whether a number field holds something typed that is not a number, or a number outside its bounds.
+  public func outOfBounds(_ value: JSONValue) -> Bool {
+    let typed = ScreenValues.text(value).trimmingCharacters(in: .whitespaces)
+    guard kind == "number", !typed.isEmpty else { return false }
+    guard let number = Double(typed) ?? ScreenValues.number(value) else { return true }
+    if let min, number < min { return true }
+    if let max, number > max { return true }
+    return false
+  }
+
+  /// Whether the field's `mismatch` line is said under it: the value is not what it must match, or a number field's value is
+  /// outside its bounds (`A whole number from 1 to 500`).
+  public func refuses(_ value: JSONValue, in context: JSONValue) -> Bool {
+    mismatches(value, in: context) || outOfBounds(value)
   }
 
   /// Whether a value is not what the field must match (a field with nothing to match never mismatches).

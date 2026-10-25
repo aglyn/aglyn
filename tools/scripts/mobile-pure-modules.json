@@ -434,6 +434,10 @@
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "why": "Reservation pricing and availability (nights, units, pending holds); a type-only import of commerce-tax-decision. The apps' Stays port reads its unit bounds and hold window as contract values (AGL-4045)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
       "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
     },

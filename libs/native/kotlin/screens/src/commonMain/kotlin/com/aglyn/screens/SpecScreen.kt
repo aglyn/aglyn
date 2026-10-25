@@ -97,6 +97,20 @@ internal fun tone(name: String?): StatusTone = when (name) {
   else -> StatusTone.NEUTRAL
 }
 
+/**
+ * A list row's badge as chips: one, or with `each` (a path to a list) one per row of that list, the row read as `row` (a
+ * resource's units left on each of the next nights). `when` is read once, against the list row.
+ */
+internal fun rowBadges(badge: JsonElement, scope: JsonElement): List<Pair<String, StatusTone>> {
+  if (!ScreenValues.condition(badge.str("when"), scope)) return emptyList()
+  val scopes = badge.str("each")?.let { path -> ScreenValues.rows(ScreenValues.lookup(path, scope)).map { ScreenContext.with(scope, "row", it) } }
+    ?: listOf(scope)
+  return scopes.mapNotNull { here ->
+    val text = ScreenValues.render(badge.str("text").orEmpty(), here)
+    if (text.isEmpty()) null else text to toneFor(badge, text, here)
+  }
+}
+
 internal fun toneFor(spec: JsonElement, value: String, context: JsonElement): StatusTone {
   val map = spec.obj("tones") as? JsonObject
   if (map != null) return tone((map[value] as? JsonPrimitive)?.content ?: (map["*"] as? JsonPrimitive)?.content)
@@ -998,15 +1012,13 @@ private fun ListRow(
   val target = block["open"]?.takeIf { ScreenValues.condition(it.str("when"), scope) }?.let { openSpec ->
     openSpec.str("screen")?.let { Selection(it, renderParams(openSpec.obj("params"), scope)) }
   }
-  val primary = ScreenValues.render(block.string("primary") ?: "{item.name|item.\$id}", scope).ifEmpty { "—" }
+  // A template, or a list of parts joined with ` · ` as `secondary` takes them (a part shown only while its `when` holds).
+  val primary = (block["primary"] as? JsonArray)?.let { rowLine(it, scope).orEmpty() }?.ifEmpty { "—" }
+    ?: ScreenValues.render(block.string("primary") ?: "{item.name|item.\$id}", scope).ifEmpty { "—" }
   val secondary = rowLine(block["secondary"], scope)
   val tertiary = rowLine(block["tertiary"], scope)
   val trailingText = block.string("trailing")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
-  val badges = block.raw.arr("badges").mapNotNull { badge ->
-    if (!ScreenValues.condition(badge.str("when"), scope)) return@mapNotNull null
-    val text = ScreenValues.render(badge.str("text").orEmpty(), scope)
-    if (text.isEmpty()) null else text to toneFor(badge, text, scope)
-  }
+  val badges = block.raw.arr("badges").flatMap { rowBadges(it, scope) }
   // `toggle: { value, disabled, on, off }`: a switch at the row's end whose
   // flip runs the `on` or `off` action (with its confirmation) against the
   // row; the screen's reload then shows what was stored.
@@ -1232,7 +1244,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         modifier = Modifier.testTag("generate-${field.key}"),
       ) { Text("Generate") }
     }
-    val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.mismatches(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
+    val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.refuses(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
     if (mismatch != null) {
       Text(mismatch, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     } else if (help != null && field.kind != "toggle") {

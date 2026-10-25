@@ -609,6 +609,13 @@
         "POS_TENDER_LABELS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-reservations.ts": {
+      "values": [
+        "PENDING_RESERVATION_HOLD_MS",
+        "MAX_RESOURCE_UNITS",
+        "FEW_UNITS_LEFT"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
       "types": [
         "ReturnReason"

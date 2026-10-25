@@ -1,3 +1,5 @@
+import AglynContracts
+import AglynCore
 import Foundation
 
 /// A season of a resource's year, by month and day (`06-01` to `08-31`; it may wrap the new year): its nights cost `multiplier` times as much.
@@ -21,6 +23,16 @@ struct StayResource: Equatable {
   var blocks: [StayBlock] = []
   var minNights: Double?
   var depositPct: Double?
+  /// How many identical units the resource holds (12 RV hookups): a whole number from 1 to `Stays.maxUnits`, and 1 for a
+  /// resource that never set one. Each night takes this many stays at once.
+  var units = 1
+}
+
+/// One night of a resource: how many of its units are still free.
+struct StayNight: Equatable {
+  let dayMs: Int64
+  let unitsLeft: Int
+  let units: Int
 }
 
 /// A reservation as an availability check reads it.
@@ -47,7 +59,30 @@ enum Stays {
   static let dayMs: Int64 = 24 * 60 * 60 * 1000
 
   /// An unpaid `pending` reservation holds its dates only this long.
-  static let pendingHoldMs: Int64 = 30 * 60 * 1000
+  static var pendingHoldMs: Int64 { Int64(ContractValues.shared.pendingReservationHoldMs) }
+
+  /// The most identical units one resource can hold.
+  static var maxUnits: Int { ContractValues.shared.maxResourceUnits }
+
+  /// A night with this many units left, or fewer, reads as scarce.
+  static var fewUnitsLeft: Int { ContractValues.shared.fewUnitsLeft }
+
+  /// The resource's stored `units` as the console reads it (`resourceUnits`): JavaScript's `Math.floor(Number(units))`, from 1
+  /// to `maxUnits`, and 1 for anything else (absent, zero, negative, not a number).
+  static func units(_ raw: Any?) -> Int {
+    let value: Double
+    switch raw {
+    case let number as NSNumber: value = number.doubleValue
+    case let text as String:
+      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      value = trimmed.isEmpty ? 0 : (Double(trimmed) ?? .nan)
+    case is NSNull: value = 0
+    default: value = .nan
+    }
+    let whole = value.rounded(.down)
+    guard whole.isFinite, whole >= 1 else { return 1 }
+    return Int(Swift.min(Double(maxUnits), whole))
+  }
 
   /// JavaScript's `Math.round`: halves go up.
   private static func round(_ value: Double) -> Int64 { Int64((value + 0.5).rounded(.down)) }
@@ -131,14 +166,102 @@ enum Stays {
     return created > 0 && now - created < pendingHoldMs
   }
 
-  /// A range clashes with a live reservation, or with a block, when they overlap; back-to-back stays touch without clashing.
+  /// How many units are taken on each night from `from` up to (not including) `to`, one entry per night, counting only the
+  /// stays that still hold their dates. A stay takes a night it overlaps, so one that leaves the morning another arrives does not.
+  static func unitsTakenByNight(_ booked: [StayBooked], from: Int64, to: Int64, now: Int64) -> [Int] {
+    let live = booked.filter { holdsDates($0, now: now) }
+    var taken: [Int] = []
+    var night = from
+    while night < to {
+      let nightEnd = Swift.min(night + dayMs, to)
+      taken.append(live.filter { $0.checkInDayMs < nightEnd && $0.checkOutDayMs > night }.count)
+      night += dayMs
+    }
+    return taken
+  }
+
+  /// Units left on each of `nights` nights from `from`: the resource's units less the stays holding that night, and none on a
+  /// blocked night, because a block closes the whole resource.
+  static func unitsLeftByNight(_ resource: StayResource, booked: [StayBooked], from: Int64, nights: Int, now: Int64) -> [StayNight] {
+    let to = from + Int64(Swift.max(0, nights)) * dayMs
+    return unitsTakenByNight(booked, from: from, to: to, now: now).enumerated().map { index, taken in
+      let night = from + Int64(index) * dayMs
+      let blocked = resource.blocks.contains { night < $0.toDayMs && night + dayMs > $0.fromDayMs }
+      return StayNight(dayMs: night, unitsLeft: blocked ? 0 : Swift.max(0, resource.units - taken), units: resource.units)
+    }
+  }
+
+  /// A range is free when no block touches it and, on EVERY night of it, fewer live stays overlap that night than the resource
+  /// has units; back-to-back stays touch without clashing. One unit (every resource that never set `units`) clashes with any
+  /// live stay it overlaps, as a resource always has.
   static func isRangeAvailable(_ resource: StayResource, booked: [StayBooked], checkIn: Int64, checkOut: Int64, now: Int64) -> Bool {
     guard checkOut > checkIn else { return false }
-    for stay in booked where holdsDates(stay, now: now) {
-      if checkIn < stay.checkOutDayMs && checkOut > stay.checkInDayMs { return false }
-    }
     for block in resource.blocks where checkIn < block.toDayMs && checkOut > block.fromDayMs { return false }
-    return true
+    if resource.units == 1 {
+      for stay in booked where holdsDates(stay, now: now) {
+        if checkIn < stay.checkOutDayMs && checkOut > stay.checkInDayMs { return false }
+      }
+      return true
+    }
+    return unitsTakenByNight(booked, from: checkIn, to: checkOut, now: now).allSatisfy { $0 < resource.units }
+  }
+
+  /// What the front desk is told when a walk-in's dates are not free, in the console's words.
+  static func takenMessage(_ resource: StayResource) -> String {
+    resource.units > 1 ? "Every unit is taken on at least one of those nights" : "Those dates are taken"
+  }
+
+  /// Today on the device's calendar as the UTC midnight stays are stored in (the console's `localTodayDayMs`).
+  static func localToday(_ date: Date, in zone: TimeZone) -> Int64 {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = zone
+    let parts = calendar.dateComponents([.year, .month, .day], from: date)
+    return day(String(format: "%04d-%02d-%02d", parts.year ?? 1970, parts.month ?? 1, parts.day ?? 1)) ?? 0
+  }
+
+  private static let weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  private static let monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+  /// A night as the console's Reservations card names it: `Mon, Oct 26` (US English, in UTC, as the card prints it).
+  static func nightLabel(_ ms: Int64) -> String {
+    let key = monthDay(ms).split(separator: "-").compactMap { Int($0) }
+    guard key.count == 2 else { return "" }
+    return "\(weekdayNames[weekday(ms)]), \(monthNames[key[0] - 1]) \(key[1])"
+  }
+
+  /// How many nights ahead the Reservations screen draws a several-unit resource's units, as the console's card does.
+  static let lookaheadNights = 14
+
+  /// The Reservations screen's look-ahead (`derive: "unitsAhead"`): for each resource with several units, its next
+  /// `lookaheadNights` nights from `today` as `{ dayMs, label, unitsLeft, units, tone }`, keyed by resource id. `resources` and
+  /// `stays` are query answers (`{ items }`) or plain lists. A resource with one unit is left out, as the console's card leaves it.
+  static func unitsAhead(resources: JSONValue?, stays: JSONValue?, today: Int64, now: Int64) -> JSONValue {
+    func rows(_ value: JSONValue?) -> [JSONValue] { ScreenValues.rows(value?["items"] ?? value) }
+    let booked = rows(stays).compactMap { stay -> (String, StayBooked)? in
+      guard let id = stay["resourceId"]?.stringValue, let data = FirestoreLoads.plain(stay) as? [String: Any],
+        let held = Self.booked(data)
+      else { return nil }
+      return (id, held)
+    }
+    var byResource: [String: JSONValue] = [:]
+    for row in rows(resources) {
+      guard let id = row["$id"]?.stringValue, let data = FirestoreLoads.plain(row) as? [String: Any] else { continue }
+      let units = Self.units(data["units"])
+      guard units > 1 else { continue }
+      let blocks = Self.resource(["nightlyRateUsd": 0, "blocks": data["blocks"] ?? []])?.blocks ?? []
+      let resource = StayResource(nightlyRateUsd: 0, blocks: blocks, units: units)
+      let nights = unitsLeftByNight(
+        resource, booked: booked.filter { $0.0 == id }.map(\.1), from: today, nights: lookaheadNights, now: now)
+      byResource[id] = .array(
+        nights.map { night in
+          let tone = night.unitsLeft == 0 ? "error" : night.unitsLeft <= fewUnitsLeft ? "warning" : "neutral"
+          return .object([
+            "dayMs": .number(Double(night.dayMs)), "label": .string(nightLabel(night.dayMs)),
+            "unitsLeft": .number(Double(night.unitsLeft)), "units": .number(Double(night.units)), "tone": .string(tone),
+          ])
+        })
+    }
+    return .object(byResource)
   }
 
   private static func number(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
@@ -156,7 +279,7 @@ enum Stays {
     }
     return StayResource(
       nightlyRateUsd: rate, weekendMultiplier: number(data?["weekendMultiplier"]), seasons: seasons, blocks: blocks,
-      minNights: number(data?["minNights"]), depositPct: number(data?["depositPct"]))
+      minNights: number(data?["minNights"]), depositPct: number(data?["depositPct"]), units: units(data?["units"]))
   }
 
   /// A stored reservation as the availability check reads it.

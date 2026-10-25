@@ -28,7 +28,8 @@ object ScreenValues {
 
   /**
    * `now.year`, `now.month` (`2026-10`), `now.prevMonth`, `now.quarter`, `now.ms` and `now.day` (`2026-10-13`) in UTC, the keys the
-   * console's monthly counters and daily documents are named by, and `now.months`: the last twelve months, newest first, as a report
+   * console's monthly counters and daily documents are named by, `now.localDayMs` (today on the device's calendar as the UTC
+   * midnight a stay's nights are stored in), and `now.months`: the last twelve months, newest first, as a report
    * picks them (`{ from, to, label }` with ISO instants in UTC).
    */
   fun nowObject(): JsonElement {
@@ -43,6 +44,7 @@ object ScreenValues {
         "year" to JsonPrimitive(y), "month" to JsonPrimitive("$y-$m"), "day" to JsonPrimitive("$y-$m-$d"),
         "prevMonth" to JsonPrimitive(prior), "quarter" to JsonPrimitive("$year-Q${(month - 1) / 3 + 1}"),
         "ms" to JsonPrimitive(clock().toDouble()),
+        "localDayMs" to JsonPrimitive(Stays.localToday(clock(), timeZone)),
         "months" to JsonArray(recentMonths(year, month)),
       ),
     )

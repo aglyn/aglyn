@@ -496,12 +496,7 @@ class FieldSpec private constructor(
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mismatches(value, context)) return true
     if (pattern != null) ScreenValues.text(value).let { typed -> if (typed.isNotEmpty() && !Regex(pattern).containsMatchIn(typed)) return true }
-    if (kind == "number") {
-      ScreenValues.number(value)?.let { number ->
-        if (min != null && number < min) return true
-        if (max != null && number > max) return true
-      }
-    }
+    if (outOfBounds(value)) return true
     if (coversAll && kind == "multiselect") {
       val chosen = ((value as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
       if (choices(context).any { it.first !in chosen }) return true
@@ -510,6 +505,20 @@ class FieldSpec private constructor(
     val finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != null)
     return required && kind != "toggle" && !finished
   }
+
+  /** Whether a number field holds something typed that is not a number, or a number outside its bounds. */
+  fun outOfBounds(value: JsonElement): Boolean {
+    val typed = ScreenValues.text(value).trim()
+    if (kind != "number" || typed.isEmpty()) return false
+    val number = typed.toDoubleOrNull() ?: ScreenValues.number(value) ?: return true
+    return (min != null && number < min) || (max != null && number > max)
+  }
+
+  /**
+   * Whether the field's `mismatch` line is said under it: the value is not what it must match, or a number field's value is
+   * outside its bounds (`A whole number from 1 to 500`).
+   */
+  fun refuses(value: JsonElement, context: JsonElement): Boolean = mismatches(value, context) || outOfBounds(value)
 
   /** Whether a value is not what the field must match (a field with nothing to match never mismatches). */
   fun mismatches(value: JsonElement, context: JsonElement): Boolean {

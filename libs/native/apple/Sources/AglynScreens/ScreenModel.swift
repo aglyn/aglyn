@@ -464,6 +464,13 @@ public final class ScreenModel {
     let source = load.from.flatMap { ScreenValues.lookup($0, in: data) }
     switch load.derive {
     case "shippingCoverage": return ShippingCoverage.summary(source)
+    case "unitsAhead":
+      // `args`: the resources load, then the current stays load (both keys under `data`).
+      let args = load.args.map { ScreenValues.lookup($0, in: data) }
+      let now = ScreenValues.clock()
+      return Stays.unitsAhead(
+        resources: args.first ?? nil, stays: args.count > 1 ? args[1] : nil, today: Stays.localToday(now, in: ScreenValues.timeZone),
+        now: Int64((now.timeIntervalSince1970 * 1000).rounded()))
     default: return .null
     }
   }
@@ -691,9 +698,11 @@ public final class ScreenModel {
   }
 
   /// A walk-in at the front desk, as the console's reservations card books one: `{ stay: { resource, checkIn, checkOut,
-  /// guestName } }` prices the stay, checks the dates against every live stay of that resource and its blocks, and only then
-  /// adds the confirmed reservation. Anything it cannot book is said in words, and nothing is written.
-  private func bookStay(_ stay: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+  /// guestName, route } }` prices the stay and checks the dates against every live stay of that resource and its blocks
+  /// (counting units on a resource with several), for the instant answer; then `route` (the console's walk-in route) books the
+  /// confirmed reservation, asking the same question again inside the transaction that writes it, so two desks taking the
+  /// last unit at once cannot both win. Anything it cannot book is said in words, and nothing is written.
+  private func bookStay(_ stay: JSONValue, _ scope: JSONValue) async throws {
     func text(_ key: String) -> String {
       ScreenValues.render(stay[key]?.stringValue ?? "", in: scope).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -718,21 +727,39 @@ public final class ScreenModel {
     }
     let now = Int64((Date().timeIntervalSince1970 * 1000).rounded())
     guard Stays.isRangeAvailable(resource, booked: overlapping.compactMap { Stays.booked($0.data) }, checkIn: checkIn, checkOut: checkOut, now: now) else {
-      throw ConsoleAPIError(status: 0, message: "Those dates are taken")
+      throw ConsoleAPIError(status: 0, message: Stays.takenMessage(resource))
+    }
+    guard let route = stay["route"]?.stringValue, let api else {
+      throw ConsoleAPIError(status: 0, message: "Could not reserve the walk-in — try again")
     }
     let guest = text("guestName")
-    try await writer.merge(
-      ["hosts", hostID, "reservations", newResourceID()],
-      [
-        "resourceId": resourceID, "status": "confirmed", "checkInDayMs": Double(checkIn), "checkOutDayMs": Double(checkOut),
-        "guestName": guest.isEmpty ? NSNull() : guest, "guestEmail": NSNull(), "nights": quote.nights,
-        "totalCents": Double(quote.totalCents), "depositCents": 0, "paidCents": 0, "createdAtMs": Double(now),
-      ])
+    var body: [String: JSONValue] = [
+      "hostId": .string(hostID), "resourceId": .string(resourceID), "checkInDayMs": .number(Double(checkIn)),
+      "checkOutDayMs": .number(Double(checkOut)),
+    ]
+    if !guest.isEmpty { body["guestName"] = .string(guest) }
+    // One id per attempt, minted here and sent again by a retry of the same walk-in (the same request after a failure), so
+    // a stay the route booked before the answer was lost is found rather than booked twice. A booked walk-in lets go of it:
+    // the next identical one is another party.
+    let signature = "stay|\(String(data: (try? JSONValue.object(body).encoded()) ?? Data(), encoding: .utf8) ?? "")"
+    let reservationID = attempts[signature] ?? newResourceID()
+    attempts[signature] = reservationID
+    body["reservationId"] = .string(reservationID)
+    do {
+      _ = try await api.request(ScreenValues.render(route, in: scope), method: .post, body: .object(body))
+    } catch let refusal as ConsoleAPIError where refusal.status >= 400 && !refusal.message.isEmpty {
+      throw refusal
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      throw ConsoleAPIError(status: 0, message: "Could not reserve the walk-in — try again")
+    }
+    attempts[signature] = nil
   }
 
   private func writeOne(_ write: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
     if let stay = write["stay"] {
-      try await bookStay(stay, scope, writer)
+      try await bookStay(stay, scope)
       return
     }
     if let path = write["delete"]?.stringValue {
