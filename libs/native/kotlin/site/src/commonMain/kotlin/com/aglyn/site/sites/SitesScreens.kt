@@ -18,7 +18,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
@@ -62,6 +61,7 @@ import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
@@ -113,7 +113,7 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   val open = selected
   if (open != null) {
     Column(Modifier.fillMaxSize()) {
-      androidx.compose.material3.TextButton(onClick = { selected = null }, modifier = Modifier.padding(start = space(1.5f), top = space(0.5f)).testTag("sites-back")) {
+      com.aglyn.ui.TextButton(onClick = { selected = null }, modifier = Modifier.padding(start = space(1.5f), top = space(0.5f)).testTag("sites-back")) {
         Icon(AglynIcons.named("chevron_left"), contentDescription = null)
         Text("Sites")
       }

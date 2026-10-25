@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1.5
 title: Buy a domain
-description: Search for a domain on your site's Custom Domain page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.
+description: Search for a domain on your site's Custom Domain page or your workspace's Domains page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.
 ---
 
 # Buy a domain
@@ -11,6 +11,10 @@ You search, pick a name, and say who it's registered to. Aglyn registers it to y
 and connects it to your site, with its security certificate, so there are **no DNS
 records to add**. `www.yourbusiness.com` forwards to it as well.
 
+You can buy a domain at any time, even when a site already has one. Every domain
+your workspace holds is listed on its **Domains** page — see
+[Manage your domains](manage-domains.md).
+
 :::info Plan availability
 **Starter and above.** On Free, the card says domains can be bought on the Starter
 plan and above, with a **See plans** button.
@@ -19,7 +23,8 @@ plan and above, with a **See plans** button.
 ## Steps {#steps}
 
 1. In the site's **Admin** page, choose **Custom Domain**. The **Get a domain** card
-   is at the top.
+   is at the top. (Or open your workspace's **Domains** page and press **Buy a domain**
+   in the top corner.)
 2. Type your business name or the domain you want into **Search for a domain**. Results
    appear as you type, each with its price: **this year and every year after**. A name
    someone already owns shows as **Taken**.
@@ -33,6 +38,14 @@ plan and above, with a **See plans** button.
 The card switches to **Your domain** and follows the setup: **Registering…**, then
 **Connecting to your site…**. Most domains are live within a few minutes, and you can
 leave the page while it finishes.
+
+### When the site already has a domain {#site-has-a-domain}
+
+If the site already has a domain connected, or one bought for it, the card says so above
+the search, and a name you buy goes into your **workspace's domains** instead, not
+connected to any site. The same happens when you buy from the **Domains** page. Nothing
+about the site changes. When you're ready, open the domain on the **Domains** page and
+choose **Connect to a site**.
 
 ## One thing to do afterwards: confirm your email {#confirm-email}
 
@@ -59,19 +72,22 @@ arrives, check your spam folder, then contact support.
 
 | What you see | What it means |
 | --- | --- |
-| A notice above the search | Something has to happen before this site can buy a domain, and the notice says what — for example, a domain is already connected, or only a member who manages billing can buy. |
+| A notice above the search | Something has to happen before your workspace can buy a domain, and the notice says what — for example, only a member who manages billing can buy, or your first plan payment hasn't cleared yet. |
 | "The price changed a moment ago" | The registrar's price moved while you were filling in the form. The dialog shows the new price; press buy again if you still want it. |
 | "That name was just taken" | Someone else registered it first. Pick another. |
 | An email saying we couldn't register it | The registrar couldn't complete the registration. Any charge was refunded automatically. |
-| **Not connected** on the card | The domain is yours but isn't connected to this site (another domain was connected meanwhile). Press **Connect it**. |
+| **Not connected** on the card | The domain is yours but isn't connected to this site (another domain was connected meanwhile). Press **Connect it**, or connect it to any site from the **Domains** page. |
 
 ## Moving a domain to another registrar {#transfer}
 
 The domain is yours, and you can move it to another registrar at no charge. Press
 **Move to another registrar**, then **Show transfer code**, and give that code to the
 registrar you're moving to. Your workspace's owners are emailed whenever the code is
-shown. Registries lock a newly registered domain for **60 days**; the card tells you the
-date it can move.
+shown.
+
+Domain registries lock a domain for a while after it is registered or moved, usually
+60 days. If yours is still locked, the dialog shows the date the registry gives for when
+it can move, instead of the code.
 
 To keep your site working at the domain after moving it, keep its DNS records pointing
 at Aglyn at your new registrar — see [Connect a domain](connect-a-domain.md#registrar-quick-reference).
@@ -79,8 +95,10 @@ at Aglyn at your new registrar — see [Connect a domain](connect-a-domain.md#re
 ## If your site is deleted or your plan ends {#after}
 
 The domain stays registered to you. It keeps renewing while auto-renew is on, until you
-turn it off or move it. Another site in your workspace can use it: its **Get a domain**
-card lists your workspace's unconnected domains with **Use for this site**.
+turn it off or move it. It stays on your workspace's **Domains** page, where you can
+connect it to another site. A site's **Get a domain** card also lists your workspace's
+unconnected domains with **Use for this site**. If that site already has a domain, you're
+asked to confirm first, with the domain it replaces named.
 
 If a domain expires, your site goes back to its free Aglyn address, so it stays online.
 For a short while after expiring, a domain can usually still be renewed with

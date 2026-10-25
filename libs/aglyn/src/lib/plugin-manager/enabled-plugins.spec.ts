@@ -210,6 +210,8 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // can seal a merchant's own help desk credentials.
     // Domains (AGL-3962): on for every workspace, buying hidden until the
     // deployment names a registrar, and a site can turn it off.
+    // Waivers (AGL-4042): sold with commerce, and a site can turn it off; the
+    // signatures already taken belong to the workspace.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -230,6 +232,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'review-platforms',
       'music',
       'help-desks',
+      'waivers',
       'ad-conversions',
       'domains',
     ])

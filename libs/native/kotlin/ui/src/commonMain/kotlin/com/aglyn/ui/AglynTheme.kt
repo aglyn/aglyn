@@ -48,9 +48,11 @@ fun AglynTheme(
   val base = if (isDark) AglynDarkColorScheme else AglynLightColorScheme
   val basePalette = if (isDark) AglynTokens.dark else AglynTokens.light
   val customAccent = appTheme?.accent?.let(::colorOfHex)
-  // Every theme, Aglyn's too, derives its accent token from its seed: the Aglyn theme's #00B0FF gives the fill a button
-  // wears, #0073AE (Figma's accent token, white text at 4.5:1), rather than filling with the bright seed itself.
+  // Every theme, Aglyn's too, takes its accent from its seed through the contract: the Aglyn theme's #00B0FF is the
+  // console's primary, a #00B0FF fill under white with #0077AD (light) / #4DC8FF (dark) as its text (AGL-3990).
   val seed = brand ?: customAccent ?: themeAccentSeed(theme)
+  // The brand's own look (the Aglyn theme in the brand blue), which a phone draws bold (PhoneTheme, AGL-3990).
+  val brandLook = isBrandLook(theme, if (brand != null) brand.toHex() else appTheme?.accent?.takeIf { customAccent != null })
   val accent = seed?.let { deriveAccent(it, isDark) }
   val scheme = themedColorScheme(base, surfaces, accent, isDark)
   val palette = themedPalette(basePalette, surfaces, accent)
@@ -62,6 +64,7 @@ fun AglynTheme(
     LocalUiDensity provides uiDensityOf(appTheme?.density ?: AppDensity.COMFORTABLE),
     LocalDensity provides if (textScale == 1f) density else Density(density.density, density.fontScale * textScale),
     LocalAglynDark provides isDark,
+    LocalBrandLook provides brandLook,
   ) {
     MaterialTheme(
       colorScheme = scheme,
@@ -82,3 +85,6 @@ fun textScaleOf(size: AppTextSize): Float = when (size) {
 
 /** Spacing in units of the console's 8 dp grid. */
 fun space(units: Float) = (AglynTokens.SPACING * units).dp
+
+/** A corner radius in units of the console's 4 dp shape radius (2 = a touch control, 3 = a touch card). */
+fun radius(units: Float) = (AglynTokens.RADIUS * units).dp

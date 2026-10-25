@@ -87,7 +87,7 @@ fun recordRecentOrg(recent: List<String>, orgId: String): List<String> {
 /**
  * The rail for one account, the same however few workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
  * pinned, a divider, up to three recent, a divider, then "All workspaces (N)", which opens the switcher where pins are
- * edited (Zach, 2026-10-19). `rest` is always empty. [orgIds] is every membership in the switcher's order; an id the
+ * edited (AGL-3996). `rest` is always empty. [orgIds] is every membership in the switcher's order; an id the
  * person no longer belongs to is ignored.
  */
 fun railWorkspaces(orgIds: List<String>, pinned: List<String>, recent: List<String>): RailWorkspaces {

@@ -92,6 +92,8 @@ export type AiJobKind =
   | 'media'
   /** A change to a site's analytics and advertising tags, made by code and saved live (AGL-3751). */
   | 'tracking'
+  /** A change to who can see a site — maintenance mode, search indexing, page visibility — made by code and saved live (AGL-4033). */
+  | 'privacy'
   /** A person's own website brought in, page by page, in reviewed waves (AGL-3976). */
   | 'import'
 
@@ -122,6 +124,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'settings',
   'media',
   'tracking',
+  'privacy',
   'import',
 ]
 
@@ -277,6 +280,8 @@ export type AiJobOutputResource =
   | 'media'
   /** A site's tracking tags a build changed (AGL-3751): saved live, on the host document. */
   | 'tracking'
+  /** Who can see a site, as a build changed it (AGL-4033): saved live, on the host and page documents. */
+  | 'privacy'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can

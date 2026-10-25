@@ -26,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -48,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.WorkspaceStore
 import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.shellColors
 
 /** One tab: its own place (a navigator), and the workspace and site it stands in. */

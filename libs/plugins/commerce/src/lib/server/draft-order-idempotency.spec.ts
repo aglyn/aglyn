@@ -304,6 +304,18 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
+describe('a product sold in person only (AGL-4060)', () => {
+  it('is drafted and invoiced like any other', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      ...docs.get('hosts/host-1/products/product-1'),
+      sellOnline: false,
+    })
+    const result = await post({}, { 'idempotency-key': 'attempt-in-person' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+  })
+})
+
 describe('draft-order idempotency (AGL-1697)', () => {
   it('creates one draft with a payment link and records the claim', async () => {
     const result = await post({}, { 'idempotency-key': 'attempt-a' })

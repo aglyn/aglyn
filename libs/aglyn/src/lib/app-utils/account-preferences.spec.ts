@@ -129,7 +129,7 @@ describe('site pins: five a workspace, like workspace pins (AGL-4005)', () => {
 })
 
 describe('the rail', () => {
-  it('shows a small account the same rail: pins, recents, then All (Zach, 2026-10-19)', () => {
+  it('shows a small account the same rail: pins, recents, then All (AGL-3996)', () => {
     expect(railWorkspaces(ids(6), ['o6'], ['o6', 'o2'])).toEqual({
       pinned: ['o6'],
       recent: ['o2'],

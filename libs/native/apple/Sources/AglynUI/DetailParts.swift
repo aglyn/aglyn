@@ -133,7 +133,7 @@ public struct AglynUpsellState: View {
     } actions: {
       if let actionTitle, let action {
         Button(actionTitle, action: action)
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .accessibilityIdentifier("upsell-action")
       }
     }

@@ -184,6 +184,7 @@ export const DEFAULT_APP_THEME: AppThemePrefs = {
   accent: 'theme',
   density: 'comfortable',
   textSize: 'system',
+  // Plain: a sidebar keeps the theme's neutral ground unless the person picks Tinted (AGL-3990).
   sidebarStyle: 'plain',
   appIcon: 'aglyn',
   useWorkspaceBrand: true,
@@ -460,8 +461,8 @@ export interface RailWorkspaces {
   recent: string[]
   /**
    * Workspaces listed on the rail beyond the pins and the recents. Always
-   * empty: every account reaches the rest through the All tile (Zach,
-   * 2026-10-19). The field stays so the apps that read it need no change.
+   * empty: every account reaches the rest through the All tile
+   * (AGL-3996). The field stays so the apps that read it need no change.
    */
   rest: string[]
   /** Whether the last tile is "All workspaces", opening the searchable switcher: whenever there is a workspace. */
@@ -475,10 +476,8 @@ export interface RailWorkspaces {
  * workspaces it has (Figma Rail 12:338, "Many workspaces"): up to five
  * pinned, a divider, up to three recent under "Recent", a divider, then the
  * "All workspaces" tile with the total, which opens the switcher where pins
- * are edited. Zach, 2026-10-19, on a six-workspace account that saw every
- * tile in one unlabeled column: "we are missing all orgs buttons and the
- * ability to open that dialog that edits pins and we are missing the recents
- * label and divider". `orgIds` is every membership, in the switcher's order;
+ * are edited. A small account that saw every tile in one unlabeled column
+ * had no way into the switcher and no Recent label or divider. `orgIds` is every membership, in the switcher's order;
  * an id the person no longer belongs to is ignored.
  */
 export function railWorkspaces(

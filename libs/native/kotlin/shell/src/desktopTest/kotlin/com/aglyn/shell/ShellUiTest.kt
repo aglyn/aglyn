@@ -95,6 +95,8 @@ internal fun testServices(
   orgDoc: Map<String, Any?>? = null,
   /** A JSON body a route answers with (by path); an empty 200 otherwise. */
   apiBody: (String) -> String? = { null },
+  /** Plugins loaded beside the platform's, for a test that needs one's contributions (the AI panel's slot). */
+  plugins: List<com.aglyn.pluginhost.NativePluginManifestEntry> = emptyList(),
 ): ShellServices {
   val prefs = InMemoryKeyValueStore()
   val auth = authFor(prefs)
@@ -130,7 +132,7 @@ internal fun testServices(
     ), { auth.idToken(it) }),
     workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
     prefs = prefs,
-    registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
+    registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES + plugins) },
     besigner = { _, _, _ -> },
     writer = writer,
   )
@@ -227,7 +229,7 @@ class ShellUiTest {
     onNodeWithTag("sign-in-submit").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 }
     onNodeWithTag("nav-sidebar").assertIsDisplayed()
-    // One workspace: its tile, and the All tile every account gets (Zach, 2026-10-19).
+    // One workspace: its tile, and the All tile every account gets (AGL-3996).
     onNodeWithTag("rail-tile-o1").assertIsDisplayed()
     assertEquals(1, onAllNodesWithTagCount("rail-all"))
     // Inside the site: "‹ Acme" back to the whole workspace, then the site's picker.

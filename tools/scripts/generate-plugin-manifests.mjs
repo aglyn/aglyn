@@ -223,9 +223,15 @@ function describeDrift(expected, actual) {
  * registers opens something only the console holds — an eraser that
  * revokes a provider grant with the console's key — and the tenant runtime,
  * which serves the public internet, must not so much as bundle it.
+ *
+ * A `consoleDeclarations` entry (`/declarations.console`, AGL-4047) is the
+ * console's alone too, but on BOTH its sides: what core must know in the
+ * console's browser and on its server and the tenant never reads — a
+ * console-only plugin's permission keys, which the role editor lists.
  */
 const DECLARATION_MODULES = {
   declarations: 'declarations',
+  consoleDeclarations: 'declarations.console',
   serverDeclarations: 'declarations.server',
   consoleServerDeclarations: 'declarations.console-server',
 }
@@ -263,13 +269,13 @@ function declarationsContent(surfaces, constName, entryPoint) {
 const DECLARATION_MANIFESTS = [
   {
     file: 'apps/console/constants/plugins.declarations.generated.ts',
-    surfaces: ['declarations'],
+    surfaces: ['declarations', 'consoleDeclarations'],
     constName: 'registerPluginDeclarations',
     entryPoint: 'client',
   },
   {
     file: 'apps/console/constants/plugins.declarations.server.generated.ts',
-    surfaces: ['declarations', 'serverDeclarations', 'consoleServerDeclarations'],
+    surfaces: ['declarations', 'consoleDeclarations', 'serverDeclarations', 'consoleServerDeclarations'],
     constName: 'registerPluginServerDeclarations',
     entryPoint: 'server',
   },
@@ -2210,7 +2216,7 @@ function sitemapSectionRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...declaration } = entry
-      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, lastmod } = declaration
+      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, skipWhenFalse, lastmod } = declaration
       const what = `${where} "${section ?? ''}"`
       if (typeof section !== 'string' || !/^[a-z][a-z0-9-]*$/.test(section)) throw new Error(`${where}: a section is a lowercase path segment`)
       if (CORE_SITEMAP_SECTIONS.includes(section) || section.startsWith('content-')) {
@@ -2233,7 +2239,7 @@ function sitemapSectionRows() {
       if (typeof path !== 'string' || !path.startsWith('/') || path.split('{slug}').length !== 2) {
         throw new Error(`${what}: "path" is a site path with exactly one {slug}`)
       }
-      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen]]) {
+      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen], ['skipWhenFalse', skipWhenFalse]]) {
         if (value !== undefined && !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
       }
       if (lastmod !== undefined) plainFieldList(lastmod, `${what} lastmod`)
