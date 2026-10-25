@@ -125,6 +125,38 @@ public struct AglynEmptyState<Actions: View>: View {
   }
 }
 
+/// A whole area's one loading state: a large spinner and its line, centred in the space it is given, on the content
+/// ground (the in-app Besigner shows it from the push until the editor has drawn, AGL-4002).
+public struct AglynLoadingState<Actions: View>: View {
+  let message: String
+  let detail: String?
+  let actions: Actions
+
+  /// `detail` and `actions` say more when the wait runs long (the Besigner's "taking longer than usual" and Try again).
+  public init(_ message: String, detail: String? = nil, @ViewBuilder actions: () -> Actions = { EmptyView() }) {
+    self.message = message
+    self.detail = detail
+    self.actions = actions()
+  }
+
+  public var body: some View {
+    VStack(spacing: AglynSpace.of(1.5)) {
+      ProgressView().controlSize(.large)
+      VStack(spacing: AglynSpace.half) {
+        Text(message).font(AglynFont.body).foregroundStyle(AglynColor.secondaryText)
+        if let detail {
+          Text(detail).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+        }
+      }
+      .multilineTextAlignment(.center)
+      .accessibilityElement(children: .combine)
+      actions
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(AglynColor.paper)
+  }
+}
+
 /// What a detail column shows while nothing in its list is picked: quiet
 /// secondary text, the way Mail says "No Message Selected" (never a full-size
 /// empty state with a big symbol).

@@ -275,32 +275,33 @@ class FormsApi(private val api: ConsoleApiClient, private val writer: FirestoreW
     }
   }
 
-  /** The version to open in the Besigner: [preferred], else a first one minted for a form that has none. */
-  suspend fun versionToOpen(form: FormRow, preferred: String?): String {
-    preferred?.let { return it }
-    form.versionId?.let { return it }
+  /**
+   * The version to open in the Besigner: an existing one ([existingFormVersion]), else a first one minted for a form
+   * that has none, which the form then points at.
+   */
+  suspend fun versionToOpen(form: FormRow, preferred: String?, newest: String? = null): String {
+    existingFormVersion(form, preferred, newest)?.let { return it }
     val versionId = newDocumentId()
-    api.request(
-      "/api/hosts/versions",
-      ApiMethod.POST,
-      jsonBody(
-        "hostId" to hostId,
-        "kind" to "form",
-        "parentId" to form.id,
-        "id" to versionId,
-        "data" to mapOf(
-          "formId" to form.id,
-          "hostId" to hostId,
-          "displayName" to "Initial version",
-          "rootId" to FORM_CANVAS_ROOT,
-          "nodes" to mapOf(FORM_CANVAS_ROOT to mapOf("\$id" to FORM_CANVAS_ROOT, "componentId" to "div", "nodes" to emptyList<Any>())),
-        ),
-      ),
-    )
+    api.request("/api/hosts/versions", ApiMethod.POST, formFirstVersionBody(hostId, form.id, versionId))
     writer.update(path(form.id), mapOf("versionId" to versionId, "updatedAt" to firestoreNow()))
     return versionId
   }
 }
+
+/**
+ * The version the Besigner opens on without minting one, as the console's Design in the Besigner picks it
+ * (`form-detail-card.tsx`): [preferred], else the published one, else the newest saved one (AGL-4002).
+ */
+fun existingFormVersion(form: FormRow, preferred: String? = null, newest: String? = null): String? =
+  preferred ?: form.versionId ?: newest
+
+/**
+ * The versions-route body for a form's FIRST version. The route seeds it from the form's own stored design
+ * (`seedFromParent`, as for a component), so the Besigner opens on the form element and its questions, never on an
+ * empty canvas (AGL-4002).
+ */
+fun formFirstVersionBody(hostId: String, formId: String, versionId: String) =
+  jsonBody("hostId" to hostId, "kind" to "form", "parentId" to formId, "id" to versionId, "seedFromParent" to true)
 
 /** The Besigner page for one version of a form, under the picked site. */
 fun formBesignerPath(formId: String, versionId: String) = "/$FORMS_DOCUMENT_SEGMENT/$formId/versions/$versionId/besigner"

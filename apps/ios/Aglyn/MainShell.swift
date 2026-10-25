@@ -752,7 +752,10 @@ struct PushedScreen<Content: View>: View {
 
   var body: some View {
     if wide {
+      // The screen fills the area under its head, so the head stays at the top on a screen that draws less than the
+      // window (the Besigner's loading state had the head centred around its spinner, AGL-4002).
       content()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) { AglynColor.paper.frame(height: headHeight) }
         .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in
           head(chrome)

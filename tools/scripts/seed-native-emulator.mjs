@@ -124,6 +124,8 @@ function encode(value) {
   if (typeof value === 'boolean') return { booleanValue: value }
   if (typeof value === 'number') return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value }
   if (value instanceof Date) return { timestampValue: value.toISOString() }
+  // Stored node trees are msgpack bytes in production (`encodeStoredNodes`), so the seed writes them the same way.
+  if (value instanceof Uint8Array) return { bytesValue: Buffer.from(value).toString('base64') }
   if (Array.isArray(value)) return { arrayValue: { values: value.map(encode) } }
   return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encode(v)])) } }
 }
