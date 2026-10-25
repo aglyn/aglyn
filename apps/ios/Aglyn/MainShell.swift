@@ -920,13 +920,12 @@ struct AreaView: View {
   }
 
   private func phoneSections(_ sections: [NativeNavSection]) -> [AglynAreaSection] {
-    sections.count > 1
-        ? sections.map { section in
-          let target = ShellSection.opening(section.screen, section.params)
-          return AglynAreaSection(
-            id: section.id, label: section.label, selected: target == ShellSection.opening(screen, params)
-          ) { choose(target) }
-        } : []
+    guard sections.count > 1 else { return [] }
+    let current = ShellSection.opening(screen, params)
+    return sections.map { (section: NativeNavSection) -> AglynAreaSection in
+      let target = ShellSection.opening(section.screen, section.params)
+      return AglynAreaSection(id: section.id, label: section.label, selected: target == current) { choose(target) }
+    }
   }
 
   /// The star beside the area's title: the place on the person's Starred list.
