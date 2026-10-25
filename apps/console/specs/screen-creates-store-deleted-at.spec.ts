@@ -90,6 +90,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
   'libs/plugins/ai/src/lib/jobs/ai-empty-site-sweep.ts':
     'reads whether a site has any screens; writes its own sweep marker and the job\'s siteRemoved, never a screen (AGL-3936)',
+  'libs/plugins/ai/src/lib/jobs/ai-job-privacy-step.ts':
+    'reads the pages a privacy request names and updates the visibility of screens that exist; creates only a publish outbox row (AGL-4033)',
   'libs/plugins/ai/src/lib/jobs/ai-job-edit-step.ts':
     'creates a version under a page or layout that exists and updates its fields (AGL-3616)',
   'libs/plugins/ai/src/lib/jobs/ai-job-navigation-step.ts':

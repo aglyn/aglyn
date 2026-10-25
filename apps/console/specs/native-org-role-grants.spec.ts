@@ -31,7 +31,9 @@ import { readFileSync } from 'fs'
 import { join, resolve } from 'path'
 import {
   DEFAULT_ROLE_PERMISSIONS,
+  ORG_PERMISSION_GROUPS,
   ORG_PERMISSION_KEYS,
+  ORG_PERMISSIONS,
   resolveOrgPermissions,
 } from '@aglyn/aglyn/app-utils/org-permissions'
 import {
@@ -61,6 +63,21 @@ describe('the contracts’ role grants are the console’s', () => {
 
   it('holds the same keys, in the role editor’s order', () => {
     expect(GRANTS.permissions.map((entry) => entry.key)).toEqual([...ORG_PERMISSION_KEYS])
+  })
+
+  it('carries the keys of BOTH plugin declaration APIs (AGL-4047)', () => {
+    // `registerPluginPermissions` keys joined the one catalog, so the native
+    // role editor and gates see `managePos` beside `ai.use`.
+    expect(ORG_PERMISSION_KEYS).toEqual(expect.arrayContaining(['managePos', 'outreach.use', 'accounting.manage']))
+  })
+
+  it('files every key under the console’s group, with the same headings', () => {
+    expect(GRANTS.permissions.map((entry) => [entry.key, entry.group])).toEqual(
+      ORG_PERMISSIONS.map((definition) => [definition.key, definition.group]),
+    )
+    expect((GRANTS.groups ?? []).map((group) => [group.id, group.label])).toEqual(
+      ORG_PERMISSION_GROUPS.map((group) => [group.id, group.label]),
+    )
   })
 
   it.each(ROLES)('gives %s exactly the console’s defaults', (role) => {
