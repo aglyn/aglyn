@@ -7,14 +7,17 @@ import AglynUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The workspace rail on the Mac and iPad (AGL-3945, Figma Rail 12:338): up to five pinned workspaces in the order the
-/// person drags them, a divider, up to three recent, then "All workspaces" with the total; an account with eight or
-/// fewer sees them all. At the foot: Admin for staff, Create new, and the person's photo.
+/// The workspace rail on the Mac and iPad (AGL-3945, Figma Rail 12:338 "Many workspaces"): up to five pinned workspaces
+/// in the order the person drags them, a divider, up to three recent under "Recent", a divider, then "All workspaces"
+/// with the total, which opens the picker where pins are edited. Every account gets this rail, however few workspaces it
+/// has (AGL-3996). At the foot: Admin for staff, Create new, and the person's photo.
 struct WorkspaceRail: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   /// Unread notifications, by workspace.
   let unread: [String: Int]
+  /// The name bubble beside the tile under the pointer (AGL-3996).
+  @State private var tooltip = AglynRailTooltipState()
 
   static var width: CGFloat { AglynShellMetrics.railWidth }
 
@@ -27,20 +30,20 @@ struct WorkspaceRail: View {
             caption("Pinned")
             ForEach(rail.pinned, id: \.self) { tile($0, pinned: true) }
           }
-          if !rail.recent.isEmpty || !rail.rest.isEmpty {
+          if !rail.recent.isEmpty {
             if !rail.pinned.isEmpty { railDivider }
-            if !rail.recent.isEmpty { caption("Recent") }
-            ForEach(rail.recent + rail.rest, id: \.self) { tile($0, pinned: false) }
+            caption("Recent")
+            ForEach(rail.recent, id: \.self) { tile($0, pinned: false) }
           }
           if rail.allTile {
-            railDivider
+            if !rail.pinned.isEmpty || !rail.recent.isEmpty { railDivider }
             Button {
               navigation.picker = .workspace
             } label: {
               AglynRailButton(systemImage: "square.grid.2x2", caption: "\(rail.total)", size: AglynShellMetrics.tile)
             }
             .buttonStyle(.plain)
-            .help("All workspaces")
+            .aglynRailTooltip("All workspaces", id: "rail-all-workspaces", state: tooltip)
             .accessibilityLabel("All workspaces, \(rail.total)")
             .accessibilityIdentifier("rail-all-workspaces")
           }
@@ -50,23 +53,27 @@ struct WorkspaceRail: View {
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity)
       }
-      VStack(spacing: AglynShellMetrics.railGap + 2) {
+      VStack(spacing: AglynShellMetrics.railGap) {
         if model.claims.isStaff {
           Button {
             navigation.enter(.admin, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
           } label: {
-            AglynRailButton(systemImage: "shield.lefthalf.filled", size: AglynShellMetrics.utility)
+            AglynRailButton(systemImage: "shield", size: AglynShellMetrics.utility)
           }
           .buttonStyle(.plain)
-          .help("Admin")
+          .aglynRailTooltip("Admin", id: "rail-admin", state: tooltip)
           .accessibilityLabel("Admin")
           .accessibilityIdentifier("rail-admin")
         }
         CreateNewButton()
+          .aglynRailTooltip("Create new", id: "rail-create", state: tooltip)
         AccountMenuButton(size: AglynShellMetrics.avatar)
+          .aglynRailTooltip(AccountIdentity(model: model).name, id: "rail-account", state: tooltip)
       }
       .padding(.vertical, 12)
     }
+    // Outside the scroll view, so a bubble is never clipped by it; WideShell raises the rail over the sidebar.
+    .aglynRailTooltipHost(tooltip)
     .frame(width: Self.width)
     .frame(maxHeight: .infinity)
     .background(AglynColor.rail)
@@ -89,13 +96,16 @@ struct WorkspaceRail: View {
   private func caption(_ text: String) -> some View {
     Text(text.uppercased())
       .font(.system(size: AglynShellMetrics.railCaption, weight: .semibold))
-      .kerning(0.6)
+      .kerning(AglynShellMetrics.railCaptionTracking)
       .foregroundStyle(AglynColor.railText)
       .accessibilityHidden(true)
   }
 
+  /// Between the rail's sections: a hairline in border/strong, which reads on the rail's tinted ground where the
+  /// sidebar's border/subtle vanished (AGL-3996).
   private var railDivider: some View {
-    Rectangle().fill(AglynColor.divider).frame(width: 24, height: 1).padding(.vertical, 2)
+    Rectangle().fill(AglynColor.borderStrong).frame(width: AglynShellMetrics.railDivider, height: 1)
+      .accessibilityHidden(true)
   }
 
   @ViewBuilder
@@ -110,7 +120,8 @@ struct WorkspaceRail: View {
         AglynWorkspaceTile(
           name: org.name, logoURL: model.mediaURL(logo?.light, hostID: nil),
           darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(orgID).color,
-          selected: selected, unread: unread[orgID] ?? 0)
+          selected: selected, unread: unread[orgID] ?? 0, initials: workspaceInitial(org.name))
+          .aglynRailTooltip(org.name, id: orgID, state: tooltip)
       }
       .buttonStyle(.plain)
       // The workspace in use: a 3-point bar at the rail's leading edge beside its ring.
@@ -121,7 +132,6 @@ struct WorkspaceRail: View {
             .fill(AglynColor.accentIcon).frame(width: AglynShellMetrics.railBar.width, height: AglynShellMetrics.railBar.height)
         }
       }
-      .help(pinned ? "\(org.name) (⌘\((pins.firstIndex(of: orgID) ?? 0) + 1))" : org.name)
       .accessibilityIdentifier("rail-org-\(orgID)")
       .contextMenu { RailTileMenu(org: org) }
       if pinned {
@@ -153,8 +163,18 @@ struct WorkspaceRail: View {
   }
 }
 
-/// Right-click a rail tile: Pin or Unpin, Move up, Move down, Workspace color, Workspace settings.
+/// Right-click (or, on a touch screen, long-press) a rail tile: the workspace's name as the menu's title, then Pin or
+/// Unpin, Move up, Move down, Workspace color, Workspace settings. The title is how a touch screen names a tile, since
+/// it has no pointer to show the bubble.
 struct RailTileMenu: View {
+  let org: WorkspaceOrg
+
+  var body: some View {
+    Section(org.name) { RailTileMenuItems(org: org) }
+  }
+}
+
+private struct RailTileMenuItems: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let org: WorkspaceOrg
@@ -199,7 +219,6 @@ struct CreateNewButton: View {
     .buttonStyle(.plain)
     .menuIndicator(.hidden)
     .fixedSize()
-    .help("Create new")
     .accessibilityLabel("Create new")
     .accessibilityIdentifier("rail-create")
   }

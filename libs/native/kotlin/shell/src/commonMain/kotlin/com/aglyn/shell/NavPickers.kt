@@ -206,7 +206,7 @@ private fun WorkspaceRow(
     detail = orgDetail(org, workspace),
     selected = org.id == workspace.org?.id,
     tag = "picker-org-${org.id}",
-    leading = { WorkspaceTile(org.name, light, dark, color, size = 36.dp) },
+    leading = { WorkspaceTile(org.name, light, dark, color, size = 36.dp, initials = com.aglyn.contracts.workspaceInitial(org.name)) },
     trailing = {
       TextButton(
         onClick = { if (isPinned) services.accountPrefs.unpin(org.id) else if (services.accountPrefs.pin(org.id) == PinAnswer.FULL) onPinFull(org.id) },
@@ -229,7 +229,7 @@ private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: 
   val sites = workspace.sites
   val ordered = recentIds.mapNotNull { id -> sites.firstOrNull { it.id == id } } + sites.filter { it.id !in recentIds }
   val shownSites = if (query.isBlank()) ordered.take(PICKER_PAGE) else {
-    sites.mapNotNull { site -> scoreMatch(site.name, listOf(site.subdomain), query)?.let { it to site } }
+    sites.mapNotNull { site -> scoreMatch(site.name, listOfNotNull(site.subdomain, site.cname), query)?.let { it to site } }
       .sortedWith { a, b -> com.aglyn.contracts.scoredOrder.compare(a.first to a.second.name, b.first to b.second.name) }.map { it.second }
   }
   SearchField(query, "Find a site", "picker-site-search") { query = it }
@@ -262,7 +262,7 @@ private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: 
 private fun SiteRow(services: ShellServices, workspace: WorkspaceState, site: WorkspaceSite, onPick: () -> Unit) {
   PickerRow(
     title = site.name,
-    detail = site.subdomain.ifEmpty { null },
+    detail = site.address,
     selected = site.id == workspace.site?.id,
     tag = "picker-site-${site.id}",
     leading = {

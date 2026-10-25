@@ -112,14 +112,21 @@ internal suspend fun <T : Any> withImageRetries(delaysMs: List<Long> = ImageRetr
   return null
 }
 
-/** The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. */
+/**
+ * The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. Art the decoders
+ * cannot read (an SVG logo, which the media CDN serves unchanged) is read as the CDN's PNG of it ([mediaRasterUrl]).
+ */
 @Composable
 internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   val loader = LocalImageLoader.current
   var image by remember(url) { mutableStateOf(url?.let(ImageCache::get)) }
   LaunchedEffect(url, loader) {
     if (url == null || loader == null || image != null) return@LaunchedEffect
-    image = withImageRetries { loader.load(url)?.decodeToImageBitmap() }?.also { ImageCache.put(url, it) }
+    image = withImageRetries {
+      val bytes = loader.load(url)
+      bytes?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() }
+        ?: bytes?.let { com.aglyn.core.mediaRasterUrl(url) }?.let { png -> loader.load(png)?.decodeToImageBitmap() }
+    }?.also { ImageCache.put(url, it) }
   }
   return image
 }

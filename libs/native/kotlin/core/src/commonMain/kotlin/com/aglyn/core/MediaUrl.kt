@@ -27,3 +27,26 @@ fun mediaPreviewUrl(value: String?, origin: String, hostId: String?, width: Int 
   val host = rest.substringBefore('/').substringBefore('?').substringBefore('#')
   return if (host.isEmpty() || host.any { it.isWhitespace() } || address.any { it.isWhitespace() }) null else address
 }
+
+/**
+ * The sides the media CDN draws an asset at as a transparent PNG (`?icon=png-N`; `site-icon-set.ts`'s FAVICON_PNG_SIZES
+ * and MANIFEST_ICON_SIZES), as Apple's `AglynRasterArt.pngSides`.
+ */
+val MEDIA_PNG_SIDES = listOf(16, 32, 48, 72, 96, 128, 144, 152, 192, 256, 384, 512)
+
+/**
+ * The media CDN's PNG of the picture at [url], at least as wide as the `w` it was asked at (160 when none), for art the
+ * image decoders cannot read: the CDN serves an SVG unchanged at `?w=`, so a workspace logo uploaded as an SVG drew
+ * its initials and gave the rail no color (AGL-4000, as Apple's AGL-3996). Null for an address that is not on
+ * the media CDN, or one that already names a representation (`icon=`).
+ */
+fun mediaRasterUrl(url: String): String? {
+  val path = url.substringBefore('#').substringBefore('?')
+  if ("/api/media/cdn/" !in path) return null
+  val query = url.substringBefore('#').substringAfter('?', "")
+  val items = query.split('&').filter { it.isNotEmpty() }
+  if (items.any { it.substringBefore('=') == "icon" }) return null
+  val width = items.firstOrNull { it.substringBefore('=') == "w" }?.substringAfter('=')?.toIntOrNull() ?: 160
+  val side = MEDIA_PNG_SIDES.firstOrNull { it >= width } ?: MEDIA_PNG_SIDES.last()
+  return path + "?" + (items.filter { it.substringBefore('=') != "w" } + "icon=png-$side").joinToString("&")
+}

@@ -42,7 +42,6 @@ import com.aglyn.core.Live
 import com.aglyn.core.WorkspaceState
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
-import com.aglyn.core.siteAddress
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.WidgetSize
 import com.aglyn.ui.ActivityRow
@@ -264,7 +263,8 @@ private fun SiteHeader(
     return
   }
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, now) }
-  val address = siteAddress(site.subdomain)
+  // The host's own custom domain first, then the membership row's copy, then the platform address.
+  val address = site.addressWith((host as? Live.Ready)?.value?.data?.get("cname") as? String)
   SiteHeaderCard(
     workspaceName = workspace.org?.name,
     siteName = site.name,

@@ -534,7 +534,7 @@ private fun OneBoxResult(services: ShellServices, workspace: WorkspaceState, pre
       Contracts.oneBoxWorkspacesGroup -> {
         val (light, dark) = orgLogoUrls(workspace, row.id, services.api.origin)
         val (color) = rememberWorkspaceColor(row.id, workspace, prefs, services.api.origin)
-        WorkspaceTile(row.label, light, dark, color, size = 28.dp, cornerRadius = 8.dp)
+        WorkspaceTile(row.label, light, dark, color, size = 28.dp, cornerRadius = 8.dp, initials = com.aglyn.contracts.workspaceInitial(row.label))
       }
       "sites" -> BrandPicture(mediaPreviewUrl(workspace.sites.firstOrNull { it.id == row.id }?.favicon, services.api.origin, row.id, 96), null, 28.dp, RoundedCornerShape(8.dp)) {
         WorkspaceTile(row.label, null, null, null, size = 28.dp, cornerRadius = 8.dp)
