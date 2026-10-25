@@ -59,11 +59,25 @@ class WorkspaceAccentTest {
     assertEquals("#E040FB", resolveWorkspaceColor("#E040FB", null, "#2E7D32", true, orgId = "org-acme-builders").color)
     // Without an id there is no stable color: the tile is the neutral slate.
     assertNull(resolveWorkspaceColor(null, null, null, true).color)
-    // Every stable color carries its initial at 4.5:1 or better in the color the tile draws it in.
-    for (hex in palette) {
-      val fill = com.aglyn.ui.colorOfHex(hex)!!
-      val ratio = com.aglyn.ui.contrastRatio(com.aglyn.ui.readableOn(fill), fill)
-      assertTrue(ratio >= 4.5f, "$hex: the initial at $ratio:1")
+  }
+
+  @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+  @Test
+  fun everyStableColorCarriesItsInitialAtFourPointFiveToOne() = androidx.compose.ui.test.runComposeUiTest {
+    // In the ink the tile draws its initial in (readableOn), light and dark.
+    val ratios = mutableListOf<Pair<String, Float>>()
+    setContent {
+      for (dark in listOf(false, true)) {
+        com.aglyn.ui.AglynTheme(dark = dark) {
+          for (hex in com.aglyn.contracts.Contracts.workspaceStableColors) {
+            val fill = com.aglyn.ui.colorOfHex(hex)!!
+            ratios += "$hex dark=$dark" to com.aglyn.ui.contrastRatio(com.aglyn.ui.readableOn(fill), fill)
+          }
+        }
+      }
     }
+    waitForIdle()
+    assertTrue(ratios.size >= 16, "both modes: $ratios")
+    for ((name, ratio) in ratios) assertTrue(ratio >= 4.5f, "$name: the initial at $ratio:1")
   }
 }
