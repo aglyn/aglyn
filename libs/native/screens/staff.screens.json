@@ -9321,6 +9321,27 @@
             "description": "Tells a workspace’s owners that someone asked for the code that moves a bought domain to another registrar.",
             "deliveredBy": "resend",
             "editable": true
+          },
+          {
+            "key": "pos-hardware-order-received",
+            "name": "Card reader order received",
+            "description": "Sent to the person who ordered card readers or accessories from the POS hardware shop, once the payment goes through.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "pos-hardware-order-shipped",
+            "name": "Card reader order shipped",
+            "description": "Sent when a card reader order from the POS hardware shop ships, with the carrier and a tracking link.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "pos-hardware-order-delivered",
+            "name": "Card reader order delivered",
+            "description": "Sent when a card reader order from the POS hardware shop is delivered, with the way to set the reader up at a register.",
+            "deliveredBy": "resend",
+            "editable": true
           }
         ],
         "tokens": {
@@ -15629,6 +15650,172 @@
               "name": "domain.manageUrl",
               "description": "The site's Custom Domain page",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-received": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.total",
+              "description": "What was charged, shipping and tax included",
+              "sample": "$123.45"
+            },
+            {
+              "name": "order.shipTo",
+              "description": "The name and address it ships to",
+              "sample": "Alex Test\n12 Main St\nSpringfield, IL 62701"
+            },
+            {
+              "name": "order.shippingMethod",
+              "description": "The shipping speed chosen",
+              "sample": "Standard shipping"
+            },
+            {
+              "name": "order.ordersUrl",
+              "description": "The Hardware card, where the order and its status are",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-shipped": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.shipTo",
+              "description": "The name and address it ships to",
+              "sample": "Alex Test\n12 Main St\nSpringfield, IL 62701"
+            },
+            {
+              "name": "order.carrier",
+              "description": "The carrier delivering the parcel",
+              "sample": "UPS"
+            },
+            {
+              "name": "order.trackingNumber",
+              "description": "The parcel’s tracking number",
+              "sample": "1Z999AA10123456784"
+            },
+            {
+              "name": "order.trackingUrl",
+              "description": "The carrier’s tracking page for the parcel",
+              "sample": "https://www.ups.com/track?tracknum=1Z999AA10123456784"
+            },
+            {
+              "name": "order.ordersUrl",
+              "description": "The Hardware card, where the order and its status are",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-delivered": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.setupUrl",
+              "description": "The POS devices card, where a reader is added to a register",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-devices"
+            },
+            {
+              "name": "order.ordersUrl",
+              "description": "The Hardware card, where the order and its status are",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
             },
             {
               "name": "brand.productName",

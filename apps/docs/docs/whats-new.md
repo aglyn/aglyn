@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — check people in at the window, with wristbands (newest)
+## October 2026 — hardware purchase records survive a workspace deletion (newest)
+
+- **[Records of your hardware purchases](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
+  Aglyn now keeps its record of each card reader sale after the workspace that
+  bought it is deleted, as tax law requires: the items, amounts, tax, and the
+  state, ZIP code and country it shipped to, with no name, email, phone or
+  street address. When the person who placed an order closes their account,
+  their details come off the order and the workspace keeps the rest.
+
+## October 2026 — check people in at the window, with wristbands
 
 - **[Check-in at the window](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
   mark a day pass, camping or parking as **Needs check-in**, with how many
