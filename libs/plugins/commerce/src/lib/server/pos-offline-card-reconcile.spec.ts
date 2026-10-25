@@ -104,3 +104,16 @@ describe('reconcilePosOfflineCardEvent', () => {
     expect(memory.docs.size).toBe(0)
   })
 })
+
+describe('posOfflineCardBillingWebhookHandler', () => {
+  it('claims only an offline card intent', async () => {
+    const { posOfflineCardBillingWebhookHandler } =
+      await import('./pos-offline-card-reconcile')
+    expect(
+      await posOfflineCardBillingWebhookHandler({
+        type: 'charge.refunded',
+        object: {},
+      } as any),
+    ).toBeUndefined()
+  })
+})

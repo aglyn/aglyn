@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   POS_OFFLINE_CARD_INTENT_KIND,
@@ -34,7 +35,9 @@ import {
  * (`terminal/config/offlineCardCharges/{saleKey}`), beside whether the sale
  * has synced. The sync itself never depends on this: it reads Stripe.
  *
- * Self-selecting: every other event returns `null` untouched.
+ * Self-selecting: every other event returns `null` untouched. Registered on
+ * the platform webhook from the commerce server module, beside the other
+ * commerce handlers, rather than as a branch of the storefront sections.
  *=========================================*/
 
 /** What the site keeps about one offline card's PaymentIntent. */
@@ -53,7 +56,7 @@ export interface PosOfflineCardChargeRecord {
 
 export async function reconcilePosOfflineCardEvent(
   input: { type: string; object: any },
-  firestore: FirebaseFirestore.Firestore = firebaseAdmin.app().firestore(),
+  firestore?: FirebaseFirestore.Firestore,
   now: () => number = Date.now,
 ): Promise<{ hostId: string } | null> {
   if (!input.type.startsWith('payment_intent.')) return null
@@ -67,7 +70,9 @@ export async function reconcilePosOfflineCardEvent(
     !posOfflineSaleKeyIsValid(saleKey)
   )
     return null
-  const hostRef = firestore.collection('hosts').doc(hostId)
+  const hostRef = (firestore ?? firebaseAdmin.app().firestore())
+    .collection('hosts')
+    .doc(hostId)
   const synced = (
     await hostRef.collection('posOfflineSales').doc(saleKey).get()
   ).exists
@@ -90,3 +95,10 @@ export async function reconcilePosOfflineCardEvent(
     .set(record, { merge: true })
   return { hostId }
 }
+
+/** The platform webhook's handler for offline card intents: claims only its own. */
+export const posOfflineCardBillingWebhookHandler: BillingWebhookHandler =
+  async ({ type, object }) => {
+    const reconciled = await reconcilePosOfflineCardEvent({ type, object })
+    return reconciled ? { claimed: true, hostId: reconciled.hostId } : undefined
+  }

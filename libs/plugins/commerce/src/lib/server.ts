@@ -436,6 +436,12 @@ export function registerCommerceConsoleApi(): void {
   registerBillingWebhookHandler(async (event) =>
     (await import('./server/pos-hardware-webhook')).posHardwareBillingWebhookHandler(event),
   )
+  // A card the Aglyn POS app took offline (AGL-4039): its PaymentIntent can
+  // reach Stripe before the sale reaches the server, so every event on one is
+  // kept by the sale's key. Self-selecting on `metadata.kind`.
+  registerBillingWebhookHandler(async (event) =>
+    (await import('./server/pos-offline-card-reconcile')).posOfflineCardBillingWebhookHandler(event),
+  )
   // Cancel + stock release in one transaction (AGL-1808). Server-side because
   // the release depends on the transition rule, and a client write could not
   // re-ask it under the same lock that flips the status.
