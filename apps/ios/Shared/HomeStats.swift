@@ -138,7 +138,7 @@ struct HomeWorkspaceStats: View {
     Button("Review the plan") {
       _ = model.context(for: navigation)?.openLink(standing.destination(orgSlug: slug))
     }
-    .buttonStyle(.borderedProminent)
+    .buttonStyle(.aglynProminent)
     .accessibilityIdentifier("home-upgrade-review")
   }
 

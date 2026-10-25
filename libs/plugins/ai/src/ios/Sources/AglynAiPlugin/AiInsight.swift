@@ -88,7 +88,7 @@ struct AiInsightTile: View {
           } label: {
             Label(copy.action, systemImage: "sparkles")
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .accessibilityIdentifier("ai-insight-ask")
         }
         .padding(AglynSpace.two)
