@@ -19,7 +19,7 @@ final class AIPluginTests: XCTestCase {
       ],
       widgets: [
         "ai.seo-audit", "ai.seo-start", "ai.site-memory", "ai.create-page", "ai.create-template", "ai.create-layout",
-        "ai.create-form", "ai.create-component", "ai.needs-you", "ai.assist-panel",
+        "ai.create-form", "ai.create-component", "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask",
       ],
       quickActions: ["ai.open"],
       deepLinks: ["ai.job.link", "ai.jobs.link", "ai.signals.link"])
@@ -29,7 +29,9 @@ final class AIPluginTests: XCTestCase {
     // What it adds to Setup → SEO and Business profile is in those pages' slots, and never on Home.
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostSeo").map(\.id), ["ai.seo-audit", "ai.seo-start"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostBusinessProfile").map(\.id), ["ai.site-memory"])
-    XCTAssertEqual(registry.widgets(for: .aglyn).map(\.id), [])
+    // "Ask AI about these numbers" is Home's and Analytics' glance on a site, and the workspace Home's card.
+    XCTAssertEqual(registry.widgets(for: .aglyn).map(\.id), ["ai.insight-ask"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "orgDashboard").map(\.id), ["ai.org-insight-ask"])
     // Home's "Needs you" lines and the shell's AI panel are slots of their own (AGL-3945).
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "homeNeedsYou").map(\.id), ["ai.needs-you"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: assistPanelSlot).map(\.id), ["ai.assist-panel"])

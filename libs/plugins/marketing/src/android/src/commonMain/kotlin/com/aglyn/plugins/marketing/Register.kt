@@ -22,6 +22,8 @@ fun registerMarketingNative(r: NativePluginRegistrar) {
       }
     }
   }
+  // The site dashboard's "Last campaign" card (the console's `email-campaign-glance`).
+  r.widget("marketing.last-campaign", title = "Last campaign", order = 80, size = com.aglyn.pluginhost.WidgetSize.HALF, requiresSite = true) { context -> LastCampaignCard(context) }
   r.quickAction("marketing.open", "Marketing", "campaign", 66, requiresSite = true, screen = MarketingSection.OVERVIEW.screen)
   r.deepLink("marketing.page", path = "/marketing", screen = MarketingSection.OVERVIEW.screen)
   for (section in MarketingSection.entries) r.deepLink("marketing.${section.key}-page", path = "/marketing/${section.key}", screen = section.screen)

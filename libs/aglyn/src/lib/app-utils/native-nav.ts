@@ -22,7 +22,7 @@
  * sidebar for the whole workspace, the sidebar inside one site, and the two
  * settings modes (the workspace's, and the site's, which merges the
  * console's Setup and Admin). Zach chose the site's groups on 2026-10-18:
- * an Overview row, Starred, Website, Sell, Customers, More, Site settings.
+ * an Analytics row, Starred, Website, Sell, Customers, More, Site settings.
  *
  * Every row names:
  * - the console's word for it (`label`), held to the console by
@@ -34,7 +34,7 @@
  * - the plugin it belongs to, so it hides when that plugin is off for the
  *   workspace or the site.
  *
- * The core's own rows (Home, Overview, Sites, Pages, Media, the settings
+ * The core's own rows (Home, Analytics, Sites, Pages, Media, the settings
  * modes) are here; a plugin's rows are its own, in
  * `libs/plugins/<plugin>/src/lib/native-nav.ts` (`NATIVE_NAV_ROWS`), placed
  * into a list's group by `order` (docs/PACKAGES.md rule 3: the core never
@@ -69,7 +69,7 @@ export interface NativeNavIcon {
  * - `hostAdminSection`, `orgSettingsSection`, `teamSection`,
  *   `billingSection`: a section of those hubs, by its `Route` name;
  * - `consoleWidget`: a plugin's card, as `{slot}/{widgetId}`;
- * - `shell`: a place the app's shell owns (Home, Overview's page, the
+ * - `shell`: a place the app's shell owns (Home, Analytics' page, the
  *   settings modes), whose console twin is the page named in `id`;
  * - `nativeOnly`: a native screen the console has no page for.
  */
@@ -123,7 +123,7 @@ export interface NativeNavRow {
   label: string
   /**
    * The console's word when the native label is a decision of its own
-   * (Overview for the site's analytics, Zach 2026-10-18).
+   * (a row the apps name differently from the console).
    */
   consoleLabel?: string
   icon: NativeNavIcon
@@ -364,7 +364,8 @@ const SITE: NativeNavList = {
         HOME_ROW,
         {
           id: 'overview',
-          label: 'Overview',
+          // "Analytics", the console's own word: "Overview" read as a second Home (AGL-4011).
+          label: 'Analytics',
           consoleLabel: 'Analytics',
           icon: ICONS.overview,
           screen: 'shell.analytics',

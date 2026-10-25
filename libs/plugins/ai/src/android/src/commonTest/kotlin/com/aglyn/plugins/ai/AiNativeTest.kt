@@ -14,7 +14,7 @@ class AiNativeTest {
     "widgets" to listOf(
       "ai.seo-audit", "ai.seo-start", "ai.site-memory",
       "ai.create-page", "ai.create-template", "ai.create-layout", "ai.create-form", "ai.create-component",
-      "ai.needs-you", "ai.assist-panel",
+      "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask",
     ),
     "quickActions" to listOf("ai.open"),
     "deepLinks" to listOf("ai.jobs.link", "ai.job.link", "ai.signals.link"),
@@ -28,7 +28,9 @@ class AiNativeTest {
     // What it adds to Setup → SEO and Business profile sits in those pages' slots, and never on Home.
     assertEquals(listOf("ai.seo-audit", "ai.seo-start"), registry.widgets(slot = "hostSeo").map { it.id })
     assertEquals(listOf("ai.site-memory"), registry.widgets(slot = "hostBusinessProfile").map { it.id })
-    assertEquals(emptyList(), registry.widgets().map { it.id })
+    // "Ask AI about these numbers" is Home's and Analytics' glance on a site, and the workspace Home's card.
+    assertEquals(listOf("ai.insight-ask"), registry.widgets().map { it.id })
+    assertEquals(listOf("ai.org-insight-ask"), registry.widgets(slot = "orgDashboard").map { it.id })
     // Create with AI is in each list's create zone, under the console's zone names.
     assertEquals(listOf("ai.create-page"), registry.widgets(slot = "hostScreens").map { it.id })
     assertEquals(listOf("ai.create-template"), registry.widgets(slot = "hostTemplates").map { it.id })

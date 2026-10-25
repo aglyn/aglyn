@@ -34,6 +34,14 @@ fun registerAINative(registrar: NativePluginRegistrar) {
   // Home's "Needs you" line, and the AI panel the shell docks beside every screen (a sheet on phones).
   registrar.widget("ai.needs-you", title = "Needs you", order = 40, requiresSite = true, slot = "homeNeedsYou") { context -> AiNeedsYouWidget(context) }
   registrar.widget("ai.assist-panel", title = "Assist", order = 10, slot = ASSIST_PANEL_SLOT) { context -> AssistPanel(context) }
+  // "Ask AI about these numbers" (the console's `hostDashboard` and `orgDashboard` tiles): on a site's Home and Analytics,
+  // and on the workspace's Home; on a plan without the AI add-on the same tile opens the add-on's offer.
+  registrar.widget("ai.insight-ask", title = "Ask AI about these numbers", order = 900, size = WidgetSize.HALF, requiresSite = true) { context ->
+    AiInsightTile(context, AiInsightSurface.ANALYTICS)
+  }
+  registrar.widget("ai.org-insight-ask", title = "Ask AI about these numbers", order = 900, size = WidgetSize.HALF, slot = "orgDashboard") { context ->
+    AiInsightTile(context, AiInsightSurface.WORKSPACE)
+  }
   AiCreateKind.entries.forEach { kind ->
     registrar.widget(kind.widgetId, title = "Create with AI", order = 10, requiresSite = true, slot = kind.slot) { context ->
       AiCreateButton(context, kind)
