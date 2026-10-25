@@ -325,6 +325,8 @@ const PLUGIN_TOPICS = {
   // The domains plugin's Get a domain card on the Custom Domain page
   // (AGL-3962).
   buyADomain: '/building-sites/custom-domains/buy-a-domain',
+  // The workspace's Domains page (AGL-4040).
+  manageDomains: '/building-sites/custom-domains/manage-domains',
   // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
   // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
   zapier: '/marketing-and-automation/workflows-and-actions/zapier',

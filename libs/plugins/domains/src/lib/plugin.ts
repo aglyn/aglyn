@@ -70,7 +70,7 @@ export function registerDomainsConsole(): void {
         ownsSubtree: true,
         recordTitle: 'Domain',
         icon: { path: mdiWeb.path },
-        header: { title: 'Domains', icon: { path: mdiWeb.path }, docsTopic: 'buyADomain' },
+        header: { title: 'Domains', icon: { path: mdiWeb.path }, docsTopic: 'manageDomains' },
         Component: DomainsPage,
       },
     ],

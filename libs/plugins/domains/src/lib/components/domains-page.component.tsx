@@ -222,7 +222,7 @@ export default function DomainsPage(props: ConsolePluginPageProps) {
     [],
   )
 
-  const help = pluginDocsHelp('buyADomain')
+  const help = pluginDocsHelp('manageDomains')
 
   if (!orgId) return null
   if (loadError && !state) return <Alert severity="warning">{loadError}</Alert>
