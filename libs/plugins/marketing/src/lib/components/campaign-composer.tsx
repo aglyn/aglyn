@@ -25,6 +25,8 @@ import {
 } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -44,6 +46,10 @@ import {
   CampaignTopicSelect,
 } from './campaign-email-zones'
 import { useCampaignSendApi } from './use-campaign-send-api'
+import {
+  CAMPAIGN_PLAN_CAP_REASON,
+  campaignPlanLock,
+} from '../model/campaign-plan-lock'
 import {
   useSendingApi,
   type HostSenderView,
@@ -664,7 +670,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * number a merchant checks before pressing Send.
    */
   const [preview, setPreview] = useState<
-    AudiencePreview | { error: string; blocking?: boolean } | null
+    | AudiencePreview
+    | { error: string; blocking?: boolean; planCapped?: boolean }
+    | null
   >(null)
   useEffect(() => {
     let active = true
@@ -723,6 +731,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
           return setPreview({
             error: String(payload?.error ?? ''),
             blocking: response.status === 409,
+            planCapped: payload?.reason === CAMPAIGN_PLAN_CAP_REASON,
           })
         }
         setPreview({
@@ -1387,6 +1396,42 @@ export function CampaignComposer(props: CampaignComposerProps) {
     [org, campaignSendsUsed],
   )
 
+  /*
+   * THE PLAN'S ANSWER, BEFORE SEND.
+   *
+   * A plan without campaign email used to compose, schedule and save freely,
+   * and learn the answer only when the processor marked the send `failed`.
+   * `campaignPlanLock` reads the same limit and counter the server claims
+   * against, so the lock and the refusal agree. Nothing locks while the plan
+   * is still loading: `checkQuota(undefined)` answers with Free's zero.
+   *
+   * An audience bigger than what is left this month is only known from the
+   * dry run, which refuses it with the plan-cap reason rather than a count;
+   * that refusal's own sentence (it names the plan) becomes the notice.
+   */
+  const previewSendable =
+    preview && !('error' in preview) ? preview.sendable : null
+  const planLock = useMemo(
+    () =>
+      orgReady
+        ? campaignPlanLock({
+            limit: quotaLimit,
+            used: campaignSendsUsed,
+            sendable: previewSendable,
+          })
+        : null,
+    [orgReady, quotaLimit, campaignSendsUsed, previewSendable],
+  )
+  const previewPlanCapped = Boolean(
+    preview && 'error' in preview && preview.planCapped,
+  )
+  const planCapReason = planLock
+    ? planLock.reason
+    : previewPlanCapped && preview && 'error' in preview
+      ? preview.error
+      : null
+  const upgradeHref = orgSlug ? `/${orgSlug}/billing#plans` : undefined
+
   return (
     <Stack spacing={1.5}>
       <Typography variant="body2" color="text.secondary">
@@ -1394,6 +1439,24 @@ export function CampaignComposer(props: CampaignComposerProps) {
           'carries an unsubscribe link; monthly sends are capped by ' +
           'your plan.'}
       </Typography>
+      {/*
+        The upgrade path, at the top of the composer rather than in a
+        snackbar after Send: a plan that cannot send this campaign says so
+        before a word of it is written, and says what still works (drafts,
+        tests) so the composer is not read as broken.
+       */}
+      {planLock ? (
+        <PlanUpsellNotice
+          planLabel={planLock.planLabel}
+          upgradeHref={upgradeHref}
+        >
+          {planLock.notice}
+        </PlanUpsellNotice>
+      ) : previewPlanCapped && planCapReason ? (
+        <PlanUpsellNotice planLabel={undefined} upgradeHref={upgradeHref}>
+          {planCapReason}
+        </PlanUpsellNotice>
+      ) : null}
       <Stack direction="row" spacing={1}>
         <TextField
           label="Subject"
@@ -2114,28 +2177,34 @@ export function CampaignComposer(props: CampaignComposerProps) {
         </Typography>
       ) : null}
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Button
-          variant="contained"
-          color="primary"
-          disabled={
-            busy ||
-            !subject.trim() ||
-            !messageReady ||
-            /*
-             * REFUSED BEFORE THE CLICK, not after it.
-             *
-             * The send would answer 409 anyway — that boundary holds whatever
-             * this component does. What a disabled button buys is that the
-             * merchant reads the reason instead of pressing Send and being
-             * told; the two are the same information, and only one of them
-             * arrives while there is still something to do about it.
-             */
-            Boolean(preview && 'error' in preview && preview.blocking)
-          }
-          onClick={handleSend}
+        <BlockedControl
+          blocked={Boolean(planCapReason)}
+          reason={planCapReason ?? ''}
         >
-          {busy ? 'Working…' : sendAt ? 'Schedule campaign' : 'Send campaign'}
-        </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={
+              busy ||
+              !subject.trim() ||
+              !messageReady ||
+              /*
+               * REFUSED BEFORE THE CLICK, not after it.
+               *
+               * The send would answer 409 anyway — that boundary holds whatever
+               * this component does. What a disabled button buys is that the
+               * merchant reads the reason instead of pressing Send and being
+               * told; the two are the same information, and only one of them
+               * arrives while there is still something to do about it.
+               */
+              Boolean(preview && 'error' in preview && preview.blocking) ||
+              Boolean(planCapReason)
+            }
+            onClick={handleSend}
+          >
+            {busy ? 'Working…' : sendAt ? 'Schedule campaign' : 'Send campaign'}
+          </Button>
+        </BlockedControl>
         {/*
           Never hidden while there is a record to save into. Leaving without
           saving is the ordinary way to use a composer, and a surface that
