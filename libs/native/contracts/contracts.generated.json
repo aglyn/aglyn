@@ -1725,7 +1725,7 @@
     "appIcon": "aglyn",
     "appearance": "system",
     "density": "comfortable",
-    "sidebarStyle": "tinted",
+    "sidebarStyle": "plain",
     "textSize": "system",
     "theme": "aglyn",
     "useWorkspaceBrand": true
@@ -10705,14 +10705,9 @@
   ],
   "THEME_ACCENT_SWATCHES": [
     {
-      "color": "#0073ae",
+      "color": "#00b0ff",
       "id": "aglynBlue",
       "label": "Brand blue"
-    },
-    {
-      "color": "#00b0ff",
-      "id": "sky",
-      "label": "Sky"
     },
     {
       "color": "#7a5cf0",
@@ -10738,15 +10733,15 @@
   "THEME_ACCENTS": [
     {
       "accent": {
-        "fill": "#0073ae",
-        "hover": "#00669b",
-        "icon": "#0091d5",
+        "fill": "#00b0ff",
+        "hover": "#0077ad",
+        "icon": "#00b0ff",
         "on": "#ffffff",
-        "pressed": "#005884",
+        "pressed": "#006999",
         "ring": "#00b0ff",
         "soft": "#00b0ff29",
-        "textDark": "#00b0ff",
-        "textLight": "#0078ad"
+        "textDark": "#4dc8ff",
+        "textLight": "#0077ad"
       },
       "id": "blue",
       "label": "Blue"
@@ -10771,7 +10766,7 @@
         "fill": "#e040fb",
         "hover": "#cc2ee6",
         "icon": "#c93ae3",
-        "on": "#1e0424",
+        "on": "#ffffff",
         "pressed": "#b523cf",
         "ring": "#e040fb",
         "soft": "#e040fb29",
@@ -11327,6 +11322,9 @@
       "rail": "#e9dccb",
       "surface": "#fffaf3"
     }
+  },
+  "THEME_RETIRED_ACCENTS": {
+    "#0073ae": "#00b0ff"
   },
   "THEME_TEXT_CONTRAST": 4.5,
   "TIME_ZONE_CHOICES": [

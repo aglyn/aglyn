@@ -65,7 +65,7 @@ struct HomeView: View {
         Spacer(minLength: AglynSpace.one)
         if let address, let url = URL(string: "https://\(address)/") {
           Button("Visit site") { navigation.openWeb(AglynWebPage(url)) }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .accessibilityIdentifier("home-visit-site")
         }
       }

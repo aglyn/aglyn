@@ -589,7 +589,7 @@ struct SidebarList: View {
   @ViewBuilder
   private func starredRow(_ item: StarredItem) -> some View {
     let section = ShellScope.section(for: item)
-    let dot = Circle().fill(item.color.map(starColor) ?? AglynColor.tint).frame(width: 8, height: 8)
+    let dot = Circle().fill(item.color.map(starColor) ?? AglynColor.primary).frame(width: 8, height: 8)
     Group {
       if push {
         PhoneMenuRow(title: item.label, action: { activate(.section(section)) }) { dot }

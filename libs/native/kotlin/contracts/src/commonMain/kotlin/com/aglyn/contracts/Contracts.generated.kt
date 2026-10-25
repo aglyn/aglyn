@@ -3546,6 +3546,7 @@ internal data class ContractValuesPart7(
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
+    @SerialName("THEME_RETIRED_ACCENTS") val themeRetiredAccents: Map<String, String>,
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
@@ -3870,6 +3871,7 @@ class ContractValues internal constructor(
     val themeNonTextContrast: Long get() = part7.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part7.themePalettes
     val themePreviews: Map<String, ThemePreview> get() = part7.themePreviews
+    val themeRetiredAccents: Map<String, String> get() = part7.themeRetiredAccents
     val themeTextContrast: Double get() = part7.themeTextContrast
     val timeZoneChoices: List<String> get() = part7.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part7.timeZoneDefaultLabel

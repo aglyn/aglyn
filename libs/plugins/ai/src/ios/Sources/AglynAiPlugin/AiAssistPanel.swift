@@ -165,7 +165,7 @@ struct AiAssistPanel: View {
       })
       if let proposal = turn.proposal {
         Button(proposal.label) { context.openLink(proposal.href) }
-          .buttonStyle(.borderedProminent).controlSize(.small)
+          .buttonStyle(.aglynProminent).controlSize(.small)
           .accessibilityIdentifier("assist-proposal")
       }
       ForEach(turn.docs, id: \.self) { doc in

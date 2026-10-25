@@ -1,7 +1,11 @@
 package com.aglyn.ui
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -21,7 +25,8 @@ import com.aglyn.contracts.themePalette
  * Whole-app theming (AGL-3946 Phase 4). The palettes, named accents, swatches and densities are the contract's
  * (native-themes.ts, AGL-3950: Figma's Native App variables, Ocean and Warm derived from their previews), and so is the
  * accent derivation; this file only turns them into Compose colors. The brand's own theme's palette comes from the
- * console's scheme; its "Theme" accent stays the console's primary, so the default look is the console's.
+ * console's scheme, and its "Theme" accent IS the console's primary (#00B0FF under white, #0077AD / #4DC8FF as text),
+ * so the default look is the console's.
  */
 
 /** A theme's grounds, lines, inks and status pairs, for one appearance. */
@@ -166,6 +171,20 @@ val LocalThemeSurfaces = staticCompositionLocalOf<ThemeSurfaces?> { null }
 
 /** The accent in effect. */
 val LocalAccent = staticCompositionLocalOf<AccentColors?> { null }
+
+/**
+ * The accent AS TEXT on the page: a link, a text or outlined button's label, a tab's label (AGL-3990). It is the
+ * console's `primary.dark` per scheme (#0077AD light, #4DC8FF dark for the brand blue, AGL-1186), never the fill:
+ * Material's `primary` is the brand blue #00B0FF, a fill and an indicator, 2.43:1 as text on white.
+ */
+val aglynAccentText: Color
+  @Composable @ReadOnlyComposable get() = LocalAccent.current?.text ?: MaterialTheme.colorScheme.primary
+
+/**
+ * Whether the row a view sits in is selected. A tile or a status chip on the selection's wash takes the paper with a
+ * ring so it stands off the wash (Figma List/Order row Selected 11:343, AGL-3990).
+ */
+val LocalRowSelected = compositionLocalOf { false }
 
 // ── On Material 3 ───────────────────────────────────────────────────────────
 

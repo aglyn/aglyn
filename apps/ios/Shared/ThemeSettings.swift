@@ -42,7 +42,7 @@ enum ContractThemes {
       canvas: color(colors.canvas), surface: color(colors.surface), rail: color(colors.rail), railText: color(railText),
       border: color(colors.borderSubtle), textPrimary: color(colors.textPrimary), textSecondary: color(colors.textSecondary),
       titlebar: color(colors.titlebar), sunken: color(colors.sunken), hover: color(colors.hover),
-      textTertiary: color(colors.textTertiary))
+      textTertiary: color(colors.textTertiary), borderStrong: color(colors.borderStrong))
   }
 
   /// An accent's shades for both appearances, or nil for a value that is not a color.
@@ -281,7 +281,7 @@ private struct ThemeTile: View {
         }
         .frame(height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(selected ? AglynColor.tint : AglynColor.divider, lineWidth: selected ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(selected ? AglynColor.primary : AglynColor.divider, lineWidth: selected ? 2 : 1))
         Text(label).font(AglynFont.subheadline)
       }
     }
@@ -351,6 +351,7 @@ struct AppThemeModifier: ViewModifier {
     content
       .id("\(key)|\(nonce)")
       .tint(AglynColor.tint)
+      .toggleStyle(AglynToggleStyle())
       .preferredColorScheme(ThemeApplier.scheme(prefs))
   }
 }

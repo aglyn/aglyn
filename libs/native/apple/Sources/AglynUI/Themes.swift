@@ -33,10 +33,12 @@ public struct AglynSurfaces: Sendable {
   public let hover: Color
   /// Captions and placeholders.
   public let textTertiary: Color
+  /// A control's outline: a secondary button's or a field's border (Figma border/strong).
+  public let borderStrong: Color
 
   public init(
     canvas: Color, surface: Color, rail: Color, railText: Color, border: Color, textPrimary: Color, textSecondary: Color,
-    titlebar: Color? = nil, sunken: Color? = nil, hover: Color? = nil, textTertiary: Color? = nil
+    titlebar: Color? = nil, sunken: Color? = nil, hover: Color? = nil, textTertiary: Color? = nil, borderStrong: Color? = nil
   ) {
     self.canvas = canvas
     self.surface = surface
@@ -49,6 +51,7 @@ public struct AglynSurfaces: Sendable {
     self.sunken = sunken ?? canvas
     self.hover = hover ?? canvas
     self.textTertiary = textTertiary ?? textSecondary
+    self.borderStrong = borderStrong ?? border
   }
 }
 
