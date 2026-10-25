@@ -20,6 +20,12 @@ public struct ConsoleAPIError: Error, LocalizedError, Equatable {
   public var errorDescription: String? { message }
 }
 
+/// The HTTP status is the error's code, so a crash report tells a 403 from a 500 (Telemetry.swift).
+extension ConsoleAPIError: CustomNSError {
+  public static var errorDomain: String { "AglynConsoleAPI" }
+  public var errorCode: Int { status }
+}
+
 /// The message a route sent, or a plain one for its status.
 public func consoleErrorMessage(status: Int, body: JSONValue?) -> String {
   if case .object(let record) = body {

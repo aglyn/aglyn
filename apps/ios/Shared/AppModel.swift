@@ -127,6 +127,8 @@ final class AppModel {
     invites = nil
     // A support session reads the customer's workspaces but never registers this device's notifications under their account.
     if auth?.impersonation == nil { push.signedIn(uid: user?.uid, reader: reader) }
+    // Crash reports name the person by Firebase uid only, and never the customer a support session is reading as.
+    Telemetry.user(auth?.impersonation == nil ? user?.uid : nil)
     claims = TokenClaims()
     Task { await refreshClaims(force: false) }
     guard let user, let reader else { return }

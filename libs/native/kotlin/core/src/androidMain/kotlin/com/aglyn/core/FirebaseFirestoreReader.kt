@@ -16,28 +16,30 @@ import kotlinx.coroutines.tasks.await
 /** [FirestoreReader] on the Firebase Android SDK: realtime snapshot listeners. */
 class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreReader {
   override suspend fun get(path: String): FirestoreDoc? =
-    db.document(path).get().await().toDoc()
+    recorded("get", path) { db.document(path).get().await().toDoc() }
 
-  override suspend fun page(query: FirestoreQuery): FirestorePage {
+  override suspend fun page(query: FirestoreQuery): FirestorePage = recorded("page", query.collectionPath) {
     val limit = query.limit
     val probe = if (limit != null) query.copy(limit = limit + 1) else query
     val docs = build(probe).get().await().documents.mapNotNull { it.toDoc() }
     val rows = if (limit != null) docs.take(limit) else docs
     val next = if (limit != null && docs.size > limit) cursorOf(rows.last(), query.orderBy) else null
-    return FirestorePage(rows, next)
+    FirestorePage(rows, next)
   }
 
-  override suspend fun count(query: FirestoreQuery): Long? =
+  override suspend fun count(query: FirestoreQuery): Long? = recorded("count", query.collectionPath) {
     build(query.copy(limit = null, startAfter = null)).count().get(AggregateSource.SERVER).await().count
+  }
 
-  override suspend fun sum(query: FirestoreQuery, field: String): Double? {
+  override suspend fun sum(query: FirestoreQuery, field: String): Double? = recorded("sum", query.collectionPath) {
     val total = AggregateField.sum(field)
-    return build(query.copy(limit = null, startAfter = null)).aggregate(total).get(AggregateSource.SERVER).await().getDouble(total)
+    build(query.copy(limit = null, startAfter = null)).aggregate(total).get(AggregateSource.SERVER).await().getDouble(total)
   }
 
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {
     trySend(Live.Loading)
     val registration = db.document(path).addSnapshotListener { snapshot, error ->
+      if (error != null) Telemetry.record(error, Telemetry.firestoreContext("listen_document", path))
       if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc(), snapshot?.metadata?.isFromCache == true))
     }
     awaitClose { registration.remove() }
@@ -45,8 +47,16 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
 
   override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = callbackFlow {
     trySend(Live.Loading)
-    val registration = build(query).addSnapshotListener { snapshot, error ->
+    val built = try {
+      build(query)
+    } catch (error: IllegalArgumentException) {
+      // A query the SDK refuses to build (an `in` filter of the wrong kind of values): a fault in the app, not the data.
+      Telemetry.record(error, Telemetry.firestoreContext("build", query.collectionPath))
+      throw error
+    }
+    val registration = built.addSnapshotListener { snapshot, error ->
       if (error != null) {
+        Telemetry.record(error, Telemetry.firestoreContext("listen", query.collectionPath))
         trySend(Live.Failed(error))
       } else {
         trySend(Live.Ready(snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList(), snapshot?.metadata?.isFromCache == true))
@@ -105,23 +115,35 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
 
 /** [FirestoreWriter] on the Firebase Android SDK: `set` with `SetOptions.merge()`, as the web SDK's merge. */
 class FirebaseFirestoreWriter(private val db: FirebaseFirestore) : FirestoreWriter {
-  override suspend fun merge(path: String, data: Map<String, Any?>) {
+  override suspend fun merge(path: String, data: Map<String, Any?>) = recorded("set", path) {
     db.document(path).set(toSdkWrite(data), SetOptions.merge()).await()
+    Unit
   }
 
-  override suspend fun update(path: String, data: Map<String, Any?>) {
+  override suspend fun update(path: String, data: Map<String, Any?>) = recorded("update", path) {
     // FieldPath.of keeps each key one segment, as the shared contract names it.
     val fields = toSdkWrite(data).entries.toList()
-    if (fields.isEmpty()) return
+    if (fields.isEmpty()) return@recorded
     val first = fields.first()
     val rest = fields.drop(1).flatMap { listOf(com.google.firebase.firestore.FieldPath.of(it.key), it.value) }.toTypedArray()
     db.document(path).update(com.google.firebase.firestore.FieldPath.of(first.key), first.value, *rest).await()
+    Unit
   }
 
-  override suspend fun delete(path: String) {
+  override suspend fun delete(path: String) = recorded("delete", path) {
     db.document(path).delete().await()
+    Unit
   }
 }
+
+/** Runs a Firestore read or write, telling [Telemetry] when it fails (the caller still shows its own message). */
+internal inline fun <T> recorded(operation: String, path: String, body: () -> T): T =
+  try {
+    body()
+  } catch (error: Exception) {
+    Telemetry.record(error, Telemetry.firestoreContext(operation, path))
+    throw error
+  }
 
 internal fun DocumentSnapshot.toDoc(): FirestoreDoc? {
   if (!exists()) return null

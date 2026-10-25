@@ -537,6 +537,46 @@ Sources:
 - [Admin SDK is for privileged environments](https://firebase.google.com/docs/admin/setup)
 - [App Check custom providers](https://firebase.google.com/docs/app-check/custom-provider)
 
+### Crash reports, non-fatal errors and Analytics (AGL-4067)
+
+Both apps on every platform report fatal crashes to **Firebase Crashlytics**
+and log screens and a few key flows to **Google Analytics for Firebase**, in
+release builds on production only. One hook carries all of it: `Telemetry`
+(`AglynCore/Telemetry.swift`, Kotlin `core/Telemetry.kt`), which is a no-op
+until it is started with collection on.
+
+- **When it collects.** `AGLYN_TELEMETRY` (Release `on`, emulator configs
+  `off`, never on a local stack whatever it says), and never in a DEBUG
+  (Apple) or debuggable (Android) build. Info.plist
+  (`FirebaseCrashlyticsCollectionEnabled`, `FIREBASE_ANALYTICS_COLLECTION_ENABLED`)
+  and the Android manifests (`firebase_crashlytics_collection_enabled`,
+  `firebase_analytics_collection_enabled`) keep both off, so nothing is sent
+  before `AglynFirebase.configure` / `FirebaseTelemetrySink.install` decides.
+  The desktop (JVM) app installs no sink.
+- **What it carries.** The Firebase uid as the user id (never during a support
+  session, never an email or a name); custom keys `app_version`, `app_build`,
+  `app` and `screen`; `screen_view` with the shell's screen KEY
+  (`site.pages`, `besigner`); `sign_in` and `sign_up` (method only),
+  `workspace_switch`, `site_open`, `pos_sale_completed` (tender type and
+  whether it was split, no amounts). Keys and parameter values that are not
+  identifiers are replaced or dropped. Non-fatal errors from the Firestore
+  readers and writers (named by operation and collection, never a document
+  id), card load failures and the WebView/Besigner bridge, each kind sent once
+  per place per launch; cancellations and offline errors are not sent.
+- **No advertising.** Apple links the plain `FirebaseAnalytics` product (no
+  `FirebaseAnalyticsIdentitySupport`, no AdSupport or AppTrackingTransparency)
+  with ad personalization signals and IDFV collection off. Android removes the
+  `AD_ID` and ad-services permissions and turns off ad ID collection.
+- **Symbols.** `native-release.mjs ios-archive` uploads the archive's dSYMs with
+  Crashlytics' `upload-symbols` (`ios-symbols` retries it), taking the Firebase
+  app id from the archived Info.plist; the Mac app shares its iOS target's app
+  id. `android-bundle` passes `-Paglyn.crashlyticsMappingUpload=true`, so the
+  Crashlytics Gradle plugin uploads the R8 mapping; with no google-services.json
+  the plugin's app id comes from a stand-in `processReleaseGoogleServices` task
+  that only carries a file the build writes. Analytics reads `google_app_id`
+  from resources, so the builds add it as a `resValue` and remove Firebase's
+  init provider: Firebase still starts from `AndroidFirebase` alone.
+
 ## 5. Shared contracts codegen
 
 The console's pure model and query modules are TypeScript. The native apps

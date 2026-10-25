@@ -41,6 +41,10 @@ let package = Package(
         .product(name: "FirebaseAppCheck", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
+        // Crash reports, non-fatal errors and Analytics (AGL-4067), collected in release builds only (Telemetry.swift).
+        // The plain Analytics product: no FirebaseAnalyticsIdentitySupport, so the advertising identifier is never read.
+        .product(name: "FirebaseCrashlytics", package: "firebase-ios-sdk"),
+        .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk"),
       ],
       // The notification catalog, linked in from libs/native/contracts.
       resources: [.copy("Resources/notification-catalog.generated.json")]

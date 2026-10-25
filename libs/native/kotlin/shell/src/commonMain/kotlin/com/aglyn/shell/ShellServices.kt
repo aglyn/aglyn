@@ -124,6 +124,38 @@ sealed interface Route {
 }
 
 /**
+ * The screen's KEY for Analytics and crash reports (AGL-4067): "site.pages", "besigner". Never a site, page or person
+ * name, never a URL or a search.
+ */
+val Route.telemetryKey: String
+  get() = when (this) {
+    is Route.Screen -> screenId
+    is Route.Besigner -> "besigner"
+    Route.Analytics -> "analytics"
+    Route.Switcher -> "switcher"
+    Route.NotificationSettings -> "notification_settings"
+    Route.ThemeSettings -> "theme_settings"
+    is Route.Web -> "web"
+    is Route.SearchResults -> "search_results"
+  }
+
+/** What the navigator shows, by key: the pushed screen on top, else the destination's screen ("home", "site.pages"). */
+val ShellNavigator.telemetryKey: String
+  get() = current?.telemetryKey ?: NavKeys.parse(top)?.first ?: top
+
+/** Tells Telemetry which signed-out screen is on show, the screens no navigator holds. */
+@Composable
+internal fun ReportAuthScreen(state: com.aglyn.core.AuthState, landing: Boolean, supporting: Boolean) {
+  val key = when {
+    state is com.aglyn.core.AuthState.SignedOut -> "sign_in"
+    state is com.aglyn.core.AuthState.SignedIn && landing -> "sign_in"
+    state is com.aglyn.core.AuthState.SignedIn && !state.user.emailVerified && !supporting -> "verify_email"
+    else -> null
+  }
+  androidx.compose.runtime.LaunchedEffect(key) { key?.let(com.aglyn.core.Telemetry::screen) }
+}
+
+/**
  * The platform's own content screens (sites, pages, media, setup…), which are
  * core rather than a plugin's: loaded before the generated plugin manifest,
  * through the same registrar and declaration check.

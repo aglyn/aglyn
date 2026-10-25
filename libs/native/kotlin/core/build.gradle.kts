@@ -36,6 +36,9 @@ kotlin {
       api(libs.firebase.auth)
       api(libs.firebase.firestore)
       api(libs.firebase.messaging)
+      // Crash reports, non-fatal errors and Analytics (AGL-4067), collected in release builds only (Telemetry.kt).
+      implementation(libs.firebase.crashlytics)
+      implementation(libs.firebase.analytics)
       // Firebase App Check (AGL-3818): its Play Integrity provider, which Auth and Firestore read, and the Play Integrity
       // library it calls, pinned here so the version is ours.
       implementation(libs.firebase.appcheck.playintegrity)

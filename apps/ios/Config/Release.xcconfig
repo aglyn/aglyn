@@ -44,6 +44,8 @@ AGLYN_DOCS_ORIGIN = https:/$()/docs.aglyn.com
 // Sign in with Apple (AGL-3816), offered beside Google as App Store guideline 4.8 asks: needs each App ID's Sign in
 // with Apple capability (com.aglyn.app has it; com.aglyn.pos needs it) and the Apple provider in Firebase Auth.
 AGLYN_APPLE_SIGN_IN = YES
+// Crash reports, non-fatal errors and Analytics (AGL-4067): collected from a Release build on production only.
+AGLYN_TELEMETRY = on
 
 AGLYN_DEBUG_EMAIL =
 AGLYN_DEBUG_PASSWORD =

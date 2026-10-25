@@ -57,6 +57,8 @@ data class AglynEnv(
   val legalOrigin: String? = null,
   /** Where the documentation lives (`AGLYN_DOCS_ORIGIN`); unset is the default. */
   val docsOrigin: String? = null,
+  /** Crash reports and Analytics: `on` or `off`; unset is on, except on a local stack (`AGLYN_TELEMETRY`, AGL-4067). */
+  val telemetry: String? = null,
 )
 
 data class AglynConfig(
@@ -92,6 +94,12 @@ data class AglynConfig(
    * build's own documentation, never ours presented as theirs.
    */
   val docsOrigin: String = DEFAULT_DOCS_ORIGIN,
+  /**
+   * Whether crash reports, non-fatal errors and Analytics are collected (AGL-4067): on for a release build pointed at
+   * production, never on a local stack, so a debug build on the emulator stack never reports. Android also keeps it off
+   * in any debuggable build (`AndroidFirebase`).
+   */
+  val telemetry: Boolean = true,
 ) {
   /** The domain workspace addresses sit under (`acme-inc.aglyn.com`): the console's host without its own label. */
   val workspaceDomain: String
@@ -177,6 +185,12 @@ data class AglynConfig(
       else -> throw IllegalArgumentException("AGLYN_APP_CHECK must be on or off, not ${value?.trim()}.")
     }
 
+    /** `AGLYN_TELEMETRY`: on unless set otherwise, and never on a local stack. Anything but on is off: a typo never turns it on. */
+    fun telemetrySetting(value: String?, localStack: Boolean): Boolean = !localStack && when ((value ?: "").trim().lowercase()) {
+      "", "on", "true", "yes", "1" -> true
+      else -> false
+    }
+
     internal fun hostOf(origin: String): String =
       ORIGIN.matchEntire(origin)?.groupValues?.get(2)?.lowercase() ?: ""
 
@@ -207,6 +221,7 @@ data class AglynConfig(
         appCheck = appCheckSetting(env.appCheck, localStack),
         legalOrigin = httpsOrigin(env.legalOrigin) ?: DEFAULT_LEGAL_ORIGIN,
         docsOrigin = httpsOrigin(env.docsOrigin) ?: DEFAULT_DOCS_ORIGIN,
+        telemetry = telemetrySetting(env.telemetry, localStack),
       )
     }
   }

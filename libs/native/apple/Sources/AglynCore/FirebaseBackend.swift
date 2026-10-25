@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import DeviceCheck
+import FirebaseAnalytics
 import FirebaseAppCheck
 import FirebaseAuth
 import FirebaseCore
+import FirebaseCrashlytics
 import FirebaseFirestore
 import Foundation
 
@@ -32,6 +34,7 @@ public enum AglynFirebase {
     options.projectID = config.firebase.projectID
     options.storageBucket = config.firebase.storageBucket
     FirebaseApp.configure(options: options)
+    startTelemetry(config)
 
     if let host = config.authEmulatorHost, let (name, port) = split(host) {
       Auth.auth().useEmulator(withHost: name, port: port)
@@ -43,6 +46,27 @@ public enum AglynFirebase {
       settings.cacheSettings = MemoryCacheSettings()
     }
     Firestore.firestore().settings = settings
+  }
+
+  /// Whether this build may collect crash reports and Analytics: the config's say (a release build on production), and
+  /// never a DEBUG build whatever its config says.
+  static func collects(_ config: AglynConfig) -> Bool {
+    #if DEBUG
+      return false
+    #else
+      return config.telemetry
+    #endif
+  }
+
+  /// Crashlytics and Analytics (AGL-4067). Info.plist keeps both off (`FirebaseCrashlyticsCollectionEnabled`,
+  /// `FIREBASE_ANALYTICS_COLLECTION_ENABLED`), so nothing is sent before this decides; the choice is set on every launch,
+  /// so a build that stops collecting stops at once.
+  @MainActor private static func startTelemetry(_ config: AglynConfig) {
+    let collecting = collects(config)
+    Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(collecting)
+    Analytics.setAnalyticsCollectionEnabled(collecting)
+    if !collecting { Crashlytics.crashlytics().deleteUnsentReports() }
+    Telemetry.start(collecting: collecting, sink: FirebaseTelemetrySink(), app: config.app)
   }
 
   private static func split(_ hostPort: String) -> (String, Int)? {
@@ -123,16 +147,26 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   }
 
   public func count(_ query: FirestoreQuery) async throws -> Int? {
-    let snapshot = try await built(query).count.getAggregation(source: .server)
-    return snapshot.count.intValue
+    do {
+      let snapshot = try await built(query).count.getAggregation(source: .server)
+      return snapshot.count.intValue
+    } catch {
+      Telemetry.record(error, Telemetry.firestoreContext("count", query.collection))
+      throw error
+    }
   }
 
   public func sum(_ query: FirestoreQuery, field: String) async throws -> Double? {
     let total = AggregateField.sum(field)
     var whole = query
     whole.limit = nil
-    let snapshot = try await built(whole).aggregate([total]).getAggregation(source: .server)
-    return (snapshot.get(total) as? NSNumber)?.doubleValue
+    do {
+      let snapshot = try await built(whole).aggregate([total]).getAggregation(source: .server)
+      return (snapshot.get(total) as? NSNumber)?.doubleValue
+    } catch {
+      Telemetry.record(error, Telemetry.firestoreContext("sum", query.collection))
+      throw error
+    }
   }
 
   @MainActor
@@ -144,6 +178,7 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
       let result: Result<[FirestoreDocument], Error> =
         if let snapshot { .success(snapshot.documents.map(Self.document)) }
         else { .failure(error ?? URLError(.unknown)) }
+      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen", query.collection)) }
       MainActor.assumeIsolated { onChange(result) }
     }
     return Registration(handle)
@@ -161,6 +196,7 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
       let result: Result<FirestoreDocument?, Error> =
         if let snapshot { .success(snapshot.exists ? Self.document(snapshot) : nil) }
         else { .failure(error ?? URLError(.unknown)) }
+      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen_document", path)) }
       MainActor.assumeIsolated { onChange(result) }
     }
     return Registration(handle)
@@ -176,15 +212,51 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   }
 
   public func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {
-    try await db.document(path.joined(separator: "/")).setData(
-      fields.mapValues(Self.writable), merge: merge)
+    try await recorded("set", path) {
+      try await db.document(path.joined(separator: "/")).setData(fields.mapValues(Self.writable), merge: merge)
+    }
   }
 
   public func deleteDocument(_ path: [String]) async throws {
-    try await db.document(path.joined(separator: "/")).delete()
+    try await recorded("delete", path) { try await db.document(path.joined(separator: "/")).delete() }
   }
 
   public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
-    try await db.document(path.joined(separator: "/")).updateData(fields.mapValues(Self.writable))
+    try await recorded("update", path) {
+      try await db.document(path.joined(separator: "/")).updateData(fields.mapValues(Self.writable))
+    }
+  }
+
+  /// Runs a write, telling Telemetry when it fails (the caller still shows its own "could not save").
+  private func recorded(_ operation: String, _ path: [String], _ write: () async throws -> Void) async throws {
+    do { try await write() } catch {
+      Telemetry.record(error, Telemetry.firestoreContext(operation, path))
+      throw error
+    }
+  }
+}
+
+/// Telemetry's Firebase end: Crashlytics for errors, breadcrumbs, the uid and custom keys; Analytics for events. Both SDKs
+/// are thread-safe. Only `Telemetry` calls it, and only once collection is on.
+final class FirebaseTelemetrySink: TelemetrySink, @unchecked Sendable {
+  func record(_ error: Error, context: String) {
+    Crashlytics.crashlytics().record(error: error, userInfo: ["context": context])
+  }
+
+  func breadcrumb(_ message: String) {
+    Crashlytics.crashlytics().log(message)
+  }
+
+  func setUser(_ uid: String?) {
+    Crashlytics.crashlytics().setUserID(uid ?? "")
+    Analytics.setUserID(uid)
+  }
+
+  func setValue(_ value: String, forKey key: String) {
+    Crashlytics.crashlytics().setCustomValue(value, forKey: key)
+  }
+
+  func log(_ event: String, parameters: [String: String]) {
+    Analytics.logEvent(event, parameters: parameters.isEmpty ? nil : parameters)
   }
 }

@@ -38,6 +38,8 @@
 	<string>$(AGLYN_DOCS_ORIGIN)</string>
 	<key>AGLYN_APPLE_SIGN_IN</key>
 	<string>$(AGLYN_APPLE_SIGN_IN)</string>
+	<key>AGLYN_TELEMETRY</key>
+	<string>$(AGLYN_TELEMETRY)</string>
 	<key>AGLYN_DEBUG_EMAIL</key>
 	<string>$(AGLYN_DEBUG_EMAIL)</string>
 	<key>AGLYN_DEBUG_PASSWORD</key>
@@ -60,6 +62,25 @@
 	     no Firebase-hosted web flows), so nothing else relies on it. -->
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<false/>
+	<!-- Crash reports and Analytics (AGL-4067): off until AglynFirebase.configure turns them on, which it does only in a
+	     release build on production (AGLYN_TELEMETRY), so nothing is sent before the config decides. -->
+	<key>FirebaseCrashlyticsCollectionEnabled</key>
+	<false/>
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
+	<!-- No advertising use: no ad personalization signals and no identifier for vendor. The app links the plain
+	     FirebaseAnalytics product, so the advertising identifier is never read, and it asks for no tracking permission. -->
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<false/>
+	<!-- Screens are logged by their key from the shell (Telemetry.screen), never by view-controller class. -->
+	<key>FirebaseAutomaticScreenReportingEnabled</key>
+	<false/>
+	<!-- macOS: an uncaught Objective-C exception (a Firestore NSException) ends the app, so Crashlytics reports it, rather
+	     than AppKit logging it and carrying on in a broken state. iOS ignores the key. -->
+	<key>NSApplicationCrashOnExceptions</key>
+	<true/>
 	<!-- HTTPS (TLS) only, which is exempt: no export-compliance question per upload. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

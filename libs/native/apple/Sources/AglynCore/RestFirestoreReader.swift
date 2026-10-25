@@ -72,7 +72,9 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
   ) -> FirestoreListening {
     let body = runQueryBody(query)
     let url = runQueryURL(query)
-    return poll(onChange) { [self] in try await runQuery(url: url, body: body) }
+    return poll(onChange, context: Telemetry.firestoreContext("rest_listen", query.collection)) { [self] in
+      try await runQuery(url: url, body: body)
+    }
   }
 
   @MainActor
@@ -80,12 +82,13 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     _ path: [String],
     _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void
   ) -> FirestoreListening {
-    poll(onChange) { [self] in try await get(path) }
+    poll(onChange, context: Telemetry.firestoreContext("rest_listen_document", path)) { [self] in try await get(path) }
   }
 
   @MainActor
   private func poll<T: Sendable>(
     _ onChange: @escaping @MainActor (Result<T, Error>) -> Void,
+    context: String,
     read: @escaping @Sendable () async throws -> T
   ) -> FirestoreListening {
     let interval = refreshInterval
@@ -93,7 +96,10 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
       Task { @MainActor in
         while !Task.isCancelled {
           let result: Result<T, Error>
-          do { result = .success(try await read()) } catch { result = .failure(error) }
+          do { result = .success(try await read()) } catch {
+            result = .failure(error)
+            Telemetry.record(error, context)
+          }
           if Task.isCancelled { return }
           onChange(result)
           await Self.pause(interval)
@@ -122,7 +128,9 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     let url = runQueryURL(query).replacingOccurrences(of: ":runQuery", with: ":runAggregationQuery")
     let (status, response) = try await send(url: url, method: "POST", body: countBody(query))
     guard (200..<300).contains(status), let rows = response as? [[String: Any]] else {
-      throw Self.failure(status: status, body: response)
+      let failure = Self.failure(status: status, body: response)
+      Telemetry.record(failure, Telemetry.firestoreContext("rest_count", query.collection))
+      throw failure
     }
     return Self.countResult(rows)
   }

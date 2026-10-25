@@ -384,6 +384,20 @@ class Checkout(
         is TenderOutcome.Unknown -> base
       }
     }
+    if (outcome is TenderOutcome.Settled && (outcome.answer.completed || outcome.answer.sale.dueCents <= 0)) {
+      // The tender only (AGL-4067): never an amount, an item or anything about the customer.
+      com.aglyn.core.Telemetry.event(com.aglyn.core.TelemetryEvent.POS_SALE_COMPLETED, saleCompletedParameters(outcome.answer.sale, outcome.payment))
+    }
+  }
+
+  /**
+   * What `pos_sale_completed` carries: the tender that finished the sale (`card`, `cash`, `gift_card`…) and whether it was
+   * split across tenders.
+   */
+  internal fun saleCompletedParameters(sale: PosSale, last: PosSalePayment?): Map<String, String> {
+    val tender = last?.method ?: sale.payments.lastOrNull()?.method ?: "unknown"
+    val split = sale.payments.count { it.status == "succeeded" } > 1
+    return mapOf("tender" to tender, "split" to if (split) "yes" else "no")
   }
 
   /** Reads the sale again: after a lost answer, or when the app reopens on it. */

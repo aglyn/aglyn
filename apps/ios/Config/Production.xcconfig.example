@@ -29,3 +29,6 @@
 // AGLYN_LEGAL_ORIGIN = https:/$()/<your legal site>
 // AGLYN_DOCS_ORIGIN = https:/$()/<your documentation site>
 // AGLYN_APPLE_SIGN_IN = YES
+// Crash reports, non-fatal errors and Analytics to this project's Crashlytics and Analytics; off for a build that
+// must not report (AGL-4067).
+// AGLYN_TELEMETRY = on

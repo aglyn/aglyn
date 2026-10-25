@@ -40,6 +40,8 @@ class AndroidFirebase private constructor(val app: FirebaseApp, val config: Agly
       val app = FirebaseApp.getApps(context).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
         ?: FirebaseApp.initializeApp(context, options)
       installAppCheck(app, config)
+      // Crash reports, non-fatal errors and Analytics: release builds on production only (AGL-4067).
+      FirebaseTelemetrySink.install(context, app, config)
       val firebase = AndroidFirebase(app, config)
       config.authEmulatorHost?.let { hostPort ->
         val (host, port) = hostPort.split(':')

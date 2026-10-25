@@ -447,120 +447,137 @@ public final class AuthSession {
 
   // MARK: Signing in
 
+  /// Runs a sign-in or sign-up and, once it succeeds, logs `event` with how (AGL-4067): the method only, never who.
+  private func tracked<T>(_ event: TelemetryEvent, _ method: String, _ body: () async throws -> T) async rethrows -> T {
+    let value = try await body()
+    Telemetry.event(event, ["method": method])
+    return value
+  }
+
   public func signIn(email: String, password: String) async throws {
-    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
-    if addingAccount {
-      _ = try await add { try await $0.signIn(email: trimmed, password: password) }
-      return
+    try await tracked(.signIn, "password") {
+      let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+      if addingAccount {
+        _ = try await add { try await $0.signIn(email: trimmed, password: password) }
+        return
+      }
+      if let rest {
+        signedInOrOutSinceLaunch = true
+        setBase(try await rest.signIn(email: trimmed, password: password))
+        await refreshStanding()
+        return
+      }
+      // A self-serve account lives in the project pool; an SSO sign-in aims the SDK at a workspace's tenant, which
+      // is sticky until something says otherwise (the console's `aimAuthAtPool(auth, null)`, AGL-1993).
+      Auth.auth().tenantID = nil
+      _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
     }
-    if let rest {
-      signedInOrOutSinceLaunch = true
-      setBase(try await rest.signIn(email: trimmed, password: password))
-      await refreshStanding()
-      return
-    }
-    // A self-serve account lives in the project pool; an SSO sign-in aims the SDK at a workspace's tenant, which
-    // is sticky until something says otherwise (the console's `aimAuthAtPool(auth, null)`, AGL-1993).
-    Auth.auth().tenantID = nil
-    _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
   }
 
   /// Signs in with a Firebase custom token: a passkey sign-in's, or the console hand-off's after single sign-on.
   /// `tenantId` is the identity pool the token was minted in (an SSO account lives in its workspace's tenant).
   public func signIn(customToken: String, tenantId: String? = nil) async throws {
-    let pool = tenantId.flatMap { $0.isEmpty ? nil : $0 }
-    if addingAccount {
-      _ = try await add { try await $0.signIn(customToken: customToken, tenantId: pool) }
-      return
+    try await tracked(.signIn, "custom_token") {
+      let pool = tenantId.flatMap { $0.isEmpty ? nil : $0 }
+      if addingAccount {
+        _ = try await add { try await $0.signIn(customToken: customToken, tenantId: pool) }
+        return
+      }
+      if let rest {
+        signedInOrOutSinceLaunch = true
+        setBase(try await rest.signIn(customToken: customToken, tenantId: pool))
+        await refreshStanding()
+        return
+      }
+      Auth.auth().tenantID = pool
+      _ = try await Auth.auth().signIn(withCustomToken: customToken)
     }
-    if let rest {
-      signedInOrOutSinceLaunch = true
-      setBase(try await rest.signIn(customToken: customToken, tenantId: pool))
-      await refreshStanding()
-      return
-    }
-    Auth.auth().tenantID = pool
-    _ = try await Auth.auth().signIn(withCustomToken: customToken)
   }
 
   /// Creates an email and password account in the project pool and signs in as it, as the console's sign-up does
   /// (`createUserWithEmailAndPassword`). Throws with the Firebase code for `signUpErrorMessage`.
   public func signUp(email: String, password: String) async throws -> AglynUser {
-    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
-    if addingAccount { return try await add { try await $0.signUp(email: trimmed, password: password) } }
-    if let rest {
-      signedInOrOutSinceLaunch = true
-      let created = try await rest.signUp(email: trimmed, password: password)
+    return try await tracked(.signUp, "password") {
+      let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+      if addingAccount { return try await add { try await $0.signUp(email: trimmed, password: password) } }
+      if let rest {
+        signedInOrOutSinceLaunch = true
+        let created = try await rest.signUp(email: trimmed, password: password)
+        setBase(created)
+        await refreshStanding()
+        return created
+      }
+      Auth.auth().tenantID = nil
+      let result = try await Auth.auth().createUser(withEmail: trimmed, password: password)
+      let created = AglynUser(sdk: result.user)
       setBase(created)
-      await refreshStanding()
       return created
     }
-    Auth.auth().tenantID = nil
-    let result = try await Auth.auth().createUser(withEmail: trimmed, password: password)
-    let created = AglynUser(sdk: result.user)
-    setBase(created)
-    return created
   }
 
   /// Signs in with a Google ID token (the platform sheet's), which signs up a person Firebase has not seen.
   /// Returns whether it did, the console's `isNewAccount(credential)`.
   public func signIn(googleIDToken: String, accessToken: String? = nil) async throws -> Bool {
-    let body = "id_token=\(ConsoleAPIClient.encodeComponent(googleIDToken))&providerId=google.com"
-    if addingAccount {
-      var isNew = false
-      _ = try await add { client in
-        let (signedIn, created) = try await client.signIn(idpPostBody: body)
-        isNew = created
-        return signedIn
+    return try await tracked(.signIn, "google") {
+      let body = "id_token=\(ConsoleAPIClient.encodeComponent(googleIDToken))&providerId=google.com"
+      if addingAccount {
+        var isNew = false
+        _ = try await add { client in
+          let (signedIn, created) = try await client.signIn(idpPostBody: body)
+          isNew = created
+          return signedIn
+        }
+        return isNew
       }
-      return isNew
+      if let rest {
+        signedInOrOutSinceLaunch = true
+        let (signedIn, isNew) = try await rest.signIn(idpPostBody: body)
+        setBase(signedIn)
+        await refreshStanding()
+        return isNew
+      }
+      Auth.auth().tenantID = nil
+      let credential = GoogleAuthProvider.credential(withIDToken: googleIDToken, accessToken: accessToken ?? "")
+      let result = try await Auth.auth().signIn(with: credential)
+      setBase(AglynUser(sdk: result.user))
+      return result.additionalUserInfo?.isNewUser == true
     }
-    if let rest {
-      signedInOrOutSinceLaunch = true
-      let (signedIn, isNew) = try await rest.signIn(idpPostBody: body)
-      setBase(signedIn)
-      await refreshStanding()
-      return isNew
-    }
-    Auth.auth().tenantID = nil
-    let credential = GoogleAuthProvider.credential(withIDToken: googleIDToken, accessToken: accessToken ?? "")
-    let result = try await Auth.auth().signIn(with: credential)
-    setBase(AglynUser(sdk: result.user))
-    return result.additionalUserInfo?.isNewUser == true
   }
 
   /// Signs in with Sign in with Apple's identity token and the raw nonce its request was hashed from (provider
   /// `apple.com`). Apple hands the name over on the first authorization only, so a new account keeps it then.
   public func signIn(appleIDToken: String, rawNonce: String, fullName: PersonNameComponents?) async throws -> Bool {
-    let name = fullName.map { PersonNameComponentsFormatter().string(from: $0) }?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let body =
-      "id_token=\(ConsoleAPIClient.encodeComponent(appleIDToken))&providerId=apple.com"
-      + "&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))"
-    let isNew: Bool
-    if addingAccount {
-      var created = false
-      _ = try await add { client in
-        let (signedIn, isNew) = try await client.signIn(idpPostBody: body)
-        created = isNew
-        return signedIn
+    return try await tracked(.signIn, "apple") {
+      let name = fullName.map { PersonNameComponentsFormatter().string(from: $0) }?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let body =
+        "id_token=\(ConsoleAPIClient.encodeComponent(appleIDToken))&providerId=apple.com"
+        + "&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))"
+      let isNew: Bool
+      if addingAccount {
+        var created = false
+        _ = try await add { client in
+          let (signedIn, isNew) = try await client.signIn(idpPostBody: body)
+          created = isNew
+          return signedIn
+        }
+        isNew = created
+      } else if let rest {
+        signedInOrOutSinceLaunch = true
+        let (signedIn, created) = try await rest.signIn(idpPostBody: body)
+        setBase(signedIn)
+        isNew = created
+      } else {
+        Auth.auth().tenantID = nil
+        let credential = OAuthProvider.appleCredential(withIDToken: appleIDToken, rawNonce: rawNonce, fullName: fullName)
+        let result = try await Auth.auth().signIn(with: credential)
+        setBase(AglynUser(sdk: result.user))
+        isNew = result.additionalUserInfo?.isNewUser == true
       }
-      isNew = created
-    } else if let rest {
-      signedInOrOutSinceLaunch = true
-      let (signedIn, created) = try await rest.signIn(idpPostBody: body)
-      setBase(signedIn)
-      isNew = created
-    } else {
-      Auth.auth().tenantID = nil
-      let credential = OAuthProvider.appleCredential(withIDToken: appleIDToken, rawNonce: rawNonce, fullName: fullName)
-      let result = try await Auth.auth().signIn(with: credential)
-      setBase(AglynUser(sdk: result.user))
-      isNew = result.additionalUserInfo?.isNewUser == true
+      if isNew, !name.isEmpty, (user?.displayName ?? "").isEmpty { try? await updateDisplayName(name) }
+      await refreshStanding()
+      return isNew
     }
-    if isNew, !name.isEmpty, (user?.displayName ?? "").isEmpty { try? await updateDisplayName(name) }
-    await refreshStanding()
-    return isNew
   }
 
   // MARK: The account in use
