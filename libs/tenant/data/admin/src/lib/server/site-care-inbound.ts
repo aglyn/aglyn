@@ -370,9 +370,9 @@ export async function findSiteCareWorkspacesForSender(
 /**
  * The Site Care workspace a sender's new request is filed on: the first of
  * {@link findSiteCareWorkspacesForSender}'s, by workspace id, so the choice
- * is stable. A sender in several Site Care workspaces therefore files on the
- * lowest id; what should happen instead is an open product decision, and
- * this is the one line that changes when it is made.
+ * is stable. A sender in several Site Care workspaces files on the lowest
+ * id, with every candidate recorded for staff, who move the request when it
+ * belongs to another (AGL-4031, `moveSiteCareRequest`).
  */
 export async function findSiteCareWorkspaceForSender(
   firestore: FirebaseFirestore.Firestore,
@@ -430,7 +430,7 @@ export async function fileSiteCareInboundEmail(
   const findAccount = input.findAccount ?? findSiteCareAccount
   const matches = sender ? await findSiteCareWorkspacesForSender(firestore, findAccount, sender) : []
   // A new request files on the first workspace by id (see
-  // findSiteCareWorkspaceForSender); the rest are known and unused for now.
+  // findSiteCareWorkspaceForSender); every candidate is recorded with it.
   const match = matches[0] ?? null
   if (input.target.kind === 'reply' && match) {
     const ticket = await firestore.collection('supportTickets').doc(input.target.requestId).get()
@@ -472,6 +472,11 @@ export async function fileSiteCareInboundEmail(
       requester: { uid: match.uid, email: match.email },
       source: 'email',
       dedupeKey: message.messageId || message.id,
+      candidates: matches.map((each) => ({
+        orgId: each.orgId,
+        name: String(each.org['name'] ?? '') || each.orgId,
+        uid: each.uid,
+      })),
     },
     deps,
   )

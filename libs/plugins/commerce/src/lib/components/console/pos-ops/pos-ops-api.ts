@@ -18,7 +18,7 @@
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** The register's operations routes (AGL-3609). */
-export type PosOpsRoute = 'pos-shift' | 'pos-staff-pin' | 'pos-customer' | 'pos-return'
+export type PosOpsRoute = 'pos-shift' | 'pos-staff-pin' | 'pos-customer' | 'pos-return' | 'pos-check-in'
 
 export interface PosOpsAnswer<T = Record<string, any>> {
   ok: boolean

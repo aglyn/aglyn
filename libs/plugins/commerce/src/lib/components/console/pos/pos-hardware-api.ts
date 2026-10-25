@@ -149,10 +149,14 @@ export interface StaffHardwareOrderRow extends Omit<PosHardwareOrderRow, 'shippi
 
 const STAFF = '/api/commerce/admin/hardware-orders'
 
-export function staffHardwareOrders(user: User, status: PosHardwareOrderStatus | '') {
-  return send<{ orders: StaffHardwareOrderRow[]; more: boolean; canWrite: boolean }>(
+export function staffHardwareOrders(user: User, status: PosHardwareOrderStatus | '', after: string | null = null) {
+  const params = new URLSearchParams()
+  if (status) params.set('status', status)
+  if (after) params.set('after', after)
+  const search = params.toString()
+  return send<{ orders: StaffHardwareOrderRow[]; next: string | null; pageSize: number; canWrite: boolean }>(
     user,
-    status ? `${STAFF}?status=${encodeURIComponent(status)}` : STAFF,
+    search ? `${STAFF}?${search}` : STAFF,
     { method: 'GET' },
   )
 }

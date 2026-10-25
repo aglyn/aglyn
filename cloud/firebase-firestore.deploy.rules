@@ -3900,6 +3900,13 @@ match /{subcollection}/{document=**} {
 
 
 
+
+
+
+
+
+
+
 allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -3907,7 +3914,8 @@ subcollection != 'salesChannels' &&
 subcollection != 'reviewTokens' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
-'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
+'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults',
+'checkIns', 'checkInDays'])));
 
 
 
@@ -4055,7 +4063,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens']) &&
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays']) &&
 
 
 
@@ -4225,7 +4233,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens'])));
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays'])));
 
 
 
@@ -4283,7 +4291,8 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
+'checkIns', 'checkInDays'])));
 }
 
 

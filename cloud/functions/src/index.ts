@@ -16,6 +16,11 @@ import { defineSecret } from 'firebase-functions/params'
 import * as logger from 'firebase-functions/logger'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+import {
+  EMAIL_ON_ANOTHER_ACCOUNT_MARKER,
+  aliasSignupVerdict,
+} from './alias-signup'
 import { signupsCreationVerdict } from './signups-lock'
 import { domainOf, ssoDomainCreationRefused } from './sso-domain-policy'
 import { fetchPastEdgeChallenge, isEdgeChallenge } from './edge-challenge'
@@ -1253,6 +1258,74 @@ function refuseSsoDomainCreation(
 }
 
 /**
+ * The longest the alias check may hold an account creation. Identity
+ * Platform gives a blocking function 7 seconds in all, and the signups lock
+ * still has to read after this. Past the cap the account is admitted.
+ */
+const ALIAS_SIGNUP_TIMEOUT_MS = 2_000
+
+/**
+ * REFUSE AN ACCOUNT UNDER ANOTHER ACCOUNT'S VERIFIED ADDRESS (AGL-4041).
+ *
+ * The decision, and why it fails open, is `./alias-signup`. This is only
+ * the Firestore and Auth reads it asks for, under a time cap. The refusal
+ * names no account: the caller is anonymous until it signs in, and the
+ * address alone must not tell them whose it is.
+ */
+async function refuseAliasSignup(
+  user: { uid?: string | null; email?: string | null; tenantId?: string | null } | undefined,
+): Promise<void> {
+  if (!user) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const verdict = await Promise.race([
+    aliasSignupVerdict(user, {
+      indexOwner: async (address) => {
+        const entry = await firestore().collection('emailIdentityIndex').doc(address).get()
+        const uid = entry.exists ? entry.get('uid') : null
+        return typeof uid === 'string' && uid ? uid : null
+      },
+      rowVerified: async (uid, address) => {
+        const row = await firestore()
+          .collection('users')
+          .doc(uid)
+          .collection('emails')
+          .doc(address)
+          .get()
+        return row.exists && row.get('verified') === true
+      },
+      ownerExists: async (uid) => {
+        try {
+          await getAuth().getUser(uid)
+          return true
+        } catch (error) {
+          if ((error as { code?: unknown })?.code === 'auth/user-not-found') return false
+          throw error
+        }
+      },
+    }),
+    new Promise<{ refused: false; cause: 'unreadable' }>((resolve) => {
+      timer = setTimeout(() => resolve({ refused: false, cause: 'unreadable' }), ALIAS_SIGNUP_TIMEOUT_MS)
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
+
+  if (verdict.cause === 'unreadable') {
+    logger.warn('alias check unreadable at creation, account admitted', { cause: 'unreadable' })
+  }
+  if (!verdict.refused) return
+
+  logger.warn('account refused at creation: address is on another account', {
+    cause: verdict.cause,
+  })
+  throw new HttpsError(
+    'permission-denied',
+    'This email address is already added to another account, so no new ' +
+      `account was created. (${EMAIL_ON_ANOTHER_ACCOUNT_MARKER})`,
+  )
+}
+
+/**
  * REFUSE ACCOUNT CREATION WHILE THE SIGNUPS LOCK IS ENGAGED (AGL-1531).
  *
  * The lock already refused the session mint, the legal-acceptance recorder
@@ -1295,6 +1368,7 @@ function refuseSsoDomainCreation(
  */
 export const beforeSignupCreate = beforeUserCreated(async (event) => {
   refuseSsoDomainCreation(event.data)
+  await refuseAliasSignup(event.data)
 
   const verdict = await signupsCreationVerdict(async () => {
     // The warm-up answers at most one creation, and only if it succeeded;
