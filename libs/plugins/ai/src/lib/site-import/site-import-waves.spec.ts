@@ -28,7 +28,14 @@ import type { AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
 import { aiLayoutPagePhotoSource, aiLayoutPagePhotosOf } from '../jobs/ai-layout-owner-photos'
 import { crawlSiteForImport } from './site-import-crawl'
 import { bringInSiteImportPhotos, siteImportImageKey, siteImportImageUrl } from './site-import-images'
-import { siteImportLabel, siteImportListedPage, siteImportPageRead, siteImportPageSections, siteImportPageTitle } from './site-import-page'
+import {
+  siteImportLabel,
+  siteImportLeftOutReason,
+  siteImportListedPage,
+  siteImportPageRead,
+  siteImportPageSections,
+  siteImportPageTitle,
+} from './site-import-page'
 import {
   HARBOR_DOMAIN,
   HARBOR_INJECTION,
@@ -152,6 +159,24 @@ describe('a page as an import keeps it', () => {
       'https://cdn.harbor-dental.com/office-wide.jpg',
       'https://cdn.harbor-dental.com/logo.png',
     ])
+  })
+
+  it('leaves out a page bot protection or a firewall turned away (401, 403, 429) as blocked; any other error is unreadable', async () => {
+    for (const status of [401, 403, 429]) expect(siteImportLeftOutReason('http-error', status)).toBe('blocked')
+    for (const status of [404, 410, 500, 503]) expect(siteImportLeftOutReason('http-error', status)).toBe('unreadable')
+    expect(siteImportLeftOutReason('http-error')).toBe('unreadable')
+    // Only an error answer is a refusal: a 2xx that is not a page is not.
+    expect(siteImportLeftOutReason('not-html', 403)).toBe('unreadable')
+    expect(siteImportLeftOutReason('unreachable')).toBe('unreadable')
+    expect(siteImportLeftOutReason('login-form')).toBe('login-form')
+    expect(siteImportLeftOutReason('off-origin-redirect')).toBe('off-site')
+    // The status the site answered survives the crawl to the skip.
+    const inventory = await crawlSiteForImport(
+      { domain: HARBOR_DOMAIN, maxPages: 1, only: [`${HARBOR_ORIGIN}/about`] },
+      { fetch: harborFetch([], { [`${HARBOR_ORIGIN}/about`]: { status: 429, contentType: 'text/html', body: '' } }) },
+    )
+    expect(inventory.skipped).toEqual([{ url: `${HARBOR_ORIGIN}/about`, reason: 'http-error', status: 429 }])
+    expect(siteImportLeftOutReason(inventory.skipped[0].reason, inventory.skipped[0].status)).toBe('blocked')
   })
 
   it('neutralizes what travels outside the fence: a title or heading cannot close it or hide characters', () => {

@@ -513,9 +513,9 @@ struct ShellFrame<Content: View>: View {
       .onChange(of: navigation.section) { _, section in
         navigation.record(section)
         recordRecent(section)
-        // At rest only the group holding the place in use is open (Figma 12:703); a group opened by hand stays open
-        // until the next place is opened.
-        if !compact { navigation.openGroups = navigation.openGroups.filter { $0.hasSuffix(".folded") } }
+        // The place's own group opens if it is folded; every other group stays as the person left it (AGL-3996).
+        ShellScope.reveal(
+          section, in: ShellScope(model: model, navigation: navigation).currentList, groups: &navigation.groups)
       }
       // Another account in use, or a support session: nothing open belonged to it.
       .onChange(of: model.auth?.user?.uid) {
@@ -565,6 +565,8 @@ struct WideShell: View {
       if !navigation.railHidden {
         WorkspaceRail(unread: unreadByOrg)
           .transition(.move(edge: .leading).combined(with: .opacity))
+          // Above the sidebar: a tile's name bubble hangs over it (AGL-3996).
+          .zIndex(1)
       }
       if !navigation.sidebarHidden {
         // The sidebar stays on the theme's own ground: a workspace's color is its rail tile and nothing else (Zach,

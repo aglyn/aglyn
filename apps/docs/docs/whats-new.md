@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — build a client's site on one phone screen (newest)
+## October 2026 — no platform fee on cash at the register (newest)
+
+- **[Platform fees at the register](commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register)** —
+  cash and gift card payments at the register now carry no platform fee, and
+  nothing for them is added to your monthly invoice. Card, charge-to-room
+  and store-credit payments carry your plan's rate as before. A split sale is
+  charged only on those parts, and cash sales rung while the register was
+  offline carry no fee either.
+
+## October 2026 — build a client's site on one phone screen
 
 - **[The client build screen](staff-console/overview.md#client-build-screen)** —
   staff building a site for a prospect, at a booth or on a doorstep, do it all on
