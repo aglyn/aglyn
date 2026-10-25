@@ -321,7 +321,8 @@ class PosOfflineModel(
       key, (totals.totalCents ?: 0.0).toLong(), card.currency, card.destination,
       posOfflineCardIntentMetadata(key, current.hostId, current.orgId, register),
       maxSaleCents = minOf(card.maxSaleCents.toLong(), Contracts.posOfflineCardMaxSaleCentsLimit),
-      maxDeviceDailyCents = card.maxDeviceDailyCents.toLong(),
+      // 0 is no daily limit: the store did not set one.
+      maxDeviceDailyCents = if (card.maxDeviceDailyCents > 0) card.maxDeviceDailyCents.toLong() else Long.MAX_VALUE,
       takenTodayCents = cardsTakenTodayCents,
     )
   }

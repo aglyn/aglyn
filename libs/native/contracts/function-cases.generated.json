@@ -31090,6 +31090,48 @@
             }
           ],
           "result": "This device has taken $123,000.00 in cards offline today, and its daily limit is $123,456.78. Take cash, or wait for the connection."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 1000000,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 900000,
+              "takenTodayCents": 50000000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 1000001,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Offline, a card sale can be up to $10,000.00. Take cash, or charge it when you are back online."
         }
       ]
     },

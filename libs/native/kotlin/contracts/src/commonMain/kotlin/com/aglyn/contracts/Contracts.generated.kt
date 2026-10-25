@@ -3473,21 +3473,19 @@ internal data class ContractValuesPart5(
     @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
-    @SerialName("POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT") val posOfflineCardDeviceDailyCentsDefault: Long,
     @SerialName("POS_OFFLINE_CARD_INTENT_KIND") val posOfflineCardIntentKind: String,
-    @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT") val posOfflineCardMaxSaleCentsDefault: Long,
     @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT") val posOfflineCardMaxSaleCentsLimit: Long,
     @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
+    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
+    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
-    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
-    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
     @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
@@ -3534,12 +3532,12 @@ internal data class ContractValuesPart6(
     @SerialName("STAR_COLORS") val starColors: List<StarColor>,
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
+    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
-    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
-    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
@@ -3811,17 +3809,15 @@ class ContractValues internal constructor(
     val posKioskUnlockLockoutMs: Double get() = part5.posKioskUnlockLockoutMs
     val posKioskUnlockMaxAttempts: Long get() = part5.posKioskUnlockMaxAttempts
     val posKioskUnlockTtlMs: Double get() = part5.posKioskUnlockTtlMs
-    val posOfflineCardDeviceDailyCentsDefault: Long get() = part5.posOfflineCardDeviceDailyCentsDefault
     val posOfflineCardIntentKind: String get() = part5.posOfflineCardIntentKind
-    val posOfflineCardMaxSaleCentsDefault: Long get() = part5.posOfflineCardMaxSaleCentsDefault
     val posOfflineCardMaxSaleCentsLimit: Long get() = part5.posOfflineCardMaxSaleCentsLimit
     val posOfflineCardReconnectWithinMs: Double get() = part5.posOfflineCardReconnectWithinMs
     val posOfflineClockSkewMs: Double get() = part5.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part5.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part5.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part5.posOfflineLateSyncMs
-    val posOfflineMaxAgeMs: Double get() = part6.posOfflineMaxAgeMs
-    val posOfflineSaleMaxLines: Long get() = part6.posOfflineSaleMaxLines
+    val posOfflineMaxAgeMs: Double get() = part5.posOfflineMaxAgeMs
+    val posOfflineSaleMaxLines: Long get() = part5.posOfflineSaleMaxLines
     val posOfflineSyncBatchMax: Long get() = part6.posOfflineSyncBatchMax
     val posOfflineSyncRoute: String get() = part6.posOfflineSyncRoute
     val posTenderLabels: Map<String, String> get() = part6.posTenderLabels
@@ -3868,8 +3864,8 @@ class ContractValues internal constructor(
     val starColors: List<StarColor> get() = part6.starColors
     val starredField: String get() = part6.starredField
     val starredMax: Long get() = part6.starredMax
-    val submissionFilterHeaders: Map<String, String> get() = part7.submissionFilterHeaders
-    val submissionListQuery: ListQueryDeclaration get() = part7.submissionListQuery
+    val submissionFilterHeaders: Map<String, String> get() = part6.submissionFilterHeaders
+    val submissionListQuery: ListQueryDeclaration get() = part6.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part7.submissionReadOptions
     val suppressionListQuery: ListQueryDeclaration get() = part7.suppressionListQuery
     val taskListDeclaration: ListQueryDeclaration get() = part7.taskListDeclaration

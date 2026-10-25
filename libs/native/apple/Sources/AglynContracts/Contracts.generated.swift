@@ -5125,9 +5125,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posKioskUnlockLockoutMs: Double
   public let posKioskUnlockMaxAttempts: Int
   public let posKioskUnlockTtlMs: Double
-  public let posOfflineCardDeviceDailyCentsDefault: Int
   public let posOfflineCardIntentKind: String
-  public let posOfflineCardMaxSaleCentsDefault: Int
   public let posOfflineCardMaxSaleCentsLimit: Int
   public let posOfflineCardReconnectWithinMs: Double
   public let posOfflineClockSkewMs: Double
@@ -5441,9 +5439,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posKioskUnlockLockoutMs = "POS_KIOSK_UNLOCK_LOCKOUT_MS"
     case posKioskUnlockMaxAttempts = "POS_KIOSK_UNLOCK_MAX_ATTEMPTS"
     case posKioskUnlockTtlMs = "POS_KIOSK_UNLOCK_TTL_MS"
-    case posOfflineCardDeviceDailyCentsDefault = "POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT"
     case posOfflineCardIntentKind = "POS_OFFLINE_CARD_INTENT_KIND"
-    case posOfflineCardMaxSaleCentsDefault = "POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT"
     case posOfflineCardMaxSaleCentsLimit = "POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT"
     case posOfflineCardReconnectWithinMs = "POS_OFFLINE_CARD_RECONNECT_WITHIN_MS"
     case posOfflineClockSkewMs = "POS_OFFLINE_CLOCK_SKEW_MS"

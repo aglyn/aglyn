@@ -447,6 +447,29 @@ class PosOfflineCardTest {
   }
 
   @Test
+  fun withNoLimitsSetTheRequestRunsToStripesCeilingWithNoDailyLimit() = runTest {
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit(maxSale = 1_000_000.0, maxDaily = 0.0) }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    val request = assertNotNull(offline.cardRequest(cart()))
+    assertEquals(1_000_000L, request.maxSaleCents)
+    assertEquals(Long.MAX_VALUE, request.maxDeviceDailyCents)
+  }
+
+  @Test
+  fun theBannerNamesTheDailyLimitOnlyWhenTheStoreSetOne() {
+    val money = { cents: Long -> "$" + (cents / 100) }
+    assertEquals(
+      "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to $10000.",
+      offlineCardLimitsNote(1_000_000, 0, money),
+    )
+    assertEquals(
+      "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to $100, and this device can take up to $5000 in cards a day.",
+      offlineCardLimitsNote(10_000, 500_000, money),
+    )
+  }
+
+  @Test
   fun theRequestNamesItsSaleAndTheStoreDestination() = runTest {
     val api = FakeOfflineApi().apply { kitAnswer = cardKit() }
     val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))

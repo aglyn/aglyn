@@ -91,8 +91,6 @@ export const POS_OFFLINE_CLOCK_SKEW_MS = 10 * 60 * 1000
 export type PosOfflineTender = 'cash' | 'card'
 
 export {
-  POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
-  POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
   POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT,
   POS_OFFLINE_CARD_RECONNECT_WITHIN_MS,
 } from './pos-offline-card-limits'
@@ -307,9 +305,9 @@ export interface PosOfflineKitCard {
   /** The connected account the charge transfers to (a destination charge, as online). */
   destination: string
   currency: string
-  /** The limit of one card sale rung offline, in cents. */
+  /** The limit of one card sale rung offline, in cents: the store's, or Stripe's own ceiling when it set none. */
   maxSaleCents: number
-  /** The limit of every card one device takes offline in a day, in cents. */
+  /** The limit of every card one device takes offline in a day, in cents; 0 is no daily limit. */
   maxDeviceDailyCents: number
 }
 
@@ -574,7 +572,8 @@ export function sanitizePosOfflineSaleCard(raw: unknown): PosOfflineSaleCard | n
  * Why a card cannot be taken offline for `totalCents`, in the cashier's
  * words, or `null` when it can: the store has not turned it on, the sale is
  * over the store's (or Stripe's) limit per sale, or the cards this device
- * has taken offline today would pass the store's daily limit per device.
+ * has taken offline today would pass the store's daily limit per device (a
+ * daily limit of 0 is none: the store did not set one).
  */
 export function posOfflineCardRefusal(input: {
   card: Pick<PosOfflineKitCard, 'available' | 'unavailableReason' | 'maxSaleCents' | 'maxDeviceDailyCents'> | null | undefined
@@ -591,7 +590,7 @@ export function posOfflineCardRefusal(input: {
   if (total > perSale) return `Offline, a card sale can be up to ${dollars(perSale)}. Take cash, or charge it when you are back online.`
   const today = wholeCents(input.takenTodayCents)
   const daily = wholeCents(card.maxDeviceDailyCents)
-  if (today + total > daily) {
+  if (daily > 0 && today + total > daily) {
     return `This device has taken ${dollars(today)} in cards offline today, and its daily limit is ${dollars(daily)}. Take cash, or wait for the connection.`
   }
   return null

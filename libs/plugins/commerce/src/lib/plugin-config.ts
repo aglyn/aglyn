@@ -18,8 +18,6 @@
 import type { PluginConfigSchema } from '@aglyn/aglyn'
 import { posTipPercentages } from './model/commerce-pos'
 import {
-  POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT,
-  POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT,
   POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT,
 } from './model/pos-offline-card-limits'
 import { POS_OPS_CONFIG_DEFAULTS, POS_OPS_CONFIG_FIELDS } from './pos-ops-config'
@@ -83,8 +81,22 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
       type: 'boolean',
       description: 'With no connection, the app\u2019s card reader saves each card and charges it once back online.',
     },
-    { key: 'posOfflineCardMaxSale', label: 'Limit per sale ($)', type: 'number', min: 1, max: 10000 },
-    { key: 'posOfflineCardDailyLimit', label: 'Daily limit per device ($)', type: 'number', min: 1, max: 100000 },
+    {
+      key: 'posOfflineCardMaxSale',
+      label: 'Limit per sale ($)',
+      type: 'number',
+      min: 1,
+      max: 10000,
+      description: 'Empty: up to $10,000, the most one card can be charged offline.',
+    },
+    {
+      key: 'posOfflineCardDailyLimit',
+      label: 'Daily limit per device ($)',
+      type: 'number',
+      min: 1,
+      max: 1000000,
+      description: 'Empty: no daily limit.',
+    },
     // THE REGISTER'S TIPS, RECEIPTS AND CUSTOMER DISPLAY (AGL-3607, AGL-3608).
     // Off by default: a store that never asked for tips does not start
     // asking its customers for one on the day this ships.
@@ -145,8 +157,6 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
   defaults: {
     posMaxDiscountPct: POS_MAX_DISCOUNT_PCT_DEFAULT,
     posOfflineCardSales: false,
-    posOfflineCardMaxSale: POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT / 100,
-    posOfflineCardDailyLimit: POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT / 100,
     posTippingEnabled: false,
     posTipPercentages: '15, 18, 20, 25',
     posReceiptDefault: 'ask',
@@ -204,7 +214,9 @@ export function posMaxDiscountPct(
 /** The store's rules for cards taken offline on the app's own reader (AGL-4039), in cents. */
 export interface PosOfflineCardSettings {
   enabled: boolean
+  /** The store's limit per sale, or Stripe's own ceiling when the store set none. */
   maxSaleCents: number
+  /** The store's daily limit per device; 0 when it set none (no daily limit). */
   maxDeviceDailyCents: number
 }
 
@@ -213,13 +225,14 @@ export function posOfflineCardSettings(
   config: Record<string, unknown> | null | undefined,
 ): PosOfflineCardSettings {
   const dollars = (key: string, fallbackCents: number, maxCents: number) => {
-    const raw = Number(config?.[key])
-    if (!Number.isFinite(raw) || raw <= 0) return fallbackCents
-    return Math.min(maxCents, Math.round(raw * 100))
+    const raw = config?.[key]
+    const value = raw === '' || raw === null || raw === undefined ? NaN : Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return fallbackCents
+    return Math.min(maxCents, Math.round(value * 100))
   }
   return {
     enabled: config?.['posOfflineCardSales'] === true,
-    maxSaleCents: dollars('posOfflineCardMaxSale', POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT, POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT),
-    maxDeviceDailyCents: dollars('posOfflineCardDailyLimit', POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT, 10_000_000),
+    maxSaleCents: dollars('posOfflineCardMaxSale', POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT, POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT),
+    maxDeviceDailyCents: dollars('posOfflineCardDailyLimit', 0, 100_000_000),
   }
 }
