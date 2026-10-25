@@ -149,23 +149,28 @@ to the customer yourself.
 
 ### Platform fees at the register
 
-Your plan's platform fee is charged on the **sale**, not on how it was
-paid — the rate is the same whether the customer hands you cash, taps a
-card or charges it to their room. What differs is only how it reaches us:
+Your plan's platform fee is charged on **card**, **charge-to-room** and
+**store credit** payments. **Cash** and **gift card** payments carry no platform fee: cash is
+yours in full, and the fee on a gift card is charged when the card is sold,
+not again when it is spent.
 
-| Tender | How the fee is collected |
-| --- | --- |
-| Card reader, typed card, card (QR) | Deducted from your Stripe payout for that payment |
-| Cash | No payout to deduct from — added to your next monthly invoice |
-| Gift card | Same as cash: added to your next monthly invoice |
-| Charge to room | Same as cash: added to your next monthly invoice |
+| Payment | Platform fee | How it is collected |
+| --- | --- | --- |
+| Card reader, typed card, card (QR) | Your plan's rate | Deducted from your Stripe payout for that payment |
+| Charge to room | Your plan's rate | No payout to deduct from, so it is added to your next monthly invoice |
+| Store credit | Your plan's rate | Added to your next monthly invoice, like a room charge |
+| Cash | None | — |
+| Gift card | None | — |
 
-A **split** sale does each part its own way: every payment carries the
-share of the fee for the part of the sale it paid, so the card parts are
-deducted from their payouts and the rest goes on the invoice. **Tips**
-carry no platform fee. Stripe's own processing cost on a card payment is
-passed through at cost, like any other card sale, and is worked out on the
-whole charge, tip included, because that is what Stripe charges on.
+A **split** sale charges the fee only on the part of the sale its card,
+room-charge and store-credit payments paid: a $100 sale paid $60 by card and
+$40 in cash carries the fee on $60, deducted from that card's payout, and
+nothing on the cash. Sales you ring while the register is
+[offline](pos-operations.md#selling-while-offline) are cash, so they carry no
+fee either. **Tips** carry no platform fee. Stripe's own processing cost on a
+card payment is passed through at cost, like any other card sale, and is
+worked out on the whole charge, tip included, because that is what Stripe
+charges on.
 
 The customer never pays the fee, and the amount **Due** on the register is
 the same on every tender. On plans with a 0% fee there is no platform fee
