@@ -20,6 +20,7 @@ struct RegisterScreen: View {
   @State private var showOps = false
   @State private var showPrinters = false
   @State private var showOfflineCash = false
+  @Environment(\.scenePhase) private var scenePhase
   let context: NativePluginContext
 
   init(context: NativePluginContext) {
@@ -110,8 +111,14 @@ struct RegisterScreen: View {
       if !Task.isCancelled { await model.mirrorToDisplay() }
     }
     .task {
+      model.permitTapToPayTerms(isStaff: context.staff != nil)
       model.start()
     }
+    // Back at the front: the reader gets ready again (Apple 1.5; the SDK lets Tap to Pay go in the background).
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { Task { await model.warmUpReader() } }
+    }
+    .tapToPayEducationAfterTerms(model.collector)
     .onDisappear { model.stop() }
   }
 

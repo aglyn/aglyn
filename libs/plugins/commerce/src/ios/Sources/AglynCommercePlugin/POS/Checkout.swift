@@ -66,6 +66,10 @@ final class Checkout {
   private(set) var creditAccounts: [PosCreditAccount]?
   /// The receipt went to the register's printer.
   private(set) var printed = false
+  /// The last card that was not approved, for its receipt (Apple 5.10); cleared by the next tender.
+  private(set) var declined: DeclinedCard?
+  /// Tells the cashier about a card not approved while the app was not on screen (Apple 5.12).
+  @ObservationIgnored var onCardNotApproved: ((_ amount: String) -> Void)?
 
   @ObservationIgnored private let api: PosSaleAPI
   @ObservationIgnored private var keys: AttemptKeys
@@ -132,6 +136,7 @@ final class Checkout {
     guard canTender else { return false }
     busy = true
     notice = nil
+    declined = nil
     return true
   }
 
@@ -143,6 +148,10 @@ final class Checkout {
     let key = keys.key(for: "card:\(reader.id):\(amount):\(tip)")
     let outcome = await reader.charge(deps, amountCents: amount, tipCents: tip, attemptKey: key) { [weak self] id in
       self?.step = .card(readerLabel: reader.label, paymentID: id)
+    }
+    if case .failed(let message, _) = outcome {
+      declined = DeclinedCard(amountCents: amount + tip, readerLabel: reader.label, message: message, at: Date())
+      onCardNotApproved?(formatMoney(amount + tip))
     }
     await finish(outcome)
   }
@@ -501,3 +510,26 @@ func isReceiptEmail(_ text: String) -> Bool {
 }
 
 func isReceiptPhone(_ text: String) -> Bool { text.filter(\.isNumber).count >= 7 }
+
+/// A card that was not approved: what its receipt says (Apple 5.10: a receipt whether approved or declined).
+struct DeclinedCard: Equatable {
+  let amountCents: Int
+  let readerLabel: String
+  let message: String
+  let at: Date
+
+  /// The receipt the customer can be sent through the share sheet: confidential, nothing charged.
+  func receipt(store: String, money: (Int) -> String) -> String {
+    [
+      store,
+      at.formatted(date: .abbreviated, time: .shortened),
+      "",
+      "Card payment not approved",
+      "Amount: \(money(amountCents))",
+      "Taken on: \(readerLabel)",
+      message,
+      "",
+      "Nothing was charged.",
+    ].joined(separator: "\n")
+  }
+}

@@ -146,6 +146,11 @@ struct CardReadersScreen: View {
         }
       }
       if let collector, let controls = collector.deviceReaders {
+        if collector.kinds.contains(.tapToPay) {
+          TapToPaySection(
+            collector: collector, controls: controls, hostID: hostID,
+            sessions: CommerceTerminalConnection(api: context.api), ready: readiness.value?.ready == true)
+        }
         DeviceReaderSection(
           collector: collector, controls: controls, hostID: hostID,
           sessions: CommerceTerminalConnection(api: context.api), ready: readiness.value?.ready == true)
@@ -162,6 +167,8 @@ struct CardReadersScreen: View {
     .formStyle(.grouped)
     .navigationTitle("Card readers")
     .refreshable { refresh += 1 }
+    .task { collector?.deviceReaders?.permitTapToPayTerms(tapToPayTermsPermitted(isStaff: context.staff != nil)) }
+    .tapToPayEducationAfterTerms(collector)
     .task(id: refresh) { await load(fresh: refresh > 0) }
     .task { await loadRegisters() }
     .sheet(isPresented: $pairing) {
@@ -308,7 +315,7 @@ private struct DeviceReaderSection: View {
 
   var body: some View {
     Section {
-      switch collector.state {
+      switch ownState {
       case .connected(let label, let kind, let testMode):
         AglynRow(
           label,
@@ -332,7 +339,7 @@ private struct DeviceReaderSection: View {
         if case .unavailable(let reason) = collector.state {
           AglynNotice(reason, tone: .warning)
         }
-        ForEach(collector.kinds, id: \.self) { kind in
+        ForEach(collector.kinds.filter { $0 != .tapToPay }, id: \.self) { kind in
           Button {
             // Not `run`: a search lasts until Stop or its timeout, and the readers it
             // lists must be connectable meanwhile (connecting ends the search).
@@ -363,6 +370,21 @@ private struct DeviceReaderSection: View {
     return false
   }
 
+  /// The reader state this section shows: Tap to Pay on iPhone has a section of its own.
+  private var ownState: CardCollectorState {
+    switch collector.state {
+    case .connected(_, .tapToPay, _): .disconnected
+    case .connecting where isTapToPayConnecting: .disconnected
+    default: collector.state
+    }
+  }
+
+  private var isTapToPayConnecting: Bool {
+    if case .searching(.tapToPay, _) = controls.discovery { return true }
+    if case .connecting(let words) = collector.state { return words.contains(TapToPayIPhone.title) }
+    return false
+  }
+
   @ViewBuilder private var updateRow: some View {
     if let update = controls.update {
       if let progress = update.progress {
@@ -389,6 +411,11 @@ private struct DeviceReaderSection: View {
   @ViewBuilder private var discoveryRows: some View {
     switch controls.discovery {
     case .idle:
+      EmptyView()
+    // Tap to Pay on iPhone's own search and failures show in its section.
+    case .searching(.tapToPay, _), .found(.tapToPay, _):
+      EmptyView()
+    case .failed(let message) where message == controls.tapToPayNotice?.message:
       EmptyView()
     case .failed(let message):
       AglynNotice(message, tone: .error)
@@ -562,6 +589,92 @@ struct RenameReaderSheet: View {
           .disabled(label.trimmingCharacters(in: .whitespaces).isEmpty || busy)
         }
       }
+    }
+  }
+}
+
+/// Tap to Pay on iPhone, in a section of its own (Apple 3.6, 3.9.1, 4.3): whether it is ready, its setup progress,
+/// setting it up outside checkout, and Apple's own guide to taking payments at any time.
+private struct TapToPaySection: View {
+  let collector: CardCollector
+  let controls: DeviceReaderControls
+  let hostID: String
+  let sessions: CardReaderSessionSource
+  let ready: Bool
+  @State private var busy = false
+  @State private var guideError: String?
+
+  private var connected: Bool {
+    if case .connected(_, .tapToPay, _) = collector.state { return true }
+    return false
+  }
+
+  private var progress: Double? {
+    guard case .connecting(let words) = collector.state, words.contains(TapToPayIPhone.title) else { return nil }
+    return controls.update?.progress ?? 0
+  }
+
+  var body: some View {
+    Section {
+      if connected {
+        AglynRow(
+          TapToPayIPhone.title, subtitle: "Customers tap a card or phone on this iPhone.",
+          systemImage: TapToPayIPhone.symbol
+        ) {
+          StatusChip("Ready", tone: .success)
+        }
+        .accessibilityIdentifier("tap-to-pay-ready")
+      } else if let progress {
+        AglynRow(
+          TapToPayIPhone.title, subtitle: "Setting up this iPhone to take cards…", systemImage: TapToPayIPhone.symbol
+        ) {
+          StatusChip("\(Int((progress * 100).rounded()))%", tone: .info)
+        }
+        ProgressView(value: progress)
+          .accessibilityIdentifier("tap-to-pay-preparing")
+      } else {
+        if let notice = controls.tapToPayNotice {
+          AglynNotice(notice.message, tone: .warning)
+        }
+        Button {
+          setUp()
+        } label: {
+          AglynRow(
+            "Set up \(TapToPayIPhone.title)", subtitle: DeviceCardCollector.detail(.tapToPay),
+            systemImage: TapToPayIPhone.symbol)
+        }
+        .buttonStyle(.aglynRow)
+        .disabled(busy || !ready)
+        .accessibilityIdentifier("device-reader-tap-to-pay")
+      }
+      #if os(iOS) && canImport(ProximityReader)
+        Button {
+          Task { guideError = await TapToPayEducation.present() }
+        } label: {
+          AglynRow("How to accept payments", subtitle: "Cards, phones and watches, and PIN entry", systemImage: "book")
+        }
+        .buttonStyle(.aglynRow)
+        .accessibilityIdentifier("tap-to-pay-education")
+        if let guideError { AglynNotice(guideError, tone: .error) }
+      #endif
+    } header: {
+      Text(TapToPayIPhone.title)
+    } footer: {
+      Text(
+        connected
+          ? "Apple’s own guide opens from How to accept payments. \(TapToPayIPhone.title) needs iOS \(TapToPayIPhone.minimumOSMajor) or later."
+          : "\(TapToPayIPhone.title) is ready to take cards as soon as setup finishes. Keep the app open.")
+    }
+  }
+
+  private func setUp() {
+    guard !busy else { return }
+    busy = true
+    Task {
+      // Asked here, well before a sale: whether the app may say when a card was not approved while it was away.
+      await PosCardNotifier.askPermission()
+      _ = await collector.connect(hostID: hostID, kind: .tapToPay, sessions: sessions)
+      busy = false
     }
   }
 }
