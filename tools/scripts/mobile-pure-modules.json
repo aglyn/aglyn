@@ -402,6 +402,10 @@
       "why": "Which buyer emails an order has sent, read by the app's order detail (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "why": "The product and variant check-in setting (whether an item needs check-in, people per item) and its normalize/validate rules (AGL-4043), no imports; ProductVariant carries it, so the native contracts read it."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
     },
@@ -788,6 +792,10 @@
     {
       "path": "libs/plugins/sms/src/lib/native-nav.ts",
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
+      "path": "libs/plugins/waivers/src/lib/native-nav.ts",
+      "why": "Where this plugin's console tab sits for the native apps (AGL-4042), assembled into the nav manifest by generate:native-contracts; imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",

@@ -469,6 +469,12 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/products/stock', async (req, res) =>
     (await import('./server/products-write')).productStockHandler(req, res),
   )
+  // A staff walk-in from the Reservations card and the native apps
+  // (AGL-4046): availability re-asked inside the transaction that writes, so
+  // two staff cannot hand out the last unit at once. Loaded on first call.
+  registerPluginApiRoute('commerce/reservations/walk-in', async (req, res) =>
+    (await import('./server/reservation-walk-in')).reservationWalkInHandler(req, res),
+  )
   // The products list's Duplicate and Delete for the native apps (AGL-3841):
   // the console's own copy and soft delete, with the site-wide cache drop.
   registerPluginApiRoute('commerce/products/duplicate', async (req, res) =>
@@ -556,6 +562,16 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-hardware', async (req, res) =>
     (await import('./server/pos-hardware')).posHardwareHandler(req, res),
   )
+  // A store's card reader start-up screen (AGL-4048): the POS devices card's
+  // setting, gated like a sale, and the staff page's platform default. Both
+  // draw images, so each loads with its first call.
+  registerPluginApiRoute('commerce/pos-reader-splash', async (req, res) =>
+    (await import('./server/pos-reader-splash')).posReaderSplashHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/admin/reader-splash', {
+    web: async (request) =>
+      (await import('./server/pos-reader-splash-admin')).posReaderSplashAdmin(request),
+  })
   registerPluginApiRoute('commerce/admin/hardware-orders', {
     web: async (request) =>
       (await import('./server/pos-hardware-admin')).posHardwareAdminOrders(request),

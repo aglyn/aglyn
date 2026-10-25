@@ -3269,6 +3269,56 @@
       }
     },
     {
+      "id": "waivers",
+      "package": "@aglyn/plugins-waivers",
+      "register": {
+        "site": "registerWaiversPlugin",
+        "console": "registerWaiversConsole",
+        "tenantApi": "registerWaiversApi",
+        "consoleApi": "registerWaiversConsoleApi",
+        "serverDeclarations": "registerWaiversServerDeclarations",
+        "tenantEmails": "waiversTenantEmails"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "apiPrefixes": [
+        "waivers"
+      ],
+      "requiredPersonEraser": true,
+      "catalog": {
+        "order": 41,
+        "$comment": "Digital waivers (AGL-4042): the merchant writes a waiver in the console's rich text editor with required checkboxes, a minors section a parent or guardian signs, and how long a signature lasts (the visit by default, a season, or a number of days). Riders sign before they arrive at a share link and QR (the console's public page `/kiosk/waivers/sign`) or the site's Sign waiver element, or at the window on a tablet staff hand over; a paper waiver is recorded with a photo. Every signature keeps the exact text it agreed to and its SHA-256, the e-signature consent sentence, and an audit trail, in `orgs/{orgId}/waiverSignatures`, which no client reads; the drawn signature and the paper photo are private Storage objects under the org prefix. The signer gets a signed PDF by email. It never imports commerce: it rides the `commerce` entitlement by key, files the signer through core's contact-capture seam, and shows each customer's status for the day in commerce's `posCheckIn` zone by its id. No outside vendor and no env.",
+        "label": "Waivers",
+        "alwaysOnForWorkspace": true,
+        "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+        "siteOff": {
+          "stops": "Switching Waivers off for this site stops its Sign waiver elements rendering, closes its share links, and refuses new signatures, online or at the window.",
+          "keeps": "Every signature already taken is kept, with its signed copy and audit trail, and Waivers keeps working on the workspace’s other sites."
+        },
+        "publishedSiteImpact": "elements"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "signWaiver"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/waivers"
+          ],
+          "slots": [
+            "posCheckIn"
+          ],
+          "publicRoutes": [
+            "/sign"
+          ]
+        }
+      }
+    },
+    {
       "id": "tax-engines",
       "mobile": {
         "$comment": "AGL-3652: the tax service card natively: connect a merchant's own Avalara AvaTax or TaxJar account, test or disconnect it, the ship-from address, the default tax code, whether paid orders are recorded, and exempt customers, from the spec in src/android/screens/tax-engines.screens.json. It sits in Commerce settings' commerceSettings zone.",

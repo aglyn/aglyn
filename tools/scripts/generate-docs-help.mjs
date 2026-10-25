@@ -330,6 +330,9 @@ const PLUGIN_TOPICS = {
   // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
   // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
   zapier: '/marketing-and-automation/workflows-and-actions/zapier',
+  // The waivers plugin's Waivers page: its waivers, its signatures and the
+  // waiver editor (AGL-4042).
+  waivers: '/commerce-and-bookings/commerce/waivers',
 }
 
 // The PLUGIN_TOPICS keys allowed to name an `unlisted: true` page. Such a page

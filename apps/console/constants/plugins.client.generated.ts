@@ -195,6 +195,16 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-loyalty'),
   },
   {
+    id: 'waivers',
+    apiPrefixes: ["waivers"],
+    register: {"site":"registerWaiversPlugin","console":"registerWaiversConsole"},
+    contributes: {"console":{"shell":true,"routes":["/waivers"],"slots":["posCheckIn"],"publicRoutes":["/sign"]}},
+    load: () => import('@aglyn/plugins-waivers'),
+    loads: {
+      site: () => import('@aglyn/plugins-waivers/site'),
+    },
+  },
+  {
     id: 'tax-engines',
     apiPrefixes: ["tax-engines"],
     register: {"console":"registerTaxEnginesConsole"},

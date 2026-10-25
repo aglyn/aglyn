@@ -2434,6 +2434,16 @@
     },
     {
       "alwaysOnForWorkspace": true,
+      "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+      "id": "waivers",
+      "label": "Waivers",
+      "siteOff": {
+        "keeps": "Every signature already taken is kept, with its signed copy and audit trail, and Waivers keeps working on the workspace’s other sites.",
+        "stops": "Switching Waivers off for this site stops its Sign waiver elements rendering, closes its share links, and refuses new signatures, online or at the window."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
       "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
       "id": "ad-conversions",
       "label": "Ad conversions",
@@ -4681,6 +4691,13 @@
           "surface": "hostPluginTab"
         },
         "where": "The POS app"
+      },
+      {
+        "console": {
+          "id": "/waivers",
+          "surface": "hostPluginTab"
+        },
+        "where": "The console’s Waivers page; no native screen yet"
       }
     ],
     "lists": [
@@ -10498,6 +10515,75 @@
       "name": "Referral reward",
       "plugin": "Rewards",
       "pluginId": "loyalty"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "{{host.businessName}} · Waiver",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Your signed waiver",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Thanks, {{name}}. You signed {{waiver.title}} for {{host.businessName}}. Your signed copy is attached to this email as a PDF.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Signed: {{waiver.signedAt}}\nCovers: {{waiver.people}}\n{{waiver.validity}}",
+          "variant": "details"
+        },
+        {
+          "block": "text",
+          "text": "You don’t need to print it: staff can find your waiver by name when you arrive. If anything on it is wrong, contact {{host.businessName}}.",
+          "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{host.url}}",
+          "label": "Visit {{host.businessName}}"
+        }
+      ],
+      "defaultSubject": "Your signed waiver for {{host.businessName}}",
+      "description": "Sends a signer their signed waiver as a PDF, with who it covers and for how long.",
+      "footerReason": "You’re receiving this because you signed a waiver for {{host.businessName}}.",
+      "key": "waiver-signed",
+      "mergeTokens": [
+        {
+          "description": "The signer’s name",
+          "name": "name",
+          "sample": "Alex Rivera"
+        },
+        {
+          "description": "The waiver’s title",
+          "name": "waiver.title",
+          "sample": "Rider release and waiver"
+        },
+        {
+          "description": "When it was signed, in the site’s time zone",
+          "name": "waiver.signedAt",
+          "sample": "Oct 24, 2026, 9:14 AM"
+        },
+        {
+          "description": "Everyone it covers: the signer and any minors",
+          "name": "waiver.people",
+          "sample": "Alex Rivera, Sam Rivera"
+        },
+        {
+          "description": "The days it covers",
+          "name": "waiver.validity",
+          "sample": "Good for Oct 24, 2026"
+        }
+      ],
+      "name": "Signed waiver copy",
+      "plugin": "Waivers",
+      "pluginId": "waivers"
     }
   ],
   "THEME_ACCENT_SWATCHES": [

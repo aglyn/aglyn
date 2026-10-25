@@ -10,7 +10,27 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — check people in at the window, with wristbands (newest)
+## October 2026 — digital waivers, signed before riders arrive (newest)
+
+- **[Waivers](commerce-and-bookings/commerce/waivers.md)** — write your waiver once,
+  in your own words, and riders sign it on their phones from a link or QR code, from
+  a **Sign waiver** element on your site, or on a tablet you hand them at the window.
+  A parent or guardian signs for riders under 18, a signature lasts the visit, a
+  season or a number of days, and every signer gets a signed PDF by email. Record
+  paper waivers with a photo, find anyone by name, email or day, and export them all
+  as a spreadsheet. At **Check in**, each customer shows whether their waiver is
+  signed for today, with a button to sign it there.
+
+## October 2026 — hardware purchase records survive a workspace deletion
+
+- **[Records of your hardware purchases](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
+  Aglyn now keeps its record of each card reader sale after the workspace that
+  bought it is deleted, as tax law requires: the items, amounts, tax, and the
+  state, ZIP code and country it shipped to, with no name, email, phone or
+  street address. When the person who placed an order closes their account,
+  their details come off the order and the workspace keeps the rest.
+
+## October 2026 — check people in at the window, with wristbands
 
 - **[Check-in at the window](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
   mark a day pass, camping or parking as **Needs check-in**, with how many
@@ -374,6 +394,23 @@ for the how-to.
   seller account and sell everywhere from one stock count. Listings follow your stock
   (and your prices, if you choose), marketplace orders come in as your orders and take
   their units off the same shelf, and the tracking goes back when you ship.
+-->
+
+<!--
+  AGL-4048 — Card reader start-up screens are built and run in Stripe test mode
+  only, like every card reader control, until card readers are live
+  (STRIPE_TERMINAL_LIVE_ENABLED). This entry is held unpublished: once card
+  readers are live on aglyn.com and staff have uploaded the default screen on
+  Staff → Reader start-up screen, remove this comment's markers and move
+  "(newest)" here from the top heading.
+
+## October 2026 — your logo on your card readers
+
+- **[Reader start-up screen](commerce-and-bookings/commerce/pos-hardware.md#reader-start-up-screen)** —
+  your Stripe Reader S700, S710 and BBPOS WisePOS E can show your own logo, or
+  a full-screen image of your choice, while they wait for a payment. Choose it
+  on the **POS devices** card; every reader on the site picks it up within
+  about ten minutes. White-label workspaces show their own logo by default.
 -->
 
 <!--
