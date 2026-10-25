@@ -63,7 +63,6 @@ fun utcDayKey(utcMs: Long): String {
   return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PosDayTotalsPanel(
   model: PosDayReportModel,
@@ -72,6 +71,18 @@ fun PosDayTotalsPanel(
   notSynced: PosDayNotSynced?,
   onDismiss: () -> Unit,
 ) {
+  PanelSheet(title = "Day totals", onDismiss = onDismiss, modifier = Modifier.testTag("day-totals"), subtitle = model.label) {
+    PosDayTotalsBody(model, currency, notSynced)
+  }
+}
+
+/**
+ * The day report's body: the days with Today, Pick days and Share CSV, this register's unsynced sales, then the
+ * sections. The register's panel and the Aglyn app's Orders pane both show it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PosDayTotalsBody(model: PosDayReportModel, currency: String, notSynced: PosDayNotSynced?) {
   val scope = rememberCoroutineScope()
   val exporter = LocalFileExporter.current
   var picking by remember { mutableStateOf(false) }
@@ -80,25 +91,18 @@ fun PosDayTotalsPanel(
   fun m(cents: Long) = money(cents, reportCurrency)
   LaunchedEffect(model) { if (model.state is Load.Loading) model.load() }
 
-  PanelSheet(
-    title = "Day totals",
-    onDismiss = onDismiss,
-    modifier = Modifier.testTag("day-totals"),
-    subtitle = model.label,
-    action = {
-      val csv = model.csv()
-      if (csv != null && exporter != null) {
-        TextButton(
-          onClick = { scope.launch { exportFailed = !exporter.export(csv.first, "text/csv", csv.second) } },
-          modifier = Modifier.testTag("day-totals-share"),
-        ) { Text("Share CSV") }
-      }
-    },
-  ) {
+  Column(verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     SectionCard(model.label, Modifier.fillMaxWidth()) {
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         OutlinedButton(onClick = { scope.launch { model.today() } }, modifier = Modifier.testTag("day-totals-today")) { Text("Today") }
         OutlinedButton(onClick = { picking = true }, modifier = Modifier.testTag("day-totals-pick")) { Text("Pick days") }
+        val csv = model.csv()
+        if (csv != null && exporter != null) {
+          OutlinedButton(
+            onClick = { scope.launch { exportFailed = !exporter.export(csv.first, "text/csv", csv.second) } },
+            modifier = Modifier.testTag("day-totals-share"),
+          ) { Text("Share CSV") }
+        }
       }
     }
     if (exportFailed) NoticeBanner("The spreadsheet could not be saved. Try again.", StatusTone.ERROR)
