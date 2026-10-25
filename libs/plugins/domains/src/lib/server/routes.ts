@@ -29,6 +29,7 @@ import {
   type DnsRecordView,
 } from '../model/dns-records'
 import {
+  HOLDING_STATUSES,
   nextRenewalAtMs,
   registrationView,
   type DomainRegistrationDoc,
@@ -53,6 +54,7 @@ import {
   purchaseDomain,
   purchaseTarget,
   registrarShouldAutoRenew,
+  siteServingDomain,
   startTransferIn,
   transferInQuote,
 } from './lifecycle'
@@ -337,6 +339,9 @@ export async function purchaseRoute(request: Request): Promise<Response> {
   Transfer in (AGL-4040)
 ==========================================*/
 
+const ALREADY_HERE =
+  'That domain is already in an account at our registrar, so it can’t be transferred in. Contact support with the domain name.'
+
 /** What moving a name here costs, shown before the owner confirms. */
 export async function transferInQuoteRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return domainsError(405, 'Method not allowed')
@@ -348,9 +353,15 @@ export async function transferInQuoteRoute(request: Request): Promise<Response> 
   if (existing && existing.orgId === gate.actor.orgId && existing.status === 'active') {
     return domainsError(409, 'That domain is already in your workspace.', { code: 'already-yours' })
   }
+  // A name held or lapsed here — by any workspace — is no transfer: an
+  // expired one is still its workspace's to renew back.
+  if (existing && (HOLDING_STATUSES.includes(existing.status) || existing.status === 'expired')) {
+    return domainsError(409, ALREADY_HERE, { code: 'already-here' })
+  }
   const quote = await transferInQuote(platformEffects().driver, domain)
   if (quote.ok === 'no') {
     const copy = {
+      'already-here': ALREADY_HERE,
       'not-offered': 'That name can’t be moved here. Only the endings we sell can be transferred in.',
       'needs-extra-contact': 'That ending asks for details we can’t collect here, so it can’t be moved here.',
       'registrar-unavailable': 'The registrar didn’t answer just now. Try again in a minute.',
@@ -616,7 +627,7 @@ async function connectAnswer(
     email: actor.email || null,
   })
   if (outcome.ok === 'refused') {
-    return domainsError(outcome.status, outcome.error, { code: outcome.code })
+    return domainsError(outcome.status, outcome.error, { code: outcome.code, restored: outcome.restored })
   }
   await logDomainActivity(actor, registration.domain, 'Connected a domain to the site', hostId)
   return domainsJson(
@@ -729,10 +740,17 @@ function contactAnswer(registration: DomainRegistrationDoc): Response {
   DNS records (AGL-4040)
 ==========================================*/
 
+/**
+ * Whether one of the workspace's sites serves the name now — the one the
+ * registration names, or any whose `cname` is the name (a domain connected
+ * by hand before it moved here). Either way its address records are kept.
+ */
 async function siteServes(registration: DomainRegistrationDoc): Promise<boolean> {
-  if (!registration.hostId) return false
-  const host = await db().collection('hosts').doc(registration.hostId).get().catch(() => null)
-  return String(host?.get('cname') ?? '').trim().toLowerCase() === registration.domain
+  if (registration.hostId) {
+    const host = await db().collection('hosts').doc(registration.hostId).get().catch(() => null)
+    if (String(host?.get('cname') ?? '').trim().toLowerCase() === registration.domain) return true
+  }
+  return Boolean(await siteServingDomain(registration.orgId, registration.domain))
 }
 
 const DNS_UNAVAILABLE = 'The registrar’s DNS didn’t answer just now. Try again in a minute.'
@@ -776,7 +794,7 @@ export async function dnsRoute(request: Request): Promise<Response> {
   return domainsJson({ ours: true, nameservers: nameservers.value.nameservers, siteConnected, records })
 }
 
-const MANAGED_REFUSAL = `That record is how your site is reached at this domain, so ${PLATFORM_BRAND_NAME} keeps it. Disconnect the domain from its site first to change it.`
+const MANAGED_REFUSAL = `That record keeps your site reachable at this domain, with its security certificate, so ${PLATFORM_BRAND_NAME} keeps it. Disconnect the domain from its site first to change it.`
 
 /** POST: creates, changes or deletes one record. */
 async function dnsWriteRoute(request: Request): Promise<Response> {

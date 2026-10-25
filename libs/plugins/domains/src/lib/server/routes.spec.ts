@@ -90,6 +90,7 @@ function driverWith(overrides: Partial<RegistrarDriver> = {}): jest.Mocked<Regis
     id: 'fake',
     configured: () => true,
     authCode: async () => yes('AUTH-CODE'),
+    info: async () => yes({ owned: false, registeredAtMs: null, expiresAtMs: null, autoRenew: null }),
     standardContact: async () => yes(true),
     transferPrice: async () => yes(11.25),
     renewalPrice: async () => yes(11.25),
@@ -297,7 +298,8 @@ describe('DNS records', () => {
     await seed(registration())
     driver.nameservers.mockResolvedValue(yes({ ours: false, nameservers: ['ns1.otherhost.example'], intended: [] }))
     const body = await (await dnsRoute(request('dns', undefined, '?orgId=org-1&domain=testbakery.com'))).json()
-    expect(body).toEqual({ ours: false, nameservers: ['ns1.otherhost.example'], siteConnected: false, records: [] })
+    // host-1 serves it by hand, so its address records stay protected.
+    expect(body).toEqual({ ours: false, nameservers: ['ns1.otherhost.example'], siteConnected: true, records: [] })
     expect(driver.listDnsRecords).not.toHaveBeenCalled()
     const write = await dnsRoute(
       request('dns', { orgId: 'org-1', domain: 'testbakery.com', action: 'create', record: { type: 'TXT', name: '', value: 'x' } }),
@@ -320,6 +322,18 @@ describe('DNS records', () => {
     )
     expect(await add.json()).toMatchObject({ code: 'managed' })
     expect(driver.deleteDnsRecord).not.toHaveBeenCalled()
+    expect(driver.createDnsRecord).not.toHaveBeenCalled()
+  })
+
+  it('refuses a CAA record while a site is connected', async () => {
+    await seed(registration({ hostId: 'host-1' }))
+    const add = await dnsRoute(
+      request('dns', {
+        orgId: 'org-1', domain: 'testbakery.com', action: 'create',
+        record: { type: 'CAA', name: '', value: 'other-ca.example', caaTag: 'issue' },
+      }),
+    )
+    expect(await add.json()).toMatchObject({ code: 'managed' })
     expect(driver.createDnsRecord).not.toHaveBeenCalled()
   })
 
@@ -358,6 +372,15 @@ describe('the transfer-in price', () => {
   it('is the renewal formula on the registrar’s transfer price', async () => {
     const answer = await transferInQuoteRoute(request('transfer-in-quote', undefined, '?orgId=org-1&domain=testbakery.com'))
     expect(await answer.json()).toEqual({ domain: 'testbakery.com', priceCents: 1599, renewalCents: 1599 })
+  })
+
+  it('refuses a lapsed name, even another workspace’s, and one already in our registrar account', async () => {
+    await seed(registration({ orgId: 'org-2', status: 'expired' }))
+    const lapsed = await transferInQuoteRoute(request('transfer-in-quote', undefined, '?orgId=org-1&domain=testbakery.com'))
+    expect(await lapsed.json()).toMatchObject({ code: 'already-here' })
+    driver.info.mockResolvedValue(yes({ owned: true, registeredAtMs: 1, expiresAtMs: 2, autoRenew: true }))
+    const owned = await transferInQuoteRoute(request('transfer-in-quote', undefined, '?orgId=org-1&domain=fresh.com'))
+    expect(await owned.json()).toMatchObject({ code: 'already-here' })
   })
 
   it('says a name already in the workspace is already here', async () => {

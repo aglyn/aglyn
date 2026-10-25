@@ -123,11 +123,16 @@ export interface LifecycleEffects {
     attemptKey: string
   }): Promise<DomainChargeResult>
   refund(invoiceId: string, reason: string): Promise<{ ok: boolean; refundedCents: number }>
-  /** Core's `connectHostCustomDomain`, with its www twin. */
+  /**
+   * Core's `connectHostCustomDomain`, with its www twin — or, when `twin` is
+   * given (null for none), with that one: putting a site's own domain back
+   * after a swap that could not finish restores the twin it had (AGL-4040).
+   */
   connect(request: {
     hostId: string
     domain: string
     actor: { uid: string; email: string | null }
+    twin?: string | null
   }): Promise<{ ok: 'connected' } | { ok: 'refused'; code: string; retryable: boolean }>
   /**
    * Core's `disconnectHostCustomDomain` for a site still showing `domain`.
@@ -357,8 +362,11 @@ export async function purchaseDomain(
       createdBy: actor.uid,
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
+      // Another workspace's history is never carried into this one's.
       history: withEvent(
-        existing.exists ? (existing.data() as DomainRegistrationDoc).history : [],
+        existing.exists && (existing.data() as DomainRegistrationDoc).orgId === actor.orgId
+          ? (existing.data() as DomainRegistrationDoc).history
+          : [],
         { atMs: nowMs, event: 'purchase-started', detail: attemptId },
       ),
     }
@@ -851,10 +859,11 @@ export async function advanceRenewal(
     })
     if (renewed.ok === 'no') {
       if (renewed.retryable) return registration
-      if (contactChange) {
-        // The contact may be what the registrar refused. It is set aside, so
-        // the refunded renewal is retried without it and the name keeps
-        // renewing, and the owner is shown the change was not accepted.
+      if (contactChange && isContactRefusal(renewed.code)) {
+        // The contact is what the registrar refused. It is set aside, so the
+        // refunded renewal is retried without it and the name keeps
+        // renewing, and the owner is shown the change was not accepted. Any
+        // other refusal (a price that moved) leaves the edit waiting.
         const next = await updateRegistration(
           registration.domain,
           { contactChange: null, contactRejectedAtMs: nowMs },
@@ -929,6 +938,15 @@ export async function advanceRenewal(
     }
   }
   return registration
+}
+
+/**
+ * Whether a registrar's refusal of a renewal that carried a contact is about
+ * the contact: a request it could not validate, or a contact field. A price
+ * or availability refusal is not.
+ */
+export function isContactRefusal(code: string): boolean {
+  return code === 'bad_request' || /contact/i.test(code)
 }
 
 /** A renewal paid for that the registrar would not make: refund, and tell staff. */
@@ -1194,19 +1212,28 @@ const TRANSFER_COPY: Record<Extract<TransferInOutcome, { ok: 'refused' }>['code'
   'already-here':
     'That domain is already in an account at our registrar, so it can’t be transferred in. Contact support with the domain name.',
   dnssec:
-    'DNSSEC is turned on for that domain. Turn it off at your current registrar, wait a day, then try again. The charge was refunded.',
+    'DNSSEC is turned on for that domain. Turn it off at your current registrar, wait a day, then try again.',
   'not-transferable':
-    'The registrar can’t take that domain right now. Domains registered or moved in the last 60 days can’t move yet. The charge was refunded.',
+    'The registrar can’t take that domain right now. Domains registered or moved in the last 60 days can’t move yet.',
   'transfer-refused':
-    'The registrar didn’t accept the transfer. Check that the domain is unlocked at your current registrar and that the transfer code is the latest one, then try again. The charge was refunded.',
+    'The registrar didn’t accept the transfer. Check that the domain is unlocked at your current registrar and that the transfer code is the latest one, then try again.',
 }
 
 function transferRefused(
   code: Extract<TransferInOutcome, { ok: 'refused' }>['code'],
   status: number,
-  extra: { priceCents?: number } = {},
+  extra: { priceCents?: number; refund?: 'refunded' | 'pending' } = {},
 ): TransferInOutcome {
-  return { ok: 'refused', status, code, error: TRANSFER_COPY[code], ...extra }
+  const { refund, ...rest } = extra
+  // A refusal after the charge says what became of the money, and only what
+  // is true: a refund Stripe would not make yet is still on its way.
+  const suffix =
+    refund === 'refunded'
+      ? ' The charge was refunded.'
+      : refund === 'pending'
+        ? ' The charge is being refunded, and we’ll email you when it’s done.'
+        : ''
+  return { ok: 'refused', status, code, error: `${TRANSFER_COPY[code]}${suffix}`, ...rest }
 }
 
 /** The registrar's refusal of a transfer, as the outcome the page names. */
@@ -1231,6 +1258,9 @@ export function transferFailureSentence(state: string): string {
   if (state === 'interrupted') {
     return 'The transfer could not be started, so the domain stayed at your current registrar.'
   }
+  if (state === 'unconfirmed') {
+    return 'The registrar never confirmed the transfer, and the domain did not arrive, so it stayed at your current registrar.'
+  }
   return 'The registrar could not complete the transfer, so the domain stayed at your current registrar.'
 }
 
@@ -1243,10 +1273,15 @@ export async function transferInQuote(
   domain: string,
 ): Promise<
   | { ok: 'yes'; priceCents: number; renewalCents: number; costUsd: number; renewalCostUsd: number }
-  | { ok: 'no'; code: 'not-offered' | 'needs-extra-contact' | 'registrar-unavailable' }
+  | { ok: 'no'; code: 'not-offered' | 'needs-extra-contact' | 'registrar-unavailable' | 'already-here' }
 > {
   const name = domain.trim().toLowerCase()
   if (!isOfferedName(name)) return { ok: 'no', code: 'not-offered' }
+  // A name already in our registrar account is no transfer: it is held
+  // here, by this workspace or another one.
+  const held = await driver.info(name)
+  if (held.ok === 'no') return { ok: 'no', code: 'registrar-unavailable' }
+  if (held.value.owned) return { ok: 'no', code: 'already-here' }
   const standard = await driver.standardContact(name)
   if (standard.ok === 'no') return { ok: 'no', code: 'registrar-unavailable' }
   if (!standard.value) return { ok: 'no', code: 'needs-extra-contact' }
@@ -1299,9 +1334,12 @@ export async function startTransferIn(
   const ref = registrationRef(domain)
   const held = await db().runTransaction(async (tx) => {
     const existing = await tx.get(ref)
-    if (existing.exists) {
-      const current = existing.data() as DomainRegistrationDoc
-      if (HOLDING_STATUSES.includes(current.status)) return null
+    const current = existing.exists ? (existing.data() as DomainRegistrationDoc) : null
+    // An expired name is still its workspace's to renew back, and may be
+    // another workspace's: a transfer never takes its document over.
+    if (current && current.status === 'expired') return 'already-here' as const
+    if (current && HOLDING_STATUSES.includes(current.status)) {
+      return current.orgId === actor.orgId ? ('taken' as const) : ('already-here' as const)
     }
     const registration: DomainRegistrationDoc = {
       domain,
@@ -1331,15 +1369,17 @@ export async function startTransferIn(
       createdBy: actor.uid,
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
-      history: withEvent(
-        existing.exists ? (existing.data() as DomainRegistrationDoc).history : [],
-        { atMs: nowMs, event: 'transfer-started', detail: attemptId },
-      ),
+      // Another workspace's history is never carried into this one's.
+      history: withEvent(current && current.orgId === actor.orgId ? current.history : [], {
+        atMs: nowMs,
+        event: 'transfer-started',
+        detail: attemptId,
+      }),
     }
     tx.set(ref, stripUndefined(registration))
     return registration
   })
-  if (!held) return transferRefused('taken', 409)
+  if (held === 'taken' || held === 'already-here') return transferRefused(held, 409)
 
   if (input.preclearanceId) {
     const spent = await effects.consumePreclearance(input.preclearanceId).catch(() => false)
@@ -1394,29 +1434,43 @@ export async function startTransferIn(
   })
   if (started.ok === 'no') {
     const registration = (await readRegistration(domain)) ?? held
-    // A lost answer is not a refusal: if the registrar has the transfer, it
-    // runs, and the sweep follows it as any other.
+    // A lost answer is not a refusal: the registrar may have the transfer.
+    // Unless its status says plainly that it failed, the name is followed as
+    // a transfer and the sweep decides — finishing it, or refunding it once
+    // the registrar says so or the deadline passes.
     if (started.retryable) {
       const status = await effects.driver.transferStatus(domain)
-      if (status.ok === 'yes' && status.value.status !== 'failed') {
+      if (status.ok === 'no' || status.value.status !== 'failed') {
+        const state = status.ok === 'yes' ? status.value.state : null
         const moving =
           (await updateRegistration(
             domain,
             {
               status: 'transferring-in',
-              transfer: { orderId: 'unknown', startedAtMs: nowMs, lastStatus: status.value.state, checkedAtMs: nowMs },
+              transfer: { orderId: 'unknown', startedAtMs: nowMs, lastStatus: state, checkedAtMs: nowMs },
             },
-            { event: 'transfer-requested', detail: status.value.state },
+            { event: 'transfer-requested', detail: state ?? `unconfirmed-${started.code}` },
           )) ?? registration
         return { ok: 'transferring', registration: moving }
       }
     }
-    const code = started.retryable ? 'registrar-unavailable' : transferRefusalCode(started.code)
-    await refundAndClose(effects, registration, `transfer-${started.code}`, {
+    // Reached on a retryable answer only when the registrar's status says
+    // the transfer failed, so the outcome is a refusal, never "unavailable".
+    const code = transferRefusalCode(started.code)
+    const closed = await refundAndClose(effects, registration, `transfer-${started.code}`, {
       kind: 'transferInFailed',
-      failure: TRANSFER_COPY[code].replace(/ The charge was refunded\.$/, ''),
+      failure: TRANSFER_COPY[code],
     })
-    return transferRefused(code, started.retryable ? 503 : 409)
+    const refund = closed.status === 'refunded' ? 'refunded' : 'pending'
+    // The registrar's own price moved: the dialog is told the new one.
+    if (code === 'price-changed') {
+      const again = await transferInQuote(effects.driver, domain)
+      return transferRefused(code, 409, {
+        refund,
+        ...(again.ok === 'yes' ? { priceCents: again.priceCents } : {}),
+      })
+    }
+    return transferRefused(code, 409, { refund })
   }
   const moving =
     (await updateRegistration(
@@ -1452,6 +1506,22 @@ export async function advanceTransferIn(
     startedAtMs: registration.createdAtMs,
   }
   const read = await effects.driver.transferStatus(registration.domain)
+  // The registrar will not say how the transfer stands (it knows of no
+  // transfer, say): whether the name is now in our account answers it, and
+  // past the deadline a transfer nobody can find is refunded.
+  if (read.ok === 'no' && !read.retryable) {
+    const held = await effects.driver.info(registration.domain)
+    if (held.ok === 'yes' && held.value.owned) {
+      return finishTransferIn(effects, registration, transfer, 'completed', held.value.expiresAtMs)
+    }
+    if (nowMs - transfer.startedAtMs > STUCK_TRANSFER_MS) {
+      return refundAndClose(effects, registration, `transfer-unconfirmed-${read.code}`, {
+        kind: 'transferInFailed',
+        failure: transferFailureSentence('unconfirmed'),
+      })
+    }
+    return registration
+  }
   if (read.ok === 'no' || read.value.status === 'pending') {
     if (read.ok === 'yes' && read.value.state !== transfer.lastStatus) {
       const next = await updateRegistration(
@@ -1477,8 +1547,43 @@ export async function advanceTransferIn(
     })
   }
   const info = await effects.driver.info(registration.domain)
-  const expiresAtMs =
-    info.ok === 'yes' && info.value.expiresAtMs ? info.value.expiresAtMs : nowMs + 365 * DAY_MS
+  return finishTransferIn(
+    effects,
+    registration,
+    transfer,
+    read.value.state,
+    info.ok === 'yes' ? info.value.expiresAtMs : null,
+  )
+}
+
+/**
+ * The site of this workspace that already serves `domain` — connected by
+ * hand while the name was registered elsewhere — or null.
+ */
+export async function siteServingDomain(orgId: string, domain: string): Promise<string | null> {
+  const found = await db()
+    .collection('hosts')
+    .where('cname', '==', domain)
+    .limit(5)
+    .get()
+    .catch(() => null)
+  const site = found?.docs.find((doc) => String(doc.get('orgId') ?? '') === orgId)
+  return site?.id ?? null
+}
+
+/** Records an arrived transfer: active, its new expiry, and the site it already serves. */
+async function finishTransferIn(
+  effects: LifecycleEffects,
+  registration: DomainRegistrationDoc,
+  transfer: NonNullable<DomainRegistrationDoc['transfer']>,
+  state: string,
+  registrarExpiresAtMs: number | null,
+): Promise<DomainRegistrationDoc> {
+  const nowMs = effects.now()
+  const expiresAtMs = registrarExpiresAtMs || nowMs + 365 * DAY_MS
+  // A domain is often already connected to one of the workspace's sites by
+  // hand before it moves here; it is tied to that site, which keeps serving.
+  const hostId = await siteServingDomain(registration.orgId, registration.domain)
   const arrived =
     (await updateRegistration(
       registration.domain,
@@ -1488,7 +1593,8 @@ export async function advanceTransferIn(
         expiresAtMs,
         failure: null,
         renewal: null,
-        transfer: { ...transfer, lastStatus: read.value.state, checkedAtMs: nowMs },
+        ...(hostId ? { hostId } : {}),
+        transfer: { ...transfer, lastStatus: state, checkedAtMs: nowMs },
       },
       { event: 'transferred-in', detail: formatDate(expiresAtMs) },
     )) ?? registration
@@ -1506,15 +1612,28 @@ export async function advanceTransferIn(
 
 export type ConnectToSiteOutcome =
   | { ok: 'connected' | 'connecting'; registration: DomainRegistrationDoc; replaced: string | null }
-  | { ok: 'refused'; status: number; code: 'not-active' | 'unknown-site' | 'release-failed'; error: string }
+  | {
+      ok: 'refused'
+      status: number
+      code: 'not-active' | 'unknown-site' | 'release-failed' | 'connect-failed'
+      error: string
+      /** False when the swap was undone only in part; `error` says what is left. */
+      restored: boolean
+    }
+
+const TWIN_FIELD = 'cnameTwin'
 
 /**
  * Connects `registration` to `hostId`, swapping out whatever domain that
- * site shows now: the old name is released through core's detach — its
- * www twin with it — and a name this workspace bought goes back to the
- * workspace, unassigned. A name connected to another site is released from
- * there first. The page confirms the swap, naming the domain replaced,
+ * site shows now. The page confirms the swap, naming the domain replaced,
  * before calling this.
+ *
+ * The order keeps the target site serving for as long as anything can still
+ * fail: the name is released from the OTHER site it serves first, then the
+ * target's current domain, then the name is connected. A step that fails
+ * undoes the ones before it — the replaced domain is reconnected to the
+ * target with its twin, and the name to the site it came from — and the
+ * answer says "nothing changed" only when that undo worked.
  */
 export async function connectToSite(
   effects: LifecycleEffects,
@@ -1522,52 +1641,113 @@ export async function connectToSite(
   hostId: string,
   actor: { uid: string; email: string | null },
 ): Promise<ConnectToSiteOutcome> {
+  const domain = registration.domain
   if (registration.status !== 'active') {
-    return { ok: 'refused', status: 409, code: 'not-active', error: 'That domain can’t be connected right now.' }
+    return { ok: 'refused', status: 409, code: 'not-active', error: 'That domain can’t be connected right now.', restored: true }
   }
   const host = await db().collection('hosts').doc(hostId).get()
   if (!host.exists || String(host.get('orgId') ?? '') !== registration.orgId) {
-    return { ok: 'refused', status: 404, code: 'unknown-site', error: 'That site isn’t in this workspace.' }
+    return { ok: 'refused', status: 404, code: 'unknown-site', error: 'That site isn’t in this workspace.', restored: true }
   }
   const current = String(host.get('cname') ?? '').trim().toLowerCase()
-  const replaced = current && current !== registration.domain ? current : null
+  const currentTwin = String(host.get(TWIN_FIELD) ?? '').trim().toLowerCase() || null
+  const replaced = current && current !== domain ? current : null
+
+  // 1. The other site this name serves now, released first: if that fails,
+  //    the target site has not been touched.
+  const fromHostId = registration.hostId && registration.hostId !== hostId ? registration.hostId : null
+  let fromServed = false
+  let fromTwin: string | null = null
+  if (fromHostId) {
+    const from = await db().collection('hosts').doc(fromHostId).get()
+    fromServed = from.exists && String(from.get('cname') ?? '').trim().toLowerCase() === domain
+    fromTwin = String(from.get(TWIN_FIELD) ?? '').trim().toLowerCase() || null
+    const released = await effects.disconnect({ hostId: fromHostId, domain, actor })
+    if (!released) {
+      return {
+        ok: 'refused',
+        status: 502,
+        code: 'release-failed',
+        error: `${domain} couldn’t be released from the site it serves now, so nothing changed. Try again in a minute.`,
+        restored: true,
+      }
+    }
+  }
+  /** Puts the name back on the site it came from. True when nothing is left to undo. */
+  const putBackFrom = async (): Promise<boolean> => {
+    if (!fromHostId || !fromServed) {
+      await updateRegistration(domain, { hostId: fromHostId, status: 'active' }, { event: 'connect-undone' })
+      return true
+    }
+    const back = await effects.connect({ hostId: fromHostId, domain, actor, twin: fromTwin })
+    await updateRegistration(
+      domain,
+      { hostId: back.ok === 'connected' ? fromHostId : null, status: 'active' },
+      { event: back.ok === 'connected' ? 'connect-undone' : 'connect-undo-failed', detail: fromHostId },
+    )
+    return back.ok === 'connected'
+  }
+
+  // 2. The target's current domain.
+  const previous = replaced ? await readRegistration(replaced) : null
+  const previousOurs = Boolean(previous && previous.orgId === registration.orgId && previous.hostId === hostId)
   if (replaced) {
     const released = await effects.disconnect({ hostId, domain: replaced, actor })
     if (!released) {
+      const restored = await putBackFrom()
       return {
         ok: 'refused',
         status: 502,
         code: 'release-failed',
-        error: `${replaced} couldn’t be released from the site just now, so nothing changed. Try again in a minute.`,
+        error: restored
+          ? `${replaced} couldn’t be released from the site just now, so nothing changed. Try again in a minute.`
+          : `${replaced} couldn’t be released from the site, and ${domain} couldn’t be put back on the site it served. Connect ${domain} again from the Domains page.`,
+        restored,
       }
     }
-    const previous = await readRegistration(replaced)
-    if (previous && previous.orgId === registration.orgId && previous.hostId === hostId) {
-      await updateRegistration(replaced, { hostId: null }, { event: 'replaced-on-site', detail: registration.domain })
+    if (previousOurs) {
+      await updateRegistration(replaced, { hostId: null }, { event: 'replaced-on-site', detail: domain })
     }
   }
-  if (registration.hostId && registration.hostId !== hostId) {
-    const released = await effects.disconnect({ hostId: registration.hostId, domain: registration.domain, actor })
-    if (!released) {
-      return {
-        ok: 'refused',
-        status: 502,
-        code: 'release-failed',
-        error: `${registration.domain} couldn’t be released from the site it serves now, so nothing changed. Try again in a minute.`,
-      }
-    }
-  }
+
+  // 3. The name itself.
   const moving =
     (await updateRegistration(
-      registration.domain,
+      domain,
       { hostId, status: 'connecting', failure: null },
       { event: 'connect-to-site', detail: hostId },
     )) ?? registration
   const connected = await advanceConnecting(effects, moving)
+  const refusedForGood = connected.status === 'active' && Boolean(connected.failure?.startsWith('connect-'))
+  if (!refusedForGood) {
+    return {
+      ok: connected.status === 'active' && !connected.failure ? 'connected' : 'connecting',
+      registration: connected,
+      replaced,
+    }
+  }
+  // The connect was refused for good: the target gets its own domain back,
+  // and the name goes back where it was.
+  let replacedBack = true
+  if (replaced) {
+    const back = await effects.connect({ hostId, domain: replaced, actor, twin: currentTwin })
+    replacedBack = back.ok === 'connected'
+    if (replacedBack && previousOurs) {
+      await updateRegistration(replaced, { hostId }, { event: 'restored-on-site', detail: domain })
+    }
+  }
+  const fromBack = await putBackFrom()
+  const restored = replacedBack && fromBack
   return {
-    ok: connected.status === 'active' && !connected.failure ? 'connected' : 'connecting',
-    registration: connected,
-    replaced,
+    ok: 'refused',
+    status: 409,
+    code: 'connect-failed',
+    error: restored
+      ? `${domain} couldn’t be connected to that site, so nothing changed.`
+      : replaced && !replacedBack
+        ? `${domain} couldn’t be connected to that site, and ${replaced} couldn’t be put back on it, so the site is on its free address. Connect a domain to it again from the Domains page.`
+        : `${domain} couldn’t be connected to that site, and couldn’t be put back on the site it served. Connect it again from the Domains page.`,
+    restored,
   }
 }
 

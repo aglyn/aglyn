@@ -74,13 +74,14 @@ export function platformEffects(): LifecycleEffects {
       return chargeDomain({ ...request, stripeCustomerId })
     },
     refund: (invoiceId, reason) => refundInvoice(invoiceId, reason),
-    async connect({ hostId, domain, actor }) {
+    async connect({ hostId, domain, actor, twin }) {
       const connected = await connectHostCustomDomain({
         hostId,
         domain,
         // A bought name's DNS is the registrar's and ours, so both names
-        // resolve here and the www twin can be claimed with it.
-        twin: `www.${domain}`,
+        // resolve here and the www twin can be claimed with it. A site's own
+        // domain put back after a swap keeps the twin it had (AGL-4040).
+        twin: twin === undefined ? `www.${domain}` : twin,
         actor,
       })
       if (connected.ok === 'connected') return { ok: 'connected' }
