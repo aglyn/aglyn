@@ -715,6 +715,9 @@ struct ShellStack: View {
           PushedScreen(section: section) {
             if case .area(let screen, let params) = route {
               AreaView(screen: screen, params: params, pushed: true)
+            } else if case .modeList = route {
+              // Site settings or Workspace settings from a phone Home tile (AGL-4006): the mode's grouped list.
+              MenuScreen()
             } else {
               RouteView(route: route)
             }
@@ -970,19 +973,26 @@ struct AreaView: View {
           }
         }
       }
+      .modifier(PhoneAreaTitleMenu(enabled: !wide && !columnHead))
   }
 
   /// The head's parts for a screen that draws them in its list column: title, breadcrumbs, star and sections.
   private func areaHead(_ row: NativeNavRow, sections: [NativeNavSection]) -> AglynAreaHead {
-    AglynAreaHead(
+    let shell = navigation
+    var switchArea: (@MainActor () -> Void)? = nil
+    if !wide { switchArea = { shell.showAreaSwitcher = true } }
+    return AglynAreaHead(
       title: row.label, crumbs: AnyView(Breadcrumbs(row: row)), star: AnyView(starButton(row)),
-      sections: sections.count > 1
-        ? sections.map { section in
-          let target = ShellSection.opening(section.screen, section.params)
-          return AglynAreaSection(
-            id: section.id, label: section.label, selected: target == ShellSection.opening(screen, params)
-          ) { choose(target) }
-        } : [])
+      sections: phoneSections(sections), switchArea: switchArea)
+  }
+
+  private func phoneSections(_ sections: [NativeNavSection]) -> [AglynAreaSection] {
+    guard sections.count > 1 else { return [] }
+    let current = ShellSection.opening(screen, params)
+    return sections.map { (section: NativeNavSection) -> AglynAreaSection in
+      let target = ShellSection.opening(section.screen, section.params)
+      return AglynAreaSection(id: section.id, label: section.label, selected: target == current) { choose(target) }
+    }
   }
 
   /// The star beside the area's title: the place on the person's Starred list.
@@ -1175,30 +1185,29 @@ struct PhoneShell: View {
   /// A tab's count from its row's count view (Inbox's unread), worn as the tab's badge (Figma Phone/Tab bar 22:499).
   @State private var counts: [String: Int] = [:]
 
-  /// The tabs for where the person stands: the busiest area is Orders for a store, Pages for a site without one, and
-  /// Sites for the whole workspace.
-  private var tabs: [(section: ShellSection, title: String, icon: String)] {
-    let scope = ShellScope(model: model, navigation: navigation)
-    let rows = scope.mainList.groups.flatMap(\.rows)
-    func tab(_ id: String) -> (ShellSection, String, String)? {
-      rows.first { $0.id == id }.map { (ShellSection.opening($0.screen, $0.params), $0.label, $0.appleIcon) }
+  /// The tab bar for where the person stands (AGL-4006): Home, then the areas the person pinned for this
+  /// site or the whole workspace, with Create new in the centre until four areas fill the bar (`tabBarLayout`). No area
+  /// is chosen for them and nothing sits behind a Menu or a More: every area is a tile on Home.
+  private var tabs: [(section: ShellSection, title: String, icon: String, rowID: String)] {
+    let areas = PhoneAreas(model: model, navigation: navigation)
+    let values = ContractValues.shared
+    return areas.layout.slots.compactMap { slot in
+      switch slot {
+      case values.tabBarHome: return (.home, "Home", "house", "")
+      case values.tabBarCreate: return (PhoneShell.createTab, "Create", "plus", "")
+      default:
+        return areas.row(slot).map { (ShellSection.opening($0.screen, $0.params), $0.label, $0.appleIcon, $0.id) }
+      }
     }
-    var out: [(ShellSection, String, String)] = [(.home, "Home", "house")]
-    if let busiest = scope.inSite ? (tab("orders") ?? tab("pages")) : tab("sites") { out.append(busiest) }
-    out.append((PhoneShell.createTab, "Create", "plus.circle.fill"))
-    if let inbox = tab("inbox") { out.append(inbox) }
-    out.append((.more, "Menu", "line.3.horizontal"))
-    return out
   }
 
   /// The centre tab's tag: never a section of its own.
   static let createTab = ShellSection.plugin("shell.create")
 
-  /// The manifest row a tab opens ("inbox"), for its count; empty for Home, Create and Menu.
-  private func tabRowID(_ section: ShellSection) -> String {
-    let scope = ShellScope(model: model, navigation: navigation)
-    return scope.mainList.groups.flatMap(\.rows).first { ShellSection.opening($0.screen, $0.params) == section }?.id ?? ""
-  }
+  #if DEBUG
+    /// The scopes a `-AglynFreshTabBar` launch already emptied, once each.
+    @MainActor static var freshened: Set<String> = []
+  #endif
 
   #if os(iOS)
     /// Figma Phone/Tab item, in the theme in force: the shared `AglynPhoneTabBar` (the bold look's pill and gradient +
@@ -1234,31 +1243,22 @@ struct PhoneShell: View {
               Label(tab.title, systemImage: tab.icon)
             #endif
           }
-          .badge(counts[tabRowID(tab.section)] ?? 0)
+          .badge(counts[tab.rowID] ?? 0)
+          .accessibilityIdentifier("tab-\(tab.rowID.isEmpty ? tab.title.lowercased() : tab.rowID)")
           .tag(tab.section)
       }
     }
     // The tabs' rows' count views, unseen, so each tab can wear its count.
-    .background {
-      if let context = model.context(for: navigation) {
-        ForEach(tabs.map { tabRowID($0.section) }.filter { !$0.isEmpty }, id: \.self) { rowID in
-          ForEach(model.registry.widgets(for: model.app, slot: "sidebarCount.\(rowID)")) { widget in
-            widget.make(context).id("\(widget.id):\(context.orgID ?? ""):\(context.hostID ?? "")")
-              .onPreferenceChange(AglynCountKey.self) { count in
-                MainActor.assumeIsolated { counts[rowID] = count ?? 0 }
-              }
-          }
-        }
-        .hidden()
-        .accessibilityHidden(true)
-      }
-    }
+    .background { AreaCountReader(rowIDs: tabs.map(\.rowID), counts: $counts) }
     #if os(iOS)
       .onAppear { PhoneShell.styleTabBar() }
     #endif
+    // The bell is Activity on a phone (AGL-4006): what needs you, then the notifications.
     .sheet(isPresented: $navigation.showNotifications) {
-      NotificationsPopover().environment(model).environment(navigation)
+      ActivitySheet().environment(model).environment(navigation)
     }
+    .sheet(isPresented: $navigation.showAreaSwitcher) { AreaSwitcherSheet().environment(model).environment(navigation) }
+    .sheet(isPresented: $navigation.showTabBar) { TabBarSheet().environment(model).environment(navigation) }
     .sheet(isPresented: $navigation.showCreate) { CreateNewSheet().environment(model).environment(navigation) }
     .sheet(isPresented: $navigation.showAssist) {
       // Figma iPhone / Sheet / AI 21:314: the grabber, the title centered, Done in the trailing corner, then the panel.
@@ -1290,14 +1290,30 @@ struct PhoneShell: View {
         navigation.showCreate = true
         return
       }
-      // A section with no tab of its own opens in Menu, an area with its section chips (AGL-3993).
+      // A section with no tab of its own opens on Home, an area with its section chips (AGL-3993, AGL-4006).
       guard !tabs.contains(where: { $0.section == section }) else { return }
-      navigation.openInMenu(section)
+      navigation.openOnHome(section)
+    }
+    #if DEBUG
+      // `-AglynFreshTabBar YES`: this scope's tab bar starts empty, as a fresh account's (the UI tests drive the default).
+      .task(id: "\(model.preferences?.loaded == true):\(PhoneAreas(model: model, navigation: navigation).tabScope ?? "")") {
+        guard UserDefaults.standard.bool(forKey: "AglynFreshTabBar"), model.preferences?.loaded == true,
+          let scope = PhoneAreas(model: model, navigation: navigation).tabScope, !PhoneShell.freshened.contains(scope)
+        else { return }
+        PhoneShell.freshened.insert(scope)
+        model.preferences?.forgetTabBar(scope: scope)
+        UserDefaults.standard.set(false, forKey: "aglyn.phone.pinTipSeen")
+      }
+    #endif
+    // An area taken out of the tab bar (here or on another device) while it was in front: back to Home.
+    .onChange(of: tabs.map(\.section)) { _, sections in
+      if !sections.contains(navigation.section) { navigation.section = .home }
     }
   }
 }
 
-/// The phone's top bar: the scope chip on the leading side; the bell and your photo on the trailing side.
+/// The phone's top bar: the scope chip on the leading side; search, the bell (Activity), Create new when the tab bar is
+/// full, your AI and your photo on the trailing side.
 struct PhoneTopBar: ViewModifier {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
@@ -1329,6 +1345,17 @@ struct PhoneTopBar: ViewModifier {
             }
             .tint(AglynColor.secondaryText)
             .accessibilityIdentifier("topbar-bell")
+            // Four pinned areas fill the tab bar, so Create new comes up here, beside your AI (AGL-4006, Figma Home · 4
+            // pinned 289:5791).
+            if PhoneAreas(model: model, navigation: navigation).layout.createInTopBar {
+              Button {
+                navigation.showCreate = true
+              } label: {
+                Label("Create new", systemImage: "plus")
+              }
+              .tint(AglynColor.secondaryText)
+              .accessibilityIdentifier("topbar-create")
+            }
             // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
             // 273:20194): after the bell, before your photo.
             if AssistSlot.available(model) {
@@ -1514,6 +1541,9 @@ struct AccountSheet: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   @Environment(\.dismiss) private var dismiss
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+  #endif
   @State private var confirmSignOut = false
 
   var body: some View {
@@ -1559,6 +1589,18 @@ struct AccountSheet: View {
           }
           .buttonStyle(.aglynRow)
           .accessibilityIdentifier("account-notifications")
+          // The phone's tab bar is yours: remove, reorder and add areas (AGL-4006, Figma Account sheet 21:208).
+          #if os(iOS)
+            if sizeClass == .compact {
+              row("Tab bar", "dock.rectangle") {
+                Task { @MainActor in
+                  try? await Task.sleep(nanoseconds: 350_000_000)
+                  navigation.showTabBar = true
+                }
+              }
+              .accessibilityIdentifier("account-tab-bar")
+            }
+          #endif
           row("Settings", "gearshape") { navigation.push(.settings) }
           if model.registry.screen(AccountPlaces.marketplaceScreen) != nil {
             row("Marketplace", "storefront") { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }

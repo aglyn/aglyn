@@ -627,12 +627,18 @@ public struct AglynAreaHead {
   public let crumbs: AnyView
   public let star: AnyView
   public let sections: [AglynAreaSection]
+  /// On a phone, the title's ▾: every area of the scope as tiles, to switch area in place (AGL-4006); nil for none.
+  public let switchArea: (@MainActor () -> Void)?
 
-  public init(title: String, crumbs: AnyView, star: AnyView, sections: [AglynAreaSection]) {
+  public init(
+    title: String, crumbs: AnyView, star: AnyView, sections: [AglynAreaSection],
+    switchArea: (@MainActor () -> Void)? = nil
+  ) {
     self.title = title
     self.crumbs = crumbs
     self.star = star
     self.sections = sections
+    self.switchArea = switchArea
   }
 }
 
@@ -736,12 +742,21 @@ public struct AglynListColumnHeader<Actions: View>: View {
 
   private var phone: some View {
     HStack(alignment: .center, spacing: 8) {
-      Text(head.title)
-        .font(.system(size: 34, weight: .bold))
-        .foregroundStyle(AglynColor.textPrimary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .accessibilityAddTraits(.isHeader)
+      if let switchArea = head.switchArea {
+        // The title's ▾ opens every area as tiles (Figma Area switcher, AGL-4006).
+        Button(action: switchArea) {
+          HStack(spacing: 6) {
+            phoneTitle
+            Image(systemName: "chevron.down").font(.system(size: 17, weight: .semibold))
+              .foregroundStyle(AglynColor.secondaryText)
+          }
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows every area")
+        .accessibilityIdentifier("area-title-switcher")
+      } else {
+        phoneTitle
+      }
       head.star
       Spacer(minLength: 8)
       HStack(spacing: 8) {
@@ -762,6 +777,15 @@ public struct AglynListColumnHeader<Actions: View>: View {
     .padding(.top, 4)
     .padding(.bottom, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var phoneTitle: some View {
+    Text(head.title)
+      .font(.system(size: 34, weight: .bold))
+      .foregroundStyle(AglynColor.textPrimary)
+      .lineLimit(1)
+      .minimumScaleFactor(0.7)
+      .accessibilityAddTraits(.isHeader)
   }
 
   /// The list column's side margins: the content edge, as every column's (`AglynContentInsets`).

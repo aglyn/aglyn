@@ -87,15 +87,12 @@ internal fun HomeScreen(
   val host = hostDoc(services, site?.id)
   val now = remember { nowMillis() }
   val prefs by services.accountPrefs.state.collectAsState()
-  val version by services.registry.version.collectAsState()
-  val lines = remember { com.aglyn.ui.NeedsYouLines() }
-  val needs = remember(version, site != null) { context.slotWidgets(HOME_NEEDS_YOU_SLOT).filter { site != null || !it.requiresSite } }
-  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
   val openRecent = LocalOpenRecent.current
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      // The whole content area, on the content edge E (Zach 10/19: no left-aligned or capped column).
+      // The whole content area, on the content edge E (no left-aligned or capped column).
       Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
         .padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("home"),
       verticalArrangement = Arrangement.spacedBy(space(3f)),
@@ -110,23 +107,7 @@ internal fun HomeScreen(
         HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, com.aglyn.contracts.Contracts.platformBrandName)
       }
 
-      CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {
-        Column(verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-          DashboardSectionTitle("Needs you")
-          planPaymentProblem(org)?.let { problem ->
-            com.aglyn.ui.NeedsYouLine("plan-payment", "credit_card", problem, "Billing", onClick = { context.navigate("core.billing") }, tone = StatusTone.ERROR)
-          }
-          for (widget in needs) Box(Modifier.testTag("widget-${widget.id}")) { widget.content(context) }
-          if (!lines.any && planPaymentProblem(org) == null) {
-            Text(
-              "Nothing needs you right now.",
-              style = MaterialTheme.typography.bodyLarge,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.padding(horizontal = space(1.5f), vertical = space(1f)).testTag("needs-you-none"),
-            )
-          }
-        }
-      }
+      NeedsYouBlock(services, context, workspace)
 
       // The numbers (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards.
       if (site != null) {
@@ -163,7 +144,7 @@ private const val AI_CREATE_SCREEN_ID = "ai.create"
 
 /** The workspace's own document, live. */
 @Composable
-private fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
+internal fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
   if (orgId == null) return Live.Ready(null)
   val flow = remember(orgId) { services.firestore.observeDoc("orgs/$orgId") }
   val live by flow.collectAsState(Live.Loading)
@@ -358,5 +339,36 @@ internal fun notificationFeed(services: ShellServices, uid: String, count: Int):
     is Live.Ready -> Live.Ready(value.value.map(::feedNotificationOf))
     is Live.Failed -> value
     Live.Loading -> Live.Loading
+  }
+}
+
+/**
+ * What is waiting on the person: the workspace's failed plan payment and each plugin's "Needs you" line
+ * ([HOME_NEEDS_YOU_SLOT]), each opening its list already filtered. Home's on a tablet and the desktop; on a phone the
+ * bell's Activity (AGL-4006).
+ */
+@Composable
+internal fun NeedsYouBlock(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, modifier: Modifier = Modifier) {
+  val site = workspace.site
+  val version by services.registry.version.collectAsState()
+  val lines = remember { com.aglyn.ui.NeedsYouLines() }
+  val needs = remember(version, site != null) { context.slotWidgets(HOME_NEEDS_YOU_SLOT).filter { site != null || !it.requiresSite } }
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
+  CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {
+    Column(modifier.testTag("needs-you"), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+      DashboardSectionTitle("Needs you")
+      planPaymentProblem(org)?.let { problem ->
+        com.aglyn.ui.NeedsYouLine("plan-payment", "credit_card", problem, "Billing", onClick = { context.navigate("core.billing") }, tone = StatusTone.ERROR)
+      }
+      for (widget in needs) Box(Modifier.testTag("widget-${widget.id}")) { widget.content(context) }
+      if (!lines.any && planPaymentProblem(org) == null) {
+        Text(
+          "Nothing needs you right now.",
+          style = MaterialTheme.typography.bodyLarge,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(horizontal = space(1.5f), vertical = space(1f)).testTag("needs-you-none"),
+        )
+      }
+    }
   }
 }

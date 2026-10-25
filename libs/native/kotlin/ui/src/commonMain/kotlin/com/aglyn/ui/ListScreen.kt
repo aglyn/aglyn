@@ -6,6 +6,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.sp
@@ -239,15 +240,23 @@ fun ListScreenScaffold(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
-      Text(
-        title,
-        // Figma's list title: 22/28 bold on the desktop.
-        style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line) else MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.semantics { heading() },
-      )
+      // On a phone the area's title carries ▾: every area of the scope as tiles, to switch in place (AGL-4006).
+      val switchArea = LocalAreaSwitcher.current.takeIf { !compactHead }
+      Row(
+        if (switchArea != null) Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Show every area", onClick = switchArea).testTag("area-title-switcher") else Modifier,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          title,
+          // Figma's list title: 22/28 bold on the desktop.
+          style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line) else MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.Bold,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.semantics { heading() },
+        )
+        if (switchArea != null) Icon(AglynIcons.named("expand_more"), contentDescription = null, Modifier.padding(start = 2.dp).size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
       star?.star?.invoke()
       Box(Modifier.weight(1f))
       if (more.isNotEmpty() && !compactHead) OverflowMenu(more, contentDescription = "More actions")

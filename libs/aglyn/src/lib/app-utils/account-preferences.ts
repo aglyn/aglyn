@@ -30,6 +30,7 @@
  * | `recents` | {@link RecentItem}s, most recently opened first | 30 |
  * | `workspaceColors` | workspace id → `#RRGGBB` the person picked | 100 |
  * | `appTheme` | {@link AppThemePrefs}, the apps' look, synced | — |
+ * | `tabBars` | {@link TabBarPins}, the phone's tab bar per site and per workspace | 4 areas each, 100 in all |
  *
  * The caps are held twice: here, by every writer, and by the Firestore rules,
  * which refuse a write that grows a list past its cap. A list that is ALREADY
@@ -780,6 +781,204 @@ export function readAppTheme(profile: unknown): AppThemePrefs {
         ? (raw['useWorkspaceBrand'] as boolean)
         : DEFAULT_APP_THEME.useWorkspaceBrand,
   }
+}
+
+// ── The phone's tab bar (AGL-4006) ──────────────────────────────────────────
+
+/** `users/{uid}` field holding the areas the person keeps in the phone's tab bar, per site and per workspace. */
+export const TAB_BARS_FIELD = 'tabBars'
+
+/**
+ * The most areas one tab bar holds beside Home: iOS and
+ * Material take five destinations at most, and nothing ever overflows into a
+ * More tab. With four, Create leaves the bar for the top bar.
+ */
+export const TAB_BAR_AREAS_MAX = 4
+
+/** The most sites and workspaces the account keeps a tab bar for, the bound the Firestore rules hold. */
+export const TAB_BARS_MAX = 100
+
+/** The tab bar's own slots beside the areas: Home, always first, and Create new. */
+export const TAB_BAR_HOME = 'home'
+export const TAB_BAR_CREATE = 'create'
+
+/** One site's or workspace's tab bar. */
+export interface TabBarPins {
+  /** `site:<hostId>` or `org:<orgId>` ({@link tabBarScope}). */
+  scope: string
+  /** Nav manifest row ids, in the person's order, at most {@link TAB_BAR_AREAS_MAX}. */
+  areas: string[]
+  /**
+   * The person pinned, unpinned or reordered here by hand. Until then the
+   * first areas they open take the free spots and stay (the default the
+   * orchestrator settled on 2026-10-20: nothing guessed, nothing rotating);
+   * after it, only the person changes the bar.
+   */
+  chosen: boolean
+}
+
+export type TabPinOutcome = 'pinned' | 'alreadyPinned' | 'full'
+
+export interface TabPinResult {
+  /** Every stored tab bar after the request: unchanged unless `outcome` is `pinned`. */
+  tabBars: TabBarPins[]
+  outcome: TabPinOutcome
+}
+
+/** What a phone's tab bar shows, in order, and where Create new goes. */
+export interface TabBarLayout {
+  /** {@link TAB_BAR_HOME}, the areas, and {@link TAB_BAR_CREATE} in the centre unless it moved to the top bar. */
+  slots: string[]
+  /** Four areas fill the bar, so Create new sits in the top bar beside the AI button. */
+  createInTopBar: boolean
+}
+
+/** The key of one site's tab bar, or the whole workspace's. */
+export function tabBarScope(orgId: string, hostId?: string | null): string {
+  return hostId ? `site:${hostId}` : `org:${orgId}`
+}
+
+function tabAreaList(value: unknown): string[] {
+  return idList(value)
+    .filter((id) => id !== TAB_BAR_HOME && id !== TAB_BAR_CREATE)
+    .slice(0, TAB_BAR_AREAS_MAX)
+}
+
+function tabBarList(value: unknown): TabBarPins[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const out: TabBarPins[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const raw = entry as Record<string, unknown>
+    const scope = raw['scope']
+    if (typeof scope !== 'string' || !/^(site|org):./.test(scope) || seen.has(scope)) continue
+    seen.add(scope)
+    out.push({ scope, areas: tabAreaList(raw['areas']), chosen: raw['chosen'] === true })
+  }
+  return out.slice(-TAB_BARS_MAX)
+}
+
+/**
+ * Every tab bar the person keeps, each well formed, without repeats. Anything
+ * that is not a `{ scope, areas, chosen }` reads as no tab bar, so a stray
+ * value can never take the phone's shell down.
+ */
+export function readTabBars(profile: unknown): TabBarPins[] {
+  return tabBarList(field(profile, TAB_BARS_FIELD))
+}
+
+/** One scope's areas, in the person's order. */
+export function tabBarAreas(tabBars: readonly TabBarPins[], scope: string): string[] {
+  return tabBarList(tabBars).find((bar) => bar.scope === scope)?.areas ?? []
+}
+
+/**
+ * Every tab bar with one scope's replaced. A scope seen for the first time
+ * goes last; past {@link TAB_BARS_MAX} the oldest OTHER scopes give way.
+ */
+function withTabBar(tabBars: readonly TabBarPins[], next: TabBarPins): TabBarPins[] {
+  const current = tabBarList(tabBars)
+  const at = current.findIndex((bar) => bar.scope === next.scope)
+  const out = at === -1 ? [...current, next] : current.map((bar, index) => (index === at ? next : bar))
+  while (out.length > TAB_BARS_MAX) {
+    const oldest = out.findIndex((bar) => bar.scope !== next.scope)
+    if (oldest === -1) break
+    out.splice(oldest, 1)
+  }
+  return out
+}
+
+/**
+ * Pins an area at the end of a scope's tab bar (long-press a tile, "Add to tab
+ * bar"), or says the bar is full: a full bar is never made room in quietly.
+ */
+export function pinTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+): TabPinResult {
+  const current = tabBarList(tabBars)
+  const areas = tabBarAreas(current, scope)
+  if (!area || area === TAB_BAR_HOME || area === TAB_BAR_CREATE || areas.includes(area)) {
+    return { tabBars: current, outcome: 'alreadyPinned' }
+  }
+  if (areas.length >= TAB_BAR_AREAS_MAX) return { tabBars: current, outcome: 'full' }
+  return {
+    tabBars: withTabBar(current, { scope, areas: [...areas, area], chosen: true }),
+    outcome: 'pinned',
+  }
+}
+
+/** A scope's tab bar without one area; the person chose, so opened areas no longer fill the spot. */
+export function unpinTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+): TabBarPins[] {
+  const areas = tabBarAreas(tabBars, scope)
+  return withTabBar(tabBars, { scope, areas: areas.filter((id) => id !== area), chosen: true })
+}
+
+/** A scope's tab bar with one area moved left (`-1`) or right (`1`) a place; unchanged at an end. */
+export function moveTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+  offset: number,
+): TabBarPins[] {
+  const areas = tabBarAreas(tabBars, scope)
+  const from = areas.indexOf(area)
+  const to = from + (offset < 0 ? -1 : 1)
+  if (from === -1 || to < 0 || to >= areas.length) return tabBarList(tabBars)
+  const next = [...areas]
+  next[from] = next[to]
+  next[to] = area
+  return withTabBar(tabBars, { scope, areas: next, chosen: true })
+}
+
+/** A scope's tab bar as the Tab bar sheet left it: these areas, in this order, at most four. */
+export function setTabAreas(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  areas: readonly string[],
+): TabBarPins[] {
+  return withTabBar(tabBars, { scope, areas: tabAreaList(areas), chosen: true })
+}
+
+/**
+ * The default before anyone pins: an area the person opens takes a free spot
+ * and stays there, until the bar is full or the person changes it by hand.
+ * Unchanged once the scope is `chosen`, the area is in the bar already, or the
+ * bar is full.
+ */
+export function autoPinTabArea(
+  tabBars: readonly TabBarPins[],
+  scope: string,
+  area: string,
+): TabBarPins[] {
+  const current = tabBarList(tabBars)
+  const bar = current.find((entry) => entry.scope === scope)
+  const areas = bar?.areas ?? []
+  if (!area || area === TAB_BAR_HOME || area === TAB_BAR_CREATE) return current
+  if (bar?.chosen || areas.includes(area) || areas.length >= TAB_BAR_AREAS_MAX) return current
+  return withTabBar(current, { scope, areas: [...areas, area], chosen: false })
+}
+
+/**
+ * The tab bar to draw: Home first, then the pinned areas the scope can open
+ * (`available`, the Home tiles' ids in this build), with Create new in the
+ * centre slot. Four areas fill the bar, and Create moves to the top bar.
+ */
+export function tabBarLayout(areas: readonly string[], available: readonly string[]): TabBarLayout {
+  const open = new Set(available)
+  const shown = tabAreaList(areas).filter((id) => open.has(id))
+  if (shown.length >= TAB_BAR_AREAS_MAX) {
+    return { slots: [TAB_BAR_HOME, ...shown], createInTopBar: true }
+  }
+  const slots = [TAB_BAR_HOME, ...shown]
+  slots.splice(Math.floor((shown.length + 2) / 2), 0, TAB_BAR_CREATE)
+  return { slots, createInTopBar: false }
 }
 
 // ── Who is signed in ────────────────────────────────────────────────────────

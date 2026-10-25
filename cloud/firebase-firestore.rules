@@ -4611,7 +4611,9 @@ service cloud.firestore {
       // person with seven pins can still unpin one, and the console's
       // "Keep which 5?" answer (a list of five) lands. `pinnedHosts` (AGL-4005,
       // the sites pinned, five a workspace in the console) is bounded at 100 in
-      // all, the account-wide bound `pinHost` keeps.
+      // all, the account-wide bound `pinHost` keeps. `tabBars` (AGL-4006, the
+      // phone's tab bar per site and per workspace, four areas each) is bounded
+      // at 100 scopes, the bound `withTabBar` keeps.
       function prefsBefore() {
         return resource == null ? {} : resource.data;
       }
@@ -4658,6 +4660,7 @@ service cloud.firestore {
       function accountPrefsValid() {
         return pinnedOrgsValid() &&
           prefListWithin('pinnedHosts', 100) &&
+          prefListWithin('tabBars', 100) &&
           prefListWithin('recentOrgs', 8) &&
           prefListWithin('starred', 50) &&
           prefListWithin('recents', 30) &&

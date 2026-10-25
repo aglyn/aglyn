@@ -213,7 +213,8 @@ enum DebugLaunch {
       switch defaults.string(forKey: "AglynSection") {
       case "notifications": navigation.section = .notifications
       case "settings": navigation.section = .settings
-      case "more": navigation.section = .more
+      // The phone has no Menu tab (AGL-4006): every area is a tile on Home.
+      case "more": navigation.section = .home
       case "analytics": navigation.section = .analytics
       case let value? where value.hasPrefix("plugin:"): navigation.section = .plugin(String(value.dropFirst(7)))
       default: break

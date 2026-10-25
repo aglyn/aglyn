@@ -348,6 +348,114 @@ public extension AppThemePrefs {
   }
 }
 
+// MARK: The phone's tab bar (AGL-4006)
+
+/// The key of one site's tab bar, or the whole workspace's.
+public func tabBarScope(orgID: String, hostID: String?) -> String {
+  if let hostID, !hostID.isEmpty { return "site:\(hostID)" }
+  return "org:\(orgID)"
+}
+
+/// Area ids as a tab bar keeps them: no repeats or empties, never Home or Create, at most four.
+private func tabAreaList(_ value: Any?) -> [String] {
+  Array(
+    idList(value).filter { $0 != values.tabBarHome && $0 != values.tabBarCreate }.prefix(values.tabBarAreasMax))
+}
+
+private func tabBarList(_ value: Any?) -> [TabBarPins] {
+  guard let list = value as? [Any] else { return [] }
+  var seen = Set<String>()
+  var out: [TabBarPins] = []
+  for entry in list {
+    guard let raw = entry as? [String: Any], let scope = raw["scope"] as? String,
+      scope.range(of: "^(site|org):.", options: .regularExpression) != nil, seen.insert(scope).inserted
+    else { continue }
+    out.append(TabBarPins(areas: tabAreaList(raw["areas"]), chosen: (raw["chosen"] as? Bool) == true, scope: scope))
+  }
+  return Array(out.suffix(values.tabBarsMax))
+}
+
+private func tabBarList(_ bars: [TabBarPins]) -> [TabBarPins] {
+  tabBarList(bars.map { ["scope": $0.scope, "areas": $0.areas, "chosen": $0.chosen] as [String: Any] })
+}
+
+/// Every tab bar the person keeps, each well formed, without repeats; a stray value reads as none.
+public func readTabBars(_ profile: [String: Any]?) -> [TabBarPins] {
+  tabBarList(field(profile, values.tabBarsField))
+}
+
+/// One scope's areas, in the person's order.
+public func tabBarAreas(_ tabBars: [TabBarPins], scope: String) -> [String] {
+  tabBarList(tabBars).first { $0.scope == scope }?.areas ?? []
+}
+
+/// Every tab bar with one scope's replaced; a new scope goes last, and past the cap the oldest other scopes give way.
+private func withTabBar(_ tabBars: [TabBarPins], _ next: TabBarPins) -> [TabBarPins] {
+  var out = tabBarList(tabBars)
+  if let at = out.firstIndex(where: { $0.scope == next.scope }) { out[at] = next } else { out.append(next) }
+  while out.count > values.tabBarsMax {
+    guard let oldest = out.firstIndex(where: { $0.scope != next.scope }) else { break }
+    out.remove(at: oldest)
+  }
+  return out
+}
+
+/// Pins an area at the end of a scope's tab bar, or says the bar is full (never made room in quietly).
+public func pinTabArea(_ tabBars: [TabBarPins], scope: String, area: String) -> TabPinResult {
+  let current = tabBarList(tabBars)
+  let areas = tabBarAreas(current, scope: scope)
+  if area.isEmpty || area == values.tabBarHome || area == values.tabBarCreate || areas.contains(area) {
+    return TabPinResult(outcome: .alreadyPinned, tabBars: current)
+  }
+  if areas.count >= values.tabBarAreasMax { return TabPinResult(outcome: .full, tabBars: current) }
+  return TabPinResult(
+    outcome: .pinned, tabBars: withTabBar(current, TabBarPins(areas: areas + [area], chosen: true, scope: scope)))
+}
+
+/// A scope's tab bar without one area; the person chose, so opened areas no longer fill the spot.
+public func unpinTabArea(_ tabBars: [TabBarPins], scope: String, area: String) -> [TabBarPins] {
+  let areas = tabBarAreas(tabBars, scope: scope)
+  return withTabBar(tabBars, TabBarPins(areas: areas.filter { $0 != area }, chosen: true, scope: scope))
+}
+
+/// A scope's tab bar with one area moved left (`-1`) or right (`1`) a place; unchanged at an end.
+public func moveTabArea(_ tabBars: [TabBarPins], scope: String, area: String, offset: Int) -> [TabBarPins] {
+  var areas = tabBarAreas(tabBars, scope: scope)
+  guard let from = areas.firstIndex(of: area) else { return tabBarList(tabBars) }
+  let to = from + (offset < 0 ? -1 : 1)
+  guard to >= 0, to < areas.count else { return tabBarList(tabBars) }
+  areas.swapAt(from, to)
+  return withTabBar(tabBars, TabBarPins(areas: areas, chosen: true, scope: scope))
+}
+
+/// A scope's tab bar as the Tab bar sheet left it: these areas, in this order, at most four.
+public func setTabAreas(_ tabBars: [TabBarPins], scope: String, areas: [String]) -> [TabBarPins] {
+  withTabBar(tabBars, TabBarPins(areas: tabAreaList(areas), chosen: true, scope: scope))
+}
+
+/// The default before anyone pins: an area opened takes a free spot and stays, until the bar is full or changed by hand.
+public func autoPinTabArea(_ tabBars: [TabBarPins], scope: String, area: String) -> [TabBarPins] {
+  let current = tabBarList(tabBars)
+  let bar = current.first { $0.scope == scope }
+  let areas = bar?.areas ?? []
+  if area.isEmpty || area == values.tabBarHome || area == values.tabBarCreate { return current }
+  if bar?.chosen == true || areas.contains(area) || areas.count >= values.tabBarAreasMax { return current }
+  return withTabBar(current, TabBarPins(areas: areas + [area], chosen: false, scope: scope))
+}
+
+/// The tab bar to draw: Home, the pinned areas the scope can open, and Create new in the centre until four areas fill
+/// the bar and Create moves to the top bar.
+public func tabBarLayout(_ areas: [String], available: [String]) -> TabBarLayout {
+  let open = Set(available)
+  let shown = tabAreaList(areas).filter(open.contains)
+  if shown.count >= values.tabBarAreasMax {
+    return TabBarLayout(createInTopBar: true, slots: [values.tabBarHome] + shown)
+  }
+  var slots = [values.tabBarHome] + shown
+  slots.insert(values.tabBarCreate, at: (shown.count + 2) / 2)
+  return TabBarLayout(createInTopBar: false, slots: slots)
+}
+
 // MARK: Who is signed in
 
 private func trimmedText(_ value: Any?) -> String {

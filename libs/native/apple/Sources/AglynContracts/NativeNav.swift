@@ -280,3 +280,40 @@ public func navScopeRow(in list: ResolvedNavList) -> NativeNavRow? {
   let rows = list.groups.flatMap(\.rows)
   return rows.first { $0.screen == NativeNav.home } ?? rows.first
 }
+
+// MARK: The phone's Home (AGL-4006)
+
+/// The phone's Home: every area of the scope as the same tile, in the sidebar's own groups (its More headed Tools),
+/// then the scope's own places last: Overview and Site settings in a site, Team and Workspace settings everywhere.
+/// `list` is the scope's everyday list as the app shows it, `team` the workspace settings' Members row when the person
+/// may open it, and `ownerName` heads the whole workspace's areas.
+public func phoneHomeGroups(_ list: ResolvedNavList, team: NativeNavRow?, ownerName: String) -> [PhoneHomeGroup] {
+  let values = ContractValues.shared
+  let inSite = list.id == .site
+  var own: [NativeNavRow] = []
+  var groups: [PhoneHomeGroup] = []
+  for group in list.groups where group.dynamic == nil {
+    let rows = group.rows.filter { $0.screen != NativeNav.home }
+    if group.id == "top" || group.id == "settings" {
+      own += rows
+      continue
+    }
+    if rows.isEmpty { continue }
+    let label = values.phoneHomeGroupLabels[group.id] ?? group.label ?? (ownerName.isEmpty ? nil : ownerName)
+    groups.append(PhoneHomeGroup(id: group.id, label: label, rows: rows))
+  }
+  if var team {
+    team.label = values.phoneHomeTeamLabel
+    own.append(team)
+  }
+  own.append(values.workspaceSettingsRow)
+  groups.append(
+    PhoneHomeGroup(
+      id: "scope", label: inSite ? values.phoneHomeSiteGroupLabel : values.phoneHomeWorkspaceGroupLabel, rows: own))
+  return groups
+}
+
+/// Whether a Home tile may go in the tab bar: an area, never Home itself or a settings mode.
+public func isTabPinnable(screen: String) -> Bool {
+  screen != NativeNav.home && screen != NativeNav.workspaceSettings && screen != NativeNav.siteSettings
+}

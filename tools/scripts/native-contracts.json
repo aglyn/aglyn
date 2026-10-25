@@ -870,7 +870,11 @@
         "StarResult",
         "StarOutcome",
         "WorkspaceColor",
-        "WorkspaceColorSource"
+        "WorkspaceColorSource",
+        "TabBarPins",
+        "TabPinResult",
+        "TabPinOutcome",
+        "TabBarLayout"
       ],
       "values": [
         "PINNED_ORGS_FIELD",
@@ -896,6 +900,11 @@
         "APP_TEXT_SIZES",
         "APP_SIDEBAR_STYLES",
         "APP_ICON_ID_MAX",
+        "TAB_BARS_FIELD",
+        "TAB_BAR_AREAS_MAX",
+        "TAB_BARS_MAX",
+        "TAB_BAR_HOME",
+        "TAB_BAR_CREATE",
         "ACCOUNT_PHOTO_FIELD"
       ]
     },
@@ -918,14 +927,20 @@
         "NativeNavCreateItem",
         "NativeNavCreateList",
         "NativeNavCreateContribution",
-        "ResolvedCreateItem"
+        "ResolvedCreateItem",
+        "PhoneHomeGroup"
       ],
       "values": [
         "NATIVE_NAV_MANIFEST",
         "NATIVE_NAV_SHELL_SCREENS",
         "NATIVE_CREATE_PERMISSION_REASON",
         "NATIVE_CREATE_SITE_ROLE_REASON",
-        "NATIVE_CREATE_PLAN_REASON"
+        "NATIVE_CREATE_PLAN_REASON",
+        "PHONE_HOME_GROUP_LABELS",
+        "PHONE_HOME_SITE_GROUP_LABEL",
+        "PHONE_HOME_WORKSPACE_GROUP_LABEL",
+        "PHONE_HOME_TEAM_LABEL",
+        "WORKSPACE_SETTINGS_ROW"
       ]
     },
     "libs/aglyn/src/lib/app-utils/one-box-search.ts": {
@@ -29167,6 +29182,955 @@
         [
           [],
           true
+        ]
+      ]
+    },
+    "tabBarScope": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "o1",
+          "h1"
+        ],
+        [
+          "o1",
+          null
+        ],
+        [
+          "o1"
+        ]
+      ]
+    },
+    "readTabBars": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "tabBars": [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "tabBars": "x"
+          }
+        ],
+        [
+          null
+        ],
+        [
+          {
+            "tabBars": [
+              {
+                "scope": "nope",
+                "areas": [
+                  "a"
+                ]
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "home",
+                  "a",
+                  "a",
+                  "create",
+                  "b",
+                  "c",
+                  "d",
+                  "e"
+                ],
+                "chosen": "yes"
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "z"
+                ],
+                "chosen": true
+              },
+              7
+            ]
+          }
+        ]
+      ]
+    },
+    "tabBarAreas": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h9"
+        ],
+        [
+          [],
+          "org:o1"
+        ]
+      ]
+    },
+    "pinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "emails"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "crm"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm",
+                "emails",
+                "orders"
+              ],
+              "chosen": true
+            }
+          ],
+          "site:h1",
+          "products"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h2",
+          "forms"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          ""
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "home"
+        ]
+      ]
+    },
+    "unpinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "crm"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "crm"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "zz"
+        ]
+      ]
+    },
+    "moveTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "crm",
+          -1
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "pages",
+          1
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "pages",
+          -1
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "zz",
+          1
+        ]
+      ]
+    },
+    "setTabAreas": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          [
+            "emails",
+            "pages",
+            "emails",
+            "home",
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          [],
+          "org:o2",
+          []
+        ]
+      ]
+    },
+    "autoPinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "emails"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "site:h1",
+          "emails"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true
+            },
+            {
+              "scope": "org:o1",
+              "areas": [
+                "crm"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "crm"
+        ],
+        [
+          [],
+          "site:h3",
+          "automation"
+        ],
+        [
+          [
+            {
+              "scope": "site:h1",
+              "areas": [
+                "pages",
+                "crm",
+                "emails",
+                "orders"
+              ],
+              "chosen": true
+            }
+          ],
+          "site:h1",
+          "forms"
+        ],
+        [
+          [
+            {
+              "scope": "org:o1",
+              "areas": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "chosen": false
+            }
+          ],
+          "org:o1",
+          "e"
+        ]
+      ]
+    },
+    "tabBarLayout": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [],
+          [
+            "pages"
+          ]
+        ],
+        [
+          [
+            "pages"
+          ],
+          [
+            "pages"
+          ]
+        ],
+        [
+          [
+            "pages",
+            "crm"
+          ],
+          [
+            "pages",
+            "crm"
+          ]
+        ],
+        [
+          [
+            "pages",
+            "crm",
+            "emails"
+          ],
+          [
+            "pages",
+            "crm",
+            "emails"
+          ]
+        ],
+        [
+          [
+            "pages",
+            "crm",
+            "emails",
+            "orders"
+          ],
+          [
+            "pages",
+            "crm",
+            "emails",
+            "orders"
+          ]
+        ],
+        [
+          [
+            "orders",
+            "pages"
+          ],
+          [
+            "pages"
+          ]
+        ]
+      ]
+    },
+    "phoneHomeGroups": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "args": [
+        [
+          {
+            "id": "site",
+            "groups": [
+              {
+                "id": "top",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "home",
+                    "label": "Home",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.home",
+                    "console": {
+                      "surface": "shell",
+                      "id": "home"
+                    }
+                  },
+                  {
+                    "id": "overview",
+                    "label": "Overview",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.analytics",
+                    "console": {
+                      "surface": "shell",
+                      "id": "overview"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "starred",
+                "label": "Starred",
+                "foldable": true,
+                "dynamic": "starred",
+                "rows": []
+              },
+              {
+                "id": "website",
+                "label": "Website",
+                "foldable": true,
+                "rows": [
+                  {
+                    "id": "pages",
+                    "label": "Pages",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.pages",
+                    "console": {
+                      "surface": "shell",
+                      "id": "pages"
+                    }
+                  },
+                  {
+                    "id": "media",
+                    "label": "Media",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.media",
+                    "console": {
+                      "surface": "shell",
+                      "id": "media"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "more",
+                "label": "More",
+                "foldable": true,
+                "rows": [
+                  {
+                    "id": "automation",
+                    "label": "Automation",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "workflows.automation",
+                    "console": {
+                      "surface": "shell",
+                      "id": "automation"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "settings",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "siteSettings",
+                    "label": "Site settings",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.siteSettings",
+                    "console": {
+                      "surface": "shell",
+                      "id": "siteSettings"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "members",
+            "label": "Members",
+            "icon": {
+              "apple": "square",
+              "android": "square"
+            },
+            "screen": "core.team",
+            "console": {
+              "surface": "shell",
+              "id": "members"
+            }
+          },
+          "Juniper Street Co."
+        ],
+        [
+          {
+            "id": "workspace",
+            "groups": [
+              {
+                "id": "top",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "home",
+                    "label": "Home",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.home",
+                    "console": {
+                      "surface": "shell",
+                      "id": "home"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "starred",
+                "label": "Starred",
+                "foldable": true,
+                "dynamic": "starred",
+                "rows": []
+              },
+              {
+                "id": "workspace",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "sites",
+                    "label": "Sites",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.sites",
+                    "console": {
+                      "surface": "shell",
+                      "id": "sites"
+                    }
+                  },
+                  {
+                    "id": "crm",
+                    "label": "CRM",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "crm.contacts",
+                    "console": {
+                      "surface": "shell",
+                      "id": "crm"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "members",
+            "label": "Members",
+            "icon": {
+              "apple": "square",
+              "android": "square"
+            },
+            "screen": "core.team",
+            "console": {
+              "surface": "shell",
+              "id": "members"
+            }
+          },
+          "Juniper Street Co."
+        ],
+        [
+          {
+            "id": "workspace",
+            "groups": [
+              {
+                "id": "top",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "home",
+                    "label": "Home",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "shell.home",
+                    "console": {
+                      "surface": "shell",
+                      "id": "home"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "starred",
+                "label": "Starred",
+                "foldable": true,
+                "dynamic": "starred",
+                "rows": []
+              },
+              {
+                "id": "workspace",
+                "foldable": false,
+                "rows": [
+                  {
+                    "id": "sites",
+                    "label": "Sites",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "site.sites",
+                    "console": {
+                      "surface": "shell",
+                      "id": "sites"
+                    }
+                  },
+                  {
+                    "id": "crm",
+                    "label": "CRM",
+                    "icon": {
+                      "apple": "square",
+                      "android": "square"
+                    },
+                    "screen": "crm.contacts",
+                    "console": {
+                      "surface": "shell",
+                      "id": "crm"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          null,
+          ""
+        ],
+        [
+          {
+            "id": "site",
+            "groups": []
+          },
+          null,
+          "x"
+        ]
+      ]
+    },
+    "isTabPinnable": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "args": [
+        [
+          {
+            "screen": "site.pages"
+          }
+        ],
+        [
+          {
+            "screen": "shell.home"
+          }
+        ],
+        [
+          {
+            "screen": "shell.analytics"
+          }
+        ],
+        [
+          {
+            "screen": "shell.workspaceSettings"
+          }
+        ],
+        [
+          {
+            "screen": "shell.siteSettings"
+          }
         ]
       ]
     },

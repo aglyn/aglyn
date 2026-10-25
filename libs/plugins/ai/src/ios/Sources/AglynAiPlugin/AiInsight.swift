@@ -77,7 +77,7 @@ struct AiInsightTile: View {
   private var copy: AiInsightCardCopy { ContractValues.shared.aiInsightCardCopy }
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if gate.entitled != nil && gate.releasedFor(context) {
         VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
           Text(copy.title).font(AglynFont.headline).accessibilityAddTraits(.isHeader)

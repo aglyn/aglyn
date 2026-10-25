@@ -21,6 +21,8 @@ public final class AccountPreferencesStore {
   public private(set) var recents: [RecentItem] = []
   public private(set) var workspaceColors: [String: String] = [:]
   public private(set) var appTheme: AppThemePrefs = ContractValues.shared.defaultAppTheme
+  /// The phone's tab bar per site and per workspace (AGL-4006).
+  public private(set) var tabBars: [TabBarPins] = []
   /// The profile's own picture, name and notification sound fields (`photoUrl`, `firstName`, `lastName`,
   /// `notificationSound`), the picture and name read through `photo(…)` and
   /// `name(…)` so the person shows as the console shows them (AGL-4010).
@@ -66,6 +68,7 @@ public final class AccountPreferencesStore {
     recents = readRecents(data)
     workspaceColors = readWorkspaceColors(data)
     appTheme = readAppTheme(data)
+    tabBars = readTabBars(data)
     var identity: [String: String] = [:]
     let fields = ContractValues.shared
     for key in [fields.accountPhotoField, "firstName", "lastName", fields.notificationSoundField] {
@@ -192,5 +195,47 @@ public final class AccountPreferencesStore {
     guard theme != appTheme else { return }
     appTheme = theme
     write([ContractValues.shared.appThemeField: theme.fields])
+  }
+
+  // MARK: The phone's tab bar (AGL-4006)
+
+  /// One site's or the whole workspace's pinned areas, in the person's order.
+  public func tabAreas(scope: String) -> [String] { tabBarAreas(tabBars, scope: scope) }
+
+  /// Pins an area to a scope's tab bar (long-press a tile → Add to tab bar); `.full` with four there already.
+  @discardableResult
+  public func pinTab(_ area: String, scope: String) -> TabPinOutcome {
+    let result = pinTabArea(tabBars, scope: scope, area: area)
+    if result.outcome == .pinned { setTabBars(result.tabBars) }
+    return result.outcome
+  }
+
+  public func unpinTab(_ area: String, scope: String) { setTabBars(unpinTabArea(tabBars, scope: scope, area: area)) }
+
+  public func moveTab(_ area: String, scope: String, by offset: Int) {
+    setTabBars(moveTabArea(tabBars, scope: scope, area: area, offset: offset))
+  }
+
+  /// The Tab bar sheet's answer: these areas, in this order.
+  public func setTabs(_ areas: [String], scope: String) { setTabBars(setTabAreas(tabBars, scope: scope, areas: areas)) }
+
+  /// The default before anyone pins: an opened area takes a free spot and stays. Not before the document arrived, so a
+  /// launch never writes over pins it has not read yet.
+  public func openedArea(_ area: String, scope: String) {
+    guard loaded else { return }
+    setTabBars(autoPinTabArea(tabBars, scope: scope, area: area))
+  }
+
+  /// Forgets one scope's tab bar, as if nothing had been pinned or opened there: a debug launch's fresh start
+  /// (`-AglynFreshTabBar`), so the first-open default can be driven on a seeded stack.
+  public func forgetTabBar(scope: String) {
+    guard loaded else { return }
+    setTabBars(tabBars.filter { $0.scope != scope })
+  }
+
+  private func setTabBars(_ next: [TabBarPins]) {
+    guard next != tabBars else { return }
+    tabBars = next
+    write([ContractValues.shared.tabBarsField: next.map { ["scope": $0.scope, "areas": $0.areas, "chosen": $0.chosen] }])
   }
 }

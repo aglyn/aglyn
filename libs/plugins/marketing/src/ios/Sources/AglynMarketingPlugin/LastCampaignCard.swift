@@ -26,8 +26,13 @@ struct LastCampaignCard: View {
       .max { ($0.date("sentAt") ?? .distantPast) < ($1.date("sentAt") ?? .distantPast) }
   }
 
+  /// One of the campaign's counts, formatted; a missing one reads as zero.
+  private static func figure(_ stats: [String: Any]?, _ key: String) -> String {
+    ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted()
+  }
+
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if let campaign = lastSent {
         let stats = campaign.data["stats"] as? [String: Any]
         VStack(alignment: .leading, spacing: AglynSpace.one) {

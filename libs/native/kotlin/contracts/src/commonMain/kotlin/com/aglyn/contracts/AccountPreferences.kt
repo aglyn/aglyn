@@ -327,6 +327,106 @@ fun AppThemePrefs.toPlain(): Map<String, Any?> = mapOf(
   "useWorkspaceBrand" to useWorkspaceBrand,
 )
 
+// ── The phone's tab bar (AGL-4006) ──────────────────────────────────────────
+
+private val tabAreasMax get() = Contracts.tabBarAreasMax.toInt()
+private val tabBarsMax get() = Contracts.tabBarsMax.toInt()
+private val scopePattern = Regex("^(site|org):.")
+
+/** The key of one site's tab bar, or the whole workspace's. */
+fun tabBarScope(orgId: String, hostId: String? = null): String = if (!hostId.isNullOrEmpty()) "site:$hostId" else "org:$orgId"
+
+/** Area ids as a tab bar keeps them: no repeats or empties, never Home or Create, at most four. */
+private fun tabAreaList(value: Any?): List<String> =
+  idList(value).filter { it != Contracts.tabBarHome && it != Contracts.tabBarCreate }.take(tabAreasMax)
+
+private fun tabBarList(value: Any?): List<TabBarPins> {
+  val list = value as? List<*> ?: return emptyList()
+  val seen = mutableSetOf<String>()
+  val out = mutableListOf<TabBarPins>()
+  for (entry in list) {
+    val raw = entry as? Map<*, *> ?: continue
+    val scope = raw["scope"] as? String ?: continue
+    if (!scopePattern.containsMatchIn(scope) || !seen.add(scope)) continue
+    out += TabBarPins(areas = tabAreaList(raw["areas"]), chosen = raw["chosen"] == true, scope = scope)
+  }
+  return out.takeLast(tabBarsMax)
+}
+
+private fun List<TabBarPins>.plain(): List<Map<String, Any?>> = map { mapOf("scope" to it.scope, "areas" to it.areas, "chosen" to it.chosen) }
+
+/** Every tab bar the person keeps, each well formed, without repeats; a stray value reads as none. */
+fun readTabBars(profile: Any?): List<TabBarPins> = tabBarList(field(profile, Contracts.tabBarsField))
+
+/** One scope's areas, in the person's order. */
+fun tabBarAreas(tabBars: List<TabBarPins>, scope: String): List<String> =
+  tabBarList(tabBars.plain()).firstOrNull { it.scope == scope }?.areas.orEmpty()
+
+/** Every tab bar with one scope's replaced; a new scope goes last, and past the cap the oldest other scopes give way. */
+private fun withTabBar(tabBars: List<TabBarPins>, next: TabBarPins): List<TabBarPins> {
+  val out = tabBarList(tabBars.plain()).toMutableList()
+  val at = out.indexOfFirst { it.scope == next.scope }
+  if (at == -1) out += next else out[at] = next
+  while (out.size > tabBarsMax) {
+    val oldest = out.indexOfFirst { it.scope != next.scope }
+    if (oldest == -1) break
+    out.removeAt(oldest)
+  }
+  return out
+}
+
+/** Pins an area at the end of a scope's tab bar, or says the bar is full (never made room in quietly). */
+fun pinTabArea(tabBars: List<TabBarPins>, scope: String, area: String): TabPinResult {
+  val current = tabBarList(tabBars.plain())
+  val areas = tabBarAreas(current, scope)
+  return when {
+    area.isEmpty() || area == Contracts.tabBarHome || area == Contracts.tabBarCreate || area in areas -> TabPinResult(TabPinOutcome.ALREADY_PINNED, current)
+    areas.size >= tabAreasMax -> TabPinResult(TabPinOutcome.FULL, current)
+    else -> TabPinResult(TabPinOutcome.PINNED, withTabBar(current, TabBarPins(areas + area, true, scope)))
+  }
+}
+
+/** A scope's tab bar without one area; the person chose, so opened areas no longer fill the spot. */
+fun unpinTabArea(tabBars: List<TabBarPins>, scope: String, area: String): List<TabBarPins> =
+  withTabBar(tabBars, TabBarPins(tabBarAreas(tabBars, scope).filter { it != area }, true, scope))
+
+/** A scope's tab bar with one area moved left (negative) or right a place; unchanged at an end. */
+fun moveTabArea(tabBars: List<TabBarPins>, scope: String, area: String, offset: Int): List<TabBarPins> {
+  val areas = tabBarAreas(tabBars, scope).toMutableList()
+  val from = areas.indexOf(area)
+  val to = from + if (offset < 0) -1 else 1
+  if (from == -1 || to < 0 || to >= areas.size) return tabBarList(tabBars.plain())
+  areas[from] = areas[to]
+  areas[to] = area
+  return withTabBar(tabBars, TabBarPins(areas, true, scope))
+}
+
+/** A scope's tab bar as the Tab bar sheet left it: these areas, in this order, at most four. */
+fun setTabAreas(tabBars: List<TabBarPins>, scope: String, areas: List<String>): List<TabBarPins> =
+  withTabBar(tabBars, TabBarPins(tabAreaList(areas), true, scope))
+
+/** The default before anyone pins: an area opened takes a free spot and stays, until the bar is full or changed by hand. */
+fun autoPinTabArea(tabBars: List<TabBarPins>, scope: String, area: String): List<TabBarPins> {
+  val current = tabBarList(tabBars.plain())
+  val bar = current.firstOrNull { it.scope == scope }
+  val areas = bar?.areas.orEmpty()
+  if (area.isEmpty() || area == Contracts.tabBarHome || area == Contracts.tabBarCreate) return current
+  if (bar?.chosen == true || area in areas || areas.size >= tabAreasMax) return current
+  return withTabBar(current, TabBarPins(areas + area, false, scope))
+}
+
+/**
+ * The tab bar to draw: Home, the pinned areas the scope can open, and Create new in the centre until four areas fill the
+ * bar and Create moves to the top bar.
+ */
+fun tabBarLayout(areas: List<String>, available: List<String>): TabBarLayout {
+  val open = available.toSet()
+  val shown = tabAreaList(areas).filter { it in open }
+  if (shown.size >= tabAreasMax) return TabBarLayout(createInTopBar = true, slots = listOf(Contracts.tabBarHome) + shown)
+  val slots = (listOf(Contracts.tabBarHome) + shown).toMutableList()
+  slots.add((shown.size + 2) / 2, Contracts.tabBarCreate)
+  return TabBarLayout(createInTopBar = false, slots = slots)
+}
 // ── Who is signed in ────────────────────────────────────────────────────────
 
 private fun trimmed(value: Any?): String = (value as? String)?.trim().orEmpty()

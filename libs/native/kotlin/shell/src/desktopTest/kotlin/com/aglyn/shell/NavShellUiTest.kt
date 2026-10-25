@@ -22,6 +22,8 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.aglyn.core.AccountSessions
@@ -395,19 +397,25 @@ class NavShellUiTest {
     onNodeWithTag("nav-workspaceSettings-members").assertIsDisplayed()
   }
 
+  /**
+   * The phone (AGL-4006): the scope chip, every area of the scope as the same tile on Home, and a tab bar
+   * of Home, the person's pins and Create; no Menu tab. A fresh tab bar is Home and Create with the one-time tip.
+   */
   @Test
-  fun aPhoneHasTheScopeChipTheTabsAndTheMenu() = runDesktopComposeUiTest(width = 400, height = 820) {
+  fun aPhoneHasTheScopeChipEveryAreaAsATileAndNoMenu() = runDesktopComposeUiTest(width = 400, height = 820) {
     setContent { AglynShell(testServices(userDoc = emptyMap())) }
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-tabs") > 0 }
     onNodeWithTag("scope-chip").assertTextContains("Acme Shop", substring = true)
     onNodeWithTag("tab-home").assertIsDisplayed()
     onNodeWithTag("tab-create").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("tab-menu"))
     assertEquals(0, onAllNodesWithTagCount("workspace-rail"))
-    onNodeWithTag("tab-menu").performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-menu") > 0 }
-    onNodeWithTag("nav-group-website").performClick()
-    onNodeWithTag("nav-site-pages").assertIsDisplayed()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-pages") > 0 }
+    onNodeWithTag("home-tile-media").assertExists()
+    onNodeWithTag("home-tile-workspaceSettings").assertExists()
+    onNodeWithTag("home-group-website").assertTextContains("Website")
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("pin-tip") > 0 }
     // The chip opens the picker's first step.
     onNodeWithTag("scope-chip").performClick()
     onNodeWithTag("picker-org-o1").performClick()
@@ -416,19 +424,16 @@ class NavShellUiTest {
   }
 
   /**
-   * On a phone, Menu › Website › Pages opens with its section tabs, and each tab swaps the area in place: Components,
-   * Layouts, Templates and Content are one tap from Pages, never a screen deeper (AGL-3993).
+   * On a phone, Pages' tile opens it with its section tabs, and each tab swaps the area in place: Components, Layouts,
+   * Templates and Content are one tap from Pages, never a screen deeper (AGL-3993).
    */
   @Test
-  fun aPhonesMenuReachesEverySectionOfPages() = runDesktopComposeUiTest(width = 400, height = 820) {
+  fun aPhonesPagesTileReachesEverySectionOfPages() = runDesktopComposeUiTest(width = 400, height = 820) {
     val navigator = ShellNavigator()
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
     signIn()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-menu") > 0 }
-    onNodeWithTag("tab-menu").performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-menu") > 0 }
-    onNodeWithTag("nav-group-website").performClick()
-    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-pages") > 0 }
+    onNodeWithTag("home-tile-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
     onNodeWithTag("section-tabs").assertIsDisplayed()
     for (section in listOf("components", "layouts", "templates", "content", "pages")) {
@@ -437,6 +442,94 @@ class NavShellUiTest {
       assertTrue(navigator.stack.isEmpty(), "site.$section is one tap from Pages, not pushed")
       onNodeWithTag("section-tabs").assertIsDisplayed()
     }
+  }
+
+  /** Before anyone pins, the first areas opened take the free spots and stay, Create in the centre between them. */
+  @Test
+  fun aPhonesFirstAreasOpenedTakeTheFreeSpotsAndStay() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val writes = Writes()
+    setContent { AglynShell(testServices(userDoc = emptyMap(), writer = writes)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-pages") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("tab-pages"))
+    onNodeWithTag("home-tile-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-pages") > 0 }
+    onNodeWithTag("tab-home").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-media") > 0 }
+    onNodeWithTag("home-tile-media").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") > 0 }
+    val pages = onNodeWithTag("tab-pages").getBoundsInRoot().left
+    val create = onNodeWithTag("tab-create").getBoundsInRoot().left
+    val media = onNodeWithTag("tab-media").getBoundsInRoot().left
+    assertTrue(pages < create && create < media, "Home, Pages, Create, Media")
+    val last = writes.all.last { it.second.containsKey("tabBars") }.second["tabBars"] as List<*>
+    assertEquals(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media"), "chosen" to false), last.single())
+  }
+
+  /**
+   * Long-press a tile to take it out of the tab bar or put it back; the Tab bar sheet reorders; a change by hand stops
+   * opened areas filling the spot; four areas move Create to the top bar.
+   */
+  @Test
+  fun aPhonesTabBarPinsUnpinsAndReorders() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val writes = Writes()
+    val userDoc = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = userDoc, writer = writes)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("pin-tip"))
+    onNodeWithTag("home-tile-media").performTouchInput { longClick() }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tile-unpin-media") > 0 }
+    onNodeWithTag("tile-unpin-media").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") == 0 }
+    // A change by hand: an opened area no longer takes the spot.
+    onNodeWithTag("home-tile-overview").performClick()
+    onNodeWithTag("tab-home").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tile-media") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("tab-overview"))
+    onNodeWithTag("home-tile-media").performTouchInput { longClick() }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tile-pin-media") > 0 }
+    onNodeWithTag("tile-pin-media").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-media") > 0 }
+    // The Tab bar sheet, from the account sheet: Media moves up, then Done.
+    onNodeWithTag("phone-account").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("account-tab-bar") > 0 }
+    onNodeWithTag("account-tab-bar").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-bar-sheet") > 0 }
+    onNodeWithTag("tab-bar-pinned-media").performCustomAccessibilityActionWithLabel("Move up")
+    onNodeWithTag("tab-bar-add-overview").performScrollTo().performClick()
+    onNodeWithTag("tab-bar-done").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-bar-sheet") == 0 }
+    val last = writes.all.last { it.second.containsKey("tabBars") }.second["tabBars"] as List<*>
+    val areas = (last.single() as Map<*, *>)["areas"] as List<*>
+    assertEquals(listOf("media", "pages", "overview"), areas.take(3))
+    assertTrue(onNodeWithTag("tab-media").getBoundsInRoot().left < onNodeWithTag("tab-pages").getBoundsInRoot().left, "Media before Pages")
+  }
+
+  /**
+   * Four pinned areas fill the tab bar, so Create new moves to the top bar beside the AI button; a settings mode (Site
+   * settings) is never a tab, so three pinned areas keep Create in the centre.
+   */
+  @Test
+  fun aPhonesFourPinsMoveCreateToTheTopBar() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val full = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media", "overview", "members"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = full)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-members") > 0 }
+    onNodeWithTag("tab-members").assertTextContains("Team")
+    onNodeWithTag("phone-create").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("tab-create"))
+  }
+
+  @Test
+  fun aPhonesSettingsModeIsNeverATab() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val userDoc = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media", "overview", "siteSettings"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = userDoc)) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-overview") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("tab-siteSettings"))
+    onNodeWithTag("tab-create").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("phone-create"))
   }
 
   /**

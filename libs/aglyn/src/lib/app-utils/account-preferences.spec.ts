@@ -16,7 +16,17 @@
  */
 
 import {
+  autoPinTabArea,
   effectivePinnedOrgs,
+  moveTabArea,
+  pinTabArea,
+  readTabBars,
+  setTabAreas,
+  tabBarAreas,
+  tabBarLayout,
+  tabBarScope,
+  TAB_BARS_MAX,
+  unpinTabArea,
   keepPinnedOrgs,
   pinHost,
   pinOrg,
@@ -222,6 +232,63 @@ describe('the synced theme', () => {
       accent: 'theme',
       density: 'compact',
     })
+  })
+})
+
+describe("the phone's tab bar (AGL-4006)", () => {
+  const site = tabBarScope('o1', 'h1')
+
+  it('keys a site and the whole workspace apart', () => {
+    expect(site).toBe('site:h1')
+    expect(tabBarScope('o1')).toBe('org:o1')
+  })
+
+  it('pins up to four areas and answers a fifth with full', () => {
+    let bars = setTabAreas([], site, ['pages', 'crm', 'emails'])
+    bars = pinTabArea(bars, site, 'orders').tabBars
+    expect(tabBarAreas(bars, site)).toEqual(['pages', 'crm', 'emails', 'orders'])
+    expect(pinTabArea(bars, site, 'products').outcome).toBe('full')
+    expect(pinTabArea(bars, site, 'crm').outcome).toBe('alreadyPinned')
+  })
+
+  it('lets the first areas opened take the free spots and stay, until the person changes the bar', () => {
+    let bars = autoPinTabArea([], site, 'automation')
+    bars = autoPinTabArea(bars, site, 'crm')
+    bars = autoPinTabArea(bars, site, 'automation')
+    expect(tabBarAreas(bars, site)).toEqual(['automation', 'crm'])
+    bars = unpinTabArea(bars, site, 'crm')
+    expect(autoPinTabArea(bars, site, 'pages')).toEqual(bars)
+  })
+
+  it('keeps Create in the centre until four areas fill the bar', () => {
+    expect(tabBarLayout([], ['pages'])).toEqual({ slots: ['home', 'create'], createInTopBar: false })
+    expect(tabBarLayout(['pages', 'crm'], ['pages', 'crm']).slots).toEqual(['home', 'pages', 'create', 'crm'])
+    expect(tabBarLayout(['pages', 'crm', 'emails'], ['pages', 'crm', 'emails']).slots).toEqual([
+      'home',
+      'pages',
+      'create',
+      'crm',
+      'emails',
+    ])
+    const full = tabBarLayout(['pages', 'crm', 'emails', 'orders'], ['pages', 'crm', 'emails', 'orders'])
+    expect(full).toEqual({ slots: ['home', 'pages', 'crm', 'emails', 'orders'], createInTopBar: true })
+  })
+
+  it('leaves out a pinned area the scope cannot open, and reorders by hand', () => {
+    expect(tabBarLayout(['orders', 'pages'], ['pages']).slots).toEqual(['home', 'create', 'pages'])
+    const bars = setTabAreas([], site, ['pages', 'crm'])
+    expect(tabBarAreas(moveTabArea(bars, site, 'crm', -1), site)).toEqual(['crm', 'pages'])
+  })
+
+  it('reads a stray value as no tab bar, and keeps at most the cap of scopes', () => {
+    expect(readTabBars({ tabBars: 'x' })).toEqual([])
+    expect(readTabBars({ tabBars: [{ scope: 'nope', areas: ['a'] }, { scope: 'org:o1', areas: ['home', 'a', 'a'] }] })).toEqual([
+      { scope: 'org:o1', areas: ['a'], chosen: false },
+    ])
+    let bars = setTabAreas([], 'org:o0', ['a'])
+    for (let i = 1; i <= TAB_BARS_MAX; i++) bars = setTabAreas(bars, `site:h${i}`, ['a'])
+    expect(bars).toHaveLength(TAB_BARS_MAX)
+    expect(bars[0].scope).toBe('site:h1')
   })
 })
 

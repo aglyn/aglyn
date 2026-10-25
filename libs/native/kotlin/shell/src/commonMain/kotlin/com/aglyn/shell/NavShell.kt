@@ -299,6 +299,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   BackHandler(enabled = navigator.stack.isNotEmpty() || chrome.settingsMode != null || navigator.top != ShellNavigator.HOME) {
     when {
       navigator.stack.isNotEmpty() -> navigator.back()
+      // A phone's settings screen returns to its settings list first (AGL-4006: the list is pushed on Home).
+      !wide && chrome.settingsMode != null && navigator.top != ShellNavigator.MENU -> navigator.select(ShellNavigator.MENU)
       chrome.settingsMode != null -> { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
       else -> navigator.select(ShellNavigator.HOME)
     }
@@ -678,10 +680,14 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       }
       }
     } else {
+      // The Team tile on the phone's Home (AGL-4006): the workspace settings' Members row, when this build has it.
+      val team = remember(version, orgEnabled, hostAdmin) {
+        navGroups(NativeNavListId.WORKSPACE_SETTINGS, orgEnabled, hostAdmin, services.registry, inSite = true).flatMap { it.rows }.firstOrNull { it.rowId == "members" }
+      }
       PhoneShell(
         services, navigator, chrome, workspace, prefs, user, uid, title, route, scopeGroups, settingsGroups, sidebar, starred,
         sections, banner, actions, enabled, onRow = { openRow(it) }, onStar = onStar, body = body,
-        assistTitle = assistTitle, assistContent = assistContent, help = help,
+        assistTitle = assistTitle, assistContent = assistContent, help = help, context = context, team = team,
       )
     }
     if (chrome.shortcuts) KeyboardShortcutsDialog { chrome.shortcuts = false }

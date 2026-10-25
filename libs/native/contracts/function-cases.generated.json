@@ -774,6 +774,208 @@
         }
       ]
     },
+    "autoPinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "org:o1",
+            "emails"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm",
+                "emails"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "emails"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "org:o1",
+            "crm"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            "site:h3",
+            "automation"
+          ],
+          "result": [
+            {
+              "areas": [
+                "automation"
+              ],
+              "chosen": false,
+              "scope": "site:h3"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm",
+                  "emails",
+                  "orders"
+                ],
+                "chosen": true
+              }
+            ],
+            "site:h1",
+            "forms"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm",
+                "emails",
+                "orders"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ],
+                "chosen": false
+              }
+            ],
+            "org:o1",
+            "e"
+          ],
+          "result": [
+            {
+              "areas": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        }
+      ]
+    },
     "bookingActions": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "cases": [
@@ -15704,6 +15906,51 @@
         }
       ]
     },
+    "isTabPinnable": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "screen": "site.pages"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "screen": "shell.home"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "screen": "shell.analytics"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "screen": "shell.workspaceSettings"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "screen": "shell.siteSettings"
+            }
+          ],
+          "result": false
+        }
+      ]
+    },
     "isThemeColor": {
       "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
       "cases": [
@@ -18881,6 +19128,175 @@
             "a",
             "b",
             "c"
+          ]
+        }
+      ]
+    },
+    "moveTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "crm",
+            -1
+          ],
+          "result": [
+            {
+              "areas": [
+                "crm",
+                "pages"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "pages",
+            1
+          ],
+          "result": [
+            {
+              "areas": [
+                "crm",
+                "pages"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "pages",
+            -1
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "zz",
+            1
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
           ]
         }
       ]
@@ -25717,6 +26133,555 @@
         }
       ]
     },
+    "phoneHomeGroups": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "id": "site",
+              "groups": [
+                {
+                  "id": "top",
+                  "foldable": false,
+                  "rows": [
+                    {
+                      "id": "home",
+                      "label": "Home",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "shell.home",
+                      "console": {
+                        "surface": "shell",
+                        "id": "home"
+                      }
+                    },
+                    {
+                      "id": "overview",
+                      "label": "Overview",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "shell.analytics",
+                      "console": {
+                        "surface": "shell",
+                        "id": "overview"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "starred",
+                  "label": "Starred",
+                  "foldable": true,
+                  "dynamic": "starred",
+                  "rows": []
+                },
+                {
+                  "id": "website",
+                  "label": "Website",
+                  "foldable": true,
+                  "rows": [
+                    {
+                      "id": "pages",
+                      "label": "Pages",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "site.pages",
+                      "console": {
+                        "surface": "shell",
+                        "id": "pages"
+                      }
+                    },
+                    {
+                      "id": "media",
+                      "label": "Media",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "site.media",
+                      "console": {
+                        "surface": "shell",
+                        "id": "media"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "more",
+                  "label": "More",
+                  "foldable": true,
+                  "rows": [
+                    {
+                      "id": "automation",
+                      "label": "Automation",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "workflows.automation",
+                      "console": {
+                        "surface": "shell",
+                        "id": "automation"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "settings",
+                  "foldable": false,
+                  "rows": [
+                    {
+                      "id": "siteSettings",
+                      "label": "Site settings",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "shell.siteSettings",
+                      "console": {
+                        "surface": "shell",
+                        "id": "siteSettings"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "members",
+              "label": "Members",
+              "icon": {
+                "apple": "square",
+                "android": "square"
+              },
+              "screen": "core.team",
+              "console": {
+                "surface": "shell",
+                "id": "members"
+              }
+            },
+            "Juniper Street Co."
+          ],
+          "result": [
+            {
+              "id": "website",
+              "label": "Website",
+              "rows": [
+                {
+                  "console": {
+                    "id": "pages",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "pages",
+                  "label": "Pages",
+                  "screen": "site.pages"
+                },
+                {
+                  "console": {
+                    "id": "media",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "media",
+                  "label": "Media",
+                  "screen": "site.media"
+                }
+              ]
+            },
+            {
+              "id": "more",
+              "label": "Tools",
+              "rows": [
+                {
+                  "console": {
+                    "id": "automation",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "automation",
+                  "label": "Automation",
+                  "screen": "workflows.automation"
+                }
+              ]
+            },
+            {
+              "id": "scope",
+              "label": "Site & workspace",
+              "rows": [
+                {
+                  "console": {
+                    "id": "overview",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "overview",
+                  "label": "Overview",
+                  "screen": "shell.analytics"
+                },
+                {
+                  "console": {
+                    "id": "siteSettings",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "siteSettings",
+                  "label": "Site settings",
+                  "screen": "shell.siteSettings"
+                },
+                {
+                  "console": {
+                    "id": "members",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "members",
+                  "label": "Team",
+                  "screen": "core.team"
+                },
+                {
+                  "console": {
+                    "id": "workspaceSettings",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "apartment",
+                    "apple": "building.2"
+                  },
+                  "id": "workspaceSettings",
+                  "label": "Workspace settings",
+                  "screen": "shell.workspaceSettings"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "id": "workspace",
+              "groups": [
+                {
+                  "id": "top",
+                  "foldable": false,
+                  "rows": [
+                    {
+                      "id": "home",
+                      "label": "Home",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "shell.home",
+                      "console": {
+                        "surface": "shell",
+                        "id": "home"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "starred",
+                  "label": "Starred",
+                  "foldable": true,
+                  "dynamic": "starred",
+                  "rows": []
+                },
+                {
+                  "id": "workspace",
+                  "foldable": false,
+                  "rows": [
+                    {
+                      "id": "sites",
+                      "label": "Sites",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "site.sites",
+                      "console": {
+                        "surface": "shell",
+                        "id": "sites"
+                      }
+                    },
+                    {
+                      "id": "crm",
+                      "label": "CRM",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "crm.contacts",
+                      "console": {
+                        "surface": "shell",
+                        "id": "crm"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "members",
+              "label": "Members",
+              "icon": {
+                "apple": "square",
+                "android": "square"
+              },
+              "screen": "core.team",
+              "console": {
+                "surface": "shell",
+                "id": "members"
+              }
+            },
+            "Juniper Street Co."
+          ],
+          "result": [
+            {
+              "id": "workspace",
+              "label": "Juniper Street Co.",
+              "rows": [
+                {
+                  "console": {
+                    "id": "sites",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "sites",
+                  "label": "Sites",
+                  "screen": "site.sites"
+                },
+                {
+                  "console": {
+                    "id": "crm",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "crm",
+                  "label": "CRM",
+                  "screen": "crm.contacts"
+                }
+              ]
+            },
+            {
+              "id": "scope",
+              "label": "Settings",
+              "rows": [
+                {
+                  "console": {
+                    "id": "members",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "members",
+                  "label": "Team",
+                  "screen": "core.team"
+                },
+                {
+                  "console": {
+                    "id": "workspaceSettings",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "apartment",
+                    "apple": "building.2"
+                  },
+                  "id": "workspaceSettings",
+                  "label": "Workspace settings",
+                  "screen": "shell.workspaceSettings"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "id": "workspace",
+              "groups": [
+                {
+                  "id": "top",
+                  "foldable": false,
+                  "rows": [
+                    {
+                      "id": "home",
+                      "label": "Home",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "shell.home",
+                      "console": {
+                        "surface": "shell",
+                        "id": "home"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "starred",
+                  "label": "Starred",
+                  "foldable": true,
+                  "dynamic": "starred",
+                  "rows": []
+                },
+                {
+                  "id": "workspace",
+                  "foldable": false,
+                  "rows": [
+                    {
+                      "id": "sites",
+                      "label": "Sites",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "site.sites",
+                      "console": {
+                        "surface": "shell",
+                        "id": "sites"
+                      }
+                    },
+                    {
+                      "id": "crm",
+                      "label": "CRM",
+                      "icon": {
+                        "apple": "square",
+                        "android": "square"
+                      },
+                      "screen": "crm.contacts",
+                      "console": {
+                        "surface": "shell",
+                        "id": "crm"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            null,
+            ""
+          ],
+          "result": [
+            {
+              "id": "workspace",
+              "rows": [
+                {
+                  "console": {
+                    "id": "sites",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "sites",
+                  "label": "Sites",
+                  "screen": "site.sites"
+                },
+                {
+                  "console": {
+                    "id": "crm",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "square",
+                    "apple": "square"
+                  },
+                  "id": "crm",
+                  "label": "CRM",
+                  "screen": "crm.contacts"
+                }
+              ]
+            },
+            {
+              "id": "scope",
+              "label": "Settings",
+              "rows": [
+                {
+                  "console": {
+                    "id": "workspaceSettings",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "apartment",
+                    "apple": "building.2"
+                  },
+                  "id": "workspaceSettings",
+                  "label": "Workspace settings",
+                  "screen": "shell.workspaceSettings"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "id": "site",
+              "groups": []
+            },
+            null,
+            "x"
+          ],
+          "result": [
+            {
+              "id": "scope",
+              "label": "Site & workspace",
+              "rows": [
+                {
+                  "console": {
+                    "id": "workspaceSettings",
+                    "surface": "shell"
+                  },
+                  "icon": {
+                    "android": "apartment",
+                    "apple": "building.2"
+                  },
+                  "id": "workspaceSettings",
+                  "label": "Workspace settings",
+                  "screen": "shell.workspaceSettings"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
     "pinOrg": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -25830,6 +26795,267 @@
               "c",
               "d",
               "e"
+            ]
+          }
+        }
+      ]
+    },
+    "pinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "emails"
+          ],
+          "result": {
+            "outcome": "pinned",
+            "tabBars": [
+              {
+                "areas": [
+                  "pages",
+                  "crm",
+                  "emails"
+                ],
+                "chosen": true,
+                "scope": "site:h1"
+              },
+              {
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false,
+                "scope": "org:o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "crm"
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "tabBars": [
+              {
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true,
+                "scope": "site:h1"
+              },
+              {
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false,
+                "scope": "org:o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm",
+                  "emails",
+                  "orders"
+                ],
+                "chosen": true
+              }
+            ],
+            "site:h1",
+            "products"
+          ],
+          "result": {
+            "outcome": "full",
+            "tabBars": [
+              {
+                "areas": [
+                  "pages",
+                  "crm",
+                  "emails",
+                  "orders"
+                ],
+                "chosen": true,
+                "scope": "site:h1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h2",
+            "forms"
+          ],
+          "result": {
+            "outcome": "pinned",
+            "tabBars": [
+              {
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true,
+                "scope": "site:h1"
+              },
+              {
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false,
+                "scope": "org:o1"
+              },
+              {
+                "areas": [
+                  "forms"
+                ],
+                "chosen": true,
+                "scope": "site:h2"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            ""
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "tabBars": [
+              {
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true,
+                "scope": "site:h1"
+              },
+              {
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false,
+                "scope": "org:o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "home"
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "tabBars": [
+              {
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true,
+                "scope": "site:h1"
+              },
+              {
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false,
+                "scope": "org:o1"
+              }
             ]
           }
         }
@@ -33629,6 +34855,113 @@
               "orgId": "o1",
               "screen": "commerce.orders",
               "starredAtMs": 1
+            }
+          ]
+        }
+      ]
+    },
+    "readTabBars": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "tabBars": [
+                {
+                  "scope": "site:h1",
+                  "areas": [
+                    "pages",
+                    "crm"
+                  ],
+                  "chosen": true
+                },
+                {
+                  "scope": "org:o1",
+                  "areas": [
+                    "crm"
+                  ],
+                  "chosen": false
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "tabBars": "x"
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "tabBars": [
+                {
+                  "scope": "nope",
+                  "areas": [
+                    "a"
+                  ]
+                },
+                {
+                  "scope": "org:o1",
+                  "areas": [
+                    "home",
+                    "a",
+                    "a",
+                    "create",
+                    "b",
+                    "c",
+                    "d",
+                    "e"
+                  ],
+                  "chosen": "yes"
+                },
+                {
+                  "scope": "org:o1",
+                  "areas": [
+                    "z"
+                  ],
+                  "chosen": true
+                },
+                7
+              ]
+            }
+          ],
+          "result": [
+            {
+              "areas": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
             }
           ]
         }
@@ -59568,6 +60901,75 @@
         }
       ]
     },
+    "setTabAreas": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            [
+              "emails",
+              "pages",
+              "emails",
+              "home",
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": [
+            {
+              "areas": [
+                "emails",
+                "pages",
+                "a",
+                "b"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            "org:o2",
+            []
+          ],
+          "result": [
+            {
+              "areas": [],
+              "chosen": true,
+              "scope": "org:o2"
+            }
+          ]
+        }
+      ]
+    },
     "siteProfileUrls": {
       "module": "libs/aglyn/src/lib/app-utils/content-authors.ts",
       "cases": [
@@ -62563,6 +63965,220 @@
             "shipsNowhere": true,
             "unserved": []
           }
+        }
+      ]
+    },
+    "tabBarAreas": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1"
+          ],
+          "result": [
+            "pages",
+            "crm"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h9"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [],
+            "org:o1"
+          ],
+          "result": []
+        }
+      ]
+    },
+    "tabBarLayout": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [],
+            [
+              "pages"
+            ]
+          ],
+          "result": {
+            "createInTopBar": false,
+            "slots": [
+              "home",
+              "create"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "pages"
+            ],
+            [
+              "pages"
+            ]
+          ],
+          "result": {
+            "createInTopBar": false,
+            "slots": [
+              "home",
+              "create",
+              "pages"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "pages",
+              "crm"
+            ],
+            [
+              "pages",
+              "crm"
+            ]
+          ],
+          "result": {
+            "createInTopBar": false,
+            "slots": [
+              "home",
+              "pages",
+              "create",
+              "crm"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "pages",
+              "crm",
+              "emails"
+            ],
+            [
+              "pages",
+              "crm",
+              "emails"
+            ]
+          ],
+          "result": {
+            "createInTopBar": false,
+            "slots": [
+              "home",
+              "pages",
+              "create",
+              "crm",
+              "emails"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "pages",
+              "crm",
+              "emails",
+              "orders"
+            ],
+            [
+              "pages",
+              "crm",
+              "emails",
+              "orders"
+            ]
+          ],
+          "result": {
+            "createInTopBar": true,
+            "slots": [
+              "home",
+              "pages",
+              "crm",
+              "emails",
+              "orders"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "orders",
+              "pages"
+            ],
+            [
+              "pages"
+            ]
+          ],
+          "result": {
+            "createInTopBar": false,
+            "slots": [
+              "home",
+              "create",
+              "pages"
+            ]
+          }
+        }
+      ]
+    },
+    "tabBarScope": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "o1",
+            "h1"
+          ],
+          "result": "site:h1"
+        },
+        {
+          "args": [
+            "o1",
+            null
+          ],
+          "result": "org:o1"
+        },
+        {
+          "args": [
+            "o1"
+          ],
+          "result": "org:o1"
         }
       ]
     },
@@ -66478,6 +68094,128 @@
             "e",
             "f",
             "g"
+          ]
+        }
+      ]
+    },
+    "unpinTabArea": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "crm"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "org:o1",
+            "crm"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [],
+              "chosen": true,
+              "scope": "org:o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "scope": "site:h1",
+                "areas": [
+                  "pages",
+                  "crm"
+                ],
+                "chosen": true
+              },
+              {
+                "scope": "org:o1",
+                "areas": [
+                  "crm"
+                ],
+                "chosen": false
+              }
+            ],
+            "site:h1",
+            "zz"
+          ],
+          "result": [
+            {
+              "areas": [
+                "pages",
+                "crm"
+              ],
+              "chosen": true,
+              "scope": "site:h1"
+            },
+            {
+              "areas": [
+                "crm"
+              ],
+              "chosen": false,
+              "scope": "org:o1"
+            }
           ]
         }
       ]

@@ -169,14 +169,44 @@ fun List<NavGroupItem>.rowFor(key: String): NavItem? {
 fun List<NavGroupItem>.groupFor(key: String): NavGroupItem? = firstOrNull { group -> group.rows.any { key in it.keys } }
 
 /**
- * The phone's bottom bar after Home: the scope's busiest area (Orders for a site that sells, Pages otherwise; Sites for the
- * whole workspace), then Create, then Inbox when the inbox runs, then Menu (the plan's phone section).
+ * The phone's Home (AGL-4006; Figma Home 22:776): every area of the scope as the same tile, in the
+ * sidebar's own groups (its More headed Tools), then the scope's own places (Overview and Site settings in a site; Team and
+ * Workspace settings everywhere), from the shared `phoneHomeGroups` so the Apple phone draws the same. [team] is the
+ * workspace settings' Members row when this build and the person can open it.
  */
-fun phoneTabRows(groups: List<NavGroupItem>, inSite: Boolean): Pair<NavItem?, NavItem?> {
-  val rows = groups.flatMap { it.rows }
-  val busiest = if (inSite) rows.firstOrNull { it.rowId == "orders" } ?: rows.firstOrNull { it.rowId == "pages" } else rows.firstOrNull { it.rowId == "sites" }
-  val inbox = rows.firstOrNull { it.rowId == "inbox" }
-  return busiest to inbox
+fun phoneHomeItems(scopeGroups: List<NavGroupItem>, inSite: Boolean, team: NavItem?, ownerName: String): List<NavGroupItem> {
+  fun row(item: NavItem) = com.aglyn.contracts.NativeNavRow(
+    console = item.console ?: com.aglyn.contracts.NativeNavConsoleRef(item.rowId, com.aglyn.contracts.NativeNavConsoleSurface.SHELL),
+    icon = com.aglyn.contracts.NativeNavIcon(android = item.icon, apple = ""),
+    id = item.rowId, label = item.label, screen = item.screen, params = item.params.ifEmpty { null },
+  )
+  val list = com.aglyn.contracts.ResolvedNavList(
+    groups = scopeGroups.map { g -> com.aglyn.contracts.NativeNavGroup(dynamic = g.dynamic, foldable = g.foldable, id = g.id, label = g.label, rows = g.rows.map(::row)) },
+    id = if (inSite) NativeNavListId.SITE else NativeNavListId.WORKSPACE,
+  )
+  val items = scopeGroups.flatMap { it.rows }.associateBy { it.rowId }
+  return com.aglyn.contracts.phoneHomeGroups(list, team?.let(::row), ownerName).map { group ->
+    NavGroupItem(group.id, group.label, foldable = false, dynamic = null, rows = group.rows.map { r ->
+      when {
+        team != null && r.id == team.rowId -> team.copy(label = r.label)
+        else -> items[r.id] ?: NavItem(
+          key = NavKeys.of(r.screen, r.params), rowId = r.id, listId = NativeNavListId.WORKSPACE_SETTINGS, label = r.label,
+          icon = r.icon.android, screen = r.screen, params = r.params.orEmpty(), description = r.description, sections = emptyList(),
+          actions = emptyList(), pluginId = r.pluginId, keywords = r.keywords.orEmpty(), console = r.console, docs = r.docs,
+        )
+      }
+    })
+  }
+}
+
+/** What a phone's tab bar shows for a scope: its slots (Home, the pinned areas, Create) and whether Create is in the top bar. */
+data class PhoneTabs(val slots: List<String>, val createInTopBar: Boolean, val pinnable: List<String>)
+
+/** The tab bar from the person's pins for the scope (`tabBarLayout`): a pinned area this build or scope cannot open is left out. */
+fun phoneTabs(homeGroups: List<NavGroupItem>, pinned: List<String>): PhoneTabs {
+  val pinnable = homeGroups.flatMap { it.rows }.filter { com.aglyn.contracts.isTabPinnable(it.screen) }.map { it.rowId }
+  val layout = com.aglyn.contracts.tabBarLayout(pinned, pinnable)
+  return PhoneTabs(layout.slots, layout.createInTopBar, pinnable)
 }
 
 /**

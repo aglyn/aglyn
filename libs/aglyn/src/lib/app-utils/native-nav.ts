@@ -798,3 +798,86 @@ export function resolveNavList(
   }
   return { id: list.id, ...(list.title ? { title: list.title } : {}), groups }
 }
+
+// ── The phone's Home (AGL-4006) ─────────────────────────────────────────────
+
+/**
+ * A group's heading on the phone's Home where it differs from the sidebar's.
+ * Nothing on the phone reads "More", so the sidebar's More
+ * group is headed Tools there.
+ */
+export const PHONE_HOME_GROUP_LABELS: Record<string, string> = { more: 'Tools' }
+
+/** The heading of the phone Home's last group: inside a site, and for the whole workspace. */
+export const PHONE_HOME_SITE_GROUP_LABEL = 'Site & workspace'
+export const PHONE_HOME_WORKSPACE_GROUP_LABEL = 'Settings'
+
+/** The Team tile's word: the console's tab for Members, Custom roles and Recent activity. */
+export const PHONE_HOME_TEAM_LABEL = 'Team'
+
+/** The tile that opens Workspace settings on the phone's Home. */
+export const WORKSPACE_SETTINGS_ROW: NativeNavRow = {
+  id: 'workspaceSettings',
+  label: 'Workspace settings',
+  icon: ICONS.profile,
+  screen: 'shell.workspaceSettings',
+  console: ref('shell', 'workspaceSettings'),
+}
+
+/** One group of tiles on the phone's Home. */
+export interface PhoneHomeGroup {
+  id: string
+  /** Absent for a group drawn without a heading. */
+  label?: string
+  rows: NativeNavRow[]
+}
+
+/**
+ * The phone's Home: every area of the scope as the same
+ * tile, in the sidebar's own groups, then the scope's own places last
+ * (Overview and Site settings in a site; Team and Workspace settings
+ * everywhere). Nothing is ranked above anything else and nothing sits behind
+ * a More.
+ *
+ * `list` is the scope's everyday list as the app shows it (`resolveNavList`
+ * trimmed to the build's screens), `team` the workspace settings' Members row
+ * when the person may open it, and `ownerName` heads the whole workspace's
+ * areas, whose group has no heading of its own.
+ */
+export function phoneHomeGroups(
+  list: ResolvedNavList,
+  team: NativeNavRow | null,
+  ownerName: string,
+): PhoneHomeGroup[] {
+  const inSite = list.id === 'site'
+  const own: NativeNavRow[] = []
+  const groups: PhoneHomeGroup[] = []
+  for (const group of list.groups) {
+    if (group.dynamic) continue
+    const rows = group.rows.filter((row) => row.screen !== 'shell.home')
+    if (group.id === 'top' || group.id === 'settings') {
+      own.push(...rows)
+      continue
+    }
+    if (!rows.length) continue
+    const label = PHONE_HOME_GROUP_LABELS[group.id] ?? group.label ?? (ownerName || undefined)
+    groups.push({ id: group.id, ...(label ? { label } : {}), rows })
+  }
+  if (team) own.push({ ...team, label: PHONE_HOME_TEAM_LABEL })
+  own.push(WORKSPACE_SETTINGS_ROW)
+  groups.push({
+    id: 'scope',
+    label: inSite ? PHONE_HOME_SITE_GROUP_LABEL : PHONE_HOME_WORKSPACE_GROUP_LABEL,
+    rows: own,
+  })
+  return groups
+}
+
+/** Whether a Home tile may go in the tab bar: an area, never Home itself or a settings mode. */
+export function isTabPinnable(row: Pick<NativeNavRow, 'screen'>): boolean {
+  return (
+    row.screen !== 'shell.home' &&
+    row.screen !== 'shell.workspaceSettings' &&
+    row.screen !== 'shell.siteSettings'
+  )
+}

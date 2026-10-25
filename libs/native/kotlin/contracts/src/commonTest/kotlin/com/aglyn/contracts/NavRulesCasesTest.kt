@@ -58,6 +58,41 @@ class NavRulesCasesTest {
     }
   }
 
+  /** The phone's tab bar (AGL-4006): pins per scope, the first-opened default, and where Create goes. */
+  @Test
+  fun phoneTabBar() {
+    val barList = ListSerializer(TabBarPins.serializer())
+    fun bars(json: JsonElement): List<TabBarPins> = readTabBars(mapOf("tabBars" to plainOf(json)))
+    cases("tabBarScope").forEach { (args, result) ->
+      assertEquals(text(result), tabBarScope(text(args[0]), args.getOrNull(1)?.let(::nullableString)), args.toString())
+    }
+    cases("readTabBars").forEach { (args, result) -> same(result, readTabBars(plainOf(args[0])), barList, args.toString()) }
+    cases("tabBarAreas").forEach { (args, result) -> same(result, tabBarAreas(bars(args[0]), text(args[1])), strings, args.toString()) }
+    cases("pinTabArea").forEach { (args, result) ->
+      same(result, pinTabArea(bars(args[0]), text(args[1]), text(args[2])), TabPinResult.serializer(), args.toString())
+    }
+    cases("unpinTabArea").forEach { (args, result) -> same(result, unpinTabArea(bars(args[0]), text(args[1]), text(args[2])), barList, args.toString()) }
+    cases("moveTabArea").forEach { (args, result) ->
+      same(result, moveTabArea(bars(args[0]), text(args[1]), text(args[2]), args[3].jsonPrimitive.content.toDouble().toInt()), barList, args.toString())
+    }
+    cases("setTabAreas").forEach { (args, result) -> same(result, setTabAreas(bars(args[0]), text(args[1]), ids(args[2])), barList, args.toString()) }
+    cases("autoPinTabArea").forEach { (args, result) -> same(result, autoPinTabArea(bars(args[0]), text(args[1]), text(args[2])), barList, args.toString()) }
+    cases("tabBarLayout").forEach { (args, result) -> same(result, tabBarLayout(ids(args[0]), ids(args[1])), TabBarLayout.serializer(), args.toString()) }
+  }
+
+  /** The phone's Home (AGL-4006): every area as the same tile, More headed Tools, the scope's own places last. */
+  @Test
+  fun phoneHome() {
+    cases("phoneHomeGroups").forEach { (args, result) ->
+      val list = decode(ResolvedNavList.serializer(), args[0])
+      val team = (args[1] as? kotlinx.serialization.json.JsonObject)?.let { decode(NativeNavRow.serializer(), it) }
+      same(result, phoneHomeGroups(list, team, text(args[2])), ListSerializer(PhoneHomeGroup.serializer()), args.toString())
+    }
+    cases("isTabPinnable").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.booleanOrNull, isTabPinnable(text(args[0].jsonObject.getValue("screen"))), args.toString())
+    }
+  }
+
   @Test
   fun recentWorkspacesAndTheRail() {
     cases("readRecentOrgs").forEach { (args, result) -> same(result, readRecentOrgs(plainOf(args[0])), strings, args.toString()) }

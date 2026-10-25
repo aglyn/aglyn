@@ -34,6 +34,9 @@ enum Route: Hashable {
   case web(AglynWebPage)
   /// Every result for what was typed in the search ("See all results for 'x'").
   case searchResults(String)
+  /// A settings mode's list on a phone (Site settings, Workspace settings from Home's tiles, AGL-4006): the list of the
+  /// mode the navigation is in.
+  case modeList
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.
@@ -136,6 +139,10 @@ final class ShellNavigation {
     if case .besigner? = paths[section]?.last { return true }
     return false
   }
+  /// The phone's area switcher: every area as the same tiles, from an area's title ▾ (AGL-4006).
+  var showAreaSwitcher = false
+  /// The phone's Tab bar sheet: the person's pinned areas, to remove, reorder and add (AGL-4006).
+  var showTabBar = false
   /// This navigation's identity, for a tab strip that keeps every tab's view alive.
   var tabID: ObjectIdentifier { ObjectIdentifier(self) }
   /// The sidebar folded away (View ▸ Hide Sidebar, ⌥⌘S), so the place in use takes the width.
@@ -211,11 +218,12 @@ final class ShellNavigation {
     paths[section] = stack
   }
 
-  /// A section a phone has no tab for opens in Menu, pushed as an area: an area with its section chips, the shell's own
-  /// pages as they are.
-  func openInMenu(_ target: ShellSection) {
-    section = .more
+  /// A section a phone has no tab for opens on the Home tab, pushed (AGL-4006: the phone has no Menu tab): an area
+  /// with its section chips, the shell's own pages as they are. Home's stack is kept, so Back returns where it was.
+  func openOnHome(_ target: ShellSection) {
+    section = .home
     switch target {
+    case .home: paths[.home] = []
     case .settings: push(.settings)
     case .notifications: push(.notifications)
     case .analytics: push(.analytics)
