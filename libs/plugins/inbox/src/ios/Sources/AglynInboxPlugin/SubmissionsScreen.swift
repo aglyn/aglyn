@@ -94,7 +94,7 @@ struct SubmissionsScreen: View {
     }
     .navigationTitle(title)
     .aglynScreenTitle(title)
-    // On the Mac and iPad the read state, the site and the form are the list toolbar's one Filter (Calm rule 3; Zach
+    // On the Mac and iPad the read state, the site and the form are the list toolbar's one Filter (Calm rule 3
     // 10/20: no chip row over the list); a phone keeps them as chips over its list.
     .aglynSearchable(text: $searchText, prompt: "Search submissions") { filterMenu }
     .onChange(of: searchText) { _, text in model.type(text) }

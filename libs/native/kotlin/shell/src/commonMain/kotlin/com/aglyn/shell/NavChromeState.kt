@@ -83,7 +83,7 @@ internal class NavChromeState(private val device: KeyValueStore) {
   private val groupStates = mutableStateOf(parseGroupStates(device.get(OPEN_GROUPS)))
 
   /**
-   * Whether a group shows its rows (Zach, 2026-10-20: "we need to remember the expanded state, if we navigate it
+   * Whether a group shows its rows ("we need to remember the expanded state, if we navigate it
    * collapses the others"). A group the person opened or folded stays that way in its scope's list, across launches;
    * navigating never folds another group. Until the person chooses, Starred is open (Figma Sidebar 12:703) and any other
    * group is open while it holds the screen in use ([reveal] then remembers it open).
@@ -117,7 +117,7 @@ internal class NavChromeState(private val device: KeyValueStore) {
 }
 
 /**
- * The accent a workspace lends the app while you are in it (Zach, decision 5, 2026-10-18): none when the person picked
+ * The accent a workspace lends the app while you are in it (decision 5, 2026-10-18): none when the person picked
  * an accent of their own ([pickedAccent] is not "theme"), since theirs wins; else a white-label workspace's brand color
  * (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
  * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so

@@ -179,7 +179,7 @@ struct FormsScreen: View {
   @ViewBuilder
   private func list(selectable: Bool) -> some View {
     // The list column's own toolbar on the Mac and iPad: the search and the one Filter sit over the list, never across
-    // the detail beside it (Zach, 2026-10-19).
+    // the detail beside it.
     VStack(spacing: 0) {
       if !selectable { chips }
       if sheet == nil, exporting == nil, retiring == nil, let error = runner.error {

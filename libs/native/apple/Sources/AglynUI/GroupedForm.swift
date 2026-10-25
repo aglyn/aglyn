@@ -20,7 +20,7 @@ import SwiftUI
 /// **Plain** (`plain`, or `aglynFormPlain` / a list+detail's detail column in the environment): a list screen or a
 /// detail column, as Figma draws them (Mac Sites 13:3, Orders 13:483). No card and no grey ground: the sections stand
 /// on the content surface, each row runs the column's full width with its content on E and width − E, a hairline
-/// runs exactly E…width − E between rows, and a row's hover and selection fill the row edge to edge. Zach, 2026-10-19
+/// runs exactly E…width − E between rows, and a row's hover and selection fill the row edge to edge.
 /// ("I don't like the space here", "why is there even a padding, and why is there grey?"). True settings forms keep
 /// their cards on the page ground. The Mac and iPad (iOS 18) draw it; iOS 17 keeps the grouped form.
 ///
@@ -120,7 +120,7 @@ extension View {
 
 /// What a legacy, always-visible scroll bar takes from a scroll view's width on the Mac (System Settings › Appearance ›
 /// Show scroll bars › Always, or a mouse): the content keeps E on both sides of the COLUMN, so its trailing inset is E
-/// less the bar, and the bar sits against the column's far edge, outside the content (Zach, 2026-10-19). Overlay scroll
+/// less the bar, and the bar sits against the column's far edge, outside the content. Overlay scroll
 /// bars take nothing.
 public enum AglynScroller {
   public static var trailingWidth: CGFloat {

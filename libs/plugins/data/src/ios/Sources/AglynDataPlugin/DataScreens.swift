@@ -332,7 +332,7 @@ struct DatasetsScreen: View {
       .accessibilityIdentifier("dataset-\(row.id)")
     }
     if model.rows.count >= 2 {
-      // A plain row in the accent color on the list's edges (Zach 10/20: never a tinted pill).
+      // A plain row in the accent color on the list's edges (never a tinted pill).
       AglynActionRow("Add join collection", systemImage: "plus") {
         runner.clear()
         sheet = .join

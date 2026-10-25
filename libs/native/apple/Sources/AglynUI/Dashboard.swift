@@ -478,13 +478,13 @@ public struct AglynPressableStyle: ButtonStyle {
 extension View {
   /// A list's ground. On a phone the console's page color with its rows on paper (the platform's grouped list). On the
   /// Mac and iPad a content list as Figma draws one (Mac Sites 13:3, Orders 13:483): plain rows on the content surface,
-  /// no card and no grey ground, each row's content on the column's content edges E (Zach, 2026-10-19: "why is there
+  /// no card and no grey ground, each row's content on the column's content edges E ("why is there
   /// even a padding, and why is there grey?"). A plain Mac list sets a row's content 8 points in from its own edge and
   /// ignores row insets and content margins set from outside it (measured off screen), so its safe area adds the rest
   /// of E; iPad's plain rows take E as their margins. A form's ground is `aglynFormBackground`.
   public func aglynListBackground() -> some View { modifier(AglynListBackgroundModifier()) }
 
-  /// A settings form's ground: the console's page color with its cards on the content edges, as Zach accepted them
+  /// A settings form's ground: the console's page color with its cards on the content edges, as accepted
   /// (#1843). In a list+detail's columns the ground is the content surface instead.
   public func aglynFormBackground() -> some View { modifier(AglynFormBackgroundModifier()) }
 
@@ -541,7 +541,7 @@ struct AglynListGround: ViewModifier {
   }
 }
 
-/// A list or detail screen's ground: on the Mac and iPad the content surface (Zach, 2026-10-19: list and detail columns
+/// A list or detail screen's ground: on the Mac and iPad the content surface (list and detail columns
 /// stand on the surface, never on grey), on a phone the console's page color under its grouped rows. Dashboards with
 /// cards (Home, Overview) keep `AglynColor.page`.
 public struct AglynGround: ShapeStyle {

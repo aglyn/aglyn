@@ -238,7 +238,7 @@ class NavShellUiTest {
 
   @Test
   fun everyAccountsRailHasRecentAndAllAndAWorkspacesColorIsItsTileOnly() = runDesktopComposeUiTest(width = 1280, height = 800) {
-    // Zach, 2026-10-19 (AGL-4000): a one-workspace account still gets Recent (the workspace in use, recorded once the
+    // (AGL-4000) a one-workspace account still gets Recent (the workspace in use, recorded once the
     // preferences load) and All workspaces with its total, which opens the picker where pins are edited; and a picked
     // color is the tile's only, never a wash over the sidebar ("this looks green").
     val navigator = ShellNavigator()

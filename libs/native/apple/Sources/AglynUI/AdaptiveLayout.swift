@@ -103,7 +103,7 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
 
   public var body: some View {
     HStack(spacing: 0) {
-      // Both columns stand on the content surface (Zach, 2026-10-19: never a grey ground): the list's rows on E, and the
+      // Both columns stand on the content surface (never a grey ground): the list's rows on E, and the
       // detail's forms plain (`AglynGroupedForm`), its sections on the surface with no cards.
       if showsDetail {
         listColumn
@@ -112,7 +112,7 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
             alignment: .top)
           .background(AglynColor.paper)
         // The 1-point hairline in the border token between the list and its detail, the full height of the columns
-        // (Zach 10/20: with every column on the same surface, the hairline is what says where one ends).
+        // (with every column on the same surface, the hairline is what says where one ends).
         AglynColumnHairline()
         detail
           .environment(\.aglynDetailColumn, true)

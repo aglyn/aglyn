@@ -62,7 +62,7 @@ private struct AglynSearchableModifier: ViewModifier {
   func body(content: Content) -> some View {
     if wide {
       let bar = AglynListToolbar(text: $text, prompt: prompt, onSubmit: onSubmit) { filter }
-      // The search belongs to the list (Zach 10/20: "The search bar for the list should only be in the list not
+      // The search belongs to the list ("The search bar for the list should only be in the list not
       // expanding both the list and detail view"): a list+detail screen draws it atop its list column, and only a
       // screen without one draws it across the content.
       content
@@ -276,7 +276,7 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
           .accessibilityAddTraits(.isHeader)
         accessory
       }
-      // The title row is as tall as its filled button, so the button never reaches past it (Zach 10/20: the button
+      // The title row is as tall as its filled button, so the button never reaches past it (the button
       // touched the search row under it).
       .frame(minHeight: AglynHeadMetrics.titleRow)
     }

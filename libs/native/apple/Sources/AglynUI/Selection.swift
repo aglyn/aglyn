@@ -169,7 +169,7 @@ public struct AglynSelectableRowStyle: ButtonStyle {
     @State private var hovered = false
 
     var body: some View {
-      // A content list's row on the Mac and iPad is a full-width row (Figma List/Site row, Zach 2026-10-19: no inset
+      // A content list's row on the Mac and iPad is a full-width row (Figma List/Site row: no inset
       // pills): its fill runs the list's width, square, and its content sits on E. A sidebar row keeps its pill.
       let flush = wide && density == .list
       configuration.label
@@ -256,7 +256,7 @@ public struct AglynRowButtonStyle: ButtonStyle {
 
 /// A row that does one thing (Open the lead in the CRM, Add to a marketing list, Add join collection): its words in the
 /// accent text color (the error color when destructive), a › when it opens another screen, the row's hover and the
-/// pointing hand; never a bordered pill or a tinted wash (Zach, 2026-10-20). In a plain form its hover runs the row's
+/// pointing hand; never a bordered pill or a tinted wash. In a plain form its hover runs the row's
 /// whole width.
 public struct AglynActionRow: View {
   let title: String
@@ -295,7 +295,7 @@ public struct AglynActionRow: View {
   }
 }
 
-/// A row that opens something shows the pointing hand on the Mac, as a link does (Zach, 2026-10-19: "it's not obvious
+/// A row that opens something shows the pointing hand on the Mac, as a link does ("it's not obvious
 /// this is clickable").
 struct AglynLinkPointer: ViewModifier {
   let enabled: Bool

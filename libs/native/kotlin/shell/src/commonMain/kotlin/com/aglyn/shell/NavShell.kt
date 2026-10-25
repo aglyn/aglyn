@@ -217,7 +217,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   val dark = MaterialTheme.colorScheme.background.let { (it.red + it.green + it.blue) / 3 < 0.5f }
   // A workspace's color is its rail tile and nothing else: no surface (rail, sidebar, list column, chrome) wears a wash of
-  // it (Zach, 2026-10-19: "this looks green"; AGL-4000). Only a white-label workspace's brand color stands in for the
+  // it ("this looks green"; AGL-4000). Only a white-label workspace's brand color stands in for the
   // accent ([workspaceAccent]); a picked or logo color never does, so the accent stays the account theme's (Aglyn blue
   // unless the person picked one).
   val accentOrg = workspace.org?.id
@@ -1076,7 +1076,7 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
   if (tab.pinned) {
     // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded), drawn plain in every state:
     // selected, hovered or pressed, it has no plate and no border (Figma Titlebar/Home tab 117:16049). A plate made the
-    // mark read as a button (Zach, 2026-10-19; AGL-4000).
+    // mark read as a button (AGL-4000).
     Box(
       Modifier.height(if (m.compact) 28.dp else 36.dp).testTag("tab-${tab.id}")
         .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onSelect)

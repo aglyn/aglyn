@@ -316,7 +316,7 @@ struct WorkflowsSection: View {
     let (window, truncated) = ceilinged(live.docs, AutomationCeilings.workflows)
     let rows = visibleWorkflows(window)
     let used = serverCount ?? rows.count
-    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
     AglynGroupedForm(plain: true) {
       Section {
         if live.docs == nil {
@@ -536,7 +536,7 @@ struct ActionsSection: View {
   var body: some View {
     let (window, truncated) = ceilinged(live.docs, AutomationCeilings.actions)
     let (rows, elements) = visibleActions(window)
-    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
     AglynGroupedForm(plain: true) {
       Section {
         Text(
@@ -763,7 +763,7 @@ struct WebhooksSection: View {
   var body: some View {
     let rows = visibleWebhooks(ceilinged(live.docs, AutomationCeilings.webhooks).rows)
     let siteBase = HostStatus.publicOrigin(host.doc?.data) ?? ""
-    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
     AglynGroupedForm(plain: true) {
       Section {
         Text("Send signed JSON to outside systems from the actions builder, or accept calls that run a workflow. Business plans.")

@@ -249,7 +249,7 @@ struct SpecScreenBody: View {
       .aglynPrimaryAction(wide && !embedded ? headPrimary : nil)
       .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide && !embedded { headMore } }
       // A detail column's own head only when it has actions: Refresh alone is the screen head's More already, and a
-      // row holding only a More leaves a strip above the detail (Zach, 2026-10-19).
+      // row holding only a More leaves a strip above the detail.
       .safeAreaInset(edge: .top, spacing: 0) { if wide && embedded && hasOwnActions { embeddedHead } }
       // The zones' conditional screens are read here, where the screen always is (`zoneReads`).
       .task(id: conditionalZoneScreens.map(\.key)) { await loadZoneReads() }
@@ -412,7 +412,7 @@ struct SpecScreenBody: View {
     actions.filter { $0.navigate?.screen == model.spec.id && !$0.prompt.isEmpty }
   }
 
-  /// The actions the head offers: a filter action is the list toolbar's Filter, never a primary (Zach, 2026-10-19).
+  /// The actions the head offers: a filter action is the list toolbar's Filter, never a primary.
   private var headActions: [ActionSpec] {
     guard toolbarList != nil else { return actions }
     let filters = Set(filterActions.map(\.id))

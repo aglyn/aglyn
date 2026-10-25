@@ -23,7 +23,7 @@ struct OrgAutomationsSection: View {
     let docs = live.docs ?? []
     let rows = sortedOrgAutomations(docs)
     let canEdit = sites.canEdit
-    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
     AglynGroupedForm(plain: true) {
       Section {
         Text(
@@ -238,7 +238,7 @@ struct OrgSiteListSection: View {
     let reachable = Array(sites.sites.prefix(AutomationCeilings.orgSitesMax))
     let shown = showAll ? reachable : Array(reachable.prefix(AutomationCeilings.orgSitesOpen))
     let folded = reachable.count - shown.count
-    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E (Zach, 2026-10-19).
+    // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
     AglynGroupedForm(plain: true) {
       Section {
         Text(kind.intro).font(AglynFont.subheadline).foregroundStyle(.secondary)
