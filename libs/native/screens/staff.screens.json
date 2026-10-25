@@ -24021,7 +24021,7 @@
                   "label": "Off"
                 }
               ],
-              "help": "Super staff only. Off by default for everyone: yes."
+              "help": "Super staff only. Off by default for everyone: no."
             },
             {
               "key": "release.release_crm_assist_whole_record",
