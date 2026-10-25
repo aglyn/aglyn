@@ -52,6 +52,22 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun deleteSiteConfirmIgnoresSurroundingSpacesAsTheConsoleDoes() {
+    val spec = Json.parseToJsonElement(File(screensDir, "site.screens.json").readText()).arr("screens")
+      .mapNotNull { ScreenSpec.parse(it) }.first { it.id == "core.site.delete" }
+    val actions = spec.blocks.first { it.type == "actions" }
+    val delete = actions.raw.arr("items").mapNotNull { ActionSpec.parse(it) }.first { it.id == "delete" }
+    val typed = delete.prompt.first { it.key == "typed" }
+    val context = Json.parseToJsonElement("""{"site":{"id":"h1","name":"Delete test Mac"}}""")
+    // The console compares `confirmText.trim()`: a keyboard's prediction ending the name with a space still confirms.
+    assertFalse(typed.mismatches(JsonPrimitive("Delete test Mac"), context))
+    assertFalse(typed.mismatches(JsonPrimitive("Delete test Mac "), context))
+    assertFalse(typed.mismatches(JsonPrimitive(" Delete test Mac\n"), context))
+    assertTrue(typed.mismatches(JsonPrimitive("Delete test Ma"), context))
+    assertTrue(typed.mismatches(JsonPrimitive("delete test mac"), context))
+  }
+
+  @Test
   fun templateCases() {
     val file = Json.parseToJsonElement(File(screensDir, "template-cases.json").readText())
     val context = file.obj("context")!!

@@ -754,7 +754,9 @@ public struct FieldSpec: Sendable, Identifiable {
       guard let cents = ScreenValues.dollarsToCents(typed) else { return true }
       return cents != ScreenValues.dollarsToCents(expected)
     }
-    return typed != expected
+    // Surrounding spaces never count, as on the console's type-to-confirm (`confirmText.trim()`): a keyboard's
+    // prediction ends a word with a space, and the name typed exactly would still be refused.
+    return typed.trimmingCharacters(in: .whitespacesAndNewlines) != expected
   }
 
   init(key: String, label: String, kind: String, required: Bool, help: String?) {

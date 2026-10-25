@@ -475,8 +475,8 @@ struct ShellFrame<Content: View>: View {
   let compact: Bool
   @ViewBuilder let content: () -> Content
   @State private var askedKeepPins = false
-  /// The workspace and site this window last showed, so a site that leaves the list (deleted) is told from a switch.
-  @State private var shownScope: WorkspacePick?
+  /// The site this window last showed, so a site that leaves the list (deleted) is told from a switch.
+  @State private var shownSite = WorkspaceStore.ShownSiteWatch()
 
   var body: some View {
     content()
@@ -537,16 +537,15 @@ struct ShellFrame<Content: View>: View {
 
   private func leaveARemovedSite() {
     guard let workspace = model.workspace else { return }
-    let removed = WorkspaceStore.shownSiteRemoved(
-      shownOrgID: shownScope?.orgID, shownHostID: shownScope?.hostID, orgID: workspace.org?.id, sites: workspace.sites,
-      ready: workspace.ready)
-    if removed, navigation.front {
+    let leave = shownSite.update(
+      orgID: workspace.org?.id, pickedHostID: workspace.effective.hostID, sites: workspace.sites, ready: workspace.ready,
+      inSite: navigation.inSite)
+    if leave, navigation.front {
       navigation.enterWorkspace()
       navigation.select(.plugin("site.sites"))
     }
-    guard workspace.ready else { return }
-    shownScope = WorkspacePick(orgID: workspace.org?.id, hostID: navigation.inSite ? workspace.effective.hostID : nil)
   }
+
 
   /// Asked once of an account with more than five pins (which five to keep).
   private var keepPinsShown: Binding<Bool> {

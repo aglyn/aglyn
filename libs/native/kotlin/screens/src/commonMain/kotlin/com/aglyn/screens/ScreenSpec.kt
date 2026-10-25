@@ -520,7 +520,9 @@ class FieldSpec private constructor(
       val cents = ScreenValues.dollarsToCents(typed) ?: return true
       return cents != ScreenValues.dollarsToCents(expected)
     }
-    return typed != expected
+    // Surrounding spaces never count, as on the console's type-to-confirm (`confirmText.trim()`): a keyboard's
+    // prediction ends a word with a space, and the name typed exactly would still be refused.
+    return typed.trim() != expected
   }
 
   fun choices(context: JsonElement): List<Pair<String, String>> {
