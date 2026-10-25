@@ -287,7 +287,13 @@ function ComponentBesignerPage(props) {
     componentId,
     versionId,
   })
-  const { data, status, error, hasPendingWrites } = result
+  const {
+    data,
+    status,
+    error,
+    hasPendingWrites,
+    fromCache: versionFromCache,
+  } = result
   const nodes = data?.nodes
 
   // A page component sets NO view: it edits like screen content. The LAYOUT
@@ -376,12 +382,15 @@ function ComponentBesignerPage(props) {
     handleJsonSave,
     hasError,
     notFound,
+    awaitingServer,
   } = useBesignerDocument({
     nodes,
     // Every save converts a typed `{{name}}` to its id token (AGL-3481).
     bindingLookups: useBindingTokenLookups(hostId),
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
     pendingWrites: hasPendingWrites,
+    // A cached empty answer is not "not found" until the server agrees (AGL-4002).
+    fromCache: versionFromCache,
     status,
     error,
     save: saveComponentVersion,
@@ -1074,7 +1083,7 @@ function ComponentBesignerPage(props) {
                       >
                         <Typography>{'Not found'}</Typography>
                       </Stack>
-                    ) : status === 'loading' || !surface.ready ? (
+                    ) : status === 'loading' || awaitingServer || !surface.ready ? (
                       // The canvas waits for the component's kind too
                       // (AGL-3287): an email block drawn before the email
                       // blocks registered would be a tree of unknown elements.
