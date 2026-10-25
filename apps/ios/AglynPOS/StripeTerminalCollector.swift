@@ -568,7 +568,7 @@
         state = .disconnected
         let code = terminalError(error).code
         let words = friendlyConnectError(code: code, message: (error as NSError).localizedDescription)
-        if kind == .tapToPay { tapToPayNotice = tapToPayNotice(code: code) ?? .failed(words) }
+        if kind == .tapToPay { tapToPayNotice = noticeForTapToPay(code: code) ?? .failed(words) }
         discovery = .failed(words)
         return false
       }
@@ -942,4 +942,7 @@
       }
     }
   }
+
+  /// AglynHardware's `tapToPayNotice(code:)`, under a name the collector's own `tapToPayNotice` property does not shadow.
+  private func noticeForTapToPay(code: String) -> TapToPayNotice? { tapToPayNotice(code: code) }
 #endif
