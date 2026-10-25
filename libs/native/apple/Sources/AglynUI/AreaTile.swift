@@ -5,7 +5,7 @@ import SwiftUI
 
 /// One area on the phone's Home and in the area switcher (AGL-4006, Figma Phone/Area tile 282:22072): the area's icon on
 /// a 56-point plate, radius 16, its name under it in two lines at most, and its Needs-you count on the plate's corner.
-/// Every area gets the same tile, so none looks more important than another (Zach, 2026-10-20).
+/// Every area gets the same tile, so none looks more important than another.
 ///
 /// In the phone's bold look (`AglynThemeRuntime.shared.phoneBold`) the plate is the raised paper with a hairline and the
 /// icon is in the accent's text shade, so it stands on the tinted ground; otherwise the plate is the sunken fill. The

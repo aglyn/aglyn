@@ -357,8 +357,8 @@ before.
 
 ## 9. The phone's navigation (AGL-4006)
 
-Zach decided the phone's shape on 2026-10-20, after rejecting a Menu tab and a
-More bucket: every area is equally important and equally easy to reach. Both
+The phone's shape was decided on 2026-10-20, after a Menu tab and a More
+bucket were rejected: every area is equally important and equally easy to reach. Both
 phone shells draw it from the same contract, and the Figma Phone page (2:7)
 holds the frames (Home 22:176, Android Home 22:775, the Tab bar sheet,
 Pin an area, First open, Area switcher, Activity). Decisions page cards 7 to 9.

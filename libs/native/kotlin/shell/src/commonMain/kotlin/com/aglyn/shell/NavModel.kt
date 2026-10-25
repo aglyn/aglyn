@@ -169,7 +169,7 @@ fun List<NavGroupItem>.rowFor(key: String): NavItem? {
 fun List<NavGroupItem>.groupFor(key: String): NavGroupItem? = firstOrNull { group -> group.rows.any { key in it.keys } }
 
 /**
- * The phone's Home (AGL-4006, Zach 2026-10-20; Figma Home 22:776): every area of the scope as the same tile, in the
+ * The phone's Home (AGL-4006; Figma Home 22:776): every area of the scope as the same tile, in the
  * sidebar's own groups (its More headed Tools), then the scope's own places (Overview and Site settings in a site; Team and
  * Workspace settings everywhere), from the shared `phoneHomeGroups` so the Apple phone draws the same. [team] is the
  * workspace settings' Members row when this build and the person can open it.

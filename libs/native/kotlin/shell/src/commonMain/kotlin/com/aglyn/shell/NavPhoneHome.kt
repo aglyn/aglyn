@@ -62,7 +62,7 @@ import com.aglyn.ui.space
 import kotlin.math.roundToInt
 
 /*
- * The phone's Home, its area switcher and its Tab bar sheet (AGL-4006, Zach 2026-10-20; Figma Phone 2:7: Android Home
+ * The phone's Home, its area switcher and its Tab bar sheet (AGL-4006; Figma Phone 2:7: Android Home
  * 22:775, Android · area switcher, Tab bar sheet, Pin an area, First open). The rules are the shared contract's
  * (`phoneHomeGroups`, `tabBarLayout`, `pinTabArea`, `autoPinTabArea`), so the Apple phone draws the same.
  */

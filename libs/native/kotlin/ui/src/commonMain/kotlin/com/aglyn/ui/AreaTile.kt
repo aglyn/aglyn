@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /*
- * The phone's Home tiles (AGL-4006, Zach 2026-10-20; Figma Phone/Area tile 282:22072): every area of the scope as the same
+ * The phone's Home tiles (AGL-4006; Figma Phone/Area tile 282:22072): every area of the scope as the same
  * tile, so none looks more important than another. Bold on a phone in the brand's look (inside PhoneTheme), the everyday
  * form elsewhere.
  */

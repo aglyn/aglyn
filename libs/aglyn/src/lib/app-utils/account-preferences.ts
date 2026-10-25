@@ -735,7 +735,7 @@ export function readAppTheme(profile: unknown): AppThemePrefs {
 export const TAB_BARS_FIELD = 'tabBars'
 
 /**
- * The most areas one tab bar holds beside Home (Zach, 2026-10-20): iOS and
+ * The most areas one tab bar holds beside Home: iOS and
  * Material take five destinations at most, and nothing ever overflows into a
  * More tab. With four, Create leaves the bar for the top bar.
  */

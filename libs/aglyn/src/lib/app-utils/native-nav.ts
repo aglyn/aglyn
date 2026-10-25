@@ -803,7 +803,7 @@ export function resolveNavList(
 
 /**
  * A group's heading on the phone's Home where it differs from the sidebar's.
- * Nothing on the phone reads "More" (Zach, 2026-10-20), so the sidebar's More
+ * Nothing on the phone reads "More", so the sidebar's More
  * group is headed Tools there.
  */
 export const PHONE_HOME_GROUP_LABELS: Record<string, string> = { more: 'Tools' }
@@ -833,7 +833,7 @@ export interface PhoneHomeGroup {
 }
 
 /**
- * The phone's Home (Zach, 2026-10-20): every area of the scope as the same
+ * The phone's Home: every area of the scope as the same
  * tile, in the sidebar's own groups, then the scope's own places last
  * (Overview and Site settings in a site; Team and Workspace settings
  * everywhere). Nothing is ranked above anything else and nothing sits behind

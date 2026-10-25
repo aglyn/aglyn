@@ -238,7 +238,7 @@ class NavShellUiTest {
   }
 
   /**
-   * The phone (AGL-4006, Zach 2026-10-20): the scope chip, every area of the scope as the same tile on Home, and a tab bar
+   * The phone (AGL-4006): the scope chip, every area of the scope as the same tile on Home, and a tab bar
    * of Home, the person's pins and Create; no Menu tab. A fresh tab bar is Home and Create with the one-time tip.
    */
   @Test

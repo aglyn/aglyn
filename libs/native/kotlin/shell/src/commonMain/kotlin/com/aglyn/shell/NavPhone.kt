@@ -62,7 +62,7 @@ import com.aglyn.ui.WorkspaceTile
 import com.aglyn.ui.shellColors
 
 /**
- * The phone shell (AGL-4006, Zach 2026-10-20; Figma Android Home 22:775): the scope chip (opening the two-step picker),
+ * The phone shell (AGL-4006; Figma Android Home 22:775): the scope chip (opening the two-step picker),
  * search, the bell (Activity), Create new when four areas fill the tab bar, your AI and your photo on top; along the
  * bottom Home and the areas the person pinned for this site or the whole workspace, with Create new in the centre until
  * four areas fill the bar. Home is every area of the scope as the same tile; nothing sits behind a Menu or a More.

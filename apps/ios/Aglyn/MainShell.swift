@@ -1101,7 +1101,7 @@ struct PhoneShell: View {
   /// A tab's count from its row's count view (Inbox's unread), worn as the tab's badge (Figma Phone/Tab bar 22:499).
   @State private var counts: [String: Int] = [:]
 
-  /// The tab bar for where the person stands (AGL-4006, Zach 2026-10-20): Home, then the areas the person pinned for this
+  /// The tab bar for where the person stands (AGL-4006): Home, then the areas the person pinned for this
   /// site or the whole workspace, with Create new in the centre until four areas fill the bar (`tabBarLayout`). No area
   /// is chosen for them and nothing sits behind a Menu or a More: every area is a tile on Home.
   private var tabs: [(section: ShellSection, title: String, icon: String, rowID: String)] {

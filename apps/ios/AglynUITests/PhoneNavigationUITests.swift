@@ -4,7 +4,7 @@
 import XCTest
 
 #if os(iOS)
-/// The phone's navigation (AGL-4006, Zach 2026-10-20): every area is a tile on Home; the tab bar is Home and the areas
+/// The phone's navigation (AGL-4006): every area is a tile on Home; the tab bar is Home and the areas
 /// the person pins, Create new in the centre until four fill it; the first areas opened take the free spots and stay.
 /// Runs against the seeded emulator stack with Config/Local.xcconfig's debug sign-in, on an iPhone, inside the seeded
 /// site; `-AglynFreshTabBar YES` starts the site's tab bar empty, as a fresh account's.

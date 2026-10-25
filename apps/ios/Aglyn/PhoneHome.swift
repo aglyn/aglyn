@@ -7,7 +7,7 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-// The phone's navigation (AGL-4006, Zach 2026-10-20; Figma Phone 2:7: Home 22:176, Pin an area, Tab bar sheet, Area
+// The phone's navigation (AGL-4006; Figma Phone 2:7: Home 22:176, Pin an area, Tab bar sheet, Area
 // switcher, First open). Every area of the scope is the same tile on Home; the tab bar is Home and up to four areas the
 // person pins, per site and per workspace (`users/{uid}.tabBars`), with Create new in the centre until four areas fill
 // the bar. The rules are the shared contract's (`phoneHomeGroups`, `tabBarLayout`, `pinTabArea`, `autoPinTabArea`), so
