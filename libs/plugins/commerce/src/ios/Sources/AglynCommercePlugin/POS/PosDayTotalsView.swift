@@ -36,7 +36,7 @@ struct PosDayTotalsView: View {
           Task { await model.today() }
         }
         .accessibilityIdentifier("day-totals-today")
-      } footer: {
+      } header: {
         Text(model.label)
       }
       .onChange(of: from) { _, _ in Task { await model.pick(from: from, to: to) } }
