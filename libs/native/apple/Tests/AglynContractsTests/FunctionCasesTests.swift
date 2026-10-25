@@ -196,6 +196,35 @@ final class FunctionCasesTests: XCTestCase {
     }
   }
 
+  func testTheDayReportReadsAndExportsAsTheConsoleDoes() throws {
+    func report(_ value: Any) throws -> PosDayReport {
+      try JSONDecoder().decode(PosDayReport.self, from: JSONSerialization.data(withJSONObject: value))
+    }
+    for item in cases("posDayRangeLabel") {
+      let input = item.args[0] as? [String: Any] ?? [:]
+      XCTAssertEqual(posDayRangeLabel(from: string(input["from"]) ?? "", to: string(input["to"]) ?? ""), item.result as? String)
+    }
+    for item in cases("posDayAmount") {
+      XCTAssertEqual(
+        posDayAmount((item.args[0] as? NSNumber)?.doubleValue, currency: string(item.args[1]) ?? ""), item.result as? String,
+        item.label)
+    }
+    for item in cases("posDayReportIsEmpty") {
+      XCTAssertEqual(posDayReportIsEmpty(try report(item.args[0])), item.result as? Bool)
+    }
+    for item in cases("posDayReportCsv") {
+      XCTAssertEqual(posDayReportCsv(try report(item.args[0])), item.result as? String)
+    }
+    for item in cases("posShiftsCsv") {
+      let rows = try (item.args[0] as? [[String: Any]] ?? []).map { raw in
+        PosShiftCsvRow(
+          id: string(raw["id"]) ?? "", registerName: string(raw["registerName"]),
+          shift: try JSONDecoder().decode(PosShift.self, from: JSONSerialization.data(withJSONObject: raw)))
+      }
+      XCTAssertEqual(posShiftsCsv(rows), item.result as? String)
+    }
+  }
+
   func testASaleKeyIsAnIdTheOrderCanTake() {
     for item in cases("posOfflineSaleKeyIsValid") {
       XCTAssertEqual(posOfflineSaleKeyIsValid(string(item.args[0])), item.result as? Bool, item.label)

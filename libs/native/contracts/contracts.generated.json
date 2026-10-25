@@ -7893,6 +7893,8 @@
     "paid_out": "Paid out",
     "refund": "Cash refund"
   },
+  "POS_DAY_REPORT_MAX_DAYS": 31,
+  "POS_DAY_REPORT_ROUTE": "/api/commerce/pos-day-report",
   "POS_DISPLAY_MAX_LINES": 60,
   "POS_DISPLAY_PAIRING_TTL_MS": 600000,
   "POS_DISPLAY_THANKS_MS": 8000,

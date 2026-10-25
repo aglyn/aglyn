@@ -42,6 +42,8 @@ struct OrdersScreen: View {
   @State private var exporting: TransferExportRequest?
   @State private var notice: String?
   @State private var addingFilter = false
+  /// The site's registers: with any, Day report and Shift history head the list (AGL-4062).
+  @State private var registers = OrdersRegisters()
   /// The shell hands Orders its head's parts: on the Mac and iPad the title and create action head the list column, the
   /// breadcrumbs head the detail (Figma Orders 13:483); on a phone they are the screen's own title row (22:499).
   @Environment(\.aglynAreaHead) private var areaHead
@@ -56,7 +58,13 @@ struct OrdersScreen: View {
           } detail: {
             VStack(spacing: 0) {
               if let areaHead { AglynDetailCrumbs(areaHead) }
-              if let selection {
+              if selection == ordersDayReportRowID {
+                OrdersDayReportView(context: context, currency: reportCurrency)
+              } else if selection == ordersShiftHistoryRowID {
+                NavigationStack {
+                  ShiftHistoryView(context: context, registers: registers.registers, currency: reportCurrency)
+                }
+              } else if let selection {
                 OrderDetailView(context: context, orderID: selection, titled: false)
                   .id(selection)
               } else {
@@ -123,17 +131,19 @@ struct OrdersScreen: View {
     }
     // The selected order leaves the detail pane once a filter or search leaves it out of the list.
     .onChange(of: model.rows.map(\.id)) { _, ids in
-      if let selection, model.ready, !ids.contains(selection) { self.selection = nil }
+      if let selection, model.ready, !ids.contains(selection), !isReport(selection) { self.selection = nil }
     }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     .task(id: context.hostID) {
       if model.filter == .all { model.filter = initialFilter }
       model.start(context.firestore, hostID: context.hostID)
       disputes.start(context.firestore, hostID: context.hostID)
+      registers.start(context.firestore, hostID: context.hostID)
     }
     .onDisappear {
       model.stop()
       disputes.stop()
+      registers.stop()
     }
   }
 
@@ -356,10 +366,11 @@ struct OrdersScreen: View {
         rows(selectable: true)
       }
       .onChange(of: model.rows, initial: true) { _, rows in
+        if let selection, isReport(selection) { return }
         if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
       }
       .sensoryFeedback(.selection, trigger: selection)
-      .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
+      .aglynSelectableListStyle().aglynSelectionKeys(reportIDs + model.rows.map(\.id), selection: $selection)
       .accessibilityIdentifier("orders-list")
     } else {
       List { rows(selectable: false) }
@@ -371,8 +382,46 @@ struct OrdersScreen: View {
   /// A phone list under Orders' own title row draws Figma 22:499's flush rows; otherwise the kit's grouped list.
   private var flush: Bool { areaHead != nil && !wideChrome }
 
+  /// Day report and Shift history head the list for a store with registers, while no filter or search is on.
+  private var showsReports: Bool { !registers.registers.isEmpty && model.filter == .all && model.search.isEmpty }
+  private var reportIDs: [String] { showsReports ? [ordersDayReportRowID, ordersShiftHistoryRowID] : [] }
+  private func isReport(_ id: String) -> Bool { id == ordersDayReportRowID || id == ordersShiftHistoryRowID }
+  /// The reports' money: the day report reads its own currency; the shifts are the store's.
+  private var reportCurrency: String { registers.currency }
+
+  @ViewBuilder
+  private func reportRows(selectable: Bool) -> some View {
+    if showsReports {
+      let day = OrdersReportRow(title: "Day report", detail: "Every register, today or picked days", systemImage: "chart.bar.doc.horizontal")
+      let shifts = OrdersReportRow(
+        title: "Shift history", detail: registers.registers.count == 1 ? "This store's register" : "\(registers.registers.count) registers",
+        systemImage: "clock.arrow.circlepath")
+      Group {
+        if selectable {
+          day.aglynSelectableRow(ordersDayReportRowID, selection: $selection)
+        } else {
+          AglynPushLink(disclosure: !flush) { OrdersDayReportView(context: context, currency: reportCurrency) } label: { day }
+        }
+      }
+      .modifier(OrderRowLook(flush: flush && !selectable))
+      .accessibilityIdentifier("orders-day-report")
+      Group {
+        if selectable {
+          shifts.aglynSelectableRow(ordersShiftHistoryRowID, selection: $selection)
+        } else {
+          AglynPushLink(disclosure: !flush) {
+            ShiftHistoryView(context: context, registers: registers.registers, currency: reportCurrency)
+          } label: { shifts }
+        }
+      }
+      .modifier(OrderRowLook(flush: flush && !selectable))
+      .accessibilityIdentifier("orders-shift-history")
+    }
+  }
+
   @ViewBuilder
   private func rows(selectable: Bool) -> some View {
+    reportRows(selectable: selectable)
     ForEach(model.rows) { row in
       Group {
         if selectable {

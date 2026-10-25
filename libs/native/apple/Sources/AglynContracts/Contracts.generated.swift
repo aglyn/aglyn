@@ -3164,6 +3164,216 @@ public enum PosCashEventType: String, Codable, CaseIterable, Hashable, Sendable 
   }
 }
 
+public struct PosDayCash: Codable, Hashable, Sendable {
+  public var cashRefundsCents: Double
+  public var cashSalesCents: Double
+  public var closedShiftCount: Double
+  public var countedCashCents: Double
+  public var dropsCents: Double
+  public var expectedCashCents: Double
+  public var openExpectedCashCents: Double
+  public var openingFloatCents: Double
+  public var openShiftCount: Double
+  public var paidInCents: Double
+  public var paidOutCents: Double
+  public var varianceCents: Double
+
+  public init(cashRefundsCents: Double, cashSalesCents: Double, closedShiftCount: Double, countedCashCents: Double, dropsCents: Double, expectedCashCents: Double, openExpectedCashCents: Double, openingFloatCents: Double, openShiftCount: Double, paidInCents: Double, paidOutCents: Double, varianceCents: Double) {
+    self.cashRefundsCents = cashRefundsCents
+    self.cashSalesCents = cashSalesCents
+    self.closedShiftCount = closedShiftCount
+    self.countedCashCents = countedCashCents
+    self.dropsCents = dropsCents
+    self.expectedCashCents = expectedCashCents
+    self.openExpectedCashCents = openExpectedCashCents
+    self.openingFloatCents = openingFloatCents
+    self.openShiftCount = openShiftCount
+    self.paidInCents = paidInCents
+    self.paidOutCents = paidOutCents
+    self.varianceCents = varianceCents
+  }
+}
+
+public struct PosDayCashierRow: Codable, Hashable, Sendable {
+  public var discountsCents: Double
+  public var grossSalesCents: Double
+  public var memberId: String
+  public var name: String
+  public var netSalesCents: Double
+  public var orderCount: Double
+  public var refundCount: Double
+  public var refundsCents: Double
+  public var salesByTender: [String: Double]
+  public var taxCents: Double
+  public var tipsCents: Double
+
+  public init(discountsCents: Double, grossSalesCents: Double, memberId: String, name: String, netSalesCents: Double, orderCount: Double, refundCount: Double, refundsCents: Double, salesByTender: [String: Double], taxCents: Double, tipsCents: Double) {
+    self.discountsCents = discountsCents
+    self.grossSalesCents = grossSalesCents
+    self.memberId = memberId
+    self.name = name
+    self.netSalesCents = netSalesCents
+    self.orderCount = orderCount
+    self.refundCount = refundCount
+    self.refundsCents = refundsCents
+    self.salesByTender = salesByTender
+    self.taxCents = taxCents
+    self.tipsCents = tipsCents
+  }
+}
+
+public struct PosDayRegisterRow: Codable, Hashable, Sendable {
+  public var discountsCents: Double
+  public var grossSalesCents: Double
+  public var name: String
+  public var netSalesCents: Double
+  public var orderCount: Double
+  public var refundCount: Double
+  public var refundsCents: Double
+  public var registerId: String
+  public var salesByTender: [String: Double]
+  public var taxCents: Double
+  public var tipsCents: Double
+
+  public init(discountsCents: Double, grossSalesCents: Double, name: String, netSalesCents: Double, orderCount: Double, refundCount: Double, refundsCents: Double, registerId: String, salesByTender: [String: Double], taxCents: Double, tipsCents: Double) {
+    self.discountsCents = discountsCents
+    self.grossSalesCents = grossSalesCents
+    self.name = name
+    self.netSalesCents = netSalesCents
+    self.orderCount = orderCount
+    self.refundCount = refundCount
+    self.refundsCents = refundsCents
+    self.registerId = registerId
+    self.salesByTender = salesByTender
+    self.taxCents = taxCents
+    self.tipsCents = tipsCents
+  }
+}
+
+public struct PosDayReport: Codable, Hashable, Sendable {
+  public var byCashier: [PosDayCashierRow]
+  public var byRegister: [PosDayRegisterRow]
+  public var byTender: [PosDayTenderRow]
+  public var cash: PosDayCash
+  public var currency: String
+  public var days: Double
+  public var endMs: Double
+  public var from: String
+  public var generatedAtMs: Double
+  public var hostId: String
+  public var shifts: [PosDayShiftRow]
+  public var startMs: Double
+  public var storeName: String
+  public var timeZone: String
+  public var to: String
+  public var totals: PosDayTotals
+  public var truncated: Bool?
+
+  public init(byCashier: [PosDayCashierRow], byRegister: [PosDayRegisterRow], byTender: [PosDayTenderRow], cash: PosDayCash, currency: String, days: Double, endMs: Double, from: String, generatedAtMs: Double, hostId: String, shifts: [PosDayShiftRow], startMs: Double, storeName: String, timeZone: String, to: String, totals: PosDayTotals, truncated: Bool? = nil) {
+    self.byCashier = byCashier
+    self.byRegister = byRegister
+    self.byTender = byTender
+    self.cash = cash
+    self.currency = currency
+    self.days = days
+    self.endMs = endMs
+    self.from = from
+    self.generatedAtMs = generatedAtMs
+    self.hostId = hostId
+    self.shifts = shifts
+    self.startMs = startMs
+    self.storeName = storeName
+    self.timeZone = timeZone
+    self.to = to
+    self.totals = totals
+    self.truncated = truncated
+  }
+}
+
+public struct PosDayShiftRow: Codable, Hashable, Sendable {
+  public var closedAtMs: Double?
+  public var closedByName: String?
+  public var countedCashCents: Double?
+  public var expectedCashCents: Double
+  public var netSalesCents: Double
+  public var openedAtMs: Double
+  public var openedByName: String
+  public var openingFloatCents: Double
+  public var registerId: String
+  public var registerName: String
+  public var shiftId: String
+  public var status: PosDayShiftRowStatus
+  public var varianceCents: Double?
+
+  public init(closedAtMs: Double? = nil, closedByName: String? = nil, countedCashCents: Double? = nil, expectedCashCents: Double, netSalesCents: Double, openedAtMs: Double, openedByName: String, openingFloatCents: Double, registerId: String, registerName: String, shiftId: String, status: PosDayShiftRowStatus, varianceCents: Double? = nil) {
+    self.closedAtMs = closedAtMs
+    self.closedByName = closedByName
+    self.countedCashCents = countedCashCents
+    self.expectedCashCents = expectedCashCents
+    self.netSalesCents = netSalesCents
+    self.openedAtMs = openedAtMs
+    self.openedByName = openedByName
+    self.openingFloatCents = openingFloatCents
+    self.registerId = registerId
+    self.registerName = registerName
+    self.shiftId = shiftId
+    self.status = status
+    self.varianceCents = varianceCents
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosDayShiftRowStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case closed = "closed"
+  case `open` = "open"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosDayTenderRow: Codable, Hashable, Sendable {
+  public var label: String
+  public var method: PosTenderMethod
+  public var netCents: Double
+  public var refundsCents: Double
+  public var salesCents: Double
+
+  public init(label: String, method: PosTenderMethod, netCents: Double, refundsCents: Double, salesCents: Double) {
+    self.label = label
+    self.method = method
+    self.netCents = netCents
+    self.refundsCents = refundsCents
+    self.salesCents = salesCents
+  }
+}
+
+public struct PosDayTotals: Codable, Hashable, Sendable {
+  public var discountsCents: Double
+  public var grossSalesCents: Double
+  public var netSalesCents: Double
+  public var orderCount: Double
+  public var refundCount: Double
+  public var refundsCents: Double
+  public var salesByTender: [String: Double]
+  public var taxCents: Double
+  public var tipsCents: Double
+
+  public init(discountsCents: Double, grossSalesCents: Double, netSalesCents: Double, orderCount: Double, refundCount: Double, refundsCents: Double, salesByTender: [String: Double], taxCents: Double, tipsCents: Double) {
+    self.discountsCents = discountsCents
+    self.grossSalesCents = grossSalesCents
+    self.netSalesCents = netSalesCents
+    self.orderCount = orderCount
+    self.refundCount = refundCount
+    self.refundsCents = refundsCents
+    self.salesByTender = salesByTender
+    self.taxCents = taxCents
+    self.tipsCents = tipsCents
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PosDeviceMode: String, Codable, CaseIterable, Hashable, Sendable {
   case display = "display"
@@ -5182,6 +5392,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardScreenContexts: [String: String]
   public let planCardWarningShare: Double
   public let posCashEventLabels: [String: String]
+  public let posDayReportMaxDays: Int
+  public let posDayReportRoute: String
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
   public let posDisplayThanksMs: Int
@@ -5501,6 +5713,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
+    case posDayReportMaxDays = "POS_DAY_REPORT_MAX_DAYS"
+    case posDayReportRoute = "POS_DAY_REPORT_ROUTE"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
     case posDisplayThanksMs = "POS_DISPLAY_THANKS_MS"

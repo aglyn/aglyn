@@ -109,6 +109,8 @@ final class RegisterModel {
   @ObservationIgnored var reconnectInterval: Duration = .seconds(10)
   /// The shift and staff PIN routes.
   @ObservationIgnored let opsAPI: PosOpsAPI
+  /// Day totals across every register (AGL-4037).
+  @ObservationIgnored let dayReportAPI: PosDayReportAPI
   @ObservationIgnored private var tillCashier: PosCashier!
   @ObservationIgnored private var tillShift: PosShiftModel!
   /// The customer lookup beside the basket.
@@ -145,7 +147,7 @@ final class RegisterModel {
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
     uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
     displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil,
-    cardForwards: OfflineCardForwardLedger = OfflineCardForwardLedger()
+    cardForwards: OfflineCardForwardLedger = OfflineCardForwardLedger(), dayReportAPI: PosDayReportAPI? = nil
   ) {
     self.cardForwards = cardForwards
     self.hostID = hostID
@@ -153,6 +155,7 @@ final class RegisterModel {
     let sale = ConsolePosSaleAPI(api: api, hostID: hostID)
     self.api = sale
     self.opsAPI = opsAPI ?? ConsolePosOpsAPI(api: api, hostID: hostID)
+    self.dayReportAPI = dayReportAPI ?? ConsolePosDayReportAPI(api: api, hostID: hostID)
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
     deviceService = collector.map { DeviceReaderService($0) }

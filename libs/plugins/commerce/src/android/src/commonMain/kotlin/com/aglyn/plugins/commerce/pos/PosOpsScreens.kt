@@ -67,6 +67,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   var switching by remember { mutableStateOf(false) }
   var returning by remember { mutableStateOf(false) }
   var printersOpen by remember { mutableStateOf(false) }
+  var dayTotalsOpen by remember { mutableStateOf(false) }
   // The register's controls are a task with room, not an alert: a full-screen panel on a phone, a large one on a tablet.
   PanelSheet(
     title = "Register",
@@ -89,7 +90,11 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
         OutlinedButton(onClick = { cashier.lock(); onDismiss() }, enabled = model.register != null, modifier = Modifier.testTag("pos-lock")) { Text("Lock") }
       }
     }
-    SectionCard("Shift", Modifier.fillMaxWidth()) { ShiftControls(model) }
+    SectionCard("Shift", Modifier.fillMaxWidth()) {
+      ShiftControls(model)
+      // Every register, shift and cashier of the day, as the console's day report reads them.
+      OutlinedButton(onClick = { dayTotalsOpen = true }, modifier = Modifier.testTag("pos-day-totals")) { Text("Day totals") }
+    }
     DisplayDevicesSection(model)
     SectionCard("Last receipt", Modifier.fillMaxWidth()) { LastReceiptControls(model) { printersOpen = true } }
     ReceiptPrintersSection(model) { printersOpen = true }
@@ -106,6 +111,10 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   }
   if (returning) PosReturnDialog(model) { returning = false }
   if (printersOpen) ReceiptPrintersDialog(model.printers, model.register?.name) { printersOpen = false }
+  if (dayTotalsOpen) {
+    val dayReport = remember { PosDayReportModel(model.dayReportApi) }
+    PosDayTotalsPanel(dayReport, model.currency, PosDayNotSynced.of(model.offline.queue)) { dayTotalsOpen = false }
+  }
   ShiftDialogs(model)
 }
 

@@ -430,6 +430,10 @@
       "why": "The offline register's sale, sync answer and kit shapes and its totals arithmetic (AGL-3625); the Aglyn POS app queues offline cash sales and syncs them through the same route."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-pos-day-report.ts",
+      "why": "Day and event totals across every register (AGL-4037): the report shape the native register and the Aglyn app read from /api/commerce/pos-day-report, and its range label and amounts; imports zoned-time, commerce-pos-ops and order-fulfillment."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
       "why": "The register's shifts, cash drawer and returns (AGL-3609): the shift and report shapes the native register reads, and the drawer's expected-cash formula; imports commerce-pos, commerce-printers (type only), commerce-receipt."
     },

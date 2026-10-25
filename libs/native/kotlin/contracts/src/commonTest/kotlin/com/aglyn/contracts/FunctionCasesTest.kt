@@ -11,6 +11,7 @@ import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.long
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -125,6 +126,31 @@ class FunctionCasesTest {
       val input = args[0].jsonObject
       val expected = result.jsonObject.mapValues { it.value.jsonPrimitive.content }
       assertEquals(expected, posOfflineCardIntentMetadata(str(input["saleKey"]) ?: "", str(input["hostId"]) ?: "", str(input["orgId"]) ?: "", str(input["registerId"]) ?: ""), args.toString())
+    }
+  }
+
+  @Test
+  fun theDayReportReadsAndExportsAsTheConsoleDoes() {
+    fun report(value: JsonElement) = ContractJsonFormat.decodeFromJsonElement(PosDayReport.serializer(), value)
+    cases("posDayRangeLabel").forEach { (args, result) ->
+      val input = args[0].jsonObject
+      assertEquals(result.jsonPrimitive.content, posDayRangeLabel(str(input["from"])!!, str(input["to"])!!))
+    }
+    cases("posDayAmount").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, posDayAmount(args[0].takeIf { it !is JsonNull }?.jsonPrimitive?.double, str(args[1])!!), args.toString())
+    }
+    cases("posDayReportIsEmpty").forEach { (args, result) -> assertEquals(result.jsonPrimitive.boolean, posDayReportIsEmpty(report(args[0]))) }
+    cases("posDayReportCsv").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, posDayReportCsv(report(args[0]))) }
+    cases("posShiftsCsv").forEach { (args, result) ->
+      val rows = args[0].jsonArray.map { raw ->
+        val obj = raw.jsonObject
+        PosShiftCsvRow(
+          id = obj["id"]?.jsonPrimitive?.content ?: "",
+          registerName = obj["registerName"]?.jsonPrimitive?.contentOrNull,
+          shift = ContractJsonFormat.decodeFromJsonElement(PosShift.serializer(), raw),
+        )
+      }
+      assertEquals(result.jsonPrimitive.content, posShiftsCsv(rows))
     }
   }
 

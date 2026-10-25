@@ -144,11 +144,18 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, s
   val model = remember(hostId, context.firestore) { OrdersListModel(hostId, context.firestore, scope) }
   // Opened from Home on a chip (to get ready, disputes): the list starts on it.
   LaunchedEffect(model) { if (initialFilter != null) model.pick(initialFilter) else model.reload() }
+  // The site's registers: with any, Day report and Shift history head the list (AGL-4062).
+  val registers = rememberOrdersRegisters(context)
+  val currency = rememberStoreCurrency(context)
   AglynListDetail(
     initialSelected = initialOrderId,
-    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect, startNew) },
+    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect, startNew, registers) },
     detail = { selected ->
-      if (selected == null) {
+      if (selected == ORDERS_DAY_REPORT_ROW) {
+        OrdersDayReportPane(context, currency)
+      } else if (selected == ORDERS_SHIFT_HISTORY_ROW) {
+        ShiftHistoryPane(context, registers, currency)
+      } else if (selected == null) {
         SelectionPlaceholder("Pick an order to see it here", icon = AglynIcons.named("receipt"))
       } else {
         OrderDetailPane(context, selected, onChanged = { model.reload() })
@@ -158,7 +165,14 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, s
 }
 
 @Composable
-private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit, startNew: Boolean = false) {
+private fun OrdersList(
+  context: NativePluginContext,
+  model: OrdersListModel,
+  selected: String?,
+  onSelect: (String) -> Unit,
+  startNew: Boolean = false,
+  registers: List<com.aglyn.plugins.commerce.pos.PosRegister> = emptyList(),
+) {
   val listState = rememberLazyListState()
   // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
   // Coming back to the list (from an order, or Back) keeps where it was.
@@ -298,6 +312,24 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
         )
       } else {
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("orders-list"), state = listState) {
+          // Day report and Shift history head the list for a store with registers, while no filter or search is on.
+          if (registers.isNotEmpty() && !selecting && model.filter == OrderFilter.ALL && model.search.isBlank() && model.clauses.isEmpty()) {
+            item(key = ORDERS_DAY_REPORT_ROW) {
+              com.aglyn.ui.ScaffoldListRow(
+                title = "Day report", detail = "Every register, today or picked days", kind = com.aglyn.ui.ScaffoldRowKind.ORDER,
+                selected = selected == ORDERS_DAY_REPORT_ROW, leading = { com.aglyn.ui.ScaffoldRowTile("bar_chart") },
+                onClick = { onSelect(ORDERS_DAY_REPORT_ROW) }, modifier = Modifier.testTag("orders-day-report"),
+              )
+            }
+            item(key = ORDERS_SHIFT_HISTORY_ROW) {
+              com.aglyn.ui.ScaffoldListRow(
+                title = "Shift history", detail = if (registers.size == 1) "This store's register" else "${registers.size} registers",
+                kind = com.aglyn.ui.ScaffoldRowKind.ORDER, selected = selected == ORDERS_SHIFT_HISTORY_ROW,
+                leading = { com.aglyn.ui.ScaffoldRowTile("history") },
+                onClick = { onSelect(ORDERS_SHIFT_HISTORY_ROW) }, modifier = Modifier.testTag("orders-shift-history"),
+              )
+            }
+          }
           items(rows.value, key = { it.id }) { row ->
             if (selecting) {
               OrderListRow(row, row.id in picked, ticked = row.id in picked) { picked = if (row.id in picked) picked - row.id else picked + row.id }

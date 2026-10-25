@@ -2115,6 +2115,123 @@ enum class PosCashEventType(val raw: String) {
 internal object PosCashEventTypeSerializer :
     RawEnumSerializer<PosCashEventType>("com.aglyn.contracts.PosCashEventType", PosCashEventType.entries, PosCashEventType.UNKNOWN, { it.raw })
 
+@Serializable
+data class PosDayCash(
+    val cashRefundsCents: Double,
+    val cashSalesCents: Double,
+    val closedShiftCount: Double,
+    val countedCashCents: Double,
+    val dropsCents: Double,
+    val expectedCashCents: Double,
+    val openExpectedCashCents: Double,
+    val openingFloatCents: Double,
+    val openShiftCount: Double,
+    val paidInCents: Double,
+    val paidOutCents: Double,
+    val varianceCents: Double,
+)
+
+@Serializable
+data class PosDayCashierRow(
+    val discountsCents: Double,
+    val grossSalesCents: Double,
+    val memberId: String,
+    val name: String,
+    val netSalesCents: Double,
+    val orderCount: Double,
+    val refundCount: Double,
+    val refundsCents: Double,
+    val salesByTender: Map<String, Double>,
+    val taxCents: Double,
+    val tipsCents: Double,
+)
+
+@Serializable
+data class PosDayRegisterRow(
+    val discountsCents: Double,
+    val grossSalesCents: Double,
+    val name: String,
+    val netSalesCents: Double,
+    val orderCount: Double,
+    val refundCount: Double,
+    val refundsCents: Double,
+    val registerId: String,
+    val salesByTender: Map<String, Double>,
+    val taxCents: Double,
+    val tipsCents: Double,
+)
+
+@Serializable
+data class PosDayReport(
+    val byCashier: List<PosDayCashierRow>,
+    val byRegister: List<PosDayRegisterRow>,
+    val byTender: List<PosDayTenderRow>,
+    val cash: PosDayCash,
+    val currency: String,
+    val days: Double,
+    val endMs: Double,
+    val from: String,
+    val generatedAtMs: Double,
+    val hostId: String,
+    val shifts: List<PosDayShiftRow>,
+    val startMs: Double,
+    val storeName: String,
+    val timeZone: String,
+    val to: String,
+    val totals: PosDayTotals,
+    val truncated: Boolean? = null,
+)
+
+@Serializable
+data class PosDayShiftRow(
+    val closedAtMs: Double? = null,
+    val closedByName: String? = null,
+    val countedCashCents: Double? = null,
+    val expectedCashCents: Double,
+    val netSalesCents: Double,
+    val openedAtMs: Double,
+    val openedByName: String,
+    val openingFloatCents: Double,
+    val registerId: String,
+    val registerName: String,
+    val shiftId: String,
+    val status: PosDayShiftRowStatus,
+    val varianceCents: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosDayShiftRowStatusSerializer::class)
+enum class PosDayShiftRowStatus(val raw: String) {
+    CLOSED("closed"),
+    OPEN("open"),
+    UNKNOWN(""),
+}
+
+internal object PosDayShiftRowStatusSerializer :
+    RawEnumSerializer<PosDayShiftRowStatus>("com.aglyn.contracts.PosDayShiftRowStatus", PosDayShiftRowStatus.entries, PosDayShiftRowStatus.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosDayTenderRow(
+    val label: String,
+    val method: PosTenderMethod,
+    val netCents: Double,
+    val refundsCents: Double,
+    val salesCents: Double,
+)
+
+@Serializable
+data class PosDayTotals(
+    val discountsCents: Double,
+    val grossSalesCents: Double,
+    val netSalesCents: Double,
+    val orderCount: Double,
+    val refundCount: Double,
+    val refundsCents: Double,
+    val salesByTender: Map<String, Double>,
+    val taxCents: Double,
+    val tipsCents: Double,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosDeviceModeSerializer::class)
 enum class PosDeviceMode(val raw: String) {
@@ -3504,6 +3621,8 @@ internal data class ContractValuesPart5(
     @SerialName("PLAN_CARD_SCREEN_CONTEXTS") val planCardScreenContexts: Map<String, String>,
     @SerialName("PLAN_CARD_WARNING_SHARE") val planCardWarningShare: Double,
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
+    @SerialName("POS_DAY_REPORT_MAX_DAYS") val posDayReportMaxDays: Long,
+    @SerialName("POS_DAY_REPORT_ROUTE") val posDayReportRoute: String,
     @SerialName("POS_DISPLAY_MAX_LINES") val posDisplayMaxLines: Long,
     @SerialName("POS_DISPLAY_PAIRING_TTL_MS") val posDisplayPairingTtlMs: Double,
     @SerialName("POS_DISPLAY_THANKS_MS") val posDisplayThanksMs: Long,
@@ -3525,12 +3644,12 @@ internal data class ContractValuesPart5(
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
-    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
-    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
+    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
     @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
@@ -3577,12 +3696,12 @@ internal data class ContractValuesPart6(
     @SerialName("STAR_COLORS") val starColors: List<StarColor>,
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
-    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
-    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
@@ -3845,6 +3964,8 @@ class ContractValues internal constructor(
     val planCardScreenContexts: Map<String, String> get() = part5.planCardScreenContexts
     val planCardWarningShare: Double get() = part5.planCardWarningShare
     val posCashEventLabels: Map<String, String> get() = part5.posCashEventLabels
+    val posDayReportMaxDays: Long get() = part5.posDayReportMaxDays
+    val posDayReportRoute: String get() = part5.posDayReportRoute
     val posDisplayMaxLines: Long get() = part5.posDisplayMaxLines
     val posDisplayPairingTtlMs: Double get() = part5.posDisplayPairingTtlMs
     val posDisplayThanksMs: Long get() = part5.posDisplayThanksMs
@@ -3866,8 +3987,8 @@ class ContractValues internal constructor(
     val posOfflineDisabledTenders: Map<String, String> get() = part5.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part5.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part5.posOfflineLateSyncMs
-    val posOfflineMaxAgeMs: Double get() = part5.posOfflineMaxAgeMs
-    val posOfflineSaleMaxLines: Long get() = part5.posOfflineSaleMaxLines
+    val posOfflineMaxAgeMs: Double get() = part6.posOfflineMaxAgeMs
+    val posOfflineSaleMaxLines: Long get() = part6.posOfflineSaleMaxLines
     val posOfflineSyncBatchMax: Long get() = part6.posOfflineSyncBatchMax
     val posOfflineSyncRoute: String get() = part6.posOfflineSyncRoute
     val posTenderLabels: Map<String, String> get() = part6.posTenderLabels
@@ -3914,8 +4035,8 @@ class ContractValues internal constructor(
     val starColors: List<StarColor> get() = part6.starColors
     val starredField: String get() = part6.starredField
     val starredMax: Long get() = part6.starredMax
-    val submissionFilterHeaders: Map<String, String> get() = part6.submissionFilterHeaders
-    val submissionListQuery: ListQueryDeclaration get() = part6.submissionListQuery
+    val submissionFilterHeaders: Map<String, String> get() = part7.submissionFilterHeaders
+    val submissionListQuery: ListQueryDeclaration get() = part7.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part7.submissionReadOptions
     val suppressionListQuery: ListQueryDeclaration get() = part7.suppressionListQuery
     val taskListDeclaration: ListQueryDeclaration get() = part7.taskListDeclaration
