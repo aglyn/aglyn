@@ -75,6 +75,7 @@
  * `firestore-export` cron, which is an unscoped DR snapshot. Not the audit CSV.
  */
 
+import { SITE_CARE_STAFF_COLLECTION } from '@aglyn/aglyn/app-utils/site-care'
 import { firebaseAdmin } from './firebase-admin'
 import { CONSOLE_DOMAINS_COLLECTION } from './console-domains'
 
@@ -470,7 +471,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org', 'user'],
     exported: true,
-    note: 'For an ORG: every thread and its messages. For a PERSON: only the messages they themselves authored — a thread has other authors, and handing a member the whole conversation would disclose colleagues’ words to them.',
+    note: 'For an ORG: every thread and its messages, except a Site Care request’s staff-only intake (the other workspaces its sender belongs to, AGL-4031). For a PERSON: only the messages they themselves authored — a thread has other authors, and handing a member the whole conversation would disclose colleagues’ words to them.',
   },
   // ── Retained past erasure on statutory grounds ────────────────────────
   {
@@ -1254,7 +1255,10 @@ export async function exportOrgData(
     .get()
   const ticketDocs: ExportedDocument[] = []
   for (const ticket of tickets.docs) {
-    ticketDocs.push(...(await readSubtree(db, ticket.ref, 0, 2)))
+    // Not a Site Care request's staff-only intake (AGL-4031): which other
+    // workspaces its sender belongs to is the sender's, not this org's.
+    const staffOnly = `/${SITE_CARE_STAFF_COLLECTION}/`
+    ticketDocs.push(...(await readSubtree(db, ticket.ref, 0, 2)).filter((found) => !found.path.includes(staffOnly)))
   }
   data['supportTickets'] = ticketDocs
 

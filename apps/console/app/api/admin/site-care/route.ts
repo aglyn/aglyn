@@ -25,6 +25,7 @@ import {
   addSiteCareGoodwill,
   closeSiteCareRequest,
   correctSiteCareMinutes,
+  moveSiteCareRequest,
   orgHasSiteCare,
   readSiteCareMonth,
   readSiteCareOrg,
@@ -61,6 +62,8 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *   goodwill       — add included minutes to `orgId`'s `month`, with `reason`
  *   sendStatement  — email the owner `orgId`'s `month`
  *   sendQuote      — the "bigger than Site Care covers" reply
+ *   move           — move an open emailed request to `orgId`, another Site
+ *                    Care workspace its sender was recorded in (AGL-4031)
  * A close or correction blocked by the included hour answers 409 with
  * `blocked`, which the panel reads as "Ask the owner first" / "Absorb it".
  */
@@ -169,6 +172,10 @@ async function handler(request: Request): Promise<Response> {
         })
         return Response.json({ sent: sent.sent, to: sent.to, reason: sent.reason ?? null })
       }
+      case 'move':
+        return Response.json(
+          await moveSiteCareRequest(firestore, { ticketId: needTicket(), actor, orgId: body?.orgId }),
+        )
       default:
         return Response.json({ error: 'Unknown action' }, { status: 400 })
     }
