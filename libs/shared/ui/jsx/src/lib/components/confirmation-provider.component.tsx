@@ -73,12 +73,18 @@ export function ConfirmationProviderComponent(
     setResolveReject([])
   }, [])
 
+  // The first answer settles the promise and clears the pair, but the dialog
+  // stays on screen through its exit transition. A second click in that
+  // window (a double click, a repeated Enter) has no question left to answer,
+  // so it must not call the cleared resolve or reject.
   const handleCancel = useCallback(() => {
+    if (!reject) return
     reject()
     handleClose()
   }, [reject, handleClose])
 
   const handleConfirm = useCallback(() => {
+    if (!resolve) return
     resolve()
     handleClose()
   }, [resolve, handleClose])
