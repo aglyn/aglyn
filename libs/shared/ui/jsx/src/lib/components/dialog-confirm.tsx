@@ -78,13 +78,20 @@ export const DialogConfirm = forwardRef<any, DialogConfirmProps>(
             <DialogContentText>{description}</DialogContentText>
           </DialogContent>
         )}
+        {/* Once answered the dialog fades out with its buttons still drawn;
+            they are disabled for that moment so they don't look live. */}
         <DialogActions>
-          <Button {...cancellationButtonProps} onClick={onCancel}>
+          <Button
+            {...cancellationButtonProps}
+            disabled={!open || cancellationButtonProps?.disabled}
+            onClick={onCancel}
+          >
             {cancellationText}
           </Button>
           <Button
             color="primary"
             {...confirmationButtonProps}
+            disabled={!open || confirmationButtonProps?.disabled}
             onClick={onConfirm}
           >
             {confirmationText}

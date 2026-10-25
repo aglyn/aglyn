@@ -115,7 +115,7 @@ struct CrmAtAGlanceCard: View {
       async let leads = reader.count(scopedQuery(scope, "leads", limit: 1))
       async let closed = reader.count(
         scopedQuery(
-          scope, "leads", filters: [ListQueryConstraint(path: "status", op: .in, value: ContractValues.shared.crmLeadClosedStatuses)],
+          scope, "leads", filters: [ListQueryConstraint(path: "status", op: .in, value: ContractValues.shared.crmLeadClosedStatuses.map(\.rawValue))],
           limit: 1))
       let values = try await (contacts, newThisWeek, pipeline, tasksDue, leads, closed)
       figures = CrmGlanceFigures(

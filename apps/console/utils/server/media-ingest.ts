@@ -27,9 +27,12 @@ import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   checkEntitlement,
   createResourceUid,
+  defaultMediaScopeOf,
+  defaultScopeForNewResource,
   inspectUploadBytes,
   readImageDimensions,
 } from '@aglyn/aglyn/server'
+import { hostScopeToken, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   firebaseAdmin,
   generateMediaVariants,
@@ -43,6 +46,7 @@ import { mediaStorageGate, scopeBillsStorageOverage } from '../storage-overage'
 import { embeddedMetadataAtIngress } from './media-embedded'
 import { resolveOrgMediaBand } from './media-storage-band'
 import { folderStoragePath, mediaCdnPathUpdate, resolveMediaScope } from './media-scope'
+import { resolveUploadSite } from './media-upload-site'
 
 /**
  * This app's implementation of `core.media-ingest` (AGL-3660): a picture a
@@ -107,10 +111,26 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
     if (refusal) return refuse(415, refusal.message)
   }
 
-  const { scope, error } = await resolveMediaScope({ hostId: request.hostId }, {}, request.uid, {
+  // The workspace's shared library when one is named (AGL-4066), with the
+  // site on screen as the upload route's `forHostId`; the site's own otherwise.
+  const target = request.orgId
+    ? { orgId: request.orgId, ...(request.hostId ? { forHostId: request.hostId } : {}) }
+    : { hostId: request.hostId }
+  const { scope, error } = await resolveMediaScope(target, {}, request.uid, {
     feature: 'uploads',
   })
   if (!scope) return refuse(error?.status ?? 400, error?.message ?? 'The site could not be resolved')
+  // Shared as the workspace's Default sharing decides, as an upload is: a
+  // workspace asset with no `visibleTo` matches no scoped read at all.
+  let visibleTo: string[] | null = null
+  if (scope.collection === 'orgs') {
+    const site = await resolveUploadSite(scope, target)
+    if ('error' in site) return refuse(site.error.status, site.error.message)
+    visibleTo = defaultScopeForNewResource({
+      defaultResourceScope: defaultMediaScopeOf(scope.billing as Parameters<typeof defaultMediaScopeOf>[0]),
+      hostId: site.hostId,
+    })
+  }
 
   const contentSha256 = createHash('sha256').update(new Uint8Array(buffer)).digest('hex')
   const contentHash = contentSha256.slice(0, 16)
@@ -208,6 +228,7 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
     ...(variants?.error ? { variantsError: variants.error } : {}),
     ...(embeddedMetadata ? { embeddedMetadata } : {}),
     ...(request.stockPhoto ? { stockPhoto: { ...request.stockPhoto, importedAt: Timestamp.now() } } : {}),
+    ...(visibleTo ? { visibleTo } : {}),
     // The business's own photo (AGL-3957): `true` and never false, so the
     // owner-photo read below is one equality query with no index of its own.
     ...(request.ownerPhotoLinkId ? { ownerPhoto: true, photoLinkId: request.ownerPhotoLinkId } : {}),
@@ -248,18 +269,24 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
 
 /**
  * The site's live, public raster asset copied from the stock photo `sourceKey`
- * names, or null. Read by the Admin SDK on the site's own library alone.
+ * names, or null. Read by the Admin SDK on the site's own library alone; or,
+ * with `orgId` (AGL-4066), on the workspace's shared library, where an asset
+ * counts only if it is shared with every site, or with `hostId`'s when one is
+ * named: a copy narrowed to other sites is one this member may not see.
  */
 export async function findStockPhotoMedia(input: {
   hostId: string
   sourceKey: string
+  orgId?: string
 }): Promise<PluginMediaAsset | null> {
-  if (!input.hostId || !input.sourceKey) return null
+  const library = input.orgId ? { collection: 'orgs', id: input.orgId } : { collection: 'hosts', id: input.hostId }
+  if (!library.id || !input.sourceKey) return null
+  const reachable = new Set<string>([ORG_SCOPE_TOKEN, ...(input.hostId ? [hostScopeToken(input.hostId)] : [])])
   const snapshot = await firebaseAdmin
     .app()
     .firestore()
-    .collection('hosts')
-    .doc(input.hostId)
+    .collection(library.collection)
+    .doc(library.id)
     .collection('media')
     .where('stockPhoto.key', '==', input.sourceKey)
     .limit(5)
@@ -268,6 +295,10 @@ export async function findStockPhotoMedia(input: {
     const media = doc.data() as Record<string, unknown>
     if (media['deletedAt'] || media['private'] === true) continue
     if (!RASTER_TYPES.has(String(media['contentType'] ?? ''))) continue
+    if (input.orgId) {
+      const shared = Array.isArray(media['visibleTo']) ? (media['visibleTo'] as unknown[]) : []
+      if (!shared.some((token) => typeof token === 'string' && reachable.has(token))) continue
+    }
     const asset = assetOf(doc.id, media)
     if (asset) return asset
   }

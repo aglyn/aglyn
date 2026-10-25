@@ -25,18 +25,37 @@ public struct ListQueryConstraint: @unchecked Sendable {
   func apply(to query: Query) -> Query {
     let field = fieldPath(path)
     switch op {
-    case .equal: return query.whereField(field, isEqualTo: value)
-    case .notEqual: return query.whereField(field, isNotEqualTo: value)
-    case .lessThan: return query.whereField(field, isLessThan: value)
-    case .lessThanOrEqual: return query.whereField(field, isLessThanOrEqualTo: value)
-    case .greaterThan: return query.whereField(field, isGreaterThan: value)
-    case .greaterThanOrEqual: return query.whereField(field, isGreaterThanOrEqualTo: value)
-    case .arrayContains: return query.whereField(field, arrayContains: value)
-    case .arrayContainsAny: return query.whereField(field, arrayContainsAny: value as? [Any] ?? [value])
-    case .in: return query.whereField(field, in: value as? [Any] ?? [value])
+    case .equal: return query.whereField(field, isEqualTo: firestoreValue(value))
+    case .notEqual: return query.whereField(field, isNotEqualTo: firestoreValue(value))
+    case .lessThan: return query.whereField(field, isLessThan: firestoreValue(value))
+    case .lessThanOrEqual: return query.whereField(field, isLessThanOrEqualTo: firestoreValue(value))
+    case .greaterThan: return query.whereField(field, isGreaterThan: firestoreValue(value))
+    case .greaterThanOrEqual: return query.whereField(field, isGreaterThanOrEqualTo: firestoreValue(value))
+    case .arrayContains: return query.whereField(field, arrayContains: firestoreValue(value))
+    case .arrayContainsAny, .in:
+      // Firestore throws an Objective-C exception (which aborts the app) on an empty list or one over 30 values.
+      // An empty list matches nothing, so the query asks for a document id no document has.
+      let values = firestoreList(value)
+      if values.isEmpty { return query.whereField(FieldPath.documentID(), isEqualTo: "aglyn-no-match") }
+      let capped = Array(values.prefix(firestoreListFilterMax))
+      return op == .in ? query.whereField(field, in: capped) : query.whereField(field, arrayContainsAny: capped)
     case .unknown: return query
     }
   }
+}
+
+/// A filter's values as Firestore can encode them: a contract enum (`CrmLeadStatus`) is sent as its raw value.
+/// Firestore throws an Objective-C exception on a value it cannot encode, which no Swift `catch` stops, so the app
+/// would abort instead of the read failing.
+/// The most values Firestore takes in one `in` or `array-contains-any` filter.
+private let firestoreListFilterMax = 30
+
+private func firestoreList(_ value: Any) -> [Any] {
+  (value as? [Any] ?? [value]).map(firestoreValue)
+}
+
+private func firestoreValue(_ value: Any) -> Any {
+  (value as? any RawRepresentable).map { $0.rawValue } ?? value
 }
 
 private func plainValue(_ value: ContractJSON) -> Any {

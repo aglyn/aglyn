@@ -163,6 +163,28 @@ describe('the Pixabay provider', () => {
     expect(fetch.mock.calls[1][0]).toBe('https://pixabay.com/get/g7101001large_1280.jpg')
   })
 
+  it('previews a hit from its small copy, the large one standing in for a search cached before previews (AGL-4066)', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(pixabayResponse(PIXABAY_YOGA_STUDIO_ANSWER))
+      .mockImplementation(async () => new Response(TINY_JPEG, { status: 200, headers: { 'content-type': 'image/jpeg' } }))
+    const provider = createPixabayStockPhotoProvider({ apiKey: () => KEY, fetch })
+    const [photo] = (await provider.search({ query: 'yoga' }))?.photos ?? []
+    expect((photo as PixabayPhoto).previewUrl).toBe('https://pixabay.com/get/g7101001web_340.jpg')
+    expect((await provider.preview?.(photo, { maxBytes: 1_000_000 }))?.contentType).toBe('image/jpeg')
+    expect(fetch.mock.calls[1][0]).toBe('https://pixabay.com/get/g7101001web_340.jpg')
+
+    const cachedBefore: Partial<PixabayPhoto> = { ...photo }
+    delete cachedBefore.previewUrl
+    await provider.preview?.(cachedBefore as PixabayPhoto, { maxBytes: 1_000_000 })
+    expect(fetch.mock.calls[2][0]).toBe('https://pixabay.com/get/g7101001large_1280.jpg')
+
+    // Only its own hits, from its own hosts.
+    expect(await provider.preview?.({ ...photo, provider: 'other' }, { maxBytes: 1_000_000 })).toBeNull()
+    expect(await provider.preview?.({ ...photo, previewUrl: 'https://evil.example/a.jpg' } as never, { maxBytes: 1_000_000 })).toBeNull()
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
   it('credits the photographer and the license, which asks no credit shown', async () => {
     const provider = createPixabayStockPhotoProvider({ apiKey: () => KEY })
     expect(

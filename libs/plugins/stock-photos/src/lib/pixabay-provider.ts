@@ -64,6 +64,14 @@ export function createPixabayStockPhotoProvider(
       if (!isPixabayImageUrl(url)) return null
       return client.download(url, downloadOptions)
     },
+    async preview(photo, previewOptions) {
+      if (photo.provider !== PIXABAY_PROVIDER_ID) return null
+      const held = photo as Partial<PixabayPhoto>
+      // A search cached before previews were read holds only its large copy.
+      const url = held.previewUrl ?? held.downloadUrl
+      if (!isPixabayImageUrl(url)) return null
+      return client.download(url, previewOptions)
+    },
     credit(photo) {
       return {
         providerLabel: PIXABAY_LABEL,

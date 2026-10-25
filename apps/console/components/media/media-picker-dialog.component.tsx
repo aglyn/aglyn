@@ -18,6 +18,11 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import { hostQualifiedCdnPath } from '@aglyn/aglyn'
+import type {
+  StockPhotoPickerClient,
+  StockPhotoPickerHit,
+} from '@aglyn/aglyn/app-utils/stock-photos/stock-photo-picker'
+import { StockPhotoDetails } from '@aglyn/shared-ui-jsx/components/stock-photo-search.component'
 import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import {
   Box,
@@ -32,9 +37,10 @@ import {
   useTheme,
 } from '@mui/material'
 import { useSnackbar } from 'notistack'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import MediaLibraryComponent from './media-library.component'
 import MediaPickerDetails from './media-picker-details.component'
+import StockPhotosPane from './stock-photos-pane.component'
 
 export interface MediaPickerDialogProps {
   /** Host scope — the site's private library. */
@@ -107,8 +113,18 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
   const { hostId, orgId, open, onClose, onPick, allowPrivate, kind } = props
   const derivedOrgId = useHostOrgId(hostId)
   const orgScope = orgId ?? derivedOrgId
-  const showTabs = Boolean(hostId) && Boolean(orgScope)
-  const [tab, setTab] = useState<'site' | 'org'>(hostId ? 'site' : 'org')
+  // Stock photos (AGL-4066) wherever an image can be placed: a picker for a
+  // film, a PDF or audio has nothing to search there. A photo used is saved
+  // to the site's library when a site is open, else the workspace's.
+  const stockTarget = useMemo(
+    () => (hostId ? { hostId } : orgScope ? { orgId: orgScope } : null),
+    [hostId, orgScope],
+  )
+  const offerStock = Boolean(stockTarget) && (!kind || kind === 'image')
+  const showTabs = (Boolean(hostId) && Boolean(orgScope)) || offerStock
+  const [chosenTab, setTab] = useState<'site' | 'org' | 'stock'>(hostId ? 'site' : 'org')
+  // A picker opened again for a film keeps no Stock photos tab to be on.
+  const tab = chosenTab === 'stock' && !offerStock ? (hostId ? 'site' : 'org') : chosenTab
   /**
    * The file clicked, and the library it was clicked in. Clicking shows its
    * details; only the confirm button places it, so a file is never used on
@@ -118,9 +134,23 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
     media: Aglyn.AglynHostMedia
     cdnScope: string
   } | null>(null)
+  /** The stock photo clicked, and its thumbnail; used only once the confirm button copies it. */
+  const [stockPending, setStockPending] = useState<{
+    hit: StockPhotoPickerHit
+    previewUrl: string | null
+    libraryLabel: string
+  } | null>(null)
+  const [stockImport, setStockImport] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null })
+  // The Stock photos tab's client, bound to the member while the tab is open.
+  const [stockClient, setStockClient] = useState<StockPhotoPickerClient | null>(null)
+  const stockLibraryName = hostId ? "this site's library" : "your workspace's shared library"
   // A dialog kept mounted while closed opens again with nothing chosen.
   useEffect(() => {
-    if (!open) setPending(null)
+    if (!open) {
+      setPending(null)
+      setStockPending(null)
+      setStockImport({ busy: false, error: null })
+    }
   }, [open])
   // Below `sm` the dialog is a full-screen sheet with no room beside the
   // files, so the details take its place and say how to get back.
@@ -160,8 +190,27 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
     onClose()
   }
 
-  const showSite = Boolean(hostId) && (!showTabs || tab === 'site')
-  const showOrg = Boolean(orgScope) && (hostId ? tab === 'org' : true)
+  /**
+   * Copies the stock photo into the library, or finds the copy it holds,
+   * and places that asset as a library pick is placed: the page never names
+   * an address at the stock library.
+   */
+  const placeStockPhoto = async () => {
+    if (!stockPending || !stockClient || !stockTarget) return
+    setStockImport({ busy: true, error: null })
+    const answer = await stockClient.importPhoto(stockPending.hit.ref)
+    if (answer.status !== 'ok') {
+      setStockImport({ busy: false, error: answer.message })
+      return
+    }
+    setStockImport({ busy: false, error: null })
+    pick(answer.media as Aglyn.AglynHostMedia, stockTarget.hostId ?? `org:${stockTarget.orgId}`)
+  }
+
+  const showStock = offerStock && tab === 'stock'
+  const showSite = Boolean(hostId) && !showStock && (!showTabs || tab === 'site')
+  const showOrg = Boolean(orgScope) && !showStock && (hostId ? tab === 'org' : true)
+  const chosen = showStock ? stockPending : pending
 
   return (
     <Dialog
@@ -232,7 +281,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
             overflowY: 'auto',
             // Hidden rather than unmounted, so the folder and the scroll
             // position are where they were on the way back.
-            display: narrow && pending ? 'none' : 'block',
+            display: narrow && chosen ? 'none' : 'block',
           }}
         >
           {showTabs ? (
@@ -241,14 +290,17 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
               onChange={(_event, value) => {
                 setTab(value)
                 setPending(null)
+                setStockPending(null)
+                setStockImport({ busy: false, error: null })
               }}
               variant="scrollable"
               scrollButtons="auto"
               allowScrollButtonsMobile
               sx={{ mb: 2 }}
             >
-              <Tab value="site" label="This site" />
-              <Tab value="org" label="Organization (shared)" />
+              {hostId ? <Tab value="site" label="This site" /> : null}
+              {orgScope ? <Tab value="org" label="Organization (shared)" /> : null}
+              {offerStock ? <Tab value="stock" label="Stock photos" /> : null}
             </Tabs>
           ) : null}
           {showSite && hostId ? (
@@ -274,13 +326,47 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
               }
             />
           ) : null}
+          {showStock && stockTarget ? (
+            <StockPhotosPane
+              target={stockTarget}
+              libraryName={stockLibraryName}
+              onClient={setStockClient}
+              selectedKey={stockPending?.hit.sourceKey}
+              onSelect={(hit, context) => {
+                setStockImport({ busy: false, error: null })
+                setStockPending({ hit, ...context })
+              }}
+            />
+          ) : null}
         </Box>
-        {pending ? (
+        {showStock && stockPending ? (
+          <Box
+            component="aside"
+            aria-label="Selected photo"
+            sx={{
+              width: narrow ? '100%' : (theme) => theme.spacing(40),
+              flexShrink: 0,
+              overflowY: 'auto',
+              ...(narrow ? {} : { borderLeft: 1, borderColor: 'divider', pl: 3 }),
+            }}
+          >
+            <StockPhotoDetails
+              key={stockPending.hit.sourceKey}
+              hit={stockPending.hit}
+              previewUrl={stockPending.previewUrl}
+              libraryLabel={stockPending.libraryLabel}
+              libraryName={stockLibraryName}
+              error={stockImport.error}
+              onBack={narrow ? () => setStockPending(null) : undefined}
+            />
+          </Box>
+        ) : null}
+        {!showStock && pending ? (
           <Box
             component="aside"
             aria-label="Selected file"
             sx={{
-              width: narrow ? '100%' : 320,
+              width: narrow ? '100%' : (theme) => theme.spacing(40),
               flexShrink: 0,
               overflowY: 'auto',
               ...(narrow ? {} : { borderLeft: 1, borderColor: 'divider', pl: 3 }),
@@ -297,15 +383,25 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{'Cancel'}</Button>
-        <Button
-          variant="contained"
-          disabled={!pending || Boolean(blockedReason)}
-          onClick={() => {
-            if (pending) pick(pending.media, pending.cdnScope)
-          }}
-        >
-          {mediaPickerConfirmLabel(pending?.media.contentType, kind)}
-        </Button>
+        {showStock ? (
+          <Button
+            variant="contained"
+            disabled={!stockPending || stockImport.busy}
+            onClick={() => void placeStockPhoto()}
+          >
+            {stockImport.busy ? 'Adding to library…' : 'Use this image'}
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            disabled={!pending || Boolean(blockedReason)}
+            onClick={() => {
+              if (pending) pick(pending.media, pending.cdnScope)
+            }}
+          >
+            {mediaPickerConfirmLabel(pending?.media.contentType, kind)}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )

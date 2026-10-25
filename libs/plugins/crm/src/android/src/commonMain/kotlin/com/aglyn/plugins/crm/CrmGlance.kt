@@ -100,7 +100,7 @@ fun CrmAtAGlanceCard(context: NativePluginContext, orgLevel: Boolean) {
         }
         val leads = async { reader.count(scopedQuery(current, "leads", limit = 1)) ?: 0 }
         val closed = async {
-          reader.count(scopedQuery(current, "leads", listOf(FirestoreFilter("status", FilterOp.IN, com.aglyn.contracts.Contracts.crmLeadClosedStatuses)), limit = 1)) ?: 0
+          reader.count(scopedQuery(current, "leads", listOf(FirestoreFilter("status", FilterOp.IN, com.aglyn.contracts.Contracts.crmLeadClosedStatuses.map { it.raw })), limit = 1)) ?: 0
         }
         // Every lead less the closed ones: an untouched lead carries no status (`openLeadsFromCounts`).
         GlanceFigures(contacts.await(), week.await(), pipeline.await(), tasks.await(), maxOf(0, leads.await() - closed.await()))

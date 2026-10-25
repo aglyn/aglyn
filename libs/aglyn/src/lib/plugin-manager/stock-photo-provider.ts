@@ -137,6 +137,18 @@ export interface StockPhotoProvider {
   ): Promise<StockPhotoDownload | null>
   /** How an asset copied from `photo` credits it. */
   credit(photo: StockPhoto): StockPhotoCredit
+  /**
+   * A small copy of the photo for showing it as a search result (AGL-4066),
+   * fetched only from the library's own image hosts, or `null` when none can
+   * be had within `maxBytes` and the signal. A server process asks for it and
+   * hands the bytes to the member choosing, so a browser never loads an
+   * address at the library. Optional: a provider without it shows no
+   * thumbnails, and a placed photo is always the copy {@link download} fetched.
+   */
+  preview?(
+    photo: StockPhoto,
+    options: { maxBytes: number; signal?: AbortSignal },
+  ): Promise<StockPhotoDownload | null>
 }
 
 /**
