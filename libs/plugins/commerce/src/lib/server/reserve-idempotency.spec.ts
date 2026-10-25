@@ -506,6 +506,95 @@ describe('two guests cannot hold the same dates (AGL-2450)', () => {
   })
 })
 
+/**
+ * The last unit of a several-unit resource (AGL-4044).
+ *
+ * Twelve RV hookups sold as one resource: a night is full when as many stays
+ * hold it as the resource has units. The transaction's re-read is what keeps
+ * two guests from both taking the LAST one, exactly as it keeps two from one
+ * cabin, because `isRangeAvailable` now counts. Driven concurrently for the
+ * reason the block above gives.
+ */
+describe('two guests cannot both take the last unit (AGL-4044)', () => {
+  const seedHeld = (count: number) => {
+    for (let index = 0; index < count; index++) {
+      docs.set(`hosts/host-1/reservations/held-${index}`, {
+        resourceId: 'room-1',
+        status: 'confirmed',
+        checkInDayMs: CHECK_IN,
+        checkOutDayMs: CHECK_OUT,
+        createdAtMs: Date.now() - DAY_MS,
+      })
+    }
+  }
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/resources/room-1', {
+      name: 'RV hookups',
+      nightlyRateUsd: 60,
+      units: 3,
+    })
+  })
+
+  it('books a guest while a unit is free on every night', async () => {
+    seedHeld(2)
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(holdDocs()).toHaveLength(3)
+  })
+
+  it('refuses the guest who would make one too many', async () => {
+    seedHeld(3)
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('Those dates just sold out')
+    expect(holdDocs()).toHaveLength(3)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('gives the last unit to one of two racing guests', async () => {
+    seedHeld(2)
+
+    const [first, rival] = await Promise.all([
+      post({}, { 'idempotency-key': 'attempt-a' }),
+      post({}, { 'idempotency-key': 'attempt-b' }),
+    ])
+
+    expect([first.status, rival.status].sort()).toEqual([200, 409])
+    expect(abortedRetries).toBeGreaterThan(0)
+    expect(holdDocs()).toHaveLength(3)
+    expect(stripeCalls).toHaveLength(1)
+  })
+
+  it('books both racers while two units are free', async () => {
+    seedHeld(1)
+
+    const [first, rival] = await Promise.all([
+      post({}, { 'idempotency-key': 'attempt-a' }),
+      post({}, { 'idempotency-key': 'attempt-b' }),
+    ])
+
+    expect([first.status, rival.status]).toEqual([200, 200])
+    expect(holdDocs()).toHaveLength(3)
+    expect(stripeCalls).toHaveLength(2)
+  })
+
+  it('charges one unit’s nights, whatever the resource holds', async () => {
+    seedHeld(0)
+
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    // Two nights at $60, paid in full.
+    expect(
+      stripeCalls[0].params.get('line_items[0][price_data][unit_amount]'),
+    ).toBe('12000')
+  })
+})
+
 describe('reservation idempotency (AGL-1697)', () => {
   it('creates one pending hold with a session and records the claim', async () => {
     const result = await post({}, { 'idempotency-key': 'attempt-a' })

@@ -83,23 +83,33 @@ export const reservationAvailabilityHandler: PluginApiHandler = async (req, res)
     // those dates out on the date-picker forever, while `reserve.ts` would
     // have sold them to the next guest who asked for them directly.
     const nowMs = Date.now()
-    const unavailable = reservationsSnapshot.docs
-      .filter((docSnapshot) =>
-        CommerceModel.reservationHoldsDates(
-          {
-            status: String(
-              docSnapshot.get('status'),
-            ) as CommerceModel.ReservationStatus,
-            createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
-          },
-          nowMs,
-        ),
-      )
-      .map((docSnapshot) => ({
-        fromDayMs: Number(docSnapshot.get('checkInDayMs')),
-        toDayMs: Number(docSnapshot.get('checkOutDayMs')),
-      }))
-      .concat(resource.blocks ?? [])
+    const held = reservationsSnapshot.docs.map((docSnapshot) => ({
+      checkInDayMs: Number(docSnapshot.get('checkInDayMs')),
+      checkOutDayMs: Number(docSnapshot.get('checkOutDayMs')),
+      status: String(
+        docSnapshot.get('status'),
+      ) as CommerceModel.ReservationStatus,
+      createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+    }))
+    const units = CommerceModel.resourceUnits(resource)
+    const nights =
+      units === 1
+        ? null
+        : resourceNightsAvailability(resource, held, todayMs, nowMs)
+    // One unit: every stay that still holds its dates is a closed range, as
+    // it always was. Several (AGL-4044): only the nights with no unit left
+    // are, so the widget's own overlap check (which treats each range as one
+    // stay on a one-unit resource) refuses exactly the full nights.
+    const unavailable = (
+      nights
+        ? nights.full
+        : held
+            .filter((stay) => CommerceModel.reservationHoldsDates(stay, nowMs))
+            .map((stay) => ({
+              fromDayMs: stay.checkInDayMs,
+              toDayMs: stay.checkOutDayMs,
+            }))
+    ).concat(resource.blocks ?? [])
 
     res.setHeader(
       'Cache-Control',
@@ -120,9 +130,72 @@ export const reservationAvailabilityHandler: PluginApiHandler = async (req, res)
         cancellationHours: resource.cancellationHours ?? null,
       },
       unavailable,
+      // The nights with only a few units left, for the widget's "Only 2
+      // left" line. Several-unit resources only: absent on one unit.
+      ...(nights ? { fewLeft: nights.fewLeft } : {}),
     })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Availability unavailable' })
   }
+}
+
+/**
+ * How far ahead a several-unit resource's nights are counted: two years. A
+ * stay booked further out still blocks its own nights at the booking door,
+ * which counts every night it asks for; the calendar simply stops drawing.
+ */
+export const AVAILABILITY_HORIZON_NIGHTS = 730
+
+/**
+ * A several-unit resource's calendar (AGL-4044): the runs of nights with no
+ * unit left, as closed ranges, and the nights with only a few left.
+ */
+export function resourceNightsAvailability(
+  resource: Pick<CommerceModel.HostResource, 'units'>,
+  held: CommerceModel.HeldStay[],
+  todayMs: number,
+  nowMs: number,
+): {
+  full: Array<{ fromDayMs: number; toDayMs: number }>
+  fewLeft: Array<{ dayMs: number; unitsLeft: number }>
+} {
+  const lastCheckOut = held
+    .filter((stay) => CommerceModel.reservationHoldsDates(stay, nowMs))
+    .reduce((latest, stay) => Math.max(latest, stay.checkOutDayMs), todayMs)
+  const nights = Math.min(
+    AVAILABILITY_HORIZON_NIGHTS,
+    Math.max(0, Math.round((lastCheckOut - todayMs) / CommerceModel.DAY_MS)),
+  )
+  // Blocks are left out here: the handler sends them as their own ranges.
+  const perNight = CommerceModel.unitsLeftByNight(
+    { units: resource.units },
+    held,
+    todayMs,
+    nights,
+    nowMs,
+  )
+  const full: Array<{ fromDayMs: number; toDayMs: number }> = []
+  const fewLeft: Array<{ dayMs: number; unitsLeft: number }> = []
+  for (const night of perNight) {
+    if (night.unitsLeft === 0) {
+      const last = full[full.length - 1]
+      if (last && last.toDayMs === night.dayMs) {
+        last.toDayMs = night.dayMs + CommerceModel.DAY_MS
+      } else {
+        full.push({
+          fromDayMs: night.dayMs,
+          toDayMs: night.dayMs + CommerceModel.DAY_MS,
+        })
+      }
+    } else if (
+      // A few left, and fewer than it has: a three-unit resource nobody has
+      // booked does not have "only 3 left".
+      night.unitsLeft <= CommerceModel.FEW_UNITS_LEFT &&
+      night.unitsLeft < night.units
+    ) {
+      fewLeft.push({ dayMs: night.dayMs, unitsLeft: night.unitsLeft })
+    }
+  }
+  return { full, fewLeft }
 }

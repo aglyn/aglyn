@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — one total for the day across every register (newest)
+## October 2026 — several identical units in one reservation resource (newest)
+
+- **[Several identical units](commerce-and-bookings/commerce/pos-and-reservations.md#several-identical-units)** —
+  a reservation resource can now hold several of the same thing, such as 12 RV
+  hookups. Set **Spots or units available** and each night takes that many
+  stays. The **Reservations** card shows the units left on each of the next
+  14 nights, the Reservation widget says "Only 2 left" when a few remain, and
+  two guests can't both book the last one.
+
+## October 2026 — one total for the day across every register
 
 - **[Day and event totals](commerce-and-bookings/commerce/pos-operations.md#day-and-event-totals)** —
   when several staff take payments on their own registers, **Commerce → Orders
