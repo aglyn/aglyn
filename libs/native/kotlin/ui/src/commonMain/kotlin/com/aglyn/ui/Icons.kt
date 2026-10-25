@@ -16,6 +16,9 @@ import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DesktopWindows
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Share
@@ -243,6 +246,9 @@ object AglynIcons {
     "arrow_downward" to Icons.Outlined.ArrowDownward,
     "arrow_upward" to Icons.Outlined.ArrowUpward,
     "contrast" to Icons.Outlined.Contrast,
+    "light_mode" to Icons.Outlined.LightMode,
+    "dark_mode" to Icons.Outlined.DarkMode,
+    "desktop_windows" to Icons.Outlined.DesktopWindows,
     "grid_view" to Icons.Outlined.GridView,
     "keep" to Icons.Outlined.PushPin,
     "keep_off" to Icons.Outlined.PushPin,

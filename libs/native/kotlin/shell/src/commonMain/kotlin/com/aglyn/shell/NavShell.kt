@@ -182,6 +182,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
   val authState by services.auth.state.collectAsState()
   val user = (authState as? AuthState.SignedIn)?.user
+  // Each account's photo, kept on the roster so the switcher draws every account's face (AGL-4010).
+  val storedPhoto = prefs.photo(user?.photoUrl)
+  LaunchedEffect(storedPhoto, prefs.loaded) { if (prefs.loaded) services.accounts?.rememberPhoto(storedPhoto) }
   val screenSession = rememberScreenSession(services, navigator, workspace, user, claims) { claims = it }
 
   // The scope's lists, from the manifest.
@@ -235,6 +238,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       addAccount = { services.accounts?.startAdding() },
       switchAccount = { slot -> exitScope.launch { services.accounts?.switchTo(slot) } },
       signOut = { exitScope.launch { services.signOut() } },
+      editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
+      notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
     )
   }
 
@@ -338,6 +343,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
     LocalShellActions provides actions,
+    LocalAccountIdentity provides accountIdentity(user, prefs, services.api.origin),
     LocalShellColors provides shell,
     LocalShowShortcuts provides wide,
   ) {

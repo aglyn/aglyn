@@ -109,6 +109,7 @@ class IdentityToolkitAuthSession(
       email = user["email"]?.jsonPrimitive?.content,
       displayName = user["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
       emailVerified = user["emailVerified"]?.jsonPrimitive?.content == "true",
+      photoUrl = user["photoUrl"]?.jsonPrimitive?.content?.ifEmpty { null },
     )
   }
 
@@ -281,6 +282,8 @@ class IdentityToolkitAuthSession(
       email = body["email"]?.jsonPrimitive?.content,
       displayName = body["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
       emailVerified = TokenClaims.fromIdToken(body["idToken"]?.jsonPrimitive?.content).emailVerified,
+      // `signInWithPassword` answers `profilePicture`, `signInWithIdp` answers `photoUrl`.
+      photoUrl = (body["photoUrl"] ?: body["profilePicture"])?.jsonPrimitive?.content?.ifEmpty { null },
     )
     mutable.value = AuthState.SignedIn(user)
     return user

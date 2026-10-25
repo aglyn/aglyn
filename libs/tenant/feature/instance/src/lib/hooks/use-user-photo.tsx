@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { readAccountPhoto } from '@aglyn/aglyn/app-utils/account-preferences'
 import { doc } from 'firebase/firestore'
 import { useFirestore, useUser } from './firebase/firebase-services'
 import { useFirestoreDoc } from './use-firestore-doc'
@@ -86,7 +87,9 @@ export function useUserProfilePhotoUrl(): string | undefined {
 export function useUserPhoto(): string | undefined {
   const profilePhoto = useUserProfilePhotoUrl()
   const authPhoto = useUserPhotoUrl()
-  return profilePhoto || String(authPhoto ?? '').trim() || undefined
+  // The order lives in the shared rule, which the native apps replay through
+  // the generated contracts (AGL-4010), so all three draw the same face.
+  return readAccountPhoto({ photoUrl: profilePhoto }, authPhoto) ?? undefined
 }
 
 export default useUserPhoto
