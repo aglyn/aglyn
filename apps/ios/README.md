@@ -214,9 +214,11 @@ Still owed:
 
 1. **Xcode account** for team R3B7G75SWA (Xcode → Settings → Accounts), for
    Release archives and uploads.
-2. **Tap to Pay on iPhone** entitlement for `com.aglyn.pos` (requested from
-   Apple, granted per team); then `com.apple.developer.proximity-reader.payment.acceptance`
-   goes in `Config/AglynPOS.entitlements`.
+2. **Tap to Pay on iPhone, distribution.** Apple granted the development
+   entitlement (2026-10-25); the capability is on the App IDs `com.aglyn.pos`
+   and `com.aglyn.pos.debug`, and `com.apple.developer.proximity-reader.payment.acceptance`
+   is in `Config/AglynPOS.entitlements`. TestFlight and App Store builds need
+   Apple's distribution approval, requested after internal testing.
 3. **APNs key** (`.p8`, Key ID, Team ID), set as `APNS_KEY_P8`, `APNS_KEY_ID`
    and `APNS_TEAM_ID` on the server.
 4. **Developer ID** signing and **notarization** for Mac apps sold outside the
