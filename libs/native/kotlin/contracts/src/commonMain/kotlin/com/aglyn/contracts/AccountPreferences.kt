@@ -254,15 +254,42 @@ fun readWorkspaceColors(profile: Any?): Map<String, String> {
 }
 
 /**
+ * The color a workspace with no picked, brand or logo color shows on its tile: one of `WORKSPACE_STABLE_COLORS`, chosen
+ * by 32-bit FNV-1a over the id's UTF-16 code units, as the console chooses it, so the same workspace has the same color
+ * on every device and in both apps. Null for an empty id.
+ */
+fun workspaceStableColor(orgId: Any?): String? {
+  val palette = Contracts.workspaceStableColors
+  if (orgId !is String || orgId.isEmpty() || palette.isEmpty()) return null
+  var hash = 0x811C9DC5u
+  for (unit in orgId) {
+    hash = hash xor unit.code.toUInt()
+    hash *= 0x01000193u
+  }
+  return palette[(hash % palette.size.toUInt()).toInt()]
+}
+
+/**
  * A workspace's color: the one the person picked, else its brand color (`brandingProfile.primaryColor`), else a color
  * taken from its logo (Zach, 2026-10-18). A picked color always tints the app; brand and logo colors only while
- * "Use each workspace's brand" is on.
+ * "Use each workspace's brand" is on. Given the workspace's id, one with none of the three gets its stable color
+ * ([workspaceStableColor]), which colors only its tile, never the app.
  */
-fun resolveWorkspaceColor(picked: Any?, brandColor: Any?, logoColor: Any?, useWorkspaceBrand: Boolean): WorkspaceColor = when {
-  isAccountColor(picked) -> WorkspaceColor(picked as String, WorkspaceColorSource.PICKED, true)
-  isAccountColor(brandColor) -> WorkspaceColor(brandColor as String, WorkspaceColorSource.BRAND, useWorkspaceBrand)
-  isAccountColor(logoColor) -> WorkspaceColor(logoColor as String, WorkspaceColorSource.LOGO, useWorkspaceBrand)
-  else -> WorkspaceColor(null, WorkspaceColorSource.NONE, false)
+fun resolveWorkspaceColor(
+  picked: Any?,
+  brandColor: Any?,
+  logoColor: Any?,
+  useWorkspaceBrand: Boolean,
+  orgId: Any? = null,
+): WorkspaceColor {
+  val stable = workspaceStableColor(orgId)
+  return when {
+    isAccountColor(picked) -> WorkspaceColor(picked as String, WorkspaceColorSource.PICKED, true)
+    isAccountColor(brandColor) -> WorkspaceColor(brandColor as String, WorkspaceColorSource.BRAND, useWorkspaceBrand)
+    isAccountColor(logoColor) -> WorkspaceColor(logoColor as String, WorkspaceColorSource.LOGO, useWorkspaceBrand)
+    stable != null -> WorkspaceColor(stable, WorkspaceColorSource.STABLE, false)
+    else -> WorkspaceColor(null, WorkspaceColorSource.NONE, false)
+  }
 }
 
 // ── Theme ───────────────────────────────────────────────────────────────────

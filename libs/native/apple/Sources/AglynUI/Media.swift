@@ -367,7 +367,7 @@ final class AglynBrandImage {
 }
 
 /// A brand picture's bytes in a form the image decoders read (AGL-3996). ImageIO decodes no SVG, and the media CDN's
-/// `?w=` serves an SVG unchanged, so a workspace logo uploaded as an SVG (Ready To Roll's) fell back to its initials
+/// `?w=` serves an SVG unchanged, so a workspace logo uploaded as an SVG fell back to its initials
 /// and gave the rail no color. The CDN draws any asset as a transparent PNG on request (`?icon=png-N`, the site icon
 /// set's `transparent` plate, `site-icon-set.ts`); an SVG is read through that.
 public enum AglynRasterArt {

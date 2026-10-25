@@ -136,8 +136,12 @@ final class NavContractsTests: XCTestCase {
       func arg(_ index: Int) -> Any? { item.args[index] is NSNull ? nil : item.args[index] }
       XCTAssertEqual(
         resolveWorkspaceColor(
-          picked: arg(0), brandColor: arg(1), logoColor: arg(2), useWorkspaceBrand: item.args[3] as? Bool ?? false),
+          picked: arg(0), brandColor: arg(1), logoColor: arg(2), useWorkspaceBrand: item.args[3] as? Bool ?? false,
+          orgID: item.args.count > 4 ? arg(4) : nil),
         try decode(WorkspaceColor.self, item.result), item.label)
+    }
+    for item in cases("workspaceStableColor") {
+      XCTAssertEqual(workspaceStableColor(item.args[0] is NSNull ? nil : item.args[0]), item.result as? String, item.label)
     }
     for item in cases("readAppTheme") {
       XCTAssertEqual(readAppTheme(profile(item.args[0])), try decode(AppThemePrefs.self, item.result), item.label)

@@ -30,6 +30,8 @@ import {
   replacePinnedHost,
   replacePinnedOrg,
   resolveWorkspaceColor,
+  workspaceStableColor,
+  WORKSPACE_STABLE_COLORS,
   RECENTS_MAX,
   STARRED_MAX,
   toggleStarred,
@@ -144,7 +146,7 @@ describe('the rail', () => {
   })
 
   it('gives a tile one letter, its name\'s first letter or digit', () => {
-    expect(workspaceInitial('Elevated Concepts')).toBe('E')
+    expect(workspaceInitial('Acme Builders')).toBe('A')
     expect(workspaceInitial('  42 Studio')).toBe('4')
     expect(workspaceInitial('\u{1F33F} fern & fig')).toBe('F')
     expect(workspaceInitial('—')).toBe('?')
@@ -175,6 +177,34 @@ describe("a workspace's color", () => {
     expect(resolveWorkspaceColor('#111111', '#222222', '#333333', true).source).toBe('picked')
     expect(resolveWorkspaceColor(null, '#222222', '#333333', true).source).toBe('brand')
     expect(resolveWorkspaceColor(null, null, '#333333', true).source).toBe('logo')
+  })
+
+  it('falls back to a stable color from the workspace id, which never tints the app', () => {
+    const stable = resolveWorkspaceColor(null, null, null, true, 'org-acme')
+    expect(stable).toEqual({ color: workspaceStableColor('org-acme'), source: 'stable', tintsApp: false })
+    expect(resolveWorkspaceColor(null, null, '#333333', true, 'org-acme').source).toBe('logo')
+    expect(resolveWorkspaceColor(null, null, null, true).source).toBe('none')
+    expect(resolveWorkspaceColor(null, null, null, true, '').source).toBe('none')
+  })
+
+  it('gives the same id the same stable color, from the palette, and spreads ids across it', () => {
+    expect(workspaceStableColor('org-acme')).toBe(workspaceStableColor('org-acme'))
+    const ids = Array.from({ length: 64 }, (_, i) => `org-${i}`)
+    const colors = new Set(ids.map((id) => workspaceStableColor(id)))
+    for (const color of colors) expect(WORKSPACE_STABLE_COLORS).toContain(color)
+    expect(colors.size).toBe(WORKSPACE_STABLE_COLORS.length)
+    expect(workspaceStableColor(null)).toBeNull()
+  })
+
+  it('keeps every stable color dark enough for a white initial (4.5:1)', () => {
+    const channel = (hex: string, at: number) => {
+      const c = parseInt(hex.slice(at, at + 2), 16) / 255
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+    }
+    for (const hex of WORKSPACE_STABLE_COLORS) {
+      const luminance = 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5)
+      expect(1.05 / (luminance + 0.05)).toBeGreaterThanOrEqual(4.5)
+    }
   })
 
   it('stops tinting the app with the brand when the person turned that off, not their own pick', () => {

@@ -6,7 +6,7 @@ import XCTest
 @testable import AglynUI
 
 /// An SVG brand picture is read as the media CDN's PNG of it (AGL-3996): ImageIO decodes no SVG, and `?w=` returns it
-/// unchanged, so Ready To Roll's logo drew its initials on the rail.
+/// unchanged, so a workspace logo uploaded as an SVG drew its initials on the rail.
 final class RasterArtTests: XCTestCase {
   func testACdnAddressAsksForThePngAtLeastAsWideAsItsWidth() {
     let url = URL(string: "https://app.aglyn.com/api/media/cdn/org:Ok7u/6RSz?w=160")!

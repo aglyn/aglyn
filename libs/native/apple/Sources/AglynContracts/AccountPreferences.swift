@@ -284,16 +284,32 @@ public func readWorkspaceColors(_ profile: [String: Any]?) -> [String: String] {
   return out
 }
 
+/// The color a workspace with no picked, brand or logo color shows on its tile: one of `WORKSPACE_STABLE_COLORS`,
+/// chosen by 32-bit FNV-1a over the id's UTF-16 code units, as the console chooses it, so the same workspace has the
+/// same color on every device and in both apps. Nil for an empty id.
+public func workspaceStableColor(_ orgID: Any?) -> String? {
+  guard let orgID = orgID as? String, !orgID.isEmpty, !values.workspaceStableColors.isEmpty else { return nil }
+  var hash: UInt32 = 0x811C_9DC5
+  for unit in orgID.utf16 {
+    hash ^= UInt32(unit)
+    hash = hash &* 0x0100_0193
+  }
+  return values.workspaceStableColors[Int(hash % UInt32(values.workspaceStableColors.count))]
+}
+
 /// A workspace's color: the one the person picked, else its brand color, else one taken from its logo
 /// (Zach, 2026-10-18). A picked color always tints the app; the others only while "Use each workspace's brand" is on.
-public func resolveWorkspaceColor(picked: Any?, brandColor: Any?, logoColor: Any?, useWorkspaceBrand: Bool)
-  -> WorkspaceColor
-{
+/// Given the workspace's id, one with none of the three gets its stable color (`workspaceStableColor`), which colors
+/// only its tile, never the app.
+public func resolveWorkspaceColor(
+  picked: Any?, brandColor: Any?, logoColor: Any?, useWorkspaceBrand: Bool, orgID: Any? = nil
+) -> WorkspaceColor {
   if isAccountColor(picked) { return WorkspaceColor(color: picked as? String, source: .picked, tintsApp: true) }
   if isAccountColor(brandColor) {
     return WorkspaceColor(color: brandColor as? String, source: .brand, tintsApp: useWorkspaceBrand)
   }
   if isAccountColor(logoColor) { return WorkspaceColor(color: logoColor as? String, source: .logo, tintsApp: useWorkspaceBrand) }
+  if let stable = workspaceStableColor(orgID) { return WorkspaceColor(color: stable, source: .stable, tintsApp: false) }
   return WorkspaceColor(color: nil, source: .none, tintsApp: false)
 }
 
