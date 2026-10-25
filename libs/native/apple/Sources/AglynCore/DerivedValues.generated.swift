@@ -32,6 +32,17 @@ public enum MarketplaceFeeDefaults {
   public static let paid: Double = 20
 }
 
+/// A bundle's words (`describeBundle`, `fitBundleAddonsToPlan`): what the workspace Home's proposed plan reads in one line.
+public enum BundleWords {
+  public static let kinds: [String] = ["managers", "members", "datasets", "hosts", "posRegisters", "eventCalendar", "aiAddon", "siteCare"]
+  public static let toggles: [String] = ["eventCalendar", "aiAddon", "siteCare"]
+  public static let tokens: [String: String] = ["managers": "managers", "extraseat": "managers", "extraseats": "managers", "seats": "managers", "managerseats": "managers", "members": "members", "extramember": "members", "extramembers": "members", "collaborators": "members", "collaboratorseats": "members", "datasets": "datasets", "extradataset": "datasets", "extradatasets": "datasets", "hosts": "hosts", "extrahost": "hosts", "extrahosts": "hosts", "extrasite": "hosts", "extrasites": "hosts", "sites": "hosts", "posregisters": "posRegisters", "posregister": "posRegisters", "registers": "posRegisters", "register": "posRegisters", "eventcalendar": "eventCalendar", "events": "eventCalendar", "calendar": "eventCalendar", "aiaddon": "aiAddon", "ai": "aiAddon", "aglynai": "aiAddon", "sitecare": "siteCare", "site-care": "siteCare", "site_care": "siteCare", "care": "siteCare"]
+  public static let labels: [String: String] = ["managers": "Extra manager seat", "members": "Extra collaborator seat", "datasets": "Extra dataset", "hosts": "Extra site", "posRegisters": "POS register", "eventCalendar": "Event Calendar", "aiAddon": "Aglyn AI", "siteCare": "Site Care"]
+  public static let aiTierNames: [String: String] = ["spark": "Aglyn AI Spark", "boost": "Aglyn AI Boost", "plus": "Aglyn AI Plus", "max": "Aglyn AI Max", "ultra": "Aglyn AI Ultra", "studio": "Aglyn AI Studio"]
+  public static let planLabels: [String: String] = ["free": "Free", "starter": "Starter", "pro": "Pro", "business": "Business", "scale": "Scale", "advanced": "Advanced", "agency": "Agency", "enterprise": "Enterprise"]
+  public static let planMax: [String: [String: Int]] = ["free": ["managers": 0, "members": 0, "datasets": 0, "hosts": 0, "posRegisters": 0, "eventCalendar": 1, "aiAddon": 0, "siteCare": 0], "starter": ["managers": 3, "members": 8, "datasets": 8, "hosts": 100, "posRegisters": 0, "eventCalendar": 1, "aiAddon": 1, "siteCare": 1], "pro": ["managers": 17, "members": 22, "datasets": 45, "hosts": 100, "posRegisters": 50, "eventCalendar": 1, "aiAddon": 1, "siteCare": 1], "business": ["managers": 95, "members": 95, "datasets": 240, "hosts": 100, "posRegisters": 50, "eventCalendar": 1, "aiAddon": 1, "siteCare": 1], "scale": ["managers": 145, "members": 145, "datasets": 485, "hosts": 100, "posRegisters": 50, "eventCalendar": 1, "aiAddon": 1, "siteCare": 1], "advanced": ["managers": 240, "members": 245, "datasets": 975, "hosts": 100, "posRegisters": 50, "eventCalendar": 1, "aiAddon": 1, "siteCare": 1], "agency": ["managers": 490, "members": 995, "datasets": 999, "hosts": 100, "posRegisters": 50, "eventCalendar": 1, "aiAddon": 1, "siteCare": 1], "enterprise": ["managers": 0, "members": 0, "datasets": 0, "hosts": 0, "posRegisters": 50, "eventCalendar": 1, "aiAddon": 0, "siteCare": 0]]
+}
+
 /// Each release flag as the Remote Config template publishes it.
 public enum ReleaseFlagDefaults {
   public static let byKey: [String: ReleaseFlagValue] = [
@@ -58,9 +69,10 @@ public enum ReleaseFlagDefaults {
     "release_video_uploads": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_video_delivery": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_ai_generative": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
-    "release_ai_site_import": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_ai_site_import": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_crm_assist_whole_record": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_ai_site_inspiration": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_ad_audience_sync": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_site_starters": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
   ]
 }

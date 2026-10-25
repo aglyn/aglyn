@@ -63,3 +63,43 @@ fun posOfflineSaleTotals(lines: List<PosOfflineTotalsLine>, discountPct: Double,
     totalCents = items + wholeCents(tax) - appliedDiscount,
   )
 }
+
+/*
+ * A CARD TAKEN OFFLINE ON THE APP'S OWN READER (AGL-4039): the console's
+ * `posOfflineCardRefusal` and `posOfflineCardIntentMetadata`, replayed in
+ * function-cases.generated.json. The Apple kit's `PosOfflineRules.swift`.
+ */
+
+/** `$1,234.56` for whole cents, as the console's rule words an amount. */
+private fun offlineDollars(cents: Double): String {
+  val value = cents.toLong()
+  val whole = (value / 100).toString()
+  val rest = value % 100
+  val grouped = whole.reversed().chunked(3).joinToString(",").reversed()
+  return "$" + grouped + "." + rest.toString().padStart(2, '0')
+}
+
+/** Why a card cannot be taken offline for [totalCents], in the cashier's words; null when it can. */
+fun posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, takenTodayCents: Double): String? {
+  if (card == null) return "Card sales offline need the register to connect once first."
+  if (!card.available) return card.unavailableReason?.takeIf { it.isNotEmpty() } ?: "Card sales offline are not turned on for this store."
+  val total = wholeCents(totalCents)
+  if (!(total > 0)) return "There is nothing to charge."
+  val perSale = minOf(wholeCents(card.maxSaleCents), Contracts.posOfflineCardMaxSaleCentsLimit.toDouble())
+  if (total > perSale) return "Offline, a card sale can be up to ${offlineDollars(perSale)}. Take cash, or charge it when you are back online."
+  val today = wholeCents(takenTodayCents)
+  val daily = wholeCents(card.maxDeviceDailyCents)
+  if (daily > 0 && today + total > daily) {
+    return "This device has taken ${offlineDollars(today)} in cards offline today, and its daily limit is ${offlineDollars(daily)}. Take cash, or wait for the connection."
+  }
+  return null
+}
+
+/** What the app writes on the PaymentIntent it creates for a card rung offline. */
+fun posOfflineCardIntentMetadata(saleKey: String, hostId: String, orgId: String, registerId: String): Map<String, String> = mapOf(
+  "kind" to Contracts.posOfflineCardIntentKind,
+  "saleKey" to saleKey,
+  "hostId" to hostId,
+  "orgId" to orgId,
+  "registerId" to registerId,
+)

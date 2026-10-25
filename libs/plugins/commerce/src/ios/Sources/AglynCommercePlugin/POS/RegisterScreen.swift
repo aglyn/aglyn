@@ -20,6 +20,7 @@ struct RegisterScreen: View {
   @State private var showOps = false
   @State private var showPrinters = false
   @State private var showOfflineCash = false
+  @Environment(\.scenePhase) private var scenePhase
   let context: NativePluginContext
 
   init(context: NativePluginContext) {
@@ -74,7 +75,7 @@ struct RegisterScreen: View {
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
     .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
-    .sheet(isPresented: $showOfflineCash) { OfflineCashSheet(model: model) }
+    .sheet(isPresented: $showOfflineCash) { OfflineSaleSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
     .simultaneousGesture(TapGesture().onEnded { model.cashier.touch() })
@@ -110,8 +111,14 @@ struct RegisterScreen: View {
       if !Task.isCancelled { await model.mirrorToDisplay() }
     }
     .task {
+      model.permitTapToPayTerms(isStaff: context.staff != nil)
       model.start()
     }
+    // Back at the front: the reader gets ready again (Apple 1.5; the SDK lets Tap to Pay go in the background).
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { Task { await model.warmUpReader() } }
+    }
+    .tapToPayEducationAfterTerms(model.collector)
     .onDisappear { model.stop() }
   }
 
@@ -294,17 +301,17 @@ struct BasketPanel: View {
             }
             .frame(maxWidth: .infinity)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .controlSize(.large)
           .disabled(model.cart.isEmpty || model.charging || model.register == nil)
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("charge")
         } else {
-          // Offline: cash is the one tender that still sells, saved on this register until the connection returns.
+          // Offline: cash, and a card on this device's reader (AGL-4039), saved on this register until the connection returns.
           Button(action: onOfflineCash) {
-            Text("Take cash offline").frame(maxWidth: .infinity)
+            Text("Charge offline").frame(maxWidth: .infinity)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .controlSize(.large)
           .disabled(model.cart.isEmpty || !model.offline.ready || model.register == nil)
           .accessibilityIdentifier("charge-offline")

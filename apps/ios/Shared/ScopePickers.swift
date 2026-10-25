@@ -82,6 +82,22 @@ func openPickedWorkspace(_ orgID: String, in workspace: WorkspaceStore?, navigat
   navigation.enterWorkspace()
 }
 
+/// The pin as Figma draws it (the phone picker 21:2, Switcher/Workspace row 15:691): Pin is an outlined (secondary)
+/// button, never the platform's `.bordered` glass with its bright rim in dark mode; Pinned is its label alone, in the
+/// secondary text color.
+private struct PinButtonLook: ViewModifier {
+  let pinned: Bool
+
+  func body(content: Content) -> some View {
+    if pinned {
+      // In the phone's bold look the pinned state reads in the accent's text shade (Figma Phone picker 21:2, AGL-3990).
+      content.buttonStyle(.plain).foregroundStyle(AglynThemeRuntime.shared.phoneBold ? AglynColor.tint : AglynColor.secondaryText)
+    } else {
+      content.buttonStyle(.aglynSecondary)
+    }
+  }
+}
+
 /// One workspace row: its tile, name, role and plan, and the pin.
 private struct WorkspacePickerRow: View {
   /// A phone, where the ⌘1–⌘5 shortcuts are not shown.
@@ -109,7 +125,7 @@ private struct WorkspacePickerRow: View {
           AglynWorkspaceTile(
             name: org.name, logoURL: model.mediaURL(logo?.light, hostID: nil),
             darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org.id).color,
-            selected: false, size: 28)
+            selected: false, size: 28, initials: workspaceInitial(org.name))
           VStack(alignment: .leading, spacing: 1) {
             Text(org.name).font(AglynFont.body).lineLimit(1)
             if !subtitle.isEmpty { Text(subtitle).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1) }
@@ -142,9 +158,8 @@ private struct WorkspacePickerRow: View {
         }
         .font(AglynFont.caption)
       }
-      .buttonStyle(.bordered)
+      .modifier(PinButtonLook(pinned: pinIndex != nil))
       .controlSize(.small)
-      .tint(pinIndex != nil ? AglynColor.tint : AglynColor.secondaryText)
       .accessibilityLabel(pinIndex != nil ? "Unpin \(org.name)" : "Pin \(org.name)")
       .accessibilityIdentifier("picker-pin-\(org.id)")
     }
@@ -360,9 +375,6 @@ struct AddWorkspaceSheet: View {
   @Environment(AppModel.self) private var model
   let done: () -> Void
   @State private var creating = false
-  @State private var invites: [PendingInvite] = []
-  @State private var answering: String?
-  @State private var error: String?
 
   var body: some View {
     if creating {
@@ -370,19 +382,14 @@ struct AddWorkspaceSheet: View {
     } else {
       NavigationStack {
         Form {
-          if !invites.isEmpty {
+          // Invitations join on their own (AGL-4023): the ones still on their way, never an Accept.
+          if let invites = model.invites, !(invites.joining.isEmpty && invites.waiting.isEmpty) {
             Section("Invitations") {
-              ForEach(invites) { invite in
-                HStack {
-                  Text(invite.sentence).frame(maxWidth: .infinity, alignment: .leading)
-                  Button(answering == invite.id ? "Joining…" : "Accept") { accept(invite) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(answering != nil)
-                }
+              ForEach(invites.joining + invites.waiting) { invite in
+                InviteJoinStatus(invite: invite, joining: invites.statuses[invite.id] == .joining)
               }
             }
           }
-          if let error { Text(error).foregroundStyle(AglynColor.error) }
           Section {
             Button("Create a workspace", systemImage: "plus") { creating = true }
               .accessibilityIdentifier("add-workspace-create")
@@ -393,26 +400,9 @@ struct AddWorkspaceSheet: View {
         .formStyle(.grouped)
         .navigationTitle("Add workspace")
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { done() } } }
-        .task { invites = await model.signUpService?.pendingInvites() ?? [] }
+        .task { await model.joinInvites() }
       }
       .aglynSheetMinimumSize(width: 420, height: 300)
-    }
-  }
-
-  private func accept(_ invite: PendingInvite) {
-    guard let service = model.signUpService else { return }
-    answering = invite.id
-    error = nil
-    Task {
-      do {
-        try await service.answer(invite, accept: true)
-        model.workspace?.reload()
-        model.workspace?.open(orgID: invite.orgID)
-        done()
-      } catch {
-        self.error = (error as? ConsoleAPIError)?.message ?? "Accepting the invite failed"
-      }
-      answering = nil
     }
   }
 }

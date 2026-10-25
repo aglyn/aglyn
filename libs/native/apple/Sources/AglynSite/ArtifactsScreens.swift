@@ -205,7 +205,7 @@ struct ArtifactsScreen: View {
       }
       rows(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -357,7 +357,6 @@ private struct ArtifactDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .task(id: row.parentLayoutID) {
       guard kind == .layout, let parentID = row.parentLayoutID else { return }
       await parent.bind(context.firestore, ["hosts", hostID, "layouts", parentID])
@@ -416,7 +415,7 @@ private struct ArtifactDetail: View {
       } label: {
         Label("Edit in the Besigner", systemImage: "wand.and.stars")
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(runner.busy || (kind != .template && versions.state.isLoading) || (!canEdit && versionToOpen(row, versions: loaded) == nil))
       .accessibilityIdentifier("artifact-edit-besigner")
       let preview = artifactBesignerPath(kind, id: row.id, versionID: row.versionID, preview: true)
@@ -425,7 +424,7 @@ private struct ArtifactDetail: View {
       } label: {
         Label("Preview", systemImage: "eye")
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
       .disabled(preview == nil)
       .accessibilityIdentifier("artifact-preview")
       if kind == .template {
@@ -434,7 +433,7 @@ private struct ArtifactDetail: View {
         } label: {
           Label(row.isStarterBundle ? "Use this starter site" : "Use this template", systemImage: "plus")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         .disabled(!canEdit)
         .accessibilityIdentifier("use-template")
       }

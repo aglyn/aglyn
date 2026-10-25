@@ -129,3 +129,59 @@ public func analyticsDayID(_ date: Date) -> String {
 public func recentDayIDs(now: Date, days: Int) -> [String] {
   (0..<days).map { analyticsDayID(now.addingTimeInterval(-Double($0) * 86_400)) }
 }
+
+/// One UTC day of one page's traffic (`hosts/{id}/screenAnalytics/{screenId}:{day}`), what `summarizeScreenTraffic` reads.
+public struct ScreenTrafficDay: Equatable, Sendable {
+  public var total: Double
+  public var referrers: [String: Double]
+  public var devices: [String: Double]
+  public var dwellMs: Double
+  public var dwellSamples: Double
+
+  public init(total: Double, referrers: [String: Double], devices: [String: Double], dwellMs: Double, dwellSamples: Double) {
+    self.total = total
+    self.referrers = referrers
+    self.devices = devices
+    self.dwellMs = dwellMs
+    self.dwellSamples = dwellSamples
+  }
+
+  /// A day document's fields, a missing document or field reading as zero (the console card's read).
+  public init(data: [String: Any]?) {
+    func number(_ value: Any?) -> Double { (value as? NSNumber)?.doubleValue ?? 0 }
+    func counts(_ value: Any?) -> [String: Double] {
+      (value as? [String: Any] ?? [:]).compactMapValues { ($0 as? NSNumber)?.doubleValue }
+    }
+    self.init(
+      total: number(data?["total"]), referrers: counts(data?["referrers"]), devices: counts(data?["devices"]),
+      dwellMs: number(data?["dwellMs"]), dwellSamples: number(data?["dwellSamples"]))
+  }
+}
+
+/// A page's "Page traffic" figures over its days, oldest first (`summarizeScreenTraffic`): total, the dwell averaged
+/// over the visits that reported one, the `desktop · mobile · tablet` line and the five top referrers.
+public func summarizeScreenTraffic(_ days: [ScreenTrafficDay]) -> ScreenTrafficSummary {
+  let total = days.reduce(0) { $0 + $1.total }
+  let dwellTotal = days.reduce(0) { $0 + $1.dwellMs }
+  let samples = days.reduce(0) { $0 + $1.dwellSamples }
+  var referrerOrder: [String] = []
+  var referrers: [String: Double] = [:]
+  var devices: [String: Double] = [:]
+  for day in days {
+    for (key, count) in day.referrers.sorted(by: { $0.key < $1.key }) {
+      if referrers[key] == nil { referrerOrder.append(key) }
+      referrers[key, default: 0] += count
+    }
+    for (key, count) in day.devices { devices[key, default: 0] += count }
+  }
+  let deviceSum = devices.values.reduce(0, +)
+  let deviceLine =
+    deviceSum > 0
+    ? ["desktop", "mobile", "tablet"].filter { (devices[$0] ?? 0) != 0 }
+      .map { "\($0) \(jsRound((devices[$0] ?? 0) / deviceSum * 100))%" }.joined(separator: " · ")
+    : ""
+  let top = stableSortedDescending(referrerOrder.map { (key: $0, value: referrers[$0] ?? 0) }).prefix(5)
+  return ScreenTrafficSummary(
+    avgDwellMs: samples > 0 ? dwellTotal / samples : nil, deviceLine: deviceLine,
+    topReferrers: top.map { ScreenReferrerCount(count: $0.value, referrer: $0.key) }, total: total)
+}

@@ -45,7 +45,9 @@ final class RegisterModel {
   private(set) var register: PosRegister?
   private(set) var categories: [PosCategory] = []
   private(set) var context: PosContext?
-  private(set) var online = true
+  private(set) var online = true {
+    didSet { if online != oldValue { offlineCardReader?.registerConnectivityChanged(online: online) } }
+  }
   private(set) var args = PosGridArgs()
   private(set) var grid: Load<[PosItem]> = .loading
   private(set) var cart = Cart.empty
@@ -59,11 +61,12 @@ final class RegisterModel {
   /// smart readers.
   var readers: [any CardReaderService] {
     var all: [any CardReaderService] = []
-    if let deviceService, collector?.state.isConnected == true { all.append(deviceService) }
+    // Tap to Pay on iPhone has its own button at the top of checkout (`offersTapToPay`), never a second row here.
+    if let deviceService, collector?.state.isConnected == true, !deviceIsTapToPay { all.append(deviceService) }
     return all + smartReaders
   }
   private(set) var smartReaders: [SmartReaderService] = []
-  @ObservationIgnored private let deviceService: DeviceReaderService?
+  @ObservationIgnored let deviceService: DeviceReaderService?
   /// The checked-in stays a sale can be charged to.
   private(set) var stays: [PosStay] = []
 
@@ -106,6 +109,8 @@ final class RegisterModel {
   @ObservationIgnored var reconnectInterval: Duration = .seconds(10)
   /// The shift and staff PIN routes.
   @ObservationIgnored let opsAPI: PosOpsAPI
+  /// Day totals across every register (AGL-4037).
+  @ObservationIgnored let dayReportAPI: PosDayReportAPI
   @ObservationIgnored private var tillCashier: PosCashier!
   @ObservationIgnored private var tillShift: PosShiftModel!
   /// The customer lookup beside the basket.
@@ -115,6 +120,8 @@ final class RegisterModel {
   /// This register's receipt printers (AGL-3909).
   @ObservationIgnored let printers: PosPrintersModel
   @ObservationIgnored private var tillOffline: PosOfflineModel!
+  /// What the reader's SDK said about cards it sent to Stripe, until the register applies it (AGL-4039).
+  @ObservationIgnored private let cardForwards: OfflineCardForwardLedger
   @ObservationIgnored private var tillReturns: PosReturnModel!
   @ObservationIgnored private var tillDisplay: PosDisplayControl!
   @ObservationIgnored private var tillKioskQueue: PosKioskQueueModel!
@@ -139,13 +146,16 @@ final class RegisterModel {
     keyedEntry: KeyedCardEntry? = nil,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
     uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
-    displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil
+    displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil,
+    cardForwards: OfflineCardForwardLedger = OfflineCardForwardLedger(), dayReportAPI: PosDayReportAPI? = nil
   ) {
+    self.cardForwards = cardForwards
     self.hostID = hostID
     self.reader = reader
     let sale = ConsolePosSaleAPI(api: api, hostID: hostID)
     self.api = sale
     self.opsAPI = opsAPI ?? ConsolePosOpsAPI(api: api, hostID: hostID)
+    self.dayReportAPI = dayReportAPI ?? ConsolePosDayReportAPI(api: api, hostID: hostID)
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
     deviceService = collector.map { DeviceReaderService($0) }
@@ -166,6 +176,9 @@ final class RegisterModel {
       shiftID: { [weak self] in self?.tillShift.shift?.id }, assertion: { [weak cashier] in cashier?.assertion })
     offline.networkSink = { [weak self] failed in if failed { self?.online = false } }
     tillOffline = offline
+    // What the reader's SDK did with cards it stored, even while this register was closed (AGL-4039).
+    (collector as? OfflineCardCollector)?.onOfflineForward = { [weak self] in self?.applyCardForwards() }
+    applyCardForwards()
     tillDisplay = PosDisplayControl(
       api: displayAPI ?? ConsolePosDisplayAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id })
     tillKioskQueue = PosKioskQueueModel(
@@ -297,11 +310,10 @@ final class RegisterModel {
       smartReaders = loaded.readers.filter(\.online).map { SmartReaderService($0) }
       // The reader connected last time comes back on its own; nothing is
       // asked of the cashier here (connecting one is the readers screen's job).
-      if let controls = collector?.deviceReaders, collector?.state.isConnected == false {
-        await controls.reconnectRemembered(hostID: hostID, sessions: terminal)
-      }
+      await warmUpReader()
       // The console answered: get the offline rules, then send whatever was rung while it did not.
       if offline.kitIsStale { await offline.refreshKit() }
+      applyCardForwards(sync: false)
       await offline.syncNow()
     } catch {
       if isLostAnswer(error) { online = false }
@@ -406,6 +418,65 @@ final class RegisterModel {
     return rung
   }
 
+  /// This device's reader, when it can take a card with no connection (AGL-4039).
+  var offlineCardReader: OfflineCardCollector? { collector as? OfflineCardCollector }
+
+  /// A card can be taken offline right now: the store allows it and the connected reader can store one.
+  var offlineCardsReady: Bool {
+    offline.kit?.card?.available == true && collector?.state.isConnected == true
+      && offlineCardReader?.offlineCardUnavailableReason == nil
+  }
+
+  /// Why this basket cannot be paid by card offline, in the cashier's words; nil when it can.
+  func offlineCardRefusal(_ sold: Cart) -> String? {
+    if let reason = offline.cardRefusal(for: sold) { return reason }
+    guard let reader = offlineCardReader else { return "Cards offline need a card reader on this device." }
+    guard collector?.state.isConnected == true else { return "Connect the card reader to take cards offline." }
+    return reader.offlineCardUnavailableReason
+  }
+
+  enum OfflineCardResult: Equatable {
+    case rung(PosOfflineRung)
+    case canceled
+    case failed(String)
+  }
+
+  /// Takes the basket's total by card while offline: the reader stores the
+  /// card on the device and the sale joins the offline queue. The basket
+  /// clears only once both happened.
+  func takeOfflineCard(cart sold: Cart) async -> OfflineCardResult {
+    if let reason = offlineCardRefusal(sold) { return .failed(reason) }
+    guard let reader = offlineCardReader, let request = offline.cardRequest(for: sold) else {
+      return .failed("This basket cannot be paid by card offline.")
+    }
+    switch await reader.collectOffline(request) {
+    case .canceled: return .canceled
+    case .failed(let message, _): return .failed(message)
+    case .taken(let taken):
+      guard let rung = offline.ringCardSale(cart: sold, taken: taken) else {
+        return .failed(
+          "The card was taken, but this register could not save the sale. Note it down: \(taken.label), \(posMoney(request.amountCents, currency: currency)).")
+      }
+      updateCart(.empty)
+      applyCardForwards()
+      return .rung(rung)
+    }
+  }
+
+  /// Applies the ledger of card forwards to the queue, then sends what became ready.
+  func applyCardForwards(sync: Bool = true) {
+    let forwards = cardForwards.all()
+    let applied = offline.applyForwards(forwards)
+    // A card the bank declined once it was sent, while the app was away, is notified (Apple 5.12).
+    for forward in forwards where applied.contains(forward.saleKey) && forward.status != .authorized {
+      if let entry = offline.queue.first(where: { $0.id == forward.saleKey }) {
+        PosCardNotifier.notifyIfAway(CardNotApprovedNotification(amount: money(entry.totalCents), place: register?.name))
+      }
+    }
+    cardForwards.remove(applied)
+    if sync, !applied.isEmpty, online { Task { await offline.syncNow() } }
+  }
+
   private func updateCart(_ next: Cart) {
     cart = next
     if let register { store.saveCart(register.id, next) }
@@ -444,9 +515,12 @@ final class RegisterModel {
 
   private func startCheckout(_ opened: PosOpenedSale) {
     let currency = currency
-    checkout = Checkout(
+    let next = Checkout(
       api: api, opened: opened, settings: context?.settings ?? PosRegisterSettings(),
       formatMoney: { posMoney($0, currency: currency) })
+    let place = register?.name
+    next.onCardNotApproved = { amount in PosCardNotifier.notifyIfAway(CardNotApprovedNotification(amount: amount, place: place)) }
+    checkout = next
   }
 
   /// A sale this register left open (the app closed mid-checkout): read it and pick up where it stopped.

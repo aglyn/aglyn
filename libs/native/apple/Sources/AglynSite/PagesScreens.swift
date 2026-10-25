@@ -232,7 +232,7 @@ struct PagesScreen: View {
       AglynEmptyState(
         "No pages yet", systemImage: SiteSymbols.page, message: "Add a page, then design it in the Besigner."
       ) {
-        if canEdit { Button("New page") { open(.newPage) }.buttonStyle(.borderedProminent) }
+        if canEdit { Button("New page") { open(.newPage) }.buttonStyle(.aglynProminent) }
         SlotWidgets(context: context, slot: ListCreateZone.pages)
       }
     case .ready(let rows):
@@ -547,10 +547,20 @@ struct PageDetail: View {
         }
         PageVersionsSection(
           context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
+        // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
+        Section {
+          PageTrafficCard(reader: context.firestore, api: context.api, hostID: hostID, screenID: page.id) {
+            context.navigate("core.billing.plans")
+          }
+        }
+        .aglynBareFormRow()
+        Section {
+          SiteActivityCard(reader: context.firestore, api: context.api, hostID: hostID, targetID: page.id, title: "Page Activity")
+        }
+        .aglynBareFormRow()
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     // Back from the Besigner: the tree reads a page once, so what its publish changed (Published, Updated, the
     // live version) is read again now rather than shown stale until the list is reopened.
     .onReceive(NotificationCenter.default.publisher(for: RestFirestoreReader.rereadNotification)) { _ in

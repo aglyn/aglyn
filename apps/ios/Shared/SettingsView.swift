@@ -21,9 +21,10 @@ struct SettingsView: View {
     Form {
       Section {
         HStack(spacing: 12) {
-          AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 44)
+          let identity = AccountIdentity(model: model)
+          AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 44)
           VStack(alignment: .leading, spacing: 2) {
-            Text(AccountIdentity(model: model).name).font(AglynFont.headline)
+            Text(identity.name).font(AglynFont.headline)
             if let email = model.auth?.user?.email { Text(email).font(AglynFont.subheadline).foregroundStyle(.secondary) }
           }
         }
@@ -85,7 +86,7 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Settings")
     .signOutConfirmation(isPresented: $confirmSignOut)
   }

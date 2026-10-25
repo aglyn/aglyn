@@ -122,6 +122,9 @@
     "core.site.security": {
       "data": { "site": { "approvedMediaHosts": ["images.unsplash.com"], "approvedFontHosts": ["fonts.gstatic.com"], "approvedFormActions": [], "approvedFrameHosts": ["www.youtube.com"], "approvedConnectHosts": [] } }
     },
+    "core.site.delete": {
+      "data": { "erase": { "resources": [{ "pluginId": "data", "preview": { "noun": ["dataset", "datasets"], "itemNoun": ["record", "records"], "going": [{ "id": "ds-menu", "name": "Menu", "items": 12 }, { "id": "ds-leads", "name": "Leads", "items": 1 }], "staying": 1 } }] } }
+    },
     "core.staff.overview": {
       "staff": true,
       "data": { "overview": { "orgs": 1284, "payingOrgs": 212, "compedOrgs": 9, "hosts": 1730, "mrrUsd": 9420, "rollupMonth": "2026-10",
@@ -172,6 +175,14 @@
         "credits": { "credits": { "used": 168, "limit": 1000, "remaining": 832 } },
         "overage": { "hardCap": true, "capUsd": 25, "sellsOverage": true, "label": "Stop AI assist at the included band", "capLabel": "Monthly cap on extra AI use", "minCapUsd": 5, "maxCapUsd": 500 },
         "allotments": { "members": [ { "uid": "seed-owner", "name": "Mobile Owner", "role": "owner", "credits": { "used": 120 } }, { "uid": "seed-editor-leo", "name": "Leo Martins", "role": "editor", "credits": { "used": 48 } } ], "sites": [ { "hostId": "mobile-demo-site", "name": "Demo Site", "credits": { "used": 168 } } ] }
+      }
+    },
+    "commerce.reservations": {
+      "data": {
+        "resources": { "items": [ { "$id": "cabin", "name": "Creekside cabin", "nightlyRateUsd": 140, "capacity": 4}, { "$id": "rv", "name": "RV hookups", "nightlyRateUsd": 60, "units": 12, "capacity": 6} ]},
+        "stays": { "items": [ { "$id": "s1", "resourceId": "cabin", "status": "checked_in", "checkInDayMs": 1792886400000, "checkOutDayMs": 1793059200000, "guestName": "Lena Fischer", "totalCents": 28000, "paidCents": 7000}, { "$id": "s2", "resourceId": "rv", "status": "confirmed", "checkInDayMs": 1793059200000, "checkOutDayMs": 1793145600000, "guestName": "Site 1 guest", "totalCents": 6000, "paidCents": 0}, { "$id": "s3", "resourceId": "rv", "status": "confirmed", "checkInDayMs": 1793145600000, "checkOutDayMs": 1793232000000, "guestName": "Site 2 guest", "totalCents": 6000, "paidCents": 0}, { "$id": "s4", "resourceId": "cabin", "status": "pending", "checkInDayMs": 1793491200000, "checkOutDayMs": 1793664000000, "guestName": "Jordan Lee", "totalCents": 28000, "paidCents": 0} ]},
+        "current": { "items": [ { "$id": "s1", "resourceId": "cabin", "status": "checked_in", "checkInDayMs": 1792886400000, "checkOutDayMs": 1793059200000, "guestName": "Lena Fischer", "totalCents": 28000, "paidCents": 7000}, { "$id": "s2", "resourceId": "rv", "status": "confirmed", "checkInDayMs": 1793059200000, "checkOutDayMs": 1793145600000, "guestName": "Site 1 guest", "totalCents": 6000, "paidCents": 0}, { "$id": "s3", "resourceId": "rv", "status": "confirmed", "checkInDayMs": 1793145600000, "checkOutDayMs": 1793232000000, "guestName": "Site 2 guest", "totalCents": 6000, "paidCents": 0}, { "$id": "s4", "resourceId": "cabin", "status": "pending", "checkInDayMs": 1793491200000, "checkOutDayMs": 1793664000000, "guestName": "Jordan Lee", "totalCents": 28000, "paidCents": 0} ]},
+        "unitsAhead": { "rv": [ { "dayMs": 1792972800000, "label": "Mon, Oct 26", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793059200000, "label": "Tue, Oct 27", "unitsLeft": 5, "units": 12, "tone": "neutral" }, { "dayMs": 1793145600000, "label": "Wed, Oct 28", "unitsLeft": 0, "units": 12, "tone": "error" }, { "dayMs": 1793232000000, "label": "Thu, Oct 29", "unitsLeft": 2, "units": 12, "tone": "warning" }, { "dayMs": 1793318400000, "label": "Fri, Oct 30", "unitsLeft": 0, "units": 12, "tone": "error" }, { "dayMs": 1793404800000, "label": "Sat, Oct 31", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793491200000, "label": "Sun, Nov 1", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793577600000, "label": "Mon, Nov 2", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793664000000, "label": "Tue, Nov 3", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793750400000, "label": "Wed, Nov 4", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793836800000, "label": "Thu, Nov 5", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1793923200000, "label": "Fri, Nov 6", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1794009600000, "label": "Sat, Nov 7", "unitsLeft": 12, "units": 12, "tone": "neutral" }, { "dayMs": 1794096000000, "label": "Sun, Nov 8", "unitsLeft": 12, "units": 12, "tone": "neutral" } ]}
       }
     }
   }

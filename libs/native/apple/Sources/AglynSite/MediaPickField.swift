@@ -55,7 +55,7 @@ public struct MediaPickField: View {
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: AglynSpace.half) {
           Button(value.isEmpty ? "Choose from media" : "Replace from media") { choosing = true }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(!enabled)
             .accessibilityIdentifier("media-pick-choose")
           if !value.isEmpty {

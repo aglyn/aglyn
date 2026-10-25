@@ -2705,7 +2705,7 @@
       "plans": []
     },
     "release_ai_site_import": {
-      "enabled": false,
+      "enabled": true,
       "rolloutPercent": 0,
       "plans": []
     },
@@ -2720,6 +2720,11 @@
       "plans": []
     },
     "release_ad_audience_sync": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
+    },
+    "release_site_starters": {
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []
@@ -5735,5 +5740,351 @@
         "result": 20
       }
     ]
-  }
+  },
+  "bundleWords": {
+    "kinds": [
+      "managers",
+      "members",
+      "datasets",
+      "hosts",
+      "posRegisters",
+      "eventCalendar",
+      "aiAddon",
+      "siteCare"
+    ],
+    "toggles": [
+      "eventCalendar",
+      "aiAddon",
+      "siteCare"
+    ],
+    "tokens": {
+      "managers": "managers",
+      "extraseat": "managers",
+      "extraseats": "managers",
+      "seats": "managers",
+      "managerseats": "managers",
+      "members": "members",
+      "extramember": "members",
+      "extramembers": "members",
+      "collaborators": "members",
+      "collaboratorseats": "members",
+      "datasets": "datasets",
+      "extradataset": "datasets",
+      "extradatasets": "datasets",
+      "hosts": "hosts",
+      "extrahost": "hosts",
+      "extrahosts": "hosts",
+      "extrasite": "hosts",
+      "extrasites": "hosts",
+      "sites": "hosts",
+      "posregisters": "posRegisters",
+      "posregister": "posRegisters",
+      "registers": "posRegisters",
+      "register": "posRegisters",
+      "eventcalendar": "eventCalendar",
+      "events": "eventCalendar",
+      "calendar": "eventCalendar",
+      "aiaddon": "aiAddon",
+      "ai": "aiAddon",
+      "aglynai": "aiAddon",
+      "sitecare": "siteCare",
+      "site-care": "siteCare",
+      "site_care": "siteCare",
+      "care": "siteCare"
+    },
+    "labels": {
+      "managers": "Extra manager seat",
+      "members": "Extra collaborator seat",
+      "datasets": "Extra dataset",
+      "hosts": "Extra site",
+      "posRegisters": "POS register",
+      "eventCalendar": "Event Calendar",
+      "aiAddon": "Aglyn AI",
+      "siteCare": "Site Care"
+    },
+    "aiTierNames": {
+      "spark": "Aglyn AI Spark",
+      "boost": "Aglyn AI Boost",
+      "plus": "Aglyn AI Plus",
+      "max": "Aglyn AI Max",
+      "ultra": "Aglyn AI Ultra",
+      "studio": "Aglyn AI Studio"
+    },
+    "planLabels": {
+      "free": "Free",
+      "starter": "Starter",
+      "pro": "Pro",
+      "business": "Business",
+      "scale": "Scale",
+      "advanced": "Advanced",
+      "agency": "Agency",
+      "enterprise": "Enterprise"
+    },
+    "planMax": {
+      "free": {
+        "managers": 0,
+        "members": 0,
+        "datasets": 0,
+        "hosts": 0,
+        "posRegisters": 0,
+        "eventCalendar": 1,
+        "aiAddon": 0,
+        "siteCare": 0
+      },
+      "starter": {
+        "managers": 3,
+        "members": 8,
+        "datasets": 8,
+        "hosts": 100,
+        "posRegisters": 0,
+        "eventCalendar": 1,
+        "aiAddon": 1,
+        "siteCare": 1
+      },
+      "pro": {
+        "managers": 17,
+        "members": 22,
+        "datasets": 45,
+        "hosts": 100,
+        "posRegisters": 50,
+        "eventCalendar": 1,
+        "aiAddon": 1,
+        "siteCare": 1
+      },
+      "business": {
+        "managers": 95,
+        "members": 95,
+        "datasets": 240,
+        "hosts": 100,
+        "posRegisters": 50,
+        "eventCalendar": 1,
+        "aiAddon": 1,
+        "siteCare": 1
+      },
+      "scale": {
+        "managers": 145,
+        "members": 145,
+        "datasets": 485,
+        "hosts": 100,
+        "posRegisters": 50,
+        "eventCalendar": 1,
+        "aiAddon": 1,
+        "siteCare": 1
+      },
+      "advanced": {
+        "managers": 240,
+        "members": 245,
+        "datasets": 975,
+        "hosts": 100,
+        "posRegisters": 50,
+        "eventCalendar": 1,
+        "aiAddon": 1,
+        "siteCare": 1
+      },
+      "agency": {
+        "managers": 490,
+        "members": 995,
+        "datasets": 999,
+        "hosts": 100,
+        "posRegisters": 50,
+        "eventCalendar": 1,
+        "aiAddon": 1,
+        "siteCare": 1
+      },
+      "enterprise": {
+        "managers": 0,
+        "members": 0,
+        "datasets": 0,
+        "hosts": 0,
+        "posRegisters": 50,
+        "eventCalendar": 1,
+        "aiAddon": 0,
+        "siteCare": 0
+      }
+    }
+  },
+  "proposalCases": [
+    {
+      "org": {},
+      "plan": null,
+      "summary": null,
+      "bundled": false
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "pro"
+        }
+      },
+      "plan": "pro",
+      "summary": "Pro",
+      "bundled": false
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "free"
+        }
+      },
+      "plan": null,
+      "summary": null,
+      "bundled": false
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "enterprise"
+        }
+      },
+      "plan": null,
+      "summary": null,
+      "bundled": false
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "business",
+          "interval": "year"
+        }
+      },
+      "plan": "business",
+      "summary": "Business, billed yearly",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "business",
+          "interval": "month",
+          "coupon": "BOOTH25"
+        }
+      },
+      "plan": "business",
+      "summary": "Business, billed monthly, code BOOTH25",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "business",
+          "coupon": "not a code!"
+        }
+      },
+      "plan": "business",
+      "summary": "Business",
+      "bundled": false
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "starter",
+          "addons": {
+            "siteCare": 1
+          }
+        }
+      },
+      "plan": "starter",
+      "summary": "Starter with Site Care",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "pro",
+          "addons": {
+            "managers": 2,
+            "hosts": 1,
+            "aiAddon": 1
+          },
+          "aiTier": "boost",
+          "interval": "year"
+        }
+      },
+      "plan": "pro",
+      "summary": "Pro with 2 × Extra manager seat, Extra site and Aglyn AI Boost, billed yearly",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "pro",
+          "addons": {
+            "aiAddon": 1
+          }
+        }
+      },
+      "plan": "pro",
+      "summary": "Pro with Aglyn AI",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "starter",
+          "addons": {
+            "posRegisters": 3,
+            "eventCalendar": 4,
+            "datasets": 2000
+          }
+        }
+      },
+      "plan": "starter",
+      "summary": "Starter with 8 × Extra dataset and Event Calendar",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "business",
+          "addons": {
+            "extraSeat": 2,
+            "extraSite": 1,
+            "members": 0,
+            "datasets": false
+          }
+        }
+      },
+      "plan": "business",
+      "summary": "Business with 2 × Extra manager seat and Extra site",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "scale",
+          "addons": {
+            "managers": 1,
+            "members": 1,
+            "siteCare": true
+          }
+        }
+      },
+      "plan": "scale",
+      "summary": "Scale with Extra manager seat, Extra collaborator seat and Site Care",
+      "bundled": true
+    },
+    {
+      "org": {
+        "billingStatus": "active",
+        "upgradeProposal": {
+          "plan": "business"
+        }
+      },
+      "plan": null,
+      "summary": null,
+      "bundled": false
+    },
+    {
+      "org": {
+        "billingStatus": "canceled",
+        "upgradeProposal": {
+          "plan": "business",
+          "interval": "year"
+        }
+      },
+      "plan": "business",
+      "summary": "Business, billed yearly",
+      "bundled": true
+    }
+  ]
 }

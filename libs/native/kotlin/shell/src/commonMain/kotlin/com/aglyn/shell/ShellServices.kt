@@ -93,6 +93,9 @@ class ShellServices(
   /** The console routes and account writes every sign-up door makes. */
   val signUp: com.aglyn.core.SignUpService by lazy { com.aglyn.core.SignUpService(api, writer, firestore) }
 
+  /** The signed-in person's invitations, joined on their own (AGL-4023): never an Accept step. */
+  val inviteJoin: com.aglyn.core.InviteAutoJoin by lazy { com.aglyn.core.InviteAutoJoin(signUp) }
+
   /** Removes this install's device row, then signs out, so no push follows the person out. */
   suspend fun signOut() {
     (auth.state.value as? com.aglyn.core.AuthState.SignedIn)?.let { push.unregister(it.user.uid) }

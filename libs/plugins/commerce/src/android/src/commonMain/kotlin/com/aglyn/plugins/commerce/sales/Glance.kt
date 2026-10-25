@@ -105,7 +105,7 @@ fun GlanceWidget(context: NativePluginContext) {
 @Composable
 private fun SectionRow(label: String, value: String, modifier: Modifier, onClick: () -> Unit) {
   androidx.compose.foundation.layout.Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-    androidx.compose.material3.TextButton(onClick = onClick) { Text(label) }
+    com.aglyn.ui.TextButton(onClick = onClick) { Text(label) }
     Text(value, Modifier.padding(top = space(1f)), style = MaterialTheme.typography.titleMedium)
   }
 }

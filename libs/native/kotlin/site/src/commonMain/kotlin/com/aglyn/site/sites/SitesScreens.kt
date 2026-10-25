@@ -18,7 +18,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
@@ -46,6 +45,7 @@ import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.core.siteAddress
+import com.aglyn.core.siteListAddress
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.site.SiteAreas
@@ -62,6 +62,7 @@ import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
@@ -113,7 +114,7 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   val open = selected
   if (open != null) {
     Column(Modifier.fillMaxSize()) {
-      androidx.compose.material3.TextButton(onClick = { selected = null }, modifier = Modifier.padding(start = space(1.5f), top = space(0.5f)).testTag("sites-back")) {
+      com.aglyn.ui.TextButton(onClick = { selected = null }, modifier = Modifier.padding(start = space(1.5f), top = space(0.5f)).testTag("sites-back")) {
         Icon(AglynIcons.named("chevron_left"), contentDescription = null)
         Text("Sites")
       }
@@ -167,7 +168,7 @@ private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Bo
   // shows it), and the status.
   com.aglyn.ui.ScaffoldListRow(
     title = row.name,
-    detail = listOfNotNull(row.cname ?: siteAddress(row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
+    detail = listOfNotNull(siteListAddress((host as? Live.Ready)?.value?.string("cname")?.trim()?.ifEmpty { null } ?: row.cname, row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
     kind = com.aglyn.ui.ScaffoldRowKind.SITE,
     selected = selected,
     leading = { com.aglyn.ui.ScaffoldRowTile("public", mediaPreviewUrl(favicon, context.api.origin, row.id, 160)) },

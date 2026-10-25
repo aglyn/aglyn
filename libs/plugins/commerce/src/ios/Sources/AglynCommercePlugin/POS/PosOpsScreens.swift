@@ -45,7 +45,18 @@ struct RegisterOpsSheet: View {
           .disabled(model.register == nil)
           .accessibilityIdentifier("pos-lock")
         }
-        Section("Shift") { ShiftControls(model: model) }
+        Section("Shift") {
+          ShiftControls(model: model)
+          // Every register, shift and cashier for the day or the event (AGL-4037), and this device's unsynced sales.
+          NavigationLink {
+            PosDayTotalsView(
+              model: PosDayReportModel(api: model.dayReportAPI), currency: model.currency,
+              notSynced: PosDayNotSynced(model.offline.queue))
+          } label: {
+            Text("Day totals")
+          }
+          .accessibilityIdentifier("pos-day-totals")
+        }
         DisplayDevicesSection(model: model)
         LastReceiptSection(model: model)
         Section("Returns") {
@@ -448,7 +459,7 @@ struct PinPadSheet: View {
                 Text(key == "back" ? "⌫" : key == "clear" ? "Clear" : key)
                   .font(AglynFont.title2).frame(maxWidth: .infinity, minHeight: 52)
               }
-              .buttonStyle(.bordered)
+              .buttonStyle(.aglynSecondary)
               .disabled(pad.busy || pad.memberUID.isEmpty)
               .accessibilityIdentifier("pin-\(key)")
             }
@@ -472,7 +483,7 @@ struct LockedRegister: View {
       VStack(spacing: AglynSpace.two) {
         Image(systemName: "lock.fill").font(.largeTitle).foregroundStyle(.secondary)
         Text("Register locked").font(AglynFont.title2)
-        Button("Enter PIN") { entering = true }.buttonStyle(.borderedProminent)
+        Button("Enter PIN") { entering = true }.buttonStyle(.aglynProminent)
       }
     }
     .accessibilityIdentifier("pos-locked")
@@ -588,7 +599,7 @@ private struct PairingCodeSheet: View {
           Text("and works once.")
         }
         .font(AglynFont.caption).foregroundStyle(.secondary)
-        Button("New code") { Task { await model.display.newPairingCode(mode) } }.buttonStyle(.bordered)
+        Button("New code") { Task { await model.display.newPairingCode(mode) } }.buttonStyle(.aglynSecondary)
         Spacer(minLength: 0)
       }
       .padding(AglynSpace.three)

@@ -33,10 +33,12 @@ public struct AglynSurfaces: Sendable {
   public let hover: Color
   /// Captions and placeholders.
   public let textTertiary: Color
+  /// A control's outline: a secondary button's or a field's border (Figma border/strong).
+  public let borderStrong: Color
 
   public init(
     canvas: Color, surface: Color, rail: Color, railText: Color, border: Color, textPrimary: Color, textSecondary: Color,
-    titlebar: Color? = nil, sunken: Color? = nil, hover: Color? = nil, textTertiary: Color? = nil
+    titlebar: Color? = nil, sunken: Color? = nil, hover: Color? = nil, textTertiary: Color? = nil, borderStrong: Color? = nil
   ) {
     self.canvas = canvas
     self.surface = surface
@@ -49,6 +51,7 @@ public struct AglynSurfaces: Sendable {
     self.sunken = sunken ?? canvas
     self.hover = hover ?? canvas
     self.textTertiary = textTertiary ?? textSecondary
+    self.borderStrong = borderStrong ?? border
   }
 }
 
@@ -73,13 +76,20 @@ public struct AglynThemeSpec: Sendable {
   public let accent: String
   /// Whether the theme is dark in both appearances (Night).
   public let alwaysDark: Bool
+  /// The phone's bold brand look (AGL-3990): the Aglyn theme, in the brand blue, on a phone. Its surfaces are the
+  /// contract's `THEME_PHONE_AGLYN`, and the shared phone pieces (the header glow, the tab bar's pill and gradient +,
+  /// the Menu's tiles) draw their bold form. Never on an iPad, a Mac or the POS register.
+  public let phoneBold: Bool
 
-  public init(id: String, light: AglynSurfaces, dark: AglynSurfaces, accent: String, alwaysDark: Bool) {
+  public init(
+    id: String, light: AglynSurfaces, dark: AglynSurfaces, accent: String, alwaysDark: Bool, phoneBold: Bool = false
+  ) {
     self.id = id
     self.light = light
     self.dark = dark
     self.accent = accent
     self.alwaysDark = alwaysDark
+    self.phoneBold = phoneBold
   }
 }
 
@@ -108,7 +118,7 @@ public final class AglynThemeRuntime: @unchecked Sendable {
   private var accent: (light: AglynIntent, dark: AglynIntent)?
   private var shades: (light: AglynAccentShades, dark: AglynAccentShades)?
   private var compact = false
-  private var tintedSidebar = true
+  private var tintedSidebar = false
   private var scale: CGFloat = 1
 
   public init() {}
@@ -151,6 +161,9 @@ public final class AglynThemeRuntime: @unchecked Sendable {
 
   /// Whether the theme is dark in both appearances.
   public var alwaysDark: Bool { lock.withLock { spec.alwaysDark } }
+
+  /// Whether the phone's bold brand look is on (`AglynThemeSpec.phoneBold`).
+  public var phoneBold: Bool { lock.withLock { spec.phoneBold } }
 }
 
 /// Colour arithmetic the shared tokens use to blend two colors.

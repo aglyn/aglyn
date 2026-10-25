@@ -1,15 +1,16 @@
 ---
 sidebar_position: 2.75
 title: Bring my site
-description: Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours. Rolling out.
-unlisted: true
+description: Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.
 ---
 
 # Bring my site
 
-:::caution Rolling out
-**Bring my site** is **not yet available** on aglyn.com-hosted workspaces. Until
-it is, **Create site** offers only the starter site and **Start with AI**.
+:::note Beta
+**Bring my site is in beta.** It is available today on every plan that includes
+it, and it is still changing as we improve it. Beta means you can use it now,
+while how it reads and rebuilds your pages, and the steps on this page, may
+still change.
 :::
 
 **Bring my site** moves the website you have now into a new Aglyn site. Aglyn AI
@@ -128,7 +129,22 @@ first. The same photo is stored only once, however many pages show it.
 - **The day's limit.** A workspace can start 12 waves a day, counting each time a site is
   read. Start the wave again the next day.
 - **The site could not be read.** If robots.txt could not be read, or no page answered,
-  nothing is read. Choose **Read the site again** once your site is up.
+  nothing is read. Choose **Read the site again** once your site is up. If your site's
+  bot protection turned AglynBot away, see [When your site turns AglynBot away](#turned-away).
 - **Out of AI credits.** The import pauses. Choose **Get more AI credits**, then **Resume**.
 
 Every import is also logged for the Trust & Safety team's review.
+
+## When your site turns AglynBot away {#turned-away}
+
+Many hosts protect a site with bot protection or a firewall that turns away visitors it
+takes for robots. If yours turns AglynBot away, the page is listed under **Not brought in**
+as turned away by your site's bot protection or firewall. If it turns away every page,
+nothing is read, and the import says so.
+
+To bring those pages in:
+
+1. Open your site's bot protection or firewall settings, wherever your host or your
+   domain's security service keeps them.
+2. Allow **AglynBot**. It reads only your own domain, and only pages robots.txt lets it read.
+3. Bring the site in again. If nothing was read, choose **Read the site again**.

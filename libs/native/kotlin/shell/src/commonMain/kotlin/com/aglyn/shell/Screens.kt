@@ -21,11 +21,9 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,9 +57,11 @@ import com.aglyn.ui.BrandPicture
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalAglynPalette
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.Skeleton
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.launch
@@ -88,7 +88,7 @@ internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, or
     // A full window is not the whole list (the console's switcher, AGL-2336).
     if (workspace.hasMoreOrgs) {
       item {
-        androidx.compose.material3.TextButton(
+        com.aglyn.ui.TextButton(
           onClick = { store.loadMoreOrgs() },
           modifier = Modifier.padding(horizontal = space(1f)).testTag("switcher-more-orgs"),
         ) { Text("Load more workspaces") }
@@ -103,7 +103,7 @@ internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, or
     items(workspace.sites, key = { "site-${it.id}" }) { site ->
       AglynListItem(
         title = site.name,
-        supporting = site.subdomain.ifEmpty { null },
+        supporting = site.address,
         icon = AglynIcons.named("public"),
         imageUrl = mediaPreviewUrl(site.favicon, origin, site.id, 160),
         trailing = { RadioButton(selected = site.id == workspace.site?.id, onClick = null) },
@@ -123,7 +123,7 @@ internal fun SectionHeader(text: String) {
     text,
     Modifier.padding(start = space(2f), end = space(2f), top = space(2f), bottom = space(1f)).semantics { heading() },
     style = MaterialTheme.typography.titleSmall,
-    color = MaterialTheme.colorScheme.primary,
+    color = com.aglyn.ui.aglynAccentText,
   )
 }
 

@@ -80,7 +80,7 @@ struct SitesScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -98,7 +98,7 @@ struct SitesScreen: View {
         filtered ? "No sites match" : "No sites yet", systemImage: SiteSymbols.site,
         message: filtered ? "Try another search or filter." : "Create a site to start building."
       ) {
-        if !filtered && canCreate { Button("Create site") { creating = true }.buttonStyle(.borderedProminent) }
+        if !filtered && canCreate { Button("Create site") { creating = true }.buttonStyle(.aglynProminent) }
       }
     case .ready(let rows):
       if selectable {
@@ -162,6 +162,9 @@ struct SiteListRow: View {
     // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
     // membership row's copy of it.
     let favicon = siteFavicon(doc) ?? row.favicon
+    // The address the live site answers on: the host's own custom domain once it is read (a membership row written
+    // before the mirror carried `cname` lacks it), else the row's custom domain, else the platform address.
+    let address = row.shownAddress(hostCname: doc?.string("cname"))
     // Figma List/Site row 36:826: a 36-point favicon, the name at 14 semibold over the address at 12, then the chips and
     // when it was edited; 62 points tall, 12 above and below and 14 between, its sides on the content edges.
     HStack(spacing: 14) {
@@ -174,7 +177,7 @@ struct SiteListRow: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(row.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
           .lineLimit(1).truncationMode(.tail)
-        Text(row.shownAddress ?? "").font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText)
+        Text(address ?? "").font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText)
           .lineLimit(1).truncationMode(.middle)
       }
       Spacer(minLength: 8)
@@ -292,7 +295,6 @@ struct SiteOverview: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("site-detail")
   }
 }
@@ -400,7 +402,7 @@ struct CreateSiteSheet: View {
                   subdomain = suggestion
                   edited = true
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aglynSecondary)
               }
             }
           }

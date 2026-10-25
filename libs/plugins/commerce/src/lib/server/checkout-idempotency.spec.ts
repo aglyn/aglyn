@@ -296,6 +296,19 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 
+describe('buy now for a product sold in person only (AGL-4060)', () => {
+  it('answers 404 and opens no session or claim', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      ...docs.get('hosts/host-1/products/product-1'),
+      sellOnline: false,
+    })
+    const result = await post({}, { 'idempotency-key': 'attempt-in-person' })
+    expect(result.status).toBe(404)
+    expect(sessionCalls()).toHaveLength(0)
+    expect(claimDocs()).toHaveLength(0)
+  })
+})
+
 describe('buy-now checkout idempotency (AGL-1697)', () => {
   it('creates one session and records the claim', async () => {
     const result = await post({}, { 'idempotency-key': 'attempt-a' })

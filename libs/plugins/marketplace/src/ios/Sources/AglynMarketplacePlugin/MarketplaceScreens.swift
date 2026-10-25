@@ -154,7 +154,7 @@ struct BrowseScreen: View {
       content(selectable: selectable)
     }
     .aglynListColumn()
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -509,7 +509,7 @@ private struct ListingBody: View {
     if plugin, state.installedVersion != nil {
       if state.updateAvailable, let offered {
         Button("Update to v\(offered)") { open(.install(state.scope)) }
-          .buttonStyle(.borderedProminent).disabled(!installable || runner.busy).accessibilityIdentifier("listing-update")
+          .buttonStyle(.aglynProminent).disabled(!installable || runner.busy).accessibilityIdentifier("listing-update")
       }
       Button(state.scope == .org ? "Remove from the workspace" : "Remove from this site", role: .destructive) { open(.uninstall(state.scope ?? .host)) }
         .disabled(!installable || runner.busy).accessibilityIdentifier("listing-uninstall")
@@ -519,7 +519,7 @@ private struct ListingBody: View {
       } label: {
         Label(targets.contains(.host) ? "Install on this site" : "Install", systemImage: "arrow.down.circle")
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(!installable || runner.busy || (plugin && offered == nil))
       .accessibilityIdentifier("listing-install")
       if targets.contains(.org), targets.contains(.host) {
@@ -741,7 +741,7 @@ struct InstalledScreen: View {
         List { SkeletonRows(count: 4) }.aglynListBackground()
       }
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .task(id: "\(hostID)-\(context.orgID ?? "")") {
       sitePins.start(context.firestore, FirestoreQuery(["hosts", hostID, "installs"], limit: 50))
       if let orgID = context.orgID {
@@ -860,7 +860,7 @@ struct LicencesScreen: View {
       .aglynListBackground()
       .accessibilityIdentifier("licences-list")
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
     .task(id: orgID) { held.start(context.firestore, licencesQuery(orgID: orgID)) }
     .task(id: licensedTo ?? "") { mine.start(context.firestore, boughtByYouQuery(uid: context.uid, licensedTo: licensedTo)) }
     .task(id: ((heldRows ?? []) + (mineRows ?? [])).map(\.listingID)) {

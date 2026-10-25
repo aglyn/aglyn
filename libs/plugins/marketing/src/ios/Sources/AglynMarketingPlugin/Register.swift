@@ -21,6 +21,8 @@ public func registerMarketingNative(_ r: NativePluginRegistrar) {
       }
     }
   }
+  // The site dashboard's "Last campaign" card (the console's `email-campaign-glance`).
+  r.widget("marketing.last-campaign", title: "Last campaign", order: 80, size: .half, requiresSite: true) { LastCampaignCard(context: $0) }
   r.quickAction("marketing.open", title: "Marketing", icon: "megaphone", order: 66, screen: MarketingSection.overview.screen, requiresSite: true)
   r.deepLink("marketing.page", path: "/marketing", screen: MarketingSection.overview.screen)
   for section in MarketingSection.allCases {

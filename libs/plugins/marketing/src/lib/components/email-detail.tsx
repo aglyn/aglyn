@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
+import { checkQuota, PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiCalendarClockOutline,
@@ -30,7 +30,14 @@ import RowActionsMenu, {
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  useConsoleHostRoute,
+  useFirestore,
+  useFirestoreDoc,
+  useOrgPlan,
+} from '@aglyn/tenant-feature-instance'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import {
   Alert,
   Button,
@@ -52,6 +59,7 @@ import {
   type SendStats,
 } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { campaignReport } from '../model/campaign-report'
+import { campaignPlanLock, type CampaignPlanLock } from '../model/campaign-plan-lock'
 import {
   campaignHeldForReviewNotice,
   campaignSendDisplay,
@@ -329,6 +337,34 @@ export function EmailDetail(props: EmailDetailProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [sendingMore, setSendingMore] = useState(false)
 
+  /*
+   * THE PLAN, SAID BEFORE "Send now" OR "Send to more recipients".
+   *
+   * A plan without campaign email is known from the plan alone, so it locks
+   * both buttons the moment the page loads, exactly as it locks the
+   * composer's Send. A month whose allowance is spent, or an audience bigger
+   * than what is left, is only known from the dry run each button asks for
+   * first; that answer carries the same `planLock`, and it replaces the
+   * confirmation rather than arriving as a refusal after it.
+   */
+  const { org, ready: orgReady } = useOrgPlan(hostId ?? undefined)
+  const { orgSlug } = useConsoleHostRoute(hostId)
+  const [dryRunPlanLock, setDryRunPlanLock] = useState<CampaignPlanLock | null>(
+    null,
+  )
+  const planLock = useMemo(
+    () =>
+      dryRunPlanLock ??
+      (orgReady
+        ? campaignPlanLock({
+            limit: checkQuota(org as never, 'emailSendsPerMonth', 0).limit,
+            used: 0,
+          })
+        : null),
+    [dryRunPlanLock, org, orgReady],
+  )
+  const upgradeHref = orgSlug ? `/${orgSlug}/billing#plans` : undefined
+
   const handleSendToMore = useCallback(async () => {
     if (sendingMore) return
     setSendingMore(true)
@@ -338,6 +374,9 @@ export function EmailDetail(props: EmailDetailProps) {
         campaignId: emailId,
         dryRun: true,
       })
+      if (counted.payload?.planLock) {
+        return void setDryRunPlanLock(counted.payload.planLock)
+      }
       if (!counted.response.ok) {
         return void enqueueSnackbar(
           counted.payload?.error ?? 'This email cannot be sent again',
@@ -468,7 +507,9 @@ export function EmailDetail(props: EmailDetailProps) {
         campaignId: emailId,
         dryRun: true,
       })
-      if (counted.response.ok) {
+      if (counted.payload?.planLock) {
+        setDryRunPlanLock(counted.payload.planLock)
+      } else if (counted.response.ok) {
         reaching = Number(
           counted.payload?.sendable ?? counted.payload?.sent ?? 0,
         )
@@ -739,14 +780,16 @@ export function EmailDetail(props: EmailDetailProps) {
    * and neither does one that is mid-send.
    */
   const primaryAction = held ? null : (draft || scheduled) && !midFlight ? (
-      <Button
-        size="small"
-        variant="contained"
-        disabled={Boolean(busy)}
-        onClick={() => void handleSendNow()}
-      >
-        {busy === 'sendNow' ? 'Checking…' : 'Send now'}
-      </Button>
+      <BlockedControl blocked={Boolean(planLock)} reason={planLock?.reason ?? ''}>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={Boolean(busy) || Boolean(planLock)}
+          onClick={() => void handleSendNow()}
+        >
+          {busy === 'sendNow' ? 'Checking…' : 'Send now'}
+        </Button>
+      </BlockedControl>
     ) : midFlight ? (
       /*
         A CAMPAIGN THAT IS ALREADY GOING OUT HAS ONE ACT: STOPPING IT.
@@ -768,14 +811,16 @@ export function EmailDetail(props: EmailDetailProps) {
         {'Stop sending'}
       </Button>
     ) : state === 'sent' ? (
-      <Button
-        size="small"
-        variant="contained"
-        disabled={sendingMore}
-        onClick={() => void handleSendToMore()}
-      >
-        {sendingMore ? 'Checking…' : 'Send to more recipients'}
-      </Button>
+      <BlockedControl blocked={Boolean(planLock)} reason={planLock?.reason ?? ''}>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={sendingMore || Boolean(planLock)}
+          onClick={() => void handleSendToMore()}
+        >
+          {sendingMore ? 'Checking…' : 'Send to more recipients'}
+        </Button>
+      </BlockedControl>
     ) : null
 
   /**
@@ -884,6 +929,14 @@ export function EmailDetail(props: EmailDetailProps) {
         HeaderProps={{ action: headerActions }}
       >
         <Stack spacing={3}>
+          {planLock && primaryAction && !midFlight && !siteless ? (
+            <PlanUpsellNotice
+              planLabel={planLock.planLabel}
+              upgradeHref={upgradeHref}
+            >
+              {planLock.notice}
+            </PlanUpsellNotice>
+          ) : null}
           {report.caveats.map((caveat) => (
             <Alert key={caveat.id} severity="info">
               {caveat.message}

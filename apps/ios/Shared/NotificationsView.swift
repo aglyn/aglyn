@@ -414,10 +414,10 @@ struct NotificationDetail: View {
         if let body = row.body { Text(body).font(AglynFont.body) }
         Divider()
         if row.inviteID != nil, row.orgID != nil {
-          Button("Review the invitation") { navigation.pendingInvite = row }.buttonStyle(.borderedProminent)
+          Button("Open") { navigation.pendingInvite = row }.buttonStyle(.aglynProminent)
         } else if row.link != nil {
           Button("Open") { openNotification(row, model: model, navigation: navigation) }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .accessibilityIdentifier("notification-open")
         } else {
           Text("Nothing to open for this one.").font(AglynFont.subheadline).foregroundStyle(.secondary)
@@ -480,9 +480,11 @@ struct InviteReviewSheet: View {
   @Environment(AppModel.self) private var model
   @Environment(\.dismiss) private var dismiss
   let row: FeedNotification
-  @State private var busy = false
-  @State private var error: String?
-  @State private var confirmDecline = false
+
+  /// The invitation joins on its own (AGL-4023): a member opens the workspace; otherwise it is joining or almost
+  /// ready. Never an Accept or a Decline.
+  private var member: Bool { model.workspace?.orgs.contains { $0.id == row.orgID } == true }
+  private var invite: PendingInvite? { model.invites?.invites.first { $0.id == row.inviteID } }
 
   var body: some View {
     NavigationStack {
@@ -491,42 +493,29 @@ struct InviteReviewSheet: View {
           Text(row.title).font(AglynFont.headline)
           if let body = row.body { Text(body).foregroundStyle(.secondary) }
         }
-        if let error { Section { AglynNotice(error, tone: .error) } }
         Section {
-          Button("Accept") { respond("accept") }
-            .disabled(busy)
-            .accessibilityIdentifier("invite-accept")
-          Button("Decline", role: .destructive) { confirmDecline = true }
-            .disabled(busy)
-            .accessibilityIdentifier("invite-decline")
+          if member {
+            Button("Open the workspace") {
+              if let orgID = row.orgID { model.workspace?.open(orgID: orgID) }
+              dismiss()
+            }
+            .accessibilityIdentifier("invite-open-workspace")
+          } else if let invite {
+            InviteJoinStatus(invite: invite, joining: model.invites?.statuses[invite.id] == .joining)
+          } else {
+            HStack(spacing: AglynSpace.one) {
+              ProgressView().controlSize(.small)
+              Text("Joining…").foregroundStyle(.secondary)
+            }
+          }
         }
       }
       .formStyle(.grouped)
       .navigationTitle("Invitation")
-      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Not now") { dismiss() } } }
-      .confirmationDialog("Decline this invitation?", isPresented: $confirmDecline) {
-        Button("Decline", role: .destructive) { respond("decline") }
-      }
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+      .task { await model.joinInvites() }
     }
     .aglynSheetMinimumSize(width: 360, height: 320)
-  }
-
-  private func respond(_ action: String) {
-    guard let api = model.api, let orgID = row.orgID, let inviteID = row.inviteID else { return }
-    busy = true
-    error = nil
-    Task {
-      do {
-        try await api.request(
-          "/api/orgs/invites", method: .post,
-          body: .object(["orgId": .string(orgID), "action": .string(action), "inviteId": .string(inviteID)]))
-        if action == "accept" { model.workspace?.selectOrg(orgID) }
-        dismiss()
-      } catch {
-        self.error = error.localizedDescription
-      }
-      busy = false
-    }
   }
 }
 

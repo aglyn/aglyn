@@ -1,0 +1,12 @@
+{
+  "firestore": { "rules": "firebase-firestore.deploy.rules", "indexes": "firebase-firestore.indexes.json" },
+  "database": { "rules": "firebase-database.rules.json" },
+  "emulators": {
+    "firestore": { "port": 24682, "host": "127.0.0.1" },
+    "database": { "port": 24600, "host": "127.0.0.1" },
+    "hub": { "port": 24620, "host": "127.0.0.1" },
+    "logging": { "port": 24621, "host": "127.0.0.1" },
+    "eventarc": { "port": 24622, "host": "127.0.0.1" },
+    "ui": { "enabled": false }
+  }
+}

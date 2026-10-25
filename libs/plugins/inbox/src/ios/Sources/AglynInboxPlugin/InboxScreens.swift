@@ -135,7 +135,7 @@ struct PeopleScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .aglynListColumn()
-    .background(AglynColor.page)
+    .background(AglynGround())
     .navigationTitle("Members & leads")
     .aglynScreenTitle("Members & leads")
     .onDisappear {

@@ -20,6 +20,7 @@ public enum AglynTone: Sendable {
 
 /// A small capsule naming a status ("On", "Paid", "Draft").
 public struct StatusChip: View {
+  @Environment(\.aglynRowSelected) private var rowSelected
   let text: String
   let tone: AglynTone
 
@@ -34,7 +35,10 @@ public struct StatusChip: View {
       .padding(.horizontal, 8)
       .padding(.vertical, 3)
       .foregroundStyle(tone.color)
-      .background(tone.color.opacity(0.14), in: Capsule())
+      // On a selected row: the paper with a 1-point ring in the secondary text, so the chip stands off the selection's
+      // wash (4.9:1 light, 5.4:1 dark; Figma 11:343).
+      .background(rowSelected ? AnyShapeStyle(AglynColor.paper) : AnyShapeStyle(tone.color.opacity(0.14)), in: Capsule())
+      .overlay { if rowSelected { Capsule().strokeBorder(AglynColor.secondaryText, lineWidth: 1) } }
       .accessibilityLabel(text)
   }
 }
@@ -118,6 +122,76 @@ public struct AglynEmptyState<Actions: View>: View {
     }
     // Fill the space it is given and center in it, so an empty list never floats mid-column with its filters.
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+/// A whole area's one loading state: a large spinner and its line, centred in the space it is given, on the content
+/// ground (the in-app Besigner shows it from the push until the editor has drawn, AGL-4002).
+public struct AglynLoadingState<Actions: View>: View {
+  let message: String
+  let detail: String?
+  let actions: Actions
+
+  /// `detail` and `actions` say more when the wait runs long (the Besigner's "taking longer than usual" and Try again).
+  public init(_ message: String, detail: String? = nil, @ViewBuilder actions: () -> Actions = { EmptyView() }) {
+    self.message = message
+    self.detail = detail
+    self.actions = actions()
+  }
+
+  public var body: some View {
+    VStack(spacing: AglynSpace.of(1.5)) {
+      ProgressView().controlSize(.large)
+      VStack(spacing: AglynSpace.half) {
+        Text(message).font(AglynFont.body).foregroundStyle(AglynColor.secondaryText)
+        if let detail {
+          Text(detail).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+        }
+      }
+      .multilineTextAlignment(.center)
+      .accessibilityElement(children: .combine)
+      actions
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(AglynColor.paper)
+  }
+}
+
+/// A breadcrumb that opens its level (AGL-4058): secondary text that takes the primary text color, and the link pointer
+/// on the Mac, under the pointer.
+public struct AglynCrumbLink: View {
+  let label: String
+  let action: () -> Void
+  @State private var hovered = false
+
+  public init(_ label: String, action: @escaping () -> Void) {
+    self.label = label
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      Text(label)
+        .font(.system(size: AglynShellMetrics.rowText - 1))
+        .foregroundStyle(hovered ? AglynColor.textPrimary : AglynColor.secondaryText)
+        .underline(hovered)
+        .lineLimit(1)
+    }
+    .buttonStyle(.plain)
+    .onHover { hovered = $0 }
+    .modifier(LinkPointer())
+    .accessibilityAddTraits(.isLink)
+  }
+}
+
+/// The link pointer where the platform has one.
+private struct LinkPointer: ViewModifier {
+  func body(content: Content) -> some View {
+    #if os(macOS)
+      if #available(macOS 15.0, *) { content.pointerStyle(.link) } else { content }
+    #else
+      content.hoverEffect(.highlight)
+    #endif
   }
 }
 

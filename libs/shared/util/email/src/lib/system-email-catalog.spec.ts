@@ -16,6 +16,7 @@
  */
 
 import { DOMAIN_EMAIL_KEYS } from './domain-emails'
+import { POS_HARDWARE_EMAIL_KEYS } from './pos-hardware-emails'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { EMAIL_NODE_ROOT_ID, renderEmailHtml } from './email-render'
 import {
@@ -132,14 +133,22 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       // AGL-4023 — the
       // five getting-started emails (AGL-3692), one per risk notice kind plus
       // the risk digest and review acknowledgment (AGL-3368, pinned in
-      // `risk-notice-catalog.spec.ts`), the nine emails of a domain bought
-      // through the domains plugin (AGL-3962, `domain-emails.ts`), the
+      // `risk-notice-catalog.spec.ts`), the eleven emails of a domain bought
+      // or transferred in through the domains plugin (AGL-3962, AGL-4040,
+      // `domain-emails.ts`), the
       // seven Site Care emails (AGL-3959; the eighth, to a sender the intake
       // did not recognize, retired when Site Care mail moved to the support
-      // address in AGL-3997), and the four Site Care project emails
-      // (AGL-3970).
+      // address in AGL-3997), the four Site Care project emails
+      // (AGL-3970), and the three emails of a card reader order from the POS
+      // hardware shop (AGL-4038, `pos-hardware-emails.ts`).
       expect(editable.length).toBe(
-        36 + 5 + 7 + 4 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length + Object.keys(DOMAIN_EMAIL_KEYS).length,
+        36 +
+          5 +
+          7 +
+          4 +
+          RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length +
+          Object.keys(DOMAIN_EMAIL_KEYS).length +
+          Object.keys(POS_HARDWARE_EMAIL_KEYS).length,
       )
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {

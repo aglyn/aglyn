@@ -281,6 +281,19 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "The paying person's name, email and billing address, card details entered directly into Stripe's own elements, line items and amounts, the merchant's Connect account identity and payout details, and the org identifiers carried on metadata.",
   },
 
+  'files.stripe.com': {
+    disposition: 'subprocessor',
+    entity: 'Stripe, Inc.',
+    region: 'United States',
+    purpose:
+      'Payment processing, subscription billing, and payouts to merchants who sell through the Services',
+    publishedOn: '2026-08-05',
+    reason:
+      "Stripe's file upload API, called by the card reader start-up screen (AGL-4048, server/pos-reader-splash.ts) to upload the idle-screen image a Terminal Configuration points at. The same entity and purpose as api.stripe.com, on Stripe's separate upload host.",
+    dataReceived:
+      "The start-up screen image for a store's card readers: the platform's default artwork, the workspace's own logo drawn on a plain screen, or an image the merchant picked from their media library.",
+  },
+
   // MARK – Vercel
 
   'api.vercel.com': {

@@ -17,6 +17,7 @@
 'use client'
 
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import { isNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useRef } from 'react'
@@ -57,6 +58,11 @@ import {
  *   resolves, and this navigation tore it down mid-flight on a slow phone
  *   (AGL-3578's shape through a second door). The doors always navigate on,
  *   so the bounce runs on the page they land;
+ * - not inside the native apps' web view (AGL-4002) — the apps open the
+ *   console only for the Besigner, and their in-app browser for sites keeps no
+ *   cookies, so a hint planted there could never reach a site; the bounce is a
+ *   top-level navigation off the console, which the app's Besigner screen drops
+ *   (it had handed it to the person's browser beside the in-app editor);
  * - a first-party console host (`editorHintCookieDomain` non-null) — a
  *   white-label console on a customer's domain must not leak its editors
  *   through our bounce, and localhost has no `.aglyn.app` to reach;
@@ -126,6 +132,7 @@ export default function EditHintBounce({
     }
     if (startedRef.current) return
     if (window.top !== window) return
+    if (isNativeAppWebView()) return
     if (window.location.pathname === '/edit-access') return
     if (EDIT_HINT_BOUNCE_SKIPPED_PATHS.has(window.location.pathname)) return
     if (signUpLanding) return

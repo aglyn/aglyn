@@ -187,7 +187,6 @@ struct BookingDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("booking-detail")
     .confirmationDialog(
       "Cancel this booking?", isPresented: $confirmCancel, titleVisibility: .visible

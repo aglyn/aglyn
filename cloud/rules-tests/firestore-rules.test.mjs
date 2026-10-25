@@ -1647,6 +1647,11 @@ describe('hosts', () => {
       // mints one and only /api/commerce/reviews spends one; a client that
       // could write a row could mint a "verified buyer" review.
       'reviewTokens',
+      // Who is due at the window today and who checked them in (AGL-4043).
+      // Only /api/commerce/pos-check-in writes either; a client write would
+      // check a customer in, or take a check-in back, with nobody there.
+      'checkIns',
+      'checkInDays',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -6574,6 +6579,17 @@ describe('account preferences are bounded, pins at five (AGL-3943)', () => {
       setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h100' }) }, { merge: true }),
     )
     await mustDeny('pinned sites that are not a list', setDoc(me(), { pinnedHosts: { h1: ORG } }, { merge: true }))
+  })
+
+  it("bounds the phone's tab bars at a hundred sites and workspaces (AGL-4006)", async () => {
+    const bars = (n) => Array.from({ length: n }, (_, i) => ({ scope: `site:h${i + 1}`, areas: ['pages'], chosen: true }))
+    await mustAllow('a hundred tab bars', setDoc(me(), { tabBars: bars(100) }))
+    await mustDeny(
+      'a hundred and first by arrayUnion',
+      setDoc(me(), { tabBars: arrayUnion({ scope: 'site:h101', areas: [], chosen: false }) }, { merge: true }),
+    )
+    await mustAllow('one fewer', setDoc(me(), { tabBars: bars(99) }, { merge: true }))
+    await mustDeny('tab bars that are not a list', setDoc(me(), { tabBars: { 'site:h1': ['pages'] } }, { merge: true }))
   })
 
   it('caps recent workspaces, starred items, recent items and workspace colors', async () => {
@@ -14092,6 +14108,19 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
     })
   }
 
+  it('gives the check-ins at the window no client reader and no client writer (AGL-4043)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'checkIns', 'o_o1_0_0'), {
+        status: 'expected',
+        customerEmail: 'rider@example.com',
+      })
+    })
+    for (const uid of [OWNER, EDITOR, AUTHOR, VIEWER, OUTSIDER]) {
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'checkIns', 'o_o1_0_0')))
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'checkIns', 'o_o1_0_0'), { status: 'checked_in' }))
+    }
+  })
+
   it('lists returns by status, newest first, for the order book’s readers', async () => {
     await assertSucceeds(
       getDocs(query(collection(authed(EDITOR), 'hosts', HOST, 'returns'), where('status', '==', 'requested'), orderBy('createdAtMs', 'desc'))),
@@ -14321,6 +14350,63 @@ describe('rewards records are the server’s alone (AGL-3640)', () => {
       const nested = doc(db, 'orgs', ORG, 'loyaltyMembers', `${HOST}__member-1`, 'anything', 'x')
       await mustDeny(`${who} reading beneath a member`, getDoc(nested))
       await mustDeny(`${who} writing beneath a member`, setDoc(nested, { creditCents: 1 }))
+    }
+  })
+})
+
+describe('waivers and their signatures are the server’s alone (AGL-4042)', () => {
+  // The waivers a merchant wrote, the words of each version, and every
+  // signature: a signer's date of birth, address and phone, a minor's name
+  // and a drawn signature. Written and read through the Admin SDK by the
+  // waivers plugin's routes, which check the member's permission; the
+  // owner, an editor and staff are refused like everyone.
+  const ORG_DOCS = [
+    ['waivers', 'waiver-1'],
+    ['waivers/waiver-1/versions', '1'],
+    ['waiverSignatures', 'signature-1'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, ...name.split('/'), id), {
+          orgId: ORG,
+          hostId: HOST,
+          signer: { name: 'Jordan Lee', dateOfBirth: '1990-01-01' },
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const path = name.split('/')
+        const ref = doc(db, 'orgs', ORG, ...path, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, ...path), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { voidedAt: 1 }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, ...path, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+
+  it('no client reaches a document nested beneath a signature, either', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      const nested = doc(db, 'orgs', ORG, 'waiverSignatures', 'signature-1', 'anything', 'x')
+      await mustDeny(`${who} reading beneath a signature`, getDoc(nested))
+      await mustDeny(`${who} writing beneath a signature`, setDoc(nested, { signer: {} }))
     }
   })
 })

@@ -21,7 +21,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -318,6 +317,7 @@ private fun TimeField(
     val state = rememberTimePickerState(initialHour = minutes / 60, initialMinute = minutes % 60)
     AlertDialog(
       onDismissRequest = { open = false },
+      modifier = Modifier.sheetEntrance(SheetEntrance.GROW),
       confirmButton = {
         TextButton(onClick = {
           onChange("${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}")

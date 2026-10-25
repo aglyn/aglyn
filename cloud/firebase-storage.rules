@@ -20,6 +20,13 @@ service firebase.storage {
     match /orgs/{orgId}/transfers/{allPaths=**} {
       allow read, write: if false;
     }
+    // A signed waiver's drawn signature and a paper waiver's photo
+    // (AGL-4042): personal data the waivers plugin writes and reads through
+    // the Admin SDK only, served to permitted staff by its own gated route.
+    // No download token is ever minted for them.
+    match /orgs/{orgId}/waiverSignatures/{allPaths=**} {
+      allow read, write: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }

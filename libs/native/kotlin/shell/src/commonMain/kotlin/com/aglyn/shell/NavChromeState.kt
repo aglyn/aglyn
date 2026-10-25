@@ -53,6 +53,10 @@ internal class NavChromeState(private val device: KeyValueStore) {
   var accountMenu by mutableStateOf(false)
   var workspaceMenu by mutableStateOf(false)
   var createMenu by mutableStateOf(false)
+  /** The phone's area switcher: every area as tiles, from an area's title ▾ (AGL-4006). */
+  var areaSwitcher by mutableStateOf(false)
+  /** The phone's Tab bar sheet: the pinned areas to remove, reorder and add (AGL-4006). */
+  var tabBarSheet by mutableStateOf(false)
   /** The workspace waiting on "Pinned is full. Replace one?". */
   var pinFullFor by mutableStateOf<String?>(null)
   /** The workspace whose color picker is open. */
@@ -75,31 +79,28 @@ internal class NavChromeState(private val device: KeyValueStore) {
     device.set(RAIL_HIDDEN, if (railHidden) "1" else null)
   }
 
-  private val openGroups = mutableStateOf(device.get(OPEN_GROUPS)?.split(',')?.filter { it.isNotEmpty() }?.toSet().orEmpty())
+  /** Each group the person opened (true) or folded (false), by "<list>.<group>", remembered on this device. */
+  private val groupStates = mutableStateOf(parseGroupStates(device.get(OPEN_GROUPS)))
 
   /**
-   * A foldable group is open when the person opened it, or when it holds the screen in use; only one group per list stays
-   * open, remembered on this device.
-   */
-  /**
-   * Whether a group shows its rows. Starred is open at rest (Figma Sidebar 12:703, as on Apple) until the person folds it;
-   * the other groups open with the place in use, or once the person opens them, one at a time.
+   * Whether a group shows its rows ("we need to remember the expanded state, if we navigate it
+   * collapses the others"). A group the person opened or folded stays that way in its scope's list, across launches;
+   * navigating never folds another group. Until the person chooses, Starred is open (Figma Sidebar 12:703) and any other
+   * group is open while it holds the screen in use ([reveal] then remembers it open).
    */
   fun isOpen(listId: NativeNavListId, groupId: String, holdsCurrent: Boolean): Boolean =
-    if (groupId == "starred") "${listId.raw}.starred.folded" !in openGroups.value
-    else holdsCurrent || "${listId.raw}.$groupId" in openGroups.value
+    groupStates.value["${listId.raw}.$groupId"] ?: (groupId == "starred" || holdsCurrent)
 
+  /** The person opens or folds a group; every other group keeps its state. */
   fun toggle(listId: NativeNavListId, groupId: String, open: Boolean) {
-    val next = if (groupId == "starred") {
-      val folded = "${listId.raw}.starred.folded"
-      if (open) openGroups.value - folded else openGroups.value + folded
-    } else {
-      val key = "${listId.raw}.$groupId"
-      val others = openGroups.value.filterNot { it.startsWith("${listId.raw}.") && !it.startsWith("${listId.raw}.starred") }
-      if (open) others + key else openGroups.value - key
-    }
-    openGroups.value = next.toSet()
-    device.set(OPEN_GROUPS, next.joinToString(","))
+    val next = groupStates.value + ("${listId.raw}.$groupId" to open)
+    groupStates.value = next
+    device.set(OPEN_GROUPS, formatGroupStates(next))
+  }
+
+  /** Opening a destination opens its own group when that is folded, and nothing else. */
+  fun reveal(listId: NativeNavListId, groupId: String) {
+    if (groupStates.value["${listId.raw}.$groupId"] != true) toggle(listId, groupId, true)
   }
 
   fun closeMenus() {
@@ -116,14 +117,41 @@ internal class NavChromeState(private val device: KeyValueStore) {
 }
 
 /**
- * The accent a workspace lends the app while you are in it (Zach, decision 5, 2026-10-18): a white-label workspace's brand
- * color (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
- * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so the account theme's
- * own accent stays (Aglyn blue unless the person picked one). A color the person picked, or one taken from the logo, only
- * colors the rail tile and the light sidebar wash, never the accent.
+ * The accent a workspace lends the app while you are in it (decision 5, 2026-10-18): none when the person picked
+ * an accent of their own ([pickedAccent] is not "theme"), since theirs wins; else a white-label workspace's brand color
+ * (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
+ * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so
+ * the account theme's own accent stays. The same order as Apple's `ThemeApplier.accent`. A color the person picked for
+ * the workspace, or one taken from its logo, only colors the workspace's tile, never the accent and never a surface
+ * (AGL-4000).
  */
-internal fun workspaceAccent(brandColor: String?, whiteLabel: Boolean, useWorkspaceBrand: Boolean): String? =
-  brandColor?.takeIf { whiteLabel && useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
+internal fun workspaceAccent(brandColor: String?, whiteLabel: Boolean, useWorkspaceBrand: Boolean, pickedAccent: String = "theme"): String? =
+  brandColor?.takeIf { pickedAccent == "theme" && whiteLabel && useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
+
+/**
+ * Whether the sidebar takes a 5% wash of the accent: only when the person picked Tinted, and never on the Aglyn theme,
+ * whose sidebar is always the neutral surface (Apple's `AglynColor.sidebar`: `sidebarTinted` and a theme other than
+ * "aglyn"; an unknown style counts as Tinted and an unknown theme as Aglyn's, as there). Plain is the default (AGL-3990).
+ */
+internal fun sidebarTinted(theme: com.aglyn.contracts.AppThemePrefs): Boolean =
+  theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN &&
+    theme.theme != com.aglyn.contracts.AppThemeName.AGLYN && theme.theme != com.aglyn.contracts.AppThemeName.UNKNOWN
+
+/**
+ * The remembered group states: "<list>.<group>=1" (open) or "=0" (folded), comma-separated. The older one-open-group form
+ * ("site.website" open, "site.starred.folded") reads as the same choices.
+ */
+internal fun parseGroupStates(raw: String?): Map<String, Boolean> =
+  raw.orEmpty().split(',').filter { it.isNotBlank() }.associate { entry ->
+    when {
+      '=' in entry -> entry.substringBefore('=') to (entry.substringAfter('=') == "1")
+      entry.endsWith(".starred.folded") -> entry.removeSuffix(".folded") to false
+      else -> entry to true
+    }
+  }
+
+internal fun formatGroupStates(states: Map<String, Boolean>): String =
+  states.entries.joinToString(",") { (key, open) -> "$key=${if (open) 1 else 0}" }
 
 /** A workspace's logo as a URL the image loader reads, light and dark. */
 internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: String): Pair<String?, String?> {
@@ -132,8 +160,10 @@ internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: Strin
 }
 
 /**
- * A workspace's color as the rail draws it and the app is tinted with: the person's pick, else its brand color, else a
- * color taken from its logo (Zach, 2026-10-18), and whether it tints the app.
+ * A workspace's color as its tile draws it (the rail, the pickers, the menus, the header's avatar): the person's pick,
+ * else its brand color, else a color taken from its logo, else its stable color from its id (the contract's
+ * `workspaceStableColor`, so two workspaces with the same initial still differ), and the contract's `tintsApp`. It colors
+ * the tile only; no surface wears a wash of it (AGL-4000).
  */
 @Composable
 internal fun rememberWorkspaceColor(
@@ -142,14 +172,26 @@ internal fun rememberWorkspaceColor(
   prefs: AccountPreferences,
   origin: String,
 ): Pair<Color?, Boolean> {
+  val resolved = rememberResolvedWorkspaceColor(orgId, workspace, prefs, origin)
+  return colorOfHex(resolved.color) to resolved.tintsApp
+}
+
+/** [rememberWorkspaceColor] with where the color came from (picked, brand, logo, stable or none). */
+@Composable
+internal fun rememberResolvedWorkspaceColor(
+  orgId: String,
+  workspace: WorkspaceState,
+  prefs: AccountPreferences,
+  origin: String,
+): com.aglyn.contracts.WorkspaceColor {
   val logo = rememberLogoColor(orgLogoUrls(workspace, orgId, origin).first)
-  val resolved = resolveWorkspaceColor(
+  return resolveWorkspaceColor(
     prefs.workspaceColors[orgId],
     workspace.orgLogos[orgId]?.brandColor,
     logo?.toHex(),
     prefs.theme.useWorkspaceBrand,
+    orgId = orgId,
   )
-  return colorOfHex(resolved.color) to resolved.tintsApp
 }
 
 /** The site's own document, live, for the plugins it runs. */

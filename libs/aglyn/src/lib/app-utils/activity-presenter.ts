@@ -41,6 +41,7 @@ import {
   pluginActivityTargetLabel,
   pluginActivityTargetNoun,
 } from '../plugin-manager/plugin-activity-actions'
+import { ACTIVITY_TYPE_LABELS } from './activity-type-labels'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
 export interface ActivityTargetLike {
@@ -110,32 +111,7 @@ export interface ActivityLinkContext {
 }
 
 /** Human, singular noun for a target type. Falls back to the raw type. */
-const TYPE_LABELS: Record<string, string> = {
-  host: 'Site',
-  screen: 'Page',
-  layout: 'Layout',
-  theme: 'Theme',
-  media: 'Media',
-  content: 'Content',
-  variable: 'Variable',
-  function: 'Function',
-  workflow: 'Workflow',
-  member: 'Member',
-  component: 'Component',
-  template: 'Template',
-  org: 'Organization',
-  invite: 'Invitation',
-  subscription: 'Subscription',
-  // A custom role's permission flipped (AGL-2929).
-  role: 'Role',
-  // CRM records (AGL-2622): a person added, a company or a deal created or
-  // deleted, a lead converted — logged into the feed of the site whose
-  // console did it, and linked to the record the way a screen is.
-  contact: 'Contact',
-  lead: 'Lead',
-  company: 'Company',
-  deal: 'Deal',
-}
+const TYPE_LABELS = ACTIVITY_TYPE_LABELS
 
 /**
  * A plugin's record, where its owner publishes an address for the kind

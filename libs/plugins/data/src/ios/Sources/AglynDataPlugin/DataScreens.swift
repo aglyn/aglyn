@@ -276,7 +276,7 @@ struct DatasetsScreen: View {
       // Calm rule 8: no banner at rest. Who a new dataset is shared with is said in New dataset itself.
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -295,7 +295,7 @@ struct DatasetsScreen: View {
           ? "Ask an owner or admin to share a dataset with one of your sites."
           : "Create a dataset, like Products, then add a repeating section to any page to show one item per record."
       ) {
-        if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.borderedProminent) }
+        if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.aglynProminent) }
       }
     } else if selectable {
       List { rows(selectable: true) }
@@ -332,13 +332,13 @@ struct DatasetsScreen: View {
       .accessibilityIdentifier("dataset-\(row.id)")
     }
     if model.rows.count >= 2 {
-      Button("Add join collection") {
+      // A plain row in the accent color on the list's edges (never a tinted pill).
+      AglynActionRow("Add join collection", systemImage: "plus") {
         runner.clear()
         sheet = .join
       }
       .disabled(!canWrite)
-      .frame(maxWidth: .infinity)
-      .aglynListRow()
+      .aglynContentRow(separator: false)
       .accessibilityIdentifier("add-join")
     }
   }
@@ -546,29 +546,26 @@ struct DatasetDetailView: View {
           .fixedSize()
           .accessibilityLabel("More actions")
           .accessibilityIdentifier("dataset-actions")
+          // The detail's head (Figma Orders 13:1019): a bordered action, More, then the one filled button.
+          Button {
+            context.navigate(dataRecordsScreen, ["dataset": dataset.id, "new": "1"])
+          } label: {
+            Label("Add record", systemImage: "plus").labelStyle(.titleAndIcon)
+          }
+          .buttonStyle(AglynHeaderButtonStyle())
+          .fixedSize()
+          .disabled(!canWrite)
+          .accessibilityIdentifier("dataset-add-record")
+          AglynPrimaryHeaderButton("Records", systemImage: DataSymbols.records) {
+            context.navigate(dataRecordsScreen, ["dataset": dataset.id])
+          }
+          .accessibilityIdentifier("dataset-records")
         }
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
           StatusChip("Shared with \(describeScope(dataset.visibleTo))", tone: dataset.visibleTo == nil ? .warning : .info)
           if !referencedBy.isEmpty {
             StatusChip(referencedBy.count == 1 ? "Referenced by 1 field" : "Referenced by \(referencedBy.count) fields")
           }
-        }
-        AglynWrapRow {
-          Button {
-            context.navigate(dataRecordsScreen, ["dataset": dataset.id])
-          } label: {
-            Label("Records", systemImage: DataSymbols.records)
-          }
-          .buttonStyle(.borderedProminent)
-          .accessibilityIdentifier("dataset-records")
-          Button {
-            context.navigate(dataRecordsScreen, ["dataset": dataset.id, "new": "1"])
-          } label: {
-            Label("Add record", systemImage: "plus")
-          }
-          .buttonStyle(.bordered)
-          .disabled(!canWrite)
-          .accessibilityIdentifier("dataset-add-record")
         }
       }
       Section {
@@ -593,7 +590,12 @@ struct DatasetDetailView: View {
           Text("Fields")
           Spacer()
           if canWrite {
-            Button("Edit") { context.navigate(dataSchemaScreen, ["dataset": dataset.id]) }.textCase(nil)
+            // A text button in the accent color, not a bordered pill in the section's title.
+            Button("Edit") { context.navigate(dataSchemaScreen, ["dataset": dataset.id]) }
+              .buttonStyle(.borderless)
+              .font(AglynFont.subheadline)
+              .foregroundStyle(AglynColor.tint)
+              .textCase(nil)
           }
         }
       }
@@ -618,7 +620,6 @@ struct DatasetDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("dataset-detail")
     .task(id: "\(dataset.id)-\(dataset.updatedAt?.timeIntervalSince1970 ?? 0)") {
       guard let orgID = context.orgID else { return }

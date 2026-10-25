@@ -105,6 +105,7 @@ fun ClauseFilterBar(
           InputChip(
             selected = true,
             onClick = { onChange(clauses.filterIndexed { at, _ -> at != index }) },
+            colors = com.aglyn.ui.aglynInputChipColors(),
             label = { Text(label) },
             trailingIcon = { Icon(AglynIcons.named("close"), contentDescription = "Remove filter $label", Modifier.size(InputChipDefaults.IconSize)) },
             modifier = Modifier.testTag("filter-chip-$index"),

@@ -24,12 +24,16 @@ enum ContractThemes {
     palette.brandLabel == true ? brandName : palette.label
   }
 
-  /// A theme's surfaces for the shared tokens.
-  static func spec(_ id: String) -> AglynThemeSpec {
+  /// A theme's surfaces for the shared tokens. `phoneBold` draws the Aglyn theme's bold phone grounds
+  /// (`THEME_PHONE_AGLYN`, AGL-3990) instead of the console's: see `ThemeApplier.phoneBold`.
+  static func spec(_ id: String, phoneBold: Bool = false) -> AglynThemeSpec {
     let palette = themePalette(id)
+    let bold = phoneBold && palette.id == .aglyn
+    let (light, dark) = bold
+      ? (ContractValues.shared.themePhoneAglyn.light, ContractValues.shared.themePhoneAglyn.dark) : (palette.light, palette.dark)
     return AglynThemeSpec(
-      id: palette.id.rawValue, light: surfaces(palette.light, palette), dark: surfaces(palette.dark, palette),
-      accent: palette.accent, alwaysDark: palette.alwaysDark == true)
+      id: palette.id.rawValue, light: surfaces(light, palette), dark: surfaces(dark, palette),
+      accent: palette.accent, alwaysDark: palette.alwaysDark == true, phoneBold: bold)
   }
 
   private static func surfaces(_ colors: ThemeColors, _ palette: ThemePalette) -> AglynSurfaces {
@@ -42,7 +46,7 @@ enum ContractThemes {
       canvas: color(colors.canvas), surface: color(colors.surface), rail: color(colors.rail), railText: color(railText),
       border: color(colors.borderSubtle), textPrimary: color(colors.textPrimary), textSecondary: color(colors.textSecondary),
       titlebar: color(colors.titlebar), sunken: color(colors.sunken), hover: color(colors.hover),
-      textTertiary: color(colors.textTertiary))
+      textTertiary: color(colors.textTertiary), borderStrong: color(colors.borderStrong))
   }
 
   /// An accent's shades for both appearances, or nil for a value that is not a color.
@@ -103,7 +107,8 @@ enum ThemeApplier {
       case .extraLarge: 1.22
       default: 1
       }
-    let spec = ContractThemes.spec(prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue)
+    let id = prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue
+    let spec = ContractThemes.spec(id, phoneBold: phoneBold(theme: id, accent: accent))
     AglynThemeRuntime.shared.apply(
       theme: spec, accent: ContractThemes.accent(accent ?? spec.accent),
       shades: ContractThemes.shades(accent ?? spec.accent), compact: prefs.density == .compact,
@@ -115,10 +120,25 @@ enum ThemeApplier {
   /// The accent in force (Zach's decision 5, 10/18): your own accent when you picked one; else, in a white-label
   /// workspace with "Use each workspace's brand" on, its brand color (`brandingProfile.primaryColor`, which the console
   /// reads only for a white-label workspace); else the theme's. A picked or logo-derived workspace color never becomes
-  /// the accent: it colors the rail tile and the sidebar's wash only.
+  /// the accent, and washes no surface: it colors the workspace's rail tile only (AGL-3996).
   static func accent(_ prefs: AppThemePrefs, workspace: WorkspaceColor, whiteLabel: Bool) -> String? {
     if prefs.accent != "theme" { return prefs.accent }
     return whiteLabel && workspace.source == .brand && workspace.tintsApp ? workspace.color : nil
+  }
+
+  /// Whether this device draws the phone's bold brand look (AGL-3990; Zach, 2026-10-19): a phone (an Aglyn or Aglyn POS
+  /// phone, never an iPad, a Mac or the register), in the Aglyn theme, with the brand blue as its accent. A picked
+  /// accent or a white-label workspace's brand keeps the console's grounds, since the bold grounds are tinted with the
+  /// brand blue.
+  static func phoneBold(theme: String, accent: String?) -> Bool {
+    #if os(iOS)
+      guard UIDevice.current.userInterfaceIdiom == .phone, themePalette(theme).id == .aglyn else { return false }
+      guard let accent else { return true }
+      let raw = accent.lowercased()
+      return (ContractValues.shared.themeRetiredAccents[raw] ?? raw) == ContractValues.shared.themePhoneBoldAccent.lowercased()
+    #else
+      false
+    #endif
   }
 
   /// The color scheme a window takes: Night is dark in both; otherwise the appearance's.
@@ -229,7 +249,7 @@ struct ThemeSettingsView: View {
       } header: {
         Text("Workspaces")
       } footer: {
-        Text("A white-label workspace's brand color tints the app while you are in it. Your pick for a workspace comes first, then its brand color, then a color from its logo.")
+        Text("A white-label workspace's brand color tints the app while you are in it. A workspace's rail tile shows your pick, else its brand color, else a color from its logo.")
       }
       Section {
         Toggle("Apply to this device only", isOn: $deviceOnly)
@@ -249,7 +269,7 @@ struct ThemeSettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Theme")
     .aglynScreenTitle("Theme")
   }
@@ -281,7 +301,7 @@ private struct ThemeTile: View {
         }
         .frame(height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(selected ? AglynColor.tint : AglynColor.divider, lineWidth: selected ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(selected ? AglynColor.primary : AglynColor.divider, lineWidth: selected ? 2 : 1))
         Text(label).font(AglynFont.subheadline)
       }
     }
@@ -351,6 +371,7 @@ struct AppThemeModifier: ViewModifier {
     content
       .id("\(key)|\(nonce)")
       .tint(AglynColor.tint)
+      .toggleStyle(AglynToggleStyle())
       .preferredColorScheme(ThemeApplier.scheme(prefs))
   }
 }

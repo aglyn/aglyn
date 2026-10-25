@@ -50,7 +50,7 @@ struct OutreachHubScreen: View {
           case .compliance: ComplianceSection(context: context, api: api, orgID: orgID)
           }
         }
-        .background(AglynColor.page)
+        .background(AglynGround())
       } else {
         AglynEmptyState("Not available", systemImage: "lock", message: "This workspace does not have this area.")
       }
@@ -222,11 +222,11 @@ struct SequenceDetail: View {
             PropertyRow("Sends from", mailboxes.first { $0.id == row.mailboxID }.map { $0.sendAs ?? $0.email })
             HStack {
               if row.status == "draft" || row.status == "paused" {
-                Button("Activate") { confirm = ("Activate this sequence?", "activate") }.buttonStyle(.borderedProminent)
+                Button("Activate") { confirm = ("Activate this sequence?", "activate") }.buttonStyle(.aglynProminent)
               }
-              if row.status == "active" { Button("Pause") { confirm = ("Pause this sequence?", "pause") }.buttonStyle(.bordered) }
-              if row.status != "archived" { Button("Archive") { confirm = ("Archive this sequence?", "archive") }.buttonStyle(.bordered) }
-              if row.status == "active" { Button("Enroll people") { enrolling = true }.buttonStyle(.bordered).accessibilityIdentifier("sequence-enroll") }
+              if row.status == "active" { Button("Pause") { confirm = ("Pause this sequence?", "pause") }.buttonStyle(.aglynSecondary) }
+              if row.status != "archived" { Button("Archive") { confirm = ("Archive this sequence?", "archive") }.buttonStyle(.aglynSecondary) }
+              if row.status == "active" { Button("Enroll people") { enrolling = true }.buttonStyle(.aglynSecondary).accessibilityIdentifier("sequence-enroll") }
             }
           }
           Section("Steps") {
@@ -264,7 +264,6 @@ struct SequenceDetail: View {
           }
         }
         .formStyle(.aglynGrouped)
-        .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "sequence") {
@@ -807,7 +806,6 @@ struct ComplianceSection: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .task {
       let orgID = orgID
       domains.show(context.firestore) { doNotContactDomainsQuery(orgID, search: "", limit: $0) }

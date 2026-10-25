@@ -29,6 +29,8 @@ final class AppModel {
   private(set) var workspace: WorkspaceStore?
   /// The signed-in person's pins, recents, stars, workspace colors and theme (`users/{uid}`), synced with the console.
   private(set) var preferences: AccountPreferencesStore?
+  /// The signed-in person's invitations, joined on their own (AGL-4023): never an Accept step.
+  private(set) var invites: InviteAutoJoin?
   /// The workspace and site (by address) of a link opened before anyone was signed in on this launch.
   @ObservationIgnored private var pendingLinkScope: (orgSlug: String, hostSlug: String?)?
   /// The signed-in token's claims: the staff section shows only when they say staff.
@@ -122,6 +124,7 @@ final class AppModel {
     workspace = nil
     preferences?.stop()
     preferences = nil
+    invites = nil
     // A support session reads the customer's workspaces but never registers this device's notifications under their account.
     if auth?.impersonation == nil { push.signedIn(uid: user?.uid, reader: reader) }
     claims = TokenClaims()
@@ -132,6 +135,7 @@ final class AppModel {
     let preferences = AccountPreferencesStore(uid: user.uid, reader: reader)
     preferences.start()
     self.preferences = preferences
+    if let service = signUpService { invites = InviteAutoJoin(service: service) }
     if let (orgSlug, hostSlug) = pendingLinkScope {
       pendingLinkScope = nil
       store.select(orgSlug: orgSlug, hostSlug: hostSlug)
@@ -141,6 +145,17 @@ final class AppModel {
 
   func refresh() {
     refreshToken += 1
+  }
+
+  /// Joins every invitation waiting for the signed-in person, as the console does on every load (AGL-4023): once their
+  /// address is confirmed (the server lists none before), never during a support session. A workspace joined while none
+  /// is open opens.
+  func joinInvites() async {
+    guard let invites, auth?.user?.emailVerified == true else { return }
+    let joined = await invites.run(impersonating: auth?.impersonation != nil)
+    guard let first = joined.first else { return }
+    workspace?.reload()
+    if workspace?.org == nil { workspace?.open(orgID: first) }
   }
 
   /// Re-reads the claims from the ID token (forced after a re-auth).

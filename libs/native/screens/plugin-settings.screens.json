@@ -2614,6 +2614,7 @@
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
+          "posOfflineCardSales": false,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2648,6 +2649,27 @@
               "kind": "number",
               "initial": "{item.posMaxDiscountPct ?? const.defaults.posMaxDiscountPct}",
               "help": "The largest discount the point of sale will accept on a sale. A register that asks for more is refused, and the sale is not rung up. Set to 0 to stop staff discounting at the register entirely. Between 0 and 100."
+            },
+            {
+              "key": "posOfflineCardSales",
+              "label": "Take cards offline in the point of sale app",
+              "kind": "toggle",
+              "initial": "{item.posOfflineCardSales ?? const.defaults.posOfflineCardSales}",
+              "help": "With no connection, the app’s card reader saves each card and charges it once back online."
+            },
+            {
+              "key": "posOfflineCardMaxSale",
+              "label": "Limit per sale ($)",
+              "kind": "number",
+              "initial": "{item.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
+              "help": "Empty: up to $10,000, the most one card can be charged offline. Between 1 and 10000."
+            },
+            {
+              "key": "posOfflineCardDailyLimit",
+              "label": "Daily limit per device ($)",
+              "kind": "number",
+              "initial": "{item.posOfflineCardDailyLimit ?? const.defaults.posOfflineCardDailyLimit}",
+              "help": "Empty: no daily limit. Between 1 and 1000000."
             },
             {
               "key": "posTippingEnabled",
@@ -2761,6 +2783,9 @@
               "doc": "orgs/{org.id}/pluginSettings/commerce",
               "fields": {
                 "posMaxDiscountPct": "{form.posMaxDiscountPct}",
+                "posOfflineCardSales": "{form.posOfflineCardSales}",
+                "posOfflineCardMaxSale": "{form.posOfflineCardMaxSale}",
+                "posOfflineCardDailyLimit": "{form.posOfflineCardDailyLimit}",
                 "posTippingEnabled": "{form.posTippingEnabled}",
                 "posTipPercentages": "{form.posTipPercentages}",
                 "posReceiptDefault": "{form.posReceiptDefault}",
@@ -2796,6 +2821,7 @@
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
+          "posOfflineCardSales": false,
           "posTippingEnabled": false,
           "posTipPercentages": "15, 18, 20, 25",
           "posReceiptDefault": "ask",
@@ -2840,6 +2866,48 @@
               "initial": "{data.site.posMaxDiscountPct ?? data.org.posMaxDiscountPct ?? const.defaults.posMaxDiscountPct}",
               "when": "form.ov_posMaxDiscountPct",
               "help": "The largest discount the point of sale will accept on a sale. A register that asks for more is refused, and the sale is not rung up. Set to 0 to stop staff discounting at the register entirely. Between 0 and 100."
+            },
+            {
+              "key": "ov_posOfflineCardSales",
+              "label": "Override Take cards offline in the point of sale app for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardSales:present}"
+            },
+            {
+              "key": "posOfflineCardSales",
+              "label": "Take cards offline in the point of sale app",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardSales ?? data.org.posOfflineCardSales ?? const.defaults.posOfflineCardSales}",
+              "when": "form.ov_posOfflineCardSales",
+              "help": "With no connection, the app’s card reader saves each card and charges it once back online."
+            },
+            {
+              "key": "ov_posOfflineCardMaxSale",
+              "label": "Override Limit per sale ($) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardMaxSale:present}"
+            },
+            {
+              "key": "posOfflineCardMaxSale",
+              "label": "Limit per sale ($)",
+              "kind": "number",
+              "initial": "{data.site.posOfflineCardMaxSale ?? data.org.posOfflineCardMaxSale ?? const.defaults.posOfflineCardMaxSale}",
+              "when": "form.ov_posOfflineCardMaxSale",
+              "help": "Empty: up to $10,000, the most one card can be charged offline. Between 1 and 10000."
+            },
+            {
+              "key": "ov_posOfflineCardDailyLimit",
+              "label": "Override Daily limit per device ($) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posOfflineCardDailyLimit:present}"
+            },
+            {
+              "key": "posOfflineCardDailyLimit",
+              "label": "Daily limit per device ($)",
+              "kind": "number",
+              "initial": "{data.site.posOfflineCardDailyLimit ?? data.org.posOfflineCardDailyLimit ?? const.defaults.posOfflineCardDailyLimit}",
+              "when": "form.ov_posOfflineCardDailyLimit",
+              "help": "Empty: no daily limit. Between 1 and 1000000."
             },
             {
               "key": "ov_posTippingEnabled",
@@ -3047,6 +3115,27 @@
                 "posMaxDiscountPct": {
                   "$if": "form.ov_posMaxDiscountPct",
                   "then": "{form.posMaxDiscountPct}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posOfflineCardSales": {
+                  "$if": "form.ov_posOfflineCardSales",
+                  "then": "{form.posOfflineCardSales}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posOfflineCardMaxSale": {
+                  "$if": "form.ov_posOfflineCardMaxSale",
+                  "then": "{form.posOfflineCardMaxSale}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posOfflineCardDailyLimit": {
+                  "$if": "form.ov_posOfflineCardDailyLimit",
+                  "then": "{form.posOfflineCardDailyLimit}",
                   "else": {
                     "$delete": true
                   }

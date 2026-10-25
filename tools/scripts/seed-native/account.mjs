@@ -89,8 +89,16 @@ export async function seedAccount({ put, uid, orgId, hostId, now, auth, project 
     },
     { merge: true },
   )
-  await put(`users/${uid}`, { firstName: 'Mobile', lastName: 'Owner', phoneNumber: '+1 512 555 0101' }, { merge: true })
-  await put(`orgs/${orgId}/members/${uid}`, { email: 'mobile-owner@example.test', displayName: 'Hannah Reyes', title: 'Founder' }, { merge: true })
+  // The profile's name is the one the roster shows, so the account menu and Team agree; the photo is the library pick
+  // workspace.mjs seeds, stored as the console stores one: its CDN path on the profile (`photoUrl`, the account menu's)
+  // and mirrored on the roster (`photoURL`, Team's rows), so every place the member appears shows it (AGL-4010).
+  const photo = `/api/media/cdn/org:${orgId}/seed-media-member-photo`
+  await put(`users/${uid}`, { firstName: 'Hannah', lastName: 'Reyes', phoneNumber: '+1 512 555 0101', photoUrl: photo }, { merge: true })
+  await put(
+    `orgs/${orgId}/members/${uid}`,
+    { email: 'mobile-owner@example.test', displayName: 'Hannah Reyes', title: 'Founder', photoURL: photo },
+    { merge: true },
+  )
   await put(`hosts/${hostId}/members/${uid}`, {
     uid,
     email: 'mobile-owner@example.test',

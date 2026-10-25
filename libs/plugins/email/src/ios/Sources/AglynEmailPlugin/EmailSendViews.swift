@@ -124,7 +124,7 @@ struct EmailsScreen: View {
         List { rows(selectable: false) }.refreshable { list.retry() }.aglynListBackground()
       }
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -227,13 +227,13 @@ struct EmailDetail: View {
         if canSend {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack {
-              if send.canSendNow { Button("Send now") { sheet = .sendNow }.buttonStyle(.borderedProminent).accessibilityIdentifier("email-send-now") }
-              if send.canFollowUp { Button("Send to more") { sheet = .followUp }.buttonStyle(.borderedProminent) }
-              if send.canCompose { Button("Edit") { sheet = .edit }.buttonStyle(.bordered).accessibilityIdentifier("email-edit") }
-              if send.canCompose { Button("Send a test") { sheet = .test }.buttonStyle(.bordered).accessibilityIdentifier("email-test") }
-              if send.canStop { Button("Stop sending", role: .destructive) { sheet = .cancel }.buttonStyle(.bordered) }
-              if send.canCancel { Button("Cancel send", role: .destructive) { sheet = .cancel }.buttonStyle(.bordered) }
-              Button("Rename") { sheet = .rename }.buttonStyle(.bordered)
+              if send.canSendNow { Button("Send now") { sheet = .sendNow }.buttonStyle(.aglynProminent).accessibilityIdentifier("email-send-now") }
+              if send.canFollowUp { Button("Send to more") { sheet = .followUp }.buttonStyle(.aglynProminent) }
+              if send.canCompose { Button("Edit") { sheet = .edit }.buttonStyle(.aglynSecondary).accessibilityIdentifier("email-edit") }
+              if send.canCompose { Button("Send a test") { sheet = .test }.buttonStyle(.aglynSecondary).accessibilityIdentifier("email-test") }
+              if send.canStop { Button("Stop sending", role: .destructive) { sheet = .cancel }.buttonStyle(.aglynSecondary) }
+              if send.canCancel { Button("Cancel send", role: .destructive) { sheet = .cancel }.buttonStyle(.aglynSecondary) }
+              Button("Rename") { sheet = .rename }.buttonStyle(.aglynSecondary)
             }
           }
         }
@@ -283,11 +283,13 @@ struct EmailDetail: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle(send.subject)
     .aglynScreenTitle(send.subject)
     .sheet(item: $sheet) { kind in sendSheet(kind, send) }
   }
+
+  private func upgrade() { context.navigate("core.billing.plans") }
 
   @ViewBuilder
   private func sendSheet(_ kind: SendSheet, _ send: EmailSend) -> some View {
@@ -296,7 +298,7 @@ struct EmailDetail: View {
       CountedConfirmSheet(
         title: "Send this email now?", confirm: "Send now", count: { try await api.sendNowCount(send.id) },
         message: { "This sends it to \(grouped($0)) \($0 == 1 ? "person" : "people") straight away. It cannot be taken back once it goes." },
-        nobody: "Nobody in this audience can be sent to right now."
+        nobody: "Nobody in this audience can be sent to right now.", upgrade: upgrade
       ) {
         try await api.sendNow(send.id)
         notice = "It is on its way."
@@ -305,7 +307,7 @@ struct EmailDetail: View {
       CountedConfirmSheet(
         title: "Send this email to more people?", confirm: "Send", count: { try await api.followUpCount(send.id) },
         message: { "This sends the same email to \(grouped($0)) more in the same audience. Those who already received it are not sent it again." },
-        nobody: "Everyone in the audience has it already."
+        nobody: "Everyone in the audience has it already.", upgrade: upgrade
       ) {
         try await api.followUp(send.id)
         notice = "It is on its way to the rest."
@@ -340,12 +342,15 @@ struct EmailDetail: View {
 struct CountedConfirmSheet: View {
   let title: String
   let confirm: String
-  let count: (() async throws -> Int)?
+  let count: (() async throws -> DryRunCount)?
   let message: (Int) -> String
   let nobody: String
+  var upgrade: (() -> Void)? = nil
   let run: () async throws -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var reaching: Int?
+  /// The plan that stops this send, said in place of a count the button could only fail on.
+  @State private var planLock: CampaignPlanLock?
   @State private var busy = false
   @State private var error: String?
 
@@ -353,7 +358,12 @@ struct CountedConfirmSheet: View {
     NavigationStack {
       Form {
         if let error { AglynNotice(error, tone: .error) }
-        if count != nil && reaching == nil {
+        if let planLock {
+          AglynUpgradeNotice(planLock.message) {
+            dismiss()
+            upgrade?()
+          }
+        } else if count != nil && reaching == nil {
           ProgressView("Counting who it reaches…")
         } else if count != nil && reaching == 0 {
           Text(nobody)
@@ -379,12 +389,16 @@ struct CountedConfirmSheet: View {
               busy = false
             }
           }
-          .disabled(busy || (count != nil && (reaching ?? 0) == 0))
+          .disabled(busy || planLock != nil || (count != nil && (reaching ?? 0) == 0))
         }
       }
       .task {
         guard let count else { return }
-        do { reaching = try await count() } catch {
+        do {
+          let answer = try await count()
+          planLock = answer.planLock
+          reaching = answer.reaching
+        } catch {
           reaching = 0
           self.error = problemText(error)
         }

@@ -3,63 +3,174 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import SwiftUI
 
 // The menus that belong to their owner (AGL-3945, Figma Menus 2:4): your account's, behind your photo at the foot of the
 // rail (a sheet on a phone), and the workspace's, behind its name in the sidebar.
 
-/// Who is signed in, for the account menu's header and photo.
+/// Who is signed in, for the account menu's header and photo: their name and picture as the console resolves them
+/// (`readAccountName`, `readAccountPhoto`, AGL-4010), the profile first, then the sign-in record.
 @MainActor
 struct AccountIdentity {
   let model: AppModel
 
-  var name: String { model.auth?.user?.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? model.auth?.user?.email ?? "You" }
-  var email: String? { model.auth?.user?.email }
-  var initials: String { accountInitials(name: model.auth?.user?.displayName, email: model.auth?.user?.email) }
+  private var user: AglynUser? { model.auth?.user }
+
+  var name: String {
+    let resolved =
+      model.preferences?.name(authDisplayName: user?.displayName, email: user?.email)
+      ?? readAccountName(nil, authDisplayName: user?.displayName, email: user?.email)
+    return resolved.isEmpty ? "You" : resolved
+  }
+
+  var email: String? { user?.email }
+
+  var initials: String { accountInitials(name: name == email || name == "You" ? nil : name, email: email) }
+
+  /// The stored picture (an address, or a library pick's `/api/media/cdn/...` path); nil draws the initials.
+  var photoValue: String? {
+    model.preferences?.photo(authPhotoURL: user?.photoURL) ?? readAccountPhoto(nil, authPhotoURL: user?.photoURL)
+  }
+
+  /// The picture as an address on the console this app talks to (the shared `mediaPreviewURL`).
+  var photoURL: URL? { model.mediaURL(photoValue, hostID: nil, width: AccountPlaces.photoWidth) }
+
+  /// The notification sound picked on the account (`users/{uid}.notificationSound`), by its label.
+  var soundLabel: String? {
+    AglynNotificationSounds.sound(for: model.preferences?.identity[AglynNotificationSounds.field])?.label
+  }
+
+  /// Another signed-in account's photo, as last shown on this device.
+  func photoURL(of account: SignedInAccount) -> URL? {
+    if account.slot == model.auth?.activeSlot, model.auth?.impersonation == nil { return photoURL }
+    return model.mediaURL(account.photoURL, hostID: nil, width: AccountPlaces.photoWidth)
+  }
 }
 
 /// The account menu's places, shared by the Mac and iPad menu and the phone's sheet.
 @MainActor
 enum AccountPlaces {
   static let settingsScreen = "core.account.profile"
+  /// The person's profile (name, photo), which Edit profile opens.
+  static let profileScreen = "core.account.profile"
   static let marketplaceScreen = "marketplace.sell"
   static let reportScreen = "core.support"
+  /// The width a person's photo is asked for at: the largest it is drawn (the phone sheet's 72) at 3x.
+  static let photoWidth = 256
 
   static func documentation(_ model: AppModel) -> AglynWebPage? {
     HelpLink.all(model.config).first { $0.id == "docs" }.map { AglynWebPage($0.url) }
   }
 }
 
-/// The account menu's items, in Figma's order: Theme ▸, Settings, Marketplace, Documentation, Report an issue; then
-/// the accounts signed in on this device (the one in use ticked) and Add account; then Sign out.
-struct AccountMenuItems: View {
+/// The account menu (Figma Mac / Popover / Account 16:142, dark 311:2829), drawn as a popover's content so it can hold
+/// the person's photo and the inline appearance picker: the profile header with Edit profile; Appearance, Theme
+/// settings…, Notifications and sound, Settings; Marketplace, Documentation, Report an issue; the accounts signed in on
+/// this device with their photos and Add account; Sign out. Only what the console offers the signed-in person.
+struct AccountMenuContent: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   @Binding var confirmSignOut: Bool
+  /// Closes the popover before the chosen place opens.
+  let done: () -> Void
 
   var body: some View {
     let identity = AccountIdentity(model: model)
-    Section {
-      Text(identity.name)
-      if let email = identity.email, email != identity.name { Text(email) }
-    }
-    Section {
-      ThemeMenu()
-      Button("Settings", systemImage: "gearshape") { navigation.push(.settings) }
+    VStack(alignment: .leading, spacing: 0) {
+      AglynProfileHeader(
+        name: identity.name, email: identity.email, initials: identity.initials, photoURL: identity.photoURL,
+        editProfile: model.registry.screen(AccountPlaces.profileScreen) == nil
+          ? nil : { go { navigation.push(.screen(AccountPlaces.profileScreen, [:])) } })
+      AglynMenuDivider()
+      AppearanceRow()
+      AglynMenuRow("Theme settings…", systemImage: "paintpalette", action: { go { navigation.push(.themeSettings) } })
+        .accessibilityIdentifier("account-theme-settings")
+      AglynMenuRow(
+        "Notifications and sound", systemImage: "bell", action: { go { navigation.push(.notificationSettings) } }
+      ) {
+        if let sound = identity.soundLabel { AglynMenuValue(sound) }
+      }
+      .accessibilityIdentifier("account-notifications")
+      AglynMenuRow("Settings", systemImage: "gearshape", action: { go { navigation.push(.settings) } })
+        .accessibilityIdentifier("account-settings")
+      AglynMenuDivider()
       if model.app == .aglyn, model.registry.screen(AccountPlaces.marketplaceScreen) != nil {
-        Button("Marketplace", systemImage: "storefront") { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }
+        AglynMenuRow("Marketplace", systemImage: "storefront", action: {
+          go { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }
+        })
+        .accessibilityIdentifier("account-marketplace")
       }
       if let docs = AccountPlaces.documentation(model) {
-        Button("Documentation", systemImage: "book") { navigation.openWeb(docs) }
+        AglynMenuRow("Documentation", systemImage: "book", action: { go { navigation.openWeb(docs) } })
+          .accessibilityIdentifier("account-documentation")
       }
       if model.registry.screen(AccountPlaces.reportScreen) != nil {
-        Button("Report an issue", systemImage: "flag") { navigation.push(.screen(AccountPlaces.reportScreen, [:])) }
+        AglynMenuRow("Report an issue", systemImage: "flag", action: {
+          go { navigation.push(.screen(AccountPlaces.reportScreen, [:])) }
+        })
+        .accessibilityIdentifier("account-report")
       }
+      if let auth = model.auth {
+        AglynMenuDivider()
+        AglynMenuCaption("Accounts")
+        ForEach(auth.accounts) { account in
+          AglynMenuPersonRow(
+            name: account.displayName ?? account.email ?? "Account",
+            detail: account.displayName == nil ? nil : account.email,
+            initials: account.initials, photoURL: identity.photoURL(of: account),
+            current: account.slot == auth.activeSlot && auth.impersonation == nil
+          ) {
+            done()
+            Task { await auth.switchAccount(to: account.slot) }
+          }
+          .accessibilityIdentifier("account-\(account.email ?? account.slot)")
+        }
+        if auth.canAddAccounts {
+          AglynMenuRow("Add account", systemImage: "person.badge.plus", action: {
+            go { navigation.showAddAccount = true }
+          })
+          .accessibilityIdentifier("account-add")
+        }
+      }
+      AglynMenuDivider()
+      AglynMenuRow("Sign out", systemImage: "rectangle.portrait.and.arrow.right", action: { go { confirmSignOut = true } })
+        .accessibilityIdentifier("account-sign-out")
     }
-    AccountSwitchItems()
-    Section {
-      Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { confirmSignOut = true }
+    .padding(AglynMenuMetrics.padding)
+    .frame(width: AglynMenuMetrics.width)
+  }
+
+  private func go(_ run: @escaping () -> Void) {
+    done()
+    run()
+  }
+}
+
+/// Appearance: light, dark or the system's, inline (the console's own toggle), saved on the account so it follows the
+/// person.
+struct AppearanceRow: View {
+  @Environment(AppModel.self) private var model
+
+  var body: some View {
+    if let preferences = model.preferences {
+      AglynMenuSegmentedRow(
+        "Appearance", systemImage: "circle.lefthalf.filled",
+        segments: [
+          AglynMenuSegment(AppAppearance.light, systemImage: "sun.max", label: "Light"),
+          AglynMenuSegment(AppAppearance.dark, systemImage: "moon", label: "Dark"),
+          AglynMenuSegment(AppAppearance.system, systemImage: "display", label: "Match system"),
+        ],
+        selection: Binding(
+          get: { preferences.appTheme.appearance },
+          set: { value in
+            var theme = preferences.appTheme
+            theme.appearance = value
+            preferences.setAppTheme(theme)
+          })
+      )
+      .accessibilityIdentifier("account-appearance")
     }
   }
 }
@@ -93,37 +204,6 @@ struct AccountSwitchItems: View {
   }
 }
 
-/// Theme ▸: light, dark or the system's, saved on the account so it follows the person (Theming, Phase 4 adds the rest).
-struct ThemeMenu: View {
-  @Environment(AppModel.self) private var model
-  @Environment(ShellNavigation.self) private var navigation
-
-  var body: some View {
-    if let preferences = model.preferences {
-      let appearance = Binding<AppAppearance>(
-        get: { preferences.appTheme.appearance },
-        set: { value in
-          var theme = preferences.appTheme
-          theme.appearance = value
-          preferences.setAppTheme(theme)
-        })
-      Menu {
-        Picker("Appearance", selection: appearance) {
-          Label("Light", systemImage: "sun.max").tag(AppAppearance.light)
-          Label("Dark", systemImage: "moon").tag(AppAppearance.dark)
-          Label("Match system", systemImage: "circle.lefthalf.filled").tag(AppAppearance.system)
-        }
-        .pickerStyle(.inline)
-        Divider()
-        Button("Theme settings…", systemImage: "paintpalette") { navigation.push(.themeSettings) }
-          .accessibilityIdentifier("account-theme-settings")
-      } label: {
-        Label("Theme", systemImage: "circle.lefthalf.filled")
-      }
-    }
-  }
-}
-
 extension AppAppearance {
   /// The color scheme a window takes; nil follows the system.
   var colorScheme: ColorScheme? {
@@ -135,25 +215,31 @@ extension AppAppearance {
   }
 }
 
-/// The account photo at the foot of the rail: opens the account menu.
+/// The account photo at the foot of the rail: opens the account menu, a popover from the photo (Figma 16:142).
 struct AccountMenuButton: View {
   @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  @State private var open = false
   @State private var confirmSignOut = false
   var size: CGFloat = 32
 
   var body: some View {
-    Menu {
-      AccountMenuItems(confirmSignOut: $confirmSignOut)
+    let identity = AccountIdentity(model: model)
+    Button {
+      open.toggle()
     } label: {
-      AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: size)
+      AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: size)
     }
-    .menuStyle(.button)
     .buttonStyle(.plain)
-    .menuIndicator(.hidden)
     .fixedSize()
-    .help("Your account")
-    .accessibilityLabel("Your account")
+    // The rail names the account with its own bubble (AGL-3996), so no slow system help tag.
+    .accessibilityLabel(AccountIdentity(model: model).name)
     .accessibilityIdentifier("rail-account")
+    .popover(isPresented: $open, arrowEdge: .trailing) {
+      AccountMenuContent(confirmSignOut: $confirmSignOut) { open = false }
+        .environment(model)
+        .environment(navigation)
+    }
     .signOutConfirmation(isPresented: $confirmSignOut)
   }
 }

@@ -242,6 +242,11 @@ export async function ensurePosTerminalLocation(options: {
     },
     { merge: true },
   )
+  // A new Location starts with the store's reader start-up screen (AGL-4048).
+  // Never fatal, and loaded only here: it draws images.
+  await import('./pos-reader-splash')
+    .then((splash) => splash.applyPosReaderSplash(options.hostId))
+    .catch((error) => console.error('[pos-terminal] start-up screen not applied', options.hostId, error))
   return { ok: true, locationId: String(created.body.id) }
 }
 
@@ -250,11 +255,100 @@ export function posReaderTippingKey(settings: PosRegisterSettings): string {
   return settings.tippingEnabled ? settings.tipPercentages.slice(0, 3).join(',') : 'off'
 }
 
+type PosStripeParams = Record<string, string | number | boolean | undefined | null | readonly string[]>
+
 /**
- * Keeps the site's reader tipping in step with the merchant's settings: one
- * Terminal Configuration per site, assigned to its Location, rewritten only
- * when the presets changed. Never fatal: a reader that keeps the previous
- * presets still takes the payment.
+ * Writes `params` onto the site's ONE Terminal Configuration, creating it and
+ * assigning it to the site's Location on first use. Reader tipping and the
+ * start-up screen (AGL-4048) both live on it, because a Location takes one
+ * configuration override: a second configuration assigned for the screen
+ * would silently drop the tipping presets, and the other way round. Stripe
+ * leaves every parameter an update does not name as it was, so each caller
+ * sends only its own.
+ *
+ * The first write is the only race. Tipping's runs as a payment starts, the
+ * screen's when the POS devices card saves, and two at once would each make a
+ * configuration. So the new id is CLAIMED in a transaction: the loser writes
+ * its parameters onto the winner's configuration and deletes its own.
+ *
+ * `createKey` keys only the create (`pos-configuration:{hostId}:{createKey}`),
+ * so a retried first write makes one configuration. An update is not keyed:
+ * it sets values, and repeating it changes nothing.
+ */
+export async function savePosReaderConfiguration(
+  hostId: string,
+  params: PosStripeParams,
+  createKey: string,
+): Promise<{ ok: true; configurationId: string } | { ok: false; error: string }> {
+  const ref = terminalConfigRef(hostId)
+  const config = await ref.get()
+  const locationId = String(config.get('stripeLocationId') ?? '')
+  if (!locationId) return { ok: false, error: 'no-location' }
+  const known = String(config.get('stripeConfigurationId') ?? '')
+  if (known) {
+    const updated = await posStripe('POST', `terminal/configurations/${known}`, { params })
+    if (!updated.ok) return { ok: false, error: String(updated.body?.error?.code ?? updated.status) }
+    // A configuration recorded before AGL-4048 was only ever recorded once
+    // it was assigned, so only an explicit `false` still owes the assignment.
+    if (config.get('stripeConfigurationAssigned') === false) {
+      const assigned = await assignPosReaderConfiguration(hostId, locationId, known)
+      if (!assigned) return { ok: false, error: 'assignment' }
+    }
+    return { ok: true, configurationId: known }
+  }
+  const created = await posStripe('POST', 'terminal/configurations', {
+    params,
+    idempotencyKey: `pos-configuration:${hostId}:${createKey}`,
+  })
+  if (!created.ok || !created.body?.id) {
+    return { ok: false, error: String(created.body?.error?.code ?? created.status) }
+  }
+  const createdId = String(created.body.id)
+  const winner: string = await firebaseAdmin
+    .app()
+    .firestore()
+    .runTransaction(async (transaction: any) => {
+      const fresh = await transaction.get(ref)
+      const existing = String(fresh.get('stripeConfigurationId') ?? '')
+      if (existing) return existing
+      transaction.set(
+        ref,
+        { stripeConfigurationId: createdId, stripeConfigurationAssigned: false },
+        { merge: true },
+      )
+      return createdId
+    })
+  if (winner !== createdId) {
+    const updated = await posStripe('POST', `terminal/configurations/${winner}`, { params })
+    await posStripe('DELETE', `terminal/configurations/${createdId}`).catch(() => undefined)
+    if (!updated.ok) return { ok: false, error: String(updated.body?.error?.code ?? updated.status) }
+    return { ok: true, configurationId: winner }
+  }
+  const assigned = await assignPosReaderConfiguration(hostId, locationId, createdId)
+  return assigned ? { ok: true, configurationId: createdId } : { ok: false, error: 'assignment' }
+}
+
+async function assignPosReaderConfiguration(
+  hostId: string,
+  locationId: string,
+  configurationId: string,
+): Promise<boolean> {
+  const assigned = await posStripe('POST', `terminal/locations/${locationId}`, {
+    params: { configuration_overrides: configurationId },
+  })
+  if (!assigned.ok) {
+    console.error('[pos-terminal] configuration assignment failed', hostId, assigned.body?.error)
+    return false
+  }
+  await terminalConfigRef(hostId).set({ stripeConfigurationAssigned: true }, { merge: true })
+  return true
+}
+
+/**
+ * Keeps the site's reader tipping in step with the merchant's settings, on
+ * the site's one Terminal Configuration ({@link savePosReaderConfiguration}),
+ * rewritten only when the presets changed. Never fatal: a reader that keeps
+ * the previous presets still takes the payment.
  */
 export async function syncPosReaderTipping(
   hostId: string,
@@ -263,40 +357,20 @@ export async function syncPosReaderTipping(
   if (!settings.tippingEnabled) return
   const ref = terminalConfigRef(hostId)
   const config = await ref.get()
-  const locationId = String(config.get('stripeLocationId') ?? '')
-  if (!locationId) return
+  if (!config.get('stripeLocationId')) return
   const key = posReaderTippingKey(settings)
   if (config.get('tippingKey') === key) return
   const percentages = settings.tipPercentages.slice(0, 3)
-  const configurationId = String(config.get('stripeConfigurationId') ?? '')
-  const params = {
-    [`tipping[${POS_CURRENCY}][percentages]`]: percentages.map(String),
-  }
-  const saved = await posStripe(
-    'POST',
-    configurationId ? `terminal/configurations/${configurationId}` : 'terminal/configurations',
-    {
-      params,
-      ...(configurationId ? {} : { idempotencyKey: `pos-configuration:${hostId}:${key}` }),
-    },
+  const saved = await savePosReaderConfiguration(
+    hostId,
+    { [`tipping[${POS_CURRENCY}][percentages]`]: percentages.map(String) },
+    key,
   )
-  if (!saved.ok || !saved.body?.id) {
-    console.error('[pos-terminal] tipping configuration failed', hostId, saved.body?.error)
+  if ('error' in saved) {
+    console.error('[pos-terminal] tipping configuration failed', hostId, saved.error)
     return
   }
-  if (!configurationId) {
-    const assigned = await posStripe('POST', `terminal/locations/${locationId}`, {
-      params: { configuration_overrides: String(saved.body.id) },
-    })
-    if (!assigned.ok) {
-      console.error('[pos-terminal] configuration assignment failed', hostId, assigned.body?.error)
-      return
-    }
-  }
-  await ref.set(
-    { stripeConfigurationId: String(saved.body.id), tippingKey: key },
-    { merge: true },
-  )
+  await ref.set({ tippingKey: key }, { merge: true })
 }
 
 /** Reads a reader from Stripe and keeps its status on the site's document. */
@@ -1123,3 +1197,113 @@ export async function handlePosStripeEvent(input: {
 }
 
 export type { PosLiftedOrder }
+
+/*==========================================
+ * CARDS TAKEN OFFLINE ON THE APP'S OWN READER (AGL-4039).
+ *
+ * The Aglyn POS app creates these PaymentIntents itself (Stripe stores the
+ * card on the device and forwards it once a connection returns), so the
+ * server meets them only at the sale's sync: it reads the intent, checks it
+ * is the sale's, and captures it with the platform fee, the same capture an
+ * online reader payment gets after its tip is known.
+ *=========================================*/
+
+/** A PaymentIntent the offline sync reads, reduced to what it checks. */
+export interface PosOfflineCardIntent {
+  id: string
+  status: string
+  amount: number
+  currency: string
+  metadata: Record<string, string>
+  destination: string
+  applicationFeeCents: number
+  livemode: boolean
+  brand?: string
+  last4?: string
+  failureMessage?: string
+}
+
+function offlineCardIntent(body: any): PosOfflineCardIntent {
+  const charge = body?.latest_charge && typeof body.latest_charge === 'object' ? body.latest_charge : null
+  const present = charge?.payment_method_details?.card_present ?? {}
+  const error = body?.last_payment_error ?? null
+  return {
+    id: String(body?.id ?? ''),
+    status: String(body?.status ?? ''),
+    amount: Number(body?.amount ?? 0),
+    currency: String(body?.currency ?? ''),
+    metadata: (body?.metadata ?? {}) as Record<string, string>,
+    destination: String(body?.transfer_data?.destination ?? ''),
+    applicationFeeCents: Number(body?.application_fee_amount ?? 0),
+    livemode: Boolean(body?.livemode),
+    ...(present.brand ? { brand: String(present.brand) } : {}),
+    ...(present.last4 ? { last4: String(present.last4) } : {}),
+    ...(error ? { failureMessage: String(error.message ?? error.decline_code ?? 'The card was declined.') } : {}),
+  }
+}
+
+/** Reads one offline card's PaymentIntent, with its charge's card details. */
+export async function retrievePosOfflineCardIntent(
+  paymentIntentId: string,
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+  const fetched = await posStripe('GET', `payment_intents/${encodeURIComponent(paymentIntentId)}`, {
+    params: { 'expand[]': ['latest_charge'] },
+  })
+  if (!fetched.ok) return { ok: false, error: posStripeErrorMessage(fetched.body, 'The card payment could not be read.') }
+  return { ok: true, intent: offlineCardIntent(fetched.body) }
+}
+
+/** Captures one authorized offline card with the platform's fee; a repeat finds the first capture. */
+export async function capturePosOfflineCardIntent(
+  paymentIntentId: string,
+  applicationFeeCents: number,
+  idempotencyKey: string,
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+  const captured = await posStripe('POST', `payment_intents/${encodeURIComponent(paymentIntentId)}/capture`, {
+    idempotencyKey,
+    params: {
+      ...(applicationFeeCents > 0 ? { application_fee_amount: applicationFeeCents } : {}),
+      'expand[]': ['latest_charge'],
+    },
+  })
+  if (!captured.ok) return { ok: false, error: posStripeErrorMessage(captured.body, 'The card payment could not be captured.') }
+  return { ok: true, intent: offlineCardIntent(captured.body) }
+}
+
+/**
+ * Turns Stripe's offline mode on for the site's readers: the same per-site
+ * Terminal Configuration the reader tipping uses, with `offline[enabled]`,
+ * assigned to the site's Location. Done once; a reader picks it up the next
+ * time it connects online. False when Stripe refused it.
+ */
+export async function ensurePosOfflineCardConfiguration(hostId: string): Promise<boolean> {
+  const ref = terminalConfigRef(hostId)
+  const config = await ref.get()
+  if (config.get('offlineEnabled') === true) return true
+  const locationId = String(config.get('stripeLocationId') ?? '')
+  if (!locationId) return false
+  const configurationId = String(config.get('stripeConfigurationId') ?? '')
+  const saved = await posStripe(
+    'POST',
+    configurationId ? `terminal/configurations/${configurationId}` : 'terminal/configurations',
+    {
+      params: { 'offline[enabled]': true },
+      ...(configurationId ? {} : { idempotencyKey: `pos-configuration:${hostId}:offline` }),
+    },
+  )
+  if (!saved.ok || !saved.body?.id) {
+    console.error('[pos-terminal] offline configuration failed', hostId, saved.body?.error)
+    return false
+  }
+  if (!configurationId) {
+    const assigned = await posStripe('POST', `terminal/locations/${locationId}`, {
+      params: { configuration_overrides: String(saved.body.id) },
+    })
+    if (!assigned.ok) {
+      console.error('[pos-terminal] offline configuration assignment failed', hostId, assigned.body?.error)
+      return false
+    }
+  }
+  await ref.set({ stripeConfigurationId: String(saved.body.id), offlineEnabled: true }, { merge: true })
+  return true
+}

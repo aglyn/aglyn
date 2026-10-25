@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -76,6 +75,7 @@ import com.aglyn.core.WorkspaceState
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.BrandPicture
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WorkspaceTile
 import com.aglyn.ui.shellColors
 import kotlinx.coroutines.CancellationException
@@ -488,9 +488,9 @@ internal fun SearchResultsScreen(
     }
     if (groups.size > 1) {
       Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        androidx.compose.material3.FilterChip(only == null, onClick = { only = null }, label = { Text("All") }, modifier = Modifier.testTag("search-results-all"))
+        androidx.compose.material3.FilterChip(only == null, onClick = { only = null }, label = { Text("All") }, colors = com.aglyn.ui.aglynFilterChipColors(), modifier = Modifier.testTag("search-results-all"))
         for ((group, heading) in groups) {
-          androidx.compose.material3.FilterChip(only == group, onClick = { only = if (only == group) null else group }, label = { Text(heading) }, modifier = Modifier.testTag("search-results-$group"))
+          androidx.compose.material3.FilterChip(only == group, onClick = { only = if (only == group) null else group }, label = { Text(heading) }, colors = com.aglyn.ui.aglynFilterChipColors(), modifier = Modifier.testTag("search-results-$group"))
         }
       }
     }
@@ -534,7 +534,7 @@ private fun OneBoxResult(services: ShellServices, workspace: WorkspaceState, pre
       Contracts.oneBoxWorkspacesGroup -> {
         val (light, dark) = orgLogoUrls(workspace, row.id, services.api.origin)
         val (color) = rememberWorkspaceColor(row.id, workspace, prefs, services.api.origin)
-        WorkspaceTile(row.label, light, dark, color, size = 28.dp, cornerRadius = 8.dp)
+        WorkspaceTile(row.label, light, dark, color, size = 28.dp, cornerRadius = 8.dp, initials = com.aglyn.contracts.workspaceInitial(row.label))
       }
       "sites" -> BrandPicture(mediaPreviewUrl(workspace.sites.firstOrNull { it.id == row.id }?.favicon, services.api.origin, row.id, 96), null, 28.dp, RoundedCornerShape(8.dp)) {
         WorkspaceTile(row.label, null, null, null, size = 28.dp, cornerRadius = 8.dp)

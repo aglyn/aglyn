@@ -187,6 +187,8 @@ const mockFirestore = () => ({
 })
 
 let mockUid = 'uid-1'
+/** The org's plan; Free and Starter include no campaign email. */
+let mockOrgPlan = 'pro'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   // The literal three call sites compare against — the unsubscribe writes
@@ -258,7 +260,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Nobody in this file is suppressed; document ids are what is under test.
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   // Starter, so the monthly campaign cap does not refuse before the write.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: mockOrgPlan } }),
   // No site here selects a custom sending domain, so every send resolves to
   // the platform identity — the behavior these suites were written against.
   resolveHostSendingIdentity: async () =>
@@ -623,6 +625,107 @@ describe('the ordinary campaign still sends', () => {
     expect(store.get(`orgs/org-1/campaigns/spring-2026`)).toMatchObject({
       status: 'scheduled',
     })
+  })
+
+  it('refuses to schedule on a plan with no campaign email, with an upgrade path', async () => {
+    // Scheduling claims nothing, so without this a Free workspace put a
+    // campaign on the clock that the processor could only ever mark failed.
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({
+        hostId: HOST,
+        action: 'schedule',
+        subject: 'Spring sale',
+        body: 'Ends Sunday',
+        campaignId: 'spring-2026',
+        sendAtMs: Date.now() + 60_000,
+      })
+
+      expect(result.status).toBe(403)
+      expect(result.body.reason).toBe('campaign-plan-cap')
+      expect(result.body.error).toMatch(/does not include campaign email/)
+      expect(campaignPaths()).toEqual([])
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+  })
+
+  it('answers every preview with the plan lock, refused or not', async () => {
+    // The native composers draw this as it comes, so a Free plan is said
+    // the moment the composer opens, whatever the audience resolves to.
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({ hostId: HOST, action: 'preview' })
+
+      expect(result.body.planLock).toMatchObject({
+        kind: 'not-on-plan',
+        planLabel: 'Pro',
+        reason: 'Campaign email is included from Pro.',
+      })
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+    const paid = await post({ hostId: HOST, action: 'preview' })
+    expect(paid.body.planLock ?? null).toBeNull()
+  })
+
+  it('answers the "Send now" dry run with the plan lock', async () => {
+    // The email's own page and the native confirm sheets ask this before
+    // they offer the button, so a Free plan is said instead of a count.
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({
+        hostId: HOST,
+        action: 'sendNow',
+        campaignId: 'draft-1',
+        dryRun: true,
+      })
+
+      expect(result.body.planLock).toMatchObject({
+        kind: 'not-on-plan',
+        planLabel: 'Pro',
+      })
+      expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['status']).toBe(
+        'draft',
+      )
+    } finally {
+      mockOrgPlan = 'pro'
+    }
+    const paid = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'draft-1',
+      dryRun: true,
+    })
+    expect(paid.body.planLock ?? null).toBeNull()
+  })
+
+  it('still saves a draft on a plan with no campaign email', async () => {
+    mockOrgPlan = 'free'
+    try {
+      const result = await post({
+        hostId: HOST,
+        action: 'draft',
+        subject: 'Spring sale',
+        body: 'Ends Sunday',
+        campaignId: 'spring-2026',
+      })
+
+      expect(result.status).toBe(200)
+      expect(store.get(`orgs/org-1/campaigns/spring-2026`)).toMatchObject({
+        status: 'draft',
+      })
+    } finally {
+      mockOrgPlan = 'pro'
+    }
   })
 
   it('still requires a site admin before any of this', async () => {

@@ -6,6 +6,12 @@ description: Aglyn AI writes a site function or variable from a description, cha
 
 # Functions and variables with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 On **Logic** — the Functions & Variables page — Aglyn AI can write a
 [function or a variable](../building-sites/bindings/overview.md#no-code-functions) from a
 description, change or fix a function you already have, and explain what one works out. On

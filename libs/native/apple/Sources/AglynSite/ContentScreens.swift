@@ -109,7 +109,7 @@ struct ContentScreen: View {
             "No collections yet", systemImage: "doc.richtext", message: "A collection holds posts or articles, each with its own page on your site."
           ) {
             Button("New collection") { dialog = .newCollection }
-              .buttonStyle(.borderedProminent)
+              .buttonStyle(.aglynProminent)
               .disabled(!env.canWrite)
               .accessibilityIdentifier("add-collection")
           }
@@ -218,7 +218,7 @@ private struct CollectionEntries: View {
       }
       rows(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -353,7 +353,6 @@ private struct EntryForm: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .onChange(of: stored) { _, next in draft = next }
     .accessibilityIdentifier("entry-editor")
   }
@@ -415,7 +414,7 @@ private struct EntryForm: View {
           }
         }
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
     } else {
       Button(entry.status == "scheduled" ? "Publish now" : "Publish") {
         if !entry.hasByline {
@@ -427,7 +426,7 @@ private struct EntryForm: View {
           }
         }
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(!env.canPublish || env.runner.busy || stored != draft)
       .accessibilityIdentifier("entry-publish")
     }

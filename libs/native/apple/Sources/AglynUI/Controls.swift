@@ -36,6 +36,56 @@ public struct AglynChoiceChip: View {
   }
 }
 
+/// One row of a single choice (an Aglyn AI tier, a plan): a ring that fills when it is the one chosen, its label with
+/// a line under it, and a mark beside it ("Current"). A row that cannot be chosen stays on screen, dimmed, its line
+/// saying why (a prerequisite is shown, never hidden).
+public struct AglynChoiceRow: View {
+  let title: String
+  let detail: String?
+  let badge: (text: String, tone: AglynTone)?
+  let selected: Bool
+  let enabled: Bool
+  let action: () -> Void
+
+  public init(
+    _ title: String, detail: String? = nil, badge: (text: String, tone: AglynTone)? = nil, selected: Bool,
+    enabled: Bool = true, action: @escaping () -> Void
+  ) {
+    self.title = title
+    self.detail = detail
+    self.badge = badge
+    self.selected = selected
+    self.enabled = enabled
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      HStack(alignment: .center, spacing: AglynSpace.oneAndHalf) {
+        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+          .font(AglynFont.body)
+          .foregroundStyle(selected ? AglynColor.tint : AglynColor.secondaryText)
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title).font(AglynFont.body).foregroundStyle(AglynColor.textPrimary)
+          if let detail {
+            Text(detail).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        Spacer(minLength: AglynSpace.one)
+        if let badge { StatusChip(badge.text, tone: badge.tone) }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .opacity(enabled ? 1 : 0.5)
+    }
+    .buttonStyle(.aglynRow)
+    .disabled(!enabled)
+    .accessibilityAddTraits(selected ? .isSelected : [])
+  }
+}
+
 /// Minus, a count, plus. At `minimum` the minus becomes a remove button
 /// when `onRemove` is given, so a line never sits at zero.
 public struct AglynQuantityStepper: View {
@@ -260,8 +310,8 @@ public struct AglynItemTile: View {
   }
 }
 
-/// A checkbox on every platform (iOS has no checkbox toggle): a ticked square in the tint, the label beside it, the whole
-/// row the target.
+/// A checkbox on every platform (iOS has no checkbox toggle): a ticked square in the accent's fill (the console's
+/// MuiCheckbox, `primary.main`), the label beside it, the whole row the target.
 public struct AglynCheckboxToggleStyle: ToggleStyle {
   public init() {}
 
@@ -272,7 +322,7 @@ public struct AglynCheckboxToggleStyle: ToggleStyle {
       HStack(spacing: 10) {
         Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
           .font(.system(size: 18))
-          .foregroundStyle(configuration.isOn ? AglynColor.tint : AglynColor.secondaryText)
+          .foregroundStyle(configuration.isOn ? AglynColor.primary : AglynColor.secondaryText)
         configuration.label.frame(maxWidth: .infinity, alignment: .leading)
       }
       .contentShape(Rectangle())
@@ -284,4 +334,145 @@ public struct AglynCheckboxToggleStyle: ToggleStyle {
 
 extension ToggleStyle where Self == AglynCheckboxToggleStyle {
   public static var aglynCheckbox: AglynCheckboxToggleStyle { AglynCheckboxToggleStyle() }
+}
+
+/// Every toggle in the accent's FILL, the brand blue #00B0FF, as the console's MuiSwitch draws it (AGL-3990). A scene's
+/// tint is the accent's TEXT shade (#0077AD in light), which a switch's track and a checkbox would otherwise take.
+/// Applied at a scene's root (`aglynAppTheme`, `RootView`); the platform's own toggle draws inside it.
+public struct AglynToggleStyle: ToggleStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    Toggle(configuration)
+      .toggleStyle(.automatic)
+      .tint(AglynColor.primary)
+  }
+}
+
+/// A filled ("prominent") button, Figma Button Kind=Primary: the console's contained MuiButton (AGL-3990). It paints
+/// the accent's FILL itself (#00B0FF for the brand blue, its pressed shade #006999 while held), with WHITE text, at the
+/// control size it is given (Small 28, Medium 36, Large 48; radius 6 on the Mac, 8 and 12 on touch). It never reads
+/// the scene's `.tint`, which is the accent's TEXT shade (#0077AD light, #4DC8FF dark): the platform's
+/// `.borderedProminent` fills with that, so every filled button (POS Charge and Take payment among them) read as the
+/// wrong blue. A destructive one fills in the error color.
+public struct AglynProminentButtonStyle: ButtonStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    ProminentBody(configuration: configuration)
+  }
+
+  private struct ProminentBody: View {
+    let configuration: Configuration
+    @Environment(\.controlSize) private var controlSize
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+
+    private var fill: Color {
+      if configuration.role == .destructive { return AglynColor.intent({ $0.error }, \.main) }
+      return configuration.isPressed ? AglynColor.accent(\.pressed) : AglynColor.primary
+    }
+
+    var body: some View {
+      let m = AglynButtonMetrics(controlSize)
+      let shape = RoundedRectangle(cornerRadius: m.radius, style: .continuous)
+      configuration.label
+        .font(.system(size: m.font, weight: .semibold))
+        .foregroundStyle(AglynColor.primaryContrast)
+        .tint(AglynColor.primaryContrast)
+        .lineLimit(1)
+        .padding(.horizontal, m.padding)
+        .frame(minHeight: m.height)
+        .background(shape.fill(fill))
+        // The pointer's hover: the fill a shade deeper, as the console's contained button darkens under the pointer.
+        .overlay(shape.fill(Color.black.opacity(hovered && enabled && !configuration.isPressed ? 0.1 : 0)))
+        .contentShape(shape)
+        .opacity(enabled ? 1 : 0.5)
+        .onHover { hovered = $0 }
+    }
+  }
+}
+
+/// A button's size at a control size (Figma Button Size): its height, label size, side padding and corner radius.
+struct AglynButtonMetrics {
+  let height: CGFloat
+  let font: CGFloat
+  let padding: CGFloat
+  let radius: CGFloat
+
+  init(_ controlSize: ControlSize) {
+    #if os(macOS)
+      let compact = true
+    #else
+      let compact = false
+    #endif
+    let size: (CGFloat, CGFloat, CGFloat, CGFloat) =
+      switch controlSize {
+      case .mini, .small: (28, 13, 10, compact ? 6 : 8)
+      case .large, .extraLarge: (48, 17, 20, compact ? 6 : 12)
+      default: (36, 14, 14, compact ? 6 : 8)
+      }
+    height = size.0
+    font = size.1
+    padding = size.2
+    radius = size.3
+  }
+}
+
+/// A secondary (outlined) button, Figma Button Kind=Secondary: the surface, a 1-point border/strong outline and primary
+/// text, at the control size it is given (Small 28, Medium 36, Large 48; radius 6 on the Mac, 8 and 12 on touch). It
+/// stands in for the platform's `.bordered`, whose glass draws a bright rim in dark mode (Zach, 2026-10-19: "weird
+/// white borders on dark mode on some buttons"). A destructive one says so in the error color. A `selected` one (a
+/// notification channel that is on) is the console's outlined primary: the accent's text shade, outlined in the fill,
+/// on the same surface (never the soft wash, under which #0077AD falls short of 4.5:1).
+public struct AglynSecondaryButtonStyle: ButtonStyle {
+  let selected: Bool
+
+  public init(selected: Bool = false) { self.selected = selected }
+
+  public func makeBody(configuration: Configuration) -> some View {
+    SecondaryBody(configuration: configuration, selected: selected)
+  }
+
+  private struct SecondaryBody: View {
+    let configuration: Configuration
+    let selected: Bool
+    @Environment(\.controlSize) private var controlSize
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+
+    private var fill: Color {
+      if configuration.isPressed { return AglynColor.sunken }
+      return hovered && enabled ? AglynColor.hover : AglynColor.paper
+    }
+
+    var body: some View {
+      let m = AglynButtonMetrics(controlSize)
+      let shape = RoundedRectangle(cornerRadius: m.radius, style: .continuous)
+      configuration.label
+        .font(.system(size: m.font, weight: .semibold))
+        .foregroundStyle(
+          configuration.role == .destructive ? AglynColor.error : selected ? AglynColor.tint : AglynColor.textPrimary)
+        .lineLimit(1)
+        .padding(.horizontal, m.padding)
+        .frame(minHeight: m.height)
+        .background(shape.fill(fill))
+        .overlay(shape.strokeBorder(selected ? AglynColor.primary : AglynColor.borderStrong, lineWidth: 1))
+        .contentShape(shape)
+        .opacity(enabled ? 1 : 0.5)
+        .onHover { hovered = $0 }
+    }
+  }
+}
+
+extension ButtonStyle where Self == AglynSecondaryButtonStyle {
+  /// A secondary (outlined) button: `AglynSecondaryButtonStyle`.
+  public static var aglynSecondary: AglynSecondaryButtonStyle { AglynSecondaryButtonStyle() }
+  /// A secondary button that shows it is on: `AglynSecondaryButtonStyle(selected:)`.
+  public static func aglynSecondary(selected: Bool) -> AglynSecondaryButtonStyle { AglynSecondaryButtonStyle(selected: selected) }
+}
+
+extension ButtonStyle where Self == AglynProminentButtonStyle {
+  /// A filled button in the brand blue under white: `AglynProminentButtonStyle`.
+  public static var aglynProminent: AglynProminentButtonStyle { AglynProminentButtonStyle() }
 }

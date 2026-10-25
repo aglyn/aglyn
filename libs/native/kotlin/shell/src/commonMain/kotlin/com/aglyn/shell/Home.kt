@@ -1,6 +1,7 @@
 package com.aglyn.shell
 
 import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.TextButton
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +42,6 @@ import com.aglyn.core.Live
 import com.aglyn.core.WorkspaceState
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
-import com.aglyn.core.siteAddress
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.WidgetSize
 import com.aglyn.ui.ActivityRow
@@ -69,10 +68,11 @@ const val HOME_NEEDS_YOU_SLOT = "homeNeedsYou"
 private const val PICK_UP_SHOWN = 4
 
 /**
- * Home answers one question: what needs me now? The site in one line; then "Needs you", only what waits (each line opens
- * its list, already filtered; the plugins draw their own lines in [HOME_NEEDS_YOU_SLOT], the shell adds the plan's
- * failed payment); then where the person left off; then the one-line prompt that starts Create with AI. No charts: those
- * stay in Overview.
+ * Home is the overview (AGL-4011). The site or workspace in one line (the workspace's proposed plan under it); then
+ * "Needs you", only what waits (each line opens its list, already filtered; the plugins draw their own lines in
+ * [HOME_NEEDS_YOU_SLOT], the shell adds the plan's failed payment); then the numbers (a site's Traffic, its cards and its
+ * recent activity, or the cards that total the workspace); then where the person left off; then the one-line prompt that
+ * starts Create with AI. Analytics holds the full drill-down.
  */
 @Composable
 internal fun HomeScreen(
@@ -87,15 +87,12 @@ internal fun HomeScreen(
   val host = hostDoc(services, site?.id)
   val now = remember { nowMillis() }
   val prefs by services.accountPrefs.state.collectAsState()
-  val version by services.registry.version.collectAsState()
-  val lines = remember { com.aglyn.ui.NeedsYouLines() }
-  val needs = remember(version, site != null) { context.slotWidgets(HOME_NEEDS_YOU_SLOT).filter { site != null || !it.requiresSite } }
-  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
   val openRecent = LocalOpenRecent.current
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      // The whole content area, on the content edge E (Zach 10/19: no left-aligned or capped column).
+      // The whole content area, on the content edge E (no left-aligned or capped column).
       Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
         .padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("home"),
       verticalArrangement = Arrangement.spacedBy(space(3f)),
@@ -106,23 +103,17 @@ internal fun HomeScreen(
         return@Column
       }
       HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
+      if (site == null) {
+        HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, com.aglyn.contracts.Contracts.platformBrandName)
+      }
 
-      CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {
-        Column(verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-          DashboardSectionTitle("Needs you")
-          planPaymentProblem(org)?.let { problem ->
-            com.aglyn.ui.NeedsYouLine("plan-payment", "credit_card", problem, "Billing", onClick = { context.navigate("core.billing") }, tone = StatusTone.ERROR)
-          }
-          for (widget in needs) Box(Modifier.testTag("widget-${widget.id}")) { widget.content(context) }
-          if (!lines.any && planPaymentProblem(org) == null) {
-            Text(
-              "Nothing needs you right now.",
-              style = MaterialTheme.typography.bodyLarge,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.padding(horizontal = space(1.5f), vertical = space(1f)).testTag("needs-you-none"),
-            )
-          }
-        }
+      NeedsYouBlock(services, context, workspace)
+
+      // The numbers (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards.
+      if (site != null) {
+        HomeSiteStats(services, context, site.id) { navigator.select(NavKeys.of(NavKeys.ANALYTICS_SCREEN)) }
+      } else {
+        workspace.org?.id?.let { HomeOrgGlance(services, context, it) }
       }
 
       val recents = prefs.recents.filter { it.orgId == workspace.org?.id }.take(PICK_UP_SHOWN)
@@ -153,7 +144,7 @@ private const val AI_CREATE_SCREEN_ID = "ai.create"
 
 /** The workspace's own document, live. */
 @Composable
-private fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
+internal fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
   if (orgId == null) return Live.Ready(null)
   val flow = remember(orgId) { services.firestore.observeDoc("orgs/$orgId") }
   val live by flow.collectAsState(Live.Loading)
@@ -264,7 +255,8 @@ private fun SiteHeader(
     return
   }
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, now) }
-  val address = siteAddress(site.subdomain)
+  // The host's own custom domain first, then the membership row's copy, then the platform address.
+  val address = site.addressWith((host as? Live.Ready)?.value?.data?.get("cname") as? String)
   SiteHeaderCard(
     workspaceName = workspace.org?.name,
     siteName = site.name,
@@ -347,5 +339,36 @@ internal fun notificationFeed(services: ShellServices, uid: String, count: Int):
     is Live.Ready -> Live.Ready(value.value.map(::feedNotificationOf))
     is Live.Failed -> value
     Live.Loading -> Live.Loading
+  }
+}
+
+/**
+ * What is waiting on the person: the workspace's failed plan payment and each plugin's "Needs you" line
+ * ([HOME_NEEDS_YOU_SLOT]), each opening its list already filtered. Home's on a tablet and the desktop; on a phone the
+ * bell's Activity (AGL-4006).
+ */
+@Composable
+internal fun NeedsYouBlock(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, modifier: Modifier = Modifier) {
+  val site = workspace.site
+  val version by services.registry.version.collectAsState()
+  val lines = remember { com.aglyn.ui.NeedsYouLines() }
+  val needs = remember(version, site != null) { context.slotWidgets(HOME_NEEDS_YOU_SLOT).filter { site != null || !it.requiresSite } }
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
+  CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {
+    Column(modifier.testTag("needs-you"), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+      DashboardSectionTitle("Needs you")
+      planPaymentProblem(org)?.let { problem ->
+        com.aglyn.ui.NeedsYouLine("plan-payment", "credit_card", problem, "Billing", onClick = { context.navigate("core.billing") }, tone = StatusTone.ERROR)
+      }
+      for (widget in needs) Box(Modifier.testTag("widget-${widget.id}")) { widget.content(context) }
+      if (!lines.any && planPaymentProblem(org) == null) {
+        Text(
+          "Nothing needs you right now.",
+          style = MaterialTheme.typography.bodyLarge,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(horizontal = space(1.5f), vertical = space(1f)).testTag("needs-you-none"),
+        )
+      }
+    }
   }
 }

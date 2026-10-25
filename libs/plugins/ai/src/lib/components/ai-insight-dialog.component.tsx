@@ -47,6 +47,7 @@ import {
   type AiInsightAnswerWire,
   type AiInsightSurface,
 } from '../model/ai-insight'
+import { AI_INSIGHT_DIALOG_COPY as COPY, AI_INSIGHT_PLACEHOLDERS } from '../model/ai-insight-ask'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { readEventFrames } from './ai-job-events'
 import { openAiJobs, publishAiJob } from './ai-jobs-store'
@@ -65,15 +66,7 @@ import { openAiJobs, publishAiJob } from './ai-jobs-store'
  */
 
 /** Placeholder questions by surface, in the words a person would use. */
-const PLACEHOLDERS: Record<Exclude<AiInsightSurface, 'digest'>, string> = {
-  analytics: 'Which pages brought in the most visitors, and did anything change?',
-  datasets: 'What is the average order total by state?',
-  'crm-reports': 'Which campaign or form brought in the most people this month?',
-  marketing: 'Which campaign brought in the most form submissions, and what did it earn?',
-  automations: 'Which automations failed most this month?',
-  bookings: 'Which services were booked most, and how many were canceled?',
-  workspace: 'How much is in the pipeline, and what closed this month?',
-}
+const PLACEHOLDERS: Readonly<Record<string, string>> = AI_INSIGHT_PLACEHOLDERS
 
 export interface AiInsightDialogProps {
   open: boolean
@@ -131,7 +124,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
       )
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.answer) {
-        setNotice(String(payload?.error ?? 'The answer could not be loaded. Try again.'))
+        setNotice(String(payload?.error ?? COPY.answerFailed))
         setPhase('ask')
         return
       }
@@ -147,7 +140,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
       const settle = async (settled: AiJobSummary) => {
         if (settled.status === 'done') await readAnswer(settled.id)
         else {
-          setNotice(settled.error ?? 'The question could not be answered. Try again.')
+          setNotice(settled.error ?? COPY.questionFailed)
           setPhase('ask')
         }
       }
@@ -173,7 +166,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
             const next = event['job'] as AiJobSummary
             publishAiJob(next)
             if (next.status === 'needs_input') {
-              setNotice(next.error ?? 'This workspace cannot run AI jobs right now.')
+              setNotice(next.error ?? COPY.cannotRun)
             }
             if (AI_JOB_TERMINAL_STATUSES.includes(next.status)) settled = next
           })
@@ -184,7 +177,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
         if (settled) return settle(settled)
       }
       if (!controller.signal.aborted) {
-        setNotice('The answer is still being written. Find it in AI jobs in a minute.')
+        setNotice(COPY.stillWriting)
         setStillWriting(job.id)
         setPhase('ask')
       }
@@ -236,7 +229,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
       await setDoc(doc(firestore, 'users', uid), { [INSIGHT_DIGESTS_FIELD]: { [orgId]: next } }, { merge: true })
     } catch {
       setSubscribed(!next)
-      setNotice('Your weekly insights setting could not be saved. Try again.')
+      setNotice(COPY.digestFailed)
     }
   }, [uid, subscribed, firestore, orgId])
 
@@ -261,14 +254,14 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
       const payload = await response.json().catch(() => null)
       if (!response.ok || !payload?.job) {
         const locked = parseLockdownRefusal(response.status, payload)
-        setNotice(locked ? lockdownRefusalText(locked) : String(payload?.error ?? 'The question could not be asked. Try again.'))
+        setNotice(locked ? lockdownRefusalText(locked) : String(payload?.error ?? COPY.askFailed))
         setPhase('ask')
         return
       }
       publishAiJob(payload.job as AiJobSummary)
       await follow(payload.job as AiJobSummary)
     } catch {
-      setNotice('The question could not be asked. Try again.')
+      setNotice(COPY.askFailed)
       setPhase('ask')
     }
   }, [question, orgId, hostId, surface, days, follow])
@@ -277,13 +270,13 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" aria-labelledby="ai-insight-title">
-      <DialogTitle id="ai-insight-title">{'Ask about your numbers'}</DialogTitle>
+      <DialogTitle id="ai-insight-title">{COPY.title}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           {phase === 'ask' ? (
             <>
               <TextField
-                label="What do you want to know?"
+                label={COPY.questionLabel}
                 placeholder={PLACEHOLDERS[surface]}
                 multiline
                 minRows={2}
@@ -294,7 +287,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
               {surface !== 'datasets' ? (
                 <Stack spacing={1}>
                   <Typography variant="body2" color="text.secondary" id="ai-insight-window-label">
-                    {'Over the last'}
+                    {COPY.windowLabel}
                   </Typography>
                   <Stack direction="row" useFlexGap role="group" aria-labelledby="ai-insight-window-label" sx={{ flexWrap: 'wrap', gap: 1 }}>
                     {AI_INSIGHT_WINDOWS.map((window) => (
@@ -311,15 +304,14 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
                 </Stack>
               ) : null}
               <Typography variant="body2" color="text.secondary">
-                {'The answer is read from your own figures, and every number in it links to where it comes from. '}
-                {'Nothing is changed or sent.'}
+                {COPY.promise}
               </Typography>
             </>
           ) : null}
           {phase === 'working' ? (
             <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }} role="status">
               <CircularProgress size={18} />
-              <Typography variant="body2">{'Reading your figures. This usually takes a minute.'}</Typography>
+              <Typography variant="body2">{COPY.working}</Typography>
             </Stack>
           ) : null}
           {phase === 'answer' && answer ? (
@@ -335,7 +327,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
                         onClick={() => setOpenCitations((current) => (current === index ? null : index))}
                         aria-expanded={openCitations === index}
                       >
-                        {openCitations === index ? 'Hide the figures' : 'Show the figures'}
+                        {openCitations === index ? COPY.hideFigures : COPY.showFigures}
                       </Button>
                       {openCitations === index ? (
                         <Stack spacing={1} sx={{ pl: 1, borderLeft: 2, borderColor: 'divider' }}>
@@ -372,7 +364,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
                   ))}
                 </Stack>
               ) : (
-                <Alert severity="info">{'The figures read here did not answer this question.'}</Alert>
+                <Alert severity="info">{COPY.unanswered}</Alert>
               )}
               {answer.gap ? <Alert severity="info">{answer.gap}</Alert> : null}
               {answer.left > 0 ? (
@@ -398,7 +390,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
                       onClose()
                     }}
                   >
-                    {'Open AI jobs'}
+                    {COPY.openJobs}
                   </Button>
                 ) : undefined
               }
@@ -409,7 +401,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
           {surface !== 'datasets' && subscribed !== null ? (
             <FormControlLabel
               control={<Switch checked={subscribed} onChange={() => void toggleDigest()} />}
-              label="Send me weekly insights for this workspace every Monday"
+              label={COPY.digest}
             />
           ) : null}
         </Stack>
@@ -423,13 +415,13 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
               setPhase('ask')
             }}
           >
-            {'Ask another'}
+            {COPY.askAnother}
           </Button>
         ) : null}
-        <Button onClick={onClose}>{'Close'}</Button>
+        <Button onClick={onClose}>{COPY.close}</Button>
         {phase === 'ask' ? (
           <Button variant="contained" onClick={() => void ask()} disabled={!question.trim()}>
-            {'Ask'}
+            {COPY.ask}
           </Button>
         ) : null}
       </DialogActions>

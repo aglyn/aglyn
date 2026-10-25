@@ -248,7 +248,9 @@ struct SpecScreenBody: View {
       .toolbar { if !wide { toolbar } }
       .aglynPrimaryAction(wide && !embedded ? headPrimary : nil)
       .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide && !embedded { headMore } }
-      .safeAreaInset(edge: .top, spacing: 0) { if wide && embedded { embeddedHead } }
+      // A detail column's own head only when it has actions: Refresh alone is the screen head's More already, and a
+      // row holding only a More leaves a strip above the detail.
+      .safeAreaInset(edge: .top, spacing: 0) { if wide && embedded && hasOwnActions { embeddedHead } }
       // The zones' conditional screens are read here, where the screen always is (`zoneReads`).
       .task(id: conditionalZoneScreens.map(\.key)) { await loadZoneReads() }
       // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides
@@ -267,7 +269,7 @@ struct SpecScreenBody: View {
         titleVisibility: .visible
       ) {
         if let pending = confirming {
-          Button(pending.action.label, role: pending.action.destructive ? .destructive : nil) {
+          Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
             confirming = nil
             Task { await execute(pending.action, scope: pending.scope) }
           }
@@ -341,7 +343,7 @@ struct SpecScreenBody: View {
         Button("Try again") { Task { await model.load() } }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(AglynColor.page)
+      .background(AglynGround())
     case .planRefused(let message):
       AglynUpsellState(
         "Add this to your plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
@@ -349,22 +351,36 @@ struct SpecScreenBody: View {
         plugin.navigate("core.billing.addons", [:])
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(AglynColor.page)
+      .background(AglynGround())
     case .ready:
       let blocks = model.spec.blocks.filter { ScreenValues.condition($0.when, in: context) }
       // Fills its column: the Mac draws its own grouped sections (`AglynGroupedForm`), the cards on the content edges.
-      AglynGroupedForm {
+      // A list screen on the Mac and iPad is a content list instead (Figma Mac Sites 13:3): no card and no grey ground,
+      // its rows edge to edge with their content on E, and its search and one Filter in its list toolbar.
+      let form = AglynGroupedForm(plain: wide && screenList != nil ? true : nil) {
         ForEach(blocks) { block in
           blockView(block)
         }
       }
       .refreshable { await model.load() }
-      .modifier(SearchModifier(enabled: searchLoad != nil, text: $searchText) {
-        if let key = searchLoad {
-          model.search[key] = searchText
-          Task { await model.load() }
-        }
-      })
+      if let list = toolbarList {
+        form
+          .aglynSearchable(text: $searchText, prompt: "Search", onSubmit: submitSearch) {
+            SpecListFilter(
+              block: list, model: model, context: context, filters: filterActions,
+              trigger: { action, scope in trigger(action, scope: scope) })
+          }
+          .onChange(of: searchText) { _, now in if now.isEmpty { submitSearch() } }
+      } else {
+        form.modifier(SearchModifier(enabled: searchLoad != nil, text: $searchText, submit: submitSearch))
+      }
+    }
+  }
+
+  private func submitSearch() {
+    if let key = searchLoad {
+      model.search[key] = searchText
+      Task { await model.load() }
     }
   }
 
@@ -372,14 +388,43 @@ struct SpecScreenBody: View {
     model.spec.blocks.first { $0.type == "list" && $0["search"] == .bool(true) }?["load"]?.stringValue
   }
 
+  /// The screen's one list, when everything else it shows is a notice: a list screen (the staff lists, Activity).
+  private var screenList: BlockSpec? {
+    let shown = model.spec.blocks.filter { $0.type != "notice" && ScreenValues.condition($0.when, in: context) }
+    guard shown.count == 1, let only = shown.first, only.type == "list" else { return nil }
+    return only
+  }
+
+  /// A list screen that searches: on the Mac and iPad its list toolbar holds the search and the one Filter, so the
+  /// list has no header row of its own and the screen's filter action leaves its head.
+  private var toolbarList: BlockSpec? {
+    guard wide, let list = screenList, list["search"] == .bool(true) else { return nil }
+    return list
+  }
+
   /// The screen's actions that apply now.
   private var actions: [ActionSpec] {
     model.spec.raw["actions"].array.compactMap(ActionSpec.init).filter { ScreenValues.condition($0.when, in: context) }
   }
 
+  /// The screen's own filter actions: they open this screen again with the person's choices ("Filter the list").
+  private var filterActions: [ActionSpec] {
+    actions.filter { $0.navigate?.screen == model.spec.id && !$0.prompt.isEmpty }
+  }
+
+  /// The actions the head offers: a filter action is the list toolbar's Filter, never a primary.
+  private var headActions: [ActionSpec] {
+    guard toolbarList != nil else { return actions }
+    let filters = Set(filterActions.map(\.id))
+    return actions.filter { !filters.contains($0.id) }
+  }
+
+  /// Whether a detail column has actions of its own to head it.
+  private var hasOwnActions: Bool { !headActions.isEmpty }
+
   /// The head's primary button: the screen's first action, unless it is destructive.
   private var headPrimary: AglynPrimaryAction? {
-    guard let first = actions.first, !first.destructive else { return nil }
+    guard let first = headActions.first, !first.destructive else { return nil }
     let scope = context
     return AglynPrimaryAction(
       id: "spec-action-\(first.id)", title: first.label, systemImage: first.icon ?? "plus", enabled: running == nil
@@ -406,7 +451,7 @@ struct SpecScreenBody: View {
   /// The head's More menu: the other actions, and Refresh on the Mac.
   @ViewBuilder
   private var headMore: some View {
-    let rest = headPrimary == nil ? actions : Array(actions.dropFirst())
+    let rest = headPrimary == nil ? headActions : Array(headActions.dropFirst())
     #if os(macOS)
       let refresh = true
     #else
@@ -416,7 +461,7 @@ struct SpecScreenBody: View {
       AglynMoreMenu {
         ForEach(rest) { action in
           Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
-            Label(action.label, systemImage: action.icon ?? "circle")
+            Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "circle")
           }
           .disabled(running != nil)
         }
@@ -435,13 +480,13 @@ struct SpecScreenBody: View {
     if let first = actions.first {
       ToolbarItem(placement: .primaryAction) {
         if actions.count == 1 {
-          Button { trigger(first, scope: context) } label: { Label(first.label, systemImage: first.icon ?? "plus") }
+          Button { trigger(first, scope: context) } label: { Label(ScreenValues.render(first.label, in: context), systemImage: first.icon ?? "plus") }
             .disabled(running != nil)
         } else {
           Menu {
             ForEach(actions) { action in
               Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
-                Label(action.label, systemImage: action.icon ?? "circle")
+                Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "circle")
               }
             }
           } label: {
@@ -474,7 +519,8 @@ struct SpecScreenBody: View {
         block: block, title: title, footer: footer, model: model, context: context,
         selection: splitting ? $selection : nil,
         open: { screen, params in openScreen(screen, params) },
-        trigger: { action, scope in trigger(action, scope: scope) })
+        trigger: { action, scope in trigger(action, scope: scope) },
+        toolbarControls: toolbarList?.id == block.id)
     case "form":
       section(title, footer) {
         FormBlock(block: block, context: context, busy: running != nil) { action, scope in
@@ -487,13 +533,16 @@ struct SpecScreenBody: View {
       if !shownActions.isEmpty {
       section(title, footer) {
         ForEach(shownActions) { action in
+          // A plain row in the accent text color (red for a destructive one), never a bordered pill or a tinted wash.
           Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
             HStack {
               Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "arrow.forward.circle")
+                .foregroundStyle(action.destructive ? AglynColor.error : AglynColor.tint)
               Spacer()
               if running == action.id { ProgressView().controlSize(.small) }
             }
           }
+          .buttonStyle(.aglynRow)
           .disabled(running != nil)
           .accessibilityIdentifier("action-\(action.id)")
         }
@@ -698,7 +747,7 @@ struct SpecScreenBody: View {
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (
-          instead["title"]?.stringValue.map { ScreenValues.render($0, in: after) } ?? action.label,
+          instead["title"]?.stringValue.map { ScreenValues.render($0, in: after) } ?? ScreenValues.render(action.label, in: after),
           ScreenValues.render(instead["text"]?.stringValue ?? "", in: after)
         )
         // The entry may also open a page the route named (an invoice the bank has to confirm).
@@ -712,7 +761,7 @@ struct SpecScreenBody: View {
       }
       // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
-        revealed = (action.label, ScreenValues.text(value))
+        revealed = (ScreenValues.render(action.label, in: after), ScreenValues.text(value))
       }
       if let file = action.file, let made = file.contents(in: after) {
         exporting = ExportedDownload(name: made.name, data: Data(made.text.utf8), contentType: file.type)

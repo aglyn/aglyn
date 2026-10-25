@@ -593,8 +593,13 @@ export function renderRelease({ version, date, summary, compareUrl } = {}) {
 }
 
 function renderCommitLine(commit) {
-  // Strip a trailing `(AGL-1, AGL-2)` so the ids are not printed twice.
   const summary = commit.summary
+    // A CI directive is an instruction to GitHub, not part of the change. A PR
+    // that rides the promotion's one CI pass lands with `[skip ci]` in its
+    // subject, and the beta.272 and beta.273 sections had to be stripped of it
+    // by hand. Dropped first, so the citation it trailed is trailing again.
+    .replace(/\s*\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]/gi, '')
+    // Strip a trailing `(AGL-1, AGL-2)` so the ids are not printed twice.
     .replace(/\s*\((?:AGL-\d+(?:,\s*)?)+\)\s*$/, '')
     .trim()
   const scope = commit.scope ? `**${commit.scope}:** ` : ''

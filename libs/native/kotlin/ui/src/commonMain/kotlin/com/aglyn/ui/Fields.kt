@@ -26,7 +26,6 @@ import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -225,6 +224,7 @@ fun DateTimeField(
     val time = rememberTimePickerState(initialHour = minutes / 60, initialMinute = minutes % 60)
     AlertDialog(
       onDismissRequest = { pickedDay = null },
+      modifier = Modifier.sheetEntrance(SheetEntrance.GROW),
       title = { Text("Pick a time") },
       text = { TimePicker(time) },
       confirmButton = {

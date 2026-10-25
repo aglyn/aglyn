@@ -1,6 +1,5 @@
 package com.aglyn.webview
 
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -14,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.webview.webview2.NavigationVerdict
 import com.aglyn.webview.webview2.WebView2Listener
 import com.aglyn.webview.webview2.WebView2View
@@ -46,7 +46,7 @@ actual fun PlainWebView(state: WebPageState, onLeave: (url: String) -> Unit, mod
   var view by remember { mutableStateOf<WebView2View?>(null) }
   val listener = remember(state) {
     WebView2Listener(
-      onNavigation = { uri ->
+      onNavigation = { uri, _ ->
         if (webDestination(uri) == WebDestination.SYSTEM) {
           scope.launch { leave(uri) }
           NavigationVerdict.CANCEL

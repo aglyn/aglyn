@@ -11,10 +11,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,8 +29,10 @@ import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.LocalSeoZone
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

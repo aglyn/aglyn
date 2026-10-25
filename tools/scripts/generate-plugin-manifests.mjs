@@ -223,9 +223,15 @@ function describeDrift(expected, actual) {
  * registers opens something only the console holds — an eraser that
  * revokes a provider grant with the console's key — and the tenant runtime,
  * which serves the public internet, must not so much as bundle it.
+ *
+ * A `consoleDeclarations` entry (`/declarations.console`, AGL-4047) is the
+ * console's alone too, but on BOTH its sides: what core must know in the
+ * console's browser and on its server and the tenant never reads — a
+ * console-only plugin's permission keys, which the role editor lists.
  */
 const DECLARATION_MODULES = {
   declarations: 'declarations',
+  consoleDeclarations: 'declarations.console',
   serverDeclarations: 'declarations.server',
   consoleServerDeclarations: 'declarations.console-server',
 }
@@ -263,13 +269,13 @@ function declarationsContent(surfaces, constName, entryPoint) {
 const DECLARATION_MANIFESTS = [
   {
     file: 'apps/console/constants/plugins.declarations.generated.ts',
-    surfaces: ['declarations'],
+    surfaces: ['declarations', 'consoleDeclarations'],
     constName: 'registerPluginDeclarations',
     entryPoint: 'client',
   },
   {
     file: 'apps/console/constants/plugins.declarations.server.generated.ts',
-    surfaces: ['declarations', 'serverDeclarations', 'consoleServerDeclarations'],
+    surfaces: ['declarations', 'consoleDeclarations', 'serverDeclarations', 'consoleServerDeclarations'],
     constName: 'registerPluginServerDeclarations',
     entryPoint: 'server',
   },
@@ -1323,6 +1329,8 @@ function catalogRows() {
 const RELEASE_FLAGS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-release-flags.generated.ts'
 const HOST_EVENTS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-host-events.generated.ts'
 const RELEASE_FLAG_KEY = /^release_[a-z0-9_]+$/
+/** Core's `RELEASE_FLAG_STAGES` (release-flags.ts), which plain node cannot import. */
+const RELEASE_FLAG_STAGES = ['beta']
 
 function releaseFlagRows() {
   const rows = []
@@ -1337,14 +1345,22 @@ function releaseFlagRows() {
       }
       if (!RELEASE_FLAG_KEY.test(key)) throw new Error(`${where}: "releaseFlag" ${key} is not a release_* key`)
       if (!definition) throw new Error(`${where} names ${key} but no "releaseFlagDefinition" defines it`)
-      const { label, description, defaultEnabled, navTabId } = definition
+      const { label, description, defaultEnabled, navTabId, stage } = definition
       if (typeof label !== 'string' || !label) throw new Error(`${where} releaseFlagDefinition needs a "label"`)
       if (typeof description !== 'string' || !description) throw new Error(`${where} releaseFlagDefinition needs a "description"`)
       if (typeof defaultEnabled !== 'boolean') throw new Error(`${where} releaseFlagDefinition needs a boolean "defaultEnabled"`)
       if (navTabId !== undefined && (typeof navTabId !== 'string' || !navTabId)) {
         throw new Error(`${where} releaseFlagDefinition: "navTabId" is a nav tab id`)
       }
-      rows.push({ order: source.catalog.order, flag: { key, label, description, defaultEnabled, ...(navTabId ? { navTabId } : {}) } })
+      // The released feature's stage short of general availability (AGL-4052),
+      // core's `ReleaseFlagStage`. Data only: it labels, it never gates.
+      if (stage !== undefined && !RELEASE_FLAG_STAGES.includes(stage)) {
+        throw new Error(`${where} releaseFlagDefinition: "stage" is one of ${RELEASE_FLAG_STAGES.join(', ')}, or absent for a generally available feature`)
+      }
+      rows.push({
+        order: source.catalog.order,
+        flag: { key, label, description, defaultEnabled, ...(navTabId ? { navTabId } : {}), ...(stage ? { stage } : {}) },
+      })
     }
   }
   rows.sort((a, b) => a.order - b.order)
@@ -2210,7 +2226,7 @@ function sitemapSectionRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...declaration } = entry
-      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, lastmod } = declaration
+      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, skipWhenFalse, lastmod } = declaration
       const what = `${where} "${section ?? ''}"`
       if (typeof section !== 'string' || !/^[a-z][a-z0-9-]*$/.test(section)) throw new Error(`${where}: a section is a lowercase path segment`)
       if (CORE_SITEMAP_SECTIONS.includes(section) || section.startsWith('content-')) {
@@ -2233,7 +2249,7 @@ function sitemapSectionRows() {
       if (typeof path !== 'string' || !path.startsWith('/') || path.split('{slug}').length !== 2) {
         throw new Error(`${what}: "path" is a site path with exactly one {slug}`)
       }
-      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen]]) {
+      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen], ['skipWhenFalse', skipWhenFalse]]) {
         if (value !== undefined && !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
       }
       if (lastmod !== undefined) plainFieldList(lastmod, `${what} lastmod`)

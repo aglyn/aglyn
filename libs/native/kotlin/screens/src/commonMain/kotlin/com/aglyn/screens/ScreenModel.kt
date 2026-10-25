@@ -430,6 +430,12 @@ class ScreenModel(
     val source = load.from?.let { ScreenValues.lookup(it, data) }
     return when (load.derive) {
       "shippingCoverage" -> ShippingCoverage.summary(source)
+      // `args`: the resources load, then the current stays load (both keys under `data`).
+      "unitsAhead" -> {
+        val args = load.args.map { ScreenValues.lookup(it, data) }
+        val now = ScreenValues.clock()
+        Stays.unitsAhead(args.getOrNull(0), args.getOrNull(1), Stays.localToday(now, ScreenValues.timeZone), now)
+      }
       else -> JsonNull
     }
   }
@@ -634,10 +640,12 @@ class ScreenModel(
 
   /**
    * A walk-in at the front desk, as the console's reservations card books one: `{ stay: { resource, checkIn, checkOut,
-   * guestName } }` prices the stay, checks the dates against every live stay of that resource and its blocks, and only then
-   * adds the confirmed reservation. Anything it cannot book is said in words, and nothing is written.
+   * guestName, route } }` prices the stay and checks the dates against every live stay of that resource and its blocks (counting
+   * units on a resource with several), for the instant answer; then `route` (the console's walk-in route) books the confirmed
+   * reservation, asking the same question again inside the transaction that writes it, so two desks taking the last unit at once
+   * cannot both win. Anything it cannot book is said in words, and nothing is written.
    */
-  private suspend fun bookStay(stay: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+  private suspend fun bookStay(stay: JsonElement, scope: JsonElement) {
     fun text(key: String) = ScreenValues.render(stay.str(key).orEmpty(), scope).trim()
     val reader = reader ?: throw IllegalStateException("Those dates could not be checked. Try again.")
     val hostId = ScreenValues.render("{site.id}", scope)
@@ -663,27 +671,39 @@ class ScreenModel(
     } catch (_: Throwable) {
       throw IllegalStateException("Could not check those dates. Try again.")
     }
-    if (!Stays.isRangeAvailable(resource, overlapping.mapNotNull { Stays.booked(it.data) }, checkIn, checkOut, nowMillis())) throw IllegalStateException("Those dates are taken")
-    target.add(
-      "hosts/$hostId/reservations",
-      mapOf(
-        "resourceId" to resourceId,
-        "status" to "confirmed",
-        "checkInDayMs" to checkIn,
-        "checkOutDayMs" to checkOut,
-        "guestName" to text("guestName").ifEmpty { null },
-        "guestEmail" to null,
-        "nights" to quote.nights,
-        "totalCents" to quote.totalCents,
-        "depositCents" to 0,
-        "paidCents" to 0,
-        "createdAtMs" to nowMillis(),
-      ),
+    if (!Stays.isRangeAvailable(resource, overlapping.mapNotNull { Stays.booked(it.data) }, checkIn, checkOut, nowMillis())) throw IllegalStateException(Stays.takenMessage(resource))
+    val route = stay.str("route")
+    val client = api
+    if (route == null || client == null) throw IllegalStateException("Could not reserve the walk-in — try again")
+    val guest = text("guestName")
+    val body = linkedMapOf<String, JsonElement>(
+      "hostId" to JsonPrimitive(hostId),
+      "resourceId" to JsonPrimitive(resourceId),
+      "checkInDayMs" to JsonPrimitive(checkIn),
+      "checkOutDayMs" to JsonPrimitive(checkOut),
     )
+    if (guest.isNotEmpty()) body["guestName"] = JsonPrimitive(guest)
+    // One id per attempt, minted here and sent again by a retry of the same walk-in (the same request after a failure), so a
+    // stay the route booked before the answer was lost is found rather than booked twice. A booked walk-in lets go of it: the
+    // next identical one is another party.
+    val signature = "stay|${JsonObject(body)}"
+    val reservationId = attempts.getOrPut(signature) { com.aglyn.core.listquery.newResourceId() }
+    body["reservationId"] = JsonPrimitive(reservationId)
+    try {
+      client.request(ScreenValues.renderUrl(route, scope), ApiMethod.POST, JsonObject(body))
+    } catch (error: CancellationException) {
+      throw error
+    } catch (refusal: ConsoleApiError) {
+      if (refusal.status >= 400 && refusal.message.isNotEmpty()) throw IllegalStateException(refusal.message)
+      throw IllegalStateException("Could not reserve the walk-in — try again")
+    } catch (_: Throwable) {
+      throw IllegalStateException("Could not reserve the walk-in — try again")
+    }
+    attempts.remove(signature)
   }
 
   private suspend fun writeOne(write: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
-    write.obj("stay")?.let { bookStay(it, scope, target); return }
+    write.obj("stay")?.let { bookStay(it, scope); return }
     write.str("delete")?.let { target.delete(ScreenValues.render(it, scope)); return }
     val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
     @Suppress("UNCHECKED_CAST")

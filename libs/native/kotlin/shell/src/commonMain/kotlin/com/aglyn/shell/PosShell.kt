@@ -20,7 +20,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -51,6 +50,7 @@ import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.AglynLogo
 import com.aglyn.ui.AglynTheme
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
@@ -197,6 +197,7 @@ internal fun StorePicker(
               FilterChip(
                 selected = org.id == workspace.org?.id,
                 onClick = { services.workspace.selectOrg(org.id) },
+                colors = com.aglyn.ui.aglynFilterChipColors(),
                 label = { Text(org.name) },
               )
             }
@@ -221,7 +222,7 @@ internal fun StorePicker(
             items(sellable, key = { it.id }) { store ->
               AglynListItem(
                 title = store.name,
-                supporting = store.subdomain.ifEmpty { null },
+                supporting = store.address,
                 icon = AglynIcons.named("storefront"),
                 selected = store.id == workspace.site?.id,
                 trailing = { Icon(AglynIcons.named("chevron_right"), null) },

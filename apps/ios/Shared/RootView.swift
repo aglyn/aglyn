@@ -54,6 +54,7 @@ struct RootView<Shell: View>: View {
         docksToLockup: { [self] in self.stage == .signedOut || self.stage == .verify })
     }
     .tint(AglynColor.tint)
+    .toggleStyle(AglynToggleStyle())
     .font(AglynFont.body)
     // Every plain web page (a live site, a preview, a docs or legal page) opens in the in-app browser screen, pushed
     // onto the section on screen (AGL-3935).
@@ -61,6 +62,8 @@ struct RootView<Shell: View>: View {
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()
+      // Invitations join on their own once the account is in use (AGL-4023), as the console's do on every load.
+      Task { await model.joinInvites() }
     }
     // Entering or leaving a support session starts from home: nothing open belonged to the other person.
     .onChange(of: model.auth?.impersonation) {
@@ -210,7 +213,8 @@ enum DebugLaunch {
       switch defaults.string(forKey: "AglynSection") {
       case "notifications": navigation.section = .notifications
       case "settings": navigation.section = .settings
-      case "more": navigation.section = .more
+      // The phone has no Menu tab (AGL-4006): every area is a tile on Home.
+      case "more": navigation.section = .home
       case "analytics": navigation.section = .analytics
       case let value? where value.hasPrefix("plugin:"): navigation.section = .plugin(String(value.dropFirst(7)))
       default: break

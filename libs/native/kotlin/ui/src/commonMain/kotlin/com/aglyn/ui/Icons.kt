@@ -10,12 +10,17 @@ import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.ViewSidebar
 import androidx.compose.material.icons.filled.Star as FilledStar
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DesktopWindows
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Share
@@ -239,10 +244,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 object AglynIcons {
   private val byName: Map<String, ImageVector> = mapOf(
+    "add_circle" to Icons.Outlined.AddCircle,
     "alt_route" to Icons.Outlined.AltRoute,
     "arrow_downward" to Icons.Outlined.ArrowDownward,
     "arrow_upward" to Icons.Outlined.ArrowUpward,
     "contrast" to Icons.Outlined.Contrast,
+    "drag_handle" to Icons.Outlined.DragHandle,
+    "light_mode" to Icons.Outlined.LightMode,
+    "dark_mode" to Icons.Outlined.DarkMode,
+    "desktop_windows" to Icons.Outlined.DesktopWindows,
     "grid_view" to Icons.Outlined.GridView,
     "keep" to Icons.Outlined.PushPin,
     "keep_off" to Icons.Outlined.PushPin,

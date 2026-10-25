@@ -25,6 +25,11 @@ data class SignedInAccount(
   val email: String? = null,
   val displayName: String? = null,
   val orgSlugs: List<String> = emptyList(),
+  /**
+   * The account's own picture as last shown (`readAccountPhoto`, AGL-4010), so the switcher draws each account's face
+   * without reading anyone's profile; null until it has been on screen, or when it has none.
+   */
+  val photoUrl: String? = null,
 ) {
   /** The account's name in the account menu: its display name, else its address. */
   val title: String get() = displayName?.takeIf { it.isNotBlank() } ?: email ?: "Account"
@@ -127,7 +132,9 @@ class AccountSessions(
 
   private fun remember(slot: String, user: AuthUser) {
     val existing = stored.value.firstOrNull { it.slot == slot }
-    val next = SignedInAccount(slot, user.uid, user.email, user.displayName, existing?.takeIf { it.uid == user.uid }?.orgSlugs.orEmpty())
+    val same = existing?.takeIf { it.uid == user.uid }
+    // The same person signing in again keeps the workspaces and photo last shown, until they are read again.
+    val next = SignedInAccount(slot, user.uid, user.email, user.displayName, same?.orgSlugs.orEmpty(), same?.photoUrl)
     if (existing == next) return
     write(if (existing == null) stored.value + next else stored.value.map { if (it.slot == slot) next else it })
   }
@@ -178,6 +185,14 @@ class AccountSessions(
     val next = slugs.distinct().take(200)
     if (existing.orgSlugs == next) return
     write(stored.value.map { if (it.slot == slot) it.copy(orgSlugs = next) else it })
+  }
+
+  /** Remembers the picture the account on screen shows (its profile's, else its sign-in record's), for the switcher. */
+  fun rememberPhoto(photoUrl: String?) {
+    val slot = activeSlot.value
+    val existing = stored.value.firstOrNull { it.slot == slot } ?: return
+    if (impersonation.value != null || existing.photoUrl == photoUrl) return
+    write(stored.value.map { if (it.slot == slot) it.copy(photoUrl = photoUrl) else it })
   }
 
   /** The signed-in account, other than the one on screen, that holds the workspace a link's slug names. */

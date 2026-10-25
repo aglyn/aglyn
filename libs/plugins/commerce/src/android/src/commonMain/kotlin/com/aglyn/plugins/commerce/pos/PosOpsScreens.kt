@@ -17,11 +17,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,10 +44,12 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.PanelSheet
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 
 /*
@@ -67,6 +67,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   var switching by remember { mutableStateOf(false) }
   var returning by remember { mutableStateOf(false) }
   var printersOpen by remember { mutableStateOf(false) }
+  var dayTotalsOpen by remember { mutableStateOf(false) }
   // The register's controls are a task with room, not an alert: a full-screen panel on a phone, a large one on a tablet.
   PanelSheet(
     title = "Register",
@@ -89,7 +90,11 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
         OutlinedButton(onClick = { cashier.lock(); onDismiss() }, enabled = model.register != null, modifier = Modifier.testTag("pos-lock")) { Text("Lock") }
       }
     }
-    SectionCard("Shift", Modifier.fillMaxWidth()) { ShiftControls(model) }
+    SectionCard("Shift", Modifier.fillMaxWidth()) {
+      ShiftControls(model)
+      // Every register, shift and cashier of the day, as the console's day report reads them.
+      OutlinedButton(onClick = { dayTotalsOpen = true }, modifier = Modifier.testTag("pos-day-totals")) { Text("Day totals") }
+    }
     DisplayDevicesSection(model)
     SectionCard("Last receipt", Modifier.fillMaxWidth()) { LastReceiptControls(model) { printersOpen = true } }
     ReceiptPrintersSection(model) { printersOpen = true }
@@ -106,6 +111,10 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   }
   if (returning) PosReturnDialog(model) { returning = false }
   if (printersOpen) ReceiptPrintersDialog(model.printers, model.register?.name) { printersOpen = false }
+  if (dayTotalsOpen) {
+    val dayReport = remember { PosDayReportModel(model.dayReportApi) }
+    PosDayTotalsPanel(dayReport, model.currency, PosDayNotSynced.of(model.offline.queue)) { dayTotalsOpen = false }
+  }
   ShiftDialogs(model)
 }
 

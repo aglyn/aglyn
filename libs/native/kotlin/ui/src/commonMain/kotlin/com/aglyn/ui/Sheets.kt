@@ -24,7 +24,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -109,7 +108,7 @@ fun FormSheet(
   Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = sheetDialogProperties()) {
     Surface(
       // Clear of the keyboard and the system bars: the field being typed in scrolls into the room left above the keyboard.
-      modifier.safeDrawingPadding().widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).testTag("form-sheet"),
+      modifier.safeDrawingPadding().widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).sheetEntrance(SheetEntrance.RISE).testTag("form-sheet"),
       shape = MaterialTheme.shapes.extraLarge,
       color = MaterialTheme.colorScheme.surface,
     ) {
@@ -162,7 +161,7 @@ fun PanelSheet(
     Surface(
       modifier.safeDrawingPadding().then(
         if (compact) Modifier.fillMaxSize() else Modifier.widthIn(max = 760.dp).fillMaxWidth(0.94f).heightIn(max = 920.dp).fillMaxHeight(0.92f),
-      ).testTag("panel-sheet"),
+      ).sheetEntrance(SheetEntrance.RISE).testTag("panel-sheet"),
       shape = if (compact) MaterialTheme.shapes.extraSmall else MaterialTheme.shapes.extraLarge,
       color = MaterialTheme.colorScheme.surface,
     ) {

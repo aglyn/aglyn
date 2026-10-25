@@ -47,6 +47,75 @@ func assistSuggestions(_ route: String) -> [String] {
   }
 }
 
+/// The panel's sizes, from Figma: touch on iPhone and iPad (iPhone / Sheet / AI 21:314, Android / Sheet / AI 273:20299),
+/// the Mac's compact panel (AI panel 18:485). One structure, two sets of numbers.
+private struct AssistMetrics {
+  /// The one content edge: chip, suggestions, composer and footer all start and end on it.
+  let edge: CGFloat = AglynSpace.two
+  let chipText: CGFloat
+  let chipWeight: Font.Weight
+  let chipPadding: EdgeInsets
+  /// The chip's least height: 28 on touch (21:340), the text's own on the Mac.
+  let chipHeight: CGFloat
+  /// Questions, answers, the field and suggestions.
+  let body: CGFloat
+  let suggestion: CGFloat
+  let suggestionIcon: CGFloat
+  let suggestionPadding: EdgeInsets
+  /// A suggestion card's least height: 46 on touch (21:347), 36 on the Mac (the Kotlin panel's suggestionHeight).
+  let suggestionHeight: CGFloat
+  let suggestionRadius: CGFloat
+  let suggestionGap: CGFloat
+  /// Between a suggestion's ✦ and its words.
+  let suggestionIconGap: CGFloat
+  /// "Try" and the footer.
+  let caption: CGFloat
+  let captionWeight: Font.Weight
+  let composer: CGFloat
+  let composerRadius: CGFloat
+  let composerLeading: CGFloat
+  let send: CGFloat
+  let sendRadius: CGFloat
+  let sendIcon: CGFloat
+  let bubbleRadius: CGFloat
+  let action: CGFloat
+  let actionHeight: CGFloat
+  let actionRadius: CGFloat
+  /// The Mac keeps its suggestions under the thread (18:485); a phone gives the thread the room once it starts.
+  let suggestionsStay: Bool
+
+  static var current: AssistMetrics {
+    #if os(macOS)
+      AssistMetrics(
+        chipText: 12, chipWeight: .semibold,
+        chipPadding: EdgeInsets(top: AglynSpace.half, leading: AglynSpace.one, bottom: AglynSpace.half, trailing: AglynSpace.of(1.25)),
+        chipHeight: 0, body: 14, suggestion: 13, suggestionIcon: AglynSpace.of(1.75),
+        suggestionPadding: EdgeInsets(top: AglynSpace.one, leading: AglynSpace.of(1.25), bottom: AglynSpace.one, trailing: AglynSpace.of(1.25)),
+        suggestionHeight: AglynSpace.of(4.5), suggestionRadius: AglynTokens.radius * 1.5, suggestionGap: AglynSpace.of(1.75),
+        suggestionIconGap: AglynSpace.one, caption: 12, captionWeight: .semibold, composer: AglynSpace.of(5.5),
+        composerRadius: AglynTokens.radius * 2.5, composerLeading: AglynSpace.oneAndHalf, send: AglynSpace.four,
+        sendRadius: AglynTokens.radius * 1.5, sendIcon: AglynSpace.of(1.75), bubbleRadius: AglynTokens.radius * 2.5,
+        action: 13, actionHeight: AglynSpace.of(3.5), actionRadius: AglynTokens.radius * 1.5, suggestionsStay: true)
+    #else
+      AssistMetrics(
+        chipText: 13, chipWeight: .regular,
+        chipPadding: EdgeInsets(top: AglynSpace.of(0.625), leading: AglynSpace.of(1.25), bottom: AglynSpace.of(0.625), trailing: AglynSpace.oneAndHalf),
+        chipHeight: AglynSpace.of(3.5), body: 15, suggestion: 15, suggestionIcon: AglynSpace.two,
+        suggestionPadding: EdgeInsets(top: AglynSpace.oneAndHalf, leading: AglynSpace.of(1.75), bottom: AglynSpace.oneAndHalf, trailing: AglynSpace.of(1.75)),
+        suggestionHeight: AglynSpace.of(5.75), suggestionRadius: AglynTokens.radius * 3, suggestionGap: AglynSpace.of(0.75),
+        suggestionIconGap: AglynSpace.of(1.25), caption: 13, captionWeight: .regular, composer: AglynSpace.of(6.5),
+        composerRadius: AglynTokens.radius * 3, composerLeading: AglynSpace.of(1.75), send: AglynSpace.of(5),
+        sendRadius: AglynTokens.radius * 2, sendIcon: AglynSpace.two, bubbleRadius: AglynTokens.radius * 3,
+        action: 15, actionHeight: AglynSpace.of(4.5), actionRadius: AglynTokens.radius * 2, suggestionsStay: false)
+    #endif
+  }
+
+  /// The brand face at a size, scaled with Dynamic Type.
+  func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+    .custom(AglynTokens.fontPostScriptName, size: size, relativeTo: .body).weight(weight)
+  }
+}
+
 /// The AI panel (`ai.assist-panel`, the console's Assist): a chat that reads the page the person is on, its context chip
 /// saying what it reads, a few questions that fit the screen, the credits strip and the day's free limit. Answers stream
 /// from `/api/assist/chat`, the console's own route; a proposal opens where it points, and documentation opens in the
@@ -61,124 +130,215 @@ struct AiAssistPanel: View {
   @State private var credits: String?
   @State private var task: Task<Void, Never>?
 
+  private let m = AssistMetrics.current
   private var route: String { params["route"] ?? "" }
+
+  private var canSend: Bool { !busy && !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+  /// "Ask about Juniper Street Bakery": the site or workspace the shell says the person is in.
+  private var prompt: String {
+    if let scope = params["scope"], !scope.isEmpty { return "Ask about \(scope)" }
+    return context.hostID != nil ? "Ask about this site" : "Ask about this workspace"
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       if let looking = params["title"], !looking.isEmpty {
-        HStack(spacing: 6) {
-          Image(systemName: "eye").font(.caption)
-          Text("Looking at: \(looking)").font(AglynFont.caption).lineLimit(1)
-        }
-        .foregroundStyle(AglynColor.tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(AglynColor.primary.opacity(0.12)))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, AglynSpace.two)
-        .padding(.vertical, AglynSpace.one)
-        .accessibilityIdentifier("assist-context")
+        contextChip(looking)
       }
       ScrollViewReader { proxy in
         ScrollView {
-          VStack(alignment: .leading, spacing: 10) {
-            if turns.isEmpty { suggestions }
+          VStack(alignment: .leading, spacing: AglynSpace.of(1.75)) {
             ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
               turnView(turn, last: index == turns.count - 1).id(turn.id)
             }
           }
-          .padding(AglynSpace.two)
+          .padding(.horizontal, m.edge)
+          .padding(.vertical, turns.isEmpty ? 0 : AglynSpace.one)
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollDismissesKeyboard(.interactively)
         .onChange(of: turns.last?.text) { if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) } }
       }
-      let standing = [
-        quota.map { "\($0.remaining) of \($0.limit) free messages left \($0.period == "day" ? "today" : "this month")" }, credits,
-      ].compactMap { $0 }.joined(separator: " · ")
-      if !standing.isEmpty {
-        Text(standing).font(AglynFont.caption).foregroundStyle(.secondary)
+      if turns.isEmpty || m.suggestionsStay { suggestions }
+      if let quota {
+        Text("\(quota.remaining) of \(quota.limit) free messages left \(quota.period == "day" ? "today" : "this month")")
+          .font(m.font(m.caption)).foregroundStyle(AglynColor.textTertiary)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, AglynSpace.two)
-          .accessibilityIdentifier("assist-credits")
+          .padding(.horizontal, m.edge)
+          .padding(.top, AglynSpace.of(0.75))
+          .accessibilityIdentifier("assist-quota")
       }
-      HStack(spacing: AglynSpace.one) {
-        TextField(context.hostID != nil ? "Ask about this site" : "Ask about this workspace", text: $question, axis: .vertical)
-          .textFieldStyle(.plain)
-          .lineLimit(1...4)
-          .onSubmit { ask(question) }
-          .padding(10)
-          .background(RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous).fill(AglynColor.page))
-          .accessibilityIdentifier("assist-field")
-        Button {
-          ask(question)
-        } label: {
-          Image(systemName: "arrow.up.circle.fill").font(.title2)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(AglynColor.tint)
-        .disabled(busy || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .accessibilityLabel("Send")
-        .accessibilityIdentifier("assist-send")
-      }
-      .padding(.horizontal, AglynSpace.oneAndHalf)
-      .padding(.top, AglynSpace.one)
-      Text("Questions are free; builds and edits use credits.")
-        .font(AglynFont.caption).foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, AglynSpace.two)
-        .padding(.bottom, AglynSpace.one)
+      composer
     }
-    .background(AglynColor.paper)
+    .background { assistGround }
+    // A container, so the chip, suggestions, field and Send keep their own identifiers under the panel's.
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("assist-panel")
     .task(id: context.orgID) { await loadCredits() }
     .onDisappear { task?.cancel() }
   }
 
+  private var bold: Bool { AglynThemeRuntime.shared.phoneBold }
+
+  /// The panel's ground: paper, and in the phone's bold look the AI glow behind the sheet's top, under its bar (21:314).
+  @ViewBuilder
+  private var assistGround: some View {
+    if bold {
+      ZStack(alignment: .top) {
+        AglynColor.paper
+        AglynAIGlow()
+      }
+      .ignoresSafeArea(edges: .top)
+    } else {
+      AglynColor.paper
+    }
+  }
+
+  /// The marks on the chip and the suggestions: the brand pink in the phone's bold look, the accent otherwise.
+  private var markColor: Color { bold ? AglynHighlight.icon : AglynColor.accentIcon }
+
+  /// What the panel reads: the place's own icon and name on the accent's soft fill (the highlight's pink in the bold look).
+  private func contextChip(_ looking: String) -> some View {
+    HStack(spacing: AglynSpace.of(0.75)) {
+      Image(systemName: params["icon"].flatMap { $0.isEmpty ? nil : $0 } ?? "eye")
+        .font(.system(size: m.chipText))
+        .foregroundStyle(markColor)
+        .accessibilityHidden(true)
+      Text("Looking at: \(looking)").font(m.font(m.chipText, m.chipWeight)).foregroundStyle(bold ? AglynHighlight.text : AglynColor.textPrimary)
+        .lineLimit(1)
+    }
+    .padding(m.chipPadding)
+    .frame(minHeight: m.chipHeight)
+    .background(Capsule().fill(bold ? AglynHighlight.soft : AglynColor.accentSoft))
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, m.edge)
+    .padding(.top, AglynSpace.half)
+    .padding(.bottom, AglynSpace.of(0.75))
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("assist-context")
+  }
+
+  /// A few questions that fit the screen, as outlined cards just above the field.
   private var suggestions: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("Try").font(AglynFont.caption).foregroundStyle(.secondary)
+    VStack(alignment: .leading, spacing: m.suggestionGap) {
+      let place = params["place"] ?? ""
+      Text(m.suggestionsStay && !place.isEmpty ? "Suggestions for \(place)" : "Try")
+        .font(m.font(m.caption, m.captionWeight)).foregroundStyle(AglynColor.secondaryText)
       ForEach(assistSuggestions(route), id: \.self) { text in
         Button {
           ask(text)
         } label: {
-          Label(text, systemImage: "sparkles").font(AglynFont.subheadline)
+          HStack(spacing: m.suggestionIconGap) {
+            Image(systemName: "sparkles").font(.system(size: m.suggestionIcon)).foregroundStyle(markColor)
+            Text(text).font(m.font(m.suggestion)).foregroundStyle(AglynColor.textPrimary).multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+          }
+          .padding(m.suggestionPadding)
+          .frame(maxWidth: .infinity, minHeight: m.suggestionHeight, alignment: .leading)
+          .background(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous).fill(AglynColor.paper))
+          .overlay(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous).strokeBorder(AglynColor.divider))
+          .contentShape(RoundedRectangle(cornerRadius: m.suggestionRadius, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
+        .disabled(busy)
         .accessibilityIdentifier("assist-suggestion")
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, m.edge)
+    .padding(.top, AglynSpace.of(0.75))
+  }
+
+  /// The field and its Send, and under them what questions and builds cost.
+  private var composer: some View {
+    VStack(alignment: .leading, spacing: AglynSpace.of(0.75)) {
+      HStack(spacing: AglynSpace.of(1.25)) {
+        TextField(prompt, text: $question, axis: .vertical)
+          .textFieldStyle(.plain)
+          .font(m.font(m.body))
+          .lineLimit(1...4)
+          .onSubmit { ask(question) }
+          .padding(.vertical, AglynSpace.one)
+          .accessibilityIdentifier("assist-field")
+        Button {
+          ask(question)
+        } label: {
+          Image(systemName: "paperplane")
+            .font(.system(size: m.sendIcon, weight: .semibold))
+            .foregroundStyle(AglynColor.primaryContrast)
+            .frame(width: m.send, height: m.send)
+            .background {
+              // The brand gradient under the white plane in the phone's bold look (Figma Send 21:366).
+              let shape = RoundedRectangle(cornerRadius: m.sendRadius, style: .continuous)
+              if bold { shape.fill(AglynBrandGradient.linear) } else { shape.fill(AglynColor.primary) }
+            }
+        }
+        .buttonStyle(.plain)
+        .opacity(canSend ? 1 : 0.4)
+        .disabled(!canSend)
+        .accessibilityLabel("Send")
+        .accessibilityIdentifier("assist-send")
+      }
+      .padding(.leading, m.composerLeading)
+      .padding(.trailing, AglynSpace.of(0.75))
+      .frame(minHeight: m.composer)
+      .background(RoundedRectangle(cornerRadius: m.composerRadius, style: .continuous).fill(AglynColor.sunken))
+      .overlay(RoundedRectangle(cornerRadius: m.composerRadius, style: .continuous).strokeBorder(AglynColor.divider))
+      Text(["Questions are free · builds and edits use credits", credits].compactMap { $0 }.joined(separator: " "))
+        .font(m.font(m.caption)).foregroundStyle(AglynColor.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("assist-credits")
+    }
+    .padding(.horizontal, m.edge)
+    #if os(macOS)
+      // The Mac's composer sits on its own band under a hairline (18:540).
+      .padding(.top, AglynSpace.oneAndHalf)
+      .padding(.bottom, AglynSpace.of(1.75))
+      .overlay(alignment: .top) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
+      .padding(.top, AglynSpace.of(0.75))
+    #else
+      .padding(.top, AglynSpace.of(0.75))
+      .padding(.bottom, AglynSpace.of(1.25))
+    #endif
   }
 
   @ViewBuilder
   private func turnView(_ turn: AssistTurn, last: Bool) -> some View {
     let mine = turn.role == "user"
     let shown = turn.text.isEmpty && busy && last ? "…" : turn.text
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
       Text(
         (try? AttributedString(markdown: shown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
           ?? AttributedString(shown)
       )
-      .font(AglynFont.body)
+      .font(m.font(m.body))
+      .foregroundStyle(AglynColor.textPrimary)
       .textSelection(.enabled)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .environment(\.openURL, OpenURLAction { url in
         context.openLink(url.absoluteString)
         return .handled
       })
-      if let proposal = turn.proposal {
-        Button(proposal.label) { context.openLink(proposal.href) }
-          .buttonStyle(.borderedProminent).controlSize(.small)
-          .accessibilityIdentifier("assist-proposal")
-      }
-      ForEach(turn.docs, id: \.self) { doc in
-        Button { context.openLink(doc.href) } label: { Label(doc.label, systemImage: "book").font(AglynFont.subheadline) }
-          .buttonStyle(.borderless)
+      if turn.proposal != nil || !turn.docs.isEmpty {
+        // What the answer points to: outlined buttons (Figma Button, Secondary, Small), never a second primary.
+        AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.one) {
+          if let proposal = turn.proposal {
+            Button(proposal.label) { context.openLink(proposal.href) }
+              .accessibilityIdentifier("assist-proposal")
+          }
+          ForEach(turn.docs, id: \.self) { doc in
+            Button { context.openLink(doc.href) } label: { Label(doc.label, systemImage: "book") }
+          }
+        }
+        .buttonStyle(AssistActionStyle(m: m))
       }
     }
-    .padding(10)
-    .background(
-      RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous)
-        .fill(mine ? AglynColor.primary.opacity(0.14) : AglynColor.page))
-    .frame(maxWidth: 520, alignment: .leading)
-    .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+    // Your question on the sunken fill; the answer as plain text on the panel (18:505, 18:507).
+    .padding(mine ? EdgeInsets(top: AglynSpace.of(1.25), leading: AglynSpace.oneAndHalf, bottom: AglynSpace.of(1.25), trailing: AglynSpace.oneAndHalf) : EdgeInsets())
+    .background {
+      if mine { RoundedRectangle(cornerRadius: m.bubbleRadius, style: .continuous).fill(AglynColor.sunken) }
+    }
     .accessibilityIdentifier(mine ? "assist-question" : "assist-answer")
   }
 
@@ -186,10 +346,11 @@ struct AiAssistPanel: View {
     guard let orgID = context.orgID,
       let answer = try? await context.api.request("/api/ai/billing/credits", query: [("orgId", orgID)])
     else { return }
+    // The footer's parenthesis (Figma 21:370): "(1,240 left this month)".
     if answer["unlimited"]?.boolValue == true {
-      credits = "AI credits are not capped on this workspace"
+      credits = "(not capped on this workspace)"
     } else if let remaining = answer["credits"]?["remaining"]?.numberValue {
-      credits = "\(Int(remaining)) credits left this month"
+      credits = "(\(Int(remaining).formatted()) left this month)"
     }
   }
 
@@ -247,6 +408,25 @@ struct AiAssistPanel: View {
       }
       busy = false
     }
+  }
+}
+
+/// An answer's next step or document: an outlined button (Figma Button, Secondary, Small: the surface, a border/strong
+/// outline, primary text in semibold), touch-sized on a phone.
+private struct AssistActionStyle: ButtonStyle {
+  let m: AssistMetrics
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(m.font(m.action, .semibold))
+      .foregroundStyle(AglynColor.textPrimary)
+      .labelStyle(.titleAndIcon)
+      .padding(.horizontal, AglynSpace.of(1.25))
+      .frame(height: m.actionHeight)
+      .background(
+        RoundedRectangle(cornerRadius: m.actionRadius, style: .continuous)
+          .fill(configuration.isPressed ? AglynColor.hover : AglynColor.paper))
+      .overlay(RoundedRectangle(cornerRadius: m.actionRadius, style: .continuous).strokeBorder(AglynColor.borderStrong))
   }
 }
 

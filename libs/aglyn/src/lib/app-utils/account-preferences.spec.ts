@@ -16,12 +16,23 @@
  */
 
 import {
+  autoPinTabArea,
   effectivePinnedOrgs,
+  moveTabArea,
+  pinTabArea,
+  readTabBars,
+  setTabAreas,
+  tabBarAreas,
+  tabBarLayout,
+  tabBarScope,
+  TAB_BARS_MAX,
+  unpinTabArea,
   keepPinnedOrgs,
   pinHost,
   pinOrg,
   PINNED_HOSTS_MAX,
   railWorkspaces,
+  workspaceInitial,
   readAppTheme,
   recordRecent,
   readPinnedHosts,
@@ -29,6 +40,8 @@ import {
   replacePinnedHost,
   replacePinnedOrg,
   resolveWorkspaceColor,
+  workspaceStableColor,
+  WORKSPACE_STABLE_COLORS,
   RECENTS_MAX,
   STARRED_MAX,
   toggleStarred,
@@ -36,6 +49,8 @@ import {
   workspacePinnedHosts,
   type AccountItemRef,
   type PinnedHost,
+  readAccountName,
+  readAccountPhoto,
 } from './account-preferences'
 
 /**
@@ -126,19 +141,27 @@ describe('site pins: five a workspace, like workspace pins (AGL-4005)', () => {
 })
 
 describe('the rail', () => {
-  it('shows a small account everything and no All tile', () => {
-    expect(railWorkspaces(ids(8), ['o3'], ['o5'])).toEqual({
-      pinned: ['o3'],
-      recent: [],
-      rest: ['o1', 'o2', 'o4', 'o5', 'o6', 'o7', 'o8'],
-      allTile: false,
-      total: 8,
+  it('shows a small account the same rail: pins, recents, then All (AGL-3996)', () => {
+    expect(railWorkspaces(ids(6), ['o6'], ['o6', 'o2'])).toEqual({
+      pinned: ['o6'],
+      recent: ['o2'],
+      rest: [],
+      allTile: true,
+      total: 6,
     })
+    expect(railWorkspaces([], [], [])).toEqual({ pinned: [], recent: [], rest: [], allTile: false, total: 0 })
   })
 
   it('shows a large one five pins, three recent not pinned, then All', () => {
     const rail = railWorkspaces(ids(100), ['o9', 'o2'], ['o2', 'o40', 'o41', 'o42', 'o43'])
     expect(rail).toEqual({ pinned: ['o9', 'o2'], recent: ['o40', 'o41', 'o42'], rest: [], allTile: true, total: 100 })
+  })
+
+  it('gives a tile one letter, its name\'s first letter or digit', () => {
+    expect(workspaceInitial('Acme Builders')).toBe('A')
+    expect(workspaceInitial('  42 Studio')).toBe('4')
+    expect(workspaceInitial('\u{1F33F} fern & fig')).toBe('F')
+    expect(workspaceInitial('—')).toBe('?')
   })
 
   it('moves an opened workspace to the front of the recents', () => {
@@ -168,6 +191,34 @@ describe("a workspace's color", () => {
     expect(resolveWorkspaceColor(null, null, '#333333', true).source).toBe('logo')
   })
 
+  it('falls back to a stable color from the workspace id, which never tints the app', () => {
+    const stable = resolveWorkspaceColor(null, null, null, true, 'org-acme')
+    expect(stable).toEqual({ color: workspaceStableColor('org-acme'), source: 'stable', tintsApp: false })
+    expect(resolveWorkspaceColor(null, null, '#333333', true, 'org-acme').source).toBe('logo')
+    expect(resolveWorkspaceColor(null, null, null, true).source).toBe('none')
+    expect(resolveWorkspaceColor(null, null, null, true, '').source).toBe('none')
+  })
+
+  it('gives the same id the same stable color, from the palette, and spreads ids across it', () => {
+    expect(workspaceStableColor('org-acme')).toBe(workspaceStableColor('org-acme'))
+    const ids = Array.from({ length: 64 }, (_, i) => `org-${i}`)
+    const colors = new Set(ids.map((id) => workspaceStableColor(id)))
+    for (const color of colors) expect(WORKSPACE_STABLE_COLORS).toContain(color)
+    expect(colors.size).toBe(WORKSPACE_STABLE_COLORS.length)
+    expect(workspaceStableColor(null)).toBeNull()
+  })
+
+  it('keeps every stable color dark enough for a white initial (4.5:1)', () => {
+    const channel = (hex: string, at: number) => {
+      const c = parseInt(hex.slice(at, at + 2), 16) / 255
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+    }
+    for (const hex of WORKSPACE_STABLE_COLORS) {
+      const luminance = 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5)
+      expect(1.05 / (luminance + 0.05)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('stops tinting the app with the brand when the person turned that off, not their own pick', () => {
     expect(resolveWorkspaceColor(null, '#222222', null, false).tintsApp).toBe(false)
     expect(resolveWorkspaceColor('#111111', '#222222', null, false).tintsApp).toBe(true)
@@ -181,5 +232,85 @@ describe('the synced theme', () => {
       accent: 'theme',
       density: 'compact',
     })
+  })
+})
+
+describe("the phone's tab bar (AGL-4006)", () => {
+  const site = tabBarScope('o1', 'h1')
+
+  it('keys a site and the whole workspace apart', () => {
+    expect(site).toBe('site:h1')
+    expect(tabBarScope('o1')).toBe('org:o1')
+  })
+
+  it('pins up to four areas and answers a fifth with full', () => {
+    let bars = setTabAreas([], site, ['pages', 'crm', 'emails'])
+    bars = pinTabArea(bars, site, 'orders').tabBars
+    expect(tabBarAreas(bars, site)).toEqual(['pages', 'crm', 'emails', 'orders'])
+    expect(pinTabArea(bars, site, 'products').outcome).toBe('full')
+    expect(pinTabArea(bars, site, 'crm').outcome).toBe('alreadyPinned')
+  })
+
+  it('lets the first areas opened take the free spots and stay, until the person changes the bar', () => {
+    let bars = autoPinTabArea([], site, 'automation')
+    bars = autoPinTabArea(bars, site, 'crm')
+    bars = autoPinTabArea(bars, site, 'automation')
+    expect(tabBarAreas(bars, site)).toEqual(['automation', 'crm'])
+    bars = unpinTabArea(bars, site, 'crm')
+    expect(autoPinTabArea(bars, site, 'pages')).toEqual(bars)
+  })
+
+  it('keeps Create in the centre until four areas fill the bar', () => {
+    expect(tabBarLayout([], ['pages'])).toEqual({ slots: ['home', 'create'], createInTopBar: false })
+    expect(tabBarLayout(['pages', 'crm'], ['pages', 'crm']).slots).toEqual(['home', 'pages', 'create', 'crm'])
+    expect(tabBarLayout(['pages', 'crm', 'emails'], ['pages', 'crm', 'emails']).slots).toEqual([
+      'home',
+      'pages',
+      'create',
+      'crm',
+      'emails',
+    ])
+    const full = tabBarLayout(['pages', 'crm', 'emails', 'orders'], ['pages', 'crm', 'emails', 'orders'])
+    expect(full).toEqual({ slots: ['home', 'pages', 'crm', 'emails', 'orders'], createInTopBar: true })
+  })
+
+  it('leaves out a pinned area the scope cannot open, and reorders by hand', () => {
+    expect(tabBarLayout(['orders', 'pages'], ['pages']).slots).toEqual(['home', 'create', 'pages'])
+    const bars = setTabAreas([], site, ['pages', 'crm'])
+    expect(tabBarAreas(moveTabArea(bars, site, 'crm', -1), site)).toEqual(['crm', 'pages'])
+  })
+
+  it('reads a stray value as no tab bar, and keeps at most the cap of scopes', () => {
+    expect(readTabBars({ tabBars: 'x' })).toEqual([])
+    expect(readTabBars({ tabBars: [{ scope: 'nope', areas: ['a'] }, { scope: 'org:o1', areas: ['home', 'a', 'a'] }] })).toEqual([
+      { scope: 'org:o1', areas: ['a'], chosen: false },
+    ])
+    let bars = setTabAreas([], 'org:o0', ['a'])
+    for (let i = 1; i <= TAB_BARS_MAX; i++) bars = setTabAreas(bars, `site:h${i}`, ['a'])
+    expect(bars).toHaveLength(TAB_BARS_MAX)
+    expect(bars[0].scope).toBe('site:h1')
+  })
+})
+
+describe('who is signed in (AGL-4010)', () => {
+  it('reads the profile photo first, then the sign-in record, never a blank', () => {
+    expect(readAccountPhoto({ photoUrl: ' /api/media/cdn/org:o/m ' }, 'https://a.example.com/p.jpg')).toBe(
+      '/api/media/cdn/org:o/m',
+    )
+    expect(readAccountPhoto({ photoUrl: '  ' }, ' https://a.example.com/p.jpg ')).toBe(
+      'https://a.example.com/p.jpg',
+    )
+    // The roster's casing is not the profile's field.
+    expect(readAccountPhoto({ photoURL: 'https://a.example.com/r.jpg' }, null)).toBeNull()
+    expect(readAccountPhoto(null, '')).toBeNull()
+  })
+
+  it('names the person from the profile, then the sign-in record, then the email', () => {
+    expect(readAccountName({ firstName: 'Jordan', lastName: 'Lee' }, 'J. Lee', 'j@example.com')).toBe(
+      'Jordan Lee',
+    )
+    expect(readAccountName({ firstName: ' ' }, ' Pat Lee ', 'p@example.com')).toBe('Pat Lee')
+    expect(readAccountName({}, '', ' p@example.com ')).toBe('p@example.com')
+    expect(readAccountName(null, null, null)).toBe('')
   })
 })

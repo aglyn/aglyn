@@ -199,6 +199,13 @@ const CANNOT_STORE_VIDEO: Record<string, { why: string; proof: string }> = {
       'ever served from it.',
     proof: "const bytes = Buffer.from(JSON.stringify(pkg), 'utf8')",
   },
+  'libs/plugins/waivers/src/lib/server/db.ts': {
+    why:
+      "the waivers plugin's private file store: a drawn signature or a photo " +
+      'of a paper waiver. It refuses every type but PNG and JPEG before any ' +
+      'bytes are inspected, so a video never reaches the bucket.',
+    proof: 'if (!WAIVER_FILE_TYPES.has(contentType)) throw new WaiverFileRefusedError(',
+  },
 }
 
 const GATE_CALLS = ['videoUploadPausedRefusal(', 'videoUploadsOpenForOrg(']

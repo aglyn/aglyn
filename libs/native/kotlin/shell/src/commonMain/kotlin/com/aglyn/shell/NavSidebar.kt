@@ -107,7 +107,6 @@ internal fun NavSidebar(
   content: SidebarContent,
   selectedKey: String,
   starred: List<StarredItem>,
-  tint: Color?,
   onRow: (NavItem) -> Unit,
   onStar: (StarredItem) -> Unit,
   modifier: Modifier = Modifier,
@@ -125,8 +124,9 @@ internal fun NavSidebar(
     else -> 0
   }
   val scene = SidebarScene("${mode?.raw}|${workspace.site?.id}|${workspace.org?.id}", depth, content, workspace)
-  // One flush, full-height column under the toolbar (no inset card).
-  Column(modifier.width(m.sidebarWidth).fillMaxHeight().background(tint ?: shell.sidebar).testTag("nav-sidebar")) {
+  // One flush, full-height column under the toolbar (no inset card), on the theme's own sidebar ground: a workspace's
+  // color never washes it (AGL-4000).
+  Column(modifier.width(m.sidebarWidth).fillMaxHeight().background(shell.sidebar).testTag("nav-sidebar")) {
     AnimatedContent(
       targetState = scene,
       contentKey = { it.key },
@@ -307,7 +307,7 @@ private fun WorkspaceHeaderRow(services: ShellServices, workspace: WorkspaceStat
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    WorkspaceTile(org.name, light, dark, color, size = m.workspaceLogo, cornerRadius = m.workspaceLogoRadius, initialSize = m.rowText * 0.8f)
+    WorkspaceTile(org.name, light, dark, color, size = m.workspaceLogo, cornerRadius = m.workspaceLogoRadius, initialSize = m.rowText * 0.8f, initials = com.aglyn.contracts.workspaceInitial(org.name))
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text(
         org.name,
@@ -372,7 +372,7 @@ internal fun SiteSwitcherPopover(services: ShellServices, workspace: WorkspaceSt
   val sites = workspace.sites
   val recent = recentIds.mapNotNull { id -> sites.firstOrNull { it.id == id } }.take(5)
   val rest = sites.filter { s -> recent.none { it.id == s.id } }.sortedBy { it.name.lowercase() }
-  val matches = if (query.isBlank()) null else sites.mapNotNull { site -> scoreMatch(site.name, listOf(site.subdomain), query)?.let { it to site } }
+  val matches = if (query.isBlank()) null else sites.mapNotNull { site -> scoreMatch(site.name, listOfNotNull(site.subdomain, site.cname), query)?.let { it to site } }
     .sortedWith { a, b -> com.aglyn.contracts.scoredOrder.compare(a.first to a.second.name, b.first to b.second.name) }.map { it.second }
   fun pick(site: WorkspaceSite) { onDismiss(); services.workspace.selectSite(site.id) }
   androidx.compose.ui.window.Popup(
@@ -445,7 +445,7 @@ private fun SwitcherSiteRow(services: ShellServices, site: WorkspaceSite, curren
     }
     Column(Modifier.weight(1f)) {
       Text(site.name, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      Text(com.aglyn.core.siteAddress(site.subdomain) ?: site.subdomain, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(site.address ?: site.subdomain, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     if (current) Icon(AglynIcons.named("check"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
   }
@@ -552,6 +552,9 @@ internal fun NavGroupsList(
   Box(Modifier.fillMaxWidth().onGloballyPositioned { origin = it }) {
     SelectionPillLayer(pill, dense, reduce)
     CompositionLocalProvider(LocalSelectionPill provides pill, LocalPillOrigin provides origin) {
+      // Opening a destination opens its own group if the person had folded it, and leaves every other group as it is.
+      val currentGroup = groups.firstOrNull { g -> g.foldable && g.dynamic != "starred" && g.rows.any { selectedKey in it.keys } }?.id
+      androidx.compose.runtime.LaunchedEffect(listId, selectedKey, currentGroup) { currentGroup?.let { chrome.reveal(listId, it) } }
       Column(Modifier.fillMaxWidth()) {
         // The workspace's header has a hairline under it (Figma Sidebar, Scope = Workspace).
         if (dense && listId == com.aglyn.contracts.NativeNavListId.WORKSPACE && query.isEmpty()) NavDivider(Modifier.padding(vertical = 1.dp))
@@ -744,8 +747,11 @@ internal fun NavLine(
     // takes the accent (as Figma draws the sidebar).
     val ink = MaterialTheme.colorScheme.onSurface
     val iconSize = if (dense) m.rowIcon else 20.dp
+    // The phone's Menu in the bold look: the icon on an accent tile, a dot in the tile's 30 dp slot (AGL-3990).
+    val tile = !dense && com.aglyn.ui.LocalPhoneBold.current
     when {
-      dot != null -> Box(Modifier.size(iconSize + 2.dp), contentAlignment = Alignment.Center) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+      dot != null -> Box(Modifier.size(if (tile) 30.dp else iconSize + 2.dp), contentAlignment = Alignment.Center) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+      icon != null && tile -> com.aglyn.ui.PhoneRowTile(icon, Modifier.testTag("$tag-icon"))
       icon != null -> Icon(AglynIcons.named(icon), null, Modifier.size(iconSize).testTag("$tag-icon"), tint = if (selected) MaterialTheme.colorScheme.primary else ink)
     }
     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

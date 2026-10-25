@@ -25,6 +25,11 @@ struct CheckoutView: View {
           if let notice = checkout.notice {
             AglynNotice(notice.message, tone: notice.tone) { checkout.dismissNotice() }
           }
+          if case .tender = checkout.step {
+            if let declined = checkout.declined { declinedReceipt(declined) }
+            // Pinned at the top, above the tip, so it never needs a scroll (Apple 5.1, 5.2).
+            if model.offersTapToPay { TapToPayCheckoutButton(model: model, checkout: checkout) }
+          }
           switch checkout.step {
           case .tender: tender
           case .cash: cash
@@ -61,6 +66,20 @@ struct CheckoutView: View {
     .sensoryFeedback(.success, trigger: isPaid)
     // A typed card: the register's own card fields, over the checkout.
     .sheet(item: cardForm) { session in CardFieldsSheet(session: session) }
+  }
+
+  /// A card that was not approved can still be sent its receipt (Apple 5.10), through the share sheet.
+  private func declinedReceipt(_ declined: DeclinedCard) -> some View {
+    HStack {
+      Text("Not approved · \(model.money(declined.amountCents))").font(AglynFont.subheadline)
+      Spacer()
+      ShareLink(item: declined.receipt(store: model.storeName, money: model.money)) {
+        Label("Send receipt", systemImage: "square.and.arrow.up")
+      }
+      .accessibilityIdentifier("declined-receipt-share")
+    }
+    .padding(AglynSpace.two)
+    .aglynCardSurface()
   }
 
   private var cardForm: Binding<CardFormSession?> {
@@ -161,7 +180,7 @@ struct CheckoutView: View {
         Text("No card reader is connected. Pair one in Card readers.").font(AglynFont.caption).foregroundStyle(.secondary)
       }
       if checkout.lost {
-        Button("Check the sale") { Task { await checkout.recheck() } }.buttonStyle(.bordered)
+        Button("Check the sale") { Task { await checkout.recheck() } }.buttonStyle(.aglynSecondary)
       }
     }
   }
@@ -221,7 +240,7 @@ struct CheckoutView: View {
       .padding(.vertical, AglynSpace.one)
       .frame(maxWidth: .infinity)
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
     .controlSize(.large)
     .disabled(!checkout.canTender)
   }
@@ -242,13 +261,13 @@ struct CheckoutView: View {
         AglynAmountRow("Change", amount: model.money(cents - checkout.amountCents - checkout.tipCents), emphasized: true)
       }
       HStack {
-        Button("Back") { checkout.go(to: .tender) }.buttonStyle(.bordered)
+        Button("Back") { checkout.go(to: .tender) }.buttonStyle(.aglynSecondary)
         Spacer()
         Button("Take cash") {
           guard let cents = centsFromText(tendered) else { return }
           Task { await checkout.payCash(tenderedCents: cents) }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(centsFromText(tendered) == nil || checkout.busy)
         .accessibilityIdentifier("take-cash")
       }
@@ -265,11 +284,11 @@ struct CheckoutView: View {
         .autocorrectionDisabled()
       if let balance = checkout.giftBalance { Text(balance).font(AglynFont.subheadline) }
       HStack {
-        Button("Back") { checkout.go(to: .tender) }.buttonStyle(.bordered)
-        Button("Check balance") { Task { await checkout.checkGiftCard(code: giftCode) } }.buttonStyle(.bordered)
+        Button("Back") { checkout.go(to: .tender) }.buttonStyle(.aglynSecondary)
+        Button("Check balance") { Task { await checkout.checkGiftCard(code: giftCode) } }.buttonStyle(.aglynSecondary)
         Spacer()
         Button("Apply") { Task { await checkout.payGiftCard(code: giftCode) } }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(giftCode.isEmpty || checkout.busy)
       }
     }
@@ -306,7 +325,7 @@ struct CheckoutView: View {
               }
               .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(checkout.busy || account.availableCents <= 0)
           }
         }
@@ -317,10 +336,10 @@ struct CheckoutView: View {
           checkout.clearCreditLookup()
           checkout.go(to: .tender)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         if provider?.lookup == true {
           Button("Find") { Task { await checkout.lookUpCredit(providerID: providerID, query: creditText) } }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(checkout.busy || creditText.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         Spacer()
@@ -329,7 +348,7 @@ struct CheckoutView: View {
           creditText = ""
           Task { await checkout.payCredit(providerID: providerID, code: code) }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(checkout.busy || creditText.trimmingCharacters(in: .whitespaces).isEmpty || creditText.contains("@"))
         .accessibilityIdentifier("credit-apply")
       }
@@ -346,11 +365,11 @@ struct CheckoutView: View {
         } label: {
           Label(stay.name, systemImage: "bed.double").frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         .controlSize(.large)
         .disabled(checkout.busy)
       }
-      Button("Back") { checkout.go(to: .tender) }.buttonStyle(.bordered)
+      Button("Back") { checkout.go(to: .tender) }.buttonStyle(.aglynSecondary)
     }
   }
 
@@ -362,7 +381,7 @@ struct CheckoutView: View {
         .font(AglynFont.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
       AglynQRCode(url)
       if let link = URL(string: url) { Link("Open payment page", destination: link) }
-      Button("Close", role: .destructive) { Task { await checkout.cancelLink() } }.buttonStyle(.bordered).disabled(checkout.busy)
+      Button("Close", role: .destructive) { Task { await checkout.cancelLink() } }.buttonStyle(.aglynSecondary).disabled(checkout.busy)
     }
     .frame(maxWidth: .infinity)
     .padding(AglynSpace.three)
@@ -389,7 +408,7 @@ struct CheckoutView: View {
         model.context?.testMode == true
       {
         Button("Simulate a card tap (test mode)") { Task { await checkout.simulateTapOnReader(paymentID) } }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .accessibilityIdentifier("simulate-tap")
       }
       Button("Cancel payment", role: .destructive) {
@@ -397,7 +416,7 @@ struct CheckoutView: View {
           if let reader = model.cardService(labeled: label) { await checkout.cancelCard(reader) }
         }
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
     }
     .frame(maxWidth: .infinity)
     .padding(AglynSpace.three)
@@ -442,7 +461,7 @@ struct CheckoutView: View {
           model.display.cancelAsk()
           Task { if await checkout.sendReceipt(channel: "none") { model.finished() } }
         }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .accessibilityIdentifier("receipt-none")
         if model.canPrintReceipt {
           Button("Print receipt") {
@@ -455,7 +474,7 @@ struct CheckoutView: View {
               }
             }
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(.aglynSecondary)
           .disabled(checkout.busy || (!model.lastReceipt.hasPrinter && model.receipt == nil))
           .accessibilityIdentifier("receipt-print")
         }
@@ -465,7 +484,7 @@ struct CheckoutView: View {
           model.display.cancelAsk()
           Task { if await checkout.sendReceipt(channel: channel, to: receiptTo) { model.finished() } }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(
           !(isReceiptEmail(receiptTo) || (model.context?.smsReceipts == true && isReceiptPhone(receiptTo))) || checkout.busy)
       }
@@ -479,7 +498,7 @@ struct CheckoutView: View {
             }
           }
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         .accessibilityIdentifier("receipt-gift")
       }
     }

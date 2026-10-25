@@ -115,6 +115,10 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.widget("commerce.glance", title: "At a glance", order: 120, size: .full, requiresSite: true) { context in
     GlanceWidget(context: context)
   }
+  // The console's "Newest site users" (registered there under the `accounts` switch, which ships inside commerce).
+  r.widget("commerce.newest-site-users", title: "Newest site users", order: 130, size: .half, requiresSite: true) { context in
+    NewestSiteUsersCard(context: context)
+  }
   r.quickAction(
     "commerce.orders-to-ship", title: "Ship orders", icon: "shippingbox", order: 100, screen: commerceOrdersScreen,
     params: ["filter": OrderFilter.unfulfilled.rawValue], requiresSite: true)

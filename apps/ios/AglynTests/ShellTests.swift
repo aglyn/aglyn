@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynContracts
+import AglynCore
 import AglynPluginHost
 import AglynPluginManifest
 import AglynScreens
@@ -38,6 +39,19 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/screens"), .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop"]))
   }
 
+  /// The in-app Besigner's own Assist edits the canvas; the title bar's ✦ steps aside while it shows (AGL-4057).
+  func testTheBesignerOnScreenHidesTheAppsAILauncher() {
+    let navigation = ShellNavigation()
+    navigation.select(.plugin("forms.list"))
+    XCTAssertFalse(navigation.besignerOnScreen)
+    navigation.push(.besigner("/acme/hosts/shop/forms/contact/versions/v1/besigner"))
+    XCTAssertTrue(navigation.besignerOnScreen)
+    navigation.push(.screen("forms.detail", ["formId": "contact"]))
+    XCTAssertFalse(navigation.besignerOnScreen, "a screen the editor opened natively sits on top")
+    navigation.paths[navigation.section] = []
+    XCTAssertFalse(navigation.besignerOnScreen)
+  }
+
   func testANavigationPushLandsOnTheSelectedSection() {
     let navigation = ShellNavigation()
     navigation.section = .notifications
@@ -72,6 +86,25 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.mode, .main)
     XCTAssertEqual(navigation.section, .home)
     XCTAssertTrue(navigation.paths.values.allSatisfy(\.isEmpty))
+  }
+
+  /// Sidebar groups keep the state the person left them in (AGL-3996): with Website and Sell open, opening Products
+  /// leaves Website open, and opening a place in a folded group opens that group only.
+  func testOpeningAPlaceNeverFoldsAnotherGroup() throws {
+    let list = resolveNavList(.site, enabledPluginIds: NativePluginManifest.entries.map(\.id), hostAdmin: true)
+    let sell = try XCTUnwrap(list.groups.first { $0.id == "sell" })
+    let products = try XCTUnwrap(sell.rows.first { $0.screen.contains("product") } ?? sell.rows.first)
+    var groups = AglynSidebarGroups()
+    groups.set(ShellScope.groupKey("website", in: list), open: true)
+    groups.set(ShellScope.groupKey("sell", in: list), open: true)
+    ShellScope.reveal(ShellSection.opening(products.screen, products.params), in: list, groups: &groups)
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("website", in: list)))
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("sell", in: list)))
+    groups.set(ShellScope.groupKey("sell", in: list), open: false)
+    ShellScope.reveal(ShellSection.opening(products.screen, products.params), in: list, groups: &groups)
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("sell", in: list)))
+    XCTAssertTrue(groups.isOpen(ShellScope.groupKey("website", in: list)))
+    XCTAssertFalse(groups.isOpen(ShellScope.groupKey("customers", in: list)))
   }
 
   /// Decision 5: a white-label workspace's brand color is the accent while you are in it (switch-off-able), never a
@@ -117,40 +150,41 @@ final class ShellTests: XCTestCase {
     }
   }
 
-  /// On a phone, every section of every sectioned row is one chip from the row (AGL-3993): the Menu pushes the area with
-  /// its chips, and each chip swaps it in place, so Components, Layouts, Templates and Content are all at depth 1.
-  func testEverySectionedRowReachesEachSectionFromThePhoneMenu() {
+  /// On a phone, every section of every sectioned row is one chip from the row (AGL-3993): a Home tile pushes the area
+  /// with its chips, and each chip swaps it in place, so Components, Layouts, Templates and Content are all at depth 1.
+  func testEverySectionedRowReachesEachSectionFromAHomeTile() {
     var checked = 0
     for list in NativeNav.manifest.lists {
       for row in list.groups.flatMap(\.rows) where (row.sections?.count ?? 0) > 1 {
         let navigation = ShellNavigation()
-        navigation.select(.more)
+        navigation.select(.home)
         navigation.pushArea(ShellSection.opening(row.screen, row.params))
-        XCTAssertEqual(navigation.paths[.more], [.area(row.screen, row.params ?? [:])], "\(list.id.rawValue).\(row.id)")
+        XCTAssertEqual(navigation.paths[.home], [.area(row.screen, row.params ?? [:])], "\(list.id.rawValue).\(row.id)")
         for section in row.sections ?? [] {
           navigation.swapArea(ShellSection.opening(section.screen, section.params))
           XCTAssertEqual(
-            navigation.paths[.more], [.area(section.screen, section.params ?? [:])],
+            navigation.paths[.home], [.area(section.screen, section.params ?? [:])],
             "\(list.id.rawValue).\(row.id) section \(section.id) is not one chip from its row")
           checked += 1
         }
-        XCTAssertEqual(navigation.section, .more, "a chip never leaves Menu")
+        XCTAssertEqual(navigation.section, .home, "a chip never leaves the Home tab")
       }
     }
     // Pages' five (Components, Layouts, Templates, Content), Orders', Products' and Inbox's, at the least.
     XCTAssertGreaterThanOrEqual(checked, 14)
   }
 
-  /// A section a phone has no tab for opens in Menu as an area with its chips, never as its bare screen (AGL-3993).
-  func testASectionWithNoTabOpensInMenuAsAnArea() {
+  /// A section a phone has no tab for opens on the Home tab as an area with its chips, never as its bare screen
+  /// (AGL-3993, AGL-4006: the phone has no Menu tab).
+  func testASectionWithNoTabOpensOnHomeAsAnArea() {
     let navigation = ShellNavigation()
-    navigation.openInMenu(.plugin("site.content"))
-    XCTAssertEqual(navigation.section, .more)
-    XCTAssertEqual(navigation.paths[.more], [.area("site.content", [:])])
-    navigation.openInMenu(.place("site.setup", ["section": "seo"]))
-    XCTAssertEqual(navigation.paths[.more]?.last, .area("site.setup", ["section": "seo"]))
-    navigation.openInMenu(.analytics)
-    XCTAssertEqual(navigation.paths[.more]?.last, .analytics)
+    navigation.openOnHome(.plugin("site.content"))
+    XCTAssertEqual(navigation.section, .home)
+    XCTAssertEqual(navigation.paths[.home], [.area("site.content", [:])])
+    navigation.openOnHome(.place("site.setup", ["section": "seo"]))
+    XCTAssertEqual(navigation.paths[.home]?.last, .area("site.setup", ["section": "seo"]))
+    navigation.openOnHome(.analytics)
+    XCTAssertEqual(navigation.paths[.home]?.last, .analytics)
   }
 
   /// From a tab's root (a phone's Orders tab), a chip pushes its section once; the tab's own section returns to the root.

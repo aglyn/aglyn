@@ -32,6 +32,20 @@ class WorkspaceStoreTest {
   }
 
   @Test
+  fun aDeletedSiteOnScreenIsRemovedNotReplaced() {
+    // s2 was on screen and is gone from the loaded list (deleted): the shell leaves for the workspace's Sites.
+    val afterDelete = WorkspaceState(orgs = orgs, sites = sites.take(1), org = orgs[0], site = sites[0], ready = true)
+    assertTrue(WorkspaceStore.shownSiteRemoved("a", "s2", afterDelete))
+    // Still listed, nothing on screen, the sites still loading, or another workspace now shown: nothing was removed.
+    assertFalse(WorkspaceStore.shownSiteRemoved("a", "s1", afterDelete))
+    assertFalse(WorkspaceStore.shownSiteRemoved("a", null, afterDelete))
+    assertFalse(WorkspaceStore.shownSiteRemoved("a", "s2", afterDelete.copy(sites = emptyList(), ready = false)))
+    assertFalse(WorkspaceStore.shownSiteRemoved("b", "s2", afterDelete))
+    // The last site deleted leaves an empty, loaded list: removed too.
+    assertTrue(WorkspaceStore.shownSiteRemoved("a", "s1", afterDelete.copy(sites = emptyList(), site = null, wholeWorkspace = true)))
+  }
+
+  @Test
   fun readsMembershipRowsTheWayTheConsoleWritesThem() {
     assertEquals(WorkspaceOrg("o", "acme", "acme", ""), WorkspaceStore.orgFromMembership("o", mapOf("slug" to "acme")))
     assertEquals(
@@ -48,6 +62,13 @@ class WorkspaceStoreTest {
       WorkspaceStore.siteFromMembership("h", mapOf("orgId" to "o", "subdomain" to "shop", "favicon" to "media:h/fav")).favicon,
     )
     assertEquals(null, WorkspaceStore.siteFromMembership("h", mapOf("favicon" to " ")).favicon)
+    // A site's rows show its custom domain once the membership row mirrors it, else its platform address.
+    assertEquals("example.com", WorkspaceStore.siteFromMembership("h", mapOf("subdomain" to "shop", "cname" to "example.com")).address)
+    assertEquals("shop.aglyn.app", WorkspaceStore.siteFromMembership("h", mapOf("subdomain" to "shop", "cname" to "")).address)
+    // The host's own cname wins over the row's copy, which may lag behind it.
+    val mirrored = WorkspaceStore.siteFromMembership("h", mapOf("subdomain" to "shop", "cname" to "old.example.com"))
+    assertEquals("example.com", mirrored.addressWith("example.com"))
+    assertEquals("old.example.com", mirrored.addressWith(" "))
     // A workspace's logos live on its own document; the membership index carries none.
     assertEquals(
       WorkspaceOrgLogo("/api/media/cdn/org:o/logo", null, plan = "free"),

@@ -39,7 +39,12 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
  * for that prefix misses this order until the orders backfill restamps it —
  * and nothing left on the order answers to the address.
  *
- * A DRY RUN counts the orders and writes nothing.
+ * A check-in at the window (AGL-4043) copies the buyer's name, address and
+ * phone, so the same person is taken off each of theirs, by the stored
+ * lower-cased address; the check-in itself — who was due, who checked them
+ * in, the wristband — stays, as the order does.
+ *
+ * A DRY RUN counts the orders and check-ins and writes nothing.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -76,17 +81,49 @@ export function erasedOrderPatch(
   }
 }
 
+/** The patch that takes the customer off one check-in at the window (AGL-4043). */
+export function erasedCheckInPatch(
+  data: FirebaseFirestore.DocumentData | undefined,
+  now: number,
+): Record<string, unknown> {
+  // One key per order or stay, so the people one order brought still read
+  // as one party, and as nobody's name.
+  const source = String(data?.['orderId'] ?? data?.['reservationId'] ?? '')
+  return {
+    customerKey: `erased:${source}`,
+    customerName: null,
+    customerEmail: null,
+    customerEmailLower: null,
+    customerPhone: null,
+    contactId: null,
+    searchTokens: [],
+    customerErasedAtMs: now,
+  }
+}
+
 export function createCommercePersonEraser(deps: CommercePersonEraserDeps): PluginPersonEraser {
   return async ({ orgId, email, dryRun, atMs }): Promise<PluginPersonErasureReport> => {
     const db = deps.firestore()
     const hosts = await db.collection('hosts').where('orgId', '==', orgId).get()
     let orders = 0
+    let checkIns = 0
+    const emailLower = email.trim().toLowerCase()
     for (const host of hosts.docs) {
       const placed = host.ref.collection('orders')
+      const checked = host.ref.collection('checkIns')
       if (dryRun) {
         orders += (await placed.where('customerEmail', '==', email).get()).size
+        checkIns += (await checked.where('customerEmailLower', '==', emailLower).get()).size
         continue
       }
+      checkIns += await updateWhereEquals(
+        db,
+        checked,
+        'customerEmailLower',
+        emailLower,
+        (data) => erasedCheckInPatch(data, atMs),
+        LABEL,
+      )
       orders += await updateWhereEquals(
         db,
         placed,
@@ -96,7 +133,7 @@ export function createCommercePersonEraser(deps: CommercePersonEraserDeps): Plug
         LABEL,
       )
     }
-    return { orders }
+    return { orders, checkIns }
   }
 }
 

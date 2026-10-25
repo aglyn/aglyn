@@ -19,11 +19,15 @@ import {
   orderPayments,
   posBalanceDueCents,
   posDisplayPublicState,
+  paymentCarriesPlatformFee,
   posFeeCollection,
   posInvoiceTakeCents,
+  posOwedTakeCents,
+  posPaymentTakeShareCents,
   posSettledCents,
   posTakeShareCents,
   posTenderableCents,
+  posTenderTakeCents,
   posTipCents,
   posTipFromPercent,
   posTipPercentages,
@@ -40,6 +44,149 @@ const pay = (over: Partial<OrderPayment>): OrderPayment => ({
   status: 'succeeded',
   atMs: 1,
   ...over,
+})
+
+/*
+ * NO PLATFORM FEE ON CASH OR GIFT CARD (AGL-4036). A $100.00 sale whose plan
+ * takes $2.00: every combination of tenders, by what the tenders owe, what
+ * the cards net from their payouts, and what goes on the invoice.
+ */
+describe('which tenders carry the platform fee (AGL-4036)', () => {
+  const TAKE = 200
+  const TOTAL = 10_000
+  /** A succeeded payment with the share the register would record for it. */
+  const part = (id: string, method: OrderPayment['method'], amountCents: number) =>
+    pay({
+      id,
+      method,
+      amountCents,
+      takeFeeCents: posPaymentTakeShareCents({ method, takeFeeCents: TAKE, totalCents: TOTAL, amountCents }),
+    })
+  const owed = (payments: OrderPayment[], takeFeeCents = TAKE) => ({
+    owed: posOwedTakeCents({ takeFeeCents, totalCents: TOTAL, payments }),
+    invoice: posInvoiceTakeCents({ takeFeeCents, totalCents: TOTAL, payments }),
+    netted: payments
+      .filter(
+        (payment) =>
+          payment.status === 'succeeded' && ['card_present', 'card_keyed', 'card_link'].includes(payment.method),
+      )
+      .reduce((sum, payment) => sum + Number(payment.takeFeeCents ?? 0), 0),
+  })
+
+  it('names cash, gift card and store credit as the only fee-free tenders', () => {
+    expect(paymentCarriesPlatformFee('cash')).toBe(false)
+    expect(paymentCarriesPlatformFee('gift_card')).toBe(false)
+    expect(paymentCarriesPlatformFee('credit')).toBe(false)
+    for (const method of ['card_present', 'card_keyed', 'card_link', 'folio'] as const) {
+      expect(paymentCarriesPlatformFee(method)).toBe(true)
+    }
+  })
+
+  it('a single tender owes the whole take, or nothing for cash and gift card', () => {
+    expect(posTenderTakeCents('cash', TAKE)).toBe(0)
+    expect(posTenderTakeCents('gift_card', TAKE)).toBe(0)
+    expect(posTenderTakeCents('credit', TAKE)).toBe(0)
+    expect(posTenderTakeCents('folio', TAKE)).toBe(TAKE)
+    expect(posTenderTakeCents('card_link', TAKE)).toBe(TAKE)
+  })
+
+  it('cash only: owes nothing, invoices nothing', () => {
+    const payments = [part('a', 'cash', TOTAL)]
+    expect(payments[0]!.takeFeeCents).toBe(0)
+    expect(owed(payments)).toEqual({ owed: 0, invoice: 0, netted: 0 })
+  })
+
+  it('gift card only: owes nothing, invoices nothing', () => {
+    expect(owed([part('a', 'gift_card', TOTAL)])).toEqual({ owed: 0, invoice: 0, netted: 0 })
+  })
+
+  it('room charge only: the whole take, on the invoice', () => {
+    const payments = [part('a', 'folio', TOTAL)]
+    expect(owed(payments)).toEqual({ owed: TAKE, invoice: TAKE, netted: 0 })
+    expect(posFeeCollection(payments)).toBe('invoice')
+  })
+
+  it('card only: the whole take, netted from the payout', () => {
+    const payments = [part('a', 'card_present', TOTAL)]
+    expect(owed(payments)).toEqual({ owed: TAKE, invoice: 0, netted: TAKE })
+    expect(posFeeCollection(payments)).toBe('payout')
+  })
+
+  it('card + cash: the card share only, all of it from the payout', () => {
+    const payments = [part('a', 'card_keyed', 6_000), part('b', 'cash', 4_000)]
+    expect(owed(payments)).toEqual({ owed: 120, invoice: 0, netted: 120 })
+    expect(posFeeCollection(payments)).toBe('payout')
+  })
+
+  it('card + gift card: the card share only, all of it from the payout', () => {
+    const payments = [part('a', 'gift_card', 2_500), part('b', 'card_present', 7_500)]
+    expect(owed(payments)).toEqual({ owed: 150, invoice: 0, netted: 150 })
+    expect(posFeeCollection(payments)).toBe('payout')
+  })
+
+  it('room charge + cash: the room-charge share, on the invoice', () => {
+    const payments = [part('a', 'folio', 3_000), part('b', 'cash', 7_000)]
+    expect(owed(payments)).toEqual({ owed: 60, invoice: 60, netted: 0 })
+    expect(posFeeCollection(payments)).toBe('invoice')
+  })
+
+  it('card + room charge + cash: the card nets its share, the room charge is invoiced, cash owes none', () => {
+    const payments = [part('a', 'card_present', 5_000), part('b', 'folio', 2_000), part('c', 'cash', 3_000)]
+    expect(owed(payments)).toEqual({ owed: 140, invoice: 40, netted: 100 })
+    expect(posFeeCollection(payments)).toBe('split')
+  })
+
+  it('stays exact when the shares round, however many cards split it', () => {
+    const take = 333
+    const total = 10_001
+    const share = (method: OrderPayment['method'], amountCents: number) =>
+      posPaymentTakeShareCents({ method, takeFeeCents: take, totalCents: total, amountCents })
+    const payments = [
+      pay({ id: 'a', method: 'card_keyed', amountCents: 3333, takeFeeCents: share('card_keyed', 3333) }),
+      pay({ id: 'b', method: 'card_present', amountCents: 3333, takeFeeCents: share('card_present', 3333) }),
+      pay({ id: 'c', method: 'cash', amountCents: 3335, takeFeeCents: share('cash', 3335) }),
+    ]
+    const invoice = posInvoiceTakeCents({ takeFeeCents: take, totalCents: total, payments })
+    const owedTake = posOwedTakeCents({ takeFeeCents: take, totalCents: total, payments })
+    // Two cards of 3333 on 10001 owe 222 of the 333, and nothing of it goes
+    // on the invoice beyond what the cards' own rounding left.
+    expect(owedTake).toBe(posTakeShareCents({ takeFeeCents: take, totalCents: total, amountCents: 6666 }))
+    expect(share('card_keyed', 3333) + share('card_present', 3333) + invoice).toBe(owedTake)
+  })
+
+  it('ignores a take a cash payment recorded under the old rule', () => {
+    // An open sale started before AGL-4036 and finished after it.
+    const payments = [pay({ id: 'a', method: 'cash', amountCents: TOTAL, takeFeeCents: TAKE })]
+    expect(owed(payments)).toEqual({ owed: 0, invoice: 0, netted: 0 })
+  })
+
+  it('ignores failed and canceled payments', () => {
+    const payments = [
+      pay({ id: 'a', method: 'card_present', amountCents: TOTAL, status: 'failed', takeFeeCents: TAKE }),
+      part('b', 'cash', TOTAL),
+    ]
+    expect(owed(payments)).toEqual({ owed: 0, invoice: 0, netted: 0 })
+  })
+
+  it('a 0% plan owes nothing on any tender', () => {
+    for (const payments of [
+      [part('a', 'cash', TOTAL)],
+      [part('a', 'folio', TOTAL)],
+      [part('a', 'folio', 4_000), part('b', 'gift_card', 6_000)],
+    ]) {
+      expect(owed(payments, 0)).toMatchObject({ owed: 0, invoice: 0 })
+    }
+    expect(posPaymentTakeShareCents({ method: 'card_present', takeFeeCents: 0, totalCents: TOTAL, amountCents: TOTAL })).toBe(0)
+  })
+
+  it('store credit carries no share, alone or beside cash', () => {
+    expect(owed([part('a', 'credit', TOTAL)])).toEqual({ owed: 0, invoice: 0, netted: 0 })
+    expect(owed([part('a', 'credit', 5_000), part('b', 'cash', 5_000)])).toEqual({ owed: 0, invoice: 0, netted: 0 })
+  })
+
+  it('store credit beside a room charge: only the room charge share is invoiced', () => {
+    expect(owed([part('a', 'credit', 5_000), part('b', 'folio', 5_000)])).toEqual({ owed: 100, invoice: 100, netted: 0 })
+  })
 })
 
 describe('the tender ledger (AGL-3607)', () => {
@@ -71,9 +218,9 @@ describe('the tender ledger (AGL-3607)', () => {
     const payments = [
       pay({ id: 'a', method: 'card_keyed', amountCents: 3333, takeFeeCents: first }),
       pay({ id: 'b', method: 'card_present', amountCents: 3333, takeFeeCents: second }),
-      pay({ id: 'c', method: 'cash', amountCents: 3335, takeFeeCents: 999 }),
+      pay({ id: 'c', method: 'folio', amountCents: 3335, takeFeeCents: 999 }),
     ]
-    expect(first + second + posInvoiceTakeCents({ takeFeeCents: take, payments })).toBe(take)
+    expect(first + second + posInvoiceTakeCents({ takeFeeCents: take, totalCents: total, payments })).toBe(take)
     expect(posFeeCollection(payments)).toBe('split')
   })
 

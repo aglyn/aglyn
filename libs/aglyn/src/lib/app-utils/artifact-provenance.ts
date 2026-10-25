@@ -45,6 +45,8 @@ export type InstallableArtifactType =
    */
   | 'emailStarter'
   | 'theme'
+  /** A whole site picked before it exists (AGL-4049): installing one creates the site. */
+  | 'siteStarter'
 
 /**
  * Install provenance (AGL-1015): where an installed artifact came from, at

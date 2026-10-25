@@ -6,6 +6,12 @@ description: "Ask Aglyn Assist for what you need in one message — pages, a for
 
 # Build from Assist chat
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 The [Aglyn Assist](../getting-started/aglyn-assist.md) chat answers questions. On a site
 with AI generation, it also **builds**: describe what you need in one message, such as
 *"add a pricing page and a quote request form, and a welcome email for people who send
@@ -68,6 +74,11 @@ One message can ask for any mix of:
   folder, add or remove tags, rename a file, or write its alt text, such as *put kiln.jpg
   and wheel.jpg in a Studio folder* or *write the missing alt text from the captions*. See
   [Media library](../content-and-data/media/overview.md#ask-aglyn-ai).
+- **who can see the site**: turn maintenance mode on or off, hide the site from search
+  engines or allow them again, or set pages to Public, Unlisted or Members only, such as
+  *make my site private until launch* or *hide the pricing page*. Maintenance mode needs
+  the admin role on the site. Assist never sets a page password. See
+  [Make your site private](../building-sites/site-protection/make-your-site-private.md#ask-aglyn-ai).
 - **store setup**: shipping zones and rates, local pickup, local delivery and sales tax,
   such as *free shipping over $50, otherwise $5 flat in the US*. See
   [Shipping](../commerce-and-bookings/commerce/shipping.md#ask-aglyn-ai),
@@ -130,10 +141,10 @@ page that places them.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
   campaigns are unsent and aimed at nobody. The exceptions are a **redirect**, **CRM
-  setup**, **store setup**, **site settings**, **tracking tags** and **media library
-  changes**: a redirect rule, a CRM pipeline, custom field or picklist value, the shipping,
-  pickup, delivery and tax settings, the site's settings, its tracking tags and a file's
-  folder, tags, name and alt text have no draft, so they work as soon as the build saves
+  setup**, **store setup**, **site settings**, **tracking tags**, **privacy changes** and
+  **media library changes**: a redirect rule, a CRM pipeline, custom field or picklist
+  value, the shipping, pickup, delivery and tax settings, the site's settings, its tracking
+  tags, who can see it and a file's folder, tags, name and alt text have no draft, so they work as soon as the build saves
   them, as they do when you save them yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
   prices and rates you state.
 - **Names are your own.** A new variable or function never takes a name the site already
@@ -143,8 +154,8 @@ page that places them.
   Spanish sets its language; it does not translate the pages. A value that cannot be used,
   such as an email address that is not one, is named on the card and the rest are saved.
   Assist never changes your site's address, domain, members, billing, plugins or cookie
-  banner, and never hides the site from search engines. Tracking IDs change only as a
-  tracking change, by the ID you give.
+  banner as a settings change. Tracking IDs change only as a tracking change, by the ID you
+  give, and who can see the site only as a privacy change.
 
 When it is done the card says how many parts were built, such as *5 of 6 built; 1 failed*.
 **Try again what failed** builds only the parts that failed, and shows what that is likely
@@ -193,7 +204,8 @@ done when your workspace's Stripe account already takes payments.
 
 A build spends [AI credits](./ai-credits.md) for each part it makes, and the card shows the
 estimate before you confirm. Products, booking services, overlays, A/B tests, funnels,
-variables and CRM setup cost almost nothing, and redirects and store setup cost nothing. If the build fails because of something on our side, the
+variables and CRM setup cost almost nothing, and redirects, store setup, settings, tracking
+tags and privacy changes cost nothing. If the build fails because of something on our side, the
 credits are given back, and the card says so. See
 [Credits given back](./ai-credits.md#credits-given-back).
 

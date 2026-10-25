@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -24,6 +23,7 @@ import com.aglyn.pluginhost.BesignerEntry
 import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.webview.webview2.NavigationVerdict
 import com.aglyn.webview.webview2.WEBVIEW2_RUNTIME_DOWNLOAD
 import com.aglyn.webview.webview2.WebView2Listener
@@ -111,9 +111,9 @@ private fun WebView2Besigner(
   val left = remember(path) { booleanArrayOf(false) }
 
   /** Acts on where a navigation leads; answers whether the view may show it. Runs on the WebView2 thread. */
-  fun route(uri: String): NavigationVerdict {
+  fun route(uri: String, userInitiated: Boolean): NavigationVerdict {
     if (left[0]) return NavigationVerdict.CANCEL
-    when (val next = besignerNavigation(uri, origin, current[0])) {
+    when (val next = besignerNavigation(uri, origin, current[0], userInitiated)) {
       BesignerNavigation.Stay -> {
         val shown = consolePathOf(uri)
         if (!shown.startsWith(BesignerEntry.PATH)) current[0] = shown
@@ -123,15 +123,17 @@ private fun WebView2Besigner(
       is BesignerNavigation.Native -> { left[0] = true; scope.launch { leave(next.path) } }
       BesignerNavigation.SessionEnded -> scope.launch { error = "Your session ended. Open the Besigner again to keep editing." }
       BesignerNavigation.External -> runCatching { Desktop.getDesktop().browse(URI(uri)) }
+      // A script or redirect leaving the console: dropped (AGL-4002).
+      BesignerNavigation.Ignore -> Unit
     }
     return NavigationVerdict.CANCEL
   }
 
   val listener = remember(origin, bridge) {
     WebView2Listener(
-      onNavigation = { uri -> route(uri) },
+      onNavigation = { uri, userInitiated -> route(uri, userInitiated) },
       // A client-side route change cannot be cancelled; leaving the editor still returns to the app.
-      onSourceChanged = { uri -> if (isTrustedUrl(uri, listOf(origin))) route(uri) },
+      onSourceChanged = { uri -> if (isTrustedUrl(uri, listOf(origin))) route(uri, userInitiated = false) },
       onMessage = { source, data ->
         val offered = bridge ?: return@WebView2Listener
         when (val parsed = parseBridgeMessage(data, source, listOf(origin), nonce, offered.handlers.keys.toList())) {

@@ -40,6 +40,14 @@ public func registerAINative(_ registrar: NativePluginRegistrar) {
     AiNeedsYouWidget(context: $0)
   }
   registrar.widget("ai.assist-panel", title: "Assist", order: 10, slot: assistPanelSlot) { AiAssistPanel(context: $0) }
+  // "Ask AI about these numbers" (the console's `hostDashboard` and `orgDashboard` tiles): on a site's Home and Analytics,
+  // and on the workspace's Home; on a plan without the AI add-on the same tile opens the add-on's offer.
+  registrar.widget("ai.insight-ask", title: "Ask AI about these numbers", icon: "sparkles", order: 900, size: .half, requiresSite: true) {
+    AiInsightTile(context: $0, surface: .analytics)
+  }
+  registrar.widget(
+    "ai.org-insight-ask", title: "Ask AI about these numbers", icon: "sparkles", order: 900, size: .half, slot: "orgDashboard"
+  ) { AiInsightTile(context: $0, surface: .workspace) }
   for kind in AiCreateKind.allCases {
     registrar.widget(kind.widgetID, title: "Create with AI", icon: "sparkles", order: 10, requiresSite: true, slot: kind.slot) {
       AiCreateButton(context: $0, kind: kind)

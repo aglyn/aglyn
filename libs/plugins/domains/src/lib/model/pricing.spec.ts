@@ -16,7 +16,12 @@
  */
 
 import { METERED_MARKUP, STRIPE_PROCESSOR_FEE_PCT } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { STRIPE_FIXED_FEE_USD, domainRetailCents, formatUsdCents } from './pricing'
+import {
+  STRIPE_FIXED_FEE_USD,
+  domainRetailCents,
+  domainTransferCents,
+  formatUsdCents,
+} from './pricing'
 
 describe('domain pricing (AGL-3962)', () => {
   it('prices a .com at $15.99 from the registrar\'s $11.25', () => {
@@ -37,4 +42,10 @@ describe('domain pricing (AGL-3962)', () => {
       )
     },
   )
+
+  it('prices a transfer in as a renewal: the added year at cost, plus the markup (AGL-4040)', () => {
+    expect(domainTransferCents(11.25)).toBe(domainRetailCents(11.25))
+    expect(domainTransferCents(11.25)).toBe(1599)
+    expect(domainTransferCents(0)).toBe(0)
+  })
 })

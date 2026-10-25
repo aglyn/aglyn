@@ -250,7 +250,7 @@ struct AiCreateButton: View {
       if placement == .header {
         button.help(door.label)
       } else {
-        button.buttonStyle(.bordered)
+        button.buttonStyle(.aglynSecondary)
       }
     } else {
       // Holds the read while the door is asked, and draws nothing where it says no.
@@ -323,7 +323,7 @@ struct AiCreateScreen: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle(title)
     .aglynScreenTitle(title)
     .task {
@@ -416,7 +416,7 @@ struct AiCreateScreen: View {
         }
         .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(
         busy || brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           || aiCreateInputs(door, picks: picks, collectionID: collectionID) == nil
@@ -434,7 +434,7 @@ struct AiCreateScreen: View {
       Button("Plans and billing") { context.navigate("core.billing.plans") }
         .accessibilityIdentifier("ai-create-billing")
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
   }
 
   // MARK: The add-on's offer
@@ -480,7 +480,7 @@ struct AiCreateScreen: View {
           } label: {
             Label(open.label, systemImage: "arrow.right.circle").frame(maxWidth: .infinity)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .accessibilityIdentifier("ai-create-open")
           if let besigner = open.besigner {
             Button {
@@ -511,7 +511,7 @@ struct AiCreateScreen: View {
           if let notice { AglynNotice(notice, tone: .warning) }
           if let confirm = view.confirm {
             Button(confirm.label) { decide(jobID, cancel: false) }
-              .buttonStyle(.borderedProminent)
+              .buttonStyle(.aglynProminent)
               .disabled(busy || !confirm.enabled)
               .accessibilityIdentifier("ai-create-confirm")
           }

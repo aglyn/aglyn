@@ -50,6 +50,7 @@ export type ReleaseFlagKey =
   | 'release_crm_assist_whole_record'
   | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
+  | 'release_site_starters'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -64,6 +65,30 @@ export interface ReleaseFlagDefinition {
   defaultEnabled: boolean
   /** Host dashboard tab id (host-nav-tabs.ts) this flag hides, if any. */
   navTabId?: string
+  /**
+   * Where a RELEASED feature stands, when it is still changing. Absent means
+   * generally available, which is what every feature without a stage is.
+   *
+   * Data only. A stage never gates anything, and it says nothing while the
+   * flag is off: an off feature is rolling out, whatever its stage reads. The
+   * console labels an on, `beta`-staged feature Beta beside its nav tab and
+   * its hub header, and the docs open its pages with a `:::note Beta`
+   * admonition, which `docs-release-flags.spec.ts` holds to this field.
+   */
+  stage?: ReleaseFlagStage
+}
+
+/**
+ * The stages a released feature can be in short of general availability.
+ * One today. A stage is per feature, never platform-wide: features keep
+ * arriving in beta for as long as the product grows.
+ */
+export const RELEASE_FLAG_STAGES = ['beta'] as const
+
+export type ReleaseFlagStage = (typeof RELEASE_FLAG_STAGES)[number]
+
+export function isReleaseFlagStage(value: unknown): value is ReleaseFlagStage {
+  return (RELEASE_FLAG_STAGES as readonly unknown[]).includes(value)
 }
 
 /** A release flag a plugin declares, as the generator compiles it. */
@@ -126,6 +151,9 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
     key: 'release_assist',
     label: `${PLATFORM_BRAND_NAME} Assist`,
+    // Released to every workspace and still changing: what it answers, what
+    // it can build from a message and how it cites the docs.
+    stage: 'beta',
     description:
       'The in-console AI chat helper on every page (AGL-1860): docs-' +
       'grounded answers with deep links, page-context guidance on Pro+. ' +
@@ -187,6 +215,9 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
     key: 'release_ai_generative',
     label: `${PLATFORM_BRAND_NAME} AI generation`,
+    // Released to every workspace and still changing: the guided start, page
+    // and section generation and the other generative doors.
+    stage: 'beta',
     description:
       'Generative building and automation behind the AI add-on ' +
       '(AGL-2903): sections, pages and workflows written by a model from ' +
@@ -206,14 +237,18 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
     key: 'release_ai_site_import',
     label: 'Bring my site',
+    // Released on every paid plan and still changing: how pages are read,
+    // rewritten in the new design and brought in wave by wave.
+    stage: 'beta',
     description:
       'Bring an existing website into a workspace on a paid plan (AGL-3973): ' +
       'the workspace proves it owns the domain (a DNS record, a home page ' +
       'meta tag, or a code emailed to an address at the domain), then ' +
       'AglynBot reads the site within robots.txt, same-origin only, under ' +
-      'page, byte and time budgets. OFF by default: the ownership and crawl ' +
-      'doors answer 404 while it is off.',
-    defaultEnabled: false,
+      'page, byte and time budgets. ON since 2026-10-25 (beta.282, after the ' +
+      'Legal v18 import clause and the blocked-page reason, AGL-4029); turned ' +
+      'off, the ownership and crawl doors answer 404.',
+    defaultEnabled: true,
   },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends
@@ -264,6 +299,19 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'until the Privacy Policy that discloses it is published.',
     defaultEnabled: false,
   },
+  // Per org (AGL-4049): "Create site" is to offer the starter picker only
+  // where the org's verdict is on. Nothing reads the flag yet, and off it
+  // creates the default site as it always has.
+  {
+    key: 'release_site_starters',
+    label: 'Site starters from the marketplace',
+    description:
+      'Create site asks the person to choose a starter (AGL-4049): every ' +
+      `option, ${PLATFORM_BRAND_NAME}\u2019s own included, is a marketplace listing any ` +
+      'publisher may list and price, for a base start or an AI start. OFF ' +
+      'by default: Create site makes the default site as it always has.',
+    defaultEnabled: false,
+  },
 ]
 
 /**
@@ -292,6 +340,63 @@ export function getReleaseFlagDefinition(
   if (!definition) throw new Error(`Unknown release flag: ${key}`)
   return definition
 }
+
+/**
+ * The stage a flag's definition declares, or `undefined` for a generally
+ * available feature (and for a key the registry does not know, so a retired
+ * key can never label anything).
+ */
+export function releaseFlagStage(
+  key: ReleaseFlagKey | null | undefined,
+): ReleaseFlagStage | undefined {
+  if (!key) return undefined
+  return RELEASE_FLAGS.find((entry) => entry.key === key)?.stage
+}
+
+/** Whether a flag's definition declares the `beta` stage. */
+export function isBetaStaged(key: ReleaseFlagKey | null | undefined): boolean {
+  return releaseFlagStage(key) === 'beta'
+}
+
+/**
+ * Whether a surface wears the Beta label: its feature is RELEASED for this
+ * viewer's workspace and its flag is staged `beta`.
+ *
+ * `released` is the rollout verdict without the staff bypass. A staff member
+ * looking at a workspace whose flag is off is previewing a feature that is
+ * still rolling out, which the staff preview marker already says; calling it
+ * Beta there would describe a feature the workspace does not have.
+ */
+export function showsBetaStage(
+  key: ReleaseFlagKey | null | undefined,
+  released: boolean | null | undefined,
+): boolean {
+  return released === true && isBetaStaged(key)
+}
+
+/**
+ * The stage a console surface wears, from the release flags that govern it:
+ * a hub's own flag and its open section's, either of which may be absent.
+ * `beta` when any of them is released for this workspace and staged beta.
+ *
+ * `flags` is the console's verdict map, read for `released` (the rollout
+ * verdict without the staff bypass) for the reason {@link showsBetaStage}
+ * gives.
+ */
+export function releaseStageOfSurface(
+  keys: readonly (ReleaseFlagKey | null | undefined)[],
+  flags: Partial<Record<ReleaseFlagKey, { released?: boolean } | undefined>>,
+): ReleaseFlagStage | undefined {
+  return keys.some((key) => key && showsBetaStage(key, flags[key]?.released))
+    ? 'beta'
+    : undefined
+}
+
+/** Every flag staged `beta`, in registry order. */
+export const BETA_STAGED_RELEASE_FLAG_KEYS: readonly ReleaseFlagKey[] =
+  RELEASE_FLAGS.filter((definition) => definition.stage === 'beta').map(
+    (definition) => definition.key,
+  )
 
 /**
  * The JSON payload stored in each Remote Config parameter. `enabled: true`

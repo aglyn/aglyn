@@ -17,7 +17,7 @@
 
 /**
  * Recorded crawls for the site-import specs (AGL-3974): what each address
- * answered, status, headers and body, for four small-business sites. No
+ * answered, status, headers and body, for five small-business sites. No
  * spec opens a socket; `site-import-crawl.spec.ts` serves these through a
  * stubbed `fetch`, under the real SSRF-guarded fetch.
  *
@@ -30,6 +30,8 @@
  *   AglynBot off everything while allowing every other crawler.
  * - `plain-plumbing.com`: no robots.txt, no sitemap; pages are found by links.
  * - `down-robots.com`: robots.txt answers 503.
+ * - `guarded-garden.com`: bot protection answers every request 403,
+ *   robots.txt included.
  */
 
 export interface RecordedResponse {
@@ -256,4 +258,9 @@ export const SITE_IMPORT_RECORDINGS: Record<string, RecordedResponse> = {
   // down-robots.com: robots.txt cannot be read.
   'https://down-robots.com/robots.txt': { status: 503, headers: TEXT, body: 'Service unavailable' },
   'https://down-robots.com/': { status: 200, headers: HTML, body: '<h1>Should never be read</h1>' },
+
+  // guarded-garden.com: bot protection turns AglynBot away everywhere.
+  'https://guarded-garden.com/robots.txt': { status: 403, headers: HTML, body: 'Access denied' },
+  'https://guarded-garden.com/sitemap.xml': { status: 403, headers: HTML, body: 'Access denied' },
+  'https://guarded-garden.com/': { status: 403, headers: HTML, body: 'Access denied' },
 }

@@ -21,9 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,11 +59,13 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
@@ -353,7 +353,7 @@ private fun NotificationDetail(row: FeedNotification, catalog: NotificationCatal
         row.body?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
         HorizontalDivider()
         when {
-          row.inviteId != null && row.orgId != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Review the invitation") }
+          row.inviteId != null && row.orgId != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Open") }
           row.link != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Open") }
           else -> Text("Nothing to open for this one.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -384,7 +384,7 @@ private fun TypePickerDialog(catalog: NotificationCatalog, initial: Set<String>,
   ) {
     Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).testTag("notification-type-picker")) {
       for (category in catalog.categories) {
-        Text(category.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = space(1f)))
+        Text(category.label, style = MaterialTheme.typography.labelLarge, color = com.aglyn.ui.aglynAccentText, modifier = Modifier.padding(top = space(1f)))
         for (entry in category.types) {
           Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Checkbox(
@@ -400,63 +400,33 @@ private fun TypePickerDialog(catalog: NotificationCatalog, initial: Set<String>,
   }
 }
 
-/** The invitee's own invitation: accept or decline, through `/api/orgs/invites` as the console's dialog does. */
+/**
+ * The invitee's own invitation (AGL-4023): it joins on its own, so a member opens the workspace; otherwise it is joining or
+ * almost ready. Never an Accept or a Decline.
+ */
 @Composable
 private fun InviteDialog(services: ShellServices, row: FeedNotification, onDone: () -> Unit) {
-  var busy by remember { mutableStateOf(false) }
-  var error by remember { mutableStateOf<String?>(null) }
-  var declining by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
-  fun respond(action: String) {
-    busy = true
-    error = null
-    scope.launch {
-      try {
-        services.api.request(
-          "/api/orgs/invites",
-          ApiMethod.POST,
-          buildJsonObject {
-            put("orgId", row.orgId)
-            put("action", action)
-            put("inviteId", row.inviteId)
-          },
-        )
-        if (action == "accept") row.orgId?.let { services.workspace.selectOrg(it) }
-        onDone()
-      } catch (failure: CancellationException) {
-        throw failure
-      } catch (failure: Throwable) {
-        error = failure.message ?: if (action == "accept") "Accepting the invite failed" else "Declining the invite failed"
-      } finally {
-        busy = false
-      }
-    }
-  }
-  if (declining) {
-    ActionDialog(
-      title = "Decline this invitation?",
-      body = row.body ?: row.title,
-      confirmLabel = "Decline",
-      destructive = true,
-      busy = busy,
-      error = error,
-      onConfirm = { respond("decline") },
-      onDismiss = { declining = false },
-      icon = "group",
-    )
-  } else {
-    ActionDialog(
-      title = row.title,
-      body = row.body,
-      confirmLabel = "Accept",
-      dismissLabel = "Not now",
-      busy = busy,
-      error = error,
-      onConfirm = { respond("accept") },
-      onDismiss = onDone,
-      icon = "group",
-    ) {
-      TextButton(onClick = { declining = true }, enabled = !busy, modifier = Modifier.testTag("invite-decline")) { Text("Decline instead") }
+  InviteJoinEffect(services)
+  val workspace by services.workspace.state.collectAsState()
+  val joins by services.inviteJoin.state.collectAsState()
+  val member = workspace.orgs.any { it.id == row.orgId }
+  val invite = joins.invites.firstOrNull { it.id == row.inviteId }
+  ActionDialog(
+    title = row.title,
+    body = row.body,
+    confirmLabel = if (member) "Open the workspace" else "Close",
+    dismissLabel = "Close",
+    onConfirm = {
+      if (member) row.orgId?.let { services.workspace.selectOrg(it) }
+      onDone()
+    },
+    onDismiss = onDone,
+    icon = "group",
+  ) {
+    when {
+      member -> Unit
+      invite != null -> InviteJoinStatusText(invite, joins.statuses[invite.id] == com.aglyn.core.InviteJoinStatus.JOINING)
+      else -> Text("Joining…", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }

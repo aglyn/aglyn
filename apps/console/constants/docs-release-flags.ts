@@ -46,6 +46,15 @@ export const ROLLING_OUT_ADMONITION =
   /^:::(?:caution|warning|note|info)\s+Rolling out\s*$/m
 
 /**
+ * The admonition a page that is ABOUT a released, `beta`-staged feature must
+ * open with (AGL-4052): the feature is open on every plan that includes it
+ * and is still changing. The registry's `stage` field is what requires it,
+ * and the spec forbids it on every other page, so the label cannot outlive
+ * the stage or appear on a feature that has none.
+ */
+export const BETA_ADMONITION = /^:::note\s+Beta\s*$/m
+
+/**
  * Claims a page may not make about a feature the reader cannot open. The
  * AGL-1601 defect was the first of these: a **Plan availability: Paid** callout
  * attached to a dark console page.
@@ -85,6 +94,10 @@ export interface FlagDocPage {
    * marker, which is exactly how a guard like this goes quietly vacuous.
    */
   readonly disclosure: 'admonition' | readonly RegExp[]
+  // An `'admonition'` page is also the one whose top carries the Beta note
+  // while its flag is ON and staged `beta` (BETA_ADMONITION): its subject is
+  // the feature, so the stage is said where a reader starts. A windowed page
+  // is about many features and never carries it.
   /**
    * Whether the whole-file price/plan assertions apply.
    *
@@ -282,6 +295,61 @@ export const FLAG_DOC_PAGES: Partial<
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },
+    // AGL-4052. The rest of the AI section's pages about a door this flag
+    // closes, declared when the flag was staged beta so that every one of
+    // them carries the Beta note rather than the ones somebody remembered:
+    // the guided start and what it builds (its looks and its stock photos),
+    // Create with AI on every list, images, functions and variables,
+    // marketing, building from the Assist chat, and the AI jobs page. The
+    // AI credit, allotment, privacy and business-profile pages describe what
+    // the released assistant shares, so they are not about this flag.
+    {
+      path: 'docs/ai/start-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/site-looks.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/stock-photos.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/create-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/create-images.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/logic-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/marketing-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/ai-jobs-and-activity.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/assist-builds.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The Assist build page quotes a shipping rule a merchant might ask for, with its dollar amounts, as an example of a message. It prices nothing the product sells.',
+    },
     // AGL-2923 put a full description of the generative add-on on the BILLING
     // page, where a buyer decides. It carried no disclosure and was declared
     // for no flag, so nothing here looked at it while every door it named
@@ -378,6 +446,12 @@ export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
   // less than they say, never more, so there is no rollout to disclose.
   release_crm_assist_whole_record:
     'Widens what CRM assistance sends the model provider without opening any surface. The legal pages (v10, October 5, 2026) and the docs describe the whole record, which is what the flag can send; with it off a record sends less than they say, never more.',
+  // AGL-4049. Phase 1 lands the vocabulary, the starter source seam and the
+  // picker zone, and nothing reads the flag yet, so there is no surface to
+  // document. The guide that names the starter picker lands with the picker,
+  // and moves this flag into FLAG_DOC_PAGES.
+  release_site_starters:
+    'Declares the starter picker ahead of its surface: nothing reads the flag yet and no page describes starters from the marketplace, so there is nothing to disclose until the picker ships with its guide.',
 }
 
 /**
@@ -424,9 +498,9 @@ export interface PublishedOnEvidence {
 export const PUBLISHED_ON_IN_PRODUCTION: Partial<
   Record<ReleaseFlagKey, PublishedOnEvidence>
 > = {
-  // release_assist and release_ai_generative left this list on 2026-10-09:
-  // their defaults are ON (Zach: AI and Assist are on by default now), so
-  // nothing here overrides an OFF default for them any more.
+  // release_assist and release_ai_generative left this list on 2026-10-09,
+  // when their defaults turned ON, so nothing here overrides an OFF default
+  // for them any more.
 }
 
 /** Every flag whose in-repo default (and seeded Remote Config value) is OFF. */

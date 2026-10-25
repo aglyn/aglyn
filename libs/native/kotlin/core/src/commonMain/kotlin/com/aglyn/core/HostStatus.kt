@@ -45,3 +45,11 @@ const val DEFAULT_TENANT_APEX = "aglyn.app"
 /** A site's own address on the platform domain, or null without a subdomain. */
 fun siteAddress(subdomain: String?, apex: String = DEFAULT_TENANT_APEX): String? =
   subdomain?.takeIf { it.isNotBlank() }?.let { "$it.$apex" }
+
+/**
+ * The address a list shows for a site: its custom domain (`cname`, "example.com") when it has one, else its address on
+ * the platform domain ("juniper-street.aglyn.app"): the one the live site answers on. Every site row (the Sites list,
+ * the switcher, the pickers) reads it from here.
+ */
+fun siteListAddress(cname: String?, subdomain: String?, apex: String = DEFAULT_TENANT_APEX): String? =
+  cname?.trim()?.takeIf { it.isNotEmpty() } ?: siteAddress(subdomain, apex)

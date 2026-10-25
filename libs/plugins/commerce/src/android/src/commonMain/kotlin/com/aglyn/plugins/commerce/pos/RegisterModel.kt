@@ -13,6 +13,8 @@ import com.aglyn.hardware.CardCollector
 import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.CardReaderSessionSource
 import com.aglyn.hardware.EscPosEncoder
+import com.aglyn.hardware.OfflineCardCollector
+import com.aglyn.hardware.OfflineCardOutcome
 import com.aglyn.hardware.Peripherals
 import com.aglyn.hardware.SystemPrintResult
 import com.aglyn.hardware.renderText
@@ -73,6 +75,8 @@ class RegisterModel(
   kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
   /** The receipt printers route. */
   printersApi: PosPrintersApi = OfflinePosPrinters,
+  /** The day report route (Day totals in the register sheet). */
+  val dayReportApi: PosDayReportApi = OfflinePosDayReport,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -149,8 +153,14 @@ class RegisterModel(
     private set
   var sheet by mutableStateOf<ItemSheet?>(null)
   var toast by mutableStateOf<Notice?>(null)
-  var online by mutableStateOf(true)
-    private set
+  private var onlineState by mutableStateOf(true)
+  var online: Boolean
+    get() = onlineState
+    private set(value) {
+      if (value == onlineState) return
+      onlineState = value
+      offlineCardReader?.registerConnectivityChanged(value)
+    }
   var charging by mutableStateOf(false)
     private set
 
@@ -194,6 +204,9 @@ class RegisterModel(
     // A device reader connected or dropped on the readers screen (or by the
     // SDK's own reconnect) joins or leaves the tender buttons at once.
     cardCollector?.let { collector -> scope.launch { collector.state.collect { syncDeviceReader(collector) } } }
+    // What the reader's SDK did with cards it stored, even while this register was closed (AGL-4039).
+    offlineCardReader?.onOfflineForward = { scope.launch { applyCardForwards() } }
+    applyCardForwards()
     scope.launch { loadRegisters() }
     scope.launch { loadStore() }
     scope.launch { loadCategories() }
@@ -291,6 +304,7 @@ class RegisterModel(
       loaded.readers.filter { it.online }.forEach { readers += SmartReaderService(it) }
       // The console answered: get the offline rules, then send whatever was rung while it did not.
       if (offline.kitIsStale) offline.refreshKit()
+      applyCardForwards(sync = false)
       offline.sync()
       cardCollector?.let { collector ->
         runCatching { collector.connect(hostId, terminal) }.onFailure { if (it is CancellationException) throw it }
@@ -463,6 +477,62 @@ class RegisterModel(
   fun attachCustomer(customer: PosCustomer?) = updateCart(cart.withCustomer(customer))
 
   fun clearCart() = updateCart(Cart.EMPTY)
+
+  /** This device's reader, when it can take a card with no connection (AGL-4039). */
+  val offlineCardReader: OfflineCardCollector? get() = cardCollector as? OfflineCardCollector
+
+  /** A card can be taken offline right now: the store allows it and the connected reader can store one. */
+  val offlineCardsReady: Boolean
+    get() = offline.kit?.card?.available == true && cardCollector?.state?.value is CardCollectorState.Connected &&
+      offlineCardReader?.offlineCardUnavailableReason == null
+
+  /** Why this basket cannot be paid by card offline, in the cashier's words; null when it can. */
+  fun offlineCardRefusal(sold: Cart): String? {
+    offline.cardRefusal(sold)?.let { return it }
+    val reader = offlineCardReader ?: return "Cards offline need a card reader on this device."
+    if (cardCollector?.state?.value !is CardCollectorState.Connected) return "Connect the card reader to take cards offline."
+    return reader.offlineCardUnavailableReason
+  }
+
+  sealed interface OfflineCardResult {
+    data class Rung(val rung: PosOfflineRung) : OfflineCardResult
+
+    data object Canceled : OfflineCardResult
+
+    data class Failed(val message: String) : OfflineCardResult
+  }
+
+  /**
+   * Takes the basket's total by card while offline: the reader stores the
+   * card on the device and the sale joins the offline queue. The basket
+   * clears only once both happened.
+   */
+  suspend fun takeOfflineCard(sold: Cart): OfflineCardResult {
+    offlineCardRefusal(sold)?.let { return OfflineCardResult.Failed(it) }
+    val reader = offlineCardReader ?: return OfflineCardResult.Failed("This basket cannot be paid by card offline.")
+    val request = offline.cardRequest(sold) ?: return OfflineCardResult.Failed("This basket cannot be paid by card offline.")
+    return when (val outcome = reader.collectOffline(request)) {
+      OfflineCardOutcome.Canceled -> OfflineCardResult.Canceled
+      is OfflineCardOutcome.Failed -> OfflineCardResult.Failed(outcome.message)
+      is OfflineCardOutcome.Taken -> {
+        val rung = offline.ringCardSale(sold, outcome.taken)
+          ?: return OfflineCardResult.Failed(
+            "The card was taken, but this register could not save the sale. Note it down: ${outcome.taken.label}, ${money(request.amountCents, currency)}.",
+          )
+        updateCart(Cart.EMPTY)
+        applyCardForwards()
+        OfflineCardResult.Rung(rung)
+      }
+    }
+  }
+
+  /** Applies the ledger of card forwards to the queue, then sends what became ready. */
+  fun applyCardForwards(sync: Boolean = true) {
+    val ledger = peripherals.offlineCardForwards ?: return
+    val applied = offline.applyForwards(ledger.all())
+    ledger.remove(applied)
+    if (sync && applied.isNotEmpty() && online) offline.syncInBackground()
+  }
 
   /** Takes the basket's total in cash while offline. The sale is on the device, and the basket cleared, only when this answers; null when it could not be kept. */
   fun takeOfflineCash(sold: Cart, tenderedCents: Long): PosOfflineRung? {

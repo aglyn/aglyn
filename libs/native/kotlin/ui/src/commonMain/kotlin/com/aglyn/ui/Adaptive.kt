@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.PermanentDrawerSheet
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -276,8 +277,8 @@ fun AglynListDetail(
         val crumbs = LocalPageCrumbs.current
         if (crumbs != null) {
           androidx.compose.runtime.DisposableEffect(crumbs) {
-            crumbs.claimed = true
-            onDispose { crumbs.claimed = false }
+            crumbs.claim()
+            onDispose { crumbs.release() }
           }
         }
         // One edge E per column. A list pane and a detail pane each pad their own content by 16 (DetailPanePadding), so
@@ -287,8 +288,13 @@ fun AglynListDetail(
         // Inside the shell's content area the outer edges are already brought in; only the edges at the divider are left.
         val body = LocalBodyInset.current != null
         Row(Modifier.fillMaxSize()) {
-          Box(Modifier.weight(0.4f).fillMaxHeight().padding(start = if (body) 0.dp else extra, end = extra)) {
-            CompositionLocalProvider(LocalContentInset provides DetailPanePadding) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
+          // The list column's content sits on E as before; a selectable row reaches back over the column's own inset (and
+          // the shell's) so its selection fills the column's whole width, edge to hairline (AGL-4012, ListColumnBleed).
+          val bleed = ListColumnBleed(start = if (body) LocalBodyInset.current ?: 0.dp else extra, end = extra)
+          Box(Modifier.weight(0.4f).fillMaxHeight().testTag("list-column").padding(start = if (body) 0.dp else extra, end = extra)) {
+            CompositionLocalProvider(LocalContentInset provides DetailPanePadding, LocalListColumn provides bleed) {
+              panes.SaveableStateProvider("list") { list(selected) { selected = it } }
+            }
           }
           VerticalDivider()
           Column(Modifier.weight(0.6f).fillMaxHeight().padding(start = if (body) extra else 0.dp)) {
@@ -353,6 +359,28 @@ fun contentInset(): Dp = when {
  * leading and trailing edges on. Null inside a pane that pads its own content, where a row keeps its own small inset.
  */
 val LocalContentInset = androidx.compose.runtime.compositionLocalOf<Dp?> { null }
+
+/** How far a list column's rows reach past its content on each side to meet the column's edges. */
+data class ListColumnBleed(val start: Dp, val end: Dp)
+
+/**
+ * Set inside a tablet or desktop list column beside its detail: its rows select with the square fill across the column's
+ * whole width, reaching past the column's inset by this much. Null elsewhere.
+ */
+val LocalListColumn = androidx.compose.runtime.compositionLocalOf<ListColumnBleed?> { null }
+
+/** Lays this out wider by [start] and [end], reaching over its parent's insets on both sides (a full-width row). */
+internal fun Modifier.bleed(start: Dp, end: Dp): Modifier = if (start <= 0.dp && end <= 0.dp) this else layout { measurable, constraints ->
+  val lead = start.roundToPx()
+  val trail = end.roundToPx()
+  val placeable = measurable.measure(
+    constraints.copy(
+      minWidth = constraints.minWidth + lead + trail,
+      maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + lead + trail else constraints.maxWidth,
+    ),
+  )
+  layout(placeable.width - lead - trail, placeable.height) { placeable.placeRelative(-lead, 0) }
+}
 
 /** What a detail pane pads its own content by (`space(2f)`); the two-pane column adds E minus this. */
 val DetailPanePadding: Dp = 16.dp

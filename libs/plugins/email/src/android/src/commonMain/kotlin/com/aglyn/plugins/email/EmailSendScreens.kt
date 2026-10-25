@@ -15,10 +15,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,6 +38,7 @@ import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
+import com.aglyn.ui.UpgradeNotice
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.CloseWhenGone
@@ -56,6 +55,7 @@ import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.LiveListPane
 import com.aglyn.ui.LiveQueryList
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
@@ -63,6 +63,7 @@ import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -274,6 +275,20 @@ private fun SendDialogs(context: NativePluginContext, api: CampaignSendApi, send
   var busy by remember(dialog) { mutableStateOf(false) }
   var error by remember(dialog) { mutableStateOf<String?>(null) }
   var reaching by remember(dialog) { mutableStateOf<Long?>(null) }
+  // The plan that stops this send, said in place of a count the button could only fail on (the console's notice).
+  var planLock by remember(dialog) { mutableStateOf<CampaignPlanLock?>(null) }
+  fun count(answer: DryRunCount?) {
+    planLock = answer?.planLock
+    reaching = answer?.reaching ?: 0
+  }
+  val upgrade: (@Composable () -> Unit)? = planLock?.let { lock ->
+    {
+      UpgradeNotice(lock.message, modifier = Modifier.testTag("send-plan-lock")) {
+        onClose()
+        context.navigate("core.billing.plans")
+      }
+    }
+  }
   fun run(done: String, block: suspend () -> Unit) {
     busy = true
     error = null
@@ -294,29 +309,31 @@ private fun SendDialogs(context: NativePluginContext, api: CampaignSendApi, send
   when (dialog) {
     null -> Unit
     SendDialog.SEND_NOW -> {
-      LaunchedEffect(send.id) { reaching = runCatching { api.sendNowCount(send.id) }.getOrNull() ?: 0 }
+      LaunchedEffect(send.id) { count(runCatching { api.sendNowCount(send.id) }.getOrNull()) }
       ActionDialog(
         title = "Send this email now?",
-        body = reaching?.let { "This sends it to ${people(it)} straight away${if (send.status == "scheduled") ", instead of at the time it is scheduled for." else "."} It cannot be taken back once it goes." } ?: "Counting who it reaches…",
+        body = if (planLock != null) null else reaching?.let { "This sends it to ${people(it)} straight away${if (send.status == "scheduled") ", instead of at the time it is scheduled for." else "."} It cannot be taken back once it goes." } ?: "Counting who it reaches…",
         icon = "send",
         confirmLabel = "Send now",
-        confirmEnabled = (reaching ?: 0) > 0,
+        confirmEnabled = (reaching ?: 0) > 0 && planLock == null,
         busy = busy,
-        error = error ?: if (reaching == 0L) "Nobody in this audience can be sent to right now." else null,
+        error = error ?: if (reaching == 0L && planLock == null) "Nobody in this audience can be sent to right now." else null,
+        content = upgrade,
         onDismiss = onClose,
         onConfirm = { run("It is on its way.") { api.sendNow(send.id) } },
       )
     }
     SendDialog.FOLLOW_UP -> {
-      LaunchedEffect(send.id) { reaching = runCatching { api.followUpCount(send.id) }.getOrNull() ?: 0 }
+      LaunchedEffect(send.id) { count(runCatching { api.followUpCount(send.id) }.getOrNull()) }
       ActionDialog(
         title = "Send this email to more people?",
-        body = reaching?.let { "This sends the same email to ${people(it)} more in the same audience. The ${grouped(send.display.progress.reached)} who already received it are not sent it again, and its report adds the new figures." } ?: "Counting who is new…",
+        body = if (planLock != null) null else reaching?.let { "This sends the same email to ${people(it)} more in the same audience. The ${grouped(send.display.progress.reached)} who already received it are not sent it again, and its report adds the new figures." } ?: "Counting who is new…",
         icon = "send",
         confirmLabel = "Send",
-        confirmEnabled = (reaching ?: 0) > 0,
+        confirmEnabled = (reaching ?: 0) > 0 && planLock == null,
         busy = busy,
-        error = error ?: if (reaching == 0L) "Everyone in the audience has it already." else null,
+        error = error ?: if (reaching == 0L && planLock == null) "Everyone in the audience has it already." else null,
+        content = upgrade,
         onDismiss = onClose,
         onConfirm = { run("It is on its way to the rest.") { api.followUp(send.id) } },
       )

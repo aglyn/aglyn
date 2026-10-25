@@ -20,6 +20,7 @@ import {
   referrerLabel,
   topDevice,
   topReferrer,
+  summarizeScreenTraffic,
 } from './screen-analytics-aggregate'
 
 it('folds multiple days of one screen into a single summed row', () => {
@@ -147,4 +148,27 @@ test('a referrer key reads as the address the collector stored it from', () => {
   expect(referrerLabel('news_ycombinator_com')).toBe('news.ycombinator.com')
   expect(referrerLabel('shop.example')).toBe('shop.example')
   expect(referrerLabel('')).toBe('')
+})
+
+// A page's "Page traffic" card (AGL-4011): the console card and the native page detail read these figures.
+it('summarizes a page: the dwell over the visits that reported one, desktop · mobile · tablet, the top five referrers', () => {
+  const day = (total: number, referrers: Record<string, number>, devices: Record<string, number>, dwellMs = 0, dwellSamples = 0) => ({
+    total,
+    referrers,
+    devices,
+    dwellMs,
+    dwellSamples,
+  })
+  expect(summarizeScreenTraffic([])).toEqual({ total: 0, avgDwellMs: null, deviceLine: '', topReferrers: [] })
+  const summary = summarizeScreenTraffic([
+    day(5, { google_com: 2, bing_com: 1 }, { mobile: 3, desktop: 2 }, 120_000, 4),
+    day(4, { google_com: 1, yelp_com: 3 }, { mobile: 1, tablet: 1 }),
+  ])
+  expect(summary.total).toBe(9)
+  // Two minutes over four samples: thirty seconds, never two minutes over nine views.
+  expect(summary.avgDwellMs).toBe(30_000)
+  expect(summary.deviceLine).toBe('desktop 29% · mobile 57% · tablet 14%')
+  expect(summary.topReferrers.map((entry) => entry.referrer)).toEqual(['google_com', 'yelp_com', 'bing_com'])
+  // A device the line does not name still counts toward each named one's share.
+  expect(summarizeScreenTraffic([day(4, {}, { desktop: 1, tv: 3 })]).deviceLine).toBe('desktop 25%')
 })

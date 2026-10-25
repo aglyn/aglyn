@@ -1,5 +1,11 @@
 package com.aglyn.screens
 
+import com.aglyn.contracts.Contracts
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -18,7 +24,12 @@ internal data class StayResource(
   val blocks: List<StayBlock>,
   val minNights: Double?,
   val depositPct: Double?,
+  /** How many identical units the resource holds (12 RV hookups): 1 to [Stays.maxUnits], and 1 for one that never set it. */
+  val units: Int = 1,
 )
+
+/** One night of a resource: how many of its units are still free. */
+internal data class StayNight(val dayMs: Long, val unitsLeft: Int, val units: Int)
 
 /** A reservation as an availability check reads it. */
 internal data class StayBooked(val checkInDayMs: Long, val checkOutDayMs: Long, val status: String, val createdAtMs: Long?)
@@ -41,7 +52,33 @@ internal object Stays {
   const val DAY_MS = 24L * 60 * 60 * 1000
 
   /** An unpaid `pending` reservation holds its dates only this long. */
-  const val PENDING_HOLD_MS = 30L * 60 * 1000
+  val PENDING_HOLD_MS: Long get() = Contracts.pendingReservationHoldMs.toLong()
+
+  /** The most identical units one resource can hold. */
+  val maxUnits: Int get() = Contracts.maxResourceUnits.toInt()
+
+  /** A night with this many units left, or fewer, reads as scarce. */
+  val fewUnitsLeft: Int get() = Contracts.fewUnitsLeft.toInt()
+
+  /** How many nights ahead the Reservations screen draws a several-unit resource's units, as the console's card does. */
+  const val LOOKAHEAD_NIGHTS = 14
+
+  /**
+   * The resource's stored `units` as the console reads it (`resourceUnits`): JavaScript's `Math.floor(Number(units))`, from 1
+   * to [maxUnits], and 1 for anything else (absent, zero, negative, not a number).
+   */
+  fun units(raw: Any?): Int {
+    val value = when (raw) {
+      null -> Double.NaN
+      is Boolean -> if (raw) 1.0 else 0.0
+      is Number -> raw.toDouble()
+      is String -> raw.trim().let { if (it.isEmpty()) 0.0 else it.toDoubleOrNull() ?: Double.NaN }
+      else -> Double.NaN
+    }
+    val whole = floor(value)
+    if (!whole.isFinite() || whole < 1) return 1
+    return min(maxUnits.toDouble(), whole).toInt()
+  }
 
   /** JavaScript's `Math.round`: halves go up. */
   private fun round(value: Double): Long = floor(value + 0.5).toLong()
@@ -116,15 +153,108 @@ internal object Stays {
     return created > 0 && nowMs - created < PENDING_HOLD_MS
   }
 
-  /** A range clashes with a live reservation, or with a block, when they overlap; back-to-back stays touch without clashing. */
+  /**
+   * How many units are taken on each night from [fromDayMs] up to (not including) [toDayMs], one entry per night, counting only
+   * the stays that still hold their dates. A stay takes a night it overlaps, so one that leaves the morning another arrives does not.
+   */
+  fun unitsTakenByNight(booked: List<StayBooked>, fromDayMs: Long, toDayMs: Long, nowMs: Long): List<Int> {
+    val live = booked.filter { holdsDates(it, nowMs) }
+    val taken = mutableListOf<Int>()
+    var night = fromDayMs
+    while (night < toDayMs) {
+      val nightEnd = min(night + DAY_MS, toDayMs)
+      taken += live.count { it.checkInDayMs < nightEnd && it.checkOutDayMs > night }
+      night += DAY_MS
+    }
+    return taken
+  }
+
+  /** Units left on each of [nights] nights from [fromDayMs]: the units less the stays holding that night, none on a blocked night. */
+  fun unitsLeftByNight(resource: StayResource, booked: List<StayBooked>, fromDayMs: Long, nights: Int, nowMs: Long): List<StayNight> {
+    val toDayMs = fromDayMs + max(0, nights) * DAY_MS
+    return unitsTakenByNight(booked, fromDayMs, toDayMs, nowMs).mapIndexed { index, taken ->
+      val night = fromDayMs + index * DAY_MS
+      val blocked = resource.blocks.any { night < it.toDayMs && night + DAY_MS > it.fromDayMs }
+      StayNight(night, if (blocked) 0 else max(0, resource.units - taken), resource.units)
+    }
+  }
+
+  /**
+   * A range is free when no block touches it and, on EVERY night of it, fewer live stays overlap that night than the resource has
+   * units; back-to-back stays touch without clashing. One unit (every resource that never set `units`) clashes with any live stay
+   * it overlaps, as a resource always has.
+   */
   fun isRangeAvailable(resource: StayResource, booked: List<StayBooked>, checkInDayMs: Long, checkOutDayMs: Long, nowMs: Long): Boolean {
     if (checkOutDayMs <= checkInDayMs) return false
-    for (stay in booked) {
-      if (!holdsDates(stay, nowMs)) continue
-      if (checkInDayMs < stay.checkOutDayMs && checkOutDayMs > stay.checkInDayMs) return false
-    }
     for (block in resource.blocks) if (checkInDayMs < block.toDayMs && checkOutDayMs > block.fromDayMs) return false
-    return true
+    if (resource.units == 1) {
+      for (stay in booked) {
+        if (!holdsDates(stay, nowMs)) continue
+        if (checkInDayMs < stay.checkOutDayMs && checkOutDayMs > stay.checkInDayMs) return false
+      }
+      return true
+    }
+    return unitsTakenByNight(booked, checkInDayMs, checkOutDayMs, nowMs).all { it < resource.units }
+  }
+
+  /** What the front desk is told when a walk-in's dates are not free, in the console's words. */
+  fun takenMessage(resource: StayResource): String =
+    if (resource.units > 1) "Every unit is taken on at least one of those nights" else "Those dates are taken"
+
+  /** Today on the device's calendar (or [zone]'s) as the UTC midnight stays are stored in (the console's `localTodayDayMs`). */
+  fun localToday(nowMs: Long, zone: String?): Long {
+    val (year, month, day) = localParts(nowMs, zone)
+    return dayMs("${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}") ?: 0
+  }
+
+  private val weekdayNames = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+  private val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+  /** A night as the console's Reservations card names it: `Mon, Oct 26` (US English, in UTC, as the card prints it). */
+  fun nightLabel(dayMs: Long): String {
+    val (month, day) = monthDay(dayMs).split('-').map { it.toInt() }
+    return "${weekdayNames[weekday(dayMs)]}, ${monthNames[month - 1]} $day"
+  }
+
+  /**
+   * The Reservations screen's look-ahead (`derive: "unitsAhead"`): for each resource with several units, its next
+   * [LOOKAHEAD_NIGHTS] nights from [todayDayMs] as `{ dayMs, label, unitsLeft, units, tone }`, keyed by resource id. [resources]
+   * and [stays] are query answers (`{ items }`) or plain lists. A resource with one unit is left out, as the console's card leaves it.
+   */
+  fun unitsAhead(resources: JsonElement?, stays: JsonElement?, todayDayMs: Long, nowMs: Long): JsonElement {
+    fun rows(value: JsonElement?): List<JsonElement> = ScreenValues.rows((value as? JsonObject)?.get("items") ?: value)
+    @Suppress("UNCHECKED_CAST")
+    fun data(row: JsonElement): Map<String, Any?>? = ScreenModel.plain(row) as? Map<String, Any?>
+    val booked = rows(stays).mapNotNull { stay ->
+      val id = ((stay as? JsonObject)?.get("resourceId") as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+      val held = data(stay)?.let { booked(it) } ?: return@mapNotNull null
+      id to held
+    }
+    val byResource = linkedMapOf<String, JsonElement>()
+    for (row in rows(resources)) {
+      val id = ((row as? JsonObject)?.get("\$id") as? JsonPrimitive)?.contentOrNull ?: continue
+      val stored = data(row) ?: continue
+      val units = units(stored["units"])
+      if (units <= 1) continue
+      val blocks = resource(mapOf("nightlyRateUsd" to 0.0, "blocks" to stored["blocks"]))?.blocks.orEmpty()
+      val unit = StayResource(0.0, null, emptyList(), blocks, null, null, units)
+      val nights = unitsLeftByNight(unit, booked.filter { it.first == id }.map { it.second }, todayDayMs, LOOKAHEAD_NIGHTS, nowMs)
+      byResource[id] = JsonArray(
+        nights.map { night ->
+          val tone = if (night.unitsLeft == 0) "error" else if (night.unitsLeft <= fewUnitsLeft) "warning" else "neutral"
+          JsonObject(
+            mapOf(
+              "dayMs" to JsonPrimitive(night.dayMs),
+              "label" to JsonPrimitive(nightLabel(night.dayMs)),
+              "unitsLeft" to JsonPrimitive(night.unitsLeft),
+              "units" to JsonPrimitive(night.units),
+              "tone" to JsonPrimitive(tone),
+            ),
+          )
+        },
+      )
+    }
+    return JsonObject(byResource)
   }
 
   private fun number(value: Any?): Double? = (value as? Number)?.toDouble()
@@ -142,6 +272,7 @@ internal object Stays {
       blocks = maps("blocks").mapNotNull { b -> StayBlock(number(b["fromDayMs"])?.toLong() ?: return@mapNotNull null, number(b["toDayMs"])?.toLong() ?: return@mapNotNull null) },
       minNights = number(data?.get("minNights")),
       depositPct = number(data?.get("depositPct")),
+      units = units(data?.get("units")),
     )
   }
 

@@ -98,6 +98,22 @@ final class FormsTests: XCTestCase {
     XCTAssertEqual(newDocumentID().count, 20)
   }
 
+  /// The Besigner opens the version the console's Design in the Besigner opens, and a form's first version is seeded
+  /// on the server from the form's own design, never an empty canvas (AGL-4002).
+  func testOpensTheConsolesVersionAndSeedsAFirstOneFromTheForm() {
+    let published = FormRow(FirestoreDocument(id: "contact", data: ["versionId": "v-live"]))
+    let unpublished = FormRow(FirestoreDocument(id: "quote", data: [:]))
+    XCTAssertEqual(FormsAPI.existingVersion(published, preferred: "v-old", newest: "v-new"), "v-old")
+    XCTAssertEqual(FormsAPI.existingVersion(published, newest: "v-new"), "v-live")
+    XCTAssertEqual(FormsAPI.existingVersion(unpublished, newest: "v-new"), "v-new")
+    XCTAssertNil(FormsAPI.existingVersion(unpublished))
+    let api = FormsAPI(api: ConsoleAPIClient(origin: "https://x.test", getIDToken: { _ in "t" }), writer: NoFirestoreWrites(), hostID: "h")
+    XCTAssertEqual(
+      api.firstVersionBody(formID: "quote", versionID: "v1"),
+      ["hostId": "h", "kind": "form", "parentId": "quote", "id": "v1", "seedFromParent": true])
+    XCTAssertNil(api.firstVersionBody(formID: "quote", versionID: "v1")["data"])
+  }
+
   func testRetiringKeepsArchivedAtAndRetiredInStep() {
     let api = FormsAPI(api: ConsoleAPIClient(origin: "https://x.test", getIDToken: { _ in "t" }), writer: NoFirestoreWrites(), hostID: "h")
     let retire = api.retireFields(true, now: Date(timeIntervalSince1970: 2))

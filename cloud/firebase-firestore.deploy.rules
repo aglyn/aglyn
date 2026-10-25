@@ -924,6 +924,23 @@ allow read, write: if false;
 
 
 
+
+
+match /hardwareOrders/{orderId} {
+allow read: if isStaff() ||
+(isOrgWideMember() && orgNotSuspended() &&
+orgMember().role in ['owner', 'admin', 'editor'] &&
+memberGrants('managePos'));
+allow write: if false;
+}
+
+
+
+
+
+
+
+
 match /postPurchaseHostSettings/{hostId} {
 allow read, write: if false;
 }
@@ -981,6 +998,24 @@ match /loyaltyConnections/{hostId} {
 allow read, write: if false;
 }
 match /loyaltySync/{rowId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+match /waivers/{waiverId} {
+allow read, write: if false;
+match /versions/{version} {
+allow read, write: if false;
+}
+}
+match /waiverSignatures/{signatureId} {
 allow read, write: if false;
 }
 
@@ -2883,6 +2918,23 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
+match /posHardwareSales/{orderId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 function hostMemberRole(hostId) {
 return get(/databases/$(database)/documents/hosts/$(hostId))
 .data.get('memberRoles', {}).get(request.auth.uid, null);
@@ -3883,6 +3935,13 @@ match /{subcollection}/{document=**} {
 
 
 
+
+
+
+
+
+
+
 allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -3890,7 +3949,8 @@ subcollection != 'salesChannels' &&
 subcollection != 'reviewTokens' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
-'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
+'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults',
+'checkIns', 'checkInDays'])));
 
 
 
@@ -4038,7 +4098,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens']) &&
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays']) &&
 
 
 
@@ -4208,7 +4268,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens'])));
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays'])));
 
 
 
@@ -4266,7 +4326,8 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
+'checkIns', 'checkInDays'])));
 }
 
 
@@ -4551,6 +4612,8 @@ match /users/{userId} {
 
 
 
+
+
 function prefsBefore() {
 return resource == null ? {} : resource.data;
 }
@@ -4597,6 +4660,7 @@ t.get('useWorkspaceBrand', true) is bool);
 function accountPrefsValid() {
 return pinnedOrgsValid() &&
 prefListWithin('pinnedHosts', 100) &&
+prefListWithin('tabBars', 100) &&
 prefListWithin('recentOrgs', 8) &&
 prefListWithin('starred', 50) &&
 prefListWithin('recents', 30) &&

@@ -21,11 +21,10 @@
         { "title": "Solutions", "body": null, "meta": "menu" },
         { "title": "Pricing", "body": null, "meta": "link" },
         { "title": "Docs", "body": null, "meta": "link" },
-        { "title": "Blog", "body": null, "meta": "link" },
-        { "title": "Beta", "body": null, "meta": "pill badge next to the logo" }
+        { "title": "Blog", "body": null, "meta": "link" }
       ],
       "image": null,
-      "notes": "Shared NavBar component instance (637:1219), byte-identical on all three frames."
+      "notes": "Shared NavBar component instance (637:1219), byte-identical on all three frames. Synced to the live nav on 2026-10-25 (AGL-4052): the 'Beta' pill beside the logo is gone from aglyn.com."
     },
     {
       "kind": "hero",
@@ -128,7 +127,7 @@
         }
       ],
       "image": {
-        "describe": "Overlay editor mockup, 768×580. Breadcrumb 'Marketing / Overlays' with a 'New overlay' action. Top of the previewed site shows an announcement bar reading 'Aglyn is in early access — join the beta  →'. Below it a modal popup preview: 'Join the newsletter' / 'Product updates and early-access news.' / email field 'you@email.com' / 'Subscribe' button. Right rail is the overlay's settings: name 'Welcome popup' with a 'Live' status chip, then TYPE 'Popup', TRIGGER 'After 5 seconds', FREQUENCY 'Once per session', SCHEDULE 'Always on' — each a dropdown.",
+        "describe": "Overlay editor mockup, 768×580. Breadcrumb 'Marketing / Overlays' with a 'New overlay' action. Top of the previewed site shows an announcement bar reading 'Free to start — build your website today  →' (the frame's 'Aglyn is in early access — join the beta' bar is retired with the early-access copy). Below it a modal popup preview: 'Join the newsletter' / 'Product updates and early-access news.' / email field 'you@email.com' / 'Subscribe' button. Right rail is the overlay's settings: name 'Welcome popup' with a 'Live' status chip, then TYPE 'Popup', TRIGGER 'After 5 seconds', FREQUENCY 'Once per session', SCHEDULE 'Always on' — each a dropdown.",
         "figmaNodeId": "637:1308"
       },
       "notes": "Two-column: 440px copy column left with three icon+text bullets (each bullet body wraps to 2 lines here, so bullets are 81px tall vs 55px on Analytics), 768px mockup right. Section background is grey (bg/default #f8f9fa)."
@@ -181,24 +180,24 @@
     },
     {
       "kind": "early-access",
-      "eyebrow": "Now in early access",
-      "heading": "Be among the first to build on Aglyn.",
+      "eyebrow": "Free to start",
+      "heading": "Start free. Add capacity when your website needs it.",
       "subheading": null,
       "body": [
-        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+        "The free plan includes one website, up to five pages, forms, the media library and a monthly allowance of Aglyn AI credits. Paid plans add your own domain, a store, the CRM and more capacity. No credit card to start."
       ],
       "actions": [
-        { "label": "Join early access", "variant": "contained" },
-        { "label": "See what’s included", "variant": "outlined" }
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "outlined" }
       ],
       "items": [
         { "title": "1", "body": "platform, not a stack", "meta": "stat" },
-        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "All", "body": "products built in", "meta": "stat" },
         { "title": "0", "body": "plugins to wire up", "meta": "stat" },
         { "title": "1-click", "body": "to publish", "meta": "stat" }
       ],
       "image": null,
-      "notes": "Identical to the Analytics and Product overview versions. Centred; Badge/Pill eyebrow; 4-up stat row with 1px × 56px dividers. Grey background (bg/default #f8f9fa)."
+      "notes": "Identical to the Analytics and Product overview versions. Centred; Badge/Pill eyebrow; 4-up stat row with 1px × 56px dividers. Grey background (bg/default #f8f9fa). Synced to the live page on 2026-10-25 (AGL-4052): the early-access wording (the 'Now in early access' chip, 'Aglyn is pre-release…' and 'Join early access') came off aglyn.com on 2026-10-05, when the band became 'Free to start'. The chip is now POURED from `eyebrow` rather than kept from the skeleton, the buttons are Start free and See pricing, and the second stat reads 'All products built in', which states no count. The Figma frame still draws the old band; this file follows the live page."
     },
     {
       "kind": "cta",
@@ -222,21 +221,21 @@
       "heading": null,
       "subheading": "Open source. Self-hostable. Yours to run.",
       "body": [
-        "© 2026 Aglyn LLC. All rights reserved."
+        "© 2026 Aglyn LLC. All rights reserved. Aglyn™ and Besigner™ are trademarks of Aglyn LLC."
       ],
       "actions": [],
       "items": [
-        { "title": "Product", "body": "Besigner · Console · Commerce · Forms · Media · Workflows · Marketing", "meta": "column" },
+        { "title": "Product", "body": "Besigner · Console · Commerce · POS · Forms · CRM · Media · Workflows · Plugins · Analytics · Marketing · Datasets · Aglyn AI", "meta": "column" },
         { "title": "Solutions", "body": "Agencies · Startups · Creators · Developers · Enterprise · Small business", "meta": "column" },
         { "title": "Use cases", "body": "Online stores · Portfolios · Blogs · SaaS websites · Documentation · Membership sites", "meta": "column" },
-        { "title": "Resources", "body": "Docs · Guides · Blog · Changelog · Newsroom", "meta": "column" },
+        { "title": "Resources", "body": "AI website builder · Free website builder · How to create a website · Docs · Guides · Blog · Videos · Changelog · Newsroom · Pricing calculator · Multi-site cost sheet · Multi-brand site audit · Comparisons", "meta": "column" },
         { "title": "Company", "body": "About · Pricing · Careers · Press · Contact", "meta": "column" },
+        { "title": "Documentation", "body": "Building sites · Content & data · Commerce & bookings · Marketing & automation · AI · API & developers", "meta": "column" },
         { "title": "Legal / utility bar", "body": "Privacy · Terms · Legal · Status", "meta": "row" },
-        { "title": "Social", "body": "X · LinkedIn · GitHub · Facebook · YouTube · Instagram", "meta": "row" },
-        { "title": "Beta notice", "body": "In early-access beta — features may change.", "meta": "badge 'Beta' + note" }
+        { "title": "Social", "body": "X · LinkedIn · GitHub · Facebook · YouTube · Instagram · TikTok", "meta": "row" }
       ],
       "image": null,
-      "notes": "Shared Footer component instance (637:1439), byte-identical on all three frames. Dark background."
+      "notes": "Shared Footer component instance (637:1439), byte-identical on all three frames. Dark background. Synced to the live footer on 2026-10-25 (AGL-4052): the 'Beta notice' item ('In early-access beta — features may change.') is gone from aglyn.com, the Product column lists the whole roster, Resources carries the guides and tools, a Documentation column was added and Social includes TikTok. The footer is the layout's, so the applier never pours it."
     }
   ],
   "claimsToVerify": [

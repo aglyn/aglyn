@@ -249,6 +249,22 @@ describe('nextVersion — prerelease series', () => {
   })
 })
 
+describe('leaving the beta series (AGL-4052)', () => {
+  it('accepts --set 1.0.0 from the beta series, and the bump policy then acts on the base', () => {
+    // The GA cut is `release:prepare --write --set 1.0.0`: forward of every
+    // beta, and refused once it has been cut.
+    assert.doesNotThrow(() => assertForward('1.0.0-beta.282', '1.0.0'))
+    assert.throws(() => assertForward('1.0.0', '1.0.0'), /not ahead of/)
+    // After it there is no series left to increment: the base moves.
+    assert.equal(formatVersion(nextVersion('1.0.0', 'none')), '1.0.1')
+    assert.equal(formatVersion(nextVersion('1.0.0', 'patch')), '1.0.1')
+    assert.equal(formatVersion(nextVersion('1.0.0', 'minor')), '1.1.0')
+    assert.equal(formatVersion(nextVersion('1.0.0', 'major')), '2.0.0')
+    // And it never drifts back into a prerelease on its own.
+    assert.equal(parseVersion(formatVersion(nextVersion('1.0.0', 'minor'))).prerelease, null)
+  })
+})
+
 describe('nextVersion — release series', () => {
   it('applies ordinary semver', () => {
     assert.equal(formatVersion(nextVersion('1.2.3', 'major')), '2.0.0')
@@ -537,6 +553,26 @@ describe('renderRelease', () => {
       line,
       '- **tenant:** the apex is configuration ([AGL-2022](https://linear.app/aglyn/issue/AGL-2022))',
     )
+  })
+
+  it('drops a CI directive, and the citation it trailed', () => {
+    const skipped = renderRelease({
+      version: '1.0.0-beta.2',
+      date: '2026-10-20',
+      summary: summarizeCommits([
+        commit(
+          'feat(console): pin sites the way workspaces are pinned (AGL-4005) [skip ci]',
+        ),
+        commit('fix(tools): a quiet change [CI Skip]'),
+      ]),
+    })
+    assert.ok(!/skip/i.test(skipped))
+    assert.ok(
+      skipped.includes(
+        '- **console:** pin sites the way workspaces are pinned ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005))',
+      ),
+    )
+    assert.ok(skipped.includes('- **tools:** a quiet change'))
   })
 
   it('sections the user-facing work and collapses the quiet types', () => {

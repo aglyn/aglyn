@@ -25,18 +25,21 @@ import {
   posOfflineSaleTotals,
   posOfflineSoldAt,
   posOfflineTotalsAddUp,
+  POS_OFFLINE_CARD_INTENT_KIND,
   POS_OFFLINE_LATE_SYNC_MS,
   POS_OFFLINE_SYNC_BATCH_MAX,
   sanitizePosOfflineSale,
   type PosOfflineFlag,
   type PosOfflineKit,
+  type PosOfflineKitCard,
   type PosOfflineOrderStamp,
   type PosOfflineRefusal,
+  type PosOfflineSale,
   type PosOfflineSaleOutcome,
   type PosOfflineStockConflict,
 } from '../model/commerce-pos-offline'
 import { ORDER_PAID_EVENT } from '../model/order-events'
-import { posMaxDiscountPct } from '../plugin-config'
+import { posMaxDiscountPct, posOfflineCardSettings } from '../plugin-config'
 import { alertLowStockCrossing } from './low-stock'
 import { notifyOrderBuyer } from './order-notifications'
 import { raiseOrderEvent } from './order-events'
@@ -51,6 +54,15 @@ import {
   type PosOpsStaff,
 } from './pos-ops-gate'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { POS_CURRENCY, posCardApplicationFeeCents, posTerminalAvailable } from './pos-stripe'
+import {
+  capturePosOfflineCardIntent,
+  ensurePosOfflineCardConfiguration,
+  posMerchantAccount,
+  posTerminalLocationId,
+  retrievePosOfflineCardIntent,
+  type PosOfflineCardIntent,
+} from './pos-terminal'
 import { decrementVariantStock, type StockDecrementOutcome } from './reserve-stock'
 
 /*==========================================
@@ -59,7 +71,10 @@ import { decrementVariantStock, type StockDecrementOutcome } from './reserve-sto
  *   GET   ?hostId=   the offline kit: the store's in-person tax rate, the
  *                    discount ceiling, the shift rule, the registers and their
  *                    open shifts, and the receipt's head and foot
- *   POST  {hostId, sales[]}   records each cash sale rung offline, once
+ *   POST  {hostId, sales[]}   records each sale rung offline, once: cash,
+ *                    and a card the Aglyn POS app's own reader stored and
+ *                    Stripe has since been sent (AGL-4039), which this
+ *                    captures with the platform fee
  *
  * The register's gate, unchanged (`authorizePosOps`): admin or editor on the
  * site, `managePos`, and the plan's `pos` entitlement — re-read at sync, so a
@@ -101,6 +116,8 @@ export interface PosOfflineSyncRecord {
   stockLines: number[]
   stockDone: boolean
   notified: boolean
+  /** A card taken offline that was declined or never charged: no receipt and no "paid" for it. */
+  unpaid?: boolean
 }
 
 export interface PosOfflineAfterSale {
@@ -128,6 +145,37 @@ export interface PosOfflineSyncDeps extends PosOpsDeps {
   }): Promise<StockDecrementOutcome>
   /** What a completed sale tells the rest of the workspace. Never throws. */
   afterSale(input: PosOfflineAfterSale): Promise<void>
+  /** Cards taken offline on the app's own reader (AGL-4039); absent, the server takes none. */
+  card?: PosOfflineCardDeps
+}
+
+/** The Stripe side of a card taken offline on the app's own reader. */
+export interface PosOfflineCardDeps {
+  /** Whether Terminal readers are offered at all, and the site's Location once one exists. */
+  terminal(hostId: string): Promise<{ available: boolean; locationId: string | null }>
+  /** The merchant's connected account, when it can take card payments. */
+  merchantAccount(hostId: string, org: Record<string, any> | null): Promise<string | null>
+  /** Turns Stripe's offline mode on for the site's readers; false when Stripe refused. */
+  enableOffline(hostId: string): Promise<boolean>
+  retrieve(paymentIntentId: string): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }>
+  capture(
+    paymentIntentId: string,
+    applicationFeeCents: number,
+    idempotencyKey: string,
+  ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }>
+}
+
+export function defaultPosOfflineCardDeps(): PosOfflineCardDeps {
+  return {
+    terminal: async (hostId) => ({
+      available: posTerminalAvailable(),
+      locationId: posTerminalAvailable() ? await posTerminalLocationId(hostId) : null,
+    }),
+    merchantAccount: posMerchantAccount,
+    enableOffline: ensurePosOfflineCardConfiguration,
+    retrieve: retrievePosOfflineCardIntent,
+    capture: capturePosOfflineCardIntent,
+  }
 }
 
 export function defaultPosOfflineSyncDeps(): PosOfflineSyncDeps {
@@ -190,6 +238,7 @@ export function defaultPosOfflineSyncDeps(): PosOfflineSyncDeps {
         raiseOrderEvent(ORDER_PAID_EVENT, { hostId: input.hostId, orderId: input.orderId, key: 'paid' }),
       )
     },
+    card: defaultPosOfflineCardDeps(),
   }
 }
 
@@ -258,6 +307,7 @@ export async function buildPosOfflineKit(
     staff.hostRef.collection('settings').doc('store').get(),
   ])
   const tax = posInPersonTax(taxSettings)
+  const card = await buildPosOfflineKitCard(deps, staff, config)
   return {
     v: 1,
     hostId: staff.hostId,
@@ -276,6 +326,7 @@ export async function buildPosOfflineKit(
         ...(register.data['locationId'] ? { locationId: String(register.data['locationId']) } : {}),
         openShiftId: posOpsCleanId(register.data['openShiftId']) || null,
       })),
+    ...(card ? { card } : {}),
     receipt: {
       name: String(host.get('displayName') ?? '') || 'Receipt',
       ...(typeof host.get('logoUrl') === 'string' && host.get('logoUrl') ? { logo: String(host.get('logoUrl')) } : {}),
@@ -284,6 +335,119 @@ export async function buildPosOfflineKit(
       ...(staff.settings.returnPolicy ? { returnPolicy: staff.settings.returnPolicy } : {}),
     },
   }
+}
+
+/**
+ * What the app needs to take a card offline on its own reader (AGL-4039), or
+ * why it cannot. Absent where this server takes no offline cards.
+ */
+async function buildPosOfflineKitCard(
+  deps: PosOfflineSyncDeps,
+  staff: PosOpsStaff,
+  config: Record<string, unknown>,
+): Promise<PosOfflineKitCard | undefined> {
+  if (!deps.card) return undefined
+  const settings = posOfflineCardSettings(config)
+  const base = {
+    destination: '',
+    currency: POS_CURRENCY,
+    maxSaleCents: settings.maxSaleCents,
+    maxDeviceDailyCents: settings.maxDeviceDailyCents,
+  }
+  const off = (unavailableReason: string): PosOfflineKitCard => ({ ...base, available: false, unavailableReason })
+  if (!settings.enabled) return off('Card sales offline are not turned on in this store’s point of sale settings.')
+  const terminal = await deps.card.terminal(staff.hostId)
+  if (!terminal.available) return off('Card readers are not set up for this store yet.')
+  if (!terminal.locationId) return off('Connect a card reader once while online, then cards keep working offline.')
+  const destination = await deps.card.merchantAccount(staff.hostId, staff.org)
+  if (!destination) return off('Finish connecting Stripe to take cards.')
+  if (!(await deps.card.enableOffline(staff.hostId))) {
+    return off('Card sales offline could not be turned on for this store’s readers yet. Try again later.')
+  }
+  return { ...base, destination, available: true }
+}
+
+/** What became of a card taken offline, as the sync settles it. */
+type OfflineCardSettlement =
+  | {
+      kind: 'captured'
+      intentId: string
+      feeCents: number
+      takeShareCents: number
+      livemode: boolean
+      brand?: string
+      last4?: string
+    }
+  | { kind: 'unpaid'; flag: 'card-declined' | 'card-not-charged'; intentId?: string; message: string; brand?: string; last4?: string }
+  | { kind: 'wait'; outcome: PosOfflineSaleOutcome }
+
+/**
+ * Reads the card of a sale rung offline and settles it: captured with the
+ * platform fee (the card tender's share of the take, by the one tender rule,
+ * plus Stripe's processing cost, exactly as an online reader payment), or
+ * unpaid when the bank declined it or Stripe never took it. Anything Stripe
+ * has not finished yet waits on the register for the next sync.
+ */
+async function settleOfflineCard(
+  context: SyncContext,
+  sale: PosOfflineSale,
+  takeFee: number,
+): Promise<OfflineCardSettlement> {
+  const { deps, staff } = context
+  const { saleKey } = sale
+  const card = sale.card!
+  const wait = (error: string): OfflineCardSettlement => ({ kind: 'wait', outcome: refused(saleKey, 'failed', error, true) })
+  if (card.forward === 'stored') return wait('The card is still on this register. It syncs once Stripe has it.')
+  if (!deps.card) return wait('Card sales taken offline cannot sync to this store yet.')
+  const details = { ...(card.brand ? { brand: card.brand } : {}), ...(card.last4 ? { last4: card.last4 } : {}) }
+  if (!card.paymentIntentId) {
+    return {
+      kind: 'unpaid',
+      flag: card.forward === 'declined' ? 'card-declined' : 'card-not-charged',
+      message: card.declineMessage || 'Stripe did not take the card.',
+      ...details,
+    }
+  }
+  const read = await deps.card.retrieve(card.paymentIntentId)
+  if ('error' in read) return wait(`The card payment could not be checked yet: ${read.error}`)
+  let intent = read.intent
+  if (
+    intent.metadata['kind'] !== POS_OFFLINE_CARD_INTENT_KIND ||
+    intent.metadata['saleKey'] !== saleKey ||
+    intent.metadata['hostId'] !== staff.hostId ||
+    intent.amount !== sale.totals.totalCents ||
+    intent.currency !== POS_CURRENCY
+  ) {
+    return { kind: 'wait', outcome: refused(saleKey, 'invalid', 'The card payment does not belong to this sale.', false) }
+  }
+  const found = { ...details, ...(intent.brand ? { brand: intent.brand } : {}), ...(intent.last4 ? { last4: intent.last4 } : {}) }
+  const takeShareCents = CommerceModel.posTenderTakeCents('card_present', takeFee)
+  if (intent.status === 'requires_capture') {
+    const feeCents = posCardApplicationFeeCents({ takeShareCents, chargeCents: intent.amount })
+    const captured = await deps.card.capture(intent.id, feeCents, `pos-offline-capture:${staff.hostId}:${saleKey}`)
+    if ('error' in captured) return wait(`The card payment could not be captured yet: ${captured.error}`)
+    intent = captured.intent
+  }
+  if (intent.status === 'succeeded') {
+    return {
+      kind: 'captured',
+      intentId: intent.id,
+      feeCents: intent.applicationFeeCents,
+      takeShareCents,
+      livemode: intent.livemode,
+      ...found,
+    }
+  }
+  if (intent.status === 'requires_payment_method' || intent.status === 'canceled') {
+    return {
+      kind: 'unpaid',
+      flag: 'card-declined',
+      intentId: intent.id,
+      message: intent.failureMessage || card.declineMessage || 'The card was declined.',
+      ...found,
+    }
+  }
+  return wait('The card payment is still processing. It syncs when Stripe finishes.')
 }
 
 const refused = (
@@ -390,6 +554,12 @@ async function finishSale(
       })
     }
     if (!stockDone) return current
+  }
+  if (!current.notified && current.unpaid) {
+    // A card that was never paid gets no receipt and no "paid": the order
+    // waits, flagged, for the merchant to collect it another way.
+    current = { ...current, notified: true, status: 'settled' }
+    await recordRef.update({ notified: true, status: 'settled' })
   }
   if (!current.notified) {
     const email = String(order.customerEmail ?? '')
@@ -528,7 +698,8 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
     flags.add('tax-differs')
   }
   if (sale.discountPct > posMaxDiscountPct(context.config)) flags.add('discount-over-limit')
-  if (sale.cashTenderedCents < totals.totalCents) flags.add('cash-short')
+  const byCard = sale.tender === 'card'
+  if (!byCard && sale.cashTenderedCents < totals.totalCents) flags.add('cash-short')
 
   // Where it was rung.
   const register = context.registers.get(sale.registerId)
@@ -564,9 +735,20 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
     else flags.add('cashier-unverified')
   }
 
-  const takeFee = takeFeeCents(deps, staff, lineItems, totals)
+  // The offline register takes cash only, and cash carries no platform fee
+  // (AGL-4036): the plan's take is worked out and then settled by the one
+  // predicate every tender answers to, so a sale synced from the queue is
+  // charged exactly what the same sale rung online is.
+  const planTake = takeFeeCents(deps, staff, lineItems, totals)
+  // A card taken offline settles with Stripe BEFORE the order is written: a
+  // capture that fails leaves the sale on the register for the next sync,
+  // and a repeat after a lost answer finds the first capture (AGL-4039).
+  const settled = byCard ? await settleOfflineCard(context, sale, planTake) : null
+  if (settled?.kind === 'wait') return settled.outcome
+  if (settled?.kind === 'unpaid') flags.add(settled.flag)
+  const takeFee = byCard ? (settled?.kind === 'captured' ? settled.takeShareCents : 0) : CommerceModel.posTenderTakeCents('cash', planTake)
   totals = { ...totals, feeCents: takeFee }
-  const changeCents = Math.max(0, sale.cashTenderedCents - totals.totalCents)
+  const changeCents = byCard ? 0 : Math.max(0, sale.cashTenderedCents - totals.totalCents)
   const flagList = [...flags]
   const stamp: PosOfflineOrderStamp = {
     saleKey: sale.saleKey,
@@ -591,11 +773,17 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
     const counter = await transaction.get(counterRef)
     const number = Number(counter.get('next') ?? 1)
     transaction.set(counterRef, { next: number + 1 }, { merge: true })
-    const paidDetail =
-      `Cash — received ${money(sale.cashTenderedCents)}, change ${money(changeCents)}. ` +
-      'Rung while the register was offline.'
+    const cardName = settled
+      ? [settled.brand ? settled.brand.toUpperCase() : 'Card', settled.last4 ? `•••• ${settled.last4}` : ''].filter(Boolean).join(' ')
+      : ''
+    const paidDetail = !settled
+      ? `Cash — received ${money(sale.cashTenderedCents)}, change ${money(changeCents)}. ` +
+        'Rung while the register was offline.'
+      : settled.kind === 'captured'
+        ? `${cardName} — ${money(totals.totalCents)}, taken while the register was offline and charged when it reconnected.`
+        : `${cardName} — ${money(totals.totalCents)} taken while the register was offline was not paid: ${settled.message}`.slice(0, 500)
     const timeline: CommerceModel.OrderTimelineEvent[] = [
-      { atMs: soldAt.atMs, event: 'paid', detail: paidDetail },
+      { atMs: soldAt.atMs, event: settled?.kind === 'unpaid' ? 'payment-failed' : 'paid', detail: paidDetail },
       {
         atMs: now,
         event: 'offline-synced',
@@ -608,7 +796,7 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       orderRef,
       CommerceModel.withOrderListFields(orderRef.id, {
         number,
-        status: 'paid',
+        status: settled?.kind === 'unpaid' ? 'pending' : 'paid',
         channel: 'pos',
         registerId: sale.registerId,
         cashierId,
@@ -624,8 +812,25 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
           : totals.taxCents > 0
             ? 'manual'
             : 'none',
-        ...(takeFee > 0 ? { feeCollection: 'invoice' as const } : {}),
-        payments: [
+        ...(takeFee > 0 ? { feeCollection: settled ? ('payout' as const) : ('invoice' as const) } : {}),
+        payments: settled
+          ? [
+              {
+                id: 'pay_card_offline',
+                method: 'card_present',
+                amountCents: totals.totalCents,
+                status: settled.kind === 'captured' ? 'succeeded' : 'failed',
+                atMs: soldAt.atMs,
+                ...(settled.kind === 'captured'
+                  ? { settledAtMs: now, takeFeeCents: settled.takeShareCents, feeCents: settled.feeCents, livemode: settled.livemode }
+                  : { takeFeeCents: 0, feeCents: 0, failureMessage: settled.message.slice(0, 300) }),
+                ...(settled.intentId ? { paymentIntentId: settled.intentId } : {}),
+                ...(settled.brand ? { cardBrand: settled.brand } : {}),
+                ...(settled.last4 ? { last4: settled.last4 } : {}),
+                cashierId,
+              } satisfies CommerceModel.OrderPayment,
+            ]
+          : [
           {
             id: 'pay_cash',
             method: 'cash',
@@ -661,10 +866,12 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       stockLines: [],
       stockDone: false,
       notified: false,
+      ...(settled?.kind === 'unpaid' ? { unpaid: true } : {}),
     }
     transaction.create(recordRef, record)
     // The take accrues with the order, in the same transaction (AGL-2111).
-    if (takeFee > 0 && feeRef) {
+    // A card's share was netted from its payout by the capture instead.
+    if (takeFee > 0 && feeRef && !settled) {
       transaction.set(
         feeRef,
         { month: feeMonth, feeCents: FieldValue.increment(takeFee), orders: FieldValue.increment(1) },

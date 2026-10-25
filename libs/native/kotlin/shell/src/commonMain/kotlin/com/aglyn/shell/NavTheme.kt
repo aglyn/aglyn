@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.sheetEntrance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,7 +30,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +62,7 @@ import com.aglyn.ui.SettingsDivider
 import com.aglyn.ui.SettingsGroup
 import com.aglyn.ui.SettingsRow
 import com.aglyn.ui.SettingsTrailing
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.colorOfHex
 import com.aglyn.ui.contrastRatio
 import com.aglyn.ui.deriveAccent
@@ -136,7 +137,9 @@ internal fun ThemeSettingsScreen(services: ShellServices, workspace: WorkspaceSt
       SettingsRow("Density", description = "Compact fits more rows on screen")
       Choice(Contracts.appDensities, theme.density, ::densityLabel, "theme-density") { save(theme.copy(density = it)) }
       SettingsDivider()
-      SettingsRow("Sidebar", description = "Tinted wears the workspace's color")
+      // A workspace's color no longer washes the sidebar (AGL-4000), so the row no longer says it does; Apple's row has no
+      // description either.
+      SettingsRow("Sidebar")
       Choice(Contracts.appSidebarStyles, theme.sidebarStyle, ::sidebarLabel, "theme-sidebar") { save(theme.copy(sidebarStyle = it)) }
       SettingsDivider()
       if (appSetsTextSize) {
@@ -266,7 +269,7 @@ private fun CustomAccentDialog(initial: String?, onDone: (String?) -> Unit) {
   val color = colorOfHex(text.trim())
   AlertDialog(
     onDismissRequest = { onDone(null) },
-    modifier = Modifier.widthIn(max = 420.dp).testTag("accent-custom-dialog"),
+    modifier = Modifier.widthIn(max = 420.dp).sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("accent-custom-dialog"),
     title = { Text("Custom accent") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
