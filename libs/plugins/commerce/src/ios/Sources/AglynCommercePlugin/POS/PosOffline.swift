@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynHardware
 import Foundation
 import Observation
 
@@ -10,10 +11,12 @@ import Observation
  * THE REGISTER, OFFLINE (AGL-3625, AGL-3651, AGL-3652): the console register's
  * offline mode, on the device. The Kotlin app's `PosOffline.kt`, line for line.
  *
- * WHAT SELLS OFFLINE IS CASH, AND ONLY CASH (the console's rule, unchanged).
- * A card needs the reader and Stripe, a gift card's balance and a room charge's
- * stay can only be checked by the server, and a promotion code's cap is counted
- * there. The cashier's own discount, bounded by the site's ceiling, does sell.
+ * WHAT SELLS OFFLINE IS CASH, AND A CARD ON THIS DEVICE'S OWN READER (AGL-4039).
+ * Stripe's SDK stores the card on the device and sends it once a connection
+ * returns; the sale waits here until it has, then syncs and the server
+ * captures it. A gift card's balance and a room charge's stay can only be
+ * checked by the server, and a promotion code's cap is counted there. The
+ * cashier's own discount, bounded by the site's ceiling, does sell.
  *
  * WHAT IT KEEPS, for ONE signed-in member at ONE site: the KIT (the server's
  * offline rules: the store's in-person tax, the discount ceiling, the shift rule,
@@ -49,6 +52,10 @@ struct PosOfflineQueued: Codable, Equatable, Identifiable {
 
   var id: String { sale.saleKey }
   var totalCents: Int { Int(sale.totals.totalCents ?? 0) }
+  /// Paid by a card on this device's reader (AGL-4039).
+  var isCard: Bool { sale.tender == .card }
+  /// A card still on the device: Stripe has not been sent it yet, so it cannot sync.
+  var cardOnDevice: Bool { isCard && sale.card?.forward == .stored }
 }
 
 /// A sale the server answered for with something to check.
@@ -58,12 +65,18 @@ struct PosOfflineSyncNotice: Equatable, Identifiable {
   let number: Int?
   let flags: [PosOfflineFlag]
   let stockConflicts: [PosOfflineStockConflict]
+  /// The card and the money of a sale paid by card, for a declined card's own notice.
+  var card: PosOfflineSaleCard? = nil
+  var totalCents: Int = 0
+  var soldAtMs: Double = 0
   var id: String { saleKey }
+  /// A card taken offline that the bank declined, or that Stripe never took: the order is unpaid.
+  var cardUnpaid: Bool { flags.contains(.cardDeclined) || flags.contains(.cardNotCharged) }
 
   /// What to check, in the words the console shows.
   var lines: [String] {
     stockConflicts.map { "\(Int($0.shortUnits)) of \(Int($0.requested))× \($0.name) not in stock" }
-      + flags.filter { $0 != .stockShort }.map { ContractValues.shared.posOfflineFlagLabels[$0.rawValue] ?? $0.rawValue }
+      + flags.filter { $0 != .stockShort && !(cardUnpaid && ($0 == .cardDeclined || $0 == .cardNotCharged)) }.map { ContractValues.shared.posOfflineFlagLabels[$0.rawValue] ?? $0.rawValue }
   }
 }
 
@@ -73,6 +86,8 @@ struct PosOfflineRung: Equatable {
   var changeCents: Int { Int(sale.changeCents) }
   var totalCents: Int { Int(sale.totals.totalCents ?? 0) }
   var hasCustomerEmail: Bool { !(sale.customer?.email ?? "").isEmpty }
+  /// The card, for a sale paid by card on this device's reader.
+  var card: PosOfflineSaleCard? { sale.tender == .card ? sale.card : nil }
 }
 
 /// The two offline calls, as the signed-in member.
@@ -211,6 +226,12 @@ final class PosOfflineModel {
   var waiting: [PosOfflineQueued] { queue.filter { $0.state == .queued } }
   var refused: [PosOfflineQueued] { queue.filter { $0.state == .refused } }
   var waitingCents: Int { waiting.reduce(0) { $0 + $1.totalCents } }
+  /// Cards waiting to be charged, and their total (AGL-4039).
+  var waitingCards: [PosOfflineQueued] { waiting.filter(\.isCard) }
+  var waitingCardCents: Int { waitingCards.reduce(0) { $0 + $1.totalCents } }
+  var waitingCashCents: Int { waitingCents - waitingCardCents }
+  /// Every card this member holds on the device that Stripe has not been sent: what the stored ceiling counts.
+  var storedCardCents: Int { queue.filter(\.cardOnDevice).reduce(0) { $0 + $1.totalCents } }
 
   /// The shift open on the register as last seen: the live one, else the kit's.
   private func lastKnownShift() -> String? {
@@ -248,6 +269,25 @@ final class PosOfflineModel {
     return Double(cart.discountPct) > kit.maxDiscountPct
   }
 
+  /// Why this basket cannot be paid by card offline, in the cashier's words; nil when it can (AGL-4039).
+  func cardRefusal(for cart: Cart) -> String? {
+    if let reason = unavailableReason { return reason }
+    guard let totals = totals(for: cart) else { return "This basket cannot be rung offline." }
+    if discountOverLimit(cart) { return "This register may discount up to \(Int(kit?.maxDiscountPct ?? 0))%." }
+    return posOfflineCardRefusal(card: kit?.card, totalCents: totals.totalCents ?? 0, storedCents: Double(storedCardCents))
+  }
+
+  /// The card to take for this basket, under a key minted for the sale; nil when it cannot be taken.
+  func cardRequest(for cart: Cart) -> OfflineCardRequest? {
+    guard cardRefusal(for: cart) == nil, let kit, let card = kit.card, let register = registerID(),
+      let totals = totals(for: cart)
+    else { return nil }
+    let key = mintKey()
+    return OfflineCardRequest(
+      saleKey: key, amountCents: Int(totals.totalCents ?? 0), currency: card.currency, destination: card.destination,
+      metadata: posOfflineCardIntentMetadata(saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register))
+  }
+
   /// Reads the site's offline rules while online.
   func refreshKit() async {
     do {
@@ -262,11 +302,30 @@ final class PosOfflineModel {
 
   /// Queues one cash sale; nil (and nothing taken) when it cannot be kept.
   func ringCashSale(cart: Cart, tenderedCents: Int) -> PosOfflineRung? {
-    guard !ringing, let kit, kit.available, !cart.isEmpty, let register = registerID(), !uid.isEmpty,
-      let totals = totals(for: cart), !discountOverLimit(cart)
-    else { return nil }
+    guard let totals = totals(for: cart) else { return nil }
     let total = totals.totalCents ?? 0
     guard Double(tenderedCents) >= total else { return nil }
+    return ring(
+      cart: cart, saleKey: mintKey(), cashTenderedCents: Double(tenderedCents),
+      changeCents: Double(posOfflineChangeCents(total: total, tendered: Double(tenderedCents))), card: nil)
+  }
+
+  /// Queues one sale whose card this device's reader took (AGL-4039). The
+  /// card is already on the device (or with Stripe), so this keeps the sale
+  /// even past the ceilings: the money was taken.
+  func ringCardSale(cart: Cart, taken: OfflineCardTaken) -> PosOfflineRung? {
+    let card = PosOfflineSaleCard(
+      brand: taken.brand, forward: taken.paymentIntentID == nil ? .stored : .forwarded, last4: taken.last4,
+      paymentIntentId: taken.paymentIntentID)
+    return ring(cart: cart, saleKey: taken.saleKey, cashTenderedCents: 0, changeCents: 0, card: card)
+  }
+
+  private func ring(
+    cart: Cart, saleKey: String, cashTenderedCents: Double, changeCents: Double, card: PosOfflineSaleCard?
+  ) -> PosOfflineRung? {
+    guard !ringing, let kit, kit.available, !cart.isEmpty, let register = registerID(), !uid.isEmpty,
+      let totals = totals(for: cart), card != nil || !discountOverLimit(cart)
+    else { return nil }
     ringing = true
     defer { ringing = false }
     let sold = now()
@@ -284,11 +343,10 @@ final class PosOfflineModel {
       return made.email == nil && made.name == nil && made.id == nil ? nil : made
     }
     let sale = PosOfflineSale(
-      cashierAssertion: assertion(), cashTenderedCents: Double(tenderedCents),
-      changeCents: Double(posOfflineChangeCents(total: total, tendered: Double(tenderedCents))), customer: customer,
-      discountPct: Double(cart.discountPct), hostId: kit.hostId, lines: lines, locationId: locationID(), orgId: kit.orgId,
-      registerId: register, saleKey: mintKey(), shiftId: lastKnownShift(), signedInUid: uid, soldAtMs: Double(sold),
-      totals: totals, v: 1)
+      card: card, cashierAssertion: assertion(), cashTenderedCents: cashTenderedCents, changeCents: changeCents,
+      customer: customer, discountPct: Double(cart.discountPct), hostId: kit.hostId, lines: lines,
+      locationId: locationID(), orgId: kit.orgId, registerId: register, saleKey: saleKey, shiftId: lastKnownShift(),
+      signedInUid: uid, soldAtMs: Double(sold), tender: card == nil ? nil : .card, totals: totals, v: 1)
     // The sale is real only once the device holds it: a write that fails answers nil, before any cash is taken.
     guard store.put(PosOfflineQueued(sale: sale, state: .queued, queuedAtMs: sold, attempts: 0)) else { return nil }
     queue = store.queue()
@@ -296,6 +354,39 @@ final class PosOfflineModel {
   }
 
   func dismissNotices() { notices = [] }
+
+  /// Dismisses one notice (a declined card's, which stands on its own).
+  func dismissNotice(_ saleKey: String) { notices.removeAll { $0.saleKey == saleKey } }
+
+  /// Applies what the reader's SDK said about cards it sent to Stripe, and
+  /// answers the sale keys it applied (the ledger then forgets them). A
+  /// forward for a sale another member or site queued is left for them.
+  @discardableResult
+  func applyForwards(_ forwards: [OfflineCardForward]) -> Set<String> {
+    var applied: Set<String> = []
+    for forward in forwards {
+      guard var entry = store.queue().first(where: { $0.id == forward.saleKey }), entry.isCard,
+        var card = entry.sale.card
+      else { continue }
+      switch forward.status {
+      case .authorized: card.forward = .forwarded
+      case .declined: card.forward = .declined
+      case .failed: card.forward = .failed
+      }
+      if let id = forward.paymentIntentID { card.paymentIntentId = id }
+      if let message = forward.message { card.declineMessage = String(message.prefix(300)) }
+      if card.brand == nil { card.brand = forward.brand }
+      if card.last4 == nil { card.last4 = forward.last4 }
+      var sale = entry.sale
+      sale.card = card
+      entry = PosOfflineQueued(
+        sale: sale, state: entry.state, queuedAtMs: entry.queuedAtMs, attempts: entry.attempts, error: entry.error,
+        reason: entry.reason)
+      if store.put(entry) { applied.insert(forward.saleKey) }
+    }
+    if !applied.isEmpty { queue = store.queue() }
+    return applied
+  }
 
   /// Removes a refused sale the server will never take, after the cashier confirms.
   func discard(_ saleKey: String) {
@@ -306,7 +397,8 @@ final class PosOfflineModel {
   /// Sends everything waiting, in batches, one sync at a time.
   func syncNow() async {
     guard !syncInFlight else { return }
-    let mine = store.queue().filter { $0.state == .queued && $0.sale.signedInUid == uid }
+    // A card still on the device waits for its forward: the server reads Stripe, and Stripe has not got it yet.
+    let mine = store.queue().filter { $0.state == .queued && $0.sale.signedInUid == uid && !$0.cardOnDevice }
     guard !mine.isEmpty else { return }
     syncInFlight = true
     syncing = true
@@ -345,7 +437,8 @@ final class PosOfflineModel {
             flagged.append(
               PosOfflineSyncNotice(
                 saleKey: result.saleKey, orderID: result.orderId ?? result.saleKey, number: result.number.map { Int($0) },
-                flags: flags, stockConflicts: result.stockConflicts ?? []))
+                flags: flags, stockConflicts: result.stockConflicts ?? [], card: entry.isCard ? entry.sale.card : nil,
+                totalCents: entry.totalCents, soldAtMs: entry.sale.soldAtMs))
           }
           continue
         }

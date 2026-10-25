@@ -86,6 +86,8 @@ public enum CardReaderSetupCode: String, Sendable {
   case unavailable = "terminal-unavailable"
   case merchantNotReady = "merchant-not-ready"
   case locationRequired = "location-required"
+  /// The console could not be reached: the device is offline (AGL-4039).
+  case unreachable = "unreachable"
 }
 
 public struct CardReaderSetupError: Error, LocalizedError, Equatable {

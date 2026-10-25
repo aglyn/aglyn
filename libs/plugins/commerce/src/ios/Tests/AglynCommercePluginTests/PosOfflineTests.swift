@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynHardware
 import Foundation
 import XCTest
 
@@ -376,5 +377,110 @@ final class ConsolePosOfflineAPITests: XCTestCase {
     let results = try await ConsolePosOfflineAPI(api: client(transport), hostID: "h1").sync([])
     XCTAssertTrue(results.isEmpty)
     XCTAssertEqual((transport.sent["sales"] as? [Any])?.count, 0)
+  }
+}
+
+/// A card taken offline on this device's reader (AGL-4039): the store's
+/// ceilings, the sale it queues, and the forward that lets it sync.
+@MainActor
+final class PosOfflineCardTests: XCTestCase {
+  private let key = "offcard0000000000000000001"
+
+  private func cardKit(available: Bool = true, maxSale: Double = 25_000, maxStored: Double = 250_000) -> PosOfflineKit {
+    makeKit {
+      $0.card = PosOfflineKitCard(
+        available: available, currency: "usd", destination: "acct_merchant", maxSaleCents: maxSale,
+        maxStoredCents: maxStored, unavailableReason: available ? nil : "Card sales offline are off.")
+    }
+  }
+
+  private func ready(_ api: FakeOfflineAPI, keys: [String]) async -> PosOfflineModel {
+    let offline = model(api, defaults: suite(), keys: keys)
+    await offline.refreshKit()
+    return offline
+  }
+
+  func testACardIsTakenWithinTheStoreCeilingsAndRefusedPastThem() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit()
+    let offline = await ready(api, keys: [key])
+    XCTAssertNil(offline.cardRefusal(for: cart()))
+    api.kitAnswer = cardKit(maxSale: 500)
+    await offline.refreshKit()
+    XCTAssertEqual(
+      offline.cardRefusal(for: cart()),
+      "Offline, a card sale can be up to $5.00. Take cash, or charge it when you are back online.")
+    api.kitAnswer = makeKit()
+    await offline.refreshKit()
+    XCTAssertEqual(offline.cardRefusal(for: cart()), "Card sales offline need the register to connect once first.")
+  }
+
+  func testTheRequestNamesItsSaleAndTheStoreDestination() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit()
+    let offline = await ready(api, keys: [key])
+    let request = offline.cardRequest(for: cart())
+    XCTAssertEqual(request?.saleKey, key)
+    XCTAssertEqual(request?.destination, "acct_merchant")
+    XCTAssertEqual(request?.amountCents, 1296)
+    XCTAssertEqual(request?.metadata["kind"], "pos-offline")
+    XCTAssertEqual(request?.metadata["registerId"], "r1")
+    XCTAssertNil(request?.problem)
+  }
+
+  func testACardOnTheDeviceWaitsForItsForwardBeforeItSyncs() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit()
+    let offline = await ready(api, keys: [])
+    let rung = offline.ringCardSale(
+      cart: cart(), taken: OfflineCardTaken(saleKey: key, paymentIntentID: nil, brand: "visa", last4: "4242"))
+    XCTAssertEqual(rung?.card?.forward, .stored)
+    XCTAssertEqual(rung?.sale.cashTenderedCents, 0)
+    XCTAssertEqual(offline.storedCardCents, 1296)
+    XCTAssertEqual(offline.waitingCardCents, 1296)
+    await offline.syncNow()
+    XCTAssertTrue(api.batchesSent.isEmpty, "Stripe has not got the card yet")
+    // Stripe's forward arrives: the card is authorized and the sale syncs.
+    let applied = offline.applyForwards([
+      OfflineCardForward(saleKey: key, paymentIntentID: "pi_3Q0abcdEFGH12345", status: .authorized),
+      OfflineCardForward(saleKey: "someone-elses-sale-0000", paymentIntentID: "pi_x", status: .authorized),
+    ])
+    XCTAssertEqual(applied, [key])
+    XCTAssertEqual(offline.queue.first?.sale.card?.paymentIntentId, "pi_3Q0abcdEFGH12345")
+    XCTAssertEqual(offline.storedCardCents, 0)
+    await offline.syncNow()
+    XCTAssertEqual(api.batchesSent, [[key]])
+    XCTAssertTrue(offline.queue.isEmpty)
+  }
+
+  func testADeclineAfterTheSaleIsToldOnItsOwnWithTheCard() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit()
+    api.answers[key] = PosOfflineSaleOutcome(
+      flags: [.cardDeclined], number: 1042, orderId: key, saleKey: key, status: .recorded)
+    let offline = await ready(api, keys: [])
+    _ = offline.ringCardSale(cart: cart(), taken: OfflineCardTaken(saleKey: key, paymentIntentID: nil, brand: "visa", last4: "4242"))
+    offline.applyForwards([
+      OfflineCardForward(saleKey: key, paymentIntentID: "pi_3Q0abcdEFGH12345", status: .declined, message: "Your card was declined.")
+    ])
+    XCTAssertEqual(offline.queue.first?.sale.card?.forward, .declined)
+    await offline.syncNow()
+    let notice = offline.notices.first
+    XCTAssertEqual(notice?.cardUnpaid, true)
+    XCTAssertEqual(notice?.card?.last4, "4242")
+    XCTAssertEqual(notice?.totalCents, 1296)
+    XCTAssertEqual(notice?.lines, [], "the declined card is said once, in its own notice")
+    offline.dismissNotice(key)
+    XCTAssertTrue(offline.notices.isEmpty)
+  }
+
+  func testCardsOnTheDeviceCountAgainstTheStoredCeiling() async {
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit(maxStored: 2000)
+    let offline = await ready(api, keys: [])
+    _ = offline.ringCardSale(cart: cart(), taken: OfflineCardTaken(saleKey: key, paymentIntentID: nil))
+    XCTAssertEqual(
+      offline.cardRefusal(for: cart()),
+      "This register already holds $12.96 in cards to charge, and offline it can hold up to $20.00. Take cash, or wait for the connection.")
   }
 }
