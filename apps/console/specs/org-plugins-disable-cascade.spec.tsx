@@ -204,6 +204,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'review-platforms',
       'music',
       'help-desks',
+      'waivers',
       'ad-conversions',
       'domains',
       'commerce',
@@ -278,6 +279,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'review-platforms',
         'music',
         'help-desks',
+        'waivers',
         'ad-conversions',
         'domains',
       ])

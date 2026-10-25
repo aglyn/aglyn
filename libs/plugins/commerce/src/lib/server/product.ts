@@ -125,7 +125,9 @@ export const productHandler: PluginApiHandler = async (req, res) => {
       .get()
     const docSnapshot = snapshot.docs[0]
     const raw = docSnapshot?.data() as any
-    if (!raw || raw.deletedAt || raw.status !== 'active') {
+    // A product sold in person only (AGL-4060) has no page online: the same
+    // 404 as a draft, so its address says nothing about it.
+    if (!CommerceModel.productListedOnline(raw)) {
       return res.status(404).json({ error: 'Unknown product' })
     }
     const product = CommerceModel.liftLegacyProduct(raw)

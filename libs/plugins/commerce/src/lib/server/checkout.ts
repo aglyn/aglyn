@@ -156,6 +156,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!product || product.deletedAt) {
       return res.status(404).json({ error: 'Unknown product' })
     }
+    // Sold in person only (AGL-4060): bought at the register, the kiosk or
+    // the POS apps, never through the site's Buy now.
+    if (!CommerceModel.productSellsOnline(product)) {
+      return res.status(404).json({ error: 'Unknown product' })
+    }
     // Variant pricing (AGL-292): the buyer's selection maps to a variant;
     // absent variantId keeps the legacy default-variant behavior.
     const lifted = CommerceModel.liftLegacyProduct(product)

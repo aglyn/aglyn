@@ -128,7 +128,9 @@ async function storeCounts(
   let cursor: string | null = null
   let offers = 0
   do {
-    const page = await catalog.page({ hostId, cursor, limit: 200 })
+    // The whole shelf, the products sold in person only included (AGL-4060):
+    // the warehouse counts what the store holds, wherever it sells.
+    const page = await catalog.page({ hostId, cursor, limit: 200, inPersonOnly: true })
     for (const offer of page.offers) {
       offers += 1
       const sku = String(offer.sku ?? '').trim()
@@ -566,7 +568,7 @@ export function createEngine(deps: EngineDeps) {
           throw new ProviderError('invalid', `${name} products are made in ${name}. Choose Import or Off.`)
         }
         do {
-          const page = await catalog.page({ hostId: connection.hostId, cursor, limit: 100 })
+          const page = await catalog.page({ hostId: connection.hostId, cursor, limit: 100, inPersonOnly: true })
           const offers = page.offers.filter((offer) => String(offer.sku ?? '').trim())
           const unlinked = []
           for (const offer of offers) {

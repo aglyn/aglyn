@@ -166,7 +166,9 @@ export async function readStoreReviews(
     )
     for (const snapshot of snapshots) {
       const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null
-      if (!data || data['deletedAt'] || data['status'] !== 'active') continue
+      // A product sold in person only (AGL-4060) is named and linked nowhere
+      // online, as a draft is not.
+      if (!CommerceModel.productListedOnline(data)) continue
       products.set(snapshot.id, { name: String(data['name'] ?? ''), slug: String(data['slug'] ?? '') })
     }
   }

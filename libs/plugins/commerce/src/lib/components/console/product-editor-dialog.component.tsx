@@ -82,7 +82,7 @@ import {
   PaidMediaProtection,
 } from './paid-media'
 import { ProductCheckInFields } from './product-check-in-fields.component'
-import { ProductRegisterFields } from './product-register-fields.component'
+import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
 
 /**
  * What each picker in this dialog will offer.
@@ -1901,15 +1901,22 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           <>
             <ProductRegisterFields
               posQuickKey={Boolean(current.posQuickKey)}
+              sellOnline={CommerceModel.productSellsOnline(current)}
               modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
               update={update}
             />
             <ProductCheckInFields checkIn={current.checkIn} variants={checkInVariants} update={update} />
           </>
         ) : pos.ready ? (
-          <EntitlementUpsell planLabel={pos.planLabel} upgradeHref={pos.upgradeHref}>
-            {'Register quick keys, modifier groups (sizes, add-ons) and check-in at the window come with the point of sale.'}
-          </EntitlementUpsell>
+          <>
+            <EntitlementUpsell planLabel={pos.planLabel} upgradeHref={pos.upgradeHref}>
+              {'Register quick keys, modifier groups (sizes, add-ons), check-in at the window and selling a product in person only come with the point of sale.'}
+            </EntitlementUpsell>
+            {/* A product already set to in person only (AGL-4060) can always be put back online. */}
+            {!CommerceModel.productSellsOnline(current) ? (
+              <ProductSellOnlineField sellOnline={false} update={update} />
+            ) : null}
+          </>
         ) : null}
         {current.type === 'digital' ? (
           <ProductDigitalFields

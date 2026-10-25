@@ -1001,6 +1001,24 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Waivers (AGL-4042): the waivers a merchant wrote, the words of each
+      // version, and every signature taken — online, at the window or on
+      // paper. Server-written AND server-read: the waivers plugin's routes
+      // serve what the console shows, to a site's admins and editors whose
+      // `collectWaivers` or `manageWaivers` permission is on. A signature
+      // holds a signer's date of birth, address and phone, a minor's name and
+      // a drawn signature, so no client reads one, the owner and staff
+      // included; one that could write could forge a signature or void one.
+      match /waivers/{waiverId} {
+        allow read, write: if false;
+        match /versions/{version} {
+          allow read, write: if false;
+        }
+      }
+      match /waiverSignatures/{signatureId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
