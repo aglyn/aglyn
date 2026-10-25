@@ -917,6 +917,23 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // POS hardware orders (AGL-4038): card readers a workspace bought from
+      // the platform's hardware shop — the lines and what was paid, the
+      // address it ships to, Stripe's ids and the tracking. Written ONLY by
+      // the commerce plugin's webhook and staff route on the Admin SDK: a
+      // client that could write one could mark an order shipped, point its
+      // tracking anywhere, or forge one that was never paid. Readable by
+      // staff and by an org-wide member who may run the register (owner,
+      // admin or editor without a `managePos` override of false); the
+      // console itself reads them through the plugin's route.
+      match /hardwareOrders/{orderId} {
+        allow read: if isStaff() ||
+          (isOrgWideMember() && orgNotSuspended() &&
+           orgMember().role in ['owner', 'admin', 'editor'] &&
+           memberGrants('managePos'));
+        allow write: if false;
+      }
+
       // Post-purchase (AGL-3635): one site's AfterShip, Route and Narvar
       // switches with the credentials its merchant connected, sealed under
       // POST_PURCHASE_TOKEN_KEY, and what each service was told about an
