@@ -54,6 +54,7 @@ import {
   purchaseDomain,
   purchaseTarget,
   registrarShouldAutoRenew,
+  RENEW_INSTEAD,
   siteServingDomain,
   startTransferIn,
   transferInQuote,
@@ -355,6 +356,9 @@ export async function transferInQuoteRoute(request: Request): Promise<Response> 
   }
   // A name held or lapsed here — by any workspace — is no transfer: an
   // expired one is still its workspace's to renew back.
+  if (existing && existing.status === 'expired' && existing.orgId === gate.actor.orgId) {
+    return domainsError(409, RENEW_INSTEAD, { code: 'renew-instead' })
+  }
   if (existing && (HOLDING_STATUSES.includes(existing.status) || existing.status === 'expired')) {
     return domainsError(409, ALREADY_HERE, { code: 'already-here' })
   }
@@ -746,11 +750,22 @@ function contactAnswer(registration: DomainRegistrationDoc): Response {
  * by hand before it moved here). Either way its address records are kept.
  */
 async function siteServes(registration: DomainRegistrationDoc): Promise<boolean> {
+  // Throws on a failed read, and the DNS routes answer that as retryable:
+  // records whose protection cannot be decided are never shown editable.
   if (registration.hostId) {
-    const host = await db().collection('hosts').doc(registration.hostId).get().catch(() => null)
-    if (String(host?.get('cname') ?? '').trim().toLowerCase() === registration.domain) return true
+    const host = await db().collection('hosts').doc(registration.hostId).get()
+    if (String(host.get('cname') ?? '').trim().toLowerCase() === registration.domain) return true
   }
   return Boolean(await siteServingDomain(registration.orgId, registration.domain))
+}
+
+/** {@link siteServes}, or a retryable refusal when it cannot be read. */
+async function siteServesOrRefuse(registration: DomainRegistrationDoc): Promise<boolean | Response> {
+  try {
+    return await siteServes(registration)
+  } catch {
+    return domainsError(503, DNS_UNAVAILABLE, { code: 'site-unreadable' })
+  }
 }
 
 const DNS_UNAVAILABLE = 'The registrar’s DNS didn’t answer just now. Try again in a minute.'
@@ -775,7 +790,8 @@ export async function dnsRoute(request: Request): Promise<Response> {
   const driver = platformEffects().driver
   const nameservers = await driver.nameservers(registration.domain)
   if (nameservers.ok === 'no') return domainsError(503, DNS_UNAVAILABLE, { code: 'registrar-unavailable' })
-  const siteConnected = await siteServes(registration)
+  const siteConnected = await siteServesOrRefuse(registration)
+  if (siteConnected instanceof Response) return siteConnected
   if (!nameservers.value.ours) {
     return domainsJson({ ours: false, nameservers: nameservers.value.nameservers, siteConnected, records: [] })
   }
@@ -819,7 +835,8 @@ async function dnsWriteRoute(request: Request): Promise<Response> {
       code: 'not-our-nameservers',
     })
   }
-  const siteConnected = await siteServes(registration)
+  const siteConnected = await siteServesOrRefuse(registration)
+  if (siteConnected instanceof Response) return siteConnected
 
   let existing = null as null | { id: string; type: string; name: string; creator: string | null }
   if (action !== 'create') {

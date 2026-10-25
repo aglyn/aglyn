@@ -359,6 +359,27 @@ describe('DNS records', () => {
     expect(mockActivity).toEqual(['Added a DNS record', 'Changed a DNS record', 'Deleted a DNS record'])
   })
 
+  it('fails closed when it cannot tell whether a site serves the name', async () => {
+    await seed(registration())
+    const store = mockStore.current
+    const original = store.collection.bind(store)
+    store.collection = ((name: string) =>
+      name === 'hosts'
+        ? {
+            doc: () => ({ get: async () => { throw new Error('unavailable') } }),
+            where: () => ({ limit: () => ({ get: async () => { throw new Error('unavailable') } }) }),
+          }
+        : original(name)) as typeof store.collection
+    const write = await dnsRoute(
+      request('dns', { orgId: 'org-1', domain: 'testbakery.com', action: 'delete', recordId: 'rec_a' }),
+    )
+    expect(write.status).toBe(503)
+    expect(await write.json()).toMatchObject({ code: 'site-unreadable' })
+    expect(driver.deleteDnsRecord).not.toHaveBeenCalled()
+    const read = await dnsRoute(request('dns', undefined, '?orgId=org-1&domain=testbakery.com'))
+    expect(read.status).toBe(503)
+  })
+
   it('names a malformed record’s fields', async () => {
     await seed(registration())
     const answer = await dnsRoute(
@@ -381,6 +402,14 @@ describe('the transfer-in price', () => {
     driver.info.mockResolvedValue(yes({ owned: true, registeredAtMs: 1, expiresAtMs: 2, autoRenew: true }))
     const owned = await transferInQuoteRoute(request('transfer-in-quote', undefined, '?orgId=org-1&domain=fresh.com'))
     expect(await owned.json()).toMatchObject({ code: 'already-here' })
+  })
+
+  it('tells a workspace to renew its own expired name', async () => {
+    await seed(registration({ status: 'expired' }))
+    const answer = await transferInQuoteRoute(request('transfer-in-quote', undefined, '?orgId=org-1&domain=testbakery.com'))
+    const body = await answer.json()
+    expect(body).toMatchObject({ code: 'renew-instead' })
+    expect(body.error).toMatch(/Renew now/)
   })
 
   it('says a name already in the workspace is already here', async () => {
