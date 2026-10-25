@@ -372,6 +372,30 @@ describe('plugin-declared permissions resolve and can be overridden (AGL-2474)',
     expect(resolved.permissions.editHosts).toBe(true)
   })
 
+  it('a CUSTOM ROLE grants it to an org-wide viewer (AGL-4047)', async () => {
+    // One catalog: the key is a catalog key now, so the custom role layer
+    // reaches it the way it reaches `hosts.create`.
+    roles.set('org-1:cashier', { name: 'Cashier', permissions: { runtimeTestPerm: true } })
+    members.set('org-1:till', { role: 'viewer', allHosts: true, roleId: 'cashier' })
+    const resolved = await resolveOrgPermissions('till', { orgId: 'org-1' })
+    expect(resolved.permissions.runtimeTestPerm).toBe(true)
+    // The custom role widened nothing else.
+    expect(resolved.permissions.manageMembers).toBe(false)
+  })
+
+  it('a CUSTOM ROLE revokes it from an org-wide admin, and an override still wins (AGL-4047)', async () => {
+    roles.set('org-1:no-till', { name: 'No register', permissions: { runtimeTestPerm: false } })
+    members.set('org-1:boss', { role: 'admin', allHosts: true, roleId: 'no-till' })
+    expect((await resolveOrgPermissions('boss', { orgId: 'org-1' })).permissions.runtimeTestPerm).toBe(false)
+    members.set('org-1:boss', {
+      role: 'admin',
+      allHosts: true,
+      roleId: 'no-till',
+      permissions: { runtimeTestPerm: true },
+    })
+    expect((await resolveOrgPermissions('boss', { orgId: 'org-1' })).permissions.runtimeTestPerm).toBe(true)
+  })
+
   it('a denied member has no plugin grant at all', async () => {
     const resolved = await resolveOrgPermissions('stranger', {
       orgId: 'org-1',

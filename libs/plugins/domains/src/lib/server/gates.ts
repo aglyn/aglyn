@@ -39,10 +39,16 @@ import { PURCHASE_REFUSAL_COPY, type PurchaseRefusal } from './purchase-refusals
  * member and the money:
  *
  *   401  no bearer token, or one the verifier refused
- *   403  unverified address (impersonation exempt), not the site's admin, or
- *        a member without `billing.manage` — a domain is a charge
+ *   403  unverified address (impersonation exempt), not the site's admin (or,
+ *        at the workspace level, not a workspace owner or admin), or a member
+ *        without `billing.manage` — a domain is a charge
  *   402  the plan does not include custom domains
- *   400  no site named
+ *   400  no site named, or at the workspace level no workspace named
+ *
+ * Two levels (AGL-4040). A site's Custom Domain page names its site
+ * (`hostId`); the workspace's Domains page names the workspace (`orgId`) and
+ * no site, and only a workspace owner or admin reaches it, since every name
+ * the workspace holds — and every one of its sites — is in play there.
  *
  * And for a purchase, the fraud gates, because a registration cannot be
  * taken back once the registrar completes it and a name bought to phish is a
@@ -77,9 +83,17 @@ export interface DomainsActor {
   staff: boolean
   orgId: string
   org: Record<string, unknown>
-  hostId: string
-  host: Record<string, unknown>
+  /** The site the request names; null at the workspace level (AGL-4040). */
+  hostId: string | null
+  host: Record<string, unknown> | null
 }
+
+/**
+ * Where a route may be called from: a site's page (`hostId`), the
+ * workspace's Domains page (`orgId`), or either — a request naming a site is
+ * then gated as the site's.
+ */
+export type DomainsGateScope = 'site' | 'workspace' | 'either'
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
 
@@ -108,12 +122,16 @@ const DOCUMENT_ID = /^[A-Za-z0-9_-]{1,128}$/
 /**
  * The member half every route climbs. `billing` additionally requires the
  * workspace's `billing.manage` permission, for anything that charges or
- * changes what will be charged.
+ * changes what will be charged. `entitlement` (default on) requires the
+ * plan's custom domains; a route that only manages a name the workspace
+ * already holds passes it off, so a workspace that moved to a plan without
+ * domains can still turn renewals off or move its names away.
  */
 export async function domainsGate(
   request: Request,
-  options: { billing: boolean },
+  options: { billing: boolean; scope?: DomainsGateScope; entitlement?: boolean },
 ): Promise<{ actor: DomainsActor; body: Record<string, unknown> } | Response> {
+  const scope = options.scope ?? 'site'
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return domainsError(401, 'Unauthenticated')
   let decoded
@@ -130,29 +148,48 @@ export async function domainsGate(
     return domainsError(403, 'Verify your email address first')
   }
   const body = await readJsonBody(request)
-  const hostId = String(
-    body['hostId'] ?? new URL(request.url).searchParams.get('hostId') ?? '',
-  )
-  if (!DOCUMENT_ID.test(hostId)) return domainsError(400, 'Missing hostId')
-  const hostSnapshot = await db().collection('hosts').doc(hostId).get()
-  if (!hostSnapshot.exists) return domainsError(404, 'Unknown site')
-  const host = (hostSnapshot.data() ?? {}) as Record<string, unknown>
+  const params = new URL(request.url).searchParams
+  const hostId = String(body['hostId'] ?? params.get('hostId') ?? '')
   const staff = decoded['staff'] === true
-  const role = String(
-    (host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '',
-  )
-  if (!staff && role !== 'admin') return domainsError(403, 'Only a site admin can do this')
-  const resolved = await getOrgForHost(hostId)
-  if (!resolved) return domainsError(404, 'Unknown workspace')
+  const atSite = scope === 'site' || (scope === 'either' && hostId !== '')
+
+  let orgId: string
+  let org: Record<string, unknown>
+  let host: Record<string, unknown> | null = null
+  if (atSite) {
+    if (!DOCUMENT_ID.test(hostId)) return domainsError(400, 'Missing hostId')
+    const hostSnapshot = await db().collection('hosts').doc(hostId).get()
+    if (!hostSnapshot.exists) return domainsError(404, 'Unknown site')
+    host = (hostSnapshot.data() ?? {}) as Record<string, unknown>
+    const role = String(
+      (host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '',
+    )
+    if (!staff && role !== 'admin') return domainsError(403, 'Only a site admin can do this')
+    const resolved = await getOrgForHost(hostId)
+    if (!resolved) return domainsError(404, 'Unknown workspace')
+    orgId = resolved.orgId
+    org = resolved.org as Record<string, unknown>
+  } else {
+    orgId = String(body['orgId'] ?? params.get('orgId') ?? '')
+    if (!DOCUMENT_ID.test(orgId)) return domainsError(400, 'Missing orgId')
+    const orgSnapshot = await db().collection('orgs').doc(orgId).get()
+    if (!orgSnapshot.exists) return domainsError(404, 'Unknown workspace')
+    org = (orgSnapshot.data() ?? {}) as Record<string, unknown>
+    if (!staff) {
+      const membership = await resolveOrgMembership(decoded.uid, orgId).catch(() => null)
+      const role = String(membership?.member?.role ?? '')
+      if (role !== 'owner' && role !== 'admin') {
+        return domainsError(403, 'Only a workspace owner or admin can manage its domains', {
+          code: 'workspace-admin',
+        })
+      }
+    }
+  }
   if (options.billing && !staff) {
-    const membership = await resolveOrgMembership(decoded.uid, resolved.orgId)
+    const membership = await resolveOrgMembership(decoded.uid, orgId)
     const allowed =
       membership &&
-      (await memberHasOrgPermission(
-        resolved.orgId,
-        membership.member,
-        'billing.manage' as never,
-      ))
+      (await memberHasOrgPermission(orgId, membership.member, 'billing.manage' as never))
     if (!allowed) {
       return domainsError(
         403,
@@ -161,7 +198,7 @@ export async function domainsGate(
       )
     }
   }
-  if (!checkEntitlement(resolved.org as never, 'customDomain')) {
+  if (options.entitlement !== false && !checkEntitlement(org as never, 'customDomain')) {
     return domainsError(402, 'Custom domains are included from the Starter plan', {
       code: 'plan',
     })
@@ -172,9 +209,9 @@ export async function domainsGate(
       email: String(decoded.email ?? ''),
       name: String(decoded['name'] ?? decoded.email ?? ''),
       staff,
-      orgId: resolved.orgId,
-      org: resolved.org as Record<string, unknown>,
-      hostId,
+      orgId,
+      org,
+      hostId: atSite ? hostId : null,
       host,
     },
     body,
@@ -195,7 +232,8 @@ export type PurchaseClearance =
   | { refusal: null; preclearanceId: string | null }
 
 /**
- * Whether this actor may buy `domain` for its site now. Never throws: a read
+ * Whether this actor's workspace may buy `domain` now — or move it here,
+ * since a transfer in is a charge the same gates guard (AGL-4040). Never throws: a read
  * that fails refuses, because a purchase is the one place a wrong "yes"
  * costs money that cannot be recovered.
  *
@@ -218,13 +256,8 @@ export async function purchaseClearance(
   })
   const clear: PurchaseClearance = { refusal: null, preclearanceId: null }
   if (lookalikeBrandForHost(domain)) return refuse('lookalike')
-  if (String(actor.host['cname'] ?? '').trim()) return refuse('site-has-domain')
-  const [forSite, forOrg] = await Promise.all([
-    listRegistrations('hostId', actor.hostId),
-    listRegistrations('orgId', actor.orgId),
-  ])
-  if (forSite.some(holds)) return refuse('site-has-bought-domain')
   if (actor.staff) return clear
+  const forOrg = await listRegistrations('orgId', actor.orgId)
   if (await isPaymentFraudHeld(db(), actor.orgId).catch(() => true)) return refuse('fraud-hold')
   if (forOrg.filter(holds).length >= MAX_HELD_PER_WORKSPACE) return refuse('too-many-held')
   const recent = forOrg.filter(

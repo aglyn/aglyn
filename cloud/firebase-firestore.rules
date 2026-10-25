@@ -1001,6 +1001,24 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Waivers (AGL-4042): the waivers a merchant wrote, the words of each
+      // version, and every signature taken — online, at the window or on
+      // paper. Server-written AND server-read: the waivers plugin's routes
+      // serve what the console shows, to a site's admins and editors whose
+      // `collectWaivers` or `manageWaivers` permission is on. A signature
+      // holds a signer's date of birth, address and phone, a minor's name and
+      // a drawn signature, so no client reads one, the owner and staff
+      // included; one that could write could forge a signature or void one.
+      match /waivers/{waiverId} {
+        allow read, write: if false;
+        match /versions/{version} {
+          allow read, write: if false;
+        }
+      }
+      match /waiverSignatures/{signatureId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
@@ -2891,6 +2909,23 @@ service cloud.firestore {
     // shape the erasure sweep eats), and they must NEVER be added to an
     // org-keyed deletion pass.
     match /storefrontTaxCollected/{stripeObjectId} {
+      allow read, write: if false;
+    }
+
+    // POS hardware sale records (AGL-4038): the platform's OWN sales of card
+    // readers, one per `orgs/{orgId}/hardwareOrders/{orderId}`, written by
+    // the commerce plugin's webhook, staff route and account eraser on the
+    // Admin SDK. Deny ALL client access, the buying workspace and staff
+    // included: a row names the workspace beside its amounts and where the
+    // order shipped, and the merchant reads its orders through the order
+    // documents and the plugin's route, never these.
+    //
+    // Same retention rule as `platformRevenue` and `storefrontTaxCollected`
+    // above: these are the platform's sales-tax and accounting records,
+    // kept after the workspace is erased (GDPR Art. 17(3)(b)) with nothing
+    // about the buyer in them. They are org-keyed by FIELD, and they must
+    // NEVER be added to an org-keyed deletion pass.
+    match /posHardwareSales/{orderId} {
       allow read, write: if false;
     }
 

@@ -114,16 +114,21 @@ struct DeliveryQueueView: View {
         AglynNotice(error, tone: order.pending == nil ? .error : .warning)
         if order.pending != nil {
           Button("Send again") { Task { await model.act(order, .retry) } }
-            .buttonStyle(.bordered).disabled(busy)
+            .buttonStyle(.aglynSecondary).disabled(busy)
         }
       }
       let steps = deliverySteps(order)
       if !steps.isEmpty {
         HStack {
           ForEach(steps) { step in
-            Button(step.label, role: step.destructive ? .destructive : nil) { Task { await model.act(order, step.action) } }
-              .buttonStyle(.borderedProminent)
-              .tint(step.destructive ? AglynColor.error : (step.primary ? AglynColor.tint : .gray))
+            let button = Button(step.label, role: step.destructive ? .destructive : nil) {
+              Task { await model.act(order, step.action) }
+            }
+            // A filled step: the brand blue under white (the console's contained button), red to undo; the others are
+            // secondary (outlined) buttons.
+            Group {
+              if step.primary || step.destructive { button.buttonStyle(.aglynProminent) } else { button.buttonStyle(.aglynSecondary) }
+            }
               .controlSize(.large)
               .disabled(busy)
               .accessibilityIdentifier("delivery-\(step.action.rawValue)-\(order.id)")

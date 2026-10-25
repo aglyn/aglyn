@@ -75,7 +75,13 @@ const when = (ms: number) => (ms ? new Date(ms).toLocaleString() : '—')
 
 function shipTo(order: StaffHardwareOrderRow): string {
   const address = order.shipping?.address
-  if (!address) return '—'
+  if (!address) {
+    // The buyer's account was erased: only the tax region is left (AGL-4038).
+    const region = order.shipping?.taxRegion
+    return region
+      ? [[region.state, region.postalCode].filter(Boolean).join(' '), region.country].filter(Boolean).join('\n')
+      : '—'
+  }
   return [
     order.shipping?.name,
     address.line1,

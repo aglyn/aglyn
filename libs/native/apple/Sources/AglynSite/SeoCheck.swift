@@ -78,7 +78,7 @@ struct SeoCheckCard: View {
           Text(busy ? "Checking…" : (report != nil ? "Check again" : "Run the check"))
         }
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(busy)
       .accessibilityIdentifier("seo-check-run")
       if let notice { AglynNotice(notice, tone: .warning) }
@@ -198,7 +198,7 @@ struct SeoTargetKeywords: View {
                   } label: {
                     Text(keyword + (at >= limit ? " (not checked)" : "") + "  ×").font(AglynFont.caption)
                   }
-                  .buttonStyle(.bordered)
+                  .buttonStyle(.aglynSecondary)
                   .disabled(!enabled)
                 }
               }

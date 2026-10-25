@@ -93,6 +93,8 @@ describe('the Outreach server entry', () => {
     expect(entry?.register).toEqual({
       console: 'registerOutreachConsole',
       consoleApi: 'registerOutreachConsoleApi',
+      // Its permission key, in the console's browser and server alone (AGL-4047).
+      consoleDeclarations: 'registerOutreachConsoleDeclarations',
       // The workspace eraser that revokes Google grants (AGL-2978).
       consoleServerDeclarations: 'registerOutreachConsoleServerDeclarations',
       // Data the generator writes into the console's subprocessor manifest.
