@@ -22,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -74,6 +73,7 @@ import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
@@ -331,6 +331,7 @@ private fun ChannelChip(channel: NotificationChannel, on: Boolean, owner: String
     selected = on,
     onClick = { onChange(!on) },
     enabled = enabled,
+    colors = com.aglyn.ui.aglynFilterChipColors(),
     label = { Text(channel.label) },
     leadingIcon = { Icon(AglynIcons.named(if (on) "check" else "close"), contentDescription = null) },
     modifier = Modifier

@@ -1227,6 +1227,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var posQuickKey: Bool?
   public var priceUsd: Double?
   public var relatedProductIds: [String]?
+  public var sellOnline: Bool?
   public var seo: HostProductSeo?
   public var shipping: ProductShippingFacts?
   public var slug: String?
@@ -1240,7 +1241,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var updatedAtMs: Double?
   public var variants: [ProductVariant]?
 
-  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, imageUrl: String? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, imageUrl: String? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
     self.categoryIds = categoryIds
     self.channel = channel
     self.checkIn = checkIn
@@ -1262,6 +1263,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
     self.posQuickKey = posQuickKey
     self.priceUsd = priceUsd
     self.relatedProductIds = relatedProductIds
+    self.sellOnline = sellOnline
     self.seo = seo
     self.shipping = shipping
     self.slug = slug
@@ -5193,7 +5195,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let themeFigmaBase: ThemeColorsPair
   public let themeNonTextContrast: Int
   public let themePalettes: [ThemePalette]
+  public let themePhoneAglyn: ThemeColorsPair
+  public let themePhoneBoldAccent: String
   public let themePreviews: [String: ThemePreview]
+  public let themeRetiredAccents: [String: String]
   public let themeTextContrast: Double
   public let timeZoneChoices: [String]
   public let timeZoneDefaultLabel: String
@@ -5503,7 +5508,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case themeFigmaBase = "THEME_FIGMA_BASE"
     case themeNonTextContrast = "THEME_NON_TEXT_CONTRAST"
     case themePalettes = "THEME_PALETTES"
+    case themePhoneAglyn = "THEME_PHONE_AGLYN"
+    case themePhoneBoldAccent = "THEME_PHONE_BOLD_ACCENT"
     case themePreviews = "THEME_PREVIEWS"
+    case themeRetiredAccents = "THEME_RETIRED_ACCENTS"
     case themeTextContrast = "THEME_TEXT_CONTRAST"
     case timeZoneChoices = "TIME_ZONE_CHOICES"
     case timeZoneDefaultLabel = "TIME_ZONE_DEFAULT_LABEL"

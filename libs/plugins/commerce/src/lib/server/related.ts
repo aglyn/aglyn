@@ -39,6 +39,11 @@ export const relatedHandler: PluginApiHandler = async (req, res) => {
       .collection('products')
       .doc(productId)
       .get()
+    // A product sold in person only (AGL-4060) has no page to show neighbors
+    // on, and naming them would say what it is bought with.
+    if (productSnapshot.exists && !CommerceModel.productSellsOnline(productSnapshot.data())) {
+      return res.status(200).json({ productIds: [] })
+    }
     const product = CommerceModel.liftLegacyProduct(
       (productSnapshot.data() as any) ?? {},
     )
@@ -93,7 +98,7 @@ export const relatedHandler: PluginApiHandler = async (req, res) => {
         .filter((docSnapshot) => {
           if (docSnapshot.id === productId) return false
           const candidate = docSnapshot.data() as any
-          if (candidate.deletedAt || candidate.status !== 'active') return false
+          if (!CommerceModel.productListedOnline(candidate)) return false
           const sharedTag = (candidate.tags ?? []).some((tag: string) =>
             (product.tags ?? []).includes(tag),
           )

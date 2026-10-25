@@ -928,13 +928,16 @@
         "THEME_PALETTES",
         "THEME_ACCENTS",
         "THEME_ACCENT_SWATCHES",
+        "THEME_RETIRED_ACCENTS",
         "THEME_DENSITIES",
         "THEME_PREVIEWS",
         "THEME_DARK_RAIL_SEEDS",
         "THEME_TEXT_CONTRAST",
         "THEME_NON_TEXT_CONTRAST",
         "THEME_CONSOLE_FIELDS",
-        "THEME_FIGMA_BASE"
+        "THEME_FIGMA_BASE",
+        "THEME_PHONE_AGLYN",
+        "THEME_PHONE_BOLD_ACCENT"
       ]
     },
     "libs/aglyn/src/lib/app-utils/org-role-grants.ts": {

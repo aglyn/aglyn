@@ -6086,15 +6086,15 @@
             "#00b0ff"
           ],
           "result": {
-            "fill": "#0073ae",
-            "hover": "#00669b",
-            "icon": "#0091d5",
+            "fill": "#00b0ff",
+            "hover": "#0077ad",
+            "icon": "#00b0ff",
             "on": "#ffffff",
-            "pressed": "#005884",
+            "pressed": "#006999",
             "ring": "#00b0ff",
             "soft": "#00b0ff29",
-            "textDark": "#00b0ff",
-            "textLight": "#0078ad"
+            "textDark": "#4dc8ff",
+            "textLight": "#0077ad"
           }
         },
         {
@@ -6121,7 +6121,7 @@
             "fill": "#e040fb",
             "hover": "#cc2ee6",
             "icon": "#c93ae3",
-            "on": "#1e0424",
+            "on": "#ffffff",
             "pressed": "#b523cf",
             "ring": "#e040fb",
             "soft": "#e040fb29",
@@ -6150,15 +6150,15 @@
             "#0073ae"
           ],
           "result": {
-            "fill": "#0073ae",
-            "hover": "#00669a",
-            "icon": "#0073ae",
+            "fill": "#00b0ff",
+            "hover": "#0077ad",
+            "icon": "#00b0ff",
             "on": "#ffffff",
-            "pressed": "#005885",
-            "ring": "#0073ae",
-            "soft": "#0073ae29",
-            "textDark": "#00a2f5",
-            "textLight": "#0073ae"
+            "pressed": "#006999",
+            "ring": "#00b0ff",
+            "soft": "#00b0ff29",
+            "textDark": "#4dc8ff",
+            "textLight": "#0077ad"
           }
         },
         {
@@ -6182,11 +6182,11 @@
             "#c2571a"
           ],
           "result": {
-            "fill": "#b95319",
-            "hover": "#a74b17",
+            "fill": "#c2571a",
+            "hover": "#b04f18",
             "icon": "#c2571a",
             "on": "#ffffff",
-            "pressed": "#954314",
+            "pressed": "#9e4715",
             "ring": "#c2571a",
             "soft": "#c2571a29",
             "textDark": "#e68147",
@@ -6310,15 +6310,15 @@
             "#00B0FF"
           ],
           "result": {
-            "fill": "#0073ae",
-            "hover": "#00669b",
-            "icon": "#0091d5",
+            "fill": "#00b0ff",
+            "hover": "#0077ad",
+            "icon": "#00b0ff",
             "on": "#ffffff",
-            "pressed": "#005884",
+            "pressed": "#006999",
             "ring": "#00b0ff",
             "soft": "#00b0ff29",
-            "textDark": "#00b0ff",
-            "textLight": "#0078ad"
+            "textDark": "#4dc8ff",
+            "textLight": "#0077ad"
           }
         },
         {
@@ -6341,7 +6341,7 @@
             "fill": "#e040fa",
             "hover": "#dd2cf9",
             "icon": "#e040fa",
-            "on": "#200425",
+            "on": "#ffffff",
             "pressed": "#da18f9",
             "ring": "#e040fa",
             "soft": "#e040fa29",
@@ -31986,7 +31986,7 @@
             "appIcon": "aglyn",
             "appearance": "system",
             "density": "comfortable",
-            "sidebarStyle": "tinted",
+            "sidebarStyle": "plain",
             "textSize": "system",
             "theme": "aglyn",
             "useWorkspaceBrand": true
@@ -32038,7 +32038,7 @@
             "appIcon": "aglyn",
             "appearance": "system",
             "density": "comfortable",
-            "sidebarStyle": "tinted",
+            "sidebarStyle": "plain",
             "textSize": "system",
             "theme": "aglyn",
             "useWorkspaceBrand": true
@@ -32055,7 +32055,7 @@
             "appIcon": "aglyn",
             "appearance": "system",
             "density": "comfortable",
-            "sidebarStyle": "tinted",
+            "sidebarStyle": "plain",
             "textSize": "system",
             "theme": "aglyn",
             "useWorkspaceBrand": true
