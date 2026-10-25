@@ -353,25 +353,19 @@ struct ShellChrome: View {
   }
 #endif
 
-/// The Home tab: the logo kit's mark, 16 points, icon only, never faded.
+/// The Home tab: the logo kit's mark, 16 points, icon only, never faded, and drawn plain in every state, selected,
+/// hovered or not (Figma Titlebar/Home tab 117:16049 has no plate). A plate and border round it when it was the selected
+/// tab made the mark read as a button (Zach, 2026-10-19; AGL-3996).
 struct HomeMarkTab: View {
   @Environment(AppModel.self) private var model
   let selected: Bool
   let select: () -> Void
-  @State private var hovered = false
 
   var body: some View {
     mark
       .frame(width: AglynShellMetrics.barButton + 4, height: AglynShellMetrics.barButton)
-      .background(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
-          .fill(selected ? AglynColor.paper : hovered ? AglynColor.hover : .clear))
-      .overlay(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
-          .strokeBorder(selected ? AglynColor.divider : .clear))
       .contentShape(Rectangle())
       .onTapGesture(perform: select)
-      .onHover { hovered = $0 }
       .help("Home")
       .accessibilityElement(children: .ignore)
       .accessibilityLabel("\(model.brandName) Home")
@@ -510,8 +504,10 @@ struct ShellFrame<Content: View>: View {
         navigation.showSwitcher = false
         navigation.picker = compact ? .workspace : .site
       }
-      .onChange(of: model.workspace?.org?.id, initial: true) { _, orgID in
-        if let orgID { model.preferences?.opened(orgID: orgID) }
+      // The workspace in use is the newest recent, once the account's preferences have loaded: on a fresh install the
+      // first workspace opens before they arrive, and was never recorded (AGL-3996).
+      .task(id: "\(model.workspace?.org?.id ?? ""):\(model.preferences?.loaded == true)") {
+        if let orgID = model.workspace?.org?.id { model.preferences?.opened(orgID: orgID) }
       }
       .onChange(of: model.workspace?.orgs.map(\.id) ?? []) { _, ids in model.auth?.recordWorkspaces(ids) }
       .onChange(of: navigation.section) { _, section in
@@ -571,8 +567,9 @@ struct WideShell: View {
           .transition(.move(edge: .leading).combined(with: .opacity))
       }
       if !navigation.sidebarHidden {
+        // The sidebar stays on the theme's own ground: a workspace's color is its rail tile and nothing else (Zach,
+        // 2026-10-19: "this looks green"; AGL-3996).
         ShellSidebar()
-          .background(workspaceTint)
           .frame(width: AglynShellMetrics.sidebarWidth)
           .overlay(alignment: .trailing) { Rectangle().fill(AglynColor.divider).frame(width: 1) }
           .transition(.move(edge: .leading).combined(with: .opacity))
@@ -593,14 +590,6 @@ struct WideShell: View {
     }
   }
 
-  /// The light tint a workspace's color lays over the sidebar while you are in it.
-  @ViewBuilder
-  private var workspaceTint: some View {
-    let color = model.workspaceColor(model.workspace?.org?.id)
-    if color.tintsApp, let tint = Color(aglynHex: color.color) {
-      tint.opacity(0.06)
-    }
-  }
 }
 
 /// The Mac's title bar as Figma draws it: one plain bar in the theme's title-bar color across the window, with a

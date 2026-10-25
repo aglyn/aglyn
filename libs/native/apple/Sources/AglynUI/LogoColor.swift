@@ -33,7 +33,8 @@ public final class AglynLogoColors {
     guard loading.insert(url).inserted else { return }
     let session = session
     Task {
-      let data = try? await session.data(from: url).0
+      // An SVG logo is read as the media CDN's PNG of it, as the tile draws it (AGL-3996).
+      let data = await AglynRasterArt.data(from: url, session: session)
       let hex = data.flatMap { Self.dominantColor(of: $0) }
       self.colors[url] = .some(hex)
     }

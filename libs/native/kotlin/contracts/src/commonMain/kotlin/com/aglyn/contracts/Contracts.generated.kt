@@ -3170,6 +3170,7 @@ enum class WorkspaceColorSource(val raw: String) {
     LOGO("logo"),
     NONE("none"),
     PICKED("picked"),
+    STABLE("stable"),
     UNKNOWN(""),
 }
 
@@ -3510,6 +3511,7 @@ internal data class ContractValuesPart7(
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
     @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
     @SerialName("WORKSPACE_COLORS_MAX") val workspaceColorsMax: Long,
+    @SerialName("WORKSPACE_STABLE_COLORS") val workspaceStableColors: List<String>,
 )
 
 /**
@@ -3834,6 +3836,7 @@ class ContractValues internal constructor(
     val workflowMaxSteps: Long get() = part7.workflowMaxSteps
     val workspaceColorsField: String get() = part7.workspaceColorsField
     val workspaceColorsMax: Long get() = part7.workspaceColorsMax
+    val workspaceStableColors: List<String> get() = part7.workspaceStableColors
 
     override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6 && part7 == other.part7)
 

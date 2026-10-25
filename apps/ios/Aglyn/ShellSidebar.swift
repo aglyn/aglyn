@@ -157,7 +157,8 @@ struct WorkspaceButton: View {
         AglynWorkspaceTile(
           name: org?.name ?? "Workspace", logoURL: model.mediaURL(logo?.light, hostID: nil),
           darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org?.id).color,
-          selected: false, size: AglynShellMetrics.workspaceLogo, cornerRadius: AglynShellMetrics.workspaceLogoRadius)
+          selected: false, size: AglynShellMetrics.workspaceLogo, initials: workspaceInitial(org?.name ?? "Workspace"),
+          cornerRadius: AglynShellMetrics.workspaceLogoRadius)
           .padding(-3)
         // Figma Sidebar/Scope header 98:1023: an 18-point name row with ▾ at the header's trailing edge, 2 points, and
         // an 18-point plan badge.

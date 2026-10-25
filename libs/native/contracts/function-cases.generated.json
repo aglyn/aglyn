@@ -55994,6 +55994,76 @@
             "source": "picked",
             "tintsApp": true
           }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            true,
+            "Xk3pQ9vLmT2aBc7DeF1g"
+          ],
+          "result": {
+            "color": "#0073AE",
+            "source": "stable",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            false,
+            "Qm7tR2wXyZ4"
+          ],
+          "result": {
+            "color": "#0073AE",
+            "source": "stable",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            "#445566",
+            true,
+            "Xk3pQ9vLmT2aBc7DeF1g"
+          ],
+          "result": {
+            "color": "#445566",
+            "source": "logo",
+            "tintsApp": true
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            true,
+            ""
+          ],
+          "result": {
+            "color": null,
+            "source": "none",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            "#112233",
+            null,
+            null,
+            true,
+            "org-1"
+          ],
+          "result": {
+            "color": "#112233",
+            "source": "picked",
+            "tintsApp": true
+          }
         }
       ]
     },
@@ -67841,15 +67911,15 @@
         },
         {
           "args": [
-            "elevated concepts"
+            "acme builders"
           ],
-          "result": "E"
+          "result": "A"
         },
         {
           "args": [
-            "EDR Construction"
+            "Northwind Construction"
           ],
-          "result": "E"
+          "result": "N"
         },
         {
           "args": [
@@ -67886,6 +67956,107 @@
             "—"
           ],
           "result": "?"
+        }
+      ]
+    },
+    "workspaceStableColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "Xk3pQ9vLmT2aBc7DeF1g"
+          ],
+          "result": "#0073AE"
+        },
+        {
+          "args": [
+            "Qm7tR2wXyZ4"
+          ],
+          "result": "#0073AE"
+        },
+        {
+          "args": [
+            "org-1"
+          ],
+          "result": "#00796B"
+        },
+        {
+          "args": [
+            "org-2"
+          ],
+          "result": "#A62BBF"
+        },
+        {
+          "args": [
+            "org-3"
+          ],
+          "result": "#8A6A00"
+        },
+        {
+          "args": [
+            "org-4"
+          ],
+          "result": "#0073AE"
+        },
+        {
+          "args": [
+            "org-5"
+          ],
+          "result": "#C2185B"
+        },
+        {
+          "args": [
+            "org-6"
+          ],
+          "result": "#2E7D5B"
+        },
+        {
+          "args": [
+            "org-7"
+          ],
+          "result": "#6A4FD8"
+        },
+        {
+          "args": [
+            "org-8"
+          ],
+          "result": "#B4501A"
+        },
+        {
+          "args": [
+            "a"
+          ],
+          "result": "#B4501A"
+        },
+        {
+          "args": [
+            "Ölstudio"
+          ],
+          "result": "#8A6A00"
+        },
+        {
+          "args": [
+            "🌿"
+          ],
+          "result": "#B4501A"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            42
+          ],
+          "result": null
         }
       ]
     }

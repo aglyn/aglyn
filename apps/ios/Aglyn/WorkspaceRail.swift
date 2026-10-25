@@ -7,9 +7,10 @@ import AglynUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The workspace rail on the Mac and iPad (AGL-3945, Figma Rail 12:338): up to five pinned workspaces in the order the
-/// person drags them, a divider, up to three recent, then "All workspaces" with the total; an account with eight or
-/// fewer sees them all. At the foot: Admin for staff, Create new, and the person's photo.
+/// The workspace rail on the Mac and iPad (AGL-3945, Figma Rail 12:338 "Many workspaces"): up to five pinned workspaces
+/// in the order the person drags them, a divider, up to three recent under "Recent", a divider, then "All workspaces"
+/// with the total, which opens the picker where pins are edited. Every account gets this rail, however few workspaces it
+/// has (AGL-3996). At the foot: Admin for staff, Create new, and the person's photo.
 struct WorkspaceRail: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
@@ -27,13 +28,13 @@ struct WorkspaceRail: View {
             caption("Pinned")
             ForEach(rail.pinned, id: \.self) { tile($0, pinned: true) }
           }
-          if !rail.recent.isEmpty || !rail.rest.isEmpty {
+          if !rail.recent.isEmpty {
             if !rail.pinned.isEmpty { railDivider }
-            if !rail.recent.isEmpty { caption("Recent") }
-            ForEach(rail.recent + rail.rest, id: \.self) { tile($0, pinned: false) }
+            caption("Recent")
+            ForEach(rail.recent, id: \.self) { tile($0, pinned: false) }
           }
           if rail.allTile {
-            railDivider
+            if !rail.pinned.isEmpty || !rail.recent.isEmpty { railDivider }
             Button {
               navigation.picker = .workspace
             } label: {
@@ -50,12 +51,12 @@ struct WorkspaceRail: View {
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity)
       }
-      VStack(spacing: AglynShellMetrics.railGap + 2) {
+      VStack(spacing: AglynShellMetrics.railGap) {
         if model.claims.isStaff {
           Button {
             navigation.enter(.admin, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
           } label: {
-            AglynRailButton(systemImage: "shield.lefthalf.filled", size: AglynShellMetrics.utility)
+            AglynRailButton(systemImage: "shield", size: AglynShellMetrics.utility)
           }
           .buttonStyle(.plain)
           .help("Admin")
@@ -89,13 +90,16 @@ struct WorkspaceRail: View {
   private func caption(_ text: String) -> some View {
     Text(text.uppercased())
       .font(.system(size: AglynShellMetrics.railCaption, weight: .semibold))
-      .kerning(0.6)
+      .kerning(AglynShellMetrics.railCaptionTracking)
       .foregroundStyle(AglynColor.railText)
       .accessibilityHidden(true)
   }
 
+  /// Between the rail's sections: a hairline in border/strong, which reads on the rail's tinted ground where the
+  /// sidebar's border/subtle vanished (AGL-3996).
   private var railDivider: some View {
-    Rectangle().fill(AglynColor.divider).frame(width: 24, height: 1).padding(.vertical, 2)
+    Rectangle().fill(AglynColor.dividerStrong).frame(width: AglynShellMetrics.railDivider, height: 1)
+      .accessibilityHidden(true)
   }
 
   @ViewBuilder
@@ -110,7 +114,7 @@ struct WorkspaceRail: View {
         AglynWorkspaceTile(
           name: org.name, logoURL: model.mediaURL(logo?.light, hostID: nil),
           darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(orgID).color,
-          selected: selected, unread: unread[orgID] ?? 0)
+          selected: selected, unread: unread[orgID] ?? 0, initials: workspaceInitial(org.name))
       }
       .buttonStyle(.plain)
       // The workspace in use: a 3-point bar at the rail's leading edge beside its ring.

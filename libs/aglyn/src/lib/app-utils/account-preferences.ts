@@ -166,6 +166,10 @@ export interface AppThemePrefs {
   density: AppDensity
   /** `system` follows Dynamic Type or the font scale; the rest are the Mac and Windows sizes. */
   textSize: AppTextSize
+  /**
+   * `plain` keeps the sidebar on the theme's surface; `tinted` lays the THEME's accent over it at 5%, on a theme other
+   * than Aglyn only (Aglyn's sidebar is always neutral). A workspace's color never tints it: that is its rail tile's.
+   */
   sidebarStyle: AppSidebarStyle
   /** The app icon's id: `aglyn`, or one of the alternates the apps ship. */
   appIcon: string
@@ -668,7 +672,43 @@ export function readWorkspaceColors(profile: unknown): Record<string, string> {
   return out
 }
 
-export type WorkspaceColorSource = 'picked' | 'brand' | 'logo' | 'none'
+/**
+ * The colors a workspace's tile takes when nothing else gives it one
+ * ({@link workspaceStableColor}): deep tones of the brand palette's blue,
+ * violet and pink, and a rose, orange, gold, green and teal beside them,
+ * each dark enough that the tile's white initial reads at 4.5:1 or more. The
+ * slate is left out: it is the tile of a workspace with no id at all.
+ */
+export const WORKSPACE_STABLE_COLORS: readonly string[] = [
+  '#0073AE',
+  '#6A4FD8',
+  '#A62BBF',
+  '#C2185B',
+  '#B4501A',
+  '#8A6A00',
+  '#2E7D5B',
+  '#00796B',
+]
+
+/**
+ * The color a workspace with no picked, brand or logo color shows on its
+ * tile: one of {@link WORKSPACE_STABLE_COLORS}, chosen by its id, so the same
+ * workspace has the same color on every device and in every app, and two
+ * workspaces with the same initial usually differ. The id is hashed with
+ * 32-bit FNV-1a over its UTF-16 code units, which each platform computes the
+ * same way. Null for an empty id.
+ */
+export function workspaceStableColor(orgId: unknown): string | null {
+  if (typeof orgId !== 'string' || orgId === '') return null
+  let hash = 0x811c9dc5
+  for (let i = 0; i < orgId.length; i++) {
+    hash ^= orgId.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return WORKSPACE_STABLE_COLORS[hash % WORKSPACE_STABLE_COLORS.length] ?? null
+}
+
+export type WorkspaceColorSource = 'picked' | 'brand' | 'logo' | 'stable' | 'none'
 
 export interface WorkspaceColor {
   /** `#RRGGBB`, or null when nothing gives the workspace a color. */
@@ -685,12 +725,18 @@ export interface WorkspaceColor {
  * it while you are in the workspace unless the person turned "Use each
  * workspace's brand" off, which stops the brand and logo colors tinting the
  * app (a picked color still does: the person chose it).
+ *
+ * Given the workspace's id, a workspace with none of the three still gets a
+ * color: its stable one ({@link workspaceStableColor}). That one colors only
+ * its tile (the rail, the pickers, the menus, the sidebar's header), never
+ * the app.
  */
 export function resolveWorkspaceColor(
   picked: unknown,
   brandColor: unknown,
   logoColor: unknown,
   useWorkspaceBrand: boolean,
+  orgId?: unknown,
 ): WorkspaceColor {
   if (isAccountColor(picked)) return { color: picked, source: 'picked', tintsApp: true }
   if (isAccountColor(brandColor)) {
@@ -699,6 +745,8 @@ export function resolveWorkspaceColor(
   if (isAccountColor(logoColor)) {
     return { color: logoColor, source: 'logo', tintsApp: useWorkspaceBrand }
   }
+  const stable = workspaceStableColor(orgId)
+  if (stable) return { color: stable, source: 'stable', tintsApp: false }
   return { color: null, source: 'none', tintsApp: false }
 }
 

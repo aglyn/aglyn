@@ -97,7 +97,11 @@ class NavRulesCasesTest {
       same(result, readWorkspaceColors(plainOf(args[0])), MapSerializer(String.serializer(), String.serializer()), args.toString())
     }
     cases("resolveWorkspaceColor").forEach { (args, result) ->
-      same(result, resolveWorkspaceColor(plainOf(args[0]), plainOf(args[1]), plainOf(args[2]), args[3].jsonPrimitive.booleanOrNull == true), WorkspaceColor.serializer(), args.toString())
+      val orgId = if (args.size > 4) plainOf(args[4]) else null
+      same(result, resolveWorkspaceColor(plainOf(args[0]), plainOf(args[1]), plainOf(args[2]), args[3].jsonPrimitive.booleanOrNull == true, orgId), WorkspaceColor.serializer(), args.toString())
+    }
+    cases("workspaceStableColor").forEach { (args, result) ->
+      assertEquals(nullableString(result), workspaceStableColor(plainOf(args[0])), args.toString())
     }
     cases("readAppTheme").forEach { (args, result) -> same(result, readAppTheme(plainOf(args[0])), AppThemePrefs.serializer(), args.toString()) }
     // What is written back reads the same.

@@ -852,6 +852,7 @@
         "RECENTS_MAX",
         "WORKSPACE_COLORS_FIELD",
         "WORKSPACE_COLORS_MAX",
+        "WORKSPACE_STABLE_COLORS",
         "APP_THEME_FIELD",
         "ACCOUNT_ITEM_LABEL_MAX",
         "ACCOUNT_COLOR_PATTERN",
@@ -26563,10 +26564,10 @@
           "Juniper Street Co."
         ],
         [
-          "elevated concepts"
+          "acme builders"
         ],
         [
-          "EDR Construction"
+          "Northwind Construction"
         ],
         [
           "  42 Studio"
@@ -27651,6 +27652,94 @@
           null,
           null,
           false
+        ],
+        [
+          null,
+          null,
+          null,
+          true,
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          null,
+          null,
+          null,
+          false,
+          "Qm7tR2wXyZ4"
+        ],
+        [
+          null,
+          null,
+          "#445566",
+          true,
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          null,
+          null,
+          null,
+          true,
+          ""
+        ],
+        [
+          "#112233",
+          null,
+          null,
+          true,
+          "org-1"
+        ]
+      ]
+    },
+    "workspaceStableColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "Xk3pQ9vLmT2aBc7DeF1g"
+        ],
+        [
+          "Qm7tR2wXyZ4"
+        ],
+        [
+          "org-1"
+        ],
+        [
+          "org-2"
+        ],
+        [
+          "org-3"
+        ],
+        [
+          "org-4"
+        ],
+        [
+          "org-5"
+        ],
+        [
+          "org-6"
+        ],
+        [
+          "org-7"
+        ],
+        [
+          "org-8"
+        ],
+        [
+          "a"
+        ],
+        [
+          "Ölstudio"
+        ],
+        [
+          "🌿"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          42
         ]
       ]
     },
