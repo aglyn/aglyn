@@ -197,6 +197,7 @@ internal fun StorePicker(
               FilterChip(
                 selected = org.id == workspace.org?.id,
                 onClick = { services.workspace.selectOrg(org.id) },
+                colors = com.aglyn.ui.aglynFilterChipColors(),
                 label = { Text(org.name) },
               )
             }

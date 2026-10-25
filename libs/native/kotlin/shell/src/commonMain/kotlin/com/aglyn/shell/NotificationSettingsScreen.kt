@@ -331,6 +331,7 @@ private fun ChannelChip(channel: NotificationChannel, on: Boolean, owner: String
     selected = on,
     onClick = { onChange(!on) },
     enabled = enabled,
+    colors = com.aglyn.ui.aglynFilterChipColors(),
     label = { Text(channel.label) },
     leadingIcon = { Icon(AglynIcons.named(if (on) "check" else "close"), contentDescription = null) },
     modifier = Modifier
