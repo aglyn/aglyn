@@ -49,7 +49,7 @@ describe('the range', () => {
 
   it('counts a day the clocks change in by the calendar: 25 hours in November', () => {
     const range = posDayReportRange({ from: '2026-11-01', nowMs: now, timeZone: 'America/Chicago' })
-    expect(range.ok && range.endMs - range.startMs).toBe(25 * 3_600_000)
+    expect('endMs' in range && range.endMs - range.startMs).toBe(25 * 3_600_000)
   })
 
   it(`allows ${POS_DAY_REPORT_MAX_DAYS} days and no more`, () => {
@@ -74,9 +74,10 @@ describe('the range', () => {
 
 function input(overrides: Partial<PosDayReportInput> = {}): PosDayReportInput {
   const range = posDayReportRange({ from: '2026-10-24', nowMs: 0, timeZone: 'UTC' })
-  if (!range.ok) throw new Error('range')
+  if ('error' in range) throw new Error('range')
   return {
     hostId: 'shop',
+    storeName: 'Corner Shop',
     currency: 'usd',
     timeZone: 'UTC',
     range,

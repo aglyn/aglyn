@@ -108,7 +108,7 @@ export async function readPosDayReport(
   )
   const nowMs = deps.now()
   const range = posDayReportRange({ from: input.from, to: input.to, nowMs, timeZone })
-  if (!range.ok) return { ok: false, status: 400, error: range.error }
+  if ('error' in range) return { ok: false, status: 400, error: range.error }
   const { startMs, endMs } = range
 
   const registersSnapshot = await hostRef.collection('registers').limit(REGISTERS_CEILING).get()
@@ -262,6 +262,7 @@ export async function readPosDayReport(
     ok: true,
     report: computePosDayReport({
       hostId: input.hostId,
+      storeName: String(hostSnapshot.get('displayName') ?? ''),
       currency,
       timeZone,
       range,
@@ -292,7 +293,7 @@ export async function handlePosDayReport(deps: PosOpsDeps, req: PluginApiRequest
     from: queryValue(query['from']),
     to: queryValue(query['to']),
   })
-  if (!read.ok) return { status: read.status, body: { error: read.error } }
+  if ('error' in read) return { status: read.status, body: { error: read.error } }
   if (format === 'csv') {
     const { from, to } = read.report
     return {

@@ -153,6 +153,8 @@ export interface PosDayCash {
 /** `GET /api/commerce/pos-day-report`'s answer. Every amount is integer minor units. */
 export interface PosDayReport {
   hostId: string
+  /** The site's name, as the printed report heads it. */
+  storeName: string
   /** The store's currency, lower case ISO 4217 (`usd`). */
   currency: string
   /** The zone the days are counted in (the site's, else the workspace's, else UTC). */
@@ -280,6 +282,7 @@ export type PosDayShift = Pick<
 
 export interface PosDayReportInput {
   hostId: string
+  storeName: string
   currency: string
   timeZone: string
   range: Extract<PosDayRange, { ok: true }>
@@ -418,6 +421,7 @@ export function computePosDayReport(input: PosDayReportInput): PosDayReport {
 
   return {
     hostId: input.hostId,
+    storeName: input.storeName,
     currency: input.currency,
     timeZone: input.timeZone,
     from: input.range.from,
