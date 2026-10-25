@@ -665,6 +665,29 @@
             "limit": 100,
             "orderBy": "checkInDayMs asc"
           }
+        },
+        "current": {
+          "late": true,
+          "when": "data.resources.items[?item.units > 1].0",
+          "query": {
+            "collection": "hosts/{site.id}/reservations",
+            "where": [
+              [
+                "checkOutDayMs",
+                ">",
+                "{now.localDayMs}"
+              ]
+            ],
+            "orderBy": "checkOutDayMs asc",
+            "limit": 500
+          }
+        },
+        "unitsAhead": {
+          "derive": "unitsAhead",
+          "args": [
+            "resources",
+            "current"
+          ]
         }
       },
       "blocks": [
@@ -674,9 +697,23 @@
           "title": "Resources",
           "items": "data.resources.items",
           "empty": "No resources yet. A resource is a room, a cabin or anything guests book by the night.",
-          "primary": "{item.name} · ${item.nightlyRateUsd}/night",
+          "primary": [
+            "{item.name}",
+            "${item.nightlyRateUsd}/night",
+            {
+              "text": "{data.unitsAhead[@item.$id].0.units} units",
+              "when": "data.unitsAhead[@item.$id].0"
+            }
+          ],
           "secondary": "id: {item.$id}",
           "icon": "bed.double|apartment",
+          "badges": [
+            {
+              "each": "data.unitsAhead[@item.$id]",
+              "text": "{row.label} · {row.unitsLeft} of {row.units} left",
+              "tone": "{row.tone}"
+            }
+          ],
           "actions": [
             {
               "id": "edit",
@@ -692,6 +729,27 @@
                   "required": true,
                   "placeholder": "Lakeside cabin",
                   "initial": "{item.name}"
+                },
+                {
+                  "key": "units",
+                  "label": "Spots or units available",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "max": 500,
+                  "placeholder": "1",
+                  "help": "How many identical ones you have, like 12 RV hookups",
+                  "mismatch": "A whole number from 1 to 500",
+                  "initial": "{item.units}"
+                },
+                {
+                  "key": "capacity",
+                  "label": "Sleeps",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "help": "Guests per unit, for display",
+                  "initial": "{item.capacity}"
                 },
                 {
                   "key": "nightlyRateUsd",
@@ -739,6 +797,10 @@
                 "doc": "hosts/{site.id}/resources/{item.$id}",
                 "fields": {
                   "name": "{form.name:take/120}",
+                  "units": {
+                    "$number": "{form.units ?? '1'}"
+                  },
+                  "capacity": "{form.capacity}",
                   "nightlyRateUsd": "{form.nightlyRateUsd}",
                   "weekendMultiplier": "{form.weekendMultiplier}",
                   "minNights": "{form.minNights}",
@@ -776,6 +838,25 @@
                   "kind": "text",
                   "required": true,
                   "placeholder": "Lakeside cabin"
+                },
+                {
+                  "key": "units",
+                  "label": "Spots or units available",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "max": 500,
+                  "placeholder": "1",
+                  "help": "How many identical ones you have, like 12 RV hookups",
+                  "mismatch": "A whole number from 1 to 500"
+                },
+                {
+                  "key": "capacity",
+                  "label": "Sleeps",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "help": "Guests per unit, for display"
                 },
                 {
                   "key": "nightlyRateUsd",
@@ -821,6 +902,8 @@
                 "add": "hosts/{site.id}/resources",
                 "fields": {
                   "name": "{form.name:take/120}",
+                  "units": "{form.units}",
+                  "capacity": "{form.capacity}",
                   "nightlyRateUsd": "{form.nightlyRateUsd}",
                   "weekendMultiplier": "{form.weekendMultiplier}",
                   "minNights": "{form.minNights}",
@@ -872,7 +955,8 @@
                   "resource": "{form.resourceId}",
                   "checkIn": "{form.checkIn}",
                   "checkOut": "{form.checkOut}",
-                  "guestName": "{form.guestName}"
+                  "guestName": "{form.guestName}",
+                  "route": "/api/commerce/reservations/walk-in"
                 }
               },
               "success": "Walk-in reserved — collect payment at POS"

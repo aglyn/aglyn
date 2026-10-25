@@ -4974,6 +4974,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let eventOrganizerMaxLength: Int
   public let eventTitleMaxLength: Int
   public let experimentListQuery: ListQueryDeclaration
+  public let fewUnitsLeft: Int
   public let firstPartyPlugins: [FirstPartyPlugin]
   public let formInUse: ListQueryFilter
   public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
@@ -5018,6 +5019,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let localFulfillmentQueueTabs: [LocalFulfillmentQueueTab]
   public let marketplaceBrowseQuery: ListQueryDeclaration
   public let maxLabelCopies: Int
+  public let maxResourceUnits: Int
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -5099,6 +5101,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachSequenceNameMax: Int
   public let outreachTaskTitleMax: Int
   public let paymentAcceptedMaxLength: Int
+  public let pendingReservationHoldMs: Double
   public let pinnedOrgsField: String
   public let pinnedOrgsMax: Int
   public let planCardAdvanceMs: Int
@@ -5287,6 +5290,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case eventOrganizerMaxLength = "EVENT_ORGANIZER_MAX_LENGTH"
     case eventTitleMaxLength = "EVENT_TITLE_MAX_LENGTH"
     case experimentListQuery = "EXPERIMENT_LIST_QUERY"
+    case fewUnitsLeft = "FEW_UNITS_LEFT"
     case firstPartyPlugins = "FIRST_PARTY_PLUGINS"
     case formInUse = "FORM_IN_USE"
     case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
@@ -5331,6 +5335,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case localFulfillmentQueueTabs = "LOCAL_FULFILLMENT_QUEUE_TABS"
     case marketplaceBrowseQuery = "MARKETPLACE_BROWSE_QUERY"
     case maxLabelCopies = "MAX_LABEL_COPIES"
+    case maxResourceUnits = "MAX_RESOURCE_UNITS"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
@@ -5412,6 +5417,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachSequenceNameMax = "OUTREACH_SEQUENCE_NAME_MAX"
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
+    case pendingReservationHoldMs = "PENDING_RESERVATION_HOLD_MS"
     case pinnedOrgsField = "PINNED_ORGS_FIELD"
     case pinnedOrgsMax = "PINNED_ORGS_MAX"
     case planCardAdvanceMs = "PLAN_CARD_ADVANCE_MS"

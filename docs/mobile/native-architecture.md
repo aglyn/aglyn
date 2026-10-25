@@ -1310,7 +1310,7 @@ system email test's "Populate from" uses it; its fills are generated from the co
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
-whose field matches) and `map[key.with.dots]`. `now` has `year`, `month`, `prevMonth`, `day`, `quarter`, `ms` and `months` (the last twelve, newest first). A list row's `secondary` or `tertiary` may be a list of parts instead of one template (each a template, or `{ text, when }` shown while its condition holds), joined with ` · ` and an empty part left out, so a row never ends on a dangling `set by `. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
+whose field matches) and `map[key.with.dots]`. `now` has `year`, `month`, `prevMonth`, `day`, `quarter`, `ms`, `localDayMs` (today on the device's calendar as the UTC midnight a stay's nights are stored in, the console's `localTodayDayMs`) and `months` (the last twelve, newest first). A list row's `primary`, `secondary` or `tertiary` may be a list of parts instead of one template (each a template, or `{ text, when }` shown while its condition holds), joined with ` · ` and an empty part left out, so a row never ends on a dangling `set by `. A row badge with `each: "<list path>"` is one chip for every row of that list, read as `row` (`{row.label} · {row.unitsLeft} of {row.units} left`, `tone: "{row.tone}"`); a row's chips wrap onto the next line. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
 platform's secure generator (the console's password generator). Formats: `pairs` (a map's entries as
 `key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
 `<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,
@@ -1359,9 +1359,11 @@ the grammar. A `write` is `{ doc, fields }` (merge a document), `{ add, fields }
 document in a collection, with an id of its own), `{ delete }`, `{ steps: [...] }` (several
 in order) or `{ each: { items, filter }, doc, fields }` (one per row of the data that passes
 the filter, with `item` set to the row); `siteWide: true` also drops the site's cached
-pages, as the console's `writeSiteWideChange` does. `{ stay: { resource, checkIn, checkOut, guestName } }` is the front desk's walk-in: it prices the
-stay and checks the dates against the resource's live reservations and blocks (ports of the console's reservation functions,
-replayed from `stays-cases.json`), then adds a confirmed reservation, or says in words why it cannot. A field value is resolved like a
+pages, as the console's `writeSiteWideChange` does. `{ stay: { resource, checkIn, checkOut, guestName, route } }` is the front desk's walk-in: it prices the
+stay and checks the dates against the resource's live reservations and blocks, counting units on a resource with several
+(ports of the console's reservation functions, replayed from `stays-cases.json`), for the instant answer; then `route` (the
+console's `/api/commerce/reservations/walk-in`) books the confirmed reservation inside a transaction, with a `reservationId`
+minted for the attempt and sent again by its retry, or says in words why it cannot. A field value is resolved like a
 body, and these operations shape it: `{"$timestamp": true}` (the server's time),
 `{"$orNull": v}` (null when empty, which a merge write turns into a cleared field; a
 template that found nothing is otherwise left out), `{"$cents": "{form.amount}"}` (typed
@@ -1400,7 +1402,9 @@ feature, so a card the console locks behind a plan shows its notice instead of f
 `{ "derive": "shippingCoverage", "from": "store.shipping" }`: the `from` path (under `data`) finds the shipping settings, and
 `data.<key>` holds what the console's Coverage block says of them (`served`, `unserved`, `headline`, `detail`, `note`, `asks`, …), a port
 of the console's resolver replayed from the contracts' `function-cases.generated.json` (`summarizeShippingCoverage`,
-`describeShippingCoverage`, `resolveCheckoutShippingOptions`).
+`describeShippingCoverage`, `resolveCheckoutShippingOptions`). `{ "derive": "unitsAhead", "args": ["resources", "current"] }` is the
+Reservations card's look-ahead: for each resource with several units, its next 14 nights (`{ dayMs, label, unitsLeft, units, tone }`,
+keyed by resource id) from the resources load and the current stays load, as `unitsLeftByNight` counts them.
 
 The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
 `now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
@@ -1520,7 +1524,7 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   generator makes for a built-in plugin's schema (`native-plugin-settings.test.mjs` holds them equal).
 - A field with `mustMatch` is unfinished until the typed text equals it; `mustMatchAs: "dollars"` reads both sides as a
   dollar amount instead (`60`, `$60.00`, `1,250 USD` all mean 6000 cents, as the gift card Confirm step reads a typed
-  total), and `mismatch` is what is said under the field while something typed does not match.
+  total), and `mismatch` is what is said under the field while something typed does not match. A number field is unfinished while it holds text that is not a number or a number outside its `min`/`max`, and its `mismatch` is said then too (`A whole number from 1 to 500`).
 - `gate: { when, screen }` on an action: when the route refuses with a body that meets `when` (read as `error`), `screen`
   opens over this one, and when an action there that carries `resume: true` finishes, the very same action is sent again,
   once. The Marketplace publish uses it for the Publisher Agreement: the route's structured `agreement` refusal opens the
