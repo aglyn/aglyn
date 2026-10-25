@@ -367,7 +367,7 @@ function pluginTierPermissionOwner(key: string): string | undefined {
 }
 
 /** Refusals already logged by `listPluginCatalogPermissions`, so each is reported once. */
-// boot-registry: per copy — it only dedupes a log line, so a copy that has not seen a refusal logs it once more
+// boot-registry: per copy — it only de-duplicates a warning; a second compiled copy logging the same refusal once more is harmless, and nothing reads it to decide anything.
 const reportedCatalogRefusals = new Set<string>()
 
 /** A plugin's catalog label, the heading its own permission group carries. */
