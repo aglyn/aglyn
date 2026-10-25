@@ -205,7 +205,7 @@ struct MediaLibrary: View {
       HStack(spacing: 0) {
         browser
         if wide && !selection.isEmpty {
-          Rectangle().fill(AglynColor.divider).frame(width: AglynMediaMetrics.hairline).ignoresSafeArea(edges: .bottom)
+          AglynColumnHairline().ignoresSafeArea(edges: .bottom)
           inspector
             .frame(width: AglynMediaMetrics.inspectorWidth)
             .transition(.move(edge: .trailing).combined(with: .opacity))
