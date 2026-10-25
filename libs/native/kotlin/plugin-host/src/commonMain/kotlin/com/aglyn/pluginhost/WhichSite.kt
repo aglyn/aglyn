@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,6 +25,7 @@ import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
+import com.aglyn.ui.TextButton
 
 /** One of the workspace's sites, as the person's membership index names it. */
 data class WorkspaceSiteChoice(val id: String, val name: String, val address: String?)

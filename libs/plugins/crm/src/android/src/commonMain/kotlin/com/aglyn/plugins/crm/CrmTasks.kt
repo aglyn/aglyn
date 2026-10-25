@@ -207,7 +207,7 @@ fun TaskDialog(title: String, initial: TaskDraft, reference: CrmReference, busy:
     FieldEditor(FieldSpec("contact", "Contact", FieldKind.SELECT, options = reference.contacts, emptyLabel = "None"), draft.contactId.orEmpty(), { draft = draft.copy(contactId = it.ifEmpty { null }) })
     OutlinedTextField(draft.notes, { draft = draft.copy(notes = it.take(4000)) }, label = { Text("Notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
     if (onDelete != null) {
-      androidx.compose.material3.TextButton(onClick = onDelete, enabled = !busy.busy) { Text("Delete this task", color = MaterialTheme.colorScheme.error) }
+      com.aglyn.ui.TextButton(onClick = onDelete, enabled = !busy.busy) { Text("Delete this task", color = MaterialTheme.colorScheme.error) }
     }
   }
 }

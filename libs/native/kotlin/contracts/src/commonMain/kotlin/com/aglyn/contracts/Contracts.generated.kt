@@ -832,6 +832,7 @@ data class HostProduct(
     val posQuickKey: Boolean? = null,
     val priceUsd: Double? = null,
     val relatedProductIds: List<String>? = null,
+    val sellOnline: Boolean? = null,
     val seo: HostProductSeo? = null,
     val shipping: ProductShippingFacts? = null,
     val slug: String? = null,
@@ -3547,7 +3548,10 @@ internal data class ContractValuesPart7(
     @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
+    @SerialName("THEME_PHONE_AGLYN") val themePhoneAglyn: ThemeColorsPair,
+    @SerialName("THEME_PHONE_BOLD_ACCENT") val themePhoneBoldAccent: String,
     @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
+    @SerialName("THEME_RETIRED_ACCENTS") val themeRetiredAccents: Map<String, String>,
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
@@ -3874,7 +3878,10 @@ class ContractValues internal constructor(
     val themeFigmaBase: ThemeColorsPair get() = part7.themeFigmaBase
     val themeNonTextContrast: Long get() = part7.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part7.themePalettes
+    val themePhoneAglyn: ThemeColorsPair get() = part7.themePhoneAglyn
+    val themePhoneBoldAccent: String get() = part7.themePhoneBoldAccent
     val themePreviews: Map<String, ThemePreview> get() = part7.themePreviews
+    val themeRetiredAccents: Map<String, String> get() = part7.themeRetiredAccents
     val themeTextContrast: Double get() = part7.themeTextContrast
     val timeZoneChoices: List<String> get() = part7.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part7.timeZoneDefaultLabel

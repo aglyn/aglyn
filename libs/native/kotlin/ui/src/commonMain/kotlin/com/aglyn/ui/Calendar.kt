@@ -32,7 +32,6 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimeInput
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -326,6 +325,7 @@ fun TimeSlotPicker(
           FilterChip(
             selected = slot == selected,
             onClick = { onSelect(slot) },
+            colors = aglynFilterChipColors(),
             label = { Text(formatClock(slot, timeZone)) },
             modifier = Modifier.testTag("slot-$slot"),
           )

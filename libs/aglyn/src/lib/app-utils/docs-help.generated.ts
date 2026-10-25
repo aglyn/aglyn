@@ -215,7 +215,7 @@ export const PLUGIN_DOCS = {
   buyADomain: {
     path: '/building-sites/custom-domains/buy-a-domain',
     title: 'Buy a domain',
-    excerpt: 'Search for a domain on your site\'s Custom Domain page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.',
+    excerpt: 'Search for a domain on your site\'s Custom Domain page or your workspace\'s Domains page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.',
   },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
@@ -411,6 +411,11 @@ export const PLUGIN_DOCS = {
     path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
     title: 'Connect Smile.io or Yotpo Loyalty',
     excerpt: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.',
+  },
+  manageDomains: {
+    path: '/building-sites/custom-domains/manage-domains',
+    title: 'Manage your domains',
+    excerpt: 'See every domain your workspace holds on its Domains page, connect any of them to any site, move a domain here from another registrar, and edit its contact and DNS records.',
   },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
@@ -608,8 +613,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#functions-card', '#parameters-a-visitor-can-answer', '#a-calculator-you-lay-out', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#draft-services', '#price-labels', '#phone-and-address', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#export-bookings', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
-  buyADomain: ['#steps', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
-  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
+  buyADomain: ['#steps', '#site-has-a-domain', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
+  catalog: ['#products-options-and-variants', '#sell-in-person-only', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
@@ -648,6 +653,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   liveChat: ['#set-up-live-chat', '#which-pages-show-the-chat', '#how-the-chat-loads', '#privacy-and-cookies'],
   loyalty: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   loyaltyConnectors: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
+  manageDomains: ['#the-list', '#a-domain', '#connect', '#transfer-in', '#contact', '#dns', '#transfer-out'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#review-queue', '#verification-requests', '#listed-plugins', '#submission-status', '#review-overview', '#review-checklist', '#review-verdict', '#review-versions', '#take-down', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#org-marketing-overview', '#org-overlays', '#related'],
   marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],

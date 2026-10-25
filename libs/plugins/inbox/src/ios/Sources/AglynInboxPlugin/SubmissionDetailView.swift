@@ -142,7 +142,7 @@ struct SubmissionDetailView: View {
           } label: {
             Label("Reply", systemImage: InboxSymbols.reply)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(!canEdit)
           .keyboardShortcut("r", modifiers: [.command, .shift])
           .accessibilityIdentifier("submission-reply")

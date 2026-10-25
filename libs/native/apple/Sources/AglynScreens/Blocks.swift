@@ -114,7 +114,7 @@ struct MeterRow: View {
       }
       if !unlimited {
         ProgressView(value: fraction)
-          .tint(fraction >= 1 ? AglynColor.error : fraction >= 0.8 ? AglynColor.warning : AglynColor.tint)
+          .tint(fraction >= 1 ? AglynColor.error : fraction >= 0.8 ? AglynColor.warning : AglynColor.primary)
       }
       if let note = meter["note"]?.stringValue {
         Text(ScreenValues.render(note, in: scope)).font(AglynFont.caption).foregroundStyle(.secondary)
@@ -673,7 +673,7 @@ struct FormBlock: View {
           Button(action.label) {
             submit(action, visibleOnly(filled, fields))
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .controlSize(.regular)
           .disabled(busy || missing)
           .accessibilityIdentifier("submit-\(block.id)")
