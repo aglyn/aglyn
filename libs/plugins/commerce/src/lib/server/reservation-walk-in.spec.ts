@@ -234,7 +234,7 @@ function call(token: string | null, body: Record<string, unknown>, method = 'POS
 const stays = () =>
   [...docs.entries()]
     .filter(([path]) => path.startsWith('hosts/h1/reservations/'))
-    .map(([path, value]) => ({ id: path.split('/').pop(), ...value }))
+    .map(([path, value]): Record<string, any> => ({ id: path.split('/').pop(), ...value }))
 
 const seedStay = (id: string, resourceId: string, fromDay: number, toDay: number, status = 'confirmed') =>
   writeDoc(
