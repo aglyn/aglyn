@@ -20,7 +20,7 @@ import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
 import type { DomainRegistrationView } from '../model/registration'
 import DomainsPage, { domainStatus, renewsLine } from './domains-page.component'
 import { DomainsRequestError, type WorkspaceAnswer, type WorkspaceDomainRow } from './domains-api'
-import { transferStateSentence } from './bought-domain-panel.component'
+import { swapNotice, transferStateSentence } from './bought-domain-panel.component'
 import { contactTakesEffectSentence } from './registrant-contact-section.component'
 
 /**
@@ -306,6 +306,13 @@ describe('sentences', () => {
     expect(renewsLine(ROWS[0])).toMatch(/^Renews /)
     expect(renewsLine({ ...ROWS[0], autoRenew: false })).toMatch(/^Expires /)
     expect(renewsLine(ROWS[2])).toBe('—')
+  })
+
+  it('says what is left after a move onto a site did not finish', () => {
+    expect(swapNotice({ domain: 'a.com', failure: 'swap-timed-out' })).toMatch(/was undone/)
+    expect(swapNotice({ domain: 'a.com', failure: 'swap-undo-failed:old.com' })).toMatch(/Connect old.com to it again/)
+    expect(swapNotice({ domain: 'a.com', failure: 'swap-undo-failed:a.com' })).toMatch(/Connect it to a site again/)
+    expect(swapNotice({ domain: 'a.com', failure: null })).toBeNull()
   })
 
   it('says where a transfer stands, and when a contact change takes effect', () => {

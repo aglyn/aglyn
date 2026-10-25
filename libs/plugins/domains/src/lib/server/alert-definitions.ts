@@ -55,6 +55,19 @@ export const DOMAINS_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    type: 'domains.swapRollbackFailed',
+    label: 'A domain swap could not be undone',
+    description:
+      'A workspace moved a domain onto a site, the connect did not finish, and putting the site’s previous domain (or the moved name) back failed (AGL-4040). A site may be on its free address. Reconnect the domain named in the reason from the staff site page, or ask the owner to from the Domains page.',
+    tier: 'must',
+    category: 'ops',
+    title: 'Domain swap not undone: {{domain}}',
+    body: 'Moving {{domain}} (workspace {{orgId}}) onto a site could not be undone ({{reason}}). A site may be left without its custom domain.',
+    delivery: 'immediate',
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+  },
+  {
     type: 'domains.transferStuck',
     label: 'A domain transfer in has not finished in two weeks',
     description:

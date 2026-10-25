@@ -28,6 +28,7 @@ const TYPE: Record<DomainAlertKind, string> = {
   orphanRegistration: 'domains.orphanRegistration',
   disputed: 'domains.disputed',
   transferStuck: 'domains.transferStuck',
+  swapRollbackFailed: 'domains.swapRollbackFailed',
 }
 
 /** Raises one alert, deduped per name. Never throws. */

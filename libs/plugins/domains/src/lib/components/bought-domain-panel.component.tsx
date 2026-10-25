@@ -54,6 +54,24 @@ import { RegistrantContactSection } from './registrant-contact-section.component
  * registrant contact and the DNS records.
  */
 
+/**
+ * What is left after a move onto a site that did not finish (AGL-4040): the
+ * sweep put things back, or could not, and says which domain to reconnect.
+ */
+export function swapNotice(registration: Pick<DomainRegistrationView, 'domain' | 'failure'>): string | null {
+  const failure = registration.failure ?? ''
+  if (failure === 'swap-timed-out') {
+    return `Connecting ${registration.domain} to a site didn’t finish, so it was undone and the site kept its own domain. Try connecting it again.`
+  }
+  if (failure.startsWith('swap-undo-failed:')) {
+    const left = failure.slice('swap-undo-failed:'.length)
+    return left === registration.domain
+      ? `Connecting ${registration.domain} to a site didn’t finish, and it couldn’t be put back on the site it served. Connect it to a site again.`
+      : `Connecting ${registration.domain} to a site didn’t finish, and ${left} couldn’t be put back on that site, so it is on its free address. Connect ${left} to it again.`
+  }
+  return null
+}
+
 /** Where a transfer in stands, by the registrar's state, in a sentence. */
 export function transferStateSentence(state: string | null): string {
   switch (state) {
@@ -230,6 +248,11 @@ export function BoughtDomainPanel(props: BoughtDomainPanelProps) {
           {registration.origin === 'transfer-in'
             ? 'The transfer didn’t complete, so the domain stayed at its current registrar. Any charge for it was refunded.'
             : 'It couldn’t be registered, so any charge for it was refunded.'}
+        </Alert>
+      ) : null}
+      {swapNotice(registration) ? (
+        <Alert severity={registration.failure?.startsWith('swap-undo-failed:') ? 'error' : 'info'}>
+          {swapNotice(registration)}
         </Alert>
       ) : null}
       {atWorkspace && workspace && active && workspace.connected ? (

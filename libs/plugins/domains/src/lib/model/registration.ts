@@ -80,6 +80,23 @@ export interface RegistrantContact {
 /** How a name came to the workspace. Absent on names bought before AGL-4040. */
 export type DomainRegistrationOrigin = 'purchase' | 'transfer-in'
 
+/** What a swap onto a site released, kept until the connect finishes (AGL-4040). */
+export interface DomainSwapState {
+  /** The site the name is being connected to. */
+  hostId: string
+  /** The domain that site served before, and its www twin. */
+  replaced: string | null
+  replacedTwin: string | null
+  /** Whether `replaced` is this workspace's registration, tied to that site. */
+  replacedOurs: boolean
+  /** The site the name served before the move, and its twin there. */
+  fromHostId: string | null
+  fromServed: boolean
+  fromTwin: string | null
+  startedAtMs: number
+  actor: { uid: string; email: string | null }
+}
+
 /** A transfer in from another registrar, while it runs (AGL-4040). */
 export interface DomainTransferInState {
   orderId: string
@@ -164,6 +181,11 @@ export interface DomainRegistrationDoc {
   contactChange?: { updatedAtMs: number; updatedBy: string } | null
   /** When the registrar last refused a renewal that carried the edited contact. */
   contactRejectedAtMs?: number | null
+  /**
+   * A move onto a site that is still connecting (AGL-4040): what the swap
+   * released, so the sweep can put it back if the connect never finishes.
+   */
+  pendingSwap?: DomainSwapState | null
   /** ICANN's registrant email check, as last read from the registrar. */
   contactVerification?: {
     verified: boolean

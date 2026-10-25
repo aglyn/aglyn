@@ -31,7 +31,7 @@ import type { DomainsActor } from './gates'
 import {
   advanceRenewal,
   advanceTransferIn,
-  isContactRefusal,
+  SWAP_CONNECT_WINDOW_MS,
   connectToSite,
   disconnectFromSite,
   purchaseTarget,
@@ -815,15 +815,39 @@ describe('an edited registrant contact rides the next renewal (AGL-4040)', () =>
     expect(driver.renew).toHaveBeenCalledWith(expect.not.objectContaining({ contact: expect.anything() }))
   })
 
-  it('sets a refused contact aside, so the name keeps renewing', async () => {
-    const driver = fakeDriver({ renew: async () => no('bad_request') })
-    const { effects } = effectsWith(driver)
+  it.each(['bad_request', 'http_400', 'invalid_phone'])(
+    'retries a renewal refused with %s once without the contact, and marks the contact rejected when that renews',
+    async (code) => {
+      const driver = fakeDriver({
+        renew: async (request) => (request.contact ? no(code) : yes({ orderId: 'renew-plain' })),
+      })
+      const { effects, recorded } = effectsWith(driver)
+      await seed({ registrantContact: EDITED, contactChange: { updatedAtMs: T0, updatedBy: 'user-1' } })
+      await advanceRenewal(effects, (await readRegistration('testbakery.com'))!, { force: true })
+      expect(driver.renew).toHaveBeenCalledTimes(2)
+      expect(driver.renew.mock.calls[1][0]).not.toHaveProperty('contact')
+      const after = await readRegistration('testbakery.com')
+      expect(after?.contactChange).toBeNull()
+      expect(after?.contactRejectedAtMs).toBeGreaterThan(0)
+      expect(after?.registrantContact).toEqual(EDITED)
+      // The plain renewal went through, and the refused contact was never applied.
+      expect(after?.history).toContainEqual(expect.objectContaining({ event: 'renewal-ordered', detail: 'renew-plain' }))
+      expect(after?.registrant?.name).toBe('Alex Test')
+      expect(recorded.refunds).toEqual([])
+    },
+  )
+
+  it('keeps the contact waiting when the renewal fails without it too, and handles the failure as before', async () => {
+    const driver = fakeDriver({ renew: async () => no('http_400') })
+    const { effects, recorded } = effectsWith(driver)
     await seed({ registrantContact: EDITED, contactChange: { updatedAtMs: T0, updatedBy: 'user-1' } })
     await advanceRenewal(effects, (await readRegistration('testbakery.com'))!, { force: true })
+    expect(driver.renew).toHaveBeenCalledTimes(2)
     const after = await readRegistration('testbakery.com')
-    expect(after?.contactChange).toBeNull()
-    expect(after?.contactRejectedAtMs).toBeGreaterThan(0)
-    expect(after?.registrantContact).toEqual(EDITED)
+    expect(after?.contactChange).toEqual({ updatedAtMs: T0, updatedBy: 'user-1' })
+    expect(after?.contactRejectedAtMs ?? null).toBeNull()
+    expect(recorded.alerts).toContain('renewalFailedAtRegistrar')
+    expect(recorded.refunds).toHaveLength(1)
   })
 })
 
@@ -957,6 +981,53 @@ describe('review fixes (AGL-4040)', () => {
       expect((outcome as { error: string }).error).not.toMatch(/nothing changed/)
       expect((outcome as { error: string }).error).toMatch(/old.com couldn’t be put back/)
     })
+
+    it('records a failed rollback, raises it to staff, and leaves what to fix on the page', async () => {
+      const { effects, recorded } = swapEffects({ connect: ['testbakery.com@host-2', 'old.com@host-2'] })
+      await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-2', { uid: 'u', email: null })
+      expect(recorded.alerts).toEqual(['swapRollbackFailed'])
+      const after = await readRegistration('testbakery.com')
+      expect(after?.history.map((row) => row.event)).toContain('swap-undo-failed')
+      expect(after?.failure).toBe('swap-undo-failed:old.com')
+      expect(after?.pendingSwap ?? null).toBeNull()
+    })
+
+    it('undoes a swap whose connect is still retrying after the window', async () => {
+      const { effects, connects, disconnects } = swapEffects()
+      let attach = false
+      effects.connect = async ({ hostId, domain, twin }) => {
+        connects.push({ hostId, domain, ...(twin === undefined ? {} : { twin }) })
+        if (domain === 'testbakery.com' && hostId === 'host-2' && !attach) {
+          return { ok: 'refused', code: 'attach-failed', retryable: true }
+        }
+        return { ok: 'connected' }
+      }
+      const outcome = await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-2', { uid: 'u', email: null })
+      expect(outcome).toMatchObject({ ok: 'connecting' })
+      expect(await readRegistration('testbakery.com')).toMatchObject({
+        status: 'connecting',
+        pendingSwap: { hostId: 'host-2', replaced: 'old.com', replacedTwin: 'www.old.com', fromHostId: 'host-1' },
+      })
+      // Within the window, the sweep keeps retrying.
+      await runDomainsSweep(effects, { nowMs: Date.now() + 10 * 60 * 1000, deadlineMs: Date.now() + 60_000 })
+      expect(await readRegistration('testbakery.com')).toMatchObject({ status: 'connecting' })
+      // Past it, the swap is undone.
+      await runDomainsSweep(effects, { nowMs: Date.now() + SWAP_CONNECT_WINDOW_MS + 60_000, deadlineMs: Date.now() + 60_000 })
+      expect(connects).toContainEqual({ hostId: 'host-2', domain: 'old.com', twin: 'www.old.com' })
+      expect(connects).toContainEqual({ hostId: 'host-1', domain: 'testbakery.com', twin: 'www.testbakery.com' })
+      expect(disconnects).toContain('testbakery.com@host-2')
+      expect(await readRegistration('old.com')).toMatchObject({ hostId: 'host-2' })
+      const after = await readRegistration('testbakery.com')
+      expect(after).toMatchObject({ status: 'active', hostId: 'host-1', failure: 'swap-timed-out', pendingSwap: null })
+      expect(after?.history.map((row) => row.event)).toContain('swap-undone')
+      attach = true
+    })
+
+    it('clears the swap record once the connect finishes', async () => {
+      const { effects } = swapEffects()
+      await connectToSite(effects, (await readRegistration('testbakery.com'))!, 'host-2', { uid: 'u', email: null })
+      expect(await readRegistration('testbakery.com')).toMatchObject({ status: 'active', hostId: 'host-2', pendingSwap: null })
+    })
   })
 
   describe('a transfer never takes over a name held or lapsed here', () => {
@@ -968,6 +1039,14 @@ describe('review fixes (AGL-4040)', () => {
       expect(await startWith(effects)).toMatchObject({ ok: 'refused', code: 'already-here' })
       expect(recorded.charges).toEqual([])
       expect(await readRegistration('testbakery.com')).toMatchObject({ orgId: 'org-2', status: 'expired' })
+    })
+
+    it('tells a workspace to renew its own expired name instead', async () => {
+      await registrationRef('testbakery.com').set(registrationDoc({ status: 'expired' }) as never)
+      const { effects } = effectsWith(transferDriverFor())
+      const outcome = await startWith(effects)
+      expect(outcome).toMatchObject({ ok: 'refused', code: 'renew-instead' })
+      expect((outcome as { error: string }).error).toMatch(/Renew now/)
     })
 
     it('refuses a name already in our registrar account', async () => {
@@ -1072,8 +1151,5 @@ describe('review fixes (AGL-4040)', () => {
     const after = await readRegistration('testbakery.com')
     expect(after?.contactChange).toEqual({ updatedAtMs: T0, updatedBy: 'user-1' })
     expect(after?.contactRejectedAtMs ?? null).toBeNull()
-    expect(isContactRefusal('expected_price_mismatch')).toBe(false)
-    expect(isContactRefusal('invalid_additional_contact_info')).toBe(true)
-    expect(isContactRefusal('bad_request')).toBe(true)
   })
 })
