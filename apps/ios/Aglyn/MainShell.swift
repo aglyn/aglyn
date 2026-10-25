@@ -990,21 +990,35 @@ struct Breadcrumbs: View {
   private var crumbs: some View {
     let scope = ShellScope(model: model, navigation: navigation)
     if let row {
-      let group = scope.currentList.groups.first { $0.rows.contains { $0.id == row.id } }?.label
+      let list = scope.currentList
       let owner = navigation.mode == .main ? (scope.site?.name ?? scope.org?.name) : scope.modeTitle
-      let parts = [owner, group, row.label].compactMap { $0 }
+      // Every level but the place in use opens it (AGL-4058): the scope, then the group.
+      let levels = navCrumbs(for: row, in: list, owner: owner, ownerOpens: navScopeRow(in: list))
       HStack(spacing: 6) {
-        ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+        ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
           if index > 0 {
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
           }
-          Text(part).font(.system(size: AglynShellMetrics.rowText - 1, weight: index == parts.count - 1 ? .medium : .regular))
-            .foregroundStyle(index == parts.count - 1 ? AglynColor.textPrimary : AglynColor.secondaryText)
-            .lineLimit(1)
+          if let target = level.opens {
+            AglynCrumbLink(level.label) { open(target, scope: scope) }
+              .accessibilityIdentifier("crumb-\(index)")
+          } else {
+            Text(level.label).font(.system(size: AglynShellMetrics.rowText - 1, weight: index == levels.count - 1 ? .medium : .regular))
+              .foregroundStyle(index == levels.count - 1 ? AglynColor.textPrimary : AglynColor.secondaryText)
+              .lineLimit(1)
+          }
         }
       }
-      .accessibilityElement(children: .combine)
+      .accessibilityElement(children: .contain)
       .accessibilityIdentifier("breadcrumbs")
+    }
+  }
+
+  /// Opens a crumb's row the way the sidebar does on a wide window.
+  private func open(_ row: NativeNavRow, scope: ShellScope) {
+    switch ShellScope.target(of: row) {
+    case .mode(let mode): navigation.enter(mode, first: scope.firstSection(of: mode))
+    case .section(let section): navigation.select(section)
     }
   }
 }

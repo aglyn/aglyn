@@ -248,3 +248,35 @@ private func canonicalParams(_ params: [String: String]?) -> String {
 public func rankOneBox(_ scored: [OneBoxScoredRow]) -> [OneBoxRow] {
   scored.sorted { scoredFirst(($0.score, $0.row.label), ($1.score, $1.row.label)) }.map(\.row)
 }
+
+/// One level of a place's breadcrumbs (AGL-4058): what it says, and the row it opens, nil for the place in use.
+public struct NavCrumb: Equatable, Sendable {
+  public let label: String
+  public let opens: NativeNavRow?
+
+  public init(label: String, opens: NativeNavRow?) {
+    self.label = label
+    self.opens = opens
+  }
+}
+
+/// A row's breadcrumbs in `list`, the way the sidebar holds it ("Juniper Street Bakery › Sell › Orders", "Site settings
+/// › Setup › Business profile"). The scope (`owner`) opens `ownerOpens`: its Home in the everyday list, or a settings
+/// list's first row. The group opens its first row. The row itself is the place in use and opens nothing. A level that
+/// would open the row in use opens nothing either, and a group with no label (Home and Overview's) has no level.
+public func navCrumbs(for row: NativeNavRow, in list: ResolvedNavList, owner: String?, ownerOpens: NativeNavRow?) -> [NavCrumb] {
+  let live = { (target: NativeNavRow?) in target.flatMap { $0.id == row.id ? nil : $0 } }
+  var crumbs: [NavCrumb] = []
+  if let owner { crumbs.append(NavCrumb(label: owner, opens: live(ownerOpens))) }
+  if let group = list.groups.first(where: { $0.rows.contains { $0.id == row.id } }), let label = group.label {
+    crumbs.append(NavCrumb(label: label, opens: live(group.rows.first)))
+  }
+  crumbs.append(NavCrumb(label: row.label, opens: nil))
+  return crumbs
+}
+
+/// The row a scope's crumb opens: Home in the everyday list, else the list's first row (a settings list's).
+public func navScopeRow(in list: ResolvedNavList) -> NativeNavRow? {
+  let rows = list.groups.flatMap(\.rows)
+  return rows.first { $0.screen == NativeNav.home } ?? rows.first
+}
