@@ -1965,16 +1965,37 @@ data class OrderUnresolvedLine(
 
 @Serializable
 data class OrgPermissionDeclaration(
-    val description: String,
+    val defaults: OrgPermissionDeclarationDefaults? = null,
+    val description: String? = null,
+    val group: String? = null,
+    val groupLabel: String? = null,
+    val hostRoleDefaults: Map<String, Boolean>? = null,
     val key: String,
     val label: String,
-    val roleDefaults: Map<String, Boolean>,
+    val pluginId: String? = null,
+    val roleDefaults: Map<String, Boolean>? = null,
+)
+
+@Serializable
+data class OrgPermissionDeclarationDefaults(
+    val admin: Boolean,
+    val editor: Boolean,
+    val viewer: Boolean,
 )
 
 @Serializable
 data class OrgPermissionEntry(
     val description: String,
+    val group: String? = null,
     val key: String,
+    val label: String,
+    val pluginId: String? = null,
+    val scope: OrgPermissionScope? = null,
+)
+
+@Serializable
+data class OrgPermissionGroup(
+    val id: String,
     val label: String,
     val pluginId: String? = null,
 )
@@ -1984,9 +2005,21 @@ data class OrgPermissionLayer(
     val permissions: Map<String, Boolean>? = null,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrgPermissionScopeSerializer::class)
+enum class OrgPermissionScope(val raw: String) {
+    ORG("org"),
+    SITE("site"),
+    UNKNOWN(""),
+}
+
+internal object OrgPermissionScopeSerializer :
+    RawEnumSerializer<OrgPermissionScope>("com.aglyn.contracts.OrgPermissionScope", OrgPermissionScope.entries, OrgPermissionScope.UNKNOWN, { it.raw })
+
 @Serializable
 data class OrgRoleGrants(
     val grants: Map<String, List<String>>,
+    val groups: List<OrgPermissionGroup>? = null,
     val permissions: List<OrgPermissionEntry>,
 )
 

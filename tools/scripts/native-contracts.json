@@ -996,13 +996,19 @@
       ]
     },
     "ORG_ROLE_GRANTS": {
-      "$comment": "The core catalog and grants, with every plugin's declared org catalog keys (assembleOrgRoleGrants). apps/console/specs/native-org-role-grants.spec.ts holds this to the console's DEFAULT_ROLE_PERMISSIONS once the plugins' declarations have registered.",
+      "$comment": "The core catalog and grants, with every plugin's declared permission keys from both declaration APIs, in the plugins' catalog order (assembleOrgRoleGrants, AGL-4047). apps/console/specs/native-org-role-grants.spec.ts holds this to the console's DEFAULT_ROLE_PERMISSIONS once the plugins' declarations have registered.",
       "with": "assembleOrgRoleGrants",
       "collect": [
-        "AI_ORG_PERMISSIONS"
+        "AI_ORG_PERMISSIONS",
+        "COMMERCE_PERMISSIONS",
+        "OUTREACH_PERMISSIONS",
+        "ACCOUNTING_PERMISSIONS"
       ],
       "parts": [
-        "libs/plugins/ai/src/lib/model/ai-permissions.ts"
+        "libs/plugins/ai/src/lib/model/ai-permissions.ts",
+        "libs/plugins/commerce/src/lib/model/plugin-permissions.ts",
+        "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
+        "libs/plugins/accounting/src/lib/constants/bundle-common.ts"
       ]
     }
   },
@@ -1092,6 +1098,8 @@
   ],
   "omit": [
     "HostProduct.deletedAt",
+    "HostProduct.checkIn",
+    "ProductVariant.checkIn",
     "TenantEmailEntry.mergeTokens",
     "TenantEmailEntry.defaultBody"
   ],

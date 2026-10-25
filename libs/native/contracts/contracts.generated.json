@@ -7198,14 +7198,18 @@
         "marketplace.publish",
         "plugins.install",
         "ai.use",
-        "ai.generate"
+        "ai.generate",
+        "managePos",
+        "outreach.use",
+        "accounting.manage"
       ],
       "editor": [
         "data.manage",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
-        "ai.generate"
+        "ai.generate",
+        "managePos"
       ],
       "owner": [
         "org.settings",
@@ -7219,70 +7223,156 @@
         "marketplace.publish",
         "plugins.install",
         "ai.use",
-        "ai.generate"
+        "ai.generate",
+        "managePos",
+        "outreach.use",
+        "accounting.manage"
       ],
       "viewer": []
     },
+    "groups": [
+      {
+        "id": "organization",
+        "label": "Organization"
+      },
+      {
+        "id": "billing",
+        "label": "Billing"
+      },
+      {
+        "id": "team",
+        "label": "Team"
+      },
+      {
+        "id": "sites",
+        "label": "Sites"
+      },
+      {
+        "id": "datasets",
+        "label": "Data"
+      },
+      {
+        "id": "extensions",
+        "label": "Marketplace and plugins"
+      },
+      {
+        "id": "ai",
+        "label": "AI"
+      },
+      {
+        "id": "commerce",
+        "label": "Commerce",
+        "pluginId": "commerce"
+      },
+      {
+        "id": "outreach",
+        "label": "Sequences",
+        "pluginId": "outreach"
+      },
+      {
+        "id": "accounting",
+        "label": "Accounting",
+        "pluginId": "accounting"
+      }
+    ],
     "permissions": [
       {
         "description": "Rename the organization, change its slug, transfer it.",
+        "group": "organization",
         "key": "org.settings",
         "label": "Organization settings"
       },
       {
         "description": "See the organization activity feed.",
+        "group": "organization",
         "key": "org.auditLog",
         "label": "Activity & audit log"
       },
       {
         "description": "See the plan, usage meters, and invoices.",
+        "group": "billing",
         "key": "billing.view",
         "label": "View billing"
       },
       {
         "description": "Change plans, buy add-ons, update payment details.",
+        "group": "billing",
         "key": "billing.manage",
         "label": "Manage billing"
       },
       {
         "description": "Invite, remove, and re-role organization members.",
+        "group": "team",
         "key": "members.manage",
         "label": "Manage members"
       },
       {
         "description": "Create new sites in the organization.",
+        "group": "sites",
         "key": "hosts.create",
         "label": "Create sites"
       },
       {
         "description": "Delete sites the member can access.",
+        "group": "sites",
         "key": "hosts.delete",
         "label": "Delete sites"
       },
       {
         "description": "Create, edit, and delete organization datasets.",
+        "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
       },
       {
         "description": "Publish listings under the organization profile.",
+        "group": "extensions",
         "key": "marketplace.publish",
         "label": "Publish to marketplace"
       },
       {
         "description": "Install or remove marketplace plugins.",
+        "group": "extensions",
         "key": "plugins.install",
         "label": "Install plugins"
       },
       {
         "description": "Ask the assistant, rewrite copy with AI, and generate a section.",
+        "group": "ai",
         "key": "ai.use",
-        "label": "Use AI assistance"
+        "label": "Use AI assistance",
+        "scope": "site"
       },
       {
         "description": "Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.",
+        "group": "ai",
         "key": "ai.generate",
-        "label": "Generate with AI"
+        "label": "Generate with AI",
+        "scope": "site"
+      },
+      {
+        "description": "Open the POS page and record in-person sales.",
+        "group": "commerce",
+        "key": "managePos",
+        "label": "Use the point of sale",
+        "pluginId": "commerce",
+        "scope": "org"
+      },
+      {
+        "description": "Open Sequences, and work its email sequences and connected mailboxes.",
+        "group": "outreach",
+        "key": "outreach.use",
+        "label": "Use Sequences",
+        "pluginId": "outreach",
+        "scope": "org"
+      },
+      {
+        "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",
+        "group": "accounting",
+        "key": "accounting.manage",
+        "label": "Manage accounting",
+        "pluginId": "accounting",
+        "scope": "org"
       }
     ]
   },

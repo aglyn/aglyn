@@ -107,15 +107,16 @@ export const ORG_ROLE_NAMES: readonly OrgRoleName[] = ['owner', 'admin', 'editor
 
 /**
  * The core groups, in display order. A plugin's keys are filed under a group
- * named by the plugin's id unless its declaration names one of these.
+ * named by the plugin's id unless its declaration names one of these, so no
+ * core group id is a plugin id.
  */
 export const CORE_ORG_PERMISSION_GROUPS: readonly OrgPermissionGroup[] = [
   { id: 'organization', label: 'Organization' },
   { id: 'billing', label: 'Billing' },
   { id: 'team', label: 'Team' },
   { id: 'sites', label: 'Sites' },
-  { id: 'data', label: 'Data' },
-  { id: 'marketplace', label: 'Marketplace and plugins' },
+  { id: 'datasets', label: 'Data' },
+  { id: 'extensions', label: 'Marketplace and plugins' },
 ]
 
 /**
@@ -192,19 +193,19 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
   },
   {
     key: 'data.manage',
-    group: 'data',
+    group: 'datasets',
     label: 'Manage data',
     description: 'Create, edit, and delete organization datasets.',
   },
   {
     key: 'marketplace.publish',
-    group: 'marketplace',
+    group: 'extensions',
     label: 'Publish to marketplace',
     description: 'Publish listings under the organization profile.',
   },
   {
     key: 'plugins.install',
-    group: 'marketplace',
+    group: 'extensions',
     label: 'Install plugins',
     description: 'Install or remove marketplace plugins.',
   },

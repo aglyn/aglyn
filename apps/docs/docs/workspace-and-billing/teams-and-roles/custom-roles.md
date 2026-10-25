@@ -25,7 +25,11 @@ Control what each teammate can do with **roles** — named permission sets — p
 
 The permission catalog covers organization settings, the activity log, billing (view
 and manage separately), member management, site creation and deletion, organization
-data, marketplace publishing, plugin installs, and the two AI keys.
+data, marketplace publishing, plugin installs, the two AI keys, and every permission
+the workspace's plugins add, such as **Use the point of sale** (`managePos`). A
+plugin's permissions are listed while the plugin is on for the workspace. Owners,
+admins and editors hold the point of sale by default and viewers don't, so a custom
+role can hand the register to a viewer or take it from an editor.
 
 ### The AI permissions {#ai-permissions}
 

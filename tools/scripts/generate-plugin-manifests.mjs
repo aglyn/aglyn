@@ -223,9 +223,15 @@ function describeDrift(expected, actual) {
  * registers opens something only the console holds — an eraser that
  * revokes a provider grant with the console's key — and the tenant runtime,
  * which serves the public internet, must not so much as bundle it.
+ *
+ * A `consoleDeclarations` entry (`/declarations.console`, AGL-4047) is the
+ * console's alone too, but on BOTH its sides: what core must know in the
+ * console's browser and on its server and the tenant never reads — a
+ * console-only plugin's permission keys, which the role editor lists.
  */
 const DECLARATION_MODULES = {
   declarations: 'declarations',
+  consoleDeclarations: 'declarations.console',
   serverDeclarations: 'declarations.server',
   consoleServerDeclarations: 'declarations.console-server',
 }
@@ -263,13 +269,13 @@ function declarationsContent(surfaces, constName, entryPoint) {
 const DECLARATION_MANIFESTS = [
   {
     file: 'apps/console/constants/plugins.declarations.generated.ts',
-    surfaces: ['declarations'],
+    surfaces: ['declarations', 'consoleDeclarations'],
     constName: 'registerPluginDeclarations',
     entryPoint: 'client',
   },
   {
     file: 'apps/console/constants/plugins.declarations.server.generated.ts',
-    surfaces: ['declarations', 'serverDeclarations', 'consoleServerDeclarations'],
+    surfaces: ['declarations', 'consoleDeclarations', 'serverDeclarations', 'consoleServerDeclarations'],
     constName: 'registerPluginServerDeclarations',
     entryPoint: 'server',
   },
