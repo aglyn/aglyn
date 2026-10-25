@@ -119,6 +119,8 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.widget("commerce.to-ship", title = "To ship", order = 90, size = WidgetSize.HALF, requiresSite = true) { context -> OrdersToShipWidget(context) }
   r.widget("commerce.needs-you", title = "Needs you", order = 10, requiresSite = true, slot = "homeNeedsYou") { context -> OrdersNeedsYouWidget(context) }
   r.widget("commerce.glance", title = "At a glance", order = 120, size = WidgetSize.FULL, requiresSite = true) { context -> GlanceWidget(context) }
+  // The console's "Newest site users" (registered there under the `accounts` switch, which ships inside commerce).
+  r.widget("commerce.newest-site-users", title = "Newest site users", order = 130, size = WidgetSize.HALF, requiresSite = true) { context -> NewestSiteUsersCard(context) }
   r.quickAction("commerce.orders-to-ship", "Ship orders", "local_shipping", 100, requiresSite = true, screen = COMMERCE_ORDERS_SCREEN)
   r.quickAction("commerce.new-product", "New product", "add", 110, requiresSite = true, screen = COMMERCE_PRODUCT_SCREEN, params = mapOf("new" to "1"))
   r.quickAction("commerce.scan", "Scan stock", "qr_code_scanner", 120, requiresSite = true, screen = COMMERCE_SCAN_SCREEN)

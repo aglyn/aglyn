@@ -48,8 +48,16 @@ const val ORG_DASHBOARD_SLOT = "orgDashboard"
 @Composable
 internal fun HomeGlanceGrid(services: ShellServices, context: NativePluginContext, title: String?, slot: String? = null) {
   val version by services.registry.version.collectAsState()
-  val widgets = remember(version, context.hostId, slot) {
-    services.registry.widgets(NativeApp.AGLYN, slot).filter { context.hostId != null || !it.requiresSite }
+  // Only the cards of plugins on for the scope, as the console's slot gates them (a site's set inside a site).
+  val workspace = services.workspace.state.collectAsState().value
+  val host = liveHostDoc(services, context.hostId)
+  val enabled = releasedPlugins(
+    enabledPluginsFor(workspace.orgLogo?.enabledPlugins, host?.data, context.hostId != null),
+    workspace.org?.id, workspace.orgLogo, staff = false,
+  )
+  val widgets = remember(version, context.hostId, slot, enabled) {
+    services.registry.widgets(NativeApp.AGLYN, slot)
+      .filter { (context.hostId != null || !it.requiresSite) && (it.pluginId == "core" || it.pluginId in enabled) }
   }
   if (widgets.isEmpty()) return
   Column(Modifier.fillMaxWidth().testTag(if (slot == null) "home-glance" else "home-org-glance"), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {

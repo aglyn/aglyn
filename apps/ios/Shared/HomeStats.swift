@@ -26,7 +26,11 @@ struct HomeGlanceGrid: View {
 
   var body: some View {
     let hasSite = model.scopedSite(navigation) != nil
-    let widgets = model.registry.widgets(for: .aglyn).filter { hasSite || !$0.requiresSite }
+    // Only the cards of plugins on for the scope, as the console's slot gates them (a site's set inside a site).
+    let scope = ShellScope(model: model, navigation: navigation)
+    let enabled = Set(hasSite ? scope.sitePlugins : scope.workspacePlugins)
+    let widgets = model.registry.widgets(for: .aglyn)
+      .filter { (hasSite || !$0.requiresSite) && ($0.pluginID == "core" || enabled.contains($0.pluginID)) }
     if !widgets.isEmpty, let context = model.context(for: navigation) {
       VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
         if let title { AglynSectionHeader(title) }
@@ -142,7 +146,8 @@ struct HomeWorkspaceStats: View {
   private var orgRow: some View {
     let role = model.workspace?.org?.role ?? ""
     let reach = member.ready && OrgAccess.isOrgWideMember(member.document?.data)
-    let widgets = model.registry.widgets(for: .aglyn, slot: orgDashboardSlot)
+    let enabled = Set(ShellScope(model: model, navigation: navigation).workspacePlugins)
+    let widgets = model.registry.widgets(for: .aglyn, slot: orgDashboardSlot).filter { enabled.contains($0.pluginID) }
     if reach, ["owner", "admin", "editor"].contains(role), !widgets.isEmpty, let context = model.context(for: navigation) {
       VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
         AglynSectionHeader("At a glance")
