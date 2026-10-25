@@ -21,6 +21,7 @@
     "label": "Rolling out",
     "body": "Aglyn AI is a release-flagged feature, currently being rolled out — the doors described on this page do not all appear in every workspace yet. Aglyn Assist, the assistant that answers questions about the product, is available today.",
     "removeAtFlip": true,
+    "status": "REMOVED. `release_ai_generative` has been on for every workspace since 2026-09-29, and the live /product/ai page carries no rolling-out band (read 2026-10-25, AGL-4052). Do not place this band again. Aglyn AI is in beta, which the console and the docs say per feature; the marketing page carries no stage label.",
     "notes": "Generative building is gated on `release_ai_generative`, which is OFF in production: every generative route answers 404, so a page that reads as though Aglyn AI is available today would be a misrepresentation on the live site. The wording is the one `apps/docs/docs/ai/overview.md` has carried all along, so the two surfaces agree. It is a DISCRETE element on purpose: when the flag flips, this band is deleted and the page is correct, rather than the page being rewritten sentence by sentence — the same way the `:::caution Rolling out` admonitions come out of the docs. The second sentence is the honest split: `release_assist` gates the assistant that answers questions and has been on since 2026-08-23, and `libs/plugins/ai/src/lib/server/ai-assist.ts` carries no release flag at all, while `release_ai_generative` gates every build job (`ai-jobs-gate.ts`, `ai-jobs-route.ts`, `assist-chat.ts`). A page that blurs the two undersells what works or oversells what does not. ⛔ `apply-page-copy.js` pours `sections` and nothing else, so this band is NOT poured — it is placed by hand in the same pass, and deleted by hand at the flip."
   },
   "sections": [
@@ -226,11 +227,11 @@
     {
       "kind": "early-access",
       "figmaNodeId": null,
-      "eyebrow": "An add-on, not a plan",
-      "heading": "Aglyn AI is an add-on on every paid plan.",
+      "eyebrow": "Included on every plan",
+      "heading": "Credits on every plan. Add more when you need them.",
       "subheading": null,
       "body": [
-        "Bought once for the workspace — not per seat and not per site — it adds a band of AI credits to the band your plan already includes, and every member with the permission can use it on every site. A door built on a plan feature needs that feature too: AI A/B variants need A/B testing on your plan as well as the add-on. Free workspaces get a small monthly allowance instead, and stop there rather than billing you."
+        "Every paid plan includes a band of Aglyn AI credits; an optional add-on, bought once for the workspace, adds more, and every member with the permission can use it on every site. Free workspaces get a small monthly allowance and stop there rather than billing you."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -243,7 +244,7 @@
         { "title": "180", "body": "days a brief is kept, then deleted", "meta": "stat" }
       ],
       "image": null,
-      "notes": "⛔ NO PRICES ON THIS PAGE. `docs/PRICING_SURFACES.md` counts nine surfaces a charged price has to reach and two of them are edited by hand here; a figure on this page would be a tenth that no guard can see. The band says what the add-on IS and sends the reader to /pricing for what it costs. The middle sentence is the SECOND statement of the A/B gate — card 6 carries the first — and it is worded as the general rule with A/B as its instance, because the add-on is what opens the doors and a door standing on a plan feature still needs that feature. It names no tier, deliberately: `abTesting` is false on free, starter and pro and true from business up in `plan-entitlements.ts`, and a tier name in this band would be a plan table growing on a page that must not carry one. The plan names belong to /pricing, which is generated and reconciled. Unlike the other detail pages the chip is POURED rather than kept: `eyebrow` is set, so the applier writes 'An add-on, not a plan' over the skeleton's 'Now in early access' — the datasets page changed the same chip to 'Included from Starter' by hand, and pouring it is the mechanical version of that. The four stats are figures that do not go stale with the roster: one workspace credit pool with no second meter per feature, the draft-first rule as a number, the two attempts a generation gets before a job stops (`AI_GENERATION_MAX_ATTEMPTS`), and the 180 days a brief is kept. Section background is bg/default (#F8F9FA); the stat figures take the primary.dark token and never the retired brand-blue literal (AGL-1293)."
+      "notes": "⛔ NO PRICES ON THIS PAGE. `docs/PRICING_SURFACES.md` counts nine surfaces a charged price has to reach and two of them are edited by hand here; a figure on this page would be a tenth that no guard can see. The band says what the add-on IS and sends the reader to /pricing for what it costs. The middle sentence is the SECOND statement of the A/B gate — card 6 carries the first — and it is worded as the general rule with A/B as its instance, because the add-on is what opens the doors and a door standing on a plan feature still needs that feature. It names no tier, deliberately: `abTesting` is false on free, starter and pro and true from business up in `plan-entitlements.ts`, and a tier name in this band would be a plan table growing on a page that must not carry one. The plan names belong to /pricing, which is generated and reconciled. Unlike the other detail pages the chip is POURED rather than kept: `eyebrow` is set, so the applier writes 'An add-on, not a plan' over the skeleton's 'Now in early access' — the datasets page changed the same chip to 'Included from Starter' by hand, and pouring it is the mechanical version of that. The four stats are figures that do not go stale with the roster: one workspace credit pool with no second meter per feature, the draft-first rule as a number, the two attempts a generation gets before a job stops (`AI_GENERATION_MAX_ATTEMPTS`), and the 180 days a brief is kept. Section background is bg/default (#F8F9FA); the stat figures take the primary.dark token and never the retired brand-blue literal (AGL-1293). Synced to the live page on 2026-10-25 (AGL-4052): the chip reads 'Included on every plan' and the heading and body say what the live band says, credits on every plan with the add-on for more. The A/B gate sentence above is no longer in the band; card 6 still carries it."
     },
     {
       "kind": "cta",
@@ -278,7 +279,7 @@
       "label": "Aglyn AI",
       "href": "/product/ai",
       "position": "Appended after Marketing.",
-      "notes": "The footer's Product column lists the roster as plain links with no blurb; this is one more link in the same shape. The footer keeps its beta chip by decision — do not touch it while adding this."
+      "notes": "The footer's Product column lists the roster as plain links with no blurb; this is one more link in the same shape. The footer no longer carries a beta notice (removed from aglyn.com with the rest of the early-access copy)."
     },
     "productIndexCard": {
       "surface": "/product → the roster grid",

@@ -47,11 +47,12 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
   // copy JSON into exactly that many strings, in the same order.
   //
   // A `null` in the flattened array means "this slot is INVARIANT across the
-  // product pages — keep whatever the skeleton already has". The Early-access
-  // chip ("Now in early access") is the case that matters: it is identical on
-  // every page, so the extractions describe it in `notes` rather than giving
-  // it a field. Blanking a node because the copy JSON happened not to name it
-  // would be the worst possible reading of a missing value.
+  // product pages — keep whatever the skeleton already has". Blanking a node
+  // because the copy JSON happened not to name it would be the worst possible
+  // reading of a missing value. The Early-access chip was the case it was
+  // written for, when every page read "Now in early access"; since that copy
+  // came off the site, every deck names its chip in `eyebrow` (AGL-4052), so
+  // a fresh skeleton's chip is always poured over.
   const CONTRACT = [
     {
       kind: 'hero',
