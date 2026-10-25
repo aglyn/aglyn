@@ -1,16 +1,10 @@
 ---
 sidebar_position: 2.75
 title: Bring my site
-description: Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours. Rolling out.
-unlisted: true
+description: Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.
 ---
 
 # Bring my site
-
-:::caution Rolling out
-**Bring my site** is **not yet available** on aglyn.com-hosted workspaces. Until
-it is, **Create site** offers only the starter site and **Start with AI**.
-:::
 
 **Bring my site** moves the website you have now into a new Aglyn site. Aglyn AI
 reads each of its pages and rewrites it in your new site's design, keeping its words,

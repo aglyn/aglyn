@@ -498,7 +498,7 @@ private struct KioskPayingView: View {
             .buttonStyle(DeviceButtonStyle(prominent: false)).frame(maxWidth: 520).disabled(model.busy)
         }
       } else if model.context?.testMode == true, method == .reader, paymentID != nil {
-        Button("Test mode: tap a test card") { Task { await model.simulate() } }.buttonStyle(.bordered).disabled(model.busy)
+        Button("Test mode: tap a test card") { Task { await model.simulate() } }.buttonStyle(.aglynSecondary).disabled(model.busy)
       } else {
         ProgressView().controlSize(.large)
       }

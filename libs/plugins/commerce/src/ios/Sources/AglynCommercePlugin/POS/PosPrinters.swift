@@ -367,7 +367,7 @@ struct RegisterPrintersView: View {
         Button("Remove", role: .destructive) { removing = row }
           .accessibilityIdentifier("printer-remove-\(row.id)")
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
       .controlSize(.small)
       .disabled(model.busy)
     }
@@ -536,7 +536,7 @@ struct PrinterFormSheet: View {
           Button("Regenerate URL", role: .destructive) { regenerating = true }
         }
       }
-      .buttonStyle(.bordered)
+      .buttonStyle(.aglynSecondary)
     } footer: {
       Text("This URL is the printer’s password: anyone with it can collect this register’s receipts. Regenerate it if it is ever shared.")
     }

@@ -50,6 +50,7 @@ export type ReleaseFlagKey =
   | 'release_crm_assist_whole_record'
   | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
+  | 'release_site_starters'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -211,9 +212,10 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'the workspace proves it owns the domain (a DNS record, a home page ' +
       'meta tag, or a code emailed to an address at the domain), then ' +
       'AglynBot reads the site within robots.txt, same-origin only, under ' +
-      'page, byte and time budgets. OFF by default: the ownership and crawl ' +
-      'doors answer 404 while it is off.',
-    defaultEnabled: false,
+      'page, byte and time budgets. ON since 2026-10-25 (beta.282, after the ' +
+      'Legal v18 import clause and the blocked-page reason, AGL-4029); turned ' +
+      'off, the ownership and crawl doors answer 404.',
+    defaultEnabled: true,
   },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends
@@ -262,6 +264,19 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'email addresses, to the operator\u2019s own Meta, Google and LinkedIn ' +
       'customer-list audiences (AGL-3780). OFF by default: nothing is sent ' +
       'until the Privacy Policy that discloses it is published.',
+    defaultEnabled: false,
+  },
+  // Per org (AGL-4049): "Create site" is to offer the starter picker only
+  // where the org's verdict is on. Nothing reads the flag yet, and off it
+  // creates the default site as it always has.
+  {
+    key: 'release_site_starters',
+    label: 'Site starters from the marketplace',
+    description:
+      'Create site asks the person to choose a starter (AGL-4049): every ' +
+      `option, ${PLATFORM_BRAND_NAME}\u2019s own included, is a marketplace listing any ` +
+      'publisher may list and price, for a base start or an AI start. OFF ' +
+      'by default: Create site makes the default site as it always has.',
     defaultEnabled: false,
   },
 ]

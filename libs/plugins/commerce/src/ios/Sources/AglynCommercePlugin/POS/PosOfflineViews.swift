@@ -35,7 +35,7 @@ struct RegisterOfflineBanner: View {
         )
         .overlay(alignment: .trailing) {
           Button("Retry") { model.reconnect() }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .padding(.trailing, AglynSpace.one)
             .accessibilityIdentifier("register-reconnect")
         }
@@ -141,7 +141,7 @@ struct OfflineCashSheet: View {
               .accessibilityIdentifier("offline-received")
             AglynWrapRow {
               ForEach(quickAmounts(owed), id: \.self) { cents in
-                Button(cents == owed ? "Exact" : model.money(cents)) { received = amountText(cents) }.buttonStyle(.bordered)
+                Button(cents == owed ? "Exact" : model.money(cents)) { received = amountText(cents) }.buttonStyle(.aglynSecondary)
               }
             }
             if tendered > 0 && tendered >= owed {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginPermission } from '@aglyn/aglyn'
+import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 
 /**
  * The persisted plugin id (AGL-2974): stored in `org.enabledPlugins`, named in
@@ -55,5 +55,6 @@ export const OUTREACH_PERMISSIONS: readonly PluginPermission[] = [
     description:
       'Open Sequences, and work its email sequences and connected mailboxes.',
     defaults: { admin: true, editor: false, viewer: false },
+    groupLabel: 'Sequences',
   },
 ]
