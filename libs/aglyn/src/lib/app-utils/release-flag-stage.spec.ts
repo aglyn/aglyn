@@ -29,6 +29,7 @@ import {
   RELEASE_FLAG_STAGES,
   RELEASE_FLAGS,
   releaseFlagStage,
+  releaseStageOfSurface,
   showsBetaStage,
   type ReleaseFlagKey,
 } from './release-flags'
@@ -97,6 +98,26 @@ describe('release flag stage (AGL-4052)', () => {
     // No flag at all.
     expect(showsBetaStage(undefined, true)).toBe(false)
     expect(showsBetaStage(null, true)).toBe(false)
+  })
+
+  it('stages a surface from whichever governing flag is released and beta', () => {
+    const on = { released: true }
+    const off = { released: false }
+    expect(releaseStageOfSurface(['release_assist'], { release_assist: on })).toBe('beta')
+    expect(releaseStageOfSurface(['release_assist'], { release_assist: off })).toBeUndefined()
+    // A generally available hub with a beta section reads Beta on that section.
+    expect(
+      releaseStageOfSurface(['release_crm', 'release_ai_generative'], {
+        release_crm: on,
+        release_ai_generative: on,
+      }),
+    ).toBe('beta')
+    expect(
+      releaseStageOfSurface(['release_crm', undefined], { release_crm: on }),
+    ).toBeUndefined()
+    // No verdict yet reads as not released.
+    expect(releaseStageOfSurface(['release_assist'], {})).toBeUndefined()
+    expect(releaseStageOfSurface([], {})).toBeUndefined()
   })
 
   it('agrees with the stages the plugin manifest generator accepts', () => {

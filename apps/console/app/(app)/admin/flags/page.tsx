@@ -21,12 +21,14 @@ import {
   pluginForReleaseFlag,
   RELEASE_FLAG_PLAN_LADDER,
   releaseFlagPlansAtOrAbove,
+  releaseFlagStage,
   type OrgPlan,
   type ReleaseFlagKey,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, HelpTip } from '@aglyn/shared-ui-jsx'
+import { BetaChip } from '@aglyn/shared-ui-jsx/components/beta-chip.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -278,6 +280,12 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                         </Typography>
                         {statusChip(row)}
                         {tierChip(row)}
+                        {/* AGL-4052: the stage the registry declares. The
+                            console labels the feature Beta only while the
+                            flag is on; off, it is rolling out. */}
+                        {releaseFlagStage(row.key) === 'beta' ? (
+                          <BetaChip data-testid={`flag-stage-${row.key}`} />
+                        ) : null}
                         {/* AGL-422: flags mapped to a first-party plugin
                             gate its whole LOADER (console, sites, API),
                             not just nav — surface that blast radius. */}

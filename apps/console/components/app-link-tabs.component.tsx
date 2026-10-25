@@ -16,10 +16,13 @@
  */
 'use client'
 
+import type { ReleaseFlagStage } from '@aglyn/aglyn'
 import { AppLink, type AppLinkProps } from '@aglyn/shared-ui-jsx'
+import { BetaChip } from '@aglyn/shared-ui-jsx/components/beta-chip.component'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
+  Box,
   Tab as MuiTab,
   type TabProps as MuiTabProps,
   Tabs as MuiTabs,
@@ -36,6 +39,25 @@ export interface TabItemProps
   extends MuiTabProps<any, any>,
     Omit<AppLinkProps<'naked'>, 'componentVariant'> {
   icon?: MdiIconProps
+  /**
+   * The released feature's stage (AGL-4052): `beta` draws the Beta chip after
+   * the label. Set by the nav strip's release-flag gating, never by hand.
+   */
+  stage?: ReleaseFlagStage
+}
+
+/** A tab's label, with the Beta chip after it when its feature is in beta. */
+function tabLabel(label: TabItemProps['label'], stage?: ReleaseFlagStage) {
+  if (stage !== 'beta') return label
+  return (
+    <Box
+      component="span"
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}
+    >
+      {label}
+      <BetaChip />
+    </Box>
+  )
 }
 
 export const TabItem = styled(MuiTab, {
@@ -273,7 +295,7 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
         {...rest}
       >
         {children}
-        {items.map(({ icon, href, ...item }, key) => (
+        {items.map(({ icon, href, stage, label, ...item }, key) => (
           <TabItem
             key={item.key ?? item.id ?? key}
             href={href ?? ''}
@@ -286,6 +308,7 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
             wrapped
             {...a11yProps(key)}
             {...item}
+            label={tabLabel(label, stage)}
           />
         ))}
       </MuiTabs>

@@ -356,6 +356,24 @@ export function showsBetaStage(
   return released === true && isBetaStaged(key)
 }
 
+/**
+ * The stage a console surface wears, from the release flags that govern it:
+ * a hub's own flag and its open section's, either of which may be absent.
+ * `beta` when any of them is released for this workspace and staged beta.
+ *
+ * `flags` is the console's verdict map, read for `released` (the rollout
+ * verdict without the staff bypass) for the reason {@link showsBetaStage}
+ * gives.
+ */
+export function releaseStageOfSurface(
+  keys: readonly (ReleaseFlagKey | null | undefined)[],
+  flags: Partial<Record<ReleaseFlagKey, { released?: boolean } | undefined>>,
+): ReleaseFlagStage | undefined {
+  return keys.some((key) => key && showsBetaStage(key, flags[key]?.released))
+    ? 'beta'
+    : undefined
+}
+
 /** Every flag staged `beta`, in registry order. */
 export const BETA_STAGED_RELEASE_FLAG_KEYS: readonly ReleaseFlagKey[] =
   RELEASE_FLAGS.filter((definition) => definition.stage === 'beta').map(

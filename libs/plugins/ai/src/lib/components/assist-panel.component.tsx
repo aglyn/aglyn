@@ -19,6 +19,7 @@
 import {
   canvas,
   checkEntitlement,
+  isBetaStaged,
   lockdownRefusalText,
   parseLockdownRefusal,
   planLabelGrantingFeature,
@@ -42,6 +43,7 @@ import {
   mdiThumbUpOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { BetaChip } from '@aglyn/shared-ui-jsx/components/beta-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -1272,6 +1274,12 @@ export function AssistPanelComponent(props: AssistDockProps) {
             {verdict.staffPreview && (
               <Chip size="small" color="warning" label="Staff preview" />
             )}
+            {/* Released and still changing (AGL-4052). Never beside the staff
+                preview marker: an assistant only staff can see is rolling
+                out, not in beta. */}
+            {verdict.visible &&
+              !verdict.staffPreview &&
+              isBetaStaged('release_assist') && <BetaChip />}
             {/* Assist answers from the docs but never says so, and the three
                 questions it provokes — what it can and can't do, why it
                 stopped answering, what happens to what I typed — are exactly

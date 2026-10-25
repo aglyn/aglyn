@@ -263,3 +263,31 @@ describe('the header renders the pair as one heading', () => {
     expect(heading.textContent).toBe('Marketing')
   })
 })
+
+describe('the Beta chip on the heading (AGL-4052)', () => {
+  it('asks for no badge on a released surface that is generally available', async () => {
+    // Contacts is the CRM's tab, released here and carrying no stage. The
+    // beta half of the verdict is `releaseStageOfSurface`'s, specified beside
+    // it in release-flag-stage.spec.ts.
+    await mountAt(['contacts', 'people'])
+    expect(askedFor()['badge']).toBeUndefined()
+  })
+
+  it('prints a badge after the title and section, inside the one h1', () => {
+    render(
+      <DashboardHeaderComponent
+        header={{
+          children: 'Automation',
+          secondary: 'Workflows',
+          badge: <span data-testid="badge">{'Beta'}</span>,
+        }}
+        breadcrumbItems={[]}
+      />,
+    )
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.contains(screen.getByTestId('badge'))).toBe(true)
+    expect(heading.textContent?.indexOf('Workflows')).toBeLessThan(
+      heading.textContent?.indexOf('Beta') ?? -1,
+    )
+  })
+})
