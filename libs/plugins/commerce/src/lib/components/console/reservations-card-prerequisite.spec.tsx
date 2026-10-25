@@ -35,6 +35,7 @@ const mockFirestore = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useMerchantPayments: () => mockPayments,
+  useUser: () => ({ data: null }),
   useFirestore: () => mockFirestore,
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   usePagedCollection: () => ({

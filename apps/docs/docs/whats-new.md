@@ -26,6 +26,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — hardware purchase records survive a workspace deletion
+
+- **[Records of your hardware purchases](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
+  Aglyn now keeps its record of each card reader sale after the workspace that
+  bought it is deleted, as tax law requires: the items, amounts, tax, and the
+  state, ZIP code and country it shipped to, with no name, email, phone or
+  street address. When the person who placed an order closes their account,
+  their details come off the order and the workspace keeps the rest.
+
 ## October 2026 — check people in at the window, with wristbands
 
 - **[Check-in at the window](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —

@@ -10670,6 +10670,24 @@
   "fieldOverrides": [
     {
       "collectionGroup": "hardwareOrders",
+      "fieldPath": "createdBy",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hardwareOrders",
       "fieldPath": "createdAtMs",
       "indexes": [
         {
