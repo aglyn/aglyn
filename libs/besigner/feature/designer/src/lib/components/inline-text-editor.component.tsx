@@ -36,6 +36,7 @@ import {
   type MouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
@@ -65,6 +66,16 @@ import {
   replacePillsWithTokenText,
   TOKEN_PILL_ATTR,
 } from '../utils/token-editable-dom'
+import {
+  isNearSelectionHandle,
+  isTouchPointer,
+  placeDockedToolbar,
+  prefersTouchEditing,
+  readVisibleArea,
+  selectionEndBoxes,
+  TouchPressTracker,
+  type VisibleArea,
+} from '../utils/touch-text-edit'
 import {
   parseTokenSegments,
   resolveTokenLabel,
@@ -228,6 +239,28 @@ export const InlineTextEditorComponent = observer(
       replacePill: HTMLElement | null
     } | null>(null)
     const [pillMenu, setPillMenu] = useState<HTMLElement | null>(null)
+    /**
+     * Whether the edit is being made with a finger (AGL-4069).
+     *
+     * Decided by the input itself, not by the screen size: the latest press
+     * anywhere on the page says which kind of pointer is in use, and a device
+     * whose main pointer is coarse starts out as touch before any press has
+     * been seen. A touch edit keeps its toolbar in the visible area, above
+     * the keyboard, and ends only on a real tap — see `touch-text-edit.ts`.
+     * A mouse keeps the behaviour it always had.
+     */
+    const lastPressWasTouchRef = useRef<boolean | undefined>(undefined)
+    const [touchMode, setTouchMode] = useState(false)
+    const touchModeRef = useRef(touchMode)
+    touchModeRef.current = touchMode
+    /** The part of the page the author can see, while a touch edit is open. */
+    const [visibleArea, setVisibleArea] = useState<VisibleArea | undefined>(
+      undefined,
+    )
+    const toolbarRef = useRef<HTMLDivElement>(null)
+    const [toolbarHeight, setToolbarHeight] = useState(0)
+    /** The selection as a toolbar press found it, to act on if a tap loses it. */
+    const toolbarRangeRef = useRef<Range | null>(null)
 
     // Same context walk as the attributes panel (AGL-583) — the edited
     // node is known, so dataset-item / entry groups resolve identically.
@@ -277,6 +310,61 @@ export const InlineTextEditorComponent = observer(
         (rich ? richRef.current : plainRef.current),
       [rich],
     )
+
+    // Which kind of pointer pressed last, read wherever on the page it pressed:
+    // a press inside the closed canvas still reaches the document, retargeted.
+    useEffect(() => {
+      const notePress = (event: Event) => {
+        const touch = isTouchPointer(event)
+        lastPressWasTouchRef.current = touch
+        if (inlineTextEdit.node && touch !== touchModeRef.current) {
+          setTouchMode(touch)
+        }
+      }
+      document.addEventListener('pointerdown', notePress, true)
+      return () => document.removeEventListener('pointerdown', notePress, true)
+    }, [])
+
+    // Settled once per edit, from the press that opened it.
+    useEffect(() => {
+      if (!node) return
+      setTouchMode(
+        lastPressWasTouchRef.current ??
+          prefersTouchEditing(typeof window === 'undefined' ? undefined : window),
+      )
+    }, [node])
+
+    /**
+     * Follows the visible area while a touch edit is open (AGL-4069). The
+     * keyboard opening, iOS panning the page to keep the caret in view, and a
+     * pinch all move the VISUAL viewport, which fires neither a window scroll
+     * nor a window resize.
+     */
+    useEffect(() => {
+      if (!node || !touchMode || typeof window === 'undefined') {
+        setVisibleArea(undefined)
+        return
+      }
+      const update = () => setVisibleArea(readVisibleArea(window))
+      update()
+      const visual = window.visualViewport
+      visual?.addEventListener('resize', update, { passive: true })
+      visual?.addEventListener('scroll', update, { passive: true })
+      window.addEventListener('resize', update, { passive: true })
+      window.addEventListener('scroll', update, { passive: true, capture: true })
+      return () => {
+        visual?.removeEventListener('resize', update)
+        visual?.removeEventListener('scroll', update)
+        window.removeEventListener('resize', update)
+        window.removeEventListener('scroll', update, { capture: true })
+      }
+    }, [node, touchMode])
+
+    // The docked toolbar's own height decides where its bottom edge goes.
+    useLayoutEffect(() => {
+      const height = toolbarRef.current?.offsetHeight ?? 0
+      if (height !== toolbarHeight) setToolbarHeight(height)
+    }, [node, touchMode, visibleArea, toolbarHeight])
 
     /**
      * Opens the edit: builds the content once, and puts it in the canvas
@@ -531,15 +619,48 @@ export const InlineTextEditorComponent = observer(
       inlineTextEdit.close()
     }, [])
 
+    /**
+     * A mouse edit commits when the text loses focus. A touch edit does not
+     * (AGL-4069): on a phone focus comes and goes for reasons that are not
+     * the author leaving — the keyboard's own bar, its Done key, the edit
+     * menu — and the edit there ends on a real tap away, Escape or Done.
+     */
     const handleEditableBlur = useCallback(() => {
       if (menuOpenRef.current) return
+      if (touchModeRef.current) return
       commit()
     }, [commit])
+
+    /**
+     * Ends a touch edit and lets go of the text (AGL-4069). On a phone the
+     * keyboard and the edit menu stay up for as long as the text holds focus
+     * and a selection, and the element given back is no longer editable — so
+     * both would be left hanging over a page the author has finished with.
+     */
+    const commitAndRelease = useCallback(() => {
+      const editable = activeEditable()
+      commit()
+      if (!editable) return
+      const selection = selectionOf(editable)
+      if (
+        selection &&
+        selection.rangeCount > 0 &&
+        editable.contains(selection.getRangeAt(0).commonAncestorContainer)
+      ) {
+        selection.removeAllRanges()
+      }
+      const focused = editable.ownerDocument.activeElement
+      if (focused instanceof HTMLElement && editable.contains(focused)) {
+        focused.blur()
+      }
+    }, [activeEditable, commit])
 
     // Latest `commit` for the document listener below, which must not
     // re-register on every render just to stay current.
     const commitRef = useRef(commit)
     commitRef.current = commit
+    const commitAndReleaseRef = useRef(commitAndRelease)
+    commitAndReleaseRef.current = commitAndRelease
 
     /**
      * Wires the editing handlers onto the LEAF while it is the surface.
@@ -619,6 +740,21 @@ export const InlineTextEditorComponent = observer(
      * they are. The portalled insert picker and pill popover ARE outside the
      * overlay in the DOM, and are covered by the same `menuOpenRef` stand-down
      * that already guards commit-on-blur (AGL-586).
+     *
+     * A FINGER is judged when it lifts, not when it lands (AGL-4069). The
+     * selection handles iOS hangs off the ends of selected text sit over the
+     * elements next to it, so the touch that grabs one to select more words
+     * lands outside the text — and ending the edit there closed the keyboard
+     * under an author who was only extending a selection. On touch the press
+     * is followed to its end: a still, quick tap ends the edit (or, on the
+     * element being edited, places the caret), while a drag, a hold, a press
+     * within reach of a selection handle, or a touch the browser takes over
+     * for a scroll or a handle drag (`pointercancel`) leaves it open. Inside
+     * the canvas the press is also kept from the elements under it until
+     * then: a leaf would select itself on the spot, which is not a tap's
+     * business until it is known to be one. The tap's own mouse events,
+     * which a phone sends after the finger lifts, still select what was
+     * tapped — after the edit has ended, as a click does.
      */
     useEffect(() => {
       if (!node) return
@@ -639,6 +775,10 @@ export const InlineTextEditorComponent = observer(
         return Boolean(overlay?.contains(target))
       }
 
+      /** The touch being followed, and what a tap would mean for it. */
+      const press = new TouchPressTracker()
+      let pressOnEditedLeaf = false
+
       const handlePointerDownAway = (event: Event) => {
         if (menuOpenRef.current) return
         const target = event.target as Node | null
@@ -656,20 +796,54 @@ export const InlineTextEditorComponent = observer(
         // it used to read as a click away and close the edit.
         const live = inPlaceRef.current?.element
         const leaf = live?.closest(LEAF_STAMP_SELECTOR)
-        if (
+        const onEditedLeaf = Boolean(
           live &&
-          leaf &&
-          target instanceof Element &&
-          target.closest(LEAF_STAMP_SELECTOR) === leaf
-        ) {
+            leaf &&
+            target instanceof Element &&
+            target.closest(LEAF_STAMP_SELECTOR) === leaf,
+        )
+        if (isTouchPointer(event)) {
+          const pointer = event as PointerEvent
+          const nearHandle = Boolean(
+            live &&
+              isNearSelectionHandle(
+                { x: pointer.clientX, y: pointer.clientY },
+                selectionEndBoxes(selectionOf(live)),
+              ),
+          )
+          press.down(pointer, nearHandle)
+          pressOnEditedLeaf = onEditedLeaf
+          // Inside the canvas only: chrome outside it keeps its own presses.
+          if (root && root !== document && event.currentTarget === root) {
+            event.stopPropagation()
+          }
+          return
+        }
+        if (onEditedLeaf && live) {
           event.preventDefault()
           placeCaretAtNearEnd(live, event as PointerEvent)
           return
         }
         commitRef.current()
       }
+      const handlePointerMove = (event: Event) =>
+        press.move(event as PointerEvent)
+      const handlePointerCancel = (event: Event) =>
+        press.cancel(event as PointerEvent)
+      const handlePointerUp = (event: Event) => {
+        if (press.up(event as PointerEvent) !== 'tap') return
+        const live = inPlaceRef.current?.element
+        if (pressOnEditedLeaf && live) {
+          placeCaretAtNearEnd(live, event as PointerEvent)
+          return
+        }
+        commitAndReleaseRef.current()
+      }
 
       document.addEventListener('pointerdown', handlePointerDownAway, true)
+      document.addEventListener('pointermove', handlePointerMove, true)
+      document.addEventListener('pointerup', handlePointerUp, true)
+      document.addEventListener('pointercancel', handlePointerCancel, true)
       // Second listener, INSIDE the shadow root, for the clicks the first one
       // is blind to — including a click on the very element being edited,
       // which must move the caret rather than end the edit.
@@ -678,6 +852,9 @@ export const InlineTextEditorComponent = observer(
       }
       return () => {
         document.removeEventListener('pointerdown', handlePointerDownAway, true)
+        document.removeEventListener('pointermove', handlePointerMove, true)
+        document.removeEventListener('pointerup', handlePointerUp, true)
+        document.removeEventListener('pointercancel', handlePointerCancel, true)
         if (root && root !== document) {
           root.removeEventListener('pointerdown', handlePointerDownAway, true)
         }
@@ -759,21 +936,71 @@ export const InlineTextEditorComponent = observer(
       event.preventDefault()
     }, [])
 
+    /**
+     * Notes the selection a toolbar press starts from. A tap on a phone can
+     * move focus, and the selection with it, before the button's click runs;
+     * the command must still apply to the words that were selected.
+     */
+    const noteToolbarSelection = useCallback(() => {
+      const editable = activeEditable()
+      const selection = editable ? selectionOf(editable) : null
+      const range =
+        selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+      toolbarRangeRef.current =
+        range &&
+        editable &&
+        editable.contains(range.startContainer) &&
+        editable.contains(range.endContainer)
+          ? range.cloneRange()
+          : null
+    }, [activeEditable])
+
+    /** Puts the noted selection back if the press lost it. */
+    const restoreToolbarSelection = useCallback(() => {
+      const editable = activeEditable()
+      const saved = toolbarRangeRef.current
+      toolbarRangeRef.current = null
+      if (!editable || !saved) return
+      const selection = selectionOf(editable)
+      const current =
+        selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+      if (current && editable.contains(current.commonAncestorContainer)) return
+      editable.focus()
+      const again = selectionOf(editable)
+      if (!again) return
+      again.removeAllRanges()
+      again.addRange(saved)
+    }, [activeEditable])
+
     const exec = useCallback(
       (command: string) => () => {
+        restoreToolbarSelection()
         // ExecCommand is deprecated but universally supported and keeps this
         // dependency-free; the output is normalized by the sanitizer anyway.
         document.execCommand(command)
         activeEditable()?.focus()
       },
-      [activeEditable],
+      [activeEditable, restoreToolbarSelection],
     )
 
     const handleLink = useCallback(() => {
+      restoreToolbarSelection()
+      const saved = (() => {
+        const editable = activeEditable()
+        const selection = editable ? selectionOf(editable) : null
+        return selection && selection.rangeCount > 0
+          ? selection.getRangeAt(0).cloneRange()
+          : null
+      })()
       const url = window.prompt('Link URL (https://…)')
-      if (url) document.execCommand('createLink', false, url)
+      // The prompt takes focus; the link goes on the words it was asked for.
+      if (url) {
+        toolbarRangeRef.current = saved
+        restoreToolbarSelection()
+        document.execCommand('createLink', false, url)
+      }
       activeEditable()?.focus()
-    }, [activeEditable])
+    }, [activeEditable, restoreToolbarSelection])
 
     /** Pill clicks (delegated): offer Replace/Remove (AGL-586). */
     const handleEditableClick = useCallback(
@@ -897,6 +1124,9 @@ export const InlineTextEditorComponent = observer(
       closeMenus()
     }, [pillMenu, closeMenus])
 
+    // Fingers get the larger target.
+    const toolSize = (t: Theme) => t.spacing(touchMode ? 5 : 3.5)
+
     const insertButton = (
       <IconButton
         size="small"
@@ -904,7 +1134,7 @@ export const InlineTextEditorComponent = observer(
         aria-label="Insert data token"
         onMouseDown={keepFocus}
         onClick={handleInsertOpen}
-        sx={{ width: 28, height: 28, borderRadius: 0.5 }}
+        sx={{ width: toolSize, height: toolSize, borderRadius: 0.5 }}
       >
         <MdiIcon path={mdiCodeBraces.path} fontSize="small" />
       </IconButton>
@@ -955,6 +1185,27 @@ export const InlineTextEditorComponent = observer(
     const minWidth = Math.max(live.width, 120)
     const TOOLBAR_CLEARANCE = 48
     const KEEP_VISIBLE = 80
+    // A finger's toolbar docks to the visible area, clear of the keyboard and
+    // of the edit menu iOS puts by the selection (AGL-4069); a mouse's hangs
+    // just above the text, as it always has.
+    const docked =
+      touchMode && visibleArea
+        ? placeDockedToolbar(
+            live,
+            visibleArea,
+            toolbarHeight,
+            parseFloat(theme.spacing(1)) || 0,
+          )
+        : undefined
+    const toolbarSx = docked
+      ? {
+          position: 'fixed',
+          top: docked.top,
+          left: docked.left,
+          maxWidth: docked.maxWidth,
+          overflowX: 'auto',
+        }
+      : { position: 'absolute', top: -40, left: 0 }
 
     return (
       <Box
@@ -979,17 +1230,21 @@ export const InlineTextEditorComponent = observer(
             all, and it is chrome, not text, so it stays an overlay above
             the run being edited rather than inside it. */}
         <Paper
+          ref={toolbarRef}
           elevation={4}
-          sx={{
-            position: 'absolute',
-            top: -40,
-            left: 0,
-            px: 0.5,
-            py: 0.25,
-            display: 'flex',
-            gap: 0.25,
-            alignItems: 'center',
-          }}
+          data-aglyn="overlay:inline-text-toolbar"
+          data-docked={docked?.edge}
+          onPointerDownCapture={noteToolbarSelection}
+          sx={
+            {
+              ...toolbarSx,
+              px: 0.5,
+              py: 0.25,
+              display: 'flex',
+              gap: 0.25,
+              alignItems: 'center',
+            } as SystemStyleObject<Theme>
+          }
         >
           {rich
             ? RICH_COMMANDS.filter(({ group }) =>
@@ -1002,8 +1257,8 @@ export const InlineTextEditorComponent = observer(
                   onMouseDown={keepFocus}
                   onClick={exec(command)}
                   sx={{
-                    width: 28,
-                    height: 28,
+                    width: toolSize,
+                    height: toolSize,
                     fontSize: 13,
                     fontWeight: 700,
                     fontStyle: command === 'italic' ? 'italic' : undefined,
@@ -1022,7 +1277,12 @@ export const InlineTextEditorComponent = observer(
               title="Insert link"
               onMouseDown={keepFocus}
               onClick={handleLink}
-              sx={{ width: 28, height: 28, fontSize: 13, borderRadius: 0.5 }}
+              sx={{
+                width: toolSize,
+                height: toolSize,
+                fontSize: 13,
+                borderRadius: 0.5,
+              }}
             >
               {'\u{1F517}'}
             </IconButton>
@@ -1032,7 +1292,7 @@ export const InlineTextEditorComponent = observer(
             size="small"
             color="primary"
             onMouseDown={keepFocus}
-            onClick={commit}
+            onClick={touchMode ? commitAndRelease : commit}
           >
             {'Done'}
           </Button>
