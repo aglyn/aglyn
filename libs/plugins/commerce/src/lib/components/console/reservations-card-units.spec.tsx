@@ -20,6 +20,10 @@
  * (AGL-4044): the editor's "Spots or units available" field beside "Sleeps",
  * the units left on each of the next 14 nights, and a walk-in that takes any
  * unit free on every night. A one-unit resource draws and saves as before.
+ *
+ * The walk-in is written by `/api/commerce/reservations/walk-in` (AGL-4046),
+ * not by the browser: the card keeps its instant check for the message, then
+ * posts, and shows the route's refusal when another device took the unit.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -39,7 +43,19 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 /** Every query a collection listener was built from, `null` included. */
 const builtQueries: unknown[] = []
 
+const signedIn = { uid: 'staff-1' }
+const authorizedFetch = jest.fn()
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: (...args: unknown[]) => authorizedFetch(...args),
+}))
+const answer = (status: number, body: Record<string, unknown>) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => body,
+})
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useUser: () => ({ data: signedIn }),
   useMerchantPayments: () => ({ blocked: false, reason: null, href: null }),
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => unknown) => {
@@ -115,6 +131,7 @@ const stayOn = (
 
 beforeEach(() => {
   jest.clearAllMocks()
+  authorizedFetch.mockResolvedValue(answer(200, { reservationId: 'stay-1' }))
   builtQueries.length = 0
   collections['resources'] = []
   collections['reservations'] = []
@@ -234,7 +251,7 @@ describe('a walk-in on a several-unit resource', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reserve' }))
   }
 
-  it('takes a unit that is free on every night', async () => {
+  it('takes a unit that is free on every night, through the walk-in route', async () => {
     collections['resources'] = [{ ...hookups, units: 3 }]
     collections['reservations'] = [
       stayOn('hookups', 1, 3),
@@ -244,12 +261,73 @@ describe('a walk-in on a several-unit resource', () => {
 
     await walkIn()
 
-    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
-    expect((setDoc as jest.Mock).mock.calls[0][1]).toMatchObject({
+    await waitFor(() => expect(authorizedFetch).toHaveBeenCalledTimes(1))
+    const [user, url, init] = authorizedFetch.mock.calls[0]
+    expect(user).toBe(signedIn)
+    expect(url).toBe('/api/commerce/reservations/walk-in')
+    expect(init.method).toBe('POST')
+    const sent = JSON.parse(init.body)
+    expect(sent).toMatchObject({
+      hostId: 'host-1',
       resourceId: 'hookups',
-      status: 'confirmed',
-      nights: 2,
+      checkInDayMs: TODAY + 1 * DAY,
+      checkOutDayMs: TODAY + 3 * DAY,
     })
+    expect(typeof sent.reservationId).toBe('string')
+    // The browser no longer writes the stay itself.
+    expect(setDoc).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        'Walk-in reserved — collect payment at POS',
+        expect.objectContaining({ variant: 'success' }),
+      ),
+    )
+  })
+
+  it('shows the route’s refusal when another device took the last unit', async () => {
+    collections['resources'] = [{ ...hookups, units: 3 }]
+    authorizedFetch.mockResolvedValue(
+      answer(409, { error: 'Every unit is taken on at least one of those nights' }),
+    )
+    render(<ReservationsCard hostId="host-1" />)
+
+    await walkIn()
+
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        'Every unit is taken on at least one of those nights',
+        expect.objectContaining({ variant: 'warning' }),
+      ),
+    )
+    expect(enqueueSnackbar).not.toHaveBeenCalledWith(
+      'Walk-in reserved — collect payment at POS',
+      expect.anything(),
+    )
+    // The dialog stays open on the dates, to pick others.
+    expect(screen.getByRole('button', { name: 'Reserve' })).toBeTruthy()
+  })
+
+  it('sends one attempt id for a retry of the same walk-in', async () => {
+    collections['resources'] = [cabin]
+    authorizedFetch
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(answer(200, { reservationId: 'stay-1' }))
+    render(<ReservationsCard hostId="host-1" />)
+
+    await walkIn()
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        'Could not reserve the walk-in — try again',
+        expect.objectContaining({ variant: 'error' }),
+      ),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+    await waitFor(() => expect(authorizedFetch).toHaveBeenCalledTimes(2))
+    const ids = authorizedFetch.mock.calls.map(
+      ([, , init]) => JSON.parse(init.body).reservationId,
+    )
+    expect(ids[0]).toBe(ids[1])
   })
 
   it('is refused when one night has no unit left', async () => {
@@ -269,7 +347,7 @@ describe('a walk-in on a several-unit resource', () => {
         expect.anything(),
       ),
     )
-    expect(setDoc).not.toHaveBeenCalled()
+    expect(authorizedFetch).not.toHaveBeenCalled()
   })
 
   it('still says "Those dates are taken" on a one-unit resource', async () => {
@@ -285,6 +363,6 @@ describe('a walk-in on a several-unit resource', () => {
         expect.anything(),
       ),
     )
-    expect(setDoc).not.toHaveBeenCalled()
+    expect(authorizedFetch).not.toHaveBeenCalled()
   })
 })

@@ -210,12 +210,13 @@ const LOAD_MORE_ALLOWED = [
   // over the reader's site memberships, every filter and the search on it —
   // so what grows is always a page of the answer, never a loaded window.
   'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
-  // The Get a domain card's search results (AGL-3962): one search answers at
-  // most MAX_CANDIDATES (24) names, all fetched and priced at once, and
-  // "Show N more" only reveals the rest of that answer after the first six.
-  // Nothing is loaded and nothing grows past the one answer, so there is no
-  // page to turn.
-  'libs/plugins/domains/src/lib/components/buy-domain-card.component.tsx',
+  // The domain search's results (AGL-3962), drawn by the site's Get a domain
+  // card and the workspace's Buy a domain dialog (AGL-4040): one search
+  // answers at most MAX_CANDIDATES (24) names, all fetched and priced at
+  // once, and "Show N more" only reveals the rest of that answer after the
+  // first six. Nothing is loaded and nothing grows past the one answer, so
+  // there is no page to turn.
+  'libs/plugins/domains/src/lib/components/domain-search.component.tsx',
 ]
 
 /**
@@ -973,6 +974,19 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/domains/src/lib/components/domains-page.component.tsx',
+    'The workspace’s Domains page (AGL-4040): every name the workspace holds, ' +
+      'read whole from the registrations route, which answers at most 50 and a ' +
+      'workspace may hold at most 25 (MAX_HELD_PER_WORKSPACE). A complete, ' +
+      'bounded list, sorted by every column on the client.',
+  ],
+  [
+    'libs/plugins/domains/src/lib/components/dns-records-section.component.tsx',
+    'One domain’s DNS records (AGL-4040): the zone as the registrar lists it, ' +
+      'read whole (the driver walks at most five pages of 100), one row per ' +
+      'record a person added. A zone, not a feed: it does not grow with time.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/components/console/pos-devices-card.component.tsx',
     'The hardware at the tills (AGL-3607, AGL-3608): the Stripe Terminal ' +
       'card readers the site registered — the readers route reads at most 50 ' +
@@ -988,6 +1002,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'health readout — whether the printer is collecting its queue — not ' +
       'a view of the print log. Every bound is a `limit()` on the query, set ' +
       'by what one till carries.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/pos-hardware-card.component.tsx',
+    'One workspace’s card reader purchases (AGL-4038): the shop route reads ' +
+      'the newest 50 `hardwareOrders` with `limit(50)`, and a row is one ' +
+      'order of physical readers and docks, bounded by how many devices a ' +
+      'store buys rather than by how long it has traded.',
   ],
   [
     'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-day-totals-card.component.tsx',
@@ -2074,7 +2095,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // The pickup and delivery queue beside it is a real list, and pages.
     // 82 with the day totals' summary tables (AGL-4037): tenders, registers
     // and cashiers; its shifts table pages.
-    expect(NOT_A_LIST).toHaveLength(82)
+    // 83 with one workspace's card reader purchases (AGL-4038), capped at the
+    // newest 50; the staff list of every workspace's orders pages.
+    // 85 with the workspace's Domains page and one domain's DNS records
+    // (AGL-4040): a workspace holds at most 25 names, and a zone is read whole.
+    expect(NOT_A_LIST).toHaveLength(85)
   })
 })
 

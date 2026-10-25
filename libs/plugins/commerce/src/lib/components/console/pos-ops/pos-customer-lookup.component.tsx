@@ -33,8 +33,11 @@ import {
   Typography,
 } from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CheckInRow } from '../../../model/commerce-check-in'
 import { posMoney } from '../../../model/commerce-pos-ops'
+import { PosCheckInDialog } from './pos-check-in-dialog.component'
+import { PosCheckInZone } from './pos-check-in-zone.component'
 import { callPosOps } from './pos-ops-api'
 
 /** The customer a sale is rung for. `id` is empty when no record system keeps people. */
@@ -50,6 +53,9 @@ export interface PosCustomerLookupProps {
   hostId: string
   value: PosSelectedCustomer | null
   onChange: (customer: PosSelectedCustomer | null) => void
+  /** The register and its PIN's cashier, for who checks the customer in (AGL-4043). */
+  registerId?: string
+  cashierAssertion?: string
 }
 
 /** How long typing pauses before the register asks. */
@@ -58,11 +64,12 @@ const SEARCH_DEBOUNCE_MS = 250
 /**
  * The customer at the register (AGL-3609): search the workspace's people by
  * name, email or phone, see what they have bought here before, attach them
- * to the sale — or add a new one in a few taps. Where the workspace keeps no
+ * to the sale — or add a new one in a few taps — and check them in when they
+ * have a pass or a stay due today (AGL-4043). Where the workspace keeps no
  * people, it falls back to an email typed for the receipt.
  */
 export function PosCustomerLookup(props: PosCustomerLookupProps) {
-  const { hostId, value, onChange } = props
+  const { hostId, value, onChange, registerId, cashierAssertion } = props
   const { data: user } = useUser()
   const [text, setText] = useState('')
   const [results, setResults] = useState<PosSelectedCustomer[]>([])
@@ -116,6 +123,38 @@ export function PosCustomerLookup(props: PosCustomerLookupProps) {
     }
   }, [value?.email, user, hostId])
 
+  // What the attached customer has to check in today (AGL-4043). The panel
+  // asks on every customer, so the server brings the day in line only on a
+  // day the window is already checking people in.
+  const [due, setDue] = useState<{ dayKey: string; waiting: number; total: number } | null>(null)
+  const [checkingIn, setCheckingIn] = useState(false)
+  const contactId = value?.kind === 'contact' ? value.id : ''
+  const refreshDue = useCallback(() => {
+    if ((!value?.email && !contactId) || !user) return undefined
+    let active = true
+    void callPosOps<{ dayKey?: string; checkIns?: CheckInRow[] }>(user, 'pos-check-in', {
+      hostId,
+      action: 'customer',
+      reconcile: 'if-used',
+      ...(value?.email ? { email: value.email } : { contactId }),
+    }).then((answer) => {
+      if (!active || !answer.ok || !answer.body.dayKey) return
+      const rows = answer.body.checkIns ?? []
+      setDue({
+        dayKey: answer.body.dayKey,
+        waiting: rows.filter((row) => row.status === 'expected').length,
+        total: rows.length,
+      })
+    })
+    return () => {
+      active = false
+    }
+  }, [value?.email, contactId, user, hostId])
+  useEffect(() => {
+    setDue(null)
+    return refreshDue()
+  }, [refreshDue])
+
   const pick = (customer: PosSelectedCustomer) => {
     onChange(customer)
     setText('')
@@ -161,6 +200,34 @@ export function PosCustomerLookup(props: PosCustomerLookupProps) {
               : 'First order here'}
           </Typography>
         ) : null}
+        {due?.waiting ? (
+          <Button size="small" variant="outlined" onClick={() => setCheckingIn(true)}>
+            {`Check in (${due.waiting})`}
+          </Button>
+        ) : null}
+        {due ? (
+          <PosCheckInZone
+            hostId={hostId}
+            orgId={undefined}
+            contactId={contactId || null}
+            email={value.email ? value.email.toLowerCase() : null}
+            dayKey={due.dayKey}
+            name={value.name || null}
+            unitsDue={due.total}
+            placement="register-customer"
+          />
+        ) : null}
+        <PosCheckInDialog
+          open={checkingIn}
+          hostId={hostId}
+          {...(registerId ? { registerId } : {})}
+          {...(cashierAssertion ? { cashierAssertion } : {})}
+          initialCustomer={value.email ? { email: value.email } : { contactId: contactId || null }}
+          onClose={() => {
+            setCheckingIn(false)
+            refreshDue()
+          }}
+        />
       </Stack>
     )
   }

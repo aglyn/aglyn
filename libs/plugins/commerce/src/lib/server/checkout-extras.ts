@@ -169,7 +169,7 @@ async function resolveCartExtrasLines(
   const lines: CheckoutExtrasLine[] = []
   for (const line of cartLines) {
     const product = products.get(line.productId)
-    if (!product || product.deletedAt || product.status !== 'active') continue
+    if (!CommerceModel.productListedOnline(product)) continue
     const variant = line.variantId
       ? product.variants.find((item) => item.id === line.variantId)
       : product.variants[0]

@@ -1,4 +1,6 @@
 /**
+ * @jest-environment node
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -19,10 +21,25 @@ import { MemoryFirestore } from '../testing/memory-firestore'
 
 const mockStore = { current: new MemoryFirestore() }
 const mockFraudHeld = jest.fn<Promise<boolean>, [unknown, string]>(async () => false)
+const mockVerify = jest.fn(async (_token: string): Promise<Record<string, unknown>> => ({ uid: 'user-1', email: 'alex@testbakery.com' }))
+const mockMembership = jest.fn(async (_uid: string, _orgId: string): Promise<unknown> => null)
+const mockBilling = jest.fn(async (): Promise<boolean> => true)
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  firebaseAdmin: { app: () => ({ firestore: () => mockStore.current }) },
+  firebaseAdmin: {
+    app: () => ({
+      firestore: () => mockStore.current,
+      auth: () => ({ verifyIdToken: (token: string) => mockVerify(token) }),
+    }),
+  },
+  getOrgForHost: async (hostId: string) => {
+    const host = mockStore.current.docs.get(`hosts/${hostId}`)
+    const orgId = String(host?.['orgId'] ?? '')
+    return orgId ? { orgId, org: mockStore.current.docs.get(`orgs/${orgId}`) ?? {} } : null
+  },
+  resolveOrgMembership: (uid: string, orgId: string) => mockMembership(uid, orgId),
+  memberHasOrgPermission: () => mockBilling(),
 }))
 jest.mock('@aglyn/tenant-data-admin/server/payment-fraud-hold', () => ({
   isPaymentFraudHeld: (db: unknown, orgId: string) => mockFraudHeld(db, orgId),
@@ -43,6 +60,7 @@ import {
 import type { DomainRegistrationDoc } from '../model/registration'
 import { registrationRef } from './db'
 import {
+  domainsGate,
   MAX_HELD_PER_WORKSPACE,
   PAID_HISTORY_MIN_AGE_MS,
   PURCHASES_PER_30_DAYS,
@@ -116,6 +134,12 @@ beforeEach(() => {
   mockFraudHeld.mockImplementation(async () => false)
   resetPluginServicesForTests()
   asked = []
+  mockVerify.mockReset()
+  mockVerify.mockImplementation(async () => ({ uid: 'user-1', email: 'alex@testbakery.com' }))
+  mockMembership.mockReset()
+  mockMembership.mockImplementation(async () => null)
+  mockBilling.mockReset()
+  mockBilling.mockImplementation(async () => true)
 })
 
 describe('the 72 h payment-history gate', () => {
@@ -186,14 +210,6 @@ describe('the 72 h payment-history gate', () => {
 describe('every other refusal stands with a preclearance in hand', () => {
   const cases: Array<[string, () => Promise<{ actor?: DomainsActor; domain?: string }>]> = [
     ['lookalike', async () => ({ domain: 'aglyn-billing.com' })],
-    ['site-has-domain', async () => ({ actor: { ...ACTOR, host: { cname: 'example.com' } } })],
-    [
-      'site-has-bought-domain',
-      async () => {
-        await registration('testbakery.net', { hostId: 'host-1' })
-        return {}
-      },
-    ],
     [
       'fraud-hold',
       async () => {
@@ -227,5 +243,87 @@ describe('every other refusal stands with a preclearance in hand', () => {
     expect(await purchaseClearance(actor, domain, NOW)).toEqual({ refusal, preclearanceId: null })
     // The waiver is asked about last, so a refused purchase never reads it.
     expect(asked).toEqual([])
+  })
+})
+
+describe('buying while a site has a domain (AGL-4040)', () => {
+  it('is no refusal: a site with a domain, or one bought for it, may buy another', async () => {
+    paidInvoice(PAID_HISTORY_MIN_AGE_MS + 60_000)
+    await registration('testbakery.net', { hostId: 'host-1' })
+    const withDomain = { ...ACTOR, host: { cname: 'example.com' } }
+    expect(await purchaseClearance(withDomain, 'testbakery.com', NOW)).toEqual({
+      refusal: null,
+      preclearanceId: null,
+    })
+  })
+
+  it('keeps the workspace caps across every site and the workspace itself', async () => {
+    paidInvoice(PAID_HISTORY_MIN_AGE_MS + 60_000)
+    for (let index = 0; index < MAX_HELD_PER_WORKSPACE; index += 1) {
+      await registration(`held${index}.com`, { hostId: index % 2 ? null : 'host-2' })
+    }
+    expect(await purchaseRefusal({ ...ACTOR, hostId: null, host: null }, 'testbakery.com', NOW)).toBe(
+      'too-many-held',
+    )
+  })
+})
+
+describe('the workspace-level gate (AGL-4040)', () => {
+  const request = (body: Record<string, unknown> | null, query = '') =>
+    new Request(`https://console.test/api/registrar/workspace${query}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { authorization: 'Bearer token', 'content-type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+
+  beforeEach(() => {
+    mockStore.current.docs.set('orgs/org-1', { name: 'Test Org', billing: { planId: 'starter' } })
+    mockStore.current.docs.set('hosts/host-1', { orgId: 'org-1', memberRoles: { 'user-1': 'admin' } })
+  })
+
+  it('admits a workspace owner or admin by orgId, with no site', async () => {
+    mockMembership.mockImplementation(async () => ({ orgId: 'org-1', member: { role: 'admin' } }))
+    const gate = await domainsGate(request(null, '?orgId=org-1'), {
+      billing: false,
+      scope: 'workspace',
+      entitlement: false,
+    })
+    expect(gate).not.toBeInstanceOf(Response)
+    if (gate instanceof Response) return
+    expect(gate.actor).toMatchObject({ orgId: 'org-1', hostId: null, host: null })
+  })
+
+  it('refuses a member who is not a workspace owner or admin', async () => {
+    mockMembership.mockImplementation(async () => ({ orgId: 'org-1', member: { role: 'editor' } }))
+    const gate = await domainsGate(request({ orgId: 'org-1' }), { billing: false, scope: 'workspace', entitlement: false })
+    expect(gate).toBeInstanceOf(Response)
+    expect((gate as Response).status).toBe(403)
+    expect(await (gate as Response).json()).toMatchObject({ code: 'workspace-admin' })
+  })
+
+  it('still asks billing permission to buy, and names no site', async () => {
+    mockMembership.mockImplementation(async () => ({ orgId: 'org-1', member: { role: 'owner' } }))
+    mockBilling.mockImplementation(async () => false)
+    const gate = await domainsGate(request({ orgId: 'org-1' }), { billing: true, scope: 'workspace', entitlement: false })
+    expect((gate as Response).status).toBe(403)
+    expect(await (gate as Response).json()).toMatchObject({ code: 'billing-permission' })
+  })
+
+  it('refuses a request without a workspace, and keeps the plan gate when asked', async () => {
+    mockMembership.mockImplementation(async () => ({ orgId: 'org-1', member: { role: 'owner' } }))
+    expect(((await domainsGate(request({}), { billing: false, scope: 'workspace' })) as Response).status).toBe(400)
+    const unentitled = await domainsGate(request({ orgId: 'org-1' }), { billing: false, scope: 'workspace' })
+    expect((unentitled as Response).status).toBe(402)
+  })
+
+  it('treats a request naming a site as the site’s, under either scope', async () => {
+    const gate = await domainsGate(request({ hostId: 'host-1' }), {
+      billing: false,
+      scope: 'either',
+      entitlement: false,
+    })
+    expect(gate).not.toBeInstanceOf(Response)
+    if (gate instanceof Response) return
+    expect(gate.actor).toMatchObject({ orgId: 'org-1', hostId: 'host-1' })
   })
 })

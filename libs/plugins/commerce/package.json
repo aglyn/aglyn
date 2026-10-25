@@ -41,7 +41,8 @@
     "@stripe/stripe-js": "^9.17.0",
     "@swc/helpers": "0.5.23",
     "dayjs": "^1.11.23",
-    "qrcode.react": "^4.2.0"
+    "qrcode.react": "^4.2.0",
+    "sharp": "^0.35.5"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",
