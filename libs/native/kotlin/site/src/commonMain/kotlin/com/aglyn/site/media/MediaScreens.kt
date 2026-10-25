@@ -573,8 +573,8 @@ private fun MediaHead(phone: Boolean, compact: Boolean, edge: Dp, enabled: Boole
   val star = LocalPageStar.current
   if (star != null) {
     DisposableEffect(star) {
-      star.claimed = true
-      onDispose { star.claimed = false }
+      star.claim()
+      onDispose { star.release() }
     }
   }
   var sourcesOpen by remember { mutableStateOf(false) }
