@@ -26,6 +26,10 @@ const PosKioskPage = lazy(() => import('./components/console/pos-kiosk-page.comp
 const PosHardwareOrdersStaffPage = lazy(
   () => import('./components/console/pos-hardware-orders-staff-page.component'),
 )
+/** Staff → Reader start-up screen (AGL-4048): loads only on its staff page. */
+const PosReaderSplashStaffPage = lazy(
+  () => import('./components/console/pos-reader-splash-staff-page.component'),
+)
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
@@ -110,6 +114,14 @@ export function registerCommerceConsole(): void {
         label: 'Hardware orders',
         header: { title: 'Hardware Orders', docsTopic: 'posHardware' },
         Component: PosHardwareOrdersStaffPage,
+      },
+      // The platform's default card reader start-up screen (AGL-4048), which
+      // every store that has not picked its own logo or image shows.
+      {
+        id: 'reader-start-up-screen',
+        label: 'Reader start-up screen',
+        header: { title: 'Reader Start-up Screen', docsTopic: 'posHardware' },
+        Component: PosReaderSplashStaffPage,
       },
     ],
     publicPages: [
