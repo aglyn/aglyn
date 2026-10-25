@@ -28,7 +28,7 @@ struct NewestSiteUsersCard: View {
   }
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if accountsOn {
         VStack(alignment: .leading, spacing: AglynSpace.one) {
           HStack(alignment: .firstTextBaseline) {

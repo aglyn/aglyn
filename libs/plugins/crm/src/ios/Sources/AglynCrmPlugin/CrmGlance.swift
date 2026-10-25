@@ -141,7 +141,7 @@ struct CrmTasksDueCard: View {
   private static let nextUp = 5
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if probe.ready && !probe.rows.isEmpty {
         card
       }

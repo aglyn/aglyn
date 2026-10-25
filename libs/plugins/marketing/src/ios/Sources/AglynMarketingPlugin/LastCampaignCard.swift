@@ -29,7 +29,7 @@ struct LastCampaignCard: View {
   }
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if let campaign = lastSent {
         let stats = campaign.data["stats"] as? [String: Any]
         VStack(alignment: .leading, spacing: AglynSpace.one) {
