@@ -249,6 +249,9 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
       nameLower: nameSearchKey(site.displayName),
       searchTokens: hostSearchTokens(site),
       hasCustomDomain: Boolean(site.cname),
+      // The mirror carries the custom domain as the console's sync writes it (host-memberships.ts), so a site list
+      // shows the address the live site answers on.
+      ...(site.cname ? { cname: site.cname } : {}),
       createdAt: ago(site.created),
       role: 'admin',
       updatedAt: now,

@@ -78,6 +78,12 @@ public struct SiteRow: Identifiable, Equatable, Sendable {
   /// The address a list shows under the name, as the console's Sites list does: the custom domain, else the platform
   /// address.
   public var shownAddress: String? { cname ?? HostStatus.siteAddress(subdomain) }
+
+  /// The same, once the host document is read: its own custom domain wins, so a membership row written before the
+  /// mirror carried `cname` still shows the address the live site answers on.
+  public func shownAddress(hostCname: String?) -> String? {
+    hostCname.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? shownAddress
+  }
 }
 
 /// The workspace's sites: the search, the chip, the rows read so far and
