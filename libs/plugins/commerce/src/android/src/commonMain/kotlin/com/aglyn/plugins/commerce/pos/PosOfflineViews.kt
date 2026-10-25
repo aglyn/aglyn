@@ -261,9 +261,14 @@ fun OfflineSaleDialog(model: RegisterModel) {
             }
           }
         } else if (totals != null) {
+          // The selected segment wears the brand's container, not Material's default secondary (pink) one.
+          val segmentColors = SegmentedButtonDefaults.colors(
+            activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          )
           SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("offline-tender")) {
-            SegmentedButton(tender == OfflineTender.CASH, onClick = { tender = OfflineTender.CASH }, shape = SegmentedButtonDefaults.itemShape(0, 2), enabled = !taking) { Text("Cash") }
-            SegmentedButton(tender == OfflineTender.CARD, onClick = { tender = OfflineTender.CARD }, shape = SegmentedButtonDefaults.itemShape(1, 2), enabled = !taking) { Text("Card") }
+            SegmentedButton(tender == OfflineTender.CASH, onClick = { tender = OfflineTender.CASH }, shape = SegmentedButtonDefaults.itemShape(0, 2), colors = segmentColors, enabled = !taking) { Text("Cash") }
+            SegmentedButton(tender == OfflineTender.CARD, onClick = { tender = OfflineTender.CARD }, shape = SegmentedButtonDefaults.itemShape(1, 2), colors = segmentColors, enabled = !taking) { Text("Card") }
           }
           if (tender == OfflineTender.CASH) {
             if (offline.discountOverLimit(sold)) {
