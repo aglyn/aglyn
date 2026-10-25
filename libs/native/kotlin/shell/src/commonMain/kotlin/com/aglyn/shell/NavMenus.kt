@@ -292,7 +292,8 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
   val prefs = services.accountPrefs.state.collectAsState().value
   val org = workspace.orgs.firstOrNull { it.id == orgId } ?: return onDone()
   val picked = colorOfHex(prefs.workspaceColors[orgId])
-  val (current) = rememberWorkspaceColor(orgId, workspace, prefs, services.api.origin)
+  val resolved = rememberResolvedWorkspaceColor(orgId, workspace, prefs, services.api.origin)
+  val current = colorOfHex(resolved.color)
   var custom by remember { mutableStateOf(prefs.workspaceColors[orgId].orEmpty()) }
   val (light, dark) = orgLogoUrls(workspace, orgId, services.api.origin)
   AlertDialog(
@@ -308,8 +309,9 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
             Text(
               when {
                 picked != null -> "Your color"
-                workspace.orgLogos[orgId]?.brandColor != null -> "Brand color (white-label)"
-                current != null -> "From its logo"
+                resolved.source == com.aglyn.contracts.WorkspaceColorSource.BRAND -> "Brand color (white-label)"
+                resolved.source == com.aglyn.contracts.WorkspaceColorSource.LOGO -> "From its logo"
+                resolved.source == com.aglyn.contracts.WorkspaceColorSource.STABLE -> "Automatic"
                 else -> "No color yet"
               },
               style = MaterialTheme.typography.bodySmall,
@@ -338,7 +340,7 @@ internal fun WorkspaceColorDialog(services: ShellServices, workspace: WorkspaceS
           modifier = Modifier.fillMaxWidth().testTag("workspace-color-hex"),
         )
         Text(
-          "Automatic uses the workspace's brand color, else a color from its logo. Saved on your account; only you see it.",
+          "Automatic uses the workspace's brand color, else a color from its logo, else one of its own. Saved on your account; only you see it.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

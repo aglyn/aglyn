@@ -4,6 +4,7 @@ import com.aglyn.contracts.resolveWorkspaceColor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Zach's decision 5: only a white-label workspace's brand color becomes the accent, and only while the setting is on. */
 class WorkspaceAccentTest {
@@ -41,5 +42,28 @@ class WorkspaceAccentTest {
   fun aStoredBrandColorWithoutWhiteLabelIsNoAccent() {
     // The console reads brandingProfile.primaryColor only for a white-label workspace (its branding effects).
     assertNull(workspaceAccent("#7A5CF0", whiteLabel = false, useWorkspaceBrand = true))
+  }
+
+  @Test
+  fun aWorkspaceWithNoColorOfItsOwnGetsItsStableColorOnItsTileOnly() {
+    // Two workspaces with one initial and no pick, brand or logo still differ on the rail (AGL-4000, the contract's
+    // workspaceStableColor): the color comes from the id, from the generated palette, and never tints the app.
+    val palette = com.aglyn.contracts.Contracts.workspaceStableColors
+    val stable = resolveWorkspaceColor(picked = null, brandColor = null, logoColor = null, useWorkspaceBrand = true, orgId = "org-acme-builders")
+    assertEquals(com.aglyn.contracts.WorkspaceColorSource.STABLE, stable.source)
+    assertTrue(stable.color in palette, "${stable.color} is a palette color")
+    assertEquals(false, stable.tintsApp)
+    assertEquals(stable.color, resolveWorkspaceColor(null, null, null, true, orgId = "org-acme-builders").color, "the same id, the same color")
+    // Picked > brand > logo > stable.
+    assertEquals("#2E7D32", resolveWorkspaceColor(null, null, "#2E7D32", true, orgId = "org-acme-builders").color)
+    assertEquals("#E040FB", resolveWorkspaceColor("#E040FB", null, "#2E7D32", true, orgId = "org-acme-builders").color)
+    // Without an id there is no stable color: the tile is the neutral slate.
+    assertNull(resolveWorkspaceColor(null, null, null, true).color)
+    // Every stable color carries its initial at 4.5:1 or better in the color the tile draws it in.
+    for (hex in palette) {
+      val fill = com.aglyn.ui.colorOfHex(hex)!!
+      val ratio = com.aglyn.ui.contrastRatio(com.aglyn.ui.readableOn(fill), fill)
+      assertTrue(ratio >= 4.5f, "$hex: the initial at $ratio:1")
+    }
   }
 }

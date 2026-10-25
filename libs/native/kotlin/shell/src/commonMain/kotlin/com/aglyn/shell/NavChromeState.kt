@@ -156,9 +156,10 @@ internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: Strin
 }
 
 /**
- * A workspace's color as its tile draws it (the rail, the pickers, the menus): the person's pick, else its brand color,
- * else a color taken from its logo (Zach, 2026-10-18), and the contract's `tintsApp`. It colors the tile only; no surface
- * wears a wash of it (AGL-4000).
+ * A workspace's color as its tile draws it (the rail, the pickers, the menus, the header's avatar): the person's pick,
+ * else its brand color, else a color taken from its logo, else its stable color from its id (the contract's
+ * `workspaceStableColor`, so two workspaces with the same initial still differ), and the contract's `tintsApp`. It colors
+ * the tile only; no surface wears a wash of it (AGL-4000).
  */
 @Composable
 internal fun rememberWorkspaceColor(
@@ -167,14 +168,26 @@ internal fun rememberWorkspaceColor(
   prefs: AccountPreferences,
   origin: String,
 ): Pair<Color?, Boolean> {
+  val resolved = rememberResolvedWorkspaceColor(orgId, workspace, prefs, origin)
+  return colorOfHex(resolved.color) to resolved.tintsApp
+}
+
+/** [rememberWorkspaceColor] with where the color came from (picked, brand, logo, stable or none). */
+@Composable
+internal fun rememberResolvedWorkspaceColor(
+  orgId: String,
+  workspace: WorkspaceState,
+  prefs: AccountPreferences,
+  origin: String,
+): com.aglyn.contracts.WorkspaceColor {
   val logo = rememberLogoColor(orgLogoUrls(workspace, orgId, origin).first)
-  val resolved = resolveWorkspaceColor(
+  return resolveWorkspaceColor(
     prefs.workspaceColors[orgId],
     workspace.orgLogos[orgId]?.brandColor,
     logo?.toHex(),
     prefs.theme.useWorkspaceBrand,
+    orgId = orgId,
   )
-  return colorOfHex(resolved.color) to resolved.tintsApp
 }
 
 /** The site's own document, live, for the plugins it runs. */
