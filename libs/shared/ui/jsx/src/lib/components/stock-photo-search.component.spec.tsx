@@ -87,8 +87,8 @@ afterEach(async () => {
 
 describe('the Stock photos tab', () => {
   it('says plainly why there is nothing to search on a deployment with no library', async () => {
-    renderPanel(client({ status: jest.fn(async () => ({ status: 'unconfigured' as const, message: 'Stock photos are not set up on this Aglyn deployment.' })) }))
-    expect(await screen.findByText('Stock photos are not set up on this Aglyn deployment.')).toBeTruthy()
+    renderPanel(client({ status: jest.fn(async () => ({ status: 'unconfigured' as const, message: 'Stock photos are not set up here.' })) }))
+    expect(await screen.findByText('Stock photos are not set up here.')).toBeTruthy()
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 

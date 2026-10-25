@@ -130,7 +130,7 @@ export type StockPhotoImportAnswer =
 
 /** Said when the deployment has no stock photo library. */
 export const STOCK_PHOTOS_UNCONFIGURED_MESSAGE =
-  'Stock photos are not set up on this Aglyn deployment, so there is no library to search. ' +
+  'Stock photos are not set up here, so there is no library to search. ' +
   'You can still upload your own photos in the library tabs.'
 
 /** Said when the library could not be asked, or could not send a photo, just now. */
