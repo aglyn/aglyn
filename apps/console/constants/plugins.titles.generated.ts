@@ -16,6 +16,7 @@ export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {
   bookings: 'Bookings',
   crm: 'CRM',
   data: 'Data',
+  domains: 'Domains',
   emails: 'Emails',
   events: 'Events',
   forms: 'Forms',
@@ -101,5 +102,6 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
 /** The noun for one record's page beneath a surface that owns its subtree, by the surface's URL slug. */
 export const PLUGIN_SURFACE_RECORD_TITLES: Readonly<Record<string, string>> = {
   'ai-jobs': 'Building your site',
+  domains: 'Domain',
   waivers: 'Waiver',
 }
