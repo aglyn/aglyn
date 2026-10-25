@@ -513,6 +513,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
   posOperations: {
+    '#check-in-at-the-window': 'For a track, a campground, a lot or an event: people who bought a day pass, camping or parking online, or at the register, are looked up at the window, checked in and handed a wristband.',
     '#day-and-event-totals': 'When several people take payments on their own registers, Commerce → Orders → Day totals adds the whole day up across every register, shift and cashier.',
     '#shifts-and-the-cash-drawer': 'A shift is one stretch of trading on one register, counted against one cash drawer.',
     '#staff-pins': 'A shared tablet stays signed in; each person switches in with their own PIN instead of signing out.',

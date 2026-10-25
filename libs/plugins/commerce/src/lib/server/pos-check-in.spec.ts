@@ -276,6 +276,15 @@ describe('finding a customer', () => {
     expect((byEmail.body['customer'] as CheckInCustomer).unitsDue).toBe(2)
     expect((await post({ action: 'customer' })).status).toBe(400)
   })
+
+  it('reads the day in passing only once the window has used check-in that day', async () => {
+    const panel = () => post({ action: 'customer', email: 'jordan@example.com', reconcile: 'if-used' })
+    // A store that never checks anybody in: nothing is read or written.
+    expect(((await panel()).body['checkIns'] as CheckInRow[]).length).toBe(0)
+    expect(h.memory.read('hosts/shop/checkInDays/2027-01-15')).toBeUndefined()
+    await search('jordan')
+    expect(((await panel()).body['checkIns'] as CheckInRow[]).length).toBe(2)
+  })
 })
 
 describe('checking in', () => {

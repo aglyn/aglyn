@@ -57,7 +57,7 @@ import { onPosSaleCompleted, type PosSaleCompletedEvent } from './pos-sale'
  * CHECK-IN AT THE WINDOW (AGL-4043): `/api/commerce/pos-check-in`.
  *
  *   POST { hostId, action: 'search',   text, day? }
- *   POST { hostId, action: 'customer', customerKey | email | contactId, day? }
+ *   POST { hostId, action: 'customer', customerKey | email | contactId, day?, reconcile?: false | 'if-used' }
  *   POST { hostId, action: 'check_in', checkIns: [{ id, wristband? }], registerId?, cashierAssertion? }
  *   POST { hostId, action: 'undo',     id }
  *   POST { hostId, action: 'wristband', id, wristband }
@@ -205,12 +205,16 @@ export async function reconcileCheckInDay(
   deps: PosOpsDeps,
   hostRef: FirebaseFirestore.DocumentReference,
   day: CheckInDay,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; onlyIfUsed?: boolean } = {},
 ): Promise<{ truncated: boolean }> {
   const nowMs = deps.now()
   const markerRef = hostRef.collection('checkInDays').doc(day.dayKey)
   if (!options.force) {
     const marker = await markerRef.get()
+    // A day nobody has checked anyone in on yet is left alone by a caller
+    // that only asks in passing: a store that never checks anybody in pays
+    // nothing for the register's customer panel.
+    if (!marker.exists && options.onlyIfUsed) return { truncated: false }
     if (marker.exists && nowMs - Number(marker.get('reconciledAtMs') ?? 0) < CHECK_IN_RECONCILE_MS) {
       return { truncated: marker.get('truncated') === true }
     }
@@ -424,7 +428,12 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
       if (!customerKey) {
         return { status: 400, body: { error: 'Choose a customer.' } }
       }
-      await reconcileCheckInDay(deps, staff.hostRef, day)
+      // The register's customer panel asks on every customer it attaches
+      // (`reconcile: 'if-used'`), so it brings the day in line only on a day
+      // the window is already checking people in.
+      if (body['reconcile'] !== false) {
+        await reconcileCheckInDay(deps, staff.hostRef, day, { onlyIfUsed: body['reconcile'] === 'if-used' })
+      }
       const snapshot = await checkIns
         .where('dayKey', '==', day.dayKey)
         .where('customerKey', '==', customerKey)
