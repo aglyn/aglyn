@@ -38,6 +38,11 @@ import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-reference
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import {
+  CAMPAIGN_PLAN_CAP_REASON,
+  campaignPlanCapMessage,
+  campaignPlanLock,
+} from '../model/campaign-plan-lock'
+import {
   campaignHeldForReviewNotice,
   campaignPlacedOnHost,
   campaignSendHeldForReview,
@@ -308,11 +313,16 @@ export function unsubscribeSignature(
   return sharedUnsubscribeSignature(hostId, email, secret, campaignId, topicId)
 }
 
-/** Send failures carry the HTTP status the API route should answer. */
+/**
+ * Send failures carry the HTTP status the API route should answer, and a
+ * machine `reason` when the console answers that refusal with something
+ * other than the sentence (the plan cap's Upgrade button).
+ */
 export class CampaignSendError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly reason?: string,
   ) {
     super(message)
   }
@@ -2043,21 +2053,37 @@ export async function performCampaignSend(
     'emailSendsPerMonth',
     0,
   ).limit
-  const overCapError = () =>
-    new CampaignSendError(
-      `Monthly campaign email limit reached (${campaignSendLimit}) — upgrade ` +
-        'in Billing or shrink the audience. Transactional mail — receipts, ' +
-        'booking reminders, password resets — keeps sending.',
+  // Names the plan that would carry this campaign, so a refusal that reaches
+  // a merchant anyway — a native composer, a scheduled send — still says
+  // what to do. `campaignPlanLock` is the same rule the composer locks Send
+  // with.
+  const overCapError = (used: number) => {
+    const lock = campaignPlanLock({
+      limit: campaignSendLimit,
+      used,
+      sendable: sendable.length,
+    })
+    return new CampaignSendError(
+      lock
+        ? campaignPlanCapMessage(lock)
+        : `Monthly campaign email limit reached (${campaignSendLimit}) — upgrade ` +
+            'in Billing or shrink the audience. Transactional mail — receipts, ' +
+            'booking reminders, password resets — keeps sending.',
       403,
+      CAMPAIGN_PLAN_CAP_REASON,
     )
+  }
+  // Read before the pre-check below and kept, so the race refusal after the
+  // atomic claim can still say how much of the allowance was spent.
+  const usedAtPreCheck = await orgCampaignEmailSendsForMonth(orgId, monthKey)
   {
     // A cheap read-only pre-check, so an over-cap campaign is refused before
     // the template load, the experiment read and the campaign id — and so the
     // DRY RUN has an answer without writing anything (AGL-2178: "nothing has
     // been written above this line"). It is not the enforcement; it cannot be,
     // because a read is not a claim.
-    const used = await orgCampaignEmailSendsForMonth(orgId, monthKey)
-    if (used + sendable.length > campaignSendLimit) throw overCapError()
+    const used = usedAtPreCheck
+    if (used + sendable.length > campaignSendLimit) throw overCapError(used)
   }
 
   /*
@@ -2463,7 +2489,11 @@ export async function performCampaignSend(
     // has not been entered yet, which is exactly why this cannot be left to
     // it.
     await reconcileOrgEmailSendDay(dayClaim.reservation, 0)
-    throw overCapError()
+    // A concurrent campaign took the rest between the pre-check and here, so
+    // the allowance is at least spent down to this campaign's size.
+    throw overCapError(
+      Math.max(usedAtPreCheck, campaignSendLimit - sendable.length + 1),
+    )
   }
   const reservation: CampaignSendReservation = claim.reservation
   const dayReservation: OrgEmailSendDayReservation | null = dayClaim.reservation
@@ -4349,6 +4379,29 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (scheduling && (!Number.isFinite(sendAtMs) || sendAtMs <= Date.now())) {
         return res.status(400).json({ error: 'Pick a future send time' })
       }
+      /*
+       * A PLAN WITH NO CAMPAIGN EMAIL CANNOT SCHEDULE ONE.
+       *
+       * Scheduling writes a document and claims nothing, so without this a
+       * Free workspace could put a campaign on the clock that the processor
+       * can only ever mark `failed` — the refusal arriving hours later, in a
+       * history list, instead of now with an Upgrade path. A plan WITH an
+       * allowance is not refused here: the month may have reset by the send
+       * time, and the send itself enforces the cap.
+       */
+      if (scheduling) {
+        const lock = campaignPlanLock({
+          limit: checkQuota(orgForSite?.org as never, 'emailSendsPerMonth', 0)
+            .limit,
+          used: 0,
+        })
+        if (lock?.kind === 'not-on-plan') {
+          return res.status(403).json({
+            error: campaignPlanCapMessage(lock),
+            reason: CAMPAIGN_PLAN_CAP_REASON,
+          })
+        }
+      }
       const campaignId =
         String(req.body?.campaignId ?? '') || createResourceUid()
       // AGL-1771: this branch WRITES, and it is the only campaign write that
@@ -4757,7 +4810,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     return res.status(200).json(result)
   } catch (error) {
     if (error instanceof CampaignSendError) {
-      return res.status(error.status).json({ error: error.message })
+      return res.status(error.status).json({
+        error: error.message,
+        ...(error.reason ? { reason: error.reason } : {}),
+      })
     }
     console.error(error)
     return res.status(500).json({ error: 'Campaign send failed' })

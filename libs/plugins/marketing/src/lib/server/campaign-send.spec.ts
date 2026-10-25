@@ -305,7 +305,11 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-record-email-state', () => ({
 }))
 
 import { compress } from '@aglyn/aglyn/server'
-import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  PLAN_ENTITLEMENTS,
+  planLabelGrantingQuota,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { CAMPAIGN_PLAN_CAP_REASON } from '../model/campaign-plan-lock'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { registerPluginRecordCardReader } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
@@ -1056,7 +1060,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
       [month]: CAP,
     }
 
-    await expect(recorded()).rejects.toThrow(/campaign email limit/i)
+    await expect(recorded()).rejects.toThrow(/campaign emails this month are sent/i)
     expect(mockState.sent).toHaveLength(0)
   })
 
@@ -1123,7 +1127,7 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
         audience: 'leads',
         senderUid: 'uid-1',
       }),
-    ).rejects.toThrow(/campaign email limit/i)
+    ).rejects.toThrow(/Upgrade .*in Billing/)
     expect(mockState.sent).toHaveLength(0)
   })
 
@@ -1513,7 +1517,9 @@ describe('campaign email begins at Pro', () => {
   }
 
   it('refuses a STARTER org, and nothing goes out', async () => {
-    await expect(attempt('starter')).rejects.toThrow(/campaign email limit/i)
+    await expect(attempt('starter')).rejects.toThrow(
+      /does not include campaign email/i,
+    )
     // The refusal is the point, not merely the rejection: no message was
     // handed to the sender and no delivery was metered. A cap that threw
     // after the batch had gone out would satisfy `rejects` alone.
@@ -1532,7 +1538,9 @@ describe('campaign email begins at Pro', () => {
     // Starter is now in exactly the shape Free has always been in, said in
     // the only terms that matter: the same refusal, from the same gate, on
     // the same audience.
-    await expect(attempt('free')).rejects.toThrow(/campaign email limit/i)
+    await expect(attempt('free')).rejects.toThrow(
+      /does not include campaign email/i,
+    )
     expect(mockState.sent).toHaveLength(0)
   })
 
@@ -1578,13 +1586,22 @@ describe('campaign email begins at Pro', () => {
   })
 
   it('names the band in the message, so the reason is legible', async () => {
-    // A merchant reading "limit reached (0)" is being told the plan includes
-    // none, which is the actual state — not that they have spent an
-    // allowance they had. The upgrade path is in the same sentence.
+    // A band of 0 is said as what it is — the plan includes none — rather
+    // than "limit reached (0)", which reads as an allowance spent. The plan
+    // that includes it is named, read from the same table, so a refusal
+    // that reaches a native composer or a scheduled send still says what to
+    // do.
     await expect(attempt('starter')).rejects.toThrow(
-      /Monthly campaign email limit reached \(0\)/,
+      /^Your plan does not include campaign email\./,
     )
-    await expect(attempt('starter')).rejects.toThrow(/upgrade in Billing/i)
+    await expect(attempt('starter')).rejects.toThrow(
+      `Upgrade to ${planLabelGrantingQuota('emailSendsPerMonth', 1)} in Billing`,
+    )
+    // The console answers it with an Upgrade button, by reason not by text.
+    await expect(attempt('starter')).rejects.toMatchObject({
+      status: 403,
+      reason: CAMPAIGN_PLAN_CAP_REASON,
+    })
     // Transactional mail is excluded in the same breath, because a Starter
     // store still confirms its orders and the refusal must not read as
     // though it stopped that too.
