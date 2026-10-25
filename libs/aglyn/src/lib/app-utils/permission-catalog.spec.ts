@@ -27,7 +27,14 @@ import {
   type AglynOrgCustomRole,
 } from './org-permissions'
 import { orgRoleTier, resolveRolePermissions } from './org-roles'
-import { offeredOrgPermissions } from './org-permission-editor'
+import {
+  groupOrgPermissions,
+  offeredOrgPermissions,
+  permissionChoice,
+  permissionChoiceCounts,
+  searchOrgPermissions,
+  withPermissionChoice,
+} from './org-permission-editor'
 import {
   assembleOrgRoleGrants,
   ORG_ROLE_GRANTS,
@@ -230,5 +237,50 @@ describe('one permission catalog (AGL-4047)', () => {
     const flagOff = (flag: string) => flag !== 'release_outreach'
     expect(keys({ org: { enabledPlugins: ['outreach'] }, isFlagOn: flagOff })).not.toContain('outreach.use')
     expect(keys({ org: { enabledPlugins: ['outreach'] }, isFlagOn: flagOff, staffBypass: true })).toContain('outreach.use')
+  })
+
+  it('files the offered keys under their groups, in the groups’ order, leaving empty ones out', () => {
+    const sections = groupOrgPermissions(ORG_PERMISSIONS)
+    expect(sections.map((section) => section.group.id)).toEqual(
+      ORG_PERMISSION_GROUPS.map((group) => group.id),
+    )
+    expect(sections.find((section) => section.group.id === 'sites')?.permissions.map((d) => d.key)).toEqual([
+      'hosts.create',
+      'hosts.delete',
+    ])
+    const onlyBilling = groupOrgPermissions(ORG_PERMISSIONS.filter((d) => d.group === 'billing'))
+    expect(onlyBilling.map((section) => section.group.id)).toEqual(['billing'])
+  })
+
+  it('searches labels, descriptions, keys and group headings, every word', () => {
+    const keys = (query: string) => searchOrgPermissions(ORG_PERMISSIONS, query).map((d) => d.key)
+    expect(keys('')).toHaveLength(ORG_PERMISSIONS.length)
+    expect(keys('point of sale')).toEqual(['managePos'])
+    expect(keys('MANAGEPOS')).toEqual(['managePos'])
+    expect(keys('billing')).toEqual(expect.arrayContaining(['billing.view', 'billing.manage']))
+    expect(keys('sequences')).toEqual(['outreach.use'])
+    expect(keys('delete sites')).toEqual(['hosts.delete'])
+    expect(keys('no such thing')).toEqual([])
+  })
+
+  it('reads and writes the three states, keeping keys the editor does not offer', () => {
+    const stored = { managePos: true, 'billing.view': false, 'hidden.key': true }
+    expect(permissionChoice(stored, 'managePos')).toBe('grant')
+    expect(permissionChoice(stored, 'billing.view')).toBe('deny')
+    expect(permissionChoice(stored, 'hosts.create')).toBe('inherit')
+    expect(permissionChoice({ odd: 'yes' }, 'odd')).toBe('inherit')
+    expect(withPermissionChoice(stored, 'managePos', 'inherit')).toEqual({ 'billing.view': false, 'hidden.key': true })
+    expect(withPermissionChoice(stored, ['hosts.create', 'hosts.delete'], 'deny')).toEqual({
+      ...stored,
+      'hosts.create': false,
+      'hosts.delete': false,
+    })
+    // Never mutates what it was given.
+    expect(stored).toEqual({ managePos: true, 'billing.view': false, 'hidden.key': true })
+    expect(permissionChoiceCounts(stored, ['managePos', 'billing.view', 'hosts.create'])).toEqual({
+      grant: 1,
+      deny: 1,
+      inherit: 1,
+    })
   })
 })
