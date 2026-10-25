@@ -1244,46 +1244,51 @@ struct PhoneTopBar: ViewModifier {
       content.toolbar {
         if sizeClass == .compact {
         ToolbarItem(placement: .topBarLeading) { ScopeChip() }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          Button {
-            navigation.showOneBox = true
-          } label: {
-            Label("Search or jump to", systemImage: "magnifyingglass")
-          }
-          // Grey, as Figma's top bar (22:499); the accent is for the action in use.
-          .tint(AglynColor.secondaryText)
-          .accessibilityIdentifier("topbar-search")
-          Button {
-            navigation.showNotifications = true
-          } label: {
-            Label("Notifications", systemImage: "bell")
-          }
-          .tint(AglynColor.secondaryText)
-          .accessibilityIdentifier("topbar-bell")
-          // Four pinned areas fill the tab bar, so Create new comes up here, beside your AI (AGL-4006, Figma Home · 4
-          // pinned 289:5791).
-          if PhoneAreas(model: model, navigation: navigation).layout.createInTopBar {
+        // One item, not a group: with search, the bell, AI and your photo as separate items, a phone's bar folds the
+        // last of them into a "More" menu, and AI must stay one tap away (Figma Phone/Top bar 273:20194).
+        ToolbarItem(placement: .topBarTrailing) {
+          HStack(spacing: AglynSpace.one) {
             Button {
-              navigation.showCreate = true
+              navigation.showOneBox = true
             } label: {
-              Label("Create new", systemImage: "plus")
+              Label("Search or jump to", systemImage: "magnifyingglass")
+            }
+            // Grey, as Figma's top bar (22:499); the accent is for the action in use.
+            .tint(AglynColor.secondaryText)
+            .accessibilityIdentifier("topbar-search")
+            Button {
+              navigation.showNotifications = true
+            } label: {
+              Label("Notifications", systemImage: "bell")
             }
             .tint(AglynColor.secondaryText)
-            .accessibilityIdentifier("topbar-create")
+            .accessibilityIdentifier("topbar-bell")
+            // Four pinned areas fill the tab bar, so Create new comes up here, beside your AI (AGL-4006, Figma Home · 4
+            // pinned 289:5791).
+            if PhoneAreas(model: model, navigation: navigation).layout.createInTopBar {
+              Button {
+                navigation.showCreate = true
+              } label: {
+                Label("Create new", systemImage: "plus")
+              }
+              .tint(AglynColor.secondaryText)
+              .accessibilityIdentifier("topbar-create")
+            }
+            // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
+            // 273:20194): after the bell, before your photo.
+            if AssistSlot.available(model) {
+              PhoneAssistButton()
+            }
+            Button {
+              navigation.showAccount = true
+            } label: {
+              let identity = AccountIdentity(model: model)
+              AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 28)
+            }
+            .accessibilityLabel("Your account")
+            .accessibilityIdentifier("topbar-account")
           }
-          // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
-          // 273:20194): after the bell, before your photo.
-          if AssistSlot.available(model) {
-            PhoneAssistButton()
-          }
-          Button {
-            navigation.showAccount = true
-          } label: {
-            let identity = AccountIdentity(model: model)
-            AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 28)
-          }
-          .accessibilityLabel("Your account")
-          .accessibilityIdentifier("topbar-account")
+          .labelStyle(.iconOnly)
         }
         }
       }

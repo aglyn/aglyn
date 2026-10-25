@@ -85,6 +85,7 @@ import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.shellColors
+import com.aglyn.ui.space
 import com.aglyn.ui.workspaceTint
 import kotlinx.coroutines.launch
 
@@ -595,8 +596,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                 Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
                   // Figma AI panel 18:485's header: ✦ in the accent, the title, Close.
                   Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) 18.dp else 20.dp), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
-                    Text(assistTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                    Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) space(2.25f) else space(2.5f)), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
+                    Text(assistTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = space(1f)))
                     TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
                   }
                   Box(Modifier.weight(1f)) { assistContent() }

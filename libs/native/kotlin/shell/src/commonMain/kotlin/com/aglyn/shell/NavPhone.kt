@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.ui.unit.sp
 import com.aglyn.ui.LocalAccent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,7 +58,9 @@ import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.WorkspaceTile
+import com.aglyn.ui.radius
 import com.aglyn.ui.shellColors
+import com.aglyn.ui.space
 
 /**
  * The phone shell (AGL-4006; Figma Android Home 22:775): the scope chip (opening the two-step picker),
@@ -352,31 +353,31 @@ private fun PhoneAiSheet(title: String, onClose: () -> Unit, content: @Composabl
     onDismissRequest = onClose,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     // The sheet stops 16 under the status bar, the scrim showing above it.
-    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top)).padding(top = 16.dp).testTag("ai-sheet"),
+    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top)).padding(top = space(2f)).testTag("ai-sheet"),
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
     contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
     dragHandle = {
-      Box(Modifier.padding(top = 12.dp, bottom = 6.dp).size(width = 32.dp, height = 4.dp).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)))
+      Box(Modifier.padding(top = space(1.5f), bottom = space(0.75f)).size(width = space(4f), height = space(0.5f)).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(radius(0.5f))))
     },
   ) {
     Column(Modifier.fillMaxSize()) {
-      Row(Modifier.fillMaxWidth().height(36.dp).padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(20.dp), tint = LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
+      Row(Modifier.fillMaxWidth().height(space(4.5f)).padding(start = space(2f), end = space(1f)), verticalAlignment = Alignment.CenterVertically) {
+        Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(space(2.5f)), tint = LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
         Text(
           title,
-          style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+          style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.SemiBold,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f).padding(start = 8.dp),
+          modifier = Modifier.weight(1f).padding(start = space(1f)),
         )
         WithTooltip("Close") {
-          IconButton(onClick = onClose, modifier = Modifier.size(36.dp).testTag("ai-sheet-close")) {
-            Icon(AglynIcons.named("close"), contentDescription = "Close", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+          IconButton(onClick = onClose, modifier = Modifier.size(space(4.5f)).testTag("ai-sheet-close")) {
+            Icon(AglynIcons.named("close"), contentDescription = "Close", Modifier.size(space(2.5f)), tint = MaterialTheme.colorScheme.onSurfaceVariant)
           }
         }
       }
-      Box(Modifier.fillMaxWidth().weight(1f).padding(top = 2.dp)) { content() }
+      Box(Modifier.fillMaxWidth().weight(1f).padding(top = space(0.25f))) { content() }
     }
   }
 }
