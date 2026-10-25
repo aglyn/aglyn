@@ -39,73 +39,32 @@
  * on every plan (the owner adds more from the Content, Commerce and Events
  * sections afterward).
  *
+ * The font pairings and the built-in bases are the platform's since AGL-4049
+ * (the core's `site-font-pairings.ts` and `SITE_THEME_BASES`), because a site
+ * starter names them too; this module re-exports both under its old names.
+ *
  * Pure data and two small readers, safe for the console to import: no
  * theme compiler, no network.
  */
 
-/** A font pairing the look may choose: a heading family over a body family. */
-export interface AiSiteFontPairing {
-  id: string
-  /** What the pairing reads like, as the model is told. */
-  feel: string
-  heading: { family: string; category: 'sans-serif' | 'serif'; weight: number; sub: number }
-  body: { family: string; category: 'sans-serif' | 'serif'; weights: number[] }
-  /** Letter spacing the headings carry, in em. */
-  tracking?: number
-  /** Headings set in capitals: a condensed display face. */
-  caps?: boolean
-}
+import { SITE_FONT_PAIRINGS, siteFontPairing, type SiteFontPairing } from '@aglyn/aglyn/app-utils/site-font-pairings'
+import { SITE_THEME_BASES } from '@aglyn/aglyn/app-utils/site-starter'
 
-/**
- * The pairings, every family from the Google Fonts catalog the fonts plugin
- * serves (`google-fonts.catalog.json`) and every weight one that family
- * has — `ai-site-look.spec.ts` holds both. The tenant loads them the way it
- * loads the starter theme's family, so nothing here adds a font host.
- */
-export const AI_SITE_FONT_PAIRINGS: readonly AiSiteFontPairing[] = [
-  { id: 'jakarta', feel: 'modern, friendly sans', heading: { family: 'Plus Jakarta Sans', category: 'sans-serif', weight: 800, sub: 700 }, body: { family: 'Plus Jakarta Sans', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.02 },
-  { id: 'inter', feel: 'neutral, precise sans', heading: { family: 'Inter', category: 'sans-serif', weight: 700, sub: 600 }, body: { family: 'Inter', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.025 },
-  { id: 'grotesk', feel: 'designer grotesk', heading: { family: 'Space Grotesk', category: 'sans-serif', weight: 600, sub: 600 }, body: { family: 'Inter', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.03 },
-  { id: 'syne', feel: 'expressive, art-school display', heading: { family: 'Syne', category: 'sans-serif', weight: 700, sub: 600 }, body: { family: 'Inter', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.02 },
-  { id: 'bricolage', feel: 'contemporary, characterful sans', heading: { family: 'Bricolage Grotesque', category: 'sans-serif', weight: 700, sub: 600 }, body: { family: 'DM Sans', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.025 },
-  { id: 'editorial', feel: 'editorial serif over clean sans', heading: { family: 'Playfair Display', category: 'serif', weight: 700, sub: 600 }, body: { family: 'Source Sans 3', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.01 },
-  { id: 'fraunces', feel: 'warm, soft serif', heading: { family: 'Fraunces', category: 'serif', weight: 600, sub: 600 }, body: { family: 'Inter', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.015 },
-  { id: 'instrument', feel: 'elegant, light serif headlines', heading: { family: 'Instrument Serif', category: 'serif', weight: 400, sub: 400 }, body: { family: 'Inter', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.01 },
-  { id: 'reading', feel: 'reading-first serif, serif body', heading: { family: 'Newsreader', category: 'serif', weight: 600, sub: 600 }, body: { family: 'Source Serif 4', category: 'serif', weights: [400, 600, 700] }, tracking: -0.01 },
-  { id: 'garamond', feel: 'refined, classic serif', heading: { family: 'Cormorant Garamond', category: 'serif', weight: 600, sub: 600 }, body: { family: 'Montserrat', category: 'sans-serif', weights: [400, 500, 600, 700] } },
-  { id: 'baskerville', feel: 'established, trustworthy serif', heading: { family: 'Libre Baskerville', category: 'serif', weight: 700, sub: 700 }, body: { family: 'Source Sans 3', category: 'sans-serif', weights: [400, 500, 600, 700] } },
-  { id: 'merriweather', feel: 'sturdy, readable serif', heading: { family: 'Merriweather', category: 'serif', weight: 700, sub: 700 }, body: { family: 'Lato', category: 'sans-serif', weights: [400, 700] } },
-  { id: 'lora', feel: 'gentle, calm serif', heading: { family: 'Lora', category: 'serif', weight: 600, sub: 600 }, body: { family: 'Open Sans', category: 'sans-serif', weights: [400, 500, 600, 700] } },
-  { id: 'dmserif', feel: 'polished display serif', heading: { family: 'DM Serif Display', category: 'serif', weight: 400, sub: 400 }, body: { family: 'DM Sans', category: 'sans-serif', weights: [400, 500, 600, 700] } },
-  { id: 'oswald', feel: 'bold, condensed, workmanlike', heading: { family: 'Oswald', category: 'sans-serif', weight: 600, sub: 500 }, body: { family: 'Roboto', category: 'sans-serif', weights: [400, 500, 700] }, caps: true, tracking: 0.01 },
-  { id: 'archivo', feel: 'heavy, high-impact sans', heading: { family: 'Archivo Black', category: 'sans-serif', weight: 400, sub: 400 }, body: { family: 'Archivo', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.01 },
-  { id: 'barlow', feel: 'athletic, condensed sans', heading: { family: 'Barlow Condensed', category: 'sans-serif', weight: 700, sub: 600 }, body: { family: 'Barlow', category: 'sans-serif', weights: [400, 500, 600, 700] }, caps: true, tracking: 0.01 },
-  { id: 'anton', feel: 'loud poster display', heading: { family: 'Anton', category: 'sans-serif', weight: 400, sub: 400 }, body: { family: 'Inter', category: 'sans-serif', weights: [400, 500, 600, 700] }, caps: true, tracking: 0.01 },
-  { id: 'nunito', feel: 'rounded, approachable sans', heading: { family: 'Nunito', category: 'sans-serif', weight: 800, sub: 700 }, body: { family: 'Nunito Sans', category: 'sans-serif', weights: [400, 600, 700] } },
-  { id: 'quicksand', feel: 'soft, airy rounded sans', heading: { family: 'Quicksand', category: 'sans-serif', weight: 700, sub: 600 }, body: { family: 'Nunito Sans', category: 'sans-serif', weights: [400, 600, 700] } },
-  { id: 'manrope', feel: 'crisp, confident sans', heading: { family: 'Manrope', category: 'sans-serif', weight: 800, sub: 700 }, body: { family: 'Manrope', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.02 },
-  { id: 'outfit', feel: 'geometric, upbeat sans', heading: { family: 'Outfit', category: 'sans-serif', weight: 700, sub: 600 }, body: { family: 'Outfit', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.02 },
-  { id: 'plex', feel: 'technical, engineered sans', heading: { family: 'IBM Plex Sans', category: 'sans-serif', weight: 600, sub: 600 }, body: { family: 'IBM Plex Sans', category: 'sans-serif', weights: [400, 500, 600, 700] }, tracking: -0.01 },
-]
+/** A font pairing the look may choose: a heading family over a body family (`SiteFontPairing`). */
+export type AiSiteFontPairing = SiteFontPairing
+
+/** The pairings: the platform's list (AGL-4049), under the name the AI start always used. */
+export const AI_SITE_FONT_PAIRINGS: readonly AiSiteFontPairing[] = SITE_FONT_PAIRINGS
 
 export type AiSiteFontPairingId = string
 
 /**
  * The platform's built-in themes a site's look is layered on, by the short
  * name of the themes plugin's preset id (\`theme-presets.<name>\`), and
- * \`starter\`: the theme a new site is born with (AGL-3497).
+ * \`starter\`: the theme a new site is born with (AGL-3497). The platform's
+ * list since AGL-4049 (`SITE_THEME_BASES`), which a site starter names too.
  */
-export const AI_SITE_BASES = [
-  'starter',
-  'material-ui',
-  'bootstrap',
-  'minimal',
-  'material3',
-  'ant-design',
-  'fluent',
-  'carbon',
-  'cupertino',
-] as const
+export const AI_SITE_BASES = SITE_THEME_BASES
 export type AiSiteBase = (typeof AI_SITE_BASES)[number]
 
 /** How saturated a kind's palette runs. `neutral` is an ink-and-paper ground with one accent. */
@@ -450,8 +409,7 @@ export function aiSiteKind(id: unknown): AiSiteKind | null {
 
 /** A pairing by id, or `null`. */
 export function aiSiteFontPairing(id: unknown): AiSiteFontPairing | null {
-  if (typeof id !== 'string' || !id) return null
-  return AI_SITE_FONT_PAIRINGS.find((pairing) => pairing.id === id) ?? null
+  return siteFontPairing(id)
 }
 
 /** One word as the classifier compares it: lower case, unaccented, singular. */

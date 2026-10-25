@@ -44,6 +44,7 @@
     "emailTemplate": "Email template",
     "layout": "Layout",
     "plugin": "Plugin",
+    "siteStarter": "Site starter",
     "template": "Site template",
     "theme": "Theme"
   },
@@ -3195,6 +3196,9 @@
     ],
     "plugin": [
       "org",
+      "host"
+    ],
+    "siteStarter": [
       "host"
     ],
     "template": [

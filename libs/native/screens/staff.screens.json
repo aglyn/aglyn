@@ -24088,6 +24088,28 @@
                 }
               ],
               "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_site_starters",
+              "label": "Early access: Site starters from the marketplace",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_site_starters}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
             }
           ],
           "submit": {
