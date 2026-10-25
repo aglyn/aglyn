@@ -39,6 +39,8 @@ export const DOMAIN_PRODUCT_ENV = 'STRIPE_PRODUCT_DOMAIN_REGISTRATION'
 export const DOMAIN_CHARGE_KIND = {
   purchase: 'domain-purchase',
   renewal: 'domain-renewal',
+  /** A name moved here from another registrar, a year added (AGL-4040). */
+  transfer: 'domain-transfer',
 } as const
 
 export function domainProductId(): string {

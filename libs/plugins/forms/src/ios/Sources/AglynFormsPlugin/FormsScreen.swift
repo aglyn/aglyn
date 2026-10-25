@@ -211,7 +211,7 @@ struct FormsScreen: View {
         message: model.search.isEmpty ? "Add a form, then place it on a page in the Besigner." : "Try another search."
       ) {
         if model.search.isEmpty && model.status == .inUse && role.canEditContent {
-          Button("New form") { sheet = .create }.buttonStyle(.borderedProminent)
+          Button("New form") { sheet = .create }.buttonStyle(.aglynProminent)
         }
         if model.search.isEmpty && model.status == .inUse { SlotWidgets(context: context, slot: ListCreateZone.forms) }
       }

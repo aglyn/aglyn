@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Card readers, a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.
+description: Card readers (and buying them, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, barcode scanning, and product and shipping labels.
 ---
 
 # POS hardware
@@ -49,6 +49,10 @@ the pairing code it shows, including one that was registered somewhere
 else before: generating a new pairing code on the reader and adding it
 here moves it to your store.
 
+Where the **Hardware** card is available, you can buy a reader from Aglyn
+instead and have Stripe ship it to you; see
+[Buy a reader from Aglyn](#buy-a-reader-from-aglyn).
+
 Stripe sells its readers through the Terminal hardware shop in the Stripe
 Dashboard. If you buy one there with a Stripe account of your own, add it
 here with a fresh pairing code from the reader, as above. Use the pairing
@@ -82,6 +86,111 @@ only register a reader to the Stripe account that ordered it.
   check that it is on and connected, cancel the payment, and take it again
   — or use **Card (QR)** or **Type card** for that sale.
 
+
+### Reader start-up screen {#reader-start-up-screen}
+
+While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it
+shows a start-up screen. Choose what yours show under **Reader start-up
+screen** on the **POS devices** card:
+
+- **The Aglyn start-up screen** — the default.
+- **Your logo** — the logo from your organization profile, centered on a white
+  screen. If the profile has no logo yet, the card links to it. A square logo
+  with a little space around it looks best.
+- **Your own image** — a full-screen picture from your media library. It must
+  be a portrait image shaped 9:16, at least 1080 × 1920 pixels, as a PNG, JPEG
+  or WebP; the card refuses any other shape before saving. It is sized for each
+  reader's screen for you.
+
+A workspace on a white-label plan never shows the Aglyn screen: its readers
+show its own logo unless it picks an image.
+
+Your choice goes to every reader on the site, including ones you add later.
+Readers pick up a change within about ten minutes. If you change your logo,
+open the **POS devices** card again to send the new one. Any admin or editor
+who can use the point of sale can change it.
+
+## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
+
+:::note Rolling out
+Buying readers from Aglyn is **not yet available** on aglyn.com-hosted
+workspaces. Until it is, no **Hardware** card appears on **Products → Point of
+sale**; buy a reader from Stripe and add it with its pairing code, as in
+[Getting a reader](#card-readers).
+:::
+
+The **Hardware** card on **Products → Point of sale** sells Stripe's card readers
+and their accessories. Aglyn places the order with Stripe, and Stripe ships it
+straight to you. Because Aglyn sells it, the reader is ready to take payments
+through Aglyn: add it to a register with its pairing code when it arrives.
+
+**What's on offer**
+
+| Item | What it's for |
+| --- | --- |
+| **Stripe Reader S710** | Handheld with its own 4G connection, for events and parking lots |
+| **Stripe Reader S700** | Handheld or countertop reader on Wi-Fi |
+| **BBPOS WisePOS E** | Countertop reader on Wi-Fi |
+| **Stripe Reader M2** | Pairs with the Aglyn POS app on your phone or tablet by Bluetooth |
+| Charging docks and the M2 mount | Keep a reader charged and in place at the counter |
+
+The card shows only what is available to order, with its price.
+
+**Place an order**
+
+1. Open **Products → Point of sale** and find the **Hardware** card.
+2. Choose a quantity for each item, up to 10 of each and 20 items in one order.
+3. Choose a shipping speed. The summary shows the items, shipping and, where tax
+   applies, says it is calculated at checkout.
+4. Select **Check out** in the card's header. Enter the shipping address, a
+   phone number for the carrier, and your card on the secure checkout page, and
+   pay.
+
+You come back to the card, which says the order is in. Orders ship to street
+addresses in the United States; P.O. boxes and military addresses are not
+accepted.
+
+**Follow an order**
+
+**Your orders** on the card lists every hardware order placed from this site,
+newest first, and sorts by any column. Each order moves through:
+
+| Status | Meaning |
+| --- | --- |
+| **Order received** | Paid. Aglyn is placing it with Stripe. |
+| **Being prepared** | Stripe has the order and is getting it ready to ship. |
+| **Shipped** | On its way. The tracking number links to the carrier's tracking page. |
+| **Delivered** | It has arrived. |
+| **Set up** | The reader is registered for your store. |
+| **Canceled** or **Refunded** | The order was stopped before it shipped, and the payment was returned to your card. |
+
+You get an email when the order is received, when it ships (with the carrier and
+a tracking link), and when it is delivered (with the steps to set the reader
+up). To change or cancel an order before it ships, contact support.
+
+**When it arrives**
+
+Set the reader up as in [Setting one up](#card-readers): charge it, connect it to
+Wi-Fi, generate a pairing code on the reader, and add it on the **POS devices**
+card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
+
+**Who can buy:** an admin or editor of the site with the **Use the point of
+sale** permission, on a plan that includes POS.
+
+### Records of your purchases {#hardware-purchase-records}
+
+Aglyn is the seller of these readers, so it keeps a record of each sale for tax
+and accounting: the items and their prices, shipping, tax, the total, the order's
+status dates, Stripe's payment references, and the state, ZIP code and country it
+shipped to. That record stays after the workspace is
+[deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
+for as long as tax law requires. It never holds the buyer's name, email, phone,
+street address or tracking number.
+
+If the person who placed an order
+[closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
+the workspace keeps the order and its amounts, and their name, email, phone,
+street address and the tracking are removed from it.
 
 ## Receipt printers
 

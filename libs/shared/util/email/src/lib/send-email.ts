@@ -67,6 +67,52 @@ export interface EmailTag {
   value: string
 }
 
+/**
+ * A file carried with a message (AGL-4042): a signed waiver's PDF, say.
+ * `content` is the file's bytes in base64. Bounded by
+ * {@link EMAIL_ATTACHMENT_LIMITS}, and refused on a marketing send, which is
+ * mail to a list and never a document owed to one person.
+ */
+export interface EmailAttachment {
+  filename: string
+  contentType: string
+  content: string
+}
+
+export const EMAIL_ATTACHMENT_LIMITS = {
+  count: 5,
+  /** The base64 characters across every attachment of one message. */
+  totalBase64Chars: 10 * 1024 * 1024,
+} as const
+
+/** The attachments a caller passed, or the reason they cannot ride. */
+export function checkEmailAttachments(
+  attachments: readonly EmailAttachment[] | undefined,
+): { ok: true; attachments: EmailAttachment[] } | { ok: false; detail: string } {
+  const list = (attachments ?? []).filter(Boolean)
+  if (list.length > EMAIL_ATTACHMENT_LIMITS.count) {
+    return { ok: false, detail: `A message carries at most ${EMAIL_ATTACHMENT_LIMITS.count} attachments.` }
+  }
+  let total = 0
+  for (const attachment of list) {
+    const filename = String(attachment.filename ?? '').trim()
+    if (!filename || /[\\/\r\n]/.test(filename)) {
+      return { ok: false, detail: 'An attachment needs a plain file name.' }
+    }
+    if (!/^[\w.+-]+\/[\w.+-]+$/.test(String(attachment.contentType ?? ''))) {
+      return { ok: false, detail: `The attachment ${filename} has no content type.` }
+    }
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(String(attachment.content ?? ''))) {
+      return { ok: false, detail: `The attachment ${filename} is not base64.` }
+    }
+    total += attachment.content.length
+  }
+  if (total > EMAIL_ATTACHMENT_LIMITS.totalBase64Chars) {
+    return { ok: false, detail: 'The attachments are too large to send.' }
+  }
+  return { ok: true, attachments: list.map((one) => ({ ...one, filename: one.filename.trim() })) }
+}
+
 export interface SendEmailOptions {
   /** One or more recipient addresses. */
   to: string | string[]
@@ -95,6 +141,8 @@ export interface SendEmailOptions {
    * `to` recipients, so a marketing send refuses any.
    */
   bcc?: string | string[]
+  /** Files carried with the message (AGL-4042); see {@link EmailAttachment}. */
+  attachments?: EmailAttachment[]
   /*
    * THERE IS NO `from`.
    *
@@ -878,7 +926,20 @@ export async function sendEmail(
    */
   let unsubscribeUrl = options.marketing?.unsubscribeUrl ?? ''
   let oneClickUrl = options.marketing?.oneClickUrl ?? ''
+  const attached = checkEmailAttachments(options.attachments)
+  if (attached.ok === false) {
+    console.error(`${label} refused — ${attached.detail}`)
+    return { sent: false, reason: 'no-recipient', detail: attached.detail }
+  }
   if (options.marketing) {
+    if (attached.attachments.length) {
+      console.error(`${label} refused — a marketing send carries no attachments`)
+      return {
+        sent: false,
+        reason: 'no-recipient',
+        detail: 'A marketing send carries no attachments.',
+      }
+    }
     if (normalizeRecipients(options.bcc ?? []).length) {
       // A blind copy of a marketing send is mail the gate never asked about.
       console.error(`${label} refused — a marketing send carries no blind copies`)
@@ -1138,6 +1199,7 @@ export async function sendEmail(
         ...(tags.length ? { tags } : {}),
         ...(replyTo ? { replyTo } : {}),
         ...(bcc.length ? { bcc } : {}),
+        ...(attached.attachments.length ? { attachments: attached.attachments } : {}),
       },
       options.context,
     )

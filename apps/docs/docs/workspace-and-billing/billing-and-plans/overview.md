@@ -793,12 +793,13 @@ of the recurring price, rounded up to two decimals, so a $10-a-month membership 
 a higher percentage than a $100-a-month one. The platform take itself does not move,
 and a 0% tier still takes 0%.
 
-**In-person sales carry the same rate.** The fee is charged on the sale, not on the
-tender, so a cash sale or a charge-to-room sale at the register is priced exactly like
-a card sale. Card payments have the fee deducted from the Stripe payout; cash, gift-card
-and room-charge payments have no payout to deduct from, so their fees are added to your
-next monthly invoice as a usage line. A split sale does each part its own way, and tips
-carry no platform fee. See
+**At the register, cash, gift cards and store credit carry no platform fee.** Card
+and charge-to-room payments carry the same rate as an online sale. Card payments have
+the fee deducted from the Stripe payout; a room charge has no payout to deduct from, so
+its fee is added to your next monthly invoice as a usage line. Cash is yours in full,
+the fee on a gift card is charged when the card is sold, not again when it is spent,
+and store credit is value you gave your customer. A split sale charges the fee only on
+its card and room-charge parts, and tips carry no platform fee. See
 [POS &amp; reservations](../../commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register).
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted

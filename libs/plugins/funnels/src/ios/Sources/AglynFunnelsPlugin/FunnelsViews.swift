@@ -138,7 +138,7 @@ struct FunnelsScreen: View {
           + (access.state.canManage ? "" : " A site admin or editor can create one.")
       ) {
         if access.state.canManage {
-          Button("New funnel") { Task { await editor?.add() } }.buttonStyle(.borderedProminent)
+          Button("New funnel") { Task { await editor?.add() } }.buttonStyle(.aglynProminent)
         }
       }
     } else if selectable {
@@ -241,9 +241,9 @@ struct FunnelDetail: View {
       if canManage {
         HStack {
           Button { Task { await editor.edit(row) } } label: { Label("Edit", systemImage: "pencil") }
-            .buttonStyle(.borderedProminent).disabled(editor.busy).accessibilityIdentifier("funnel-edit")
+            .buttonStyle(.aglynProminent).disabled(editor.busy).accessibilityIdentifier("funnel-edit")
           Button(role: .destructive) { editor.askDelete(row) } label: { Label("Delete", systemImage: "trash") }
-            .buttonStyle(.bordered).accessibilityIdentifier("funnel-delete")
+            .buttonStyle(.aglynSecondary).accessibilityIdentifier("funnel-delete")
         }
       }
     }
@@ -260,7 +260,7 @@ struct FunnelDetail: View {
         }
         if canManage {
           Button("Activate") { Task { await editor.activate(row) } }
-            .buttonStyle(.borderedProminent).disabled(editor.busy).accessibilityIdentifier("funnel-activate")
+            .buttonStyle(.aglynProminent).disabled(editor.busy).accessibilityIdentifier("funnel-activate")
         }
       }
     }

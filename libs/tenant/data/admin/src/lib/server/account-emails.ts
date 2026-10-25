@@ -604,10 +604,28 @@ export async function setPrimaryAccountEmail(
     return refuse(decision.verdict, String(decision.message ?? 'That change is not allowed.'))
   }
 
-  await authForPool(context.tenantId).updateUser(uid, {
-    email: address,
-    emailVerified: true,
-  })
+  // The index entry being ours is not enough: an account created later can
+  // hold this address as its Auth email without ever touching the index (a
+  // federated sign-up with an address that was once our provider address,
+  // AGL-4041). Auth refuses the move with EMAIL_EXISTS, so ask first and
+  // answer with a refusal rather than letting it surface as a 500.
+  const taken = refuse(
+    'claimed-by-another-account',
+    'That address is now the sign-in email of another account, so it cannot be your primary.',
+  )
+  if (await addressTakenByAnother(address, uid)) return taken
+
+  try {
+    await authForPool(context.tenantId).updateUser(uid, {
+      email: address,
+      emailVerified: true,
+    })
+  } catch (error) {
+    // The same refusal when the other account appears between the check and
+    // the write.
+    if ((error as { code?: unknown })?.code === 'auth/email-already-exists') return taken
+    throw error
+  }
   await reconcilePrimaryFlag(uid, address)
   return ok()
 }

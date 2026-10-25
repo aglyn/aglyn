@@ -568,6 +568,17 @@ describe('the ordinary restock alert still works', () => {
     expect(pendingAlerts()).toEqual([`hosts/${HOST}/restockAlerts/alert-1`])
   })
 
+  it('holds an alert, unsent and pending, while the product sells in person only (AGL-4060)', async () => {
+    seedAlert('alert-1', PRODUCT)
+    docs.set(`hosts/${HOST}/products/${PRODUCT}`, { ...IN_STOCK, sellOnline: false })
+
+    await runCron()
+
+    // Its one button is the product's page, which is not served.
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(pendingAlerts()).toEqual([`hosts/${HOST}/restockAlerts/alert-1`])
+  })
+
   it('skips an alert whose product was deleted', async () => {
     seedAlert('alert-1', PRODUCT)
 

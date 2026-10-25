@@ -127,7 +127,7 @@ public struct AglynMonthGrid: View {
               .frame(maxWidth: .infinity, minHeight: 48)
               .overlay(
                 RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous)
-                  .strokeBorder(key == picked ? AglynColor.tint : Color.clear, lineWidth: 2))
+                  .strokeBorder(key == picked ? AglynColor.primary : Color.clear, lineWidth: 2))
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -396,7 +396,7 @@ public struct AglynWeeklyHoursEditor: View {
             let window = windows[index]
             HStack(spacing: AglynSpace.half) {
               Button("\(aglynMinutesLabel(window.start)) – \(aglynMinutesLabel(window.end))") { onEdit(index) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aglynSecondary)
                 .accessibilityIdentifier("hours-\(day)-\(index)")
               Button {
                 onRemove(index)

@@ -93,7 +93,7 @@ struct OrdersScreen: View {
       if selecting {
         HStack {
           Button("Mark \(picked.count) fulfilled") { confirmingBulk = true }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.aglynProminent)
             .disabled(picked.isEmpty || running)
             .accessibilityIdentifier("orders-bulk-fulfill")
           // Whatever services are connected add what they can do to the ticked orders (buy their labels, say).
@@ -103,7 +103,7 @@ struct OrdersScreen: View {
                 "commerce.ordersBulk",
                 ["orderIds": picked.sorted().joined(separator: ","), "run": UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()])
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.aglynSecondary)
             .disabled(picked.isEmpty || picked.count > 50)
             .accessibilityIdentifier("orders-bulk-more")
           }
@@ -296,7 +296,7 @@ struct OrdersScreen: View {
             "\(openDisputesTitle(disputes.summary, more: disputes.more)). \(openDisputesDetail(disputes.summary))",
             tone: disputes.summary.overdue ? .error : .warning)
           if model.filter != .disputes {
-            Button("Show them") { model.filter = .disputes }.buttonStyle(.bordered)
+            Button("Show them") { model.filter = .disputes }.buttonStyle(.aglynSecondary)
           }
         }
         .aglynContentEdges()
@@ -308,9 +308,12 @@ struct OrdersScreen: View {
         }
         .aglynContentEdges()
       }
-      content(selectable: selectable)
+      // The list on the paper panel under the toolbar, as Figma's phone Orders (22:499) draws it.
+      content(selectable: selectable).aglynPhonePanel()
     }
-    .background(AglynGround())
+    // The content surface on the Mac and iPad; a phone's page ground, with the brand's glow under the title in the
+    // phone's bold look (AGL-3990).
+    .aglynListGround()
   }
 
   @ViewBuilder

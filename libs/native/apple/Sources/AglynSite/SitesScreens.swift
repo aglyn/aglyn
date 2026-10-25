@@ -98,7 +98,7 @@ struct SitesScreen: View {
         filtered ? "No sites match" : "No sites yet", systemImage: SiteSymbols.site,
         message: filtered ? "Try another search or filter." : "Create a site to start building."
       ) {
-        if !filtered && canCreate { Button("Create site") { creating = true }.buttonStyle(.borderedProminent) }
+        if !filtered && canCreate { Button("Create site") { creating = true }.buttonStyle(.aglynProminent) }
       }
     case .ready(let rows):
       if selectable {
@@ -402,7 +402,7 @@ struct CreateSiteSheet: View {
                   subdomain = suggestion
                   edited = true
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aglynSecondary)
               }
             }
           }

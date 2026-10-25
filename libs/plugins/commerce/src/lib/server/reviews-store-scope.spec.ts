@@ -176,6 +176,15 @@ describe('the store-wide reviews read', () => {
     })
   })
 
+  it('names and links no product sold in person only (AGL-4060)', async () => {
+    mockProducts['p3'] = { name: 'Card Reader', slug: 'card-reader', status: 'active', sellOnline: false }
+    mockReviews.push(review('r1', { productId: 'p3' }), review('r2'))
+    const { reviews } = await readStoreReviews('host-1')
+    expect(reviews.find((entry) => entry.id === 'r1')).not.toHaveProperty('productSlug')
+    expect(reviews.find((entry) => entry.id === 'r1')).not.toHaveProperty('productName')
+    expect(reviews.find((entry) => entry.id === 'r2')).toMatchObject({ productSlug: 'candle-gift-set' })
+  })
+
   it('names a reviewer by first name and last initial, never the full name or email', async () => {
     mockReviews.push(review('r1', { authorName: 'Jane Q Doe' }))
     const { reviews } = await readStoreReviews('host-1')

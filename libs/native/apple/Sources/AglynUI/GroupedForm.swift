@@ -276,6 +276,7 @@ public struct AglynFormToggleStyle: ToggleStyle {
       Spacer(minLength: 8)
       Toggle("", isOn: configuration.$isOn)
         .toggleStyle(.switch)
+        .tint(AglynColor.primary)
         .labelsHidden()
     }
   }
