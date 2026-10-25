@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -76,12 +77,17 @@ internal class FakeAuth(private val uid: String = "u1") : AuthSession {
   }
 }
 
-/** Documents by collection path, answered at once. */
-internal class FakeFirestore(private val collections: Map<String, List<FirestoreDoc>>, private val docs: Map<String, FirestoreDoc>) : FirestoreReader {
+/** Documents by collection path, answered at once; a [live] collection answers again each time a test changes it. */
+internal class FakeFirestore(
+  private val collections: Map<String, List<FirestoreDoc>>,
+  private val docs: Map<String, FirestoreDoc>,
+  private val live: Map<String, StateFlow<List<FirestoreDoc>>> = emptyMap(),
+) : FirestoreReader {
   override suspend fun get(path: String) = docs[path]
-  override suspend fun page(query: FirestoreQuery) = FirestorePage(collections[query.collectionPath].orEmpty(), null)
+  override suspend fun page(query: FirestoreQuery) = FirestorePage(live[query.collectionPath]?.value ?: collections[query.collectionPath].orEmpty(), null)
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = flowOf(Live.Ready(docs[path]))
-  override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = flowOf(Live.Ready(collections[query.collectionPath].orEmpty()))
+  override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> =
+    live[query.collectionPath]?.let { flow -> flow.map { Live.Ready(it) } } ?: flowOf(Live.Ready(collections[query.collectionPath].orEmpty()))
 }
 
 /** The shell's services over the fakes: one workspace (Acme) with one site (Acme Shop) and one unread order notification. */
@@ -95,6 +101,8 @@ internal fun testServices(
   orgDoc: Map<String, Any?>? = null,
   /** A JSON body a route answers with (by path); an empty 200 otherwise. */
   apiBody: (String) -> String? = { null },
+  /** Collections a test changes while the shell runs (a site deleted), by path; they replace the fixed ones. */
+  liveCollections: Map<String, StateFlow<List<FirestoreDoc>>> = emptyMap(),
   /** Plugins loaded beside the platform's, for a test that needs one's contributions (the AI panel's slot). */
   plugins: List<com.aglyn.pluginhost.NativePluginManifestEntry> = emptyList(),
 ): ShellServices {
@@ -114,6 +122,7 @@ internal fun testServices(
         ),
       ),
     ),
+    live = liveCollections,
     docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }, orgDoc?.let { "orgs/o1" to FirestoreDoc("o1", "orgs/o1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
   )
   val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)

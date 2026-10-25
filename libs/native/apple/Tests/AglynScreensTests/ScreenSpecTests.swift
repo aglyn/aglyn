@@ -64,6 +64,21 @@ final class ScreenSpecTests: XCTestCase {
     }
   }
 
+  func testDeleteSiteConfirmIgnoresSurroundingSpacesAsTheConsoleDoes() throws {
+    let data = try Data(contentsOf: Self.screensDir.appendingPathComponent("site.screens.json"))
+    let spec = try XCTUnwrap(ScreenCatalog.parse(data).first { $0.id == "core.site.delete" })
+    let actions = try XCTUnwrap(spec.blocks.first { $0.type == "actions" })
+    let delete = try XCTUnwrap(actions["items"].array.compactMap(ActionSpec.init).first { $0.id == "delete" })
+    let typed = try XCTUnwrap(delete.prompt.first { $0.key == "typed" })
+    let context = try XCTUnwrap(JSONValue.decode(Data(#"{"site":{"id":"h1","name":"Delete test Mac"}}"#.utf8)))
+    // The console compares `confirmText.trim()`: a keyboard's prediction ending the name with a space still confirms.
+    XCTAssertFalse(typed.mismatches("Delete test Mac", in: context))
+    XCTAssertFalse(typed.mismatches("Delete test Mac ", in: context))
+    XCTAssertFalse(typed.mismatches(" Delete test Mac\n", in: context))
+    XCTAssertTrue(typed.mismatches("Delete test Ma", in: context))
+    XCTAssertTrue(typed.mismatches("delete test mac", in: context))
+  }
+
   func testEverySpecParsesAndPointsAtRealScreens() throws {
     let files = Self.specFiles
     XCTAssertFalse(files.isEmpty)

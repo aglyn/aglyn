@@ -32,6 +32,20 @@ class WorkspaceStoreTest {
   }
 
   @Test
+  fun aDeletedSiteOnScreenIsRemovedNotReplaced() {
+    // s2 was on screen and is gone from the loaded list (deleted): the shell leaves for the workspace's Sites.
+    val afterDelete = WorkspaceState(orgs = orgs, sites = sites.take(1), org = orgs[0], site = sites[0], ready = true)
+    assertTrue(WorkspaceStore.shownSiteRemoved("a", "s2", afterDelete))
+    // Still listed, nothing on screen, the sites still loading, or another workspace now shown: nothing was removed.
+    assertFalse(WorkspaceStore.shownSiteRemoved("a", "s1", afterDelete))
+    assertFalse(WorkspaceStore.shownSiteRemoved("a", null, afterDelete))
+    assertFalse(WorkspaceStore.shownSiteRemoved("a", "s2", afterDelete.copy(sites = emptyList(), ready = false)))
+    assertFalse(WorkspaceStore.shownSiteRemoved("b", "s2", afterDelete))
+    // The last site deleted leaves an empty, loaded list: removed too.
+    assertTrue(WorkspaceStore.shownSiteRemoved("a", "s1", afterDelete.copy(sites = emptyList(), site = null, wholeWorkspace = true)))
+  }
+
+  @Test
   fun readsMembershipRowsTheWayTheConsoleWritesThem() {
     assertEquals(WorkspaceOrg("o", "acme", "acme", ""), WorkspaceStore.orgFromMembership("o", mapOf("slug" to "acme")))
     assertEquals(

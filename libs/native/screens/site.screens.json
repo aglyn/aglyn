@@ -1175,35 +1175,142 @@
       "links": [
         "/admin/danger"
       ],
+      "load": {
+        "erase": {
+          "url": "/api/hosts/delete?hostId={site.id}",
+          "optional": true
+        }
+      },
+      "derive": [
+        {
+          "name": "listed",
+          "when": "data.erase.resources.length >= 0"
+        },
+        {
+          "name": "incomplete",
+          "when": "!is.listed || data.erase.resources[?!item.preview]"
+        },
+        {
+          "name": "noneGoing",
+          "when": "!is.incomplete && !data.erase.resources.*.preview.going"
+        }
+      ],
       "blocks": [
         {
           "type": "notice",
           "tone": "error",
-          "text": "Deleting {site.name} takes it offline, disconnects its domain and erases its pages, media and entries. It cannot be undone."
+          "text": "Permanently delete this site — its pages, media, and settings, its AI jobs, AI insights, and Assist conversations, and the datasets shared with this site only. This is immediate and cannot be undone. Export a backup first if you might want it back."
+        },
+        {
+          "type": "list",
+          "id": "goingSeveral",
+          "when": "data.erase.resources[pluginId='data'].preview.going.length > 1",
+          "title": "These {data.erase.resources[pluginId='data'].preview.going.length} {data.erase.resources[pluginId='data'].preview.noun.1} are deleted with the site, with their {data.erase.resources[pluginId='data'].preview.itemNoun.1}:",
+          "count": false,
+          "items": "data.erase.resources[pluginId='data'].preview.going",
+          "primary": "{item.name}",
+          "secondary": [
+            {
+              "text": "1 {data.erase.resources[pluginId='data'].preview.itemNoun.0}",
+              "when": "item.items == 1"
+            },
+            {
+              "text": "{item.items:count} {data.erase.resources[pluginId='data'].preview.itemNoun.1}",
+              "when": "item.items >= 0 && item.items != 1"
+            },
+            {
+              "text": "{data.erase.resources[pluginId='data'].preview.itemNoun.1:title} not counted",
+              "when": "item.items == ''"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "goingOne",
+          "when": "data.erase.resources[pluginId='data'].preview.going.length == 1",
+          "title": "This {data.erase.resources[pluginId='data'].preview.noun.0} is deleted with the site, with its {data.erase.resources[pluginId='data'].preview.itemNoun.1}:",
+          "count": false,
+          "items": "data.erase.resources[pluginId='data'].preview.going",
+          "primary": "{item.name}",
+          "secondary": [
+            {
+              "text": "1 {data.erase.resources[pluginId='data'].preview.itemNoun.0}",
+              "when": "item.items == 1"
+            },
+            {
+              "text": "{item.items:count} {data.erase.resources[pluginId='data'].preview.itemNoun.1}",
+              "when": "item.items >= 0 && item.items != 1"
+            },
+            {
+              "text": "{data.erase.resources[pluginId='data'].preview.itemNoun.1:title} not counted",
+              "when": "item.items == ''"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "neutral",
+          "when": "is.noneGoing",
+          "text": "No datasets are shared with this site only, so none are deleted."
+        },
+        {
+          "type": "notice",
+          "tone": "neutral",
+          "when": "data.erase.resources[pluginId='data'].preview.staying == 1",
+          "text": "One {data.erase.resources[pluginId='data'].preview.noun.0} this site shares with other sites stays. This site is removed from its sharing."
+        },
+        {
+          "type": "notice",
+          "tone": "neutral",
+          "when": "data.erase.resources[pluginId='data'].preview.staying > 1",
+          "text": "{data.erase.resources[pluginId='data'].preview.staying} {data.erase.resources[pluginId='data'].preview.noun.1} this site shares with other sites stay. This site is removed from their sharing."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "is.incomplete",
+          "text": "Could not list everything that goes with this site. Datasets shared with this site only are still deleted with it; see them on the Data page first."
         },
         {
           "type": "actions",
           "items": [
             {
               "id": "delete",
-              "label": "Delete this site",
+              "label": "Delete site",
               "icon": "trash|delete_forever",
               "destructive": true,
               "url": "/api/hosts/delete",
+              "promptTitle": "Delete this site?",
+              "submitLabel": "Delete site",
+              "confirm": [
+                {
+                  "text": "\"{site.name}\" and all of its pages, media, and settings"
+                },
+                {
+                  "when": "data.erase.resources[pluginId='data'].preview.going.length == 1",
+                  "text": ", with the {data.erase.resources[pluginId='data'].preview.noun.0} shared with this site only and its {data.erase.resources[pluginId='data'].preview.itemNoun.1},"
+                },
+                {
+                  "when": "data.erase.resources[pluginId='data'].preview.going.length > 1",
+                  "text": ", with the {data.erase.resources[pluginId='data'].preview.going.length} {data.erase.resources[pluginId='data'].preview.noun.1} shared with this site only and their {data.erase.resources[pluginId='data'].preview.itemNoun.1},"
+                },
+                {
+                  "text": " are permanently deleted. This can't be undone."
+                }
+              ],
               "prompt": [
                 {
                   "key": "typed",
-                  "label": "Type the site name to confirm",
+                  "label": "Type \"{site.name}\" to confirm",
                   "kind": "text",
                   "required": true,
-                  "mustMatch": "{site.name}",
-                  "help": "{site.name}"
+                  "mustMatch": "{site.name}"
                 }
               ],
               "body": {
                 "hostId": "{site.id}"
               },
-              "success": "Deleted {site.name}",
+              "success": "\"{site.name}\" deleted",
               "back": true
             }
           ]

@@ -61,6 +61,28 @@ class NavShellUiTest {
   }
 
   @Test
+  fun aDeletedSiteOnScreenLeavesForTheWorkspacesSitesNeverTheNextSite() = runComposeUiTest {
+    val shop = com.aglyn.core.FirestoreDoc("h1", "users/u1/hostMemberships/h1", mapOf("orgId" to "o1", "displayName" to "Acme Shop", "subdomain" to "shop", "role" to "admin"))
+    val blog = com.aglyn.core.FirestoreDoc("h2", "users/u1/hostMemberships/h2", mapOf("orgId" to "o1", "displayName" to "Acme Blog", "subdomain" to "blog", "role" to "admin"))
+    val memberships = kotlinx.coroutines.flow.MutableStateFlow(listOf(blog, shop))
+    val services = testServices(userDoc = emptyMap(), liveCollections = mapOf("users/u1/hostMemberships" to memberships))
+    val navigator = ShellNavigator()
+    setContent { AglynShell(services, navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site != null }
+    services.workspace.selectSite("h1")
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site?.id == "h1" }
+    // The site's Danger zone is open when the site goes (deleted here, on the web or on another device).
+    runOnIdle { navigator.select(NavKeys.of("core.site.delete")) }
+    waitForIdle()
+    memberships.value = listOf(blog)
+    // The whole workspace's Sites, as View all sites opens; never Acme Blog with its Danger zone still open.
+    waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.sites") }
+    assertTrue(services.workspace.state.value.wholeWorkspace)
+    assertEquals(null, services.workspace.state.value.site)
+  }
+
+  @Test
   fun siteSettingsIsAModeWithItsOwnListAndAWayBack() = runComposeUiTest {
     val navigator = ShellNavigator()
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }

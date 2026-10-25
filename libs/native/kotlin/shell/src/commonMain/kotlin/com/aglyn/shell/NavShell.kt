@@ -78,6 +78,7 @@ import com.aglyn.contracts.NativeNavListId
 import com.aglyn.contracts.toRef
 import com.aglyn.core.AuthState
 import com.aglyn.core.WorkspaceState
+import com.aglyn.core.WorkspaceStore
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.LocalAglynPalette
 import com.aglyn.ui.LocalShellColors
@@ -218,6 +219,21 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
+  // A site on screen that is deleted (or taken away) leaves for the whole workspace's Sites, as View all sites does, never
+  // for the next site with the same screen still open (a deleted site's Danger zone stayed open on another site).
+  var shownScope by remember(uid) { mutableStateOf<Pair<String?, String?>>(null to null) }
+  LaunchedEffect(workspace) {
+    if (WorkspaceStore.shownSiteRemoved(shownScope.first, shownScope.second, workspace)) {
+      services.workspace.selectWholeWorkspace()
+      chrome.settingsMode = null
+      chrome.closeMenus()
+      navigator.select(NavKeys.of("site.sites"))
+      shownScope = workspace.org?.id to null
+    } else if (workspace.ready) {
+      shownScope = workspace.org?.id to workspace.site?.id
+    }
+  }
+
   val actions = remember(navigator, chrome, services) {
     ShellActions(
       openScreen = { screen, params ->

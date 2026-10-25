@@ -475,6 +475,8 @@ struct ShellFrame<Content: View>: View {
   let compact: Bool
   @ViewBuilder let content: () -> Content
   @State private var askedKeepPins = false
+  /// The site this window last showed, so a site that leaves the list (deleted) is told from a switch.
+  @State private var shownSite = WorkspaceStore.ShownSiteWatch()
 
   var body: some View {
     content()
@@ -514,6 +516,10 @@ struct ShellFrame<Content: View>: View {
         if let orgID { model.preferences?.opened(orgID: orgID) }
       }
       .onChange(of: model.workspace?.orgs.map(\.id) ?? []) { _, ids in model.auth?.recordWorkspaces(ids) }
+      // A site on screen that is deleted (or taken away) leaves for the whole workspace's Sites, as View all sites does,
+      // never for the next site with the same screen still open (a deleted site's Danger zone stayed open on another).
+      .onChange(of: model.workspace?.sites.map(\.id) ?? []) { leaveARemovedSite() }
+      .onChange(of: model.workspace?.effective, initial: true) { leaveARemovedSite() }
       .onChange(of: navigation.section) { _, section in
         navigation.record(section)
         recordRecent(section)
@@ -528,6 +534,18 @@ struct ShellFrame<Content: View>: View {
         navigation.section = .home
       }
   }
+
+  private func leaveARemovedSite() {
+    guard let workspace = model.workspace else { return }
+    let leave = shownSite.update(
+      orgID: workspace.org?.id, pickedHostID: workspace.effective.hostID, sites: workspace.sites, ready: workspace.ready,
+      inSite: navigation.inSite)
+    if leave, navigation.front {
+      navigation.enterWorkspace()
+      navigation.select(.plugin("site.sites"))
+    }
+  }
+
 
   /// Asked once of an account with more than five pins (which five to keep).
   private var keepPinsShown: Binding<Bool> {
