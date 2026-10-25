@@ -16,6 +16,7 @@
  */
 
 import { randomBytes } from 'crypto'
+import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { Firestore } from 'firebase-admin/firestore'
 import { WAIVERS_COLLECTIONS } from '../constants/bundle-common'
@@ -44,8 +45,31 @@ export interface WaiversFileStore {
 
 let storeOverride: WaiversFileStore | null = null
 
+/**
+ * A file the upload structure check refused. Both writes here carry a
+ * signer's or staff member's own bytes — a drawn signature sent as an image,
+ * a photo of a paper waiver — so they pass the same structural inspection as
+ * every other upload door before they reach the bucket. The message is the
+ * inspector's, written for the person who sent the file.
+ */
+export class WaiverFileRefusedError extends Error {}
+
+function inspected(store: WaiversFileStore): WaiversFileStore {
+  return {
+    async save(path, bytes, contentType) {
+      const refusal = inspectUploadBytes({ bytes, contentType, fileName: path.split('/').pop() ?? null })
+      if (refusal) throw new WaiverFileRefusedError(refusal.message)
+      await store.save(path, bytes, contentType)
+    },
+    read: (path) => store.read(path),
+  }
+}
+
 export function waiversFiles(): WaiversFileStore {
-  if (storeOverride) return storeOverride
+  return inspected(storeOverride ?? bucketFiles())
+}
+
+function bucketFiles(): WaiversFileStore {
   const bucket = firebaseAdmin.app().storage().bucket()
   return {
     async save(path, bytes, contentType) {
