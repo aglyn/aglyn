@@ -37,9 +37,9 @@ class SheetEntranceTest {
     setContent { ActionDialog("Remove this tab?", "Remove", onConfirm = {}, onDismiss = {}) }
     mainClock.advanceTimeByFrame()
     mainClock.advanceTimeBy(16)
-    val early = onNodeWithTag("action-dialog", useUnmergedTree = true).getBoundsInRoot().width
+    val early = onNodeWithTag("action-dialog", useUnmergedTree = true).getBoundsInRoot().let { it.right - it.left }
     mainClock.advanceTimeBy(400)
-    val settled = onNodeWithTag("action-dialog", useUnmergedTree = true).getBoundsInRoot().width
+    val settled = onNodeWithTag("action-dialog", useUnmergedTree = true).getBoundsInRoot().let { it.right - it.left }
     mainClock.autoAdvance = true
     assertTrue(early < settled, "the dialog starts a little smaller: early $early, settled $settled")
     assertTrue(early >= settled * 0.95f, "from 96%, never smaller: early $early, settled $settled")
