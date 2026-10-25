@@ -28,7 +28,8 @@ A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the consol
 ## Switch
 
 Nothing runs until the console holds `PIXABAY_API_KEY`. Without it the
-provider answers as absent, and the AI site build places the starter photos.
+provider answers as absent: the AI site build places the starter photos, and
+the media picker's Stock photos tab says stock photos are not set up.
 
 ## Pixabay's terms, and how they are kept
 
@@ -39,7 +40,11 @@ provider answers as absent, and the AI site build places the starter photos.
 - The rate limit: the client reads `X-RateLimit-*` on every answer, keeps a
   margin, and stops asking until the window resets; a 429 stops it for the
   window named.
+- Previews: the console's media picker shows search results in its Stock
+  photos tab (AGL-4066). Each thumbnail is the hit's small copy
+  (`webformatURL` at 340 pixels), fetched by the console's server and handed
+  to the browser as bytes, so no browser loads a Pixabay address; the tab
+  names Pixabay over its results, as the API terms ask.
 - Credit: every copied asset records the photographer, the photo's Pixabay
   page and the license (`stockPhoto` on the media document) and a credit
-  sentence in its description. The Pixabay Content License asks no credit,
-  and no search result is ever shown to anyone.
+  sentence in its description. The Pixabay Content License asks no credit.

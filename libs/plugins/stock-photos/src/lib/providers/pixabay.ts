@@ -34,6 +34,10 @@ import {
  * - **No permanent hotlinking.** A photo is DOWNLOADED, by
  *   {@link createPixabayClient}'s `download`, and the caller stores the bytes
  *   in the site's own media library. A page never names a Pixabay address.
+ *   A search result shown to a member choosing a photo (the media picker's
+ *   Stock photos tab, AGL-4066) is its small copy, fetched by the console's
+ *   server and handed over as bytes, so no browser loads a Pixabay address
+ *   either.
  * - **Cache requests for 24 hours.** `server/search-cache.ts`.
  * - **The rate limit** (100 requests a minute per key by default, reported
  *   in `X-RateLimit-*` headers). The client reads the headers on every answer
@@ -44,13 +48,17 @@ import {
  *   photos are fetched {@link PIXABAY_DOWNLOADS_AT_ONCE} at a time, and a 429
  *   pauses every download of the process for as long as it asks before the
  *   photo is asked for again.
- * - **Show where search results are from.** No search result is ever shown
- *   to anyone: a job places one photo. The asset records its credit anyway
- *   (the photographer, the photo's Pixabay page and the license), which the
- *   media library shows in the asset's description.
+ * - **Show where search results are from.** An AI job shows no search
+ *   result: it places one photo. The media picker's Stock photos tab names
+ *   the library over every result it shows, and each photo's details link
+ *   its Pixabay page and the license. The asset records its credit either
+ *   way (the photographer, the photo's Pixabay page and the license), which
+ *   the media library shows in the asset's description.
  * - **Real human requests, no mass downloads.** A search runs only inside a
- *   site build a member started, a page asks a handful at most, and a photo
- *   is downloaded once per site.
+ *   site build a member started, or when a member searches the media
+ *   picker; a page asks a handful at most, previews are fetched as a member
+ *   scrolls to them and take turns with the downloads, and a photo is
+ *   downloaded once per library.
  *
  * The key is read from the environment at each call and never leaves this
  * module: it rides the query string Pixabay requires, so a request URL is
@@ -150,6 +158,24 @@ const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 /** A Pixabay hit, with the address its bytes are fetched from. */
 export interface PixabayPhoto extends StockPhoto {
   downloadUrl: string
+  /**
+   * The small copy a search result shows (AGL-4066): `webformatURL` at its
+   * 340-pixel-tall size, valid for the day the answer is cached. Absent on a
+   * search cached before it was read; the large copy stands in then.
+   */
+  previewUrl?: string
+}
+
+/** The height of the copy a search result shows: one of `webformatURL`'s documented sizes. */
+export const PIXABAY_PREVIEW_SIZE = 340
+
+/**
+ * `webformatURL` at the preview size: its documented `_640` swapped for
+ * `_340`, or the address as it stands when it carries no size.
+ */
+export function pixabayPreviewUrl(webformatUrl: unknown): string | undefined {
+  if (!isPixabayImageUrl(webformatUrl)) return undefined
+  return webformatUrl.replace(/_640(\.[a-z]+)$/i, `_${PIXABAY_PREVIEW_SIZE}$1`)
 }
 
 /** The API key, from this process's environment. */
@@ -245,6 +271,7 @@ export function parsePixabayAnswer(body: unknown): PixabayPhoto[] {
     const user = text(hit['user'], 80)
     const userId = Number(hit['user_id'])
     const size = pixabayLargeSize(width, height)
+    const previewUrl = pixabayPreviewUrl(hit['webformatURL'])
     photos.push({
       provider: PIXABAY_PROVIDER_ID,
       id: String(id),
@@ -263,6 +290,7 @@ export function parsePixabayAnswer(body: unknown): PixabayPhoto[] {
         .filter(Boolean)
         .slice(0, 20),
       downloadUrl,
+      ...(previewUrl ? { previewUrl } : {}),
     })
   }
   return photos
