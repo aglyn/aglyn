@@ -44,6 +44,7 @@ import type { OrgPermissions } from '../app-utils/org-permissions'
 import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
+import type { SiteStarterFacets, SiteStarterMode } from '../app-utils/site-starter'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
   ComponentSchema,
@@ -51,6 +52,7 @@ import type {
   PresetSchema,
 } from '../types/nodes'
 import type { Plugin, PluginId } from './plugin-manager'
+import type { SiteStarterSummary } from './plugin-site-starters'
 import type { HostThemeSource } from '../app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType, ReactNode } from 'react'
@@ -902,6 +904,19 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostFirstRun: 'hostFirstRun',
   /**
+   * The starter picker inside "Start your site" (AGL-4049), drawn before the
+   * site exists. Props: {@link ConsoleHostStarterPickerZoneProps} — the
+   * workspace, how the site will be filled, the person's search and filter,
+   * `onPick` and `ready`.
+   *
+   * A pick is required: there is no Skip, and the listing the platform starts
+   * a site from by default comes first. A widget here lists and picks and
+   * creates nothing; the site is created by the dialog from the starter it was
+   * handed. Not a staff zone and not host-gated: the widget's own extension
+   * gates it, as on any other zone.
+   */
+  hostStarterPicker: 'hostStarterPicker',
+  /**
    * The host setup Theme section, between the Theme picker and the editor
    * (AGL-2938). Props: {@link ConsoleHostThemeZoneProps} — the
    * site, the theme the editor shows, where that theme came from, the
@@ -1635,6 +1650,24 @@ export interface ConsoleArtifactPublishZoneProps {
   artifact: ConsolePublishableArtifact | null
   /** Closes it, however it was closed — cancelled, published, or refused. */
   onClose: () => void
+}
+
+/** What the `hostStarterPicker` zone hands each widget (AGL-4049). */
+export interface ConsoleHostStarterPickerZoneProps {
+  /** The org the site will belong to; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** How the site will be filled: its pages as they are, or by the AI site start. */
+  mode: SiteStarterMode
+  /** The person's search words, as typed. */
+  search: string
+  /** The facets the person narrowed to; an absent one is any. */
+  filter: Partial<SiteStarterFacets>
+  /** Hands the dialog the starter the person picked. */
+  onPick: (pick: SiteStarterSummary) => void
+  /** Reports whether the widget drew a picker; `false` gives the dialog its own default. */
+  ready: (shown: boolean) => void
 }
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */
