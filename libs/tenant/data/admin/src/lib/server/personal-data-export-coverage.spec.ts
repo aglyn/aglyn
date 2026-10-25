@@ -288,7 +288,7 @@ describe('the export and the erasure see the same collections', () => {
     // erasure on purpose (GDPR Art. 17(3)(b)) and `erase.ts` says in terms
     // that they must NEVER be swept, so they appear in the export's list and
     // not in the erasure's. `hostIndex` is reached through the host sweep.
-    const RETAINED_BY_LAW = ['platformRevenue', 'storefrontTaxCollected']
+    const RETAINED_BY_LAW = ['platformRevenue', 'storefrontTaxCollected', 'posHardwareSales']
     const unexplained = EXPORT_COVERED_COLLECTIONS.filter(
       (collection) =>
         !ERASED.has(collection) && !RETAINED_BY_LAW.includes(collection),
@@ -306,7 +306,10 @@ describe('the export and the erasure see the same collections', () => {
     expect(ERASE_SOURCE).toContain(
       '`storefrontTaxCollected` must NEVER be added either',
     )
-    for (const collection of ['platformRevenue', 'storefrontTaxCollected']) {
+    expect(ERASE_SOURCE).toContain(
+      '`posHardwareSales` must NEVER be added either',
+    )
+    for (const collection of ['platformRevenue', 'storefrontTaxCollected', 'posHardwareSales']) {
       const spec = PERSONAL_DATA_SOURCES.find(
         (source) => source.collection === collection,
       )

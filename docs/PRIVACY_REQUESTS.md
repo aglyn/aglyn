@@ -345,8 +345,9 @@ Work this list, not the tree.
 - Google Analytics — 14-month retention, not keyed to an account
 
 **Deliberately excluded from erasure, and disclose them on an access request**
-- `platformRevenue`, `storefrontTaxCollected` — statutory tax records
-  (AGL-1811/AGL-1904). GDPR Art. 17(3)(b) exempts them from erasure; it does
+- `platformRevenue`, `storefrontTaxCollected`, `posHardwareSales` — statutory
+  tax records (AGL-1811/AGL-1904/AGL-4038; the last is Aglyn's own sale of POS
+  hardware to the workspace, with no buyer details in it). GDPR Art. 17(3)(b) exempts them from erasure; it does
   **not** exempt them from access. If a transaction of theirs is in there, it
   is disclosable.
 - `contactSuppressions` — kept precisely so we can honour "stop contacting me".

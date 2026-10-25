@@ -27,6 +27,7 @@ import {
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_METADATA_TYPE,
   POS_HARDWARE_ORDERS_COLLECTION,
+  POS_HARDWARE_SALES_COLLECTION,
   POS_HARDWARE_SHIP_COUNTRIES,
   POS_HARDWARE_SHIPPING_LABELS,
   posHardwareOffers,
@@ -84,6 +85,15 @@ export function hardwareOrdersRef(orgId: string) {
     .collection('orgs')
     .doc(orgId)
     .collection(POS_HARDWARE_ORDERS_COLLECTION)
+}
+
+/**
+ * `posHardwareSales/{orderId}`, the retained sale record beside each order
+ * (see `PosHardwareSaleRecord`). Top-level on purpose: the workspace erasure
+ * cannot reach it.
+ */
+export function posHardwareSaleRef(orderId: string) {
+  return firebaseAdmin.app().firestore().collection(POS_HARDWARE_SALES_COLLECTION).doc(orderId)
 }
 
 /** An order as the merchant's card shows it: no Stripe ids, no staff notes. */

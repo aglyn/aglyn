@@ -2894,6 +2894,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // POS hardware sale records (AGL-4038): the platform's OWN sales of card
+    // readers, one per `orgs/{orgId}/hardwareOrders/{orderId}`, written by
+    // the commerce plugin's webhook, staff route and account eraser on the
+    // Admin SDK. Deny ALL client access, the buying workspace and staff
+    // included: a row names the workspace beside its amounts and where the
+    // order shipped, and the merchant reads its orders through the order
+    // documents and the plugin's route, never these.
+    //
+    // Same retention rule as `platformRevenue` and `storefrontTaxCollected`
+    // above: these are the platform's sales-tax and accounting records,
+    // kept after the workspace is erased (GDPR Art. 17(3)(b)) with nothing
+    // about the buyer in them. They are org-keyed by FIELD, and they must
+    // NEVER be added to an org-keyed deletion pass.
+    match /posHardwareSales/{orderId} {
+      allow read, write: if false;
+    }
+
     // Hosts and everything under them (content-hardening review,
     // 2026-07-07: tenant sites read through the Admin SDK, so no public
     // read). Access resolves through the org membership projection
