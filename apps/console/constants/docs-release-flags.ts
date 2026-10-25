@@ -348,7 +348,7 @@ export const FLAG_DOC_PAGES: Partial<
       disclosure: 'admonition',
       checkNoPriceClaim: false,
       priceClaimNote:
-        'The Assist build page quotes a shipping rule a merchant might ask for, with its dollar amounts, as an example of a message. It prices nothing Aglyn sells.',
+        'The Assist build page quotes a shipping rule a merchant might ask for, with its dollar amounts, as an example of a message. It prices nothing the product sells.',
     },
     // AGL-2923 put a full description of the generative add-on on the BILLING
     // page, where a buyer decides. It carried no disclosure and was declared
