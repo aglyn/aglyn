@@ -1942,5 +1942,74 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       }
     ],
     "footerReason": "You’re receiving this because a friend used your referral code at {{host.businessName}}."
+  },
+  {
+    "key": "waiver-signed",
+    "name": "Signed waiver copy",
+    "description": "Sends a signer their signed waiver as a PDF, with who it covers and for how long.",
+    "pluginId": "waivers",
+    "plugin": "Waivers",
+    "control": "besigner",
+    "defaultSubject": "Your signed waiver for {{host.businessName}}",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The signer’s name",
+        "sample": "Alex Rivera"
+      },
+      {
+        "name": "waiver.title",
+        "description": "The waiver’s title",
+        "sample": "Rider release and waiver"
+      },
+      {
+        "name": "waiver.signedAt",
+        "description": "When it was signed, in the site’s time zone",
+        "sample": "Oct 24, 2026, 9:14 AM"
+      },
+      {
+        "name": "waiver.people",
+        "description": "Everyone it covers: the signer and any minors",
+        "sample": "Alex Rivera, Sam Rivera"
+      },
+      {
+        "name": "waiver.validity",
+        "description": "The days it covers",
+        "sample": "Good for Oct 24, 2026"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "{{host.businessName}} · Waiver",
+        "variant": "eyebrow"
+      },
+      {
+        "block": "text",
+        "text": "Your signed waiver",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Thanks, {{name}}. You signed {{waiver.title}} for {{host.businessName}}. Your signed copy is attached to this email as a PDF.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Signed: {{waiver.signedAt}}\nCovers: {{waiver.people}}\n{{waiver.validity}}",
+        "variant": "details"
+      },
+      {
+        "block": "text",
+        "text": "You don’t need to print it: staff can find your waiver by name when you arrive. If anything on it is wrong, contact {{host.businessName}}.",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Visit {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you signed a waiver for {{host.businessName}}."
   }
 ]

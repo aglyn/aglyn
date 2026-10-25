@@ -31563,6 +31563,48 @@
             }
           ],
           "result": "This device has taken $123,000.00 in cards offline today, and its daily limit is $123,456.78. Take cash, or wait for the connection."
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 1000000,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 900000,
+              "takenTodayCents": 50000000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "card": {
+                "available": true,
+                "maxSaleCents": 1000000,
+                "maxDeviceDailyCents": 0
+              },
+              "totalCents": 1000001,
+              "takenTodayCents": 0
+            }
+          ],
+          "result": "Offline, a card sale can be up to $10,000.00. Take cash, or charge it when you are back online."
         }
       ]
     },
@@ -50180,6 +50222,7 @@
             "weglot",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -50228,6 +50271,7 @@
             "weglot",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -50262,6 +50306,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -50300,6 +50345,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains",
             "crm",
@@ -50340,6 +50386,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains",
             "accounts",
@@ -50394,6 +50441,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -50432,6 +50480,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains",
             "commerce",
@@ -50476,6 +50525,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains",
             "commerce",
@@ -50525,6 +50575,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains",
             "commerce",
@@ -50580,6 +50631,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -50629,6 +50681,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -50675,6 +50728,7 @@
             "review-platforms",
             "music",
             "help-desks",
+            "waivers",
             "ad-conversions",
             "domains"
           ]
@@ -56700,17 +56754,22 @@
             null
           ],
           "result": {
+            "accounting.manage": true,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": true,
             "billing.view": true,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": true,
             "org.auditLog": true,
             "org.settings": true,
+            "outreach.use": true,
             "plugins.install": true
           }
         },
@@ -56721,17 +56780,22 @@
             null
           ],
           "result": {
+            "accounting.manage": true,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": true,
             "billing.view": true,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": true,
             "org.auditLog": true,
             "org.settings": true,
+            "outreach.use": true,
             "plugins.install": true
           }
         },
@@ -56742,17 +56806,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": true
           }
         },
@@ -56763,17 +56832,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": false,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56784,17 +56858,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": false,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56805,17 +56884,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": false,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56833,17 +56917,22 @@
             null
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": true,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": true,
             "data.manage": false,
             "hosts.create": true,
             "hosts.delete": false,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": true
           }
         },
@@ -56863,17 +56952,22 @@
             }
           ],
           "result": {
+            "accounting.manage": false,
             "ai.generate": false,
             "ai.use": true,
             "billing.manage": false,
             "billing.view": false,
+            "collectWaivers": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "managePos": false,
+            "manageWaivers": false,
             "marketplace.publish": false,
             "members.manage": false,
             "org.auditLog": false,
             "org.settings": false,
+            "outreach.use": false,
             "plugins.install": false
           }
         },
@@ -56888,17 +56982,22 @@
             }
           ],
           "result": {
+            "accounting.manage": true,
             "ai.generate": true,
             "ai.use": true,
             "billing.manage": true,
             "billing.view": true,
+            "collectWaivers": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
+            "managePos": true,
+            "manageWaivers": true,
             "marketplace.publish": true,
             "members.manage": true,
             "org.auditLog": true,
             "org.settings": true,
+            "outreach.use": true,
             "plugins.install": true
           }
         }

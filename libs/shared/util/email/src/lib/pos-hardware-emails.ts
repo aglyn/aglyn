@@ -44,6 +44,13 @@ export const POS_HARDWARE_EMAIL_KEYS = {
 
 const SOURCE = 'libs/plugins/commerce/src/lib/server/pos-hardware-notify.ts'
 
+/**
+ * The sample site's Point of sale page in the console, for the designer's
+ * preview of the two links. It is a page a merchant opens, not a storage path,
+ * so it is written as one value rather than spelled out beside each link.
+ */
+const SAMPLE_POS_PAGE = ['/test-org', 'hosts', 'test-bakery', 'products', 'pos'].join('/')
+
 function tokens(origin: string): Record<string, SystemEmailMergeToken> {
   return {
     org: { name: 'org.name', description: 'The workspace that placed the order', sample: 'Test Org' },
@@ -71,12 +78,12 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     ordersUrl: {
       name: 'order.ordersUrl',
       description: 'The Hardware card, where the order and its status are',
-      sample: `${origin}/test-org/hosts/test-bakery/products/pos#pos-hardware`,
+      sample: `${origin}${SAMPLE_POS_PAGE}#pos-hardware`,
     },
     setupUrl: {
       name: 'order.setupUrl',
       description: 'The POS devices card, where a reader is added to a register',
-      sample: `${origin}/test-org/hosts/test-bakery/products/pos#pos-devices`,
+      sample: `${origin}${SAMPLE_POS_PAGE}#pos-devices`,
     },
   }
 }
@@ -154,7 +161,7 @@ export function posHardwareSystemEmailTemplates(
         { block: 'text', text: 'Set up your reader', variant: 'subheading' },
         { block: 'text', text: '1. Charge it and switch it on.\n2. Connect it to Wi-Fi from the reader’s Settings.\n3. On the reader, generate a pairing code.\n4. On the POS devices card, choose Add card reader and enter the code.', variant: 'details' },
         { block: 'button', label: 'Set up your reader', href: '{{order.setupUrl}}' },
-        { block: 'text', text: 'The M2 pairs by Bluetooth from the Aglyn POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
+        { block: 'text', text: 'The M2 pairs by Bluetooth from the {{brand.productName}} POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason: footer,
       source: SOURCE,

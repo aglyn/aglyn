@@ -320,7 +320,9 @@ final class PosOfflineModel {
       saleKey: key, amountCents: Int(totals.totalCents ?? 0), currency: card.currency, destination: card.destination,
       metadata: posOfflineCardIntentMetadata(saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register),
       maxSaleCents: min(Int(card.maxSaleCents), ContractValues.shared.posOfflineCardMaxSaleCentsLimit),
-      maxDeviceDailyCents: Int(card.maxDeviceDailyCents), takenTodayCents: cardsTakenTodayCents)
+      // 0 is no daily limit: the store did not set one.
+      maxDeviceDailyCents: card.maxDeviceDailyCents > 0 ? Int(card.maxDeviceDailyCents) : .max,
+      takenTodayCents: cardsTakenTodayCents)
   }
 
   /// Reads the site's offline rules while online.
@@ -489,4 +491,10 @@ final class PosOfflineModel {
     }
     if !flagged.isEmpty { notices += flagged }
   }
+}
+
+/// The card banner's words: the limit per sale, and the daily limit per device when the store set one (0 is none).
+func offlineCardLimitsNote(perSaleCents: Int, perDayCents: Int, money: (Int) -> String) -> String {
+  "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to \(money(perSaleCents))"
+    + (perDayCents > 0 ? ", and this device can take up to \(money(perDayCents)) in cards a day." : ".")
 }

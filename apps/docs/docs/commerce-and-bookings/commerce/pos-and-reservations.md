@@ -424,6 +424,40 @@ For stays (cabins, rooms, rentals):
    (with a folio summary if the guest charged store purchases to the
    room), walk-ins, no-shows, and cancellations.
 
+### Several identical units
+
+When you have several of the same thing, such as 12 RV hookups, 30 tent
+sites or four matching cabins, add them as **one resource** and set
+**Spots or units available** to how many there are. Each night can then
+take that many stays:
+
+- A guest can book a range of dates as long as at least one unit is free on
+  **every** night of it. Which unit they get is up to you at check-in.
+- The **Reservations** card shows the units left on each of the next 14
+  nights under the resource, for example "3 of 12 left".
+- When a stay's busiest night has three or fewer units left, the
+  Reservation widget tells the guest "Only 2 left".
+- A walk-in takes any unit that is free on every night of the stay, and is
+  refused only when some night has none left.
+- Blocking dates on a resource closes every unit on those dates.
+- An unpaid online checkout holds its unit for 30 minutes, then gives it
+  back, the same as for a single cabin.
+- Two guests can't both book the last unit: the second is told those dates
+  just sold out before any payment is taken.
+- Two staff can't both hand out the last unit as walk-ins either, even from
+  different devices: the second is told every unit is taken on at least one
+  of those nights (or "Those dates are taken" for a single cabin).
+
+**Sleeps** is separate: it is how many guests one unit sleeps, shown for
+information. It never limits how many stays a night can take. Leave
+**Spots or units available** at 1 (or empty) for a single cabin or room;
+it then works exactly as before.
+
+For example, a campground sells **RV camping with hookups** as one resource with
+**Spots or units available** set to 12 and a nightly rate of $60. Dry
+camping has no limit, so it is an ordinary product on the register, not a
+resource.
+
 :::info Deposits need a plan with commerce
 Taking a **reservation deposit** is a sale, and it is checked against your plan
 at the moment a guest tries to pay — not just when you added the widget. On a

@@ -157,7 +157,11 @@ module.exports = withAglyn({
     // through `require.resolve` at the first request. Stated rather than left
     // to tracing, for the reason SHARP_NATIVE_LIBRARIES is: a file the trace
     // misses is a route that fails only once deployed.
-    '/api/[...pluginApi]': FONT_INSTALLER_WASM,
+    //
+    // Plugin routes draw images too (AGL-4048): commerce renders a card
+    // reader's start-up screen with `sharp`, loaded only on that route's
+    // first call, so the plugin route needs libvips beside the WASM.
+    '/api/[...pluginApi]': [...FONT_INSTALLER_WASM, ...SHARP_NATIVE_LIBRARIES],
     '/api/health': SHARP_NATIVE_LIBRARIES,
     '/api/media/upload': SHARP_NATIVE_LIBRARIES,
     '/api/media/replace': SHARP_NATIVE_LIBRARIES,

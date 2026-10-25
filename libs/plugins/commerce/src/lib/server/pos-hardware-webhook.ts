@@ -24,10 +24,11 @@ import {
   POS_HARDWARE_METADATA_TYPE,
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_SHIPPING_LABELS,
+  posHardwareSaleRecord,
   type PosHardwareAddress,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
-import { hardwareOrdersRef } from './pos-hardware'
+import { hardwareOrdersRef, posHardwareSaleRef } from './pos-hardware'
 import { raisePosHardwareOrderAlert, sendPosHardwareEmail } from './pos-hardware-notify'
 
 /*==========================================
@@ -36,7 +37,9 @@ import { raisePosHardwareOrderAlert, sendPosHardwareEmail } from './pos-hardware
  * The platform's Stripe webhook fans every event out to the plugins' handlers
  * (`registerBillingWebhookHandler`); this one self-selects on a
  * `checkout.session.completed` whose metadata says it is a POS hardware
- * order, and writes `orgs/{orgId}/hardwareOrders/{orderId}`.
+ * order, and writes `orgs/{orgId}/hardwareOrders/{orderId}` and, in the same
+ * transaction, the retained sale record `posHardwareSales/{orderId}` that
+ * outlives the workspace (see `PosHardwareSaleRecord`).
  *
  * IDEMPOTENT BY THE ORDER ID. The id was fixed when the session was made
  * (from the merchant's attempt key), and the write is a transactional
@@ -134,14 +137,15 @@ export function posHardwareOrderFromSession(
 }
 
 /**
- * Writes the order once. `created` is false when a delivery already did, so
- * the caller tells people only the first time.
+ * Writes the order once, with its retained sale record. `created` is false
+ * when a delivery already did, so the caller tells people only the first time.
  */
 export async function recordPosHardwareOrder(
   orderId: string,
   order: PosHardwareOrder,
 ): Promise<{ created: boolean }> {
   const ref = hardwareOrdersRef(order.orgId).doc(orderId)
+  const saleRef = posHardwareSaleRef(orderId)
   return firebaseAdmin
     .app()
     .firestore()
@@ -149,6 +153,7 @@ export async function recordPosHardwareOrder(
       const existing = await transaction.get(ref)
       if (existing.exists) return { created: false }
       transaction.create(ref, order)
+      transaction.set(saleRef, posHardwareSaleRecord(orderId, order))
       return { created: true }
     })
 }

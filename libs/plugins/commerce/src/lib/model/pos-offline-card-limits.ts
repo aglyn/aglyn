@@ -19,14 +19,12 @@
  * The ceilings of cards taken offline on the app's own reader (AGL-4039), in
  * a module of their own with no imports: the commerce settings read them at
  * load, and pulling the offline register's model into the eager bundle for
- * three numbers would cost every console page.
+ * two numbers would cost every console page.
+ *
+ * There is no small default: a store's own limit per sale and daily limit
+ * per device are empty until it sets them, so offline cards run up to
+ * Stripe's own ceiling per sale with no daily limit.
  */
-
-/** The limit per sale a store is offered when it turns offline cards on, in cents (the store sets its own). */
-export const POS_OFFLINE_CARD_MAX_SALE_CENTS_DEFAULT = 10_000
-
-/** The daily limit per device a store is offered when it turns offline cards on, in cents: every card one device takes offline in a day. */
-export const POS_OFFLINE_CARD_DEVICE_DAILY_CENTS_DEFAULT = 500_000
 
 /** How long cards may wait on a device before the register asks, more firmly, to reconnect. */
 export const POS_OFFLINE_CARD_RECONNECT_WITHIN_MS = 24 * 60 * 60 * 1000

@@ -89,7 +89,7 @@ fun posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, takenTod
   if (total > perSale) return "Offline, a card sale can be up to ${offlineDollars(perSale)}. Take cash, or charge it when you are back online."
   val today = wholeCents(takenTodayCents)
   val daily = wholeCents(card.maxDeviceDailyCents)
-  if (today + total > daily) {
+  if (daily > 0 && today + total > daily) {
     return "This device has taken ${offlineDollars(today)} in cards offline today, and its daily limit is ${offlineDollars(daily)}. Take cash, or wait for the connection."
   }
   return null

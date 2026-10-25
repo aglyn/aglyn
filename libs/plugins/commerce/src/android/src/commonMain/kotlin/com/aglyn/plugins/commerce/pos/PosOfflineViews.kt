@@ -302,7 +302,11 @@ fun OfflineSaleDialog(model: RegisterModel) {
               }
               cardRefusal != null -> NoticeBanner(cardRefusal, StatusTone.WARNING, Modifier.testTag("offline-card-refusal"))
               else -> NoticeBanner(
-                "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to ${fmt((offline.kit?.card?.maxSaleCents ?: 0.0).toLong())}, and this device can take up to ${fmt((offline.kit?.card?.maxDeviceDailyCents ?: 0.0).toLong())} in cards a day.",
+                offlineCardLimitsNote(
+                  (offline.kit?.card?.maxSaleCents ?: 0.0).toLong(),
+                  (offline.kit?.card?.maxDeviceDailyCents ?: 0.0).toLong(),
+                  ::fmt,
+                ),
                 StatusTone.INFO,
               )
             }
@@ -381,3 +385,8 @@ private fun declinedCardMessage(notice: PosOfflineSyncNotice, model: RegisterMod
 /** Exact, and the next few round amounts a customer hands over. */
 fun offlineQuickAmounts(owed: Long): List<Long> =
   listOf(owed, (owed + 499) / 500 * 500, (owed + 999) / 1000 * 1000, (owed + 1999) / 2000 * 2000).filter { it >= owed }.distinct().take(4)
+
+/** The card banner's words: the limit per sale, and the daily limit per device when the store set one (0 is none). */
+fun offlineCardLimitsNote(perSaleCents: Long, perDayCents: Long, money: (Long) -> String): String =
+  "The card is saved on this register and charged when the connection returns. Offline, a card sale can be up to ${money(perSaleCents)}" +
+    if (perDayCents > 0) ", and this device can take up to ${money(perDayCents)} in cards a day." else "."

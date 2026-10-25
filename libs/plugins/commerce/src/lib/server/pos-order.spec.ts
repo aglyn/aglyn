@@ -471,6 +471,18 @@ beforeEach(() => {
  * `recordStorefrontTax`, which reads exactly this key and was therefore
  * filing every POS card sale as `taxMode: 'none'`.
  */
+describe('a product sold in person only (AGL-4060)', () => {
+  it('rings at the register like any other', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      ...docs.get('hosts/host-1/products/product-1'),
+      sellOnline: false,
+    })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+  })
+})
+
 describe('the POS card sale tax witness (AGL-1953)', () => {
   /** 8.25% of a $4.00 item is 33 cents — a figure no other total here shares. */
   const TAXED_STORE = {
