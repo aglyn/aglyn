@@ -231,7 +231,8 @@ struct ShellChrome: View {
             NotificationsPopover().environment(model).environment(navigation)
           }
           HelpMenuButton()
-          if AssistSlot.available(model) {
+          // Not over the Besigner: the editor's own Assist is the canvas-aware one (AGL-4057).
+          if AssistSlot.available(model), !navigation.besignerOnScreen {
             TitleBarButton("\(model.brandName) AI", systemImage: "sparkles", identifier: "titlebar-ai") {
               navigation.showAssist.toggle()
             }
