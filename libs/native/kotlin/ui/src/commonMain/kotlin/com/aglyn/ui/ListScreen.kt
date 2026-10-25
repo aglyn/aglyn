@@ -78,6 +78,34 @@ class PageCrumbsSlot {
 
 val LocalPageCrumbs = staticCompositionLocalOf<PageCrumbsSlot?> { null }
 
+/**
+ * The area's section chips (Orders / Returns / …), which the shell offers to the screen. A list beside its detail on a
+ * tablet or desktop takes them into its list column under its head ([ListColumnSections], AGL-4012, as Apple's
+ * AglynListColumnHeader); unclaimed, the shell draws them across the content.
+ */
+@Stable
+class PageSectionsSlot {
+  var sections: @Composable () -> Unit by mutableStateOf({})
+  private var claims by mutableStateOf(0)
+  val claimed: Boolean get() = claims > 0
+  fun claim() { claims++ }
+  fun release() { claims = (claims - 1).coerceAtLeast(0) }
+}
+
+val LocalPageSections = staticCompositionLocalOf<PageSectionsSlot?> { null }
+
+/** In a list column beside its detail: the area's section chips, taken from the shell (nothing elsewhere). */
+@Composable
+fun ListColumnSections() {
+  if (LocalListColumn.current == null) return
+  val slot = LocalPageSections.current ?: return
+  DisposableEffect(slot) {
+    slot.claim()
+    onDispose { slot.release() }
+  }
+  slot.sections()
+}
+
 /** One filter choice in a list's Filter menu: a group heading's options, one picked per group. */
 data class FilterChoice(val group: String, val key: String, val label: String)
 
@@ -141,6 +169,22 @@ fun ListHeaderAction(label: String, icon: String, onClick: () -> Unit, modifier:
   }
 }
 
+/**
+ * A content head's measures on the desktop and tablet (Figma Mac Sites 13:3 / iPad 13:1880, Orders 13:483; Apple's
+ * AglynHeadMetrics): 24 above the breadcrumbs (16 tall), 16 between them and the title row, the title row as tall as the
+ * filled 36 button with the button centered on it, 16 to the list toolbar and 16 from it to the list. A list beside its
+ * detail heads its own column without breadcrumbs: 20 above its 28 title row, 12 to the toolbar and 12 to the rows.
+ */
+object HeadMetrics {
+  val top = 24.dp
+  val crumbs = 16.dp
+  val gap = 16.dp
+  val titleRow = 36.dp
+  val listColumnTop = 20.dp
+  val listColumnTitleRow = 28.dp
+  val listColumnGap = 12.dp
+}
+
 /** The primary action of a list screen: its one filled button. */
 data class PrimaryAction(val id: String, val label: String, val icon: String = "add", val enabled: Boolean = true, val run: () -> Unit)
 
@@ -185,15 +229,20 @@ fun ListScreenScaffold(
   // E, or what is left of it inside a list pane that already brings its content in (LocalContentInset).
   val edge = LocalContentInset.current ?: contentInset()
   Column(modifier.fillMaxSize().testTag("$tag-screen")) {
+    // The head's rhythm (HeadMetrics) on the desktop and tablet; a phone keeps its own.
+    val headTop = when { !compactHead -> space(1f); inListColumn -> HeadMetrics.listColumnTop; else -> HeadMetrics.gap }
+    val headGap = when { !compactHead -> space(1.5f); inListColumn -> HeadMetrics.listColumnGap; else -> HeadMetrics.gap }
+    val toolbarGap = when { !compactHead -> space(1f); inListColumn -> HeadMetrics.listColumnGap; else -> HeadMetrics.gap }
+    val titleRow = when { !compactHead -> 0.dp; inListColumn -> HeadMetrics.listColumnTitleRow; else -> HeadMetrics.titleRow }
     Row(
-      Modifier.fillMaxWidth().padding(start = edge, end = edge, top = space(1f), bottom = space(1.5f)),
+      Modifier.fillMaxWidth().padding(start = edge, end = edge, top = headTop, bottom = headGap).heightIn(min = titleRow).testTag("$tag-title-row"),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
       Text(
         title,
         // Figma's list title: 22/28 bold on the desktop.
-        style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp) else MaterialTheme.typography.headlineSmall,
+        style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line) else MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -214,8 +263,10 @@ fun ListScreenScaffold(
       }
       if (more.isNotEmpty() && compactHead) OverflowMenu(more, contentDescription = "More actions", boxed = true)
     }
+    // A list beside its detail heads its own column: the area's section chips under the head, then the toolbar.
+    ListColumnSections()
     Row(
-      Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = space(1f)),
+      Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = toolbarGap).testTag("$tag-toolbar"),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
@@ -300,30 +351,38 @@ fun ScaffoldListRow(
   val padV = if (phone || site) 12.dp else 10.dp
   val gap = if (site) 14.dp else 12.dp
   val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-  // The tile and the trailing figure sit on the column's content inset E; the selection's fill reaches past them.
-  val outer = ((LocalContentInset.current ?: contentInset()) - padH).coerceAtLeast(0.dp)
+  val inset = LocalContentInset.current ?: contentInset()
+  // The tile and the trailing figure sit on the column's content inset E. In a list column beside its detail the
+  // selection is square and the column's whole width (AGL-4012); elsewhere its fill reaches a little past them.
+  val square = squareListSelection()
+  val outer = if (square) 0.dp else (inset - padH).coerceAtLeast(0.dp)
+  val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
   // The tile and the status chip read it, to stand off the selection's wash (Figma List/Order row Selected 11:343).
   androidx.compose.runtime.CompositionLocalProvider(LocalRowSelected provides selected) {
-    Row(
-      modifier.fillMaxWidth().padding(horizontal = outer, vertical = 1.dp).clip(shape)
-        .background(if (selected) shellColors.selected else Color.Transparent)
-        .clickable(onClick = onClick)
-        .heightIn(min = height)
-        .padding(horizontal = padH, vertical = padV)
-        .semantics(mergeDescendants = true) { if (selected) this.selected = true },
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(gap),
-    ) {
-      leading()
-      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        // Figma's line heights (14/18 over 12/16; the phone's 17/22 over 13/18), so the row keeps its 64 (68 on a phone).
-        Text(title, fontSize = if (phone) 17.sp else 14.sp, lineHeight = if (phone) 22.sp else 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        detail?.let { Text(it, fontSize = if (phone) 13.sp else 12.sp, lineHeight = if (phone) 18.sp else 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-      }
-      if (figure != null || status != null) {
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          figure?.let { Text(it, fontSize = if (phone) 15.sp else 14.sp, lineHeight = if (phone) 20.sp else 18.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1) }
-          status?.invoke()
+  Row(
+    modifier.fillMaxWidth()
+      .then(
+        if (square) Modifier.squareRowBox().squareRowGround(selected, interaction)
+        else Modifier.padding(horizontal = outer, vertical = 1.dp).clip(shape).background(if (selected) shellColors.selected else Color.Transparent),
+      )
+      .clickable(interactionSource = interaction, indication = if (square) null else androidx.compose.material3.ripple(), onClick = onClick)
+      .heightIn(min = height)
+      .then(if (square) Modifier.padding(squareRowPadding(inset)) else Modifier.padding(horizontal = padH))
+      .padding(vertical = padV)
+      .semantics(mergeDescendants = true) { if (selected) this.selected = true },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(gap),
+  ) {
+    leading()
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      // Figma's line heights (14/18 over 12/16; the phone's 17/22 over 13/18), so the row keeps its 64 (68 on a phone).
+      Text(title, fontSize = if (phone) 17.sp else 14.sp, lineHeight = if (phone) 22.sp else 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      detail?.let { Text(it, fontSize = if (phone) 13.sp else 12.sp, lineHeight = if (phone) 18.sp else 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    }
+    if (figure != null || status != null) {
+      Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        figure?.let { Text(it, fontSize = if (phone) 15.sp else 14.sp, lineHeight = if (phone) 20.sp else 18.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1) }
+        status?.invoke()
         }
       }
     }

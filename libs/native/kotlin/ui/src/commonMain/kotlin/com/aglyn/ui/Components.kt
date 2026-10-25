@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** How far a list row's rounded container sits in from the list's edges, so its content stays on the 16 dp line. */
 internal val ListRowInset = 8.dp
@@ -81,27 +82,33 @@ fun AglynListItem(
   val shape = MaterialTheme.shapes.large
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
-  val content = if (selected) colors.onPrimaryContainer else colors.onSurface
+  val content = if (selected && !squareListSelection()) colors.onPrimaryContainer else colors.onSurface
   val compact = LocalUiDensity.current.compact
   // In a full-bleed list the row's icon and trailing sit on the column's content inset E; in a padded pane, its own 8.
-  val outer = LocalContentInset.current?.let { (it - ListRowInset).coerceAtLeast(0.dp) } ?: ListRowInset
+  // In a list column beside its detail (tablet, desktop) a selected row fills square, the column's whole width, its
+  // content on E (AGL-4012); elsewhere the row is a rounded container inset from the list's edges.
+  val square = squareListSelection()
+  val outer = if (square) 0.dp else LocalContentInset.current?.let { (it - ListRowInset).coerceAtLeast(0.dp) } ?: ListRowInset
+  val inner = if (square) LocalContentInset.current ?: contentInset() else ListRowInset
+  val innerPadding = if (square) squareRowPadding(inner) else androidx.compose.foundation.layout.PaddingValues(horizontal = ListRowInset)
   Row(
     modifier
       .fillMaxWidth()
-      .padding(horizontal = outer, vertical = 1.dp)
-      .clip(shape)
-      .background(if (selected) colors.primaryContainer else Color.Transparent)
-      .then(if (focused) Modifier.border(2.dp, colors.primary, shape) else Modifier)
+      .then(
+        if (square) Modifier.squareRowBox().squareRowGround(selected, interaction)
+        else Modifier.padding(horizontal = outer, vertical = 1.dp).clip(shape).background(if (selected) colors.primaryContainer else Color.Transparent),
+      )
+      .then(if (focused) Modifier.border(2.dp, colors.primary, if (square) androidx.compose.ui.graphics.RectangleShape else shape) else Modifier)
       .then(
         if (onClick != null) {
-          Modifier.clickable(interactionSource = interaction, indication = ripple(), onClick = onClick)
+          Modifier.clickable(interactionSource = interaction, indication = if (square) null else ripple(), onClick = onClick)
         } else {
           Modifier
         },
       )
       .semantics(mergeDescendants = onClick != null) { if (selected) this.selected = true }
       .heightIn(min = if (supporting != null) (if (compact) 60.dp else 72.dp) else (if (compact) 48.dp else 56.dp))
-      .padding(horizontal = ListRowInset, vertical = if (compact) 6.dp else 10.dp),
+      .padding(innerPadding).padding(vertical = if (compact) 6.dp else 10.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(16.dp),
   ) {
@@ -127,7 +134,7 @@ fun AglynListItem(
         Text(
           supporting,
           style = MaterialTheme.typography.bodyMedium,
-          color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+          color = if (selected && !squareListSelection()) colors.onPrimaryContainer else colors.onSurfaceVariant,
           maxLines = 2,
           overflow = TextOverflow.Ellipsis,
         )
@@ -319,6 +326,14 @@ fun StatusChip(label: String, tone: StatusTone = StatusTone.NEUTRAL, modifier: M
   }
 }
 
+/** A plain section's measures in a detail column (Apple's plain grouped form): its title 17/22 semibold, 20 above, 10 below. */
+object PlainSection {
+  val above = 20.dp
+  val below = 10.dp
+  val titleSize = 17.sp
+  val titleLine = 22.sp
+}
+
 /** A titled card on the dashboard and in detail panes. */
 @Composable
 fun SectionCard(
@@ -328,6 +343,24 @@ fun SectionCard(
   onClick: (() -> Unit)? = null,
   content: @Composable () -> Unit,
 ) {
+  // Inside a tablet or desktop detail column a section is plain (AGL-4012, Apple's plain grouped form): on the column's
+  // surface with no card or grey, its title 17 semibold with 20 above and 10 below, its content on the column's edges.
+  // Settings pages, a phone, and anything outside a detail column keep the card.
+  if (LocalDetailPane.current && currentWidthClass() != WidthClass.COMPACT) {
+    Column(
+      modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).testTag("plain-section"),
+      verticalArrangement = Arrangement.spacedBy(space(1f)),
+    ) {
+      if (title != null || action != null) {
+        Row(Modifier.padding(top = PlainSection.above, bottom = PlainSection.below - space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          if (title != null) Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium.copy(fontSize = PlainSection.titleSize, lineHeight = PlainSection.titleLine), fontWeight = FontWeight.SemiBold)
+          action?.invoke()
+        }
+      }
+      content()
+    }
+    return
+  }
   Surface(
     modifier.then(if (onClick != null) Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onClick) else Modifier),
     shape = MaterialTheme.shapes.large,
