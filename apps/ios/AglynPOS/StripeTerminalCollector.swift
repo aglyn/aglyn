@@ -180,7 +180,7 @@
 
     // MARK: OfflineDelegate (AGL-4039)
 
-    func terminal(_ terminal: Terminal, didChangeOfflineStatus offlineStatus: OfflineStatus) {}
+    func terminal(_ terminal: Terminal, didChange offlineStatus: OfflineStatus) {}
 
     func terminal(_ terminal: Terminal, didForwardPaymentIntent intent: PaymentIntent, error: Error?) {
       let forward = offlineForward(intent, error: error)
@@ -729,9 +729,11 @@
         // `-AglynMirrorOfflineToStripe YES`: a simulated reader goes offline with the register, so store and forward
         // can be driven on a simulator whose Mac still reaches Stripe.
         guard testMode, UserDefaults.standard.bool(forKey: "AglynMirrorOfflineToStripe"), Terminal.isInitialized() else { return }
-        let config = SimulatedOfflineModeConfigurationBuilder()
-          .setSdkOfflineMode(online ? .disabled : .offlineImmediate)
-          .build()
+        guard
+          let config = try? SimulatedOfflineModeConfigurationBuilder()
+            .setSdkOfflineMode(online ? .disabled : .offlineImmediate)
+            .build()
+        else { return }
         try? Terminal.shared.setSimulatedOfflineModeConfiguration(config)
       #endif
     }
