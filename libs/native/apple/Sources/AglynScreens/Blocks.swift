@@ -103,13 +103,16 @@ struct MeterRow: View {
     let limit = ScreenValues.number(limitValue)
     let usedText = ScreenValues.formatted(usedValue, as: format, in: scope)
     let unlimited = limit == nil || (limit ?? 0) < 0
+    let explicitlyUnlimited = (limit ?? 0) < 0
     let limitText = unlimited ? "Unlimited" : ScreenValues.formatted(limitValue, as: format, in: scope)
     let fraction = unlimited || (limit ?? 0) <= 0 ? 0 : min(1, used / (limit ?? 1))
     VStack(alignment: .leading, spacing: 6) {
       HStack {
         Text(label).font(AglynFont.body)
         Spacer()
-        Text(unlimited ? usedText : "\(usedText) of \(limitText)")
+        // An uncapped meter says so, as the console's usage meter does ("8,964 / Unlimited"); one with no limit at all
+        // is a count.
+        Text(unlimited ? (explicitlyUnlimited ? "\(usedText) / Unlimited" : usedText) : "\(usedText) of \(limitText)")
           .font(AglynFont.subheadline).foregroundStyle(.secondary).monospacedDigit()
       }
       if !unlimited {
@@ -138,10 +141,17 @@ struct ListBlock: View {
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
-  /// The choice made in the list's `chips` filter; empty shows every row.
-  @State private var chosen = ""
+  /// The list toolbar draws its sort, columns and chips (in its one Filter menu, `SpecListFilter`) on the Mac and iPad,
+  /// so the list has no header row of its own for them.
+  var toolbarControls = false
   /// How many more pages of a `page`d list "Show more" has revealed.
   @State private var revealed = 0
+
+  /// The choice made in the list's `chips` filter; empty shows every row.
+  private var chosen: String { model.chips[ListColumns.key(of: block)] ?? "" }
+  private var chosenBinding: Binding<String> {
+    Binding(get: { model.chips[ListColumns.key(of: block)] ?? "" }, set: { model.chips[ListColumns.key(of: block)] = $0 })
+  }
 
   var body: some View {
     let key = ListColumns.key(of: block)
@@ -160,8 +170,8 @@ struct ListBlock: View {
     let page = block["page"]?.numberValue.map { Int($0) } ?? 0
     let shown = page > 0 ? Array(rows.prefix(page * (1 + revealed))) : rows
     Section {
-      if !chipValues.isEmpty {
-        Picker(chips?["label"]?.stringValue ?? "Filter", selection: $chosen) {
+      if !chipValues.isEmpty, !toolbarControls {
+        Picker(chips?["label"]?.stringValue ?? "Filter", selection: chosenBinding) {
           Text("All").tag("")
           ForEach(chipValues, id: \.self) { Text($0).tag($0) }
         }
@@ -196,8 +206,8 @@ struct ListBlock: View {
         .accessibilityIdentifier("load-more-\(loadKey)")
       }
     } header: {
-      let sortable = columns.filter(\.sortable)
-      let pickable = columns.filter { !$0.always }
+      let sortable = toolbarControls ? [] : columns.filter(\.sortable)
+      let pickable = toolbarControls ? [] : columns.filter { !$0.always }
       if !(title ?? "").isEmpty || !sortable.isEmpty || !pickable.isEmpty {
         HStack {
           Text(title ?? "")
@@ -291,6 +301,7 @@ struct ListBlock: View {
 }
 
 struct ListRow: View {
+  @Environment(\.aglynWideChrome) private var wide
   let block: BlockSpec
   let scope: JSONValue
   /// The row's picked columns as one line (`columns`), empty for a list without them.
@@ -320,29 +331,37 @@ struct ListRow: View {
     let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
     let badges = block["badges"].array.flatMap { badge in rowBadges(badge, in: scope) }
+    // On the Mac and iPad a row is at most three lines (Figma List/Site row): its name, one line of detail, one line
+    // of the picked columns, with its badges at the trailing end; a phone keeps the fuller stack.
     let row = HStack(alignment: .center, spacing: 12) {
       if let icon = block["icon"]?.stringValue {
         IconBadge(ScreenSpec.appleIcon(ScreenValues.render(icon, in: scope)), tone: .info, size: 30, circle: true)
           .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: 3) {
-        Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(2)
+        Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(wide ? 1 : 2)
         if let secondary, !secondary.isEmpty {
-          Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+          Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(wide ? 1 : 2)
         }
         if !columnsLine.isEmpty {
-          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(3)
+          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(wide ? 1 : 3)
         }
-        if let tertiary, !tertiary.isEmpty {
+        if let tertiary, !tertiary.isEmpty, !wide || columnsLine.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
         }
-        if !badges.isEmpty {
+        if !badges.isEmpty, !wide {
           AglynWrapRow(spacing: AglynSpace.of(0.75), lineSpacing: AglynSpace.of(0.75)) {
             ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
           }
         }
       }
       Spacer(minLength: 8)
+      if !badges.isEmpty, wide {
+        HStack(spacing: 6) {
+          ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
+        }
+        .fixedSize()
+      }
       if let trailing, !trailing.isEmpty {
         Text(trailing).font(AglynFont.subheadline).foregroundStyle(.secondary).monospacedDigit()
       }
@@ -376,7 +395,7 @@ struct ListRow: View {
       }
       if let toggle = rowToggle(primary) { toggle }
     }
-    .listRowBackground(target != nil && selection?.wrappedValue == target ? AglynColor.tint.opacity(0.14) : nil)
+    .aglynRowSelected(target != nil && selection?.wrappedValue == target)
     .contextMenu { menuItems }
     #if os(iOS)
       .swipeActions(edge: .trailing) {
@@ -983,5 +1002,102 @@ struct PlainFormRow<Control: View>: View {
     } else {
       control
     }
+  }
+}
+
+/// A list screen's one Filter control on the Mac and iPad (Figma List toolbar, Calm rule 3): beside its search, one menu
+/// holding what the list can be narrowed and ordered by. The screen's own filter action (one that opens this screen
+/// again with the person's choices, such as the staff lists' "Filter the list"), the list's `chips` values, its sort
+/// columns and the columns its rows show. It reads as on, with the choice's name, once a chip or a filter is picked.
+struct SpecListFilter: View {
+  let block: BlockSpec
+  @Bindable var model: ScreenModel
+  let context: JSONValue
+  /// The screen's actions that filter its own list.
+  let filters: [ActionSpec]
+  let trigger: (ActionSpec, JSONValue) -> Void
+
+  var body: some View {
+    let key = ListColumns.key(of: block)
+    let columns = ListColumns.columns(of: block)
+    let sortable = columns.filter(\.sortable)
+    let pickable = columns.filter { !$0.always }
+    let asked = model.order[key]
+    let chosenColumn = asked.flatMap { order in columns.first { $0.id == order.column } }
+    let chips = block["chips"]
+    let chipValues = chips.map { ScreenValues.lookup($0["from"]?.stringValue ?? "", in: context).array.map { ScreenValues.text($0) } } ?? []
+    let chosen = model.chips[key] ?? ""
+    let shown = model.shownColumns(of: key, in: columns)
+    if !filters.isEmpty || !chipValues.isEmpty || !sortable.isEmpty || !pickable.isEmpty {
+      AglynFilterMenu(active: activeName(chosen: chosen)) {
+        ForEach(filters) { action in
+          Button {
+            trigger(action, context)
+          } label: {
+            Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "line.3.horizontal.decrease")
+          }
+        }
+        if !chipValues.isEmpty {
+          Picker(
+            chips?["label"]?.stringValue ?? "Show",
+            selection: Binding(get: { model.chips[key] ?? "" }, set: { model.chips[key] = $0 })
+          ) {
+            Text("All").tag("")
+            ForEach(chipValues, id: \.self) { Text($0).tag($0) }
+          }
+          .pickerStyle(.inline)
+        }
+        if !sortable.isEmpty {
+          Section("Sort by") {
+            Button {
+              Task { await model.ask(nil, of: key, routed: chosenColumn?.route != nil) }
+            } label: {
+              if asked == nil { Label("Default order", systemImage: "checkmark") } else { Text("Default order") }
+            }
+            ForEach(sortable) { column in
+              let active = asked?.column == column.id ? asked : nil
+              Button {
+                Task {
+                  await model.ask(
+                    ListColumns.next(after: asked, tapping: column), of: key,
+                    routed: column.route != nil || chosenColumn?.route != nil)
+                }
+              } label: {
+                if let active {
+                  Label("\(column.label) \(active.descending ? "\u{2193}" : "\u{2191}")", systemImage: "checkmark")
+                } else {
+                  Text(column.label)
+                }
+              }
+            }
+          }
+        }
+        if !pickable.isEmpty {
+          Section("Show") {
+            ForEach(pickable) { column in
+              Toggle(
+                column.label,
+                isOn: Binding(
+                  get: { shown.contains(column.id) },
+                  set: { on in model.shown[key] = on ? shown.union([column.id]) : shown.subtracting([column.id]) }))
+            }
+          }
+        }
+      }
+      .accessibilityIdentifier("list-filter-\(key)")
+    }
+  }
+
+  /// The Filter button's name while something narrows the list: the chip picked, else the filter action's first
+  /// choice that is set (its prompt's label), else nothing.
+  private func activeName(chosen: String) -> String? {
+    if !chosen.isEmpty { return chosen }
+    for action in filters {
+      for field in action.prompt {
+        let value = ScreenValues.text(ScreenValues.lookup("params.\(field.key)", in: context))
+        if !value.isEmpty { return field.label }
+      }
+    }
+    return nil
   }
 }

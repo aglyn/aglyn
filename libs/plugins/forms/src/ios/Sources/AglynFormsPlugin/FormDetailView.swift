@@ -87,7 +87,6 @@ struct FormDetailView: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .accessibilityIdentifier("form-detail")
   }
 

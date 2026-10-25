@@ -56,17 +56,39 @@ private struct AglynSearchableModifier: ViewModifier {
     self.filter = filter
   }
 
+  /// A list+detail screen took the toolbar into its list column (`AglynListDetailColumns`).
+  @State private var inColumn = false
+
   func body(content: Content) -> some View {
     if wide {
-      content.safeAreaInset(edge: .top, spacing: 0) {
-        AglynListToolbar(text: $text, prompt: prompt, onSubmit: onSubmit) { filter }
-      }
+      let bar = AglynListToolbar(text: $text, prompt: prompt, onSubmit: onSubmit) { filter }
+      // The search belongs to the list (Zach 10/20: "The search bar for the list should only be in the list not
+      // expanding both the list and detail view"): a list+detail screen draws it atop its list column, and only a
+      // screen without one draws it across the content.
+      content
+        .environment(\.aglynListColumnToolbar, AnyView(bar))
+        .onPreferenceChange(AglynListToolbarPlacedKey.self) { inColumn = $0 }
+        .safeAreaInset(edge: .top, spacing: 0) {
+          if !inColumn { bar }
+        }
     } else {
       content
         .searchable(text: $text, prompt: prompt)
         .onSubmit(of: .search) { onSubmit?() }
     }
   }
+}
+
+extension EnvironmentValues {
+  /// A screen's list toolbar (`aglynSearchable`) waiting for its list column: `AglynListDetailColumns` draws it atop the
+  /// list column on the Mac and iPad; nil elsewhere.
+  @Entry public var aglynListColumnToolbar: AnyView? = nil
+}
+
+/// Set by `AglynListDetailColumns` when it drew the screen's list toolbar in its list column.
+public struct AglynListToolbarPlacedKey: PreferenceKey {
+  public static let defaultValue = false
+  public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
 /// A list's toolbar (Figma List toolbar): its search field, then its one Filter control. On a phone (a screen that heads
@@ -127,7 +149,8 @@ public struct AglynListToolbar<Filter: View>: View {
       filter.environment(\.aglynTouchToolbar, touch)
     }
     .padding(.horizontal, touch ? AglynContentInsets.phone : (inset ?? AglynContentInsets.horizontal))
-    .padding(.bottom, touch ? 12 : 10)
+    // Figma 13:3: 16 between the toolbar and the list's first row on the Mac and iPad.
+    .padding(.bottom, touch ? 12 : AglynHeadMetrics.gap)
     // On touch the row sits on the page ground; in the phone's bold look it lets the ground (and its glow) through.
     .background(touch ? (AglynThemeRuntime.shared.phoneBold ? Color.clear : AglynColor.page) : AglynColor.paper)
   }
@@ -243,8 +266,8 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
   }
 
   public var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      crumbs
+    VStack(alignment: .leading, spacing: AglynHeadMetrics.gap) {
+      crumbs.frame(minHeight: AglynHeadMetrics.crumbs, alignment: .leading)
       HStack(alignment: .center, spacing: 10) {
         Text(title)
           .font(.system(size: 22, weight: .semibold))
@@ -253,13 +276,26 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
           .accessibilityAddTraits(.isHeader)
         accessory
       }
+      // The title row is as tall as its filled button, so the button never reaches past it (Zach 10/20: the button
+      // touched the search row under it).
+      .frame(minHeight: AglynHeadMetrics.titleRow)
     }
     .padding(.horizontal, AglynContentInsets.horizontal)
-    .padding(.top, 20)
-    .padding(.bottom, 12)
+    .padding(.top, AglynHeadMetrics.top)
+    .padding(.bottom, AglynHeadMetrics.gap)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(AglynColor.paper)
   }
+}
+
+/// A content head's measures on the Mac and iPad (Figma Mac Sites 13:3 and iPad 13:1880): 24 above the breadcrumbs (16
+/// tall), 16 between them and the title row, the title row as tall as the filled Medium button (36) with the button
+/// centered on it, and 16 between the title row and the list toolbar, as between the toolbar and the list.
+public enum AglynHeadMetrics {
+  public static let top: CGFloat = 24
+  public static let crumbs: CGFloat = 16
+  public static let gap: CGFloat = 16
+  public static let titleRow: CGFloat = 36
 }
 
 extension AglynPrimaryHeaderButton {
@@ -348,12 +384,16 @@ public struct AglynScreenChrome {
   public var entries: [AglynScreenToolbarEntry] = []
   /// The screen's own title, for the head of a screen pushed over a list (`aglynScreenTitle`).
   public var title: String?
+  /// Where a list column left room for the area's head (Figma 13:483: the head heads the list column), so the shell
+  /// draws the head there with the screen's own actions (`AglynListDetailColumns`, `aglynColumnHeadOffer`).
+  public var columnHeadSlot: Anchor<CGRect>?
 
   /// Adds what an outer modifier publishes to what the screen inside it already did: the screen's own primary action and
   /// title stay first, actions add up. Every chrome modifier merges this way, so stacking them never hides one.
   public mutating func merge(_ outer: AglynScreenChrome) {
     primary = primary ?? outer.primary
     title = title ?? outer.title
+    columnHeadSlot = columnHeadSlot ?? outer.columnHeadSlot
     entries.append(contentsOf: outer.entries)
   }
 }
@@ -599,6 +639,42 @@ public struct AglynAreaHead {
 extension EnvironmentValues {
   /// The area's head on the Mac and iPad when its screen draws the head in its own list column; nil otherwise.
   @Entry public var aglynAreaHead: AglynAreaHead? = nil
+  /// The area's head offered to any list column on the Mac and iPad (Figma 13:483): an `AglynListDetailColumns` that
+  /// shows a list beside its detail takes it, leaves room for the head atop its list column and draws the area's
+  /// section chips under it; the shell then draws the head in that room instead of across the content. Nil elsewhere.
+  @Entry public var aglynColumnHeadOffer: AglynAreaHead? = nil
+}
+
+/// Set by `AglynListDetailColumns` when it took the area's head into its list column (`aglynColumnHeadOffer`).
+public struct AglynListColumnHeadPlacedKey: PreferenceKey {
+  public static let defaultValue = false
+  public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// An area's sections as chips across a column (Inbox's Submissions, Members & leads and Campaigns): the selected one
+/// filled, each opening its section.
+public struct AglynAreaSectionChips: View {
+  let sections: [AglynAreaSection]
+  let inset: CGFloat
+
+  public init(_ sections: [AglynAreaSection], inset: CGFloat) {
+    self.sections = sections
+    self.inset = inset
+  }
+
+  public var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: AglynSpace.one) {
+        ForEach(sections) { section in
+          AglynChoiceChip(section.label, selected: section.selected) { section.open() }
+            .accessibilityIdentifier("area-section-\(section.id)")
+        }
+      }
+      .padding(.horizontal, inset)
+      .padding(.bottom, AglynSpace.one)
+    }
+    .background(AglynColor.paper)
+  }
 }
 
 /// The screens that head their own list column on the Mac and iPad. A plugin names its screen when it registers it, so
@@ -690,6 +766,9 @@ public struct AglynListColumnHeader<Actions: View>: View {
 
   /// The list column's side margins: the content edge, as every column's (`AglynContentInsets`).
   public static var inset: CGFloat { AglynContentInsets.horizontal }
+
+  /// The head's height in a list column on the Mac and iPad: 20 above the 28-point title row and 12 under it.
+  public static var columnHeight: CGFloat { 20 + 28 + 12 }
 }
 
 /// A phone title row's 40-point button (Figma 22:499): the create action filled with the accent, any other action

@@ -858,6 +858,8 @@ struct AreaView: View {
   let params: NativeParams
   /// Pushed on a phone's stack (a Menu row), rather than a section's own first screen.
   var pushed = false
+  /// The screen took the area's head into its list column (`aglynColumnHeadOffer`, Figma 13:483).
+  @State private var headInColumn = false
 
   /// The areas whose screens draw their own section chips.
   private static let selfSectioned: Set<String> = ["crm", "emails", "marketing", "marketplace"]
@@ -875,10 +877,17 @@ struct AreaView: View {
     // A screen that heads its own list column (Figma Orders 13:483; on a phone its own title row, 22:499) gets the head's
     // parts instead of the head, the section chips and the phone's star and actions.
     let columnHead = AglynListColumnHead.screens.contains(screen)
+    // Every other list beside its detail heads its list column too, on the Mac and iPad (Figma 13:483: the title, star
+    // and actions atop the list, the hairline from the top): the head is offered, and taken by `AglynListDetailColumns`.
+    let offer = wide && !columnHead
+      ? row.map { areaHead($0, sections: Self.selfSectioned.contains($0.id) ? [] : sections) } : nil
+    let headed = columnHead || (offer != nil && headInColumn)
     PluginScreenView(screenID: screen, params: params)
       .environment(\.aglynAreaHead, columnHead ? row.map { areaHead($0, sections: sections) } : nil)
+      .environment(\.aglynColumnHeadOffer, offer)
+      .onPreferenceChange(AglynListColumnHeadPlacedKey.self) { headInColumn = $0 }
       .safeAreaInset(edge: .top, spacing: 0) {
-        if !columnHead {
+        if !headed {
           VStack(alignment: .leading, spacing: 0) {
             if wide, let row {
               // The area's head in its content (Figma Mac Sites 13:3): breadcrumbs, the title with its star, and the
@@ -919,7 +928,19 @@ struct AreaView: View {
               navigation.push(.screen(first.screen, first.params ?? [:]))
             }
           }
-          AreaHeaderActions(row: row, primary: chrome.primary ?? fallback, entries: chrome.entries)
+          if headed, let offer, let slot = chrome.columnHeadSlot {
+            // The head in the room its list column left for it, with the screen's own actions.
+            GeometryReader { proxy in
+              let room = proxy[slot]
+              AglynListColumnHeader(offer, primary: chrome.primary ?? fallback) {
+                ForEach(chrome.entries) { $0.content }
+              }
+              .frame(width: room.width, height: room.height, alignment: .top)
+              .offset(x: room.minX, y: room.minY)
+            }
+          } else if !headed {
+            AreaHeaderActions(row: row, primary: chrome.primary ?? fallback, entries: chrome.entries)
+          }
         }
       }
       .toolbar {
@@ -990,9 +1011,14 @@ struct AreaHeaderActions: View {
   let entries: [AglynScreenToolbarEntry]
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Breadcrumbs(row: row).hidden()
-      HStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: AglynHeadMetrics.gap) {
+      Breadcrumbs(row: row).hidden().frame(minHeight: AglynHeadMetrics.crumbs, alignment: .leading)
+      // On the title row, centered on it (Figma Mac Sites 13:3: the primary's center on the title's, its right edge on
+      // E). The row has the head's measures (`AglynHeadMetrics`), so the buttons center on the same line as the title
+      // at every window size and never reach the toolbar under the head.
+      HStack(alignment: .center, spacing: 8) {
+        Text(row.label).font(.system(size: 22, weight: .semibold)).lineLimit(1).hidden().frame(width: 0)
+          .accessibilityHidden(true)
         Spacer(minLength: 0)
         HStack(spacing: 8) {
           ForEach(entries) { $0.content }
@@ -1000,15 +1026,15 @@ struct AreaHeaderActions: View {
         .buttonStyle(AglynHeaderButtonStyle())
         .menuStyle(.button)
         .fixedSize()
-        .frame(height: 36)
         if let primary {
           // Off for a reason, it says why: on hover on the Mac, on a tap on iPad.
           AglynPrimaryHeaderButton.blockable(primary)
         }
       }
+      .frame(minHeight: AglynHeadMetrics.titleRow)
     }
     .padding(.horizontal, AglynContentInsets.horizontal)
-    .padding(.top, 20)
+    .padding(.top, AglynHeadMetrics.top)
     .frame(maxWidth: .infinity, alignment: .topLeading)
   }
 }

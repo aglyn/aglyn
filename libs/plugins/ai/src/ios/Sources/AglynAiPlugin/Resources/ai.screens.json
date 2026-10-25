@@ -28,7 +28,14 @@
               "label": "Credits used",
               "used": "{data.credits.credits.used}",
               "limit": "{data.credits.credits.limit|'-1'}",
-              "note": "{data.credits.credits.remaining:number} left"
+              "note": "{data.credits.credits.remaining:number} left",
+              "when": "data.credits.credits.limit"
+            },
+            {
+              "label": "Credits used",
+              "used": "{data.credits.credits.used}",
+              "limit": "{data.credits.credits.limit|'-1'}",
+              "when": "!data.credits.credits.limit"
             }
           ]
         },
@@ -43,8 +50,8 @@
           "title": "Jobs",
           "split": true,
           "items": "data.jobs.jobs",
-          "primary": "{item.brief|item.kind:title}",
-          "secondary": "{item.kind:title} · {item.createdAt:datetime}",
+          "primary": "{item.brief|const.kindLabels[@item.kind]|'AI job'}",
+          "secondary": "{const.kindLabels[@item.kind]|'AI job'} · {item.createdAt:datetime}",
           "tertiary": "{item.creditsSpent:number} credits",
           "icon": "sparkles|auto_awesome",
           "badges": [
@@ -96,7 +103,37 @@
           ],
           "empty": "No AI jobs on this site yet."
         }
-      ]
+      ],
+      "constants": {
+        "kindLabels": {
+          "page": "Page",
+          "component": "Component",
+          "layout": "Layout",
+          "template": "Page template",
+          "edit": "Change",
+          "seo": "AI job",
+          "site": "Site",
+          "email": "Email",
+          "campaign": "Campaign",
+          "form": "Form",
+          "experiment": "Experiment",
+          "insight": "Answer",
+          "products": "Products",
+          "crm": "AI job",
+          "onboarding": "AI job",
+          "workflow": "Automation",
+          "logic": "Function",
+          "text": "AI job",
+          "theme": "Theme",
+          "build": "Build",
+          "navigation": "Menu",
+          "duplicate": "Copy",
+          "settings": "Settings",
+          "media": "Media library change",
+          "tracking": "Tracking",
+          "import": "Site import"
+        }
+      }
     },
     {
       "id": "ai.job",
@@ -142,7 +179,7 @@
             },
             {
               "label": "Kind",
-              "value": "{item.kind:title}"
+              "value": "{const.kindLabels[@item.kind]|'AI job'}"
             },
             {
               "label": "Brief",
@@ -234,7 +271,37 @@
             }
           ]
         }
-      ]
+      ],
+      "constants": {
+        "kindLabels": {
+          "page": "Page",
+          "component": "Component",
+          "layout": "Layout",
+          "template": "Page template",
+          "edit": "Change",
+          "seo": "AI job",
+          "site": "Site",
+          "email": "Email",
+          "campaign": "Campaign",
+          "form": "Form",
+          "experiment": "Experiment",
+          "insight": "Answer",
+          "products": "Products",
+          "crm": "AI job",
+          "onboarding": "AI job",
+          "workflow": "Automation",
+          "logic": "Function",
+          "text": "AI job",
+          "theme": "Theme",
+          "build": "Build",
+          "navigation": "Menu",
+          "duplicate": "Copy",
+          "settings": "Settings",
+          "media": "Media library change",
+          "tracking": "Tracking",
+          "import": "Site import"
+        }
+      }
     },
     {
       "id": "ai.credits",

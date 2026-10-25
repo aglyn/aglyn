@@ -134,7 +134,7 @@ struct RecordsSection: View {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       }
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -313,7 +313,6 @@ struct RecordDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .aglynListBackground()
     .navigationTitle(row.title)
     .aglynScreenTitle(row.title)
     #if os(iOS)

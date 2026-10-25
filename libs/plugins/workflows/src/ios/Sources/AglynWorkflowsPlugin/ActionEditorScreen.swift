@@ -26,7 +26,7 @@ struct ActionEditorScreen: View {
   var body: some View {
     Group {
       if editingID != nil && !stored.loaded {
-        Form { SkeletonRows(count: 6) }.formStyle(.grouped).aglynListBackground()
+        Form { SkeletonRows(count: 6) }.formStyle(.grouped).aglynFormBackground()
       } else if editingID != nil && stored.doc == nil {
         AglynEmptyState("This action is gone", systemImage: "bolt.slash")
       } else {

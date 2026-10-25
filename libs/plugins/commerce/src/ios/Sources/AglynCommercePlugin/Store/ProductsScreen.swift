@@ -128,7 +128,7 @@ struct ProductsScreen: View {
         .padding(.vertical, AglynSpace.one)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   @ViewBuilder
@@ -340,7 +340,7 @@ struct ProductDetailView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
   }
 }
 

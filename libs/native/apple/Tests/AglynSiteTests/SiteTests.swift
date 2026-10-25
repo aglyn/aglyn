@@ -137,6 +137,17 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(Set(pageTree(pages, routing: SiteRouting()).map(\.page.id)), ["a", "b"])
   }
 
+  func testASiteRowShowsItsCustomDomainElseThePlatformAddress() {
+    let custom = SiteRow(doc("s1", ["displayName": "Acme", "subdomain": "acme", "cname": "acme.example"]))
+    XCTAssertEqual(custom.shownAddress, "acme.example")
+    let platform = SiteRow(doc("s2", ["displayName": "Acme", "subdomain": "acme"]))
+    XCTAssertEqual(platform.shownAddress, HostStatus.siteAddress("acme"))
+    // A row mirrored before it carried `cname`: the host document's own custom domain wins once it is read.
+    XCTAssertEqual(platform.shownAddress(hostCname: "acme.example"), "acme.example")
+    XCTAssertEqual(platform.shownAddress(hostCname: " "), HostStatus.siteAddress("acme"))
+    XCTAssertEqual(custom.shownAddress(hostCname: nil), "acme.example")
+  }
+
   func testPlansTheSitesListOnTheMembersOwnRows() {
     let query = sitesQuery(uid: "u", orgID: "org1", search: "dem", domain: .connected, limit: 31)
     XCTAssertEqual(query.path, "users/u/hostMemberships")

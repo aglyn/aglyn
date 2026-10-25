@@ -94,7 +94,9 @@ struct SubmissionsScreen: View {
     }
     .navigationTitle(title)
     .aglynScreenTitle(title)
-    .aglynSearchable(text: $searchText, prompt: "Search submissions")
+    // On the Mac and iPad the read state, the site and the form are the list toolbar's one Filter (Calm rule 3; Zach
+    // 10/20: no chip row over the list); a phone keeps them as chips over its list.
+    .aglynSearchable(text: $searchText, prompt: "Search submissions") { filterMenu }
     .onChange(of: searchText) { _, text in model.type(text) }
     .aglynScreenToolbar(id: "submissions") {
       if !wholeWorkspace {
@@ -165,6 +167,42 @@ struct SubmissionsScreen: View {
 
   // MARK: The list
 
+  /// What the Filter says once something is picked: the picks' names, joined.
+  private var activeFilter: String? {
+    let parts = [
+      readChoices().first { $0.value == model.read && $0.value != nil }?.label,
+      model.pickedSite.flatMap { id in context.sites.first { $0.id == id }?.name },
+      model.pickedForm.flatMap { id in forms.rows.first { $0.id == id }?.name },
+    ].compactMap { $0 }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
+  /// The list toolbar's one Filter: Show (All, Unread, Read), then Site and Form where there is a choice.
+  private var filterMenu: some View {
+    AglynFilterMenu(active: activeFilter) {
+      Picker("Show", selection: Binding(get: { model.read ?? "" }, set: { model.read = $0.isEmpty ? nil : $0 })) {
+        ForEach(readChoices(), id: \.label) { choice in Text(choice.label).tag(choice.value ?? "") }
+      }
+      .pickerStyle(.inline)
+      if wholeWorkspace && context.sites.count > 1 {
+        Picker("Site", selection: Binding(get: { model.pickedSite ?? "" }, set: { model.pickedSite = $0.isEmpty ? nil : $0 })) {
+          Text("Every site").tag("")
+          ForEach(context.sites) { site in Text(site.name).tag(site.id) }
+        }
+        .accessibilityIdentifier("inbox-site-pick")
+      }
+      if formID == nil && forms.rows.count > 1 {
+        Picker("Form", selection: Binding(get: { model.pickedForm ?? "" }, set: { model.pickedForm = $0.isEmpty ? nil : $0 })) {
+          Text("Every form").tag("")
+          ForEach(forms.rows.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }, id: \.id) { form in
+            Text(form.name).tag(form.id)
+          }
+        }
+        .accessibilityIdentifier("inbox-form-pick")
+      }
+    }
+  }
+
   private var chips: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: AglynSpace.one) {
@@ -203,7 +241,7 @@ struct SubmissionsScreen: View {
   @ViewBuilder
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
-      chips
+      if !isWide { chips }
       if exporting == nil, replying == nil, deleting == nil, let error = runner.error {
         AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
@@ -212,7 +250,7 @@ struct SubmissionsScreen: View {
       }
       content(selectable: selectable)
     }
-    .background(AglynColor.page)
+    .background(AglynGround())
   }
 
   private var filtered: Bool {

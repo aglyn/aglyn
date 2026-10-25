@@ -269,7 +269,7 @@ struct ThemeSettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .aglynListBackground()
+    .aglynFormBackground()
     .navigationTitle("Theme")
     .aglynScreenTitle("Theme")
   }
