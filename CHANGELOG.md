@@ -24,6 +24,9 @@ content on the marketing site and is written separately.
 
 - **native:** an empty or over-30 list filter no longer aborts the Apple apps; empty matches nothing, longer lists take the first 30 ([AGL-4011](https://linear.app/aglyn/issue/AGL-4011))
 - **functions:** run Cloud Functions on Node 24 before Node 20 is retired ([AGL-4028](https://linear.app/aglyn/issue/AGL-4028))
+- **beacon:** reCAPTCHA's own timeout is watched by rate, not paged singly ([AGL-4068](https://linear.app/aglyn/issue/AGL-4068))
+- **besigner:** a second click on a closing confirm dialog no longer throws ([AGL-4068](https://linear.app/aglyn/issue/AGL-4068))
+- **console:** typing a logo URL in profile settings no longer crashes the page ([AGL-4068](https://linear.app/aglyn/issue/AGL-4068))
 - **native:** the CRM glance card's closed-lead filter sends status strings, so opening a site no longer crashes the Mac app; Aglyn POS release builds leave out the development-only Tap to Pay entitlement ([AGL-4011](https://linear.app/aglyn/issue/AGL-4011))
 - **media:** stock photo copy names no brand; re-baseline the stock-photos plugin budget for previews ([AGL-4066](https://linear.app/aglyn/issue/AGL-4066))
 
