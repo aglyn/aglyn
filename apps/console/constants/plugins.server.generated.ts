@@ -131,6 +131,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-loyalty/server'),
   },
   {
+    id: 'waivers',
+    apiPrefixes: ["waivers"],
+    register: {"consoleApi":"registerWaiversConsoleApi"},
+    load: () => import('@aglyn/plugins-waivers/server'),
+  },
+  {
     id: 'tax-engines',
     apiPrefixes: ["tax-engines"],
     register: {"consoleApi":"registerTaxEnginesConsoleApi"},

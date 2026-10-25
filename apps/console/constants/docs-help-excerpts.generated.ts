@@ -255,6 +255,7 @@ export const DOCS_HELP_EXCERPTS = {
   versionsAndPublishing: 'Every page, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
   video: 'The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the fields a video search result reads.',
   views: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
+  waivers: 'Write your waiver once. Riders sign it on their phones before they arrive, on a tablet at the window or on paper, parents sign for minors, and every signer gets a signed PDF.',
   webhooks: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
   weglot: 'Translate your published site in the visitor\'s browser with your own Weglot account, and what that does and does not do for search.',
   whiteLabel: 'Replace the Aglyn brand across the console, your published sites, and transactional email — product name, logo, colors, support URL, and email from-name.',
@@ -1073,6 +1074,11 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#publish--roll-back': 'Publish on any row makes that version the live one — which is also how you roll back: publishing an older version moves the live pointer, destroys nothing, and is symmetrical, so rolling forward again is the same click.',
     '#scheduled-publishing': 'Schedule publishes a version automatically at a chosen future time; the row then shows a "Publishes …" chip you can clear to cancel.',
     '#the-versions-dialog': 'Open the version name in the Besigner\'s app bar to see the Versions dialog, with each version\'s created/updated times and a Published chip on the live one.',
+  },
+  waivers: {
+    '#find-a-signature': 'The Signatures card lists the newest first.',
+    '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
+    '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
   },
   webhooks: {
     '#outbound-webhooks': 'Send an HTTP request to a URL you control when a site event fires — for example, post to a Slack endpoint or your own API when a form is submitted or a new booking comes in.',

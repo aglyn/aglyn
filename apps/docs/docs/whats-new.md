@@ -10,7 +10,18 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — hardware purchase records survive a workspace deletion (newest)
+## October 2026 — digital waivers, signed before riders arrive (newest)
+
+- **[Waivers](commerce-and-bookings/commerce/waivers.md)** — write your waiver once,
+  in your own words, and riders sign it on their phones from a link or QR code, from
+  a **Sign waiver** element on your site, or on a tablet you hand them at the window.
+  A parent or guardian signs for riders under 18, a signature lasts the visit, a
+  season or a number of days, and every signer gets a signed PDF by email. Record
+  paper waivers with a photo, find anyone by name, email or day, and export them all
+  as a spreadsheet. At **Check in**, each customer shows whether their waiver is
+  signed for today, with a button to sign it there.
+
+## October 2026 — hardware purchase records survive a workspace deletion
 
 - **[Records of your hardware purchases](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
   Aglyn now keeps its record of each card reader sale after the workspace that
