@@ -604,8 +604,25 @@ describe('isListingBrowsable (AGL-658)', () => {
     ).toBe(false)
   })
 
+  // A starter creates a whole site the moment it is picked (AGL-4049), so it
+  // waits for review as a plugin does.
+  it('gates site starters on their review verdict', () => {
+    expect(
+      isListingBrowsable({ artifactType: 'siteStarter', reviewStatus: 'listed' }),
+    ).toBe(true)
+    expect(
+      isListingBrowsable({ artifactType: 'siteStarter', reviewStatus: 'verified' }),
+    ).toBe(true)
+    expect(
+      isListingBrowsable({ artifactType: 'siteStarter', reviewStatus: 'submitted' }),
+    ).toBe(false)
+    expect(
+      isListingBrowsable({ artifactType: 'siteStarter', reviewStatus: 'rejected' }),
+    ).toBe(false)
+  })
+
   it('hides a taken-down listing of ANY type', () => {
-    for (const artifactType of ['component', 'template', 'layout', 'plugin']) {
+    for (const artifactType of ['component', 'template', 'layout', 'plugin', 'siteStarter']) {
       expect(
         isListingBrowsable({ artifactType, hiddenAt: new Date() }),
       ).toBe(false)
