@@ -813,6 +813,7 @@ data class HostOrderReceiptRequest(
 data class HostProduct(
     val categoryIds: List<String>? = null,
     val channel: ProductChannelFacts? = null,
+    val checkIn: ProductCheckIn? = null,
     val collectionIds: List<String>? = null,
     val createdAtMs: Double? = null,
     val description: String? = null,
@@ -2603,6 +2604,12 @@ internal object ProductChannelFactsConditionSerializer :
     RawEnumSerializer<ProductChannelFactsCondition>("com.aglyn.contracts.ProductChannelFactsCondition", ProductChannelFactsCondition.entries, ProductChannelFactsCondition.UNKNOWN, { it.raw })
 
 @Serializable
+data class ProductCheckIn(
+    val enabled: Boolean,
+    val headcount: Double? = null,
+)
+
+@Serializable
 data class ProductLabel(
     val code: String,
     val copies: Long,
@@ -2670,6 +2677,7 @@ internal object ProductTypeSerializer :
 @Serializable
 data class ProductVariant(
     val barcode: String? = null,
+    val checkIn: ProductCheckIn? = null,
     val compareAtPriceUsd: Double? = null,
     val id: String? = null,
     val imageUrl: String? = null,

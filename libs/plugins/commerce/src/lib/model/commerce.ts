@@ -16,7 +16,7 @@
  */
 
 import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
-import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in'
+import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in-product'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
 import type { PickupLocationSettings } from './order-local-fulfillment'
