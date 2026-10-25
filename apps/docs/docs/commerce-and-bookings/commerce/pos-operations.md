@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: Running the register
-description: Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.
+description: Shifts and the cash drawer with X and Z reports, day and event totals across every register, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.
 ---
 
 # Running the register
@@ -65,6 +65,38 @@ receipt printer from its dialog.
 first, with net sales, expected and counted cash and the variance. Click a
 closed shift for its Z report, and use **Export CSV** for a spreadsheet of the
 shifts listed.
+
+## Day and event totals
+
+When several people take payments on their own registers, **Commerce → Orders
+→ Day totals** adds the whole day up across every register, shift and cashier.
+It opens on today, counted in your site's time zone. Pick **From** and **To**
+dates to see another day or a whole event, up to 31 days at a time, and
+**Today** to come back.
+
+- **Totals:** orders, gross sales, discounts, tax, tips, refunds and net sales.
+  Only sales rung at a register count; online orders don't.
+- **By tender:** cash, card, gift card, room charge and store credit, each with
+  what it took, what was refunded to it, and the net.
+- **By register** and **by cashier:** each register's and each staff member's
+  orders, gross sales, tips, refunds and net sales. Every table sorts by any of
+  its columns.
+- **Cash drawers:** the starting cash of the shifts that opened on those days,
+  cash sales, paid in, paid out, safe drops and cash refunds, then what the
+  closed drawers should have held against what was counted, and whether
+  they came up short or over. Drawers still open show what they should hold
+  now.
+- **Shifts:** every shift that opened, closed or was still open on those
+  days, with its register, times, starting cash, net sales, expected and
+  counted cash and the variance.
+
+Sales count on the day they were rung, and refunds on the day they were
+given back, whenever the sale was. **Export CSV** downloads the report as a
+spreadsheet, and **Print** prints it on an 80 mm receipt printer like a Z
+report.
+
+Day totals need the point of sale on your plan, and only members who can use
+the register can see them.
 
 ### Requiring a shift
 
