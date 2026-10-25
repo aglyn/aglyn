@@ -27,6 +27,11 @@ let mockPinned: string[] = []
 let mockHasMore = false
 const mockLoadMore = jest.fn()
 
+// The switcher never needs a plugin's declarations, and their lazy imports
+// would otherwise resolve after the suite tears down and crash the worker.
+jest.mock('../constants/plugins.declarations.generated', () => ({
+  registerPluginDeclarations: () => Promise.resolve(),
+}))
 jest.mock('next/navigation', () => ({
   usePathname: () => '/aglyn-org/hosts',
   useRouter: () => ({ push: jest.fn() }),
