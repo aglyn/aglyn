@@ -154,7 +154,7 @@ export function posHardwareSystemEmailTemplates(
         { block: 'text', text: 'Set up your reader', variant: 'subheading' },
         { block: 'text', text: '1. Charge it and switch it on.\n2. Connect it to Wi-Fi from the reader’s Settings.\n3. On the reader, generate a pairing code.\n4. On the POS devices card, choose Add card reader and enter the code.', variant: 'details' },
         { block: 'button', label: 'Set up your reader', href: '{{order.setupUrl}}' },
-        { block: 'text', text: 'The M2 pairs by Bluetooth from the Aglyn POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
+        { block: 'text', text: 'The M2 pairs by Bluetooth from the {{brand.productName}} POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason: footer,
       source: SOURCE,
