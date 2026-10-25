@@ -552,3 +552,78 @@ export function formatSiteCareDate(ms: number): string {
     timeZoneName: 'short',
   })
 }
+
+/**
+ * The subcollection of a Site Care ticket that only staff read (AGL-4031):
+ * `supportTickets/{id}/siteCareStaff/intake` holds the workspaces an emailed
+ * request's sender belongs to. A workspace's own reads and exports of its
+ * tickets leave it out.
+ */
+export const SITE_CARE_STAFF_COLLECTION = 'siteCareStaff'
+
+/**
+ * A Site Care workspace an emailed request could belong to (AGL-4031): the
+ * sender is a member of it (as `uid`) and it has Site Care. A sender in
+ * several such workspaces has every one recorded at intake, staff-only,
+ * because which workspaces a person belongs to is theirs, not the filed
+ * workspace's to read.
+ */
+export interface SiteCareWorkspaceCandidate {
+  orgId: string
+  /** The workspace's name when the request came in. */
+  name: string
+  /** The sender's account in that workspace. */
+  uid: string
+}
+
+/** Recorded candidates read back, malformed entries dropped, one per workspace. */
+export function readSiteCareCandidates(value: unknown): SiteCareWorkspaceCandidate[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const candidates: SiteCareWorkspaceCandidate[] = []
+  for (const entry of value) {
+    const orgId = typeof entry?.orgId === 'string' ? entry.orgId : ''
+    const uid = typeof entry?.uid === 'string' ? entry.uid : ''
+    if (!orgId || !uid || seen.has(orgId)) continue
+    seen.add(orgId)
+    candidates.push({ orgId, uid, name: typeof entry.name === 'string' && entry.name ? entry.name : orgId })
+  }
+  return candidates
+}
+
+/** The candidates other than the workspace the request is on now. */
+export function otherSiteCareCandidates(
+  candidates: readonly SiteCareWorkspaceCandidate[],
+  orgId: string,
+): SiteCareWorkspaceCandidate[] {
+  return candidates.filter((candidate) => candidate.orgId !== orgId)
+}
+
+/** "Also a member of: Acme Builders, Acme Rentals". */
+export function siteCareCandidatesSentence(others: readonly SiteCareWorkspaceCandidate[]): string | null {
+  return others.length ? `Also a member of: ${others.map((candidate) => candidate.name).join(', ')}` : null
+}
+
+/**
+ * Why a request may not move to another workspace, or null when it may.
+ * Only an open request with nothing billed against its workspace moves: a
+ * finished one has counted its minutes against that workspace's month, a
+ * charge was billed to its Stripe customer, and an owner's approval was
+ * given for it. The server enforces the same rules.
+ */
+export function siteCareMoveBlockedReason(
+  request: Pick<SiteCareRequest, 'state' | 'charge' | 'chargeSeq' | 'approval'>,
+  others: readonly SiteCareWorkspaceCandidate[],
+): string | null {
+  if (request.state === 'closed') {
+    return 'This request is finished, so it stays on the workspace its time counted against.'
+  }
+  if (request.charge || request.chargeSeq > 0) {
+    return 'Extra time has been charged on this request, so it stays on the workspace that was billed.'
+  }
+  if (request.approval) {
+    return 'An owner’s approval of extra time is recorded on this request, so it stays on that workspace.'
+  }
+  if (!others.length) return 'The sender is not a member of another workspace with Site Care.'
+  return null
+}

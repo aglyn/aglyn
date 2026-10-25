@@ -39,8 +39,10 @@ import {
   addSiteCareGoodwill,
   closeSiteCareRequest,
   correctSiteCareMinutes,
+  moveSiteCareRequest,
   openSiteCareRequest,
   readSiteCareMonth,
+  readSiteCareRequestPanel,
   recordSiteCareApproval,
   retrySiteCareCharge,
   reverseSiteCareCharge,
@@ -53,13 +55,15 @@ import {
   type SiteCareDeps,
 } from './site-care-requests'
 
+/** Workspaces whose billing carries no Site Care; every other one has it. */
+const mockWithoutSiteCare = new Set<string>()
 jest.mock('./org-billing', () => ({
   __esModule: true,
-  readOrgBilling: async () => ({
+  readOrgBilling: async (orgId: string) => ({
     plan: 'starter',
     stripeCustomerId: 'cus_1',
     subscription: { status: 'active' },
-    seatAddons: { siteCare: 1 },
+    ...(mockWithoutSiteCare.has(orgId) ? {} : { seatAddons: { siteCare: 1 } }),
   }),
 }))
 
@@ -341,6 +345,7 @@ beforeEach(() => {
   emails = []
   autoId = 0
   mockNotifyStaff.mockClear()
+  mockWithoutSiteCare.clear()
   process.env['STRIPE_PRICE_SITE_CARE'] = 'price_care'
 })
 
@@ -688,5 +693,187 @@ describe('goodwill and the month', () => {
     )
     expect(view.monthHistory.map((row) => row.kind)).toEqual(['goodwill.added'])
     expect(siteCareStatementLine(view.requests[0])).toBe('New hours on the contact page: 1 h 30 min, included')
+  })
+})
+
+// ── A sender in several Site Care workspaces (AGL-4031) ─────────────────────
+
+describe('a sender in several Site Care workspaces', () => {
+  const CANDIDATES = [
+    { orgId: 'org-1', name: 'Acme Builders', uid: 'owner-1' },
+    { orgId: 'org-2', name: 'Acme Rentals', uid: 'owner-1' },
+  ]
+
+  beforeEach(() => {
+    store.docs.set('orgs/org-2', { name: 'Acme Rentals', ownerUid: 'owner-1' })
+    store.docs.set('orgs/org-2/members/owner-1', { email: 'owner@example.com' })
+    store.docs.set('orgs/org-3', { name: 'Someone Else', ownerUid: 'owner-3' })
+    store.docs.set('orgs/org-3/members/owner-3', { email: 'other@example.com' })
+  })
+
+  async function openEmailed(candidates = CANDIDATES, subject = 'Swap the photo'): Promise<string> {
+    const opened = await openSiteCareRequest(
+      db(),
+      { orgId: 'org-1', org: ORG, hostId: null, subject, body: 'The new one is attached.', requester: OWNER, source: 'email', candidates },
+      deps(),
+    )
+    return opened.ticketId
+  }
+
+  const intake = (id: string) => store.docs.get(`supportTickets/${id}/siteCareStaff/intake`)
+
+  it('records every candidate at intake, for staff only, and names the others in the staff notice', async () => {
+    const id = await openEmailed()
+    expect(intake(id)).toEqual(expect.objectContaining({ candidates: CANDIDATES, filedOnOrgId: 'org-1' }))
+    // Not on the ticket, which the workspace's members are shown.
+    expect(JSON.stringify(ticket(id))).not.toContain('Acme Rentals')
+    const notice = mockNotifyStaff.mock.calls[0][0] as { body: string }
+    expect(notice.body).toContain('Also a member of: Acme Rentals (org-2). If it belongs')
+  })
+
+  it('keeps nothing for a sender in one workspace, or a console request', async () => {
+    const id = await openEmailed([CANDIDATES[0]])
+    expect(intake(id)).toBeUndefined()
+    expect((mockNotifyStaff.mock.calls[0][0] as { body: string }).body).not.toContain('Also a member of')
+    const fromConsole = await openOne()
+    expect(intake(fromConsole)).toBeUndefined()
+    const panel = await readSiteCareRequestPanel(db(), fromConsole, deps())
+    expect(panel).toEqual(expect.objectContaining({ otherWorkspaces: [], moveBlockedReason: null }))
+  })
+
+  it('shows the other workspaces on the panel, and offers the move while the request is open', async () => {
+    const id = await openEmailed()
+    const panel = await readSiteCareRequestPanel(db(), id, deps())
+    expect(panel.otherWorkspaces).toEqual([CANDIDATES[1]])
+    expect(panel.moveBlockedReason).toBeNull()
+  })
+
+  it('moves the request, its month and its included hour to the chosen workspace, with its row and audit', async () => {
+    // Acme Rentals already used 45 of its included minutes this month.
+    const { ticketId: earlier } = await openSiteCareRequest(
+      db(),
+      { orgId: 'org-2', org: ORG, hostId: null, subject: 'Earlier', body: 'x', requester: OWNER, source: 'console' },
+      deps(),
+    )
+    await closeSiteCareRequest(db(), { ticketId: earlier, actor: STAFF, minutes: 45 }, deps())
+    const id = await openEmailed()
+    await startSiteCareTimer(db(), { ticketId: id, actor: STAFF }, deps())
+    expect((await readSiteCareRequestPanel(db(), id, deps())).monthMinutesLeft).toBe(60)
+
+    clock = T0 + 5 * 60_000
+    const moved = await moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-2' }, deps())
+    expect(moved).toEqual(expect.objectContaining({ fromOrgId: 'org-1', orgId: 'org-2' }))
+    expect(ticket(id)).toEqual(
+      expect.objectContaining({ orgId: 'org-2', siteCareMonth: '2026-10', siteCareOrgMonth: 'org-2_2026-10' }),
+    )
+    // The timer it started keeps running; nothing else of the request changes.
+    expect((ticket(id)['siteCare'] as Data)['timerStartedAtMs']).toBe(T0)
+    const row = history(id).find((each) => each.data['kind'] === 'request.moved')?.data
+    expect(row).toEqual(
+      expect.objectContaining({
+        atMs: T0 + 5 * 60_000,
+        summary: 'Moved to Acme Rentals, the workspace it belongs to.',
+        before: { orgId: 'org-1', hostId: null },
+        after: { orgId: 'org-2', hostId: null, month: '2026-10' },
+      }),
+    )
+    expect(store.rows('adminAudit').map((each) => each.data)).toContainEqual(
+      expect.objectContaining({ action: 'siteCare.request.moved', target: `orgs/org-2/siteCare/${id}` }),
+    )
+    // Out of the old workspace's month and into the new one's.
+    expect((await readSiteCareMonth(db(), { orgId: 'org-1', month: '2026-10' })).requests).toHaveLength(0)
+    expect((await readSiteCareMonth(db(), { orgId: 'org-2', month: '2026-10' })).requests.map((r) => r.ticketId)).toEqual(
+      expect.arrayContaining([earlier, id]),
+    )
+    // Its minutes now count against Acme Rentals' hour: 15 of it is left.
+    const panel = await readSiteCareRequestPanel(db(), id, deps())
+    expect(panel).toEqual(expect.objectContaining({ orgId: 'org-2', monthMinutesLeft: 15, otherWorkspaces: [CANDIDATES[0]] }))
+    const closed = await closeSiteCareRequest(db(), { ticketId: id, actor: STAFF, minutes: 30, absorb: true }, deps())
+    expect(closed.request).toEqual(expect.objectContaining({ includedMinutesUsed: 15, overMinutes: 15, absorbed: true }))
+    expect(closed.statement.includedMinutesUsed).toBe(60)
+  })
+
+  it('clears a site the request named, which belongs to the workspace it left', async () => {
+    const opened = await openSiteCareRequest(
+      db(),
+      { orgId: 'org-1', org: ORG, hostId: 'host-1', subject: 'x', body: 'y', requester: OWNER, source: 'email', candidates: CANDIDATES },
+      deps(),
+    )
+    await moveSiteCareRequest(db(), { ticketId: opened.ticketId, actor: STAFF, orgId: 'org-2' }, deps())
+    expect((ticket(opened.ticketId)['siteCare'] as Data)['hostId']).toBeNull()
+  })
+
+  it('refuses a closed request', async () => {
+    const id = await openEmailed()
+    await closeSiteCareRequest(db(), { ticketId: id, actor: STAFF, minutes: 10 }, deps())
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-2' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('finished'),
+    })
+    expect(ticket(id)['orgId']).toBe('org-1')
+    expect((await readSiteCareRequestPanel(db(), id, deps())).moveBlockedReason).toContain('finished')
+  })
+
+  it('refuses a request with an owner’s approval on it', async () => {
+    const id = await openEmailed()
+    await recordSiteCareApproval(
+      db(),
+      { ticketId: id, actor: { uid: 'staff-1', email: 'staff@aglyn.com' }, approval: { hours: 1, channel: 'phone', approvedAtMs: T0 } },
+      deps(),
+    )
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-2' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('approval'),
+    })
+    expect(ticket(id)['orgId']).toBe('org-1')
+    expect((await readSiteCareRequestPanel(db(), id, deps())).moveBlockedReason).toContain('approval')
+  })
+
+  it('refuses a request with a charge on it', async () => {
+    const id = await openEmailed()
+    const doc = ticket(id)
+    store.docs.set(`supportTickets/${id}`, { ...doc, siteCare: { ...(doc['siteCare'] as Data), chargeSeq: 1 } })
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-2' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('charged'),
+    })
+    expect(ticket(id)['orgId']).toBe('org-1')
+  })
+
+  it('refuses a workspace that is not a recorded candidate, the one it is on, and a missing choice', async () => {
+    const id = await openEmailed()
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-3' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('not recorded as a member'),
+    })
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-1' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('already on that workspace'),
+    })
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: '' }, deps())).rejects.toMatchObject({
+      status: 400,
+    })
+    const fromConsole = await openOne()
+    await expect(
+      moveSiteCareRequest(db(), { ticketId: fromConsole, actor: STAFF, orgId: 'org-2' }, deps()),
+    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('not a member of another workspace') })
+    expect(ticket(id)['orgId']).toBe('org-1')
+    expect(history(id).some((row) => row.data['kind'] === 'request.moved')).toBe(false)
+  })
+
+  it('refuses a candidate that lost Site Care, or that the sender has left, since intake', async () => {
+    const id = await openEmailed()
+    mockWithoutSiteCare.add('org-2')
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-2' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('does not have Site Care'),
+    })
+    mockWithoutSiteCare.clear()
+    store.docs.delete('orgs/org-2/members/owner-1')
+    await expect(moveSiteCareRequest(db(), { ticketId: id, actor: STAFF, orgId: 'org-2' }, deps())).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('no longer a member'),
+    })
+    expect(ticket(id)['orgId']).toBe('org-1')
   })
 })

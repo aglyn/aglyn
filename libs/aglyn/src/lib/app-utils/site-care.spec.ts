@@ -40,8 +40,11 @@ import {
   formatSiteCareUsd,
   isSiteCareMonthKey,
   isSiteCarePublishAction,
+  otherSiteCareCandidates,
   previousSiteCareMonthKey,
+  readSiteCareCandidates,
   readSiteCareMinutes,
+  siteCareCandidatesSentence,
   siteCareChargeWords,
   siteCareCloseVerdict,
   siteCareExtraTimeCents,
@@ -51,6 +54,7 @@ import {
   siteCareMonthLabel,
   siteCareMonthSentence,
   siteCareMonthStatement,
+  siteCareMoveBlockedReason,
   siteCareOrgMonth,
   siteCarePublishSentence,
   siteCareReplyAddress,
@@ -419,5 +423,32 @@ describe('where a change is emailed (AGL-3997)', () => {
     )
     expect(siteCareReplyAddress(null, 'in.aglyn.com', 'help@example.com')).toBe('help@example.com')
     expect(siteCareReplyAddress(null, 'in.aglyn.com', null)).toBe('support@in.aglyn.com')
+  })
+})
+
+describe('workspace candidates (AGL-4031)', () => {
+  const A = { orgId: 'org-a', name: 'Acme Builders', uid: 'u1' }
+  const B = { orgId: 'org-b', name: 'Acme Rentals', uid: 'u1' }
+
+  it('reads recorded candidates back, dropping malformed and repeated ones', () => {
+    expect(readSiteCareCandidates(null)).toEqual([])
+    expect(
+      readSiteCareCandidates([A, { orgId: 'org-a', name: 'again', uid: 'u1' }, { orgId: 'org-c' }, { orgId: 'org-d', uid: 'u2' }, 'x']),
+    ).toEqual([A, { orgId: 'org-d', uid: 'u2', name: 'org-d' }])
+  })
+
+  it('names the workspaces other than the one the request is on', () => {
+    expect(otherSiteCareCandidates([A, B], 'org-a')).toEqual([B])
+    expect(siteCareCandidatesSentence([B])).toBe('Also a member of: Acme Rentals')
+    expect(siteCareCandidatesSentence([])).toBeNull()
+  })
+
+  it('moves only an open request with nothing billed or approved on it, to another candidate', () => {
+    const open: Parameters<typeof siteCareMoveBlockedReason>[0] = { state: 'open', charge: null, chargeSeq: 0, approval: null }
+    expect(siteCareMoveBlockedReason(open, [B])).toBeNull()
+    expect(siteCareMoveBlockedReason({ ...open, state: 'closed' }, [B])).toContain('finished')
+    expect(siteCareMoveBlockedReason({ ...open, chargeSeq: 1 }, [B])).toContain('charged')
+    expect(siteCareMoveBlockedReason({ ...open, approval: { hours: 1 } as never }, [B])).toContain('approval')
+    expect(siteCareMoveBlockedReason(open, [])).toContain('not a member of another workspace')
   })
 })

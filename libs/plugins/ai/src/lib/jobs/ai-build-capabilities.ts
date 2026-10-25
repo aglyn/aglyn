@@ -38,6 +38,7 @@ import { aiJobStepRunnerFor } from './ai-jobs'
 import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
 import { AI_MEDIA_ARGS_SCHEMA, AI_MEDIA_LIMITS, AI_MEDIA_WHERE } from './ai-job-media-step'
 import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingInputFields, aiTrackingMissingInput } from './ai-job-tracking-step'
+import { AI_PRIVACY_ARGS_SCHEMA, AI_PRIVACY_WHERE } from './ai-job-privacy-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -421,6 +422,28 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     missingInput: aiTrackingMissingInput,
     // …and waits for it in `needs_input`, with a field naming the provider (AGL-3978).
     inputFields: aiTrackingInputFields,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // Who can see the site (AGL-4033): maintenance mode, the Discourage search
+    // engines switch and a page's visibility, as the console's three controls
+    // set them, saved live on confirm. Never a page password, which would put
+    // the password in the chat. No model, so no credits; every plan has these
+    // controls, so the Free taste may ask too.
+    op: 'privacy',
+    noun: 'privacy change',
+    where: AI_PRIVACY_WHERE,
+    intents: [
+      'making the site private or public again — maintenance mode (the whole site offline to every visitor until it is turned off; site admins only), hiding the site from search engines (it stays open to anyone with a link), or setting pages Public, Unlisted or Members only (Business plan and above) — saved to the live site when the plan is confirmed; never a page password, which the person sets in the page’s Page Access card',
+    ],
+    argsSchema: AI_PRIVACY_ARGS_SCHEMA,
+    maxPerPlan: 1,
+    freeAllowed: true,
+    runnerKind: 'privacy',
+    // None of these has a draft state: saved, it is what the live site does.
+    live: true,
     // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',

@@ -35,6 +35,7 @@ const mocks = {
   addSiteCareGoodwill: jest.fn(),
   closeSiteCareRequest: jest.fn(),
   correctSiteCareMinutes: jest.fn(),
+  moveSiteCareRequest: jest.fn(),
   readSiteCareMonth: jest.fn(),
   readSiteCareRequestPanel: jest.fn(),
   recordSiteCareApproval: jest.fn(),
@@ -85,6 +86,7 @@ jest.mock('@aglyn/tenant-data-admin/server/site-care-requests', () => {
     addSiteCareGoodwill: forward('addSiteCareGoodwill'),
     closeSiteCareRequest: forward('closeSiteCareRequest'),
     correctSiteCareMinutes: forward('correctSiteCareMinutes'),
+    moveSiteCareRequest: forward('moveSiteCareRequest'),
     readSiteCareMonth: forward('readSiteCareMonth'),
     readSiteCareRequestPanel: forward('readSiteCareRequestPanel'),
     recordSiteCareApproval: forward('recordSiteCareApproval'),
@@ -223,6 +225,18 @@ describe('POST actions', () => {
     expect(
       await (await post({ action: 'sendQuote', ticketId: 't1', amountUsd: 450, scope: 'A new page' })).json(),
     ).toEqual({ sent: false, to: null, reason: 'no-recipient' })
+  })
+
+  it('moves a request to the workspace staff chose, and passes a refusal through', async () => {
+    mocks.moveSiteCareRequest.mockResolvedValue({ request: { state: 'open' }, fromOrgId: 'org-1', orgId: 'org-2' })
+    const response = await post({ action: 'move', ticketId: 't1', orgId: 'org-2' })
+    expect(await response.json()).toEqual({ request: { state: 'open' }, fromOrgId: 'org-1', orgId: 'org-2' })
+    expect(mocks.moveSiteCareRequest).toHaveBeenCalledWith(FIRESTORE, { ticketId: 't1', actor: STAFF, orgId: 'org-2' })
+    mocks.moveSiteCareRequest.mockRejectedValue(new SiteCareError('This request is finished.', 409))
+    const refused = await post({ action: 'move', ticketId: 't1', orgId: 'org-2' })
+    expect(refused.status).toBe(409)
+    expect(await refused.json()).toEqual({ error: 'This request is finished.' })
+    expect((await post({ action: 'move', orgId: 'org-2' })).status).toBe(400)
   })
 
   it('refuses an unknown action and a missing ticket', async () => {

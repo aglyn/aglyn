@@ -272,14 +272,16 @@ describe('recording a sale', () => {
     })
   })
 
-  it('accrues the plan take on the invoice, as every cash sale does', async () => {
+  it('charges a synced cash sale no platform fee and accrues nothing, as every cash sale (AGL-4036)', async () => {
     const queued = sale()
     await results([queued])
-    // 2% of the goods after the discount: 4410 × 2% = 88.
-    expect(order(queued.saleKey)!['totals'].feeCents).toBe(88)
-    expect(order(queued.saleKey)!['feeCollection']).toBe('invoice')
+    // The plan would take 2% of the goods after the discount (88¢) on a
+    // fee-carrying tender; cash carries none.
+    expect(order(queued.saleKey)!['totals'].feeCents).toBe(0)
+    expect(order(queued.saleKey)!['feeCollection']).toBeUndefined()
+    expect(order(queued.saleKey)!['payments'][0]).toMatchObject({ method: 'cash', takeFeeCents: 0, feeCents: 0 })
     const month = new Date(NOW).toISOString().slice(0, 7)
-    expect(h.memory.read(`orgs/org-1/offlineFees/${month}`)).toMatchObject({ feeCents: 88, orders: 1 })
+    expect(h.memory.read(`orgs/org-1/offlineFees/${month}`)).toBeUndefined()
   })
 
   it('lands a sale sent twice once, and answers the second with the first', async () => {

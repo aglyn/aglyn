@@ -149,23 +149,29 @@ to the customer yourself.
 
 ### Platform fees at the register
 
-Your plan's platform fee is charged on the **sale**, not on how it was
-paid — the rate is the same whether the customer hands you cash, taps a
-card or charges it to their room. What differs is only how it reaches us:
+Your plan's platform fee is charged on **card** and **charge-to-room**
+payments. **Cash**, **gift card** and **store credit** payments carry no
+platform fee: cash is yours in full, the fee on a gift card is charged when the
+card is sold, not again when it is spent, and store credit is value you gave
+your customer, so no money changes hands.
 
-| Tender | How the fee is collected |
-| --- | --- |
-| Card reader, typed card, card (QR) | Deducted from your Stripe payout for that payment |
-| Cash | No payout to deduct from — added to your next monthly invoice |
-| Gift card | Same as cash: added to your next monthly invoice |
-| Charge to room | Same as cash: added to your next monthly invoice |
+| Payment | Platform fee | How it is collected |
+| --- | --- | --- |
+| Card reader, typed card, card (QR) | Your plan's rate | Deducted from your Stripe payout for that payment |
+| Charge to room | Your plan's rate | No payout to deduct from, so it is added to your next monthly invoice |
+| Cash | None | — |
+| Gift card | None | — |
+| Store credit | None | — |
 
-A **split** sale does each part its own way: every payment carries the
-share of the fee for the part of the sale it paid, so the card parts are
-deducted from their payouts and the rest goes on the invoice. **Tips**
-carry no platform fee. Stripe's own processing cost on a card payment is
-passed through at cost, like any other card sale, and is worked out on the
-whole charge, tip included, because that is what Stripe charges on.
+A **split** sale charges the fee only on the part of the sale its card and
+room-charge payments paid: a $100 sale paid $60 by card and
+$40 in cash carries the fee on $60, deducted from that card's payout, and
+nothing on the cash. Sales you ring while the register is
+[offline](pos-operations.md#selling-while-offline) are cash, so they carry no
+fee either. **Tips** carry no platform fee. Stripe's own processing cost on a
+card payment is passed through at cost, like any other card sale, and is
+worked out on the whole charge, tip included, because that is what Stripe
+charges on.
 
 The customer never pays the fee, and the amount **Due** on the register is
 the same on every tender. On plans with a 0% fee there is no platform fee
@@ -417,6 +423,40 @@ For stays (cabins, rooms, rentals):
 3. Manage stays from the **Reservations** card: check in, check out
    (with a folio summary if the guest charged store purchases to the
    room), walk-ins, no-shows, and cancellations.
+
+### Several identical units
+
+When you have several of the same thing, such as 12 RV hookups, 30 tent
+sites or four matching cabins, add them as **one resource** and set
+**Spots or units available** to how many there are. Each night can then
+take that many stays:
+
+- A guest can book a range of dates as long as at least one unit is free on
+  **every** night of it. Which unit they get is up to you at check-in.
+- The **Reservations** card shows the units left on each of the next 14
+  nights under the resource, for example "3 of 12 left".
+- When a stay's busiest night has three or fewer units left, the
+  Reservation widget tells the guest "Only 2 left".
+- A walk-in takes any unit that is free on every night of the stay, and is
+  refused only when some night has none left.
+- Blocking dates on a resource closes every unit on those dates.
+- An unpaid online checkout holds its unit for 30 minutes, then gives it
+  back, the same as for a single cabin.
+- Two guests can't both book the last unit: the second is told those dates
+  just sold out before any payment is taken.
+- Two staff can't both hand out the last unit as walk-ins either, even from
+  different devices: the second is told every unit is taken on at least one
+  of those nights (or "Those dates are taken" for a single cabin).
+
+**Sleeps** is separate: it is how many guests one unit sleeps, shown for
+information. It never limits how many stays a night can take. Leave
+**Spots or units available** at 1 (or empty) for a single cabin or room;
+it then works exactly as before.
+
+For example, a campground sells **RV camping with hookups** as one resource with
+**Spots or units available** set to 12 and a nightly rate of $60. Dry
+camping has no limit, so it is an ordinary product on the register, not a
+resource.
 
 :::info Deposits need a plan with commerce
 Taking a **reservation deposit** is a sale, and it is checked against your plan

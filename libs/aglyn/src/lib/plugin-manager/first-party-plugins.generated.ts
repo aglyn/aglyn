@@ -807,6 +807,18 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   },
   {
     "pluginId": "commerce",
+    "name": "checkIns",
+    "mediaScan": "none",
+    "mediaScanReason": "Who is due at the check-in window on a day and who checked them in (AGL-4043): a customer's name and contact details, an item name, a status and a wristband, written only by the check-in route. No content field, and a busy day writes one per person."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "checkInDays",
+    "mediaScan": "none",
+    "mediaScanReason": "When each day's check-ins were last brought in line with its orders and stays (AGL-4043): a time and a flag, written only by the check-in route."
+  },
+  {
+    "pluginId": "commerce",
     "name": "terminal",
     "mediaScan": "none",
     "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."

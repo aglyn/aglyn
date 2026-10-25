@@ -168,8 +168,57 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
   }
 }
 
+/**
+ * Every document in a collection named `name` at any depth, filtered by
+ * equality (AGL-4038). `orderBy` sorts on one field, ties broken by path as
+ * Firestore does, `startAfter` takes a document snapshot, and `limit` caps
+ * the answer, so a cursor-paged staff list can be specced.
+ */
+interface GroupShape {
+  filters: Array<[string, any]>
+  order?: { field: string; desc: boolean }
+  after?: string
+  cap?: number
+}
+function collectionGroupRef(name: string, shape: GroupShape = { filters: [] }): any {
+  const next = (patch: Partial<GroupShape>) => collectionGroupRef(name, { ...shape, ...patch })
+  return {
+    where: (field: string, _op: string, value: any) => next({ filters: [...shape.filters, [field, value]] }),
+    orderBy: (field: string, direction?: string) => next({ order: { field, desc: direction === 'desc' } }),
+    startAfter: (snapshot: { ref: { path: string } }) => next({ after: snapshot.ref.path }),
+    limit: (cap: number) => next({ cap }),
+    get: async () => {
+      let keys = [...fakeDocs.keys()]
+        .filter((key) => {
+          const parts = key.split('/')
+          return parts.length >= 2 && parts.length % 2 === 0 && parts[parts.length - 2] === name
+        })
+        .filter((key) => shape.filters.every(([field, value]) => fakeDocs.get(key)?.[field] === value))
+      if (shape.order) {
+        const { field, desc } = shape.order
+        const sign = desc ? -1 : 1
+        keys.sort((a, b) => {
+          const left = fakeDocs.get(a)?.[field] ?? 0
+          const right = fakeDocs.get(b)?.[field] ?? 0
+          if (left !== right) return left < right ? -sign : sign
+          return a < b ? -sign : a > b ? sign : 0
+        })
+      }
+      if (shape.after) {
+        const at = keys.indexOf(shape.after)
+        keys = at >= 0 ? keys.slice(at + 1) : keys
+      }
+      if (shape.cap !== undefined) keys = keys.slice(0, shape.cap)
+      const docs = keys.map(snapshotOf)
+      return { docs, empty: docs.length === 0, size: docs.length }
+    },
+  }
+}
+
 export const fakeFirestore: any = {
   collection: (name: string) => collectionRef(name),
+  collectionGroup: (name: string) => collectionGroupRef(name),
+  doc: (path: string) => docRef(path),
   runTransaction: async (fn: (transaction: any) => Promise<any>) => {
     const writes: Array<() => void> = []
     const outcome = await fn({
@@ -179,6 +228,14 @@ export const fakeFirestore: any = {
       },
       update: (ref: any, value: any) => {
         writes.push(() => applyWrite(ref.path, value, 'update'))
+      },
+      create: (ref: any, value: any) => {
+        if (fakeDocs.has(ref.path)) {
+          const error: any = new Error(`ALREADY_EXISTS: ${ref.path}`)
+          error.code = 6
+          throw error
+        }
+        writes.push(() => applyWrite(ref.path, value, 'set'))
       },
       delete: (ref: any) => {
         writes.push(() => fakeDocs.delete(ref.path))

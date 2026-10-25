@@ -10,7 +10,54 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — build a client's site on one phone screen (newest)
+## October 2026 — hardware purchase records survive a workspace deletion (newest)
+
+- **[Records of your hardware purchases](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
+  Aglyn now keeps its record of each card reader sale after the workspace that
+  bought it is deleted, as tax law requires: the items, amounts, tax, and the
+  state, ZIP code and country it shipped to, with no name, email, phone or
+  street address. When the person who placed an order closes their account,
+  their details come off the order and the workspace keeps the rest.
+
+## October 2026 — check people in at the window, with wristbands
+
+- **[Check-in at the window](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
+  mark a day pass, camping or parking as **Needs check-in**, with how many
+  people one item admits. At the register, tap **Check in**, look the customer
+  up by name, email, phone or order number, and check each person in with an
+  optional wristband number and color, whether they bought online or at the
+  window. Guests whose stay covers the day are there too. **Commerce → Orders
+  → Today's check-ins** lists who is expected and who is in, to sort, export
+  or print.
+
+## October 2026 — several identical units in one reservation resource
+
+- **[Several identical units](commerce-and-bookings/commerce/pos-and-reservations.md#several-identical-units)** —
+  a reservation resource can now hold several of the same thing, such as 12 RV
+  hookups. Set **Spots or units available** and each night takes that many
+  stays. The **Reservations** card shows the units left on each of the next
+  14 nights, the Reservation widget says "Only 2 left" when a few remain, and
+  two guests can't both book the last one.
+
+## October 2026 — one total for the day across every register
+
+- **[Day and event totals](commerce-and-bookings/commerce/pos-operations.md#day-and-event-totals)** —
+  when several staff take payments on their own registers, **Commerce → Orders
+  → Day totals** adds up the whole day, or an event of up to 31 days: sales,
+  tips, tax and refunds, split by tender, by register and by cashier, every
+  drawer's expected and counted cash, and each shift. Export it as a
+  spreadsheet or print it on your receipt printer.
+
+## October 2026 — no platform fee on cash at the register
+
+- **[Platform fees at the register](commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register)** —
+  cash, gift card and store credit payments at the register now carry no
+  platform fee, and nothing for them is added to your monthly invoice. Card
+  and charge-to-room payments carry your plan's rate as before. A split sale is
+  charged only on those parts, and cash sales rung while the register was
+  offline carry no fee either.
+
+## October 2026 — build a client's site on one phone screen
 
 - **[The client build screen](staff-console/overview.md#client-build-screen)** —
   staff building a site for a prospect, at a booth or on a doorstep, do it all on
@@ -336,6 +383,26 @@ for the how-to.
   seller account and sell everywhere from one stock count. Listings follow your stock
   (and your prices, if you choose), marketplace orders come in as your orders and take
   their units off the same shelf, and the tracking goes back when you ship.
+-->
+
+<!--
+  AGL-4038 — The POS hardware shop is built and hidden until the console sets
+  POS_HARDWARE_SHOP_ENABLED=true with the item prices and shipping figures, and
+  card readers are live (STRIPE_TERMINAL_LIVE_ENABLED). This entry is held
+  unpublished: once the shop is open on aglyn.com, remove this comment's
+  markers, move "(newest)" here from the top heading, and delete the "Rolling
+  out" note from commerce-and-bookings/commerce/pos-hardware.md (and the
+  pointer to Stripe's own shop in its Getting a reader section, if buying from
+  Aglyn replaces it).
+
+## October 2026 — buy card readers from Aglyn
+
+- **[Buy a reader from Aglyn](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —
+  order Stripe card readers and accessories from the Hardware card on **Products →
+  Point of sale**, including the Stripe Reader S710 with its own 4G connection.
+  Stripe ships them straight to you, the card shows each order's status and
+  tracking, and you're emailed as it ships and arrives, with the steps to add the
+  reader to a register.
 -->
 
 ## October 2026 — send a DoorDash courier for your local deliveries
