@@ -1647,6 +1647,11 @@ describe('hosts', () => {
       // mints one and only /api/commerce/reviews spends one; a client that
       // could write a row could mint a "verified buyer" review.
       'reviewTokens',
+      // Who is due at the window today and who checked them in (AGL-4043).
+      // Only /api/commerce/pos-check-in writes either; a client write would
+      // check a customer in, or take a check-in back, with nobody there.
+      'checkIns',
+      'checkInDays',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -14091,6 +14096,19 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
       await assertFails(deleteDoc(doc(authed(OWNER), 'hosts', HOST, name, id)))
     })
   }
+
+  it('gives the check-ins at the window no client reader and no client writer (AGL-4043)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'checkIns', 'o_o1_0_0'), {
+        status: 'expected',
+        customerEmail: 'rider@example.com',
+      })
+    })
+    for (const uid of [OWNER, EDITOR, AUTHOR, VIEWER, OUTSIDER]) {
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'checkIns', 'o_o1_0_0')))
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'checkIns', 'o_o1_0_0'), { status: 'checked_in' }))
+    }
+  })
 
   it('lists returns by status, newest first, for the order book’s readers', async () => {
     await assertSucceeds(

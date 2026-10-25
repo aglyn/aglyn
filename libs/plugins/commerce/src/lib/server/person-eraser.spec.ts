@@ -134,7 +134,7 @@ beforeEach(() => {
 
 describe('commerce’s person eraser', () => {
   it('takes the buyer off every order on the workspace’s sites, and keeps the order', async () => {
-    expect(await eraser(REQUEST)).toEqual({ orders: 1 })
+    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 0 })
     const order = docs.get('hosts/h1/orders/o1')
     expect(order).toMatchObject({ customerEmail: null, customerName: null, customerErasedAtMs: 777 })
     expect(order).not.toHaveProperty('shippingAddress')
@@ -151,8 +151,39 @@ describe('commerce’s person eraser', () => {
   })
 
   it('counts on a dry run, and writes nothing', async () => {
+    docs.set('hosts/h1/checkIns/o_o1_0_0', { customerEmailLower: EMAIL, customerName: 'Jane Doe' })
     const before = new Map(docs)
-    expect(await eraser({ ...REQUEST, dryRun: true })).toEqual({ orders: 1 })
+    expect(await eraser({ ...REQUEST, dryRun: true })).toEqual({ orders: 1, checkIns: 1 })
     expect(docs).toEqual(before)
+  })
+
+  it('takes the customer off their check-ins at the window, and keeps who was checked in (AGL-4043)', async () => {
+    docs.set('hosts/h1/checkIns/o_o1_0_0', {
+      orderId: 'o1',
+      status: 'checked_in',
+      checkedInByName: 'Cal Cashier',
+      wristband: { number: '214', color: 'Blue' },
+      customerKey: `email:${EMAIL}`,
+      customerName: 'Jane Doe',
+      customerEmail: 'Jane@Example.com',
+      customerEmailLower: EMAIL,
+      customerPhone: '555 201 7788',
+      searchTokens: ['jane', '5552017788'],
+    })
+    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 1 })
+    expect(docs.get('hosts/h1/checkIns/o_o1_0_0')).toEqual({
+      orderId: 'o1',
+      status: 'checked_in',
+      checkedInByName: 'Cal Cashier',
+      wristband: { number: '214', color: 'Blue' },
+      customerKey: 'erased:o1',
+      customerName: null,
+      customerEmail: null,
+      customerEmailLower: null,
+      customerPhone: null,
+      contactId: null,
+      searchTokens: [],
+      customerErasedAtMs: 777,
+    })
   })
 })

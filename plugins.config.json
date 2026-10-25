@@ -746,6 +746,16 @@
           "mediaScanReason": "The offline register's sync records (AGL-3625): one per cash sale rung offline, holding its order id, flags and stock conflicts, written only by the sync route. No content field, and a busy offline register writes one per sale."
         },
         {
+          "name": "checkIns",
+          "mediaScan": "none",
+          "mediaScanReason": "Who is due at the check-in window on a day and who checked them in (AGL-4043): a customer's name and contact details, an item name, a status and a wristband, written only by the check-in route. No content field, and a busy day writes one per person."
+        },
+        {
+          "name": "checkInDays",
+          "mediaScan": "none",
+          "mediaScanReason": "When each day's check-ins were last brought in line with its orders and stays (AGL-4043): a time and a flag, written only by the check-in route."
+        },
+        {
           "name": "terminal",
           "mediaScan": "none",
           "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."
