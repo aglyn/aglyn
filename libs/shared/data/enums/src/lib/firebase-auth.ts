@@ -326,7 +326,7 @@ export function normalizeAuthError<T extends AuthResultError | null | undefined>
     return {
       ...error,
       code: AuthAppErrorCodes.EMAIL_ON_ANOTHER_ACCOUNT,
-      message: 'This address is already on another Aglyn account.',
+      message: 'This address is already on another account.',
     } as T
   }
   return error

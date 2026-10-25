@@ -79,7 +79,7 @@ describe('AGL-4041 · the console names the refusal', () => {
     name: 'FirebaseError',
     message:
       'Firebase: HTTP Cloud Function returned an error: {"error":{"message":' +
-      '"This email address is already added to another Aglyn account, so no new account was created. (' +
+      '"This email address is already added to another account, so no new account was created. (' +
       EMAIL_ON_ANOTHER_ACCOUNT_MARKER +
       ')","status":"PERMISSION_DENIED"}} (auth/internal-error).',
   }

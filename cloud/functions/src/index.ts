@@ -1320,7 +1320,7 @@ async function refuseAliasSignup(
   })
   throw new HttpsError(
     'permission-denied',
-    'This email address is already added to another Aglyn account, so no new ' +
+    'This email address is already added to another account, so no new ' +
       `account was created. (${EMAIL_ON_ANOTHER_ACCOUNT_MARKER})`,
   )
 }
