@@ -83,21 +83,6 @@ struct NotInAppView: View {
   }
 }
 
-/// The one loading state of the in-app Besigner, from the push until the editor has drawn (AGL-4002): the spinner and
-/// its line centred in the whole area under the screen's head, on the content ground.
-struct BesignerLoadingView: View {
-  var body: some View {
-    VStack(spacing: 12) {
-      ProgressView().controlSize(.large)
-      Text("Opening the Besigner").font(AglynFont.body).foregroundStyle(AglynColor.secondaryText)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(AglynColor.paper)
-    .accessibilityElement(children: .combine)
-    .accessibilityIdentifier("besigner-loading")
-  }
-}
-
 /// Where the Besigner web view is, so a navigation inside it can be judged
 /// against the editor it left (AGL-3850).
 @MainActor
@@ -191,7 +176,8 @@ struct BesignerScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AglynColor.paper)
       } else if !shown {
-        BesignerLoadingView()
+        AglynLoadingState("Opening the Besigner")
+          .accessibilityIdentifier("besigner-loading")
           .transition(.opacity)
       }
     }
@@ -223,7 +209,7 @@ struct BesignerScreen: View {
       try? await Task.sleep(for: .milliseconds(150))
     }
     guard !Task.isCancelled else { return }
-    withAnimation(.easeOut(duration: 0.2)) { shown = true }
+    withAnimation(AglynShellMotion.reveal) { shown = true }
   }
 
   /// Back to the screen the Besigner was opened from.

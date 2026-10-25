@@ -200,6 +200,8 @@ public enum AglynShellMotion {
   public static let pill = Animation.spring(duration: 0.25, bounce: 0.15)
   /// Another workspace: a short cross-fade.
   public static let crossFade = Animation.easeInOut(duration: 0.15)
+  /// A screen's content stepping in over its loading state (the in-app Besigner, AGL-4002): about 200 ms.
+  public static let reveal = Animation.easeOut(duration: 0.2)
 }
 
 /// The sidebar's hairline (Figma Sidebar/Divider): the border token, inset to the rows' padding.

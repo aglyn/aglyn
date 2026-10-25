@@ -33,7 +33,7 @@ class BesignerNavigationTest {
     assertEquals(BesignerNavigation.External, besignerNavigation("http://app.aglyn.com/acme/hosts/shop/theme", origin, userActivated = true))
   }
 
-  /** The console's once-a-day editor-hint bounce opened Zach's browser beside the in-app Besigner (AGL-4002). */
+  /** The console's once-a-day editor-hint bounce opened the person's browser beside the in-app Besigner (AGL-4002). */
   @Test
   fun aScriptOrRedirectToAnotherSiteIsDroppedNotOpenedInTheBrowser() {
     val bounce = "https://console.aglyn.app/api/edit-hint/set?sig=abc&return=https%3A%2F%2Fapp.aglyn.com%2Fauth%2Fbesigner"

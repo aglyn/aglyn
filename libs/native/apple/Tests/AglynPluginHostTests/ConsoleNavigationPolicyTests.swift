@@ -6,7 +6,7 @@ import XCTest
 @testable import AglynWebView
 
 /// The console web view opens the system browser only for a link a person clicked (AGL-4002): the console's
-/// once-a-day editor-hint bounce had opened Zach's browser beside the in-app Besigner.
+/// once-a-day editor-hint bounce had opened the person's browser beside the in-app Besigner.
 @MainActor
 final class ConsoleNavigationPolicyTests: XCTestCase {
   private let console = ["https://app.aglyn.com"]
@@ -24,12 +24,12 @@ final class ConsoleNavigationPolicyTests: XCTestCase {
 
   func testAScriptOrRedirectOffTheConsoleIsDropped() {
     XCTAssertEqual(decide("https://accounts.example.com/sso"), .ignore(URL(string: "https://accounts.example.com/sso")!))
-    XCTAssertEqual(decide("mailto:help@aglyn.com"), .ignore(URL(string: "mailto:help@aglyn.com")!))
+    XCTAssertEqual(decide("mailto:help@example.com"), .ignore(URL(string: "mailto:help@example.com")!))
   }
 
   func testALinkThePersonClickedOffTheConsoleOpensTheSystemBrowser() {
     XCTAssertEqual(decide("https://docs.aglyn.com/besigner", clicked: true), .systemBrowser(URL(string: "https://docs.aglyn.com/besigner")!))
-    XCTAssertEqual(decide("mailto:help@aglyn.com", clicked: true), .systemBrowser(URL(string: "mailto:help@aglyn.com")!))
+    XCTAssertEqual(decide("mailto:help@example.com", clicked: true), .systemBrowser(URL(string: "mailto:help@example.com")!))
   }
 
   func testTheBesignerAndItsEntryLoadInTheWebView() {
