@@ -23,11 +23,15 @@ struct LastCampaignCard: View {
       .max { ($0.date("sentAt") ?? .distantPast) < ($1.date("sentAt") ?? .distantPast) }
   }
 
+  /// One of the campaign's counts, formatted; a missing one reads as zero.
+  private static func figure(_ stats: [String: Any]?, _ key: String) -> String {
+    ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted()
+  }
+
   var body: some View {
     Group {
       if let campaign = lastSent {
         let stats = campaign.data["stats"] as? [String: Any]
-        func figure(_ key: String) -> String { ((stats?[key] as? NSNumber)?.intValue ?? 0).formatted() }
         VStack(alignment: .leading, spacing: AglynSpace.one) {
           HStack(alignment: .firstTextBaseline) {
             Text("Last campaign").font(AglynFont.headline).accessibilityAddTraits(.isHeader)
@@ -38,9 +42,9 @@ struct LastCampaignCard: View {
           }
           Text(campaign.string("subject") ?? "").font(AglynFont.subheadline).lineLimit(1)
           HStack(spacing: AglynSpace.three) {
-            AglynStatTile(figure("sent"), label: "Sent")
-            AglynStatTile(figure("opens"), label: "Opens")
-            AglynStatTile(figure("clicks"), label: "Clicks")
+            AglynStatTile(Self.figure(stats, "sent"), label: "Sent")
+            AglynStatTile(Self.figure(stats, "opens"), label: "Opens")
+            AglynStatTile(Self.figure(stats, "clicks"), label: "Clicks")
           }
           .fixedSize(horizontal: false, vertical: true)
         }

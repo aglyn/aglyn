@@ -915,10 +915,12 @@ struct AreaView: View {
 
   /// The head's parts for a screen that draws them in its list column: title, breadcrumbs, star and sections.
   private func areaHead(_ row: NativeNavRow, sections: [NativeNavSection]) -> AglynAreaHead {
-    AglynAreaHead(
+    let shell = navigation
+    var switchArea: (@MainActor () -> Void)? = nil
+    if !wide { switchArea = { shell.showAreaSwitcher = true } }
+    return AglynAreaHead(
       title: row.label, crumbs: AnyView(Breadcrumbs(row: row)), star: AnyView(starButton(row)),
-      sections: phoneSections(sections),
-      switchArea: wide ? nil : { navigation.showAreaSwitcher = true })
+      sections: phoneSections(sections), switchArea: switchArea)
   }
 
   private func phoneSections(_ sections: [NativeNavSection]) -> [AglynAreaSection] {

@@ -145,7 +145,7 @@ struct HomeWorkspaceStats: View {
   @ViewBuilder
   private var orgRow: some View {
     let role = model.workspace?.org?.role ?? ""
-    let reach = member.ready && OrgAccess.isOrgWideMember(member.document?.data)
+    let reach = member.ready && AglynCore.OrgAccess.isOrgWideMember(member.document?.data)
     let enabled = Set(ShellScope(model: model, navigation: navigation).workspacePlugins)
     let widgets = model.registry.widgets(for: .aglyn, slot: orgDashboardSlot).filter { enabled.contains($0.pluginID) }
     if reach, ["owner", "admin", "editor"].contains(role), !widgets.isEmpty, let context = model.context(for: navigation) {
