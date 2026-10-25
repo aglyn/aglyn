@@ -27,13 +27,22 @@
  * it cannot do inside opaque bytes, so its forms stay as they were.
  */
 import { encode as msgpack } from '@msgpack/msgpack'
+import {
+  LEGACY_FORM_FIELD_COMPONENT_ID,
+  formFieldToElements,
+} from '../../../libs/plugins/forms/src/lib/model/form-field-elements.ts'
 
 /** The canvas root id (`CANVAS_ROOT_ELEMENT_ID`). */
 const CANVAS_ROOT = '_@_'
 
-/** The tree the console's New form writes (`host-forms-card.component.tsx`), as stored: msgpack bytes. */
-const formNodes = (formId, formName) =>
-  msgpack({
+/**
+ * A form's stored design: the console's New form tree (`host-forms-card.component.tsx`) with each question as MUI's
+ * separate form elements under the form element, built by the forms plugin's own `formFieldToElements` — the rule
+ * the presets and the formField backfill follow — so the Besigner draws the questions, not a bare Send button.
+ * Stored as msgpack bytes, as production stores it.
+ */
+const formNodes = (formId, formName, fields = []) => {
+  const nodes = {
     [CANVAS_ROOT]: { $id: CANVAS_ROOT, componentId: 'div', nodes: ['formRoot'] },
     formRoot: {
       $id: 'formRoot',
@@ -43,7 +52,28 @@ const formNodes = (formId, formName) =>
       props: { formId, formName },
       nodes: [],
     },
-  })
+  }
+  for (const f of fields) {
+    const legacy = {
+      $id: `field-${f.fieldName}`,
+      componentId: LEGACY_FORM_FIELD_COMPONENT_ID,
+      parentId: 'formRoot',
+      props: {
+        fieldName: f.fieldName,
+        label: f.label,
+        fieldType: f.fieldType,
+        required: f.required === true,
+        ...(f.options ? { options: f.options } : {}),
+      },
+    }
+    const built = formFieldToElements(legacy, nodes)
+    if (!built) continue
+    Object.assign(nodes, built.nodes)
+    nodes[built.rootId] = { ...nodes[built.rootId], parentId: 'formRoot' }
+    nodes.formRoot.nodes.push(built.rootId)
+  }
+  return msgpack(nodes)
+}
 
 const key = (text) => String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
@@ -152,7 +182,7 @@ export async function seedForms({ put, uid, hostId, now, project }) {
       displayName: form.displayName,
       slug,
       fields: form.fields,
-      ...(storedDesigns ? { rootId: CANVAS_ROOT, nodes: formNodes(form.id, form.displayName) } : {}),
+      ...(storedDesigns ? { rootId: CANVAS_ROOT, nodes: formNodes(form.id, form.displayName, form.fields) } : {}),
       ...(versionId ? { versionId } : {}),
       routing: { lead: form.lead },
       ...formListFields({ id: form.id, displayName: form.displayName, slug }),
@@ -170,7 +200,7 @@ export async function seedForms({ put, uid, hostId, now, project }) {
         hostId,
         displayName: 'Initial version',
         rootId: CANVAS_ROOT,
-        nodes: formNodes(form.id, form.displayName),
+        nodes: formNodes(form.id, form.displayName, form.fields),
         createdAt: new Date(nowMs - form.createdDaysAgo * day),
         createdBy: uid,
         updatedAt: new Date(nowMs - Math.min(form.createdDaysAgo, 2) * day),
