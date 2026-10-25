@@ -6,6 +6,12 @@ description: Every AI build reuses what your site already has, takes its colors 
 
 # How Aglyn AI builds
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 When Aglyn AI builds for your site (a page, a component, a layout, a page template, a
 form or an email), it builds the way a careful designer on your team would: from what the
 site already has, with your theme and brand, as a draft you review. The rules

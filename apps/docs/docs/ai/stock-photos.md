@@ -6,6 +6,12 @@ description: "Pages Aglyn AI writes for a new site use free stock photos from Pi
 
 # Stock photos in AI sites
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 When Aglyn AI writes the pages of a [site started with AI](./start-with-ai.md), each
 picture it needs, such as a hero, a service card or a blog cover, is found as a free stock
 photo that matches what that part of the page is about. An

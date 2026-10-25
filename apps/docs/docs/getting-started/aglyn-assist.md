@@ -6,6 +6,12 @@ description: Ask the built-in AI helper how to do anything in Aglyn — it answe
 
 # Aglyn Assist
 
+:::note Beta
+**Aglyn Assist is in beta.** It is available today on every plan that includes
+it, and it is still changing as we improve it. Beta means you can use it now,
+while its answers and the steps on this page may still change.
+:::
+
 **Aglyn Assist** is the chat helper in the bottom-right corner of every console
 page. Ask it how to do something — publish a page, connect a domain, set up
 shipping, invite a teammate — and it answers from this documentation, linking

@@ -6,6 +6,12 @@ description: "Aglyn AI is an AI website builder inside your console: describe a 
 
 # Aglyn AI: the AI website builder
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 **Aglyn AI** builds for your site. Describe what you want — a page, a reusable
 component, a layout, a page template, a form, an email, a campaign, product copy, a
 theme, your search titles and descriptions — and it plans the work, builds it from

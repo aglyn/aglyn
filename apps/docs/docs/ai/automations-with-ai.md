@@ -6,6 +6,12 @@ description: Aglyn AI drafts an automation from a description, changes or fixes 
 
 # Automations with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 On the **Automation** page, Aglyn AI can draft an automation from a description, change or
 fix one you already have, explain what one does, and tell you why one of its runs failed.
 None of them runs an automation, switches one on, or changes one you have saved: what it

@@ -6,6 +6,12 @@ description: "An AI copywriter for the words already on your site: rewrite a hea
 
 # Rewrite and write copy with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 **Rewrite with AI** drafts and rewrites text without leaving the Besigner. It works on
 any text an element carries — a headline, body copy, a button label, a caption — and on
 a blog entry.

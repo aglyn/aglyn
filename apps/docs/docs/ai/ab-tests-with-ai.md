@@ -6,6 +6,12 @@ description: "Have Aglyn AI write two to four variants for a page, section or em
 
 # A/B tests by AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 The test itself is yours. The experiment, its variants, the traffic split, the
 conversion goal and the counters all belong to the **Experiments** card on your site's
 **Marketing** page. Two AI cards sit inside that card: one writes variants while you are

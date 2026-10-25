@@ -6,6 +6,12 @@ description: "An AI product description generator for your catalog: write copy f
 
 # Product copy and catalogs with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Aglyn AI can write the copy for your products and help you set up a store. Everything it
 does is a **proposal**: you review it, and nothing is saved to your catalog until you
 apply it. A proposed product comes with a suggested price you can change, and it never

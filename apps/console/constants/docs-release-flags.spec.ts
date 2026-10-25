@@ -37,6 +37,7 @@ import {
   type ReleaseFlagKey,
 } from '@aglyn/aglyn'
 import {
+  BETA_ADMONITION,
   FLAG_DOC_PAGES,
   FLAGS_WITHOUT_DOCS,
   OFF_BY_DEFAULT_FLAG_KEYS,
@@ -59,6 +60,22 @@ const isPublishedOn = (key: ReleaseFlagKey): boolean =>
  */
 const isOff = (key: ReleaseFlagKey): boolean =>
   OFF_BY_DEFAULT_FLAG_KEYS.includes(key) && !isPublishedOn(key)
+
+/** The stage the registry declares, which only an ON flag can wear. */
+const isBetaOn = (key: ReleaseFlagKey): boolean =>
+  !isOff(key) &&
+  RELEASE_FLAGS.find((flag) => flag.key === key)?.stage === 'beta'
+
+/**
+ * Whether `pattern` sits at the TOP of the page: before its first `##`
+ * section, so a reader meets it before any of the content it qualifies.
+ */
+const opensWith = (source: string, pattern: RegExp): boolean => {
+  const match = pattern.exec(source)
+  if (!match) return false
+  const firstSection = source.search(/^##\s/m)
+  return firstSection < 0 || match.index < firstSection
+}
 
 const declaredEntries = Object.entries(FLAG_DOC_PAGES) as [
   ReleaseFlagKey,
@@ -100,6 +117,13 @@ let contentAssertions = 0
  * marker absent.
  */
 let disclosureAssertions = 0
+
+/**
+ * The Beta notes this spec REQUIRED (AGL-4052): one per subject page of an
+ * ON, beta-staged flag. Zero while such a flag exists means the Beta half
+ * read nothing.
+ */
+let betaAssertions = 0
 
 describe('docs release-flag registry (AGL-1605)', () => {
   describe('anti-vacuity', () => {
@@ -235,6 +259,50 @@ describe('docs release-flag registry (AGL-1605)', () => {
       }
     })
 
+    it('gives every ON, beta-staged flag a page that carries the Beta note', () => {
+      // The Beta half's own anti-vacuity (AGL-4052): a staged flag with no
+      // subject page would label the console and say nothing in the docs,
+      // and this spec would have nothing to hold to the stage.
+      const unpaged = RELEASE_FLAGS.filter(
+        (flag) =>
+          isBetaOn(flag.key) &&
+          !(FLAG_DOC_PAGES[flag.key] ?? []).some(
+            (page) => page.disclosure === 'admonition',
+          ),
+      ).map((flag) => flag.key)
+      if (unpaged.length > 0) {
+        throw new Error(
+          `Release flags are ON and staged beta with no subject page in FLAG_DOC_PAGES: ${unpaged.join(
+            ', ',
+          )}. Declare the pages about each feature with disclosure 'admonition', and open them with :::note Beta.`,
+        )
+      }
+    })
+
+    it('puts the Beta note only on subject pages of ON, beta-staged flags', () => {
+      // The sweep that keeps the label from appearing on a page nobody
+      // declared, where no stage could ever take it down again.
+      const allowed = new Set(
+        declaredEntries
+          .filter(([key]) => isBetaOn(key))
+          .flatMap(([, pages]) =>
+            pages
+              .filter((page) => page.disclosure === 'admonition')
+              .map((page) => page.path),
+          ),
+      )
+      const stray = grepDocs(BETA_ADMONITION_GREP).filter(
+        (path) => !allowed.has(path),
+      )
+      if (stray.length > 0) {
+        throw new Error(
+          `These pages carry :::note Beta but are not the subject page of an ON, beta-staged flag: ${stray.join(
+            ', ',
+          )}. Remove the note, or declare the page under its flag in FLAG_DOC_PAGES (disclosure 'admonition') once the flag is staged beta in release-flags.ts.`,
+        )
+      }
+    })
+
     it('declares each page at most once per flag', () => {
       for (const [key, pages] of declaredEntries) {
         const paths = pages.map((page) => page.path)
@@ -314,6 +382,38 @@ describe('docs release-flag registry (AGL-1605)', () => {
         },
       )
 
+      // The Beta half (AGL-4052), on the pages whose subject is the feature.
+      // A windowed page is about many features and is never asked for it.
+      const subjects = pages.filter((page) => page.disclosure === 'admonition')
+      if (subjects.length > 0) {
+        const beta = isBetaOn(key)
+        it.each(subjects.map((page) => [page.path, page] as const))(
+          beta
+            ? `${'%s'} opens with the Beta note`
+            : `${'%s'} carries no Beta note`,
+          (_path, page) => {
+            const source = readPage(page)
+            contentAssertions += 1
+            if (beta) {
+              betaAssertions += 1
+              if (!opensWith(source, BETA_ADMONITION)) {
+                throw new Error(
+                  `${key} is ON and staged beta in release-flags.ts, but apps/docs/${page.path} does not open with :::note Beta before its first section. Add the note under the page title; see docs/getting-started/aglyn-assist.md for the wording.`,
+                )
+              }
+              return
+            }
+            if (BETA_ADMONITION.test(source)) {
+              throw new Error(
+                off
+                  ? `${key} is OFF, but apps/docs/${page.path} carries :::note Beta. A feature the reader cannot open is rolling out, not in beta: replace the note with :::caution Rolling out.`
+                  : `${key} has no stage in release-flags.ts, so it is generally available, but apps/docs/${page.path} still carries :::note Beta. Remove the note.`,
+              )
+            }
+          },
+        )
+      }
+
       if (off) {
         const priced = pages.filter((page) => page.checkNoPriceClaim)
         if (priced.length > 0) {
@@ -344,6 +444,14 @@ describe('docs release-flag registry (AGL-1605)', () => {
       expect(contentAssertions).toBeGreaterThan(0)
     })
 
+    it('required the Beta note on a page whenever a flag is ON and staged beta', () => {
+      // Runs last, like the two above. With nothing staged there is nothing
+      // to require; with something staged, zero means the Beta half read no
+      // page at all.
+      const staged = RELEASE_FLAGS.some((flag) => isBetaOn(flag.key))
+      expect(betaAssertions > 0).toBe(staged)
+    })
+
     it('required a rolling-out disclosure on at least one page', () => {
       // The disclosure half on its own. Every page assertion can still run
       // with none of them requiring a marker — declare every OFF flag
@@ -352,6 +460,41 @@ describe('docs release-flag registry (AGL-1605)', () => {
     })
   })
 })
+
+/** {@link BETA_ADMONITION} in grep's extended syntax. */
+const BETA_ADMONITION_GREP = '^:::note[[:space:]]+Beta[[:space:]]*$'
+
+/**
+ * Pages anywhere in the published docs tree matching an extended-regex
+ * `pattern`, as paths relative to `apps/docs`. Unlike {@link grepDocsForLabel}
+ * it skips nothing: a Beta note on a staff page is as stray as any other.
+ */
+function grepDocs(pattern: string): string[] {
+  try {
+    const out = execFileSync(
+      'grep',
+      [
+        '-rlE',
+        '--include=*.md',
+        '--include=*.mdx',
+        pattern,
+        'docs',
+        'api',
+        'learn',
+        'help',
+        'src/pages',
+      ],
+      { cwd: DOCS_ROOT, encoding: 'utf8' },
+    )
+    return out
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+  } catch {
+    // grep exits 1 with no matches — that is the passing case.
+    return []
+  }
+}
 
 /**
  * Case-sensitive search for a flag label across the published docs tree,

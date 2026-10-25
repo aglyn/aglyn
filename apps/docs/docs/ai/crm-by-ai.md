@@ -6,6 +6,12 @@ description: "An AI CRM for small business: a short summary and a suggested next
 
 # The AI CRM built into Aglyn
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Aglyn AI works in three places in the CRM. In each one it makes a suggestion and you decide
 what happens next: nothing is saved, sent or imported until you do it yourself.
 

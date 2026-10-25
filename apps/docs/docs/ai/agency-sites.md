@@ -6,6 +6,12 @@ description: "Run one brief across many client sites: each is its own build job 
 
 # An AI website builder for agencies
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 An agency's problem with a website builder is rarely the first site. It is the
 twentieth: twenty logins, twenty billing relationships, twenty slightly different
 stacks, and a first draft that costs the same on the twentieth site as it did on the

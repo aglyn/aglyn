@@ -6,6 +6,12 @@ description: Describe a section and Aglyn AI builds it from real components, on 
 
 # Generate a section on the canvas
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 Where [rewriting copy](copy-assist.md) changes words, **Generate a section with AI**
 builds **structure** — a whole section of real components — directly on the page you
 have open.

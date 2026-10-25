@@ -6,6 +6,12 @@ description: "Answer a few questions when you create a site and Aglyn AI plans, 
 
 # Start a new site with AI
 
+:::note Beta
+**Aglyn AI is in beta.** It is available today on every plan that includes it,
+and it is still changing as we improve it. Beta means you can use it now, while
+what it builds and the steps on this page may still change.
+:::
+
 **Create site** opens **Start your site** straight away, before the site exists.
 **Start with AI** asks a few questions, one per step, then creates the site, plans it,
 writes every page, gives it a look of its own and publishes it at its address. This page
