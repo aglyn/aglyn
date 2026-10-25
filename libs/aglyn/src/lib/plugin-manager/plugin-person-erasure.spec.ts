@@ -250,7 +250,7 @@ describe('a share the erasure promises (AGL-3080)', () => {
   })
 
   it('is compiled from the plugins’ declarations, and stood in for a spec of the erasure’s own sweeps', async () => {
-    expect(PLUGIN_REQUIRED_PERSON_ERASERS).toEqual(['bookings', 'commerce', 'crm', 'email', 'loyalty'])
+    expect(PLUGIN_REQUIRED_PERSON_ERASERS).toEqual(['bookings', 'commerce', 'crm', 'email', 'loyalty', 'waivers'])
     standInRequiredPersonErasersForTests()
     expect((await runPluginPersonErasure(TARGET)).reports).toEqual({
       bookings: { standIn: true },
@@ -258,6 +258,7 @@ describe('a share the erasure promises (AGL-3080)', () => {
       crm: { standIn: true },
       email: { standIn: true },
       loyalty: { standIn: true },
+      waivers: { standIn: true },
     })
   })
 })

@@ -472,6 +472,18 @@ export interface PosHardwareAddress {
   country: string
 }
 
+/**
+ * What sales tax is sourced by: where the order shipped, without the street
+ * or the person. An erasure keeps this much of the address (see
+ * {@link posHardwareBuyerErasedPatch}) and the retained sale record holds
+ * nothing finer ({@link PosHardwareSaleRecord}).
+ */
+export interface PosHardwareTaxRegion {
+  country: string
+  state: string | null
+  postalCode: string | null
+}
+
 export interface PosHardwareTracking {
   carrier: string
   number: string
@@ -483,8 +495,8 @@ export interface PosHardwareOrder {
   orgId: string
   /** The site whose POS settings the order was placed from. */
   hostId: string
-  /** The member who started the checkout. */
-  createdBy: string
+  /** The member who started the checkout; `null` once their account is erased. */
+  createdBy: string | null
   /** Where the order emails go: the address entered at checkout. */
   contactEmail: string | null
   lines: PosHardwareLine[]
@@ -496,6 +508,11 @@ export interface PosHardwareOrder {
     name: string | null
     phone: string | null
     address: PosHardwareAddress | null
+    /**
+     * Set when the buyer's account is erased, in place of `address`: the part
+     * of it sales tax is sourced by.
+     */
+    taxRegion?: PosHardwareTaxRegion | null
   }
   taxCents: number
   totalCents: number
@@ -519,6 +536,8 @@ export interface PosHardwareOrder {
   refundId?: string | null
   /** The cents Stripe reported refunding. */
   refundedCents?: number
+  /** When the buyer's account was erased and their details taken off the order. */
+  buyerErasedAtMs?: number
 }
 
 /** The timestamp field each status stamps when it is reached. */
@@ -537,6 +556,161 @@ export const POS_HARDWARE_ANCHOR = 'pos-hardware'
 
 /** The collection under `orgs/{orgId}`, named once. */
 export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
+
+/*==========================================
+ * THE SALE RECORD THE PLATFORM KEEPS (AGL-4038).
+ *
+ * A hardware order is the PLATFORM's own sale: the platform is the seller of
+ * record and owes the sales tax on it. So beside every order the server keeps
+ * `posHardwareSales/{orderId}`, a TOP-LEVEL record of what tax and accounting
+ * need — the lines, the amounts, the tax, Stripe's ids, the status dates and
+ * the region it shipped to — and nothing about the person who bought it.
+ *
+ * It is the `platformRevenue` / `storefrontTaxCollected` shape on purpose
+ * (AGL-1811, AGL-1904): keyed to the workspace by FIELD, outside
+ * `orgs/{orgId}`, so the workspace erasure's `recursiveDelete(orgs/{orgId})`
+ * cannot see it, and never in any org-keyed sweep. GDPR Art. 17(3)(b) exempts
+ * records kept to comply with a legal obligation. The order under the
+ * workspace, with the buyer's name, street, phone, email and tracking, is
+ * erased with the workspace as before.
+ *
+ * Written in the same transaction as every write to the order, from the
+ * order as it stands after that write, so the two never disagree and a
+ * missing record heals on the next write.
+ *=========================================*/
+
+/** The top-level collection of retained hardware sale records. */
+export const POS_HARDWARE_SALES_COLLECTION = 'posHardwareSales'
+
+/** `posHardwareSales/{orderId}`: an order with every personal detail left out. */
+export interface PosHardwareSaleRecord {
+  orderId: string
+  /** The workspace that bought it, by id; the record outlives the workspace. */
+  orgId: string
+  lines: Array<Pick<PosHardwareLine, 'sku' | 'name' | 'quantity' | 'unitCents' | 'lineCents'>>
+  subtotalCents: number
+  shippingMethod: PosHardwareShippingMethod
+  shippingCents: number
+  taxCents: number
+  totalCents: number
+  currency: string
+  /** The sales tax sourcing input: country, state and postal code, never the street. */
+  shipTo: PosHardwareTaxRegion | null
+  stripeCheckoutSessionId: string | null
+  stripePaymentIntentId: string | null
+  stripeHardwareOrderId: string | null
+  refundId: string | null
+  refundedCents: number | null
+  status: PosHardwareOrderStatus
+  livemode: boolean
+  createdAtMs: number
+  updatedAtMs: number
+  paidAtMs: number | null
+  orderedAtMs: number | null
+  shippedAtMs: number | null
+  deliveredAtMs: number | null
+  registeredAtMs: number | null
+  canceledAtMs: number | null
+  refundedAtMs: number | null
+}
+
+const stampOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+
+const textOrNull = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim() : null
+
+/** The tax region of an order: its address cut down, or what an erasure left. */
+export function posHardwareTaxRegion(order: Pick<PosHardwareOrder, 'shipping'>): PosHardwareTaxRegion | null {
+  const address = order.shipping?.address
+  if (address?.country) {
+    return {
+      country: address.country,
+      state: textOrNull(address.state),
+      postalCode: textOrNull(address.postalCode),
+    }
+  }
+  const kept = order.shipping?.taxRegion
+  return kept?.country
+    ? { country: kept.country, state: textOrNull(kept.state), postalCode: textOrNull(kept.postalCode) }
+    : null
+}
+
+/**
+ * The retained sale record of an order, as it stands. Every field is picked
+ * by name, so a field added to the order later reaches the record only when
+ * someone decides it should.
+ */
+export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder): PosHardwareSaleRecord {
+  return {
+    orderId,
+    orgId: order.orgId,
+    lines: (order.lines ?? []).map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      quantity: line.quantity,
+      unitCents: line.unitCents,
+      lineCents: line.lineCents,
+    })),
+    subtotalCents: order.subtotalCents ?? 0,
+    shippingMethod: order.shipping?.method ?? 'standard',
+    shippingCents: order.shipping?.cents ?? 0,
+    taxCents: order.taxCents ?? 0,
+    totalCents: order.totalCents ?? 0,
+    currency: order.currency ?? POS_HARDWARE_CURRENCY,
+    shipTo: posHardwareTaxRegion(order),
+    stripeCheckoutSessionId: textOrNull(order.stripeCheckoutSessionId),
+    stripePaymentIntentId: textOrNull(order.stripePaymentIntentId),
+    stripeHardwareOrderId: textOrNull(order.stripeHardwareOrderId),
+    refundId: textOrNull(order.refundId),
+    refundedCents: stampOrNull(order.refundedCents),
+    status: order.status,
+    livemode: order.livemode === true,
+    createdAtMs: order.createdAtMs ?? 0,
+    updatedAtMs: order.updatedAtMs ?? order.createdAtMs ?? 0,
+    paidAtMs: stampOrNull(order.paidAtMs),
+    orderedAtMs: stampOrNull(order.orderedAtMs),
+    shippedAtMs: stampOrNull(order.shippedAtMs),
+    deliveredAtMs: stampOrNull(order.deliveredAtMs),
+    registeredAtMs: stampOrNull(order.registeredAtMs),
+    canceledAtMs: stampOrNull(order.canceledAtMs),
+    refundedAtMs: stampOrNull(order.refundedAtMs),
+  }
+}
+
+/**
+ * What an account erasure does to an order the person placed (AGL-4038): the
+ * workspace keeps the order and every amount on it; the buyer comes off it —
+ * who started it, the email, the name, the phone, the street and the
+ * tracking, which names the parcel to a carrier who would say where it went.
+ * The country, state and postal code stay, because sales tax is sourced by
+ * them. Deterministic but for the stamp, and an order already erased no
+ * longer answers to the person's uid, so a second run finds nothing.
+ */
+export function posHardwareBuyerErasedPatch(
+  order: Pick<PosHardwareOrder, 'shipping'>,
+  now: number,
+): Record<string, unknown> {
+  // The whole map, read in the same transaction: a dotted-path update would
+  // leave a field added to `shipping` later standing with the person in it.
+  const shipping = order.shipping
+  return {
+    createdBy: null,
+    contactEmail: null,
+    shipping: {
+      method: shipping?.method ?? 'standard',
+      label: shipping?.label ?? POS_HARDWARE_SHIPPING_LABELS[shipping?.method ?? 'standard'],
+      cents: shipping?.cents ?? 0,
+      name: null,
+      phone: null,
+      address: null,
+      taxRegion: posHardwareTaxRegion(order),
+    },
+    tracking: null,
+    buyerErasedAtMs: now,
+    updatedAtMs: now,
+  }
+}
 
 /** An order id: `hw_` and twenty hex characters. */
 export const POS_HARDWARE_ORDER_ID = /^hw_[a-f0-9]{20}$/

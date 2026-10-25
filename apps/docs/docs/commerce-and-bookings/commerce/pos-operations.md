@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: Running the register
-description: Shifts and the cash drawer with X and Z reports, day and event totals across every register, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.
+description: Shifts and X/Z reports, day and event totals, check-in with wristbands, staff PINs, customers at the register, returns and exchanges, printed receipts, and selling cash while offline.
 ---
 
 # Running the register
@@ -109,6 +109,49 @@ default.
 Every sale records the cashier who rang it, the shift it was rung in and any
 discount's author. After a PIN switch, that is the person who switched in, not
 whoever is signed in on the tablet.
+
+## Check-in at the window
+
+For a track, a campground, a lot or an event: people who bought a day pass,
+camping or parking online, or at the register, are looked up at the window,
+checked in and handed a wristband.
+
+**Choose what needs check-in.** In the product editor, under **Check-in**, turn
+on **Needs check-in** for a ride pass, a camping spot or parking. **People per
+item** says how many people one item admits: buy 3 of a pass with 1 person per
+item and that is 3 check-ins; a family camping spot set to 4 admits 4. A
+product with options can set each variant on its own, so a spectator ticket on
+the same product needs no wristband. Turning it on also covers what was
+already sold today.
+
+**What is due on a day.** Each paid order's check-in items are due on the day
+the order was placed, counted in your site's time zone, whether it was bought
+online or at the register. A product has no date of its own, so a pass bought
+today is for today. Guests whose stay covers the day are due too, one
+check-in for each day of the stay. An item refunded on its own, or an order
+refunded in full or canceled, is no longer due; anyone already checked in
+stays on the list.
+
+**At the register,** tap **Check in**, then search by name, email, phone (or
+its last four digits) or order number. Pick the customer to see each person
+their passes, camping and stays cover today. Type an optional **wristband
+number** and pick a **color**, then tap **Check in**, or **Check in all**.
+Someone already checked in shows when and by whom ("Already checked in at
+9:14 AM by Sam"), and **Undo** takes a check-in back. After a PIN switch, the
+check-in is recorded under the person who switched in. On a day you are
+checking people in, attaching a customer to a sale who has someone due today
+offers **Check in** on the customer panel too.
+
+**Commerce → Orders → Today's check-ins** lists everyone due on a day with
+what they are checked in for, the time, who checked them in and the
+wristband, with expected, checked-in and still-to-come counts. Pick a **Day**
+to see another one. Every column sorts, **Export CSV** downloads the list as
+a spreadsheet, and **Print** prints it on an 80 mm receipt printer.
+
+An order placed online shows up at the window within about 30 seconds; a sale
+at the register shows up the moment it is paid. Check-in needs the point of
+sale on your plan, and only members who can use the register can check people
+in or see the list.
 
 ## Staff PINs
 

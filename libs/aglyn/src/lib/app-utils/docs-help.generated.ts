@@ -470,12 +470,12 @@ export const PLUGIN_DOCS = {
   posHardware: {
     path: '/commerce-and-bookings/commerce/pos-hardware',
     title: 'POS hardware',
-    excerpt: 'Card readers (and buying them from Aglyn, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.',
+    excerpt: 'Card readers (and buying them, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, barcode scanning, and product and shipping labels.',
   },
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
-    excerpt: 'Shifts and the cash drawer with X and Z reports, day and event totals across every register, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
+    excerpt: 'Shifts and X/Z reports, day and event totals, check-in with wristbands, staff PINs, customers at the register, returns and exchanges, printed receipts, and selling cash while offline.',
   },
   postPurchase: {
     path: '/commerce-and-bookings/commerce/tracking-and-protection',
@@ -551,6 +551,11 @@ export const PLUGIN_DOCS = {
     path: '/commerce-and-bookings/commerce/tax-services',
     title: 'Tax services (Avalara AvaTax and TaxJar)',
     excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there.',
+  },
+  waivers: {
+    path: '/commerce-and-bookings/commerce/waivers',
+    title: 'Waivers',
+    excerpt: 'Write your waiver once. Riders sign it on their phones before they arrive, on a tablet at the window or on paper, parents sign for minors, and every signer gets a signed PDF.',
   },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
@@ -654,8 +659,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   pickupAndDelivery: ['#set-up-pickup', '#set-up-local-delivery', '#queue', '#ask-aglyn-ai', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#several-identical-units', '#related'],
-  posHardware: ['#recommended-kit', '#card-readers', '#buy-a-reader-from-aglyn', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
-  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#day-and-event-totals', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
+  posHardware: ['#recommended-kit', '#card-readers', '#reader-start-up-screen', '#buy-a-reader-from-aglyn', '#hardware-purchase-records', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
+  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#day-and-event-totals', '#requiring-a-shift', '#who-rang-it', '#check-in-at-the-window', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
   postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
   printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
@@ -671,6 +676,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#client-build-screen', '#bundle-link', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#org-activity', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   taxServices: ['#before-you-start', '#connect', '#when-the-service-is-not-used', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
+  waivers: ['#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   zapier: ['#connect-aglyn-to-zapier', '#triggers', '#actions-and-searches', '#what-each-needs', '#see-and-disconnect-your-zaps'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
@@ -1165,6 +1171,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#receipt-printers': 'Receipt printers',
   },
   posOperations: {
+    '#check-in-at-the-window': 'Check-in at the window',
     '#day-and-event-totals': 'Day and event totals',
     '#shifts-and-the-cash-drawer': 'Shifts and the cash drawer',
     '#staff-pins': 'Staff PINs',
@@ -1331,6 +1338,11 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   taxServices: {
     '#connect': 'Connect',
     '#how-sales-are-taxed': 'How sales are taxed',
+  },
+  waivers: {
+    '#find-a-signature': 'Find a signature',
+    '#versions': 'Versions',
+    '#write-a-waiver': 'Write a waiver',
   },
   webhooks: {
     '#outbound-webhooks': 'Outbound webhooks',

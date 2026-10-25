@@ -990,6 +990,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'by what one till carries.',
   ],
   [
+    'libs/plugins/commerce/src/lib/components/console/pos-hardware-card.component.tsx',
+    'One workspace’s card reader purchases (AGL-4038): the shop route reads ' +
+      'the newest 50 `hardwareOrders` with `limit(50)`, and a row is one ' +
+      'order of physical readers and docks, bounded by how many devices a ' +
+      'store buys rather than by how long it has traded.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-day-totals-card.component.tsx',
     'One report, not a list (AGL-4037): the day totals route answers a ' +
       'whole, bounded summary. Its footerless tables are a row per tender ' +
@@ -2074,7 +2081,9 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // The pickup and delivery queue beside it is a real list, and pages.
     // 82 with the day totals' summary tables (AGL-4037): tenders, registers
     // and cashiers; its shifts table pages.
-    expect(NOT_A_LIST).toHaveLength(82)
+    // 83 with one workspace's card reader purchases (AGL-4038), capped at the
+    // newest 50; the staff list of every workspace's orders pages.
+    expect(NOT_A_LIST).toHaveLength(83)
   })
 })
 

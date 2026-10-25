@@ -16,6 +16,7 @@
  */
 
 import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
+import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in-product'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
 import type { PickupLocationSettings } from './order-local-fulfillment'
@@ -96,6 +97,11 @@ export interface ProductVariant {
   inventoryByLocation?: Record<string, number>
   /** Media-library image URL shown when this variant is selected. */
   imageUrl?: string
+  /**
+   * Whether this variant needs check-in at the window (AGL-4043), over the
+   * product's own setting; absent follows the product.
+   */
+  checkIn?: ProductCheckIn
 }
 
 /** A product's packed size and customs facts (AGL-3612). */
@@ -319,6 +325,12 @@ export interface HostProduct {
   modifierGroups?: ProductModifierGroup[]
   /** Shown under Quick keys on the register's first screen (AGL-3607). */
   posQuickKey?: boolean
+  /**
+   * A pass, a camping spot, parking: each item sold is somebody to check in
+   * at the window on the day it was bought, `headcount` people per item
+   * (AGL-4043). A variant's own `checkIn` overrides it.
+   */
+  checkIn?: ProductCheckIn
   createdAtMs?: number
   updatedAtMs?: number
   deletedAt?: number | null
@@ -1352,6 +1364,11 @@ export function validateProduct(product: HostProduct): string | null {
   }
   const modifierProblem = modifierGroupsProblem(product.modifierGroups)
   if (modifierProblem) return modifierProblem
+  const checkInProblem =
+    productCheckInProblem(product.checkIn) ??
+    (product.variants ?? []).map((variant) => productCheckInProblem(variant.checkIn)).find(Boolean) ??
+    null
+  if (checkInProblem) return checkInProblem
   const variants = product.variants ?? []
   if (variants.length === 0) return 'Products need at least one variant'
   if (variants.length > COMMERCE_MAX_VARIANTS) {

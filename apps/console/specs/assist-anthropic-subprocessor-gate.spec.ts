@@ -156,6 +156,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The edit kind's live eval (AGL-3616). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is two fixed sample requests over a page and a layout written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
   [
+    'libs/plugins/ai/src/lib/jobs/ai-build-privacy-request-live.spec.ts',
+    "The privacy build item's live plan eval (AGL-4033). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is three fixed sample privacy requests written in the spec over an in-memory site, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
     'tools/scripts/lib/emulated-env.mjs',
     "The local emulator stack's environment builder (AGL-3596). It names the key only to BLANK it for an emulated console unless a developer asks for live AI on their own machine, in which case it passes the developer's own key through unchanged. It reads no customer data and is never part of a deployment.",
   ],

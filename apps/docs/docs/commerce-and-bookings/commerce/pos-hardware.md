@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Card readers (and buying them from Aglyn, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.
+description: Card readers (and buying them, rolling out), a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, barcode scanning, and product and shipping labels.
 ---
 
 # POS hardware
@@ -87,6 +87,29 @@ only register a reader to the Stripe account that ordered it.
   — or use **Card (QR)** or **Type card** for that sale.
 
 
+### Reader start-up screen {#reader-start-up-screen}
+
+While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it
+shows a start-up screen. Choose what yours show under **Reader start-up
+screen** on the **POS devices** card:
+
+- **The Aglyn start-up screen** — the default.
+- **Your logo** — the logo from your organization profile, centered on a white
+  screen. If the profile has no logo yet, the card links to it. A square logo
+  with a little space around it looks best.
+- **Your own image** — a full-screen picture from your media library. It must
+  be a portrait image shaped 9:16, at least 1080 × 1920 pixels, as a PNG, JPEG
+  or WebP; the card refuses any other shape before saving. It is sized for each
+  reader's screen for you.
+
+A workspace on a white-label plan never shows the Aglyn screen: its readers
+show its own logo unless it picks an image.
+
+Your choice goes to every reader on the site, including ones you add later.
+Readers pick up a change within about ten minutes. If you change your logo,
+open the **POS devices** card again to send the new one. Any admin or editor
+who can use the point of sale can change it.
+
 ## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
 
 :::note Rolling out
@@ -153,6 +176,21 @@ card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
 
 **Who can buy:** an admin or editor of the site with the **Use the point of
 sale** permission, on a plan that includes POS.
+
+### Records of your purchases {#hardware-purchase-records}
+
+Aglyn is the seller of these readers, so it keeps a record of each sale for tax
+and accounting: the items and their prices, shipping, tax, the total, the order's
+status dates, Stripe's payment references, and the state, ZIP code and country it
+shipped to. That record stays after the workspace is
+[deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
+for as long as tax law requires. It never holds the buyer's name, email, phone,
+street address or tracking number.
+
+If the person who placed an order
+[closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
+the workspace keeps the order and its amounts, and their name, email, phone,
+street address and the tracking are removed from it.
 
 ## Receipt printers
 
