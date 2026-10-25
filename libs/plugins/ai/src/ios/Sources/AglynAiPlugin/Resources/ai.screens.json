@@ -107,6 +107,7 @@
       "constants": {
         "kindLabels": {
           "page": "Page",
+          "privacy": "Privacy change",
           "component": "Component",
           "layout": "Layout",
           "template": "Page template",
@@ -275,6 +276,7 @@
       "constants": {
         "kindLabels": {
           "page": "Page",
+          "privacy": "Privacy change",
           "component": "Component",
           "layout": "Layout",
           "template": "Page template",

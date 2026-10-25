@@ -47,6 +47,11 @@ const scope: {
 
 // The reader's workspace pins (AGL-3762) are a read of their own account
 // document; none of these assertions is about them.
+// The switcher never needs a plugin's declarations, and their lazy imports
+// would otherwise resolve after the suite tears down and crash the worker.
+jest.mock('../constants/plugins.declarations.generated', () => ({
+  registerPluginDeclarations: () => Promise.resolve(),
+}))
 jest.mock('../hooks/use-pinned-orgs', () => ({
   __esModule: true,
   usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
