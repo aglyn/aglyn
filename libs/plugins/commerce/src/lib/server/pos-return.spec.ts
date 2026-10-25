@@ -386,6 +386,55 @@ describe('each tender gets its own money back', () => {
   })
 })
 
+/*
+ * A RETURN NEVER INVENTS A FEE REVERSAL (AGL-4036). Cash and gift-card parts
+ * carried no platform fee, so handing them back has nothing to reverse; a
+ * room charge's accrued fee and a card's netted fee are left exactly where
+ * they were, and a card's own fee comes back from Stripe with its refund.
+ */
+describe('returns and the platform fee (AGL-4036)', () => {
+  const offlineFeeDocs = () => [...h.memory.docs.keys()].filter((path) => path.includes('/offlineFees/'))
+
+  it.each([
+    ['cash', { id: 'pay-cash', method: 'cash', amountCents: 5929, status: 'succeeded', takeFeeCents: 0, feeCents: 0 }],
+    ['gift card', { id: 'pay-gift', method: 'gift_card', amountCents: 5929, status: 'succeeded', giftCardId: 'GIFT-ABCD-1234', takeFeeCents: 0, feeCents: 0 }],
+    ['room charge', { id: 'pay-room', method: 'folio', amountCents: 5929, status: 'succeeded', reservationId: 'res-1', takeFeeCents: 119, feeCents: 0 }],
+  ])('a %s return writes no fee and asks Stripe for nothing', async (_label, payment) => {
+    const feeCents = Number(payment.takeFeeCents)
+    h.memory.seed('hosts/shop/orders/o1', { ...SALE, totals: { ...SALE.totals, feeCents }, payments: [payment] })
+    h.memory.seed('hosts/shop/giftCards/GIFT-ABCD-1234', { balanceCents: 0 })
+    h.memory.seed('hosts/shop/reservations/res-1', { folio: [{ orderId: 'o1', amountCents: 5929, atMs: 1 }] })
+    if (payment.method === 'cash') {
+      await handlePosShift(h.deps, h.request('cashier', { hostId: 'shop', registerId: 'front', action: 'open', openingFloatCents: 10000 }))
+    }
+    const outcome = await ret({ lines: [{ index: 1, quantity: 1 }] })
+    expect(outcome.status).toBe(200)
+    expect(h.stripeCalls).toHaveLength(0)
+    expect(offlineFeeDocs()).toEqual([])
+    expect((order()['totals'] as { feeCents?: number }).feeCents).toBe(feeCents)
+  })
+
+  it("a card part's return hands back only that card's own fee, and a cash part beside it reverses nothing", async () => {
+    // SALE is card + cash; only the card carried a share.
+    h.memory.seed('hosts/shop/orders/o1', {
+      ...SALE,
+      totals: { ...SALE.totals, feeCents: 90 },
+      feeCollection: 'payout',
+      payments: [
+        { ...SALE.payments[0], takeFeeCents: 0, feeCents: 0 },
+        { ...SALE.payments[1], takeFeeCents: 60, feeCents: 90 },
+      ],
+    })
+    const outcome = await ret({ lines: [{ index: 0, quantity: 1 }] })
+    expect(outcome.status).toBe(200)
+    expect(h.stripeCalls).toHaveLength(1)
+    expect(h.stripeCalls[0]!.body.get('payment_intent')).toBe('pi_card')
+    expect(h.stripeCalls[0]!.body.get('refund_application_fee')).toBe('true')
+    expect(offlineFeeDocs()).toEqual([])
+    expect((order()['totals'] as { feeCents?: number }).feeCents).toBe(90)
+  })
+})
+
 describe('when Stripe says no', () => {
   it('hands the whole reservation back when the first refund fails, so the same return can be tried again', async () => {
     h.stripeReplies.push({ status: 402, body: { error: { code: 'insufficient_funds', message: 'Not enough balance' } } })

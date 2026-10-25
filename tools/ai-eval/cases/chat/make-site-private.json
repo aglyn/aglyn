@@ -1,0 +1,28 @@
+{
+  "id": "chat-make-site-private",
+  "kind": "chat",
+  "brief": "How do I make my site private?",
+  "framing": null,
+  "inventory": null,
+  "docsUrls": ["https://docs.example.com/building-sites/site-protection/make-your-site-private"],
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: there is no single private switch, so it picks the control by who should still get in, says hiding from search is not privacy, never asks for a password, and links the page it was given.",
+      "plan": null,
+      "answer": "There isn't one private switch, so pick the setting by who should still see the site:\n\n- **No one yet:** turn on **Maintenance mode** in **Admin → Error pages**. Every address shows your 503 page until you turn it off. Only a site admin can change it.\n- **Anyone with the link, but not Google:** turn on **Discourage search engines** in **Setup → SEO**. This hides the site from search, but it does not stop people opening it.\n- **Only people with a password:** set each page to **Password protected** in its **Page Access** card.\n- **Only signed-in members:** set pages to **Members only** (Business plan and above).\n\nSee [Make your site private](https://docs.example.com/building-sites/site-protection/make-your-site-private) for the steps. I can also turn maintenance mode or the search switch on for you if you ask.",
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A link to a page the answer was not grounded in.",
+      "answer": "Go to **Settings → Privacy** and switch the site to private. There is more in [this forum thread](https://random.example.net/private-site).",
+      "fails": ["rules"]
+    }
+  ]
+}

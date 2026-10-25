@@ -27,9 +27,12 @@ import type { ReceivedEmail } from '@aglyn/shared-util-email'
 import {
   fileSiteCareInboundEmail,
   findSiteCareAccount,
+  findSiteCareWorkspacesForSender,
+  siteCareAddressMatches,
   siteCareInboundTarget,
   siteCareMachineMail,
   siteCareMessageBody,
+  siteCareSenderCandidates,
   type SiteCareInboundAddresses,
 } from './site-care-inbound'
 
@@ -37,6 +40,12 @@ const mockFindAcrossPools = jest.fn()
 jest.mock('./auth-pools', () => ({
   __esModule: true,
   findUserByEmailAcrossPools: (email: string) => mockFindAcrossPools(email),
+}))
+
+const mockFindAlias = jest.fn()
+jest.mock('./account-emails', () => ({
+  __esModule: true,
+  findAccountByVerifiedAlias: (email: string) => mockFindAlias(email),
 }))
 
 /** Workspaces billed for Site Care, by id; any other reads as a plan without it. */
@@ -93,28 +102,31 @@ function docRef(path: string): unknown {
   }
 }
 
+function fieldOf(data: Record<string, unknown> | undefined, field: string): unknown {
+  return field.split('.').reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], data)
+}
+
 function collectionRef(path: string): unknown {
   const children = () =>
     [...mockDocs.keys()].filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+  const read = (keep: (key: string) => boolean = () => true) => async () => {
+    reads.push(path)
+    return { docs: children().filter(keep).map(snapshot) }
+  }
   return {
     doc: (id: string) => docRef(`${path}/${id}`),
-    limit: () => ({
-      get: async () => {
-        reads.push(path)
-        return { docs: children().map(snapshot) }
-      },
-    }),
+    get: read(),
+    limit: () => ({ get: read() }),
+    // The one query the intake makes: workspaces that bought Site Care.
+    where: (field: string, op: string, value: number) => {
+      expect(op).toBe('>=')
+      const keep = (key: string) => Number(fieldOf(mockDocs.get(key), field) ?? 0) >= value
+      return { limit: () => ({ get: read(keep) }) }
+    },
   }
 }
 
 const firestore = { collection: (name: string) => collectionRef(name) } as unknown as FirebaseFirestore.Firestore
-
-/** A member of `orgId`, signing in as `uid`. */
-function member(uid: string, orgId: string) {
-  mockDocs.set(`orgs/${orgId}`, { name: orgId })
-  mockDocs.set(`orgs/${orgId}/members/${uid}`, { role: 'owner' })
-  mockDocs.set(`users/${uid}/orgs/${orgId}`, { role: 'owner' })
-}
 
 const ACCOUNTS: Record<string, string> = {
   'owner@example.com': 'u-owner',
@@ -122,6 +134,20 @@ const ACCOUNTS: Record<string, string> = {
   'plain@example.org': 'u-plain',
 }
 const findAccount = async (email: string) => (ACCOUNTS[email] ? { uid: ACCOUNTS[email] } : null)
+
+/** A member of `orgId`, signing in as `uid` with the address `ACCOUNTS` gives it (or `email`). */
+function member(uid: string, orgId: string, email?: string) {
+  const address = email ?? Object.keys(ACCOUNTS).find((key) => ACCOUNTS[key] === uid) ?? null
+  mockDocs.set(`orgs/${orgId}`, { ...(mockDocs.get(`orgs/${orgId}`) ?? {}), name: orgId })
+  mockDocs.set(`orgs/${orgId}/members/${uid}`, { role: 'owner', email: address })
+  mockDocs.set(`users/${uid}/orgs/${orgId}`, { role: 'owner' })
+}
+
+/** Bills `orgId` for Site Care: on the org document, where the roster pass finds it, and in its billing. */
+function buySiteCare(orgId: string) {
+  mockSiteCareOrgs.add(orgId)
+  mockDocs.set(`orgs/${orgId}`, { ...(mockDocs.get(`orgs/${orgId}`) ?? {}), seatAddons: { siteCare: 1 } })
+}
 
 const MESSAGE: ReceivedEmail = {
   id: 'msg-1',
@@ -151,12 +177,15 @@ beforeEach(() => {
   mockSiteCareOrgs.clear()
   mockOpen.mockReset().mockResolvedValue({ ticketId: 'ticket-new', dueAtMs: 0 })
   mockAppend.mockReset().mockResolvedValue({ appended: true })
+  mockFindAcrossPools.mockReset()
+  mockFindAlias.mockReset().mockResolvedValue(null)
   // Avery owns a workspace with Site Care; the neighbor owns another one;
   // the plain member's workspace has no Site Care.
   member('u-owner', 'org-care')
   member('u-neighbor', 'org-other-care')
   member('u-plain', 'org-plain')
-  mockSiteCareOrgs.add('org-care').add('org-other-care')
+  buySiteCare('org-care')
+  buySiteCare('org-other-care')
   mockDocs.set('supportTickets/AbCdEf0123456789XyZw', { orgId: 'org-care', kind: 'siteCare', subject: 'Hours' })
 })
 
@@ -241,6 +270,72 @@ describe('findSiteCareAccount', () => {
     mockFindAcrossPools.mockRejectedValueOnce(new Error('auth unavailable'))
     expect(await findSiteCareAccount('owner@example.com')).toBeNull()
   })
+
+  it('then the addresses people confirmed on their account, and nothing unconfirmed', async () => {
+    mockFindAcrossPools.mockResolvedValue(null)
+    mockFindAlias.mockImplementation(async (email: string) =>
+      email === 'avery@work.example' ? { uid: 'u-owner', address: email } : null,
+    )
+    expect(await findSiteCareAccount('avery@work.example')).toEqual({ uid: 'u-owner' })
+    expect(await findSiteCareAccount('typed-only@work.example')).toBeNull()
+  })
+})
+
+describe('siteCareSenderCandidates', () => {
+  it('tries the address, then without its tag, then Gmail’s other spellings', () => {
+    expect(siteCareSenderCandidates('Avery <Avery@Example.com>')).toEqual([['avery@example.com']])
+    expect(siteCareSenderCandidates('avery+site@example.com')).toEqual([['avery+site@example.com'], ['avery@example.com']])
+    expect(siteCareSenderCandidates('a.very+x@gmail.com')).toEqual([
+      ['a.very+x@gmail.com'],
+      ['a.very@gmail.com'],
+      ['avery@gmail.com', 'a.very@googlemail.com', 'avery@googlemail.com'],
+    ])
+  })
+
+  it('folds no dots outside Gmail, and never leaves the sender’s domain', () => {
+    const all = siteCareSenderCandidates('a.very+x@example.com').flat()
+    expect(all).toEqual(['a.very+x@example.com', 'a.very@example.com'])
+    expect(siteCareSenderCandidates('not an address')).toEqual([])
+  })
+})
+
+describe('siteCareAddressMatches', () => {
+  it('is one mailbox regardless of case, a sender’s tag, and Gmail’s dots and domains', () => {
+    expect(siteCareAddressMatches('OWNER@Example.com', 'owner@example.com')).toBe(true)
+    expect(siteCareAddressMatches('owner+site@example.com', 'owner@example.com')).toBe(true)
+    expect(siteCareAddressMatches('firstlast@gmail.com', 'first.last@gmail.com')).toBe(true)
+    expect(siteCareAddressMatches('First.Last+care@googlemail.com', 'firstlast@gmail.com')).toBe(true)
+  })
+
+  it('is not the same mailbox across domains, with dots outside Gmail, or onto a member’s own tag', () => {
+    expect(siteCareAddressMatches('owner@example.org', 'owner@example.com')).toBe(false)
+    expect(siteCareAddressMatches('owner@gmail.com', 'owner@example.com')).toBe(false)
+    expect(siteCareAddressMatches('first.last@example.com', 'firstlast@example.com')).toBe(false)
+    expect(siteCareAddressMatches('owner+other@example.com', 'owner+site@example.com')).toBe(false)
+    expect(siteCareAddressMatches('owner@example.com', 'owner+site@example.com')).toBe(false)
+    expect(siteCareAddressMatches('', 'owner@example.com')).toBe(false)
+  })
+})
+
+describe('findSiteCareWorkspacesForSender', () => {
+  it('returns every Site Care workspace the sender belongs to, by id', async () => {
+    member('u-owner', 'org-b-care')
+    buySiteCare('org-b-care')
+    member('u-owner', 'org-plain-2')
+    const matches = await findSiteCareWorkspacesForSender(firestore, findAccount, 'owner@example.com')
+    expect(matches.map((match) => match.orgId)).toEqual(['org-b-care', 'org-care'])
+    expect(matches.every((match) => match.uid === 'u-owner' && match.email === 'owner@example.com')).toBe(true)
+  })
+
+  it('reads an address that is itself somebody’s sign-in as theirs, never as a look-alike’s', async () => {
+    ACCOUNTS['owner+site@example.com'] = 'u-tagged'
+    try {
+      member('u-tagged', 'org-plain')
+      expect(await findSiteCareWorkspacesForSender(firestore, findAccount, 'owner+site@example.com')).toEqual([])
+    } finally {
+      delete ACCOUNTS['owner+site@example.com']
+    }
+  })
 })
 
 describe('fileSiteCareInboundEmail', () => {
@@ -275,10 +370,16 @@ describe('fileSiteCareInboundEmail', () => {
     expect(sent).toEqual([])
   })
 
-  it('leaves a sender with no account to the support inbox without reading Firestore or answering', async () => {
+  it('leaves a sender with no account to the support inbox, reading only the Site Care rosters, answering nothing', async () => {
     const outcome = await file({ ...MESSAGE, from: 'Stranger <stranger@example.net>' })
     expect(outcome).toEqual({ outcome: 'ignored', reason: 'not-a-member' })
-    expect(reads).toEqual([])
+    expect(reads).toEqual([
+      'orgs',
+      'orgs/org-care/members',
+      'orgs/org-care/memberEmailAliases',
+      'orgs/org-other-care/members',
+      'orgs/org-other-care/memberEmailAliases',
+    ])
     expect(mockOpen).not.toHaveBeenCalled()
     expect(sent).toEqual([])
   })
@@ -335,6 +436,82 @@ describe('fileSiteCareInboundEmail', () => {
     expect(mockOpen).not.toHaveBeenCalled()
     expect(mockAppend).not.toHaveBeenCalled()
     expect(sent).toEqual([])
+  })
+
+  it('files a member’s mail from a tagged or differently cased address on their workspace', async () => {
+    expect(await file({ ...MESSAGE, from: 'Avery <OWNER+site@Example.com>' })).toEqual({
+      outcome: 'opened',
+      requestId: 'ticket-new',
+    })
+    expect(mockOpen.mock.calls[0][1]).toMatchObject({
+      orgId: 'org-care',
+      requester: { uid: 'u-owner', email: 'owner+site@example.com' },
+    })
+  })
+
+  it('files a Gmail owner’s mail however they dot it, and from googlemail.com', async () => {
+    member('u-gmail', 'org-care', 'first.last@gmail.com')
+    expect(await file({ ...MESSAGE, from: 'FirstLast+news@googlemail.com' })).toEqual({
+      outcome: 'opened',
+      requestId: 'ticket-new',
+    })
+    expect(mockOpen.mock.calls[0][1]).toMatchObject({ orgId: 'org-care', requester: { uid: 'u-gmail' } })
+  })
+
+  it('files mail from an address a member confirmed in the workspace, and not from one only typed', async () => {
+    mockDocs.set('orgs/org-care/memberEmailAliases/u-owner', {
+      uid: 'u-owner',
+      aliases: [
+        { address: 'hello@avery-bakery.example', addedAtMs: 1, verifiedAtMs: 2 },
+        { address: 'typed@avery-bakery.example', addedAtMs: 1 },
+      ],
+    })
+    expect(await file({ ...MESSAGE, from: 'hello@avery-bakery.example' })).toEqual({
+      outcome: 'opened',
+      requestId: 'ticket-new',
+    })
+    expect(mockOpen.mock.calls[0][1]).toMatchObject({ orgId: 'org-care', requester: { uid: 'u-owner' } })
+    expect(await file({ ...MESSAGE, from: 'typed@avery-bakery.example' })).toEqual({
+      outcome: 'ignored',
+      reason: 'not-a-member',
+    })
+  })
+
+  it('files nothing when two members of a workspace are the same mailbox, and nothing across domains', async () => {
+    member('u-dots-1', 'org-care', 'first.last@gmail.com')
+    member('u-dots-2', 'org-care', 'firstlast@googlemail.com')
+    expect(await file({ ...MESSAGE, from: 'f.irstlast@gmail.com' })).toEqual({ outcome: 'ignored', reason: 'not-a-member' })
+    expect(await file({ ...MESSAGE, from: 'owner@example.org' })).toEqual({ outcome: 'ignored', reason: 'not-a-member' })
+    expect(mockOpen).not.toHaveBeenCalled()
+  })
+
+  it('joins a reply from a member’s tagged address to the request', async () => {
+    const reply = {
+      ...MESSAGE,
+      from: 'owner+site@example.com',
+      to: ['support+AbCdEf0123456789XyZw@in.aglyn.com'],
+      text: 'One more thing.',
+    }
+    expect(await file(reply)).toEqual({ outcome: 'replied', requestId: 'AbCdEf0123456789XyZw' })
+    expect(mockAppend.mock.calls[0][1]).toMatchObject({ from: { uid: 'u-owner', email: 'owner+site@example.com' } })
+  })
+
+  it('files a member of several Site Care workspaces on the first by id, with every candidate recorded', async () => {
+    member('u-owner', 'org-a-care')
+    buySiteCare('org-a-care')
+    expect(await file(MESSAGE)).toEqual({ outcome: 'opened', requestId: 'ticket-new' })
+    expect(mockOpen.mock.calls[0][1]).toMatchObject({
+      orgId: 'org-a-care',
+      candidates: [
+        { orgId: 'org-a-care', name: 'org-a-care', uid: 'u-owner' },
+        { orgId: 'org-care', name: 'org-care', uid: 'u-owner' },
+      ],
+    })
+  })
+
+  it('records the one workspace of a sender in only one, which keeps nothing for staff', async () => {
+    await file(MESSAGE)
+    expect(mockOpen.mock.calls[0][1].candidates).toEqual([{ orgId: 'org-care', name: 'org-care', uid: 'u-owner' }])
   })
 
   it('files nothing for a member’s message with no words and no subject', async () => {

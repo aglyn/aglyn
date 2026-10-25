@@ -19,6 +19,7 @@
 
 import { Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
+import { PosCheckInDialog } from './pos-check-in-dialog.component'
 import { PosPinPad } from './pos-pin-pad.component'
 import { PosReturnDialog } from './pos-return-dialog.component'
 import { PosShiftPanel } from './pos-shift-panel.component'
@@ -35,13 +36,15 @@ export interface PosOperationsBarProps {
 
 /**
  * The register's operations strip (AGL-3609): who is ringing (and a PIN
- * switch to someone else), the shift and drawer, returns, and the lock. Sits
+ * switch to someone else), the shift and drawer, check-in at the window
+ * (AGL-4043), returns, and the lock. Sits
  * above the basket; every control is a tablet-sized button.
  */
 export function PosOperationsBar(props: PosOperationsBarProps) {
   const { hostId, registerId, cashier } = props
   const [switching, setSwitching] = useState(false)
   const [returning, setReturning] = useState(false)
+  const [checkingIn, setCheckingIn] = useState(false)
   return (
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
@@ -58,6 +61,9 @@ export function PosOperationsBar(props: PosOperationsBarProps) {
           {'Lock'}
         </Button>
         <Box sx={{ flex: 1 }} />
+        <Button size="small" variant="outlined" onClick={() => setCheckingIn(true)}>
+          {'Check in'}
+        </Button>
         <Button size="small" variant="outlined" onClick={() => setReturning(true)} disabled={!registerId}>
           {'Return'}
         </Button>
@@ -91,6 +97,13 @@ export function PosOperationsBar(props: PosOperationsBarProps) {
         dismissible={false}
         onClose={cashier.unlock}
         onVerified={cashier.switchTo}
+      />
+      <PosCheckInDialog
+        open={checkingIn}
+        hostId={hostId}
+        {...(registerId ? { registerId } : {})}
+        {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
+        onClose={() => setCheckingIn(false)}
       />
       <PosReturnDialog
         open={returning}

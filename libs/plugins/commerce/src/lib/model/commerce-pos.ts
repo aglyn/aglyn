@@ -138,6 +138,53 @@ export function isCardPaymentMethod(method: OrderPaymentMethod): boolean {
   return POS_CARD_METHODS.has(method)
 }
 
+/*==========================================
+ * WHICH TENDERS CARRY THE PLATFORM FEE (AGL-4036).
+ *
+ * The take used to follow the sale whatever paid it (AGL-2111): a cash sale
+ * owed the same percentage as a card sale and had it added to the monthly
+ * invoice. In-person rivals charge nothing on cash, and an event register that
+ * bills its operator for the cash in their own apron is not one they will
+ * choose, so three tenders now carry none:
+ *
+ *  - cash: no payment service touches it, and the merchant keeps all of it;
+ *  - gift card: the fee was taken when the card was SOLD, so charging it again
+ *    when the card is spent would charge the same money twice;
+ *  - store credit (`credit`): rewards or referral value the merchant gave
+ *    away, so no money changes hands and an invoiced fee on it would only
+ *    penalize running a rewards program.
+ *
+ * Everything else still carries it. Card payments net it from their payout,
+ * as always. A room charge (`folio`) is new revenue booked to a stay, so its
+ * share goes on the invoice.
+ *
+ * One predicate, so the register, the completion, the offline sync and the
+ * docs cannot disagree about which tender is which.
+ *=========================================*/
+
+/** The tenders that carry no platform fee (AGL-4036). */
+export const POS_FEE_FREE_METHODS: ReadonlySet<OrderPaymentMethod> = new Set([
+  'cash',
+  'gift_card',
+  'credit',
+])
+
+/** Whether a payment by `method` carries its share of the platform's take. */
+export function paymentCarriesPlatformFee(method: OrderPaymentMethod): boolean {
+  return !POS_FEE_FREE_METHODS.has(method)
+}
+
+/**
+ * The take a sale owes when ONE tender pays all of it: the whole take, or
+ * nothing for a fee-free tender.
+ */
+export function posTenderTakeCents(
+  method: OrderPaymentMethod,
+  takeFeeCents: number,
+): number {
+  return paymentCarriesPlatformFee(method) ? wholeCents(takeFeeCents) : 0
+}
+
 /** Whole non-negative cents from an untrusted value. */
 function wholeCents(value: unknown): number {
   const number = Math.round(Number(value))
@@ -257,12 +304,56 @@ export function posTakeShareCents(input: {
 }
 
 /**
+ * {@link posTakeShareCents} for a payment by `method`: its share of the take,
+ * or 0 for a tender that carries no platform fee (AGL-4036).
+ */
+export function posPaymentTakeShareCents(input: {
+  method: OrderPaymentMethod
+  takeFeeCents: number
+  totalCents: number
+  amountCents: number
+}): number {
+  if (!paymentCarriesPlatformFee(input.method)) return 0
+  return posTakeShareCents(input)
+}
+
+/**
+ * The part of the sale's take its tenders owe (AGL-4036): the whole take when
+ * every settled payment carries the fee, and otherwise the share for the part
+ * of the sale the fee-carrying payments paid. Cash and gift-card parts owe
+ * nothing, so a sale paid all in cash owes 0.
+ *
+ * Worked from the payments' METHODS, not from the `takeFeeCents` each one
+ * recorded, so a sale that was opened before this rule and finished after it
+ * is charged by the rule it finished under.
+ */
+export function posOwedTakeCents(input: {
+  takeFeeCents: number
+  totalCents: number
+  payments: readonly OrderPayment[]
+}): number {
+  const take = wholeCents(input.takeFeeCents)
+  const settled = input.payments.filter((payment) => payment.status === 'succeeded')
+  if (settled.every((payment) => paymentCarriesPlatformFee(payment.method))) return take
+  const carryingCents = settled
+    .filter((payment) => paymentCarriesPlatformFee(payment.method))
+    .reduce((sum, payment) => sum + wholeCents(payment.amountCents), 0)
+  return posTakeShareCents({
+    takeFeeCents: take,
+    totalCents: input.totalCents,
+    amountCents: carryingCents,
+  })
+}
+
+/**
  * What of the sale's take was NOT netted from a card payout, and therefore
- * goes on the merchant's invoice: the whole take less every succeeded card
- * payment's share. Never negative.
+ * goes on the merchant's invoice: the take the tenders owe
+ * ({@link posOwedTakeCents}) less every succeeded card payment's share. Never
+ * negative, and 0 for a sale paid only by card, cash, gift card and store credit.
  */
 export function posInvoiceTakeCents(input: {
   takeFeeCents: number
+  totalCents: number
   payments: readonly OrderPayment[]
 }): number {
   const netted = input.payments
@@ -271,14 +362,21 @@ export function posInvoiceTakeCents(input: {
         payment.status === 'succeeded' && isCardPaymentMethod(payment.method),
     )
     .reduce((sum, payment) => sum + wholeCents(payment.takeFeeCents), 0)
-  return Math.max(0, wholeCents(input.takeFeeCents) - netted)
+  return Math.max(0, posOwedTakeCents(input) - netted)
 }
 
-/** How the sale's fee reaches the platform, from what actually paid it. */
+/**
+ * How the sale's fee reaches the platform, from the payments that carried it.
+ * A cash, gift-card or store-credit part carries none (AGL-4036), so a card + cash sale is
+ * `payout`, not `split`.
+ */
 export function posFeeCollection(
   payments: readonly OrderPayment[],
 ): 'payout' | 'invoice' | 'split' {
-  const settled = payments.filter((payment) => payment.status === 'succeeded')
+  const settled = payments.filter(
+    (payment) =>
+      payment.status === 'succeeded' && paymentCarriesPlatformFee(payment.method),
+  )
   const card = settled.some((payment) => isCardPaymentMethod(payment.method))
   const other = settled.some((payment) => !isCardPaymentMethod(payment.method))
   if (card && other) return 'split'

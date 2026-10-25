@@ -230,6 +230,8 @@ export interface AiSiteInspirationStart {
   events: boolean
   /** The site has customer words of its own (`aiPlanHasCustomerWords`). */
   customerWords: boolean
+  /** The brief gives figures of its own ({@link aiSiteInspirationBriefHasFigures}). */
+  figures: boolean
 }
 
 /** Whether this start can build the part a feature maps to. */
@@ -259,9 +261,28 @@ const AI_SITE_INSPIRATION_SECTION_PARTS: Partial<Record<AiSiteInspirationSection
   testimonials: 'testimonials',
 }
 
+/**
+ * A count the brief states, the kind a numbers section shows: "200+ weddings",
+ * "12 years", "98%". A year standing alone (founded 2016) is not one, nor the
+ * size of the site being asked for ("6 pages").
+ */
+const BRIEF_FIGURE = /\b\d[\d,.]*\s?(?:\+|%)|\b(?!(?:19|20)\d{2}\b)\d[\d,.]*\s?k?\s+(?!(?:pages|sites|sections|steps)\b)[a-z]+s\b/i
+
+/**
+ * Whether the brief gives figures of its own (AGL-3975). A liked site's
+ * numbers section is only followed where it does: told one with none, the
+ * live eval's SaaS-inspired plan (2026-10-19, case 3) planned "Numbers from
+ * the taproom floor" for a business that had given no figure, which its page
+ * could only fill by inventing them or leaving them in brackets.
+ */
+export function aiSiteInspirationBriefHasFigures(brief: string | null | undefined): boolean {
+  return BRIEF_FIGURE.test(brief ?? '')
+}
+
 /** A site's sections in order, less the kinds this start cannot build: the order a plan can follow. */
 export function aiSiteInspirationOrder(site: Pick<AiSiteInspirationSite, 'sections'>, start: AiSiteInspirationStart): AiSiteInspirationSection[] {
   return site.sections.filter((kind) => {
+    if (kind === 'stats') return start.figures
     const part = AI_SITE_INSPIRATION_SECTION_PARTS[kind]
     return !part || aiSiteInspirationBuildable(part, start)
   })

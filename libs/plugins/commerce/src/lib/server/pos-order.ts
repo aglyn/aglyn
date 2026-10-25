@@ -592,59 +592,56 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (engineTax.quote) taxCents = engineTax.quote.taxCents
     const taxEngineFields = engineTax.stamp ? { taxEngine: engineTax.stamp } : {}
     /*==========================================
-     * THE FEE ATTACHES TO THE SALE, NOT TO THE TENDER (AGL-2111).
+     * WHICH TENDERS OWE THE TAKE (AGL-2111, AGL-4036).
      *
-     * It used to ride the CARD totals only, and the argument was mechanical:
-     * cash and folio never touch Stripe, so there is no charge to take an
-     * `application_fee_amount` out of, so record nothing. That left a merchant
-     * on a non-zero rate one tap away from paying Aglyn nothing forever —
-     * ring every in-person sale as cash. the decision, 2026-08-19: close
-     * it. The tender is at most an input to the RATE; it is never a switch
-     * that zeroes the fee.
+     * AGL-2111 made the take follow the SALE: cash and room charges never
+     * touch Stripe, so they had been recording no fee at all, which left a
+     * merchant one tap away from paying nothing by ringing every sale as
+     * cash. It closed that by accruing their fee to the org's month
+     * (`offlineFees` below), swept onto the org's own Aglyn invoice by
+     * `report-usage`.
      *
-     * ## Cash is genuinely different from card, and the difference argues for
-     * ## the SAME rate, not a lower one
+     * AGL-4036 narrows it, by tender, through one predicate
+     * (`CommerceModel.paymentCarriesPlatformFee`):
      *
-     * On a card sale the fee becomes `application_fee_amount` on a DESTINATION
-     * charge, and Stripe's own processing (2.9% + 30¢) is debited from the
-     * PLATFORM's balance beside it (AGL-2071). At the Starter physical rate of
-     * 2% the fee does not even cover that processing — Aglyn nets negative on
-     * the card leg. So the take rate demonstrably is NOT a processing
-     * pass-through with margin on top; there is no processing component in it
-     * to strip out for a tender that skips Stripe.
+     *  - CASH carries no fee. In-person rivals charge nothing on cash, and an
+     *    event till that invoices its operator for the cash they took is not
+     *    a till they will pick. A merchant steering sales to cash is no
+     *    longer an avoidance route, because cash is meant to be free.
+     *  - GIFT CARD carries no fee: the take was charged when the card was
+     *    sold, and charging it again when it is spent charges twice. A gift
+     *    card is only reachable on an open sale (`pos-payment.ts`).
+     *  - A ROOM CHARGE (`folio`) keeps the take, accrued to the invoice: it is
+     *    new revenue booked to a stay, with no payout to net it from.
+     *  - A CARD keeps the take, netted from its payout as always.
      *
-     * What the fee buys is the same on both tenders: the catalogue that priced
-     * the basket, the stock that decremented, the tax that computed, the order
-     * record, the receipt, the reporting, the register itself. Aglyn's cost
-     * basis on a cash sale is LOWER (no Stripe fee at all), so the same
-     * percentage is more profitable there, not less justified.
-     *
-     * And any gap between tenders is itself the defect: a cheaper cash rate
-     * would still pay a merchant to steer customers to cash. Parity is the
-     * only rate at which the tender stops being a pricing lever.
-     *
-     * ## What changes is COLLECTION, not the rate
-     *
-     * There is still no charge to net it from, so the fee is ACCRUED against
-     * the org's month (`offlineFees` below) and swept onto the
-     * org's own monthly Aglyn invoice by `report-usage` — option 2 on
-     * AGL-2111, the `aglyn_metered_usage` meter that already carries every
-     * other overage. `feeCollection` on the order says which of the two routes
-     * this sale's fee took, so a merchant reconciling a payout can tell "short
-     * by the fee" from "billed for it next month".
+     * `feeCollection` on the order says which of the two routes a sale's fee
+     * took, so a merchant reconciling a payout can tell "short by the fee"
+     * from "billed for it next month". A sale whose fee is 0 records none.
      *
      * `feeCents` does not enter `totalCents` (see `computeOrderTotals`), so
-     * the shopper pays exactly what they paid before — this moves no price at
-     * the till, on either tender.
+     * the shopper pays exactly the same on every tender.
      *=========================================*/
-    // STRIPE'S CARD COST, ON THE CARD TENDER ONLY (AGL-2152). `takeFeeCents`
-    // above is the platform's advertised take and every tender carries it
-    // (AGL-2111). This term is different in kind: it is not a rate, it is the
-    // 2.9% + 30¢ Stripe debits from the PLATFORM's balance when a destination
-    // charge settles — which the AGL-2111 note beside it already observes the
-    // take does not cover. Cash and folio never reach Stripe, so there is no
-    // such cost to pass through and adding one would invoice a merchant for a
-    // fee nobody paid.
+    // The take THIS tender owes when it pays the whole sale. An open sale
+    // keeps the whole take on `posTakeFeeCents` and settles what its tenders
+    // owe when the balance reaches zero (`posCompletionPatch`).
+    const singleTenderMethod: CommerceModel.OrderPaymentMethod | null =
+      payment === 'cash'
+        ? 'cash'
+        : payment === 'folio'
+          ? 'folio'
+          : payment === 'link'
+            ? 'card_link'
+            : null
+    const tenderTakeFeeCents = singleTenderMethod
+      ? CommerceModel.posTenderTakeCents(singleTenderMethod, takeFeeCents)
+      : takeFeeCents
+    // STRIPE'S CARD COST, ON THE CARD TENDER ONLY (AGL-2152). The take above
+    // is the platform's advertised cut. This term is different in kind: it is
+    // not a rate, it is the 2.9% + 30¢ Stripe debits from the PLATFORM's
+    // balance when a destination charge settles. Cash and folio never reach
+    // Stripe, so there is no such cost to pass through and adding one would
+    // invoice a merchant for a fee nobody paid.
     //
     // The base is exactly what the card runs for: the goods after the
     // cashier's discount, plus the origin tax. A till knows both — there is no
@@ -652,9 +649,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // online doors this one recovers the cost exactly.
     const feeCents =
       payment === 'link'
-        ? takeFeeCents +
+        ? tenderTakeFeeCents +
           Aglyn.saleProcessingCostCents(chargedItemsCents + taxCents)
-        : takeFeeCents
+        : tenderTakeFeeCents
     const totals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,
       taxCents,
@@ -923,9 +920,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           ...(locationId ? { locationId } : {}),
           lineItems,
           // `feeCents` is what the merchant's payout is short by, and it
-          // belongs on the document that records the charge. Every tender
-          // carries the fee since AGL-2111; this is the one that is netted
-          // from the payout rather than invoiced, and `feeCollection` says so.
+          // belongs on the document that records the charge. The card is the
+          // tender whose fee is netted from the payout rather than invoiced,
+          // and `feeCollection` says so.
           totals: cardTotals,
           // WHICH TAX THIS SALE CARRIED (AGL-2451), from the decision resolved
           // above. The register never reaches `stripe-automatic` — AGL-2145
@@ -1150,9 +1147,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           taxCents,
         ),
         ...taxEngineFields,
-        // AGL-2111: the fee is on `totals` for this tender too, and this says
-        // it will arrive on the org's Aglyn invoice rather than as a short
-        // payout — there is no payout, the merchant kept the cash.
+        // A room charge's fee is on `totals` and arrives on the org's Aglyn
+        // invoice, there being no payout to net it from (AGL-2111). A cash
+        // sale's is 0 (AGL-4036), so it records no collection route.
         ...(feeCents > 0 ? { feeCollection } : {}),
         // THE TENDER, RECORDED (AGL-3607): one settled payment, so this sale
         // reads the same as a split one rather than by inference.
@@ -1166,7 +1163,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
             status: 'succeeded',
             atMs: paidEvent.atMs,
             settledAtMs: paidEvent.atMs,
-            takeFeeCents,
+            takeFeeCents: tenderTakeFeeCents,
             feeCents: 0,
             cashierId: saleStamp.cashierId,
             ...(payment === 'cash'

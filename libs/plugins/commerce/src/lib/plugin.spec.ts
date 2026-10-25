@@ -168,4 +168,13 @@ describe('the zones its product surfaces host (AGL-2916, AGL-3080)', () => {
     // says what they are.
     expect(Object.values(Aglyn.CONSOLE_WIDGET_SLOTS)).not.toContain('productEditor')
   })
+
+  it('declares the register check-in zone, owned here and laid out bare (AGL-4043)', () => {
+    registerCommerceConsole()
+    const zone = pluginZone('posCheckIn')
+    // A chip or a button among the row's own: a wrapper would stack them.
+    expect(`${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(`${BUNDLE_ID} bare console`)
+    // Generic: the sentence a widget author reads names no plugin's domain.
+    expect(zone?.description).not.toMatch(/waiver/i)
+  })
 })

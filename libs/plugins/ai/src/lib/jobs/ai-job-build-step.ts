@@ -953,6 +953,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   settings: 'settings',
   media: 'media',
   tracking: 'tracking',
+  privacy: 'privacy',
 }
 
 /**
