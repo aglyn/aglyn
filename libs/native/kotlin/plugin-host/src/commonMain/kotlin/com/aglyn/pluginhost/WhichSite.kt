@@ -49,7 +49,11 @@ fun rememberWorkspaceSites(context: NativePluginContext): Live<List<WorkspaceSit
     is Live.Ready -> Live.Ready(
       value.value.map { doc ->
         val subdomain = doc.string("subdomain")?.ifBlank { null }
-        WorkspaceSiteChoice(doc.id, doc.string("displayName")?.ifBlank { null } ?: subdomain ?: doc.id, subdomain)
+        WorkspaceSiteChoice(
+          doc.id,
+          doc.string("displayName")?.ifBlank { null } ?: subdomain ?: doc.id,
+          com.aglyn.core.siteListAddress(doc.string("cname"), subdomain),
+        )
       },
     )
     is Live.Failed -> value

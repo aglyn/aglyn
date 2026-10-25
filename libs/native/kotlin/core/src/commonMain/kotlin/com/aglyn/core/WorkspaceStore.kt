@@ -30,7 +30,12 @@ data class WorkspaceSite(
    * or an address, shown through [mediaPreviewUrl] as the console's `HostIcon` resolves it.
    */
   val favicon: String? = null,
-)
+  /** The site's custom domain as the membership row mirrors it (`cname`), or null; see [address]. */
+  val cname: String? = null,
+) {
+  /** The address its rows show: the custom domain, else the platform address ([siteListAddress]). */
+  val address: String? get() = siteListAddress(cname, subdomain)
+}
 
 /**
  * A workspace's logos as its own document keeps them (`logoUrl`, `logoDarkUrl`): the membership index carries none, so
@@ -313,6 +318,7 @@ class WorkspaceStore(
         subdomain = subdomain,
         role = (data["role"] ?: "").toString(),
         favicon = (data["favicon"] as? String)?.ifBlank { null },
+        cname = (data["cname"] as? String)?.trim()?.ifBlank { null },
       )
     }
 

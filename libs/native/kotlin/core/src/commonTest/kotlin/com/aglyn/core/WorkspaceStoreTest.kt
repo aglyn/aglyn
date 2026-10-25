@@ -48,6 +48,9 @@ class WorkspaceStoreTest {
       WorkspaceStore.siteFromMembership("h", mapOf("orgId" to "o", "subdomain" to "shop", "favicon" to "media:h/fav")).favicon,
     )
     assertEquals(null, WorkspaceStore.siteFromMembership("h", mapOf("favicon" to " ")).favicon)
+    // A site's rows show its custom domain once the membership row mirrors it, else its platform address.
+    assertEquals("example.com", WorkspaceStore.siteFromMembership("h", mapOf("subdomain" to "shop", "cname" to "example.com")).address)
+    assertEquals("shop.aglyn.app", WorkspaceStore.siteFromMembership("h", mapOf("subdomain" to "shop", "cname" to "")).address)
     // A workspace's logos live on its own document; the membership index carries none.
     assertEquals(
       WorkspaceOrgLogo("/api/media/cdn/org:o/logo", null, plan = "free"),
