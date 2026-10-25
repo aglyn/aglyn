@@ -79,6 +79,12 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
     // Tags a build saved (AGL-3751) open on the card that edits them.
     return buildRoute(Route.HOST_SETUP_TRACKING, { orgSlug, host })
   }
+  if (output.resource === 'privacy') {
+    // Who can see the site (AGL-4033), each change on the card that makes it.
+    if (output.id === 'maintenance') return buildRoute(Route.HOST_ADMIN_ERROR_PAGES, { orgSlug, host })
+    if (output.id === 'search') return buildRoute(Route.HOST_SETUP_SEO, { orgSlug, host })
+    return buildRoute(Route.HOST_SCREENS, { orgSlug, host })
+  }
   if (output.resource === 'draft' && output.draftResource) {
     // A draft another plugin wrote — a dataset a site start or a build made
     // (AGL-3616) — opens where its owner lists it, or nowhere it is not loaded.

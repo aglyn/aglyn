@@ -272,6 +272,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   media: 'content',
   // A site's tracking tags a build saved (AGL-3751), filed with its settings.
   tracking: 'content',
+  // Who can see the site, as a build changed it (AGL-4033), filed with its content.
+  privacy: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {
