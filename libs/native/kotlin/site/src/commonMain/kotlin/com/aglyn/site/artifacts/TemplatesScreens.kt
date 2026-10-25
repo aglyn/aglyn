@@ -16,7 +16,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +49,7 @@ import com.aglyn.ui.SearchField
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 
 /** The words for one template kind. */

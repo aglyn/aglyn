@@ -45,7 +45,8 @@ import { PLUGIN_SITEMAP_SECTIONS_DECLARED } from './first-party-plugins.generate
  *
  * Only what a sitemap needs and a query can express: one equality filter, the
  * setting that must be set for the pages to render at all, the address with
- * `{slug}` in it, a field that drops a row (a soft delete), and the date
+ * `{slug}` in it, a field that drops a row (a soft delete), a switch whose
+ * `false` drops one (a page turned off), and the date
  * fields to try in order. A row without a slug addresses nothing and is left
  * out. Anything richer belongs to the plugin's own page, not to its sitemap.
  *
@@ -70,6 +71,12 @@ export interface PluginSitemapSectionDeclaration {
   slugField?: string
   /** A field whose truthy value leaves the row out, for a soft delete the filter cannot see. */
   skipWhen?: string
+  /**
+   * A field whose `false` leaves the row out: a switch that is on unless it
+   * was turned off, so an absent value keeps the row — a product sold in
+   * person only (AGL-4060). A query cannot ask for "absent or true".
+   */
+  skipWhenFalse?: string
   /** The fields a row's `lastmod` is read from, first present wins. */
   lastmod?: readonly string[]
 }

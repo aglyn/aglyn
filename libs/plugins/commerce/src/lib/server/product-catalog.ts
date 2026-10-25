@@ -37,7 +37,9 @@ import * as CommerceModel from '../model'
  * currency is and what shipping costs are this plugin's decisions, made once:
  *
  *  - Listed is `status: 'active'` and not soft-deleted. Drafts, archived and
- *    deleted products are never offered.
+ *    deleted products are never offered. A product sold in person only
+ *    (`sellOnline: false`, AGL-4060) is offered only to a reader that asks
+ *    for `inPersonOnly`, a stock sync, and is marked so.
  *  - A product with one configuration is one offer under the product's own
  *    id — the id the site's analytics events already send — and a product
  *    with several is one offer per variant, `{productId}_{variantId}`.
@@ -188,6 +190,8 @@ export function offerShipping(
 }
 
 interface PageContext {
+  /** Offers products sold in person only too (AGL-4060), marked as such. */
+  inPersonOnly?: boolean
   origin: string | null
   categories: ReadonlyMap<string, CommerceModel.ProductCategory>
   shipping: CommerceModel.ShippingSettings | undefined
@@ -199,6 +203,9 @@ export function productOffers(productId: string, raw: DocumentData, context: Pag
   if (!raw || raw['deletedAt']) return []
   const product = CommerceModel.liftLegacyProduct(raw as CommerceModel.HostProduct)
   if (product.status !== 'active' || !str(product.name).trim() || !str(product.slug)) return []
+  // Sold in person only (AGL-4060): in no shopping feed, ad catalog, marketplace
+  // or delivery app, unless the reader asked for the store's whole shelf.
+  if (!CommerceModel.productSellsOnline(product) && !context.inPersonOnly) return []
   // A variant with no price yet is not an offer (AGL-3676): a product listed
   // as "Price coming soon" is in no shopping feed or marketplace at $0.
   const variants = (product.variants ?? []).filter(
@@ -277,6 +284,7 @@ export function productOffers(productId: string, raw: DocumentData, context: Pag
             })
           : [],
       ...(updatedAtMs ? { updatedAtMs } : {}),
+      ...(CommerceModel.productSellsOnline(product) ? {} : { inPersonOnly: true as const }),
     }
     return offer
   })
@@ -328,13 +336,14 @@ export const productCatalog: PluginProductCatalog = {
     }
   },
 
-  async page({ hostId, cursor, limit }): Promise<CatalogPage> {
+  async page({ hostId, cursor, limit, inPersonOnly }): Promise<CatalogPage> {
     if (!isDocumentId(hostId)) return { offers: [], nextCursor: null }
     const want = Math.max(1, Math.min(Math.trunc(limit) || 1, 1000))
     const [{ host, store }, categories] = await Promise.all([readStore(hostId), readCategories(hostId)])
     if (!host.exists) return { offers: [], nextCursor: null }
     const shipping = store.get('shipping') as CommerceModel.ShippingSettings | undefined
     const context: PageContext = {
+      ...(inPersonOnly ? { inPersonOnly: true } : {}),
       origin: storeOrigin(host.data()),
       categories,
       shipping,

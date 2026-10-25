@@ -31,7 +31,8 @@
  * - `THEME_ACCENTS`: the Accent modes Blue, Violet, Pink and Workspace
  *   brand, exactly. `deriveAccent` returns them for their ring colors and
  *   derives any other color (a picked accent, a workspace's brand) by rule.
- * - `THEME_ACCENT_SWATCHES`: the six swatches the Theme settings sheet shows.
+ * - `THEME_ACCENT_SWATCHES`: the five swatches the Theme settings sheet shows.
+ * - `THEME_RETIRED_ACCENTS`: retired blues, and the brand blue each reads as.
  * - `THEME_DENSITIES`: Comfortable and Compact.
  *
  * Contrast is WCAG 2's relative luminance, as `accessible-shade.ts` (the
@@ -633,14 +634,90 @@ export const THEME_PALETTES: readonly ThemePalette[] = [
   },
 ]
 
+/**
+ * The Aglyn theme on a PHONE: the brand's bold surfaces (AGL-3990). Zach chose
+ * the bold look for the phone on 2026-10-19 and kept every other form factor
+ * on the console's neutral scheme ("I don't like this light blue everywhere",
+ * on the desktop): so only an Aglyn or Aglyn POS PHONE, in the Aglyn theme with
+ * the brand blue as its accent, draws these. A tablet, an iPad, a Mac, a
+ * Windows or Mac desktop and the POS register keep `THEME_PALETTES`' Aglyn;
+ * every other theme, a picked accent and a white-label brand look the same on
+ * a phone as anywhere else.
+ *
+ * The values are Figma's Theme mode 223:0, "Aglyn · phone (bold) 10/19", the
+ * explicit mode on every frame of the Native App file's Phone page (2:7). A
+ * sky-tinted ground under white panels in light; navy in dark. The strong
+ * border is the brand blue at 40% over the white surface, flattened. The
+ * statuses are the console's intents, tinted to sit on the sky ground; info's
+ * ink in light is the brand's ink, and in dark it is the accent's dark text
+ * shade (#4DC8FF), never the fill (Zach, 2026-10-19: blue as text on a dark
+ * ground is the console's `primary.dark`).
+ */
+const PHONE_AGLYN_LIGHT: ThemeColors = {
+  canvas: '#edf9ff',
+  surface: '#ffffff',
+  raised: '#ffffff',
+  sunken: '#e6f7ff',
+  rail: '#e0f6ff',
+  hover: '#f2fbff',
+  titlebar: '#f7fdff',
+  borderSubtle: '#dbf4ff',
+  borderStrong: '#66d0ff',
+  textPrimary: '#19202a',
+  textSecondary: '#404c5c',
+  textTertiary: '#5d6d85',
+  successBg: '#e2f2e3',
+  successFg: '#306f33',
+  warningBg: '#ffebd1',
+  warningFg: '#975400',
+  dangerBg: '#fbdddc',
+  dangerFg: '#ba1c18',
+  infoBg: '#ccefff',
+  infoFg: '#07171f',
+  newBg: '#fae0fe',
+  newFg: '#a604c2',
+  scrim: '#0f172152',
+  ...DANGER_LIGHT,
+}
+
+const PHONE_AGLYN_DARK: ThemeColors = {
+  canvas: '#07181f',
+  surface: '#0d2029',
+  raised: '#152b35',
+  sunken: '#1a323d',
+  rail: '#061319',
+  hover: '#213a45',
+  titlebar: '#0a1c24',
+  borderSubtle: '#263f4a',
+  borderStrong: '#395460',
+  textPrimary: '#f2f7fb',
+  textSecondary: '#c1d0d7',
+  textTertiary: '#8ba5b1',
+  successBg: '#1d4433',
+  successFg: '#72c275',
+  warningBg: '#4c432f',
+  warningFg: '#ffab40',
+  dangerBg: '#452228',
+  dangerFg: '#ee7b78',
+  infoBg: '#0a3d54',
+  infoFg: '#4dc8ff',
+  newBg: '#442860',
+  newFg: '#ea7cfc',
+  scrim: '#0000008c',
+  ...DANGER_DARK,
+}
+
+/** The Aglyn theme's grounds on a phone, light and dark (Figma Theme mode 223:0): see `PHONE_AGLYN_LIGHT`. */
+export const THEME_PHONE_AGLYN: ThemeColorsPair = { light: PHONE_AGLYN_LIGHT, dark: PHONE_AGLYN_DARK }
+
+/** The accent the phone's bold look belongs to: the brand blue, the Aglyn theme's own. */
+export const THEME_PHONE_BOLD_ACCENT = AGLYN_ACCENT
+
 // ── Accents ─────────────────────────────────────────────────────────────────
 
 /** The surfaces an accent's text is held to. */
 const LIGHT_PAGE = AGLYN_LIGHT.surface
 const DARK_PAGE = AGLYN_DARK.surface
-
-/** Text and icons on a fill that keeps a light brand color. */
-const DARK_ON_LIGHTNESS = 0.08
 
 function accentText(raw: string): Pick<ThemeAccent, 'textLight' | 'textDark'> {
   return {
@@ -649,19 +726,37 @@ function accentText(raw: string): Pick<ThemeAccent, 'textLight' | 'textDark'> {
   }
 }
 
-/** Figma's Accent modes, exactly as the Accent collection holds them. */
-const FIGMA_ACCENTS: ReadonlyArray<{ id: string; label: string; accent: Omit<ThemeAccent, 'textLight' | 'textDark'> }> = [
+/**
+ * Figma's Accent modes, exactly as the Accent collection holds them.
+ *
+ * Blue IS the console's primary (AGL-3990). Zach, 2026-10-19: "Just like the
+ * web app the solid buttons should have white text and the brand blue when it
+ * is on a light background should use the other shade of blue". So the fill
+ * is `primary.main` #00B0FF under `contrastText` white (the console's own
+ * pairing, knowingly under 4.5:1, AGL-1293), the text shades are
+ * `primary.dark` per scheme (#0077AD light, #4DC8FF dark: what MuiLink and the
+ * text and outlined MuiButton labels draw, AGL-1186), and the hover fill is
+ * `primary.hover`. #0073AE is retired. A mode that names its own text shades
+ * keeps them; the others walk their ring to 4.5:1.
+ */
+const FIGMA_ACCENTS: ReadonlyArray<{
+  id: string
+  label: string
+  accent: Omit<ThemeAccent, 'textLight' | 'textDark'> & Partial<Pick<ThemeAccent, 'textLight' | 'textDark'>>
+}> = [
   {
     id: 'blue',
     label: 'Blue',
     accent: {
-      fill: '#0073ae',
-      icon: '#0091d5',
+      fill: '#00b0ff',
+      icon: '#00b0ff',
       soft: '#00b0ff29',
       ring: '#00b0ff',
       on: '#ffffff',
-      hover: '#00669b',
-      pressed: '#005884',
+      hover: '#0077ad',
+      pressed: '#006999',
+      textLight: '#0077ad',
+      textDark: '#4dc8ff',
     },
   },
   {
@@ -685,7 +780,7 @@ const FIGMA_ACCENTS: ReadonlyArray<{ id: string; label: string; accent: Omit<The
       icon: '#c93ae3',
       soft: '#e040fb29',
       ring: '#e040fb',
-      on: '#1e0424',
+      on: '#ffffff',
       hover: '#cc2ee6',
       pressed: '#b523cf',
     },
@@ -705,17 +800,25 @@ const FIGMA_ACCENTS: ReadonlyArray<{ id: string; label: string; accent: Omit<The
   },
 ]
 
-/** The named accents, Figma's own values with their text shades. */
+/** The named accents, Figma's own values with their text shades (their own where they name them). */
 export const THEME_ACCENTS: readonly ThemeNamedAccent[] = FIGMA_ACCENTS.map(({ id, label, accent }) => ({
   id,
   label,
-  accent: { ...accent, ...accentText(accent.ring) },
+  accent: { ...accentText(accent.ring), ...accent },
 }))
 
-/** The accent picker's swatches, in Figma's order. */
+/**
+ * Blues the brand has retired (AGL-3990), and the color each now reads as. The
+ * picker's old "Brand blue" swatch was #0073AE; an accent an account saved
+ * from it (`appTheme.accent`) reads as the brand blue, #00B0FF.
+ */
+export const THEME_RETIRED_ACCENTS: Readonly<Record<string, string>> = {
+  '#0073ae': '#00b0ff',
+}
+
+/** The accent picker's swatches, in Figma's order. #00B0FF is the one brand blue (AGL-3990), so "Sky" went. */
 export const THEME_ACCENT_SWATCHES: readonly ThemeAccentSwatch[] = [
-  { id: 'aglynBlue', label: 'Brand blue', color: '#0073ae' },
-  { id: 'sky', label: 'Sky', color: '#00b0ff' },
+  { id: 'aglynBlue', label: 'Brand blue', color: '#00b0ff' },
   { id: 'violet', label: 'Violet', color: '#7a5cf0' },
   { id: 'pink', label: 'Pink', color: '#e040fb' },
   { id: 'green', label: 'Green', color: '#2e7d5b' },
@@ -725,21 +828,21 @@ export const THEME_ACCENT_SWATCHES: readonly ThemeAccentSwatch[] = [
 /**
  * Every control's shade of one accent color (AGL-3950).
  *
- * A color one of Figma's Accent modes is drawn from (its ring) answers with
- * that mode exactly: Figma wins where it defines a value. Any other color is
- * derived:
+ * A retired blue (`THEME_RETIRED_ACCENTS`) reads as the color that replaced
+ * it. A color one of Figma's Accent modes is drawn from (its ring) answers
+ * with that mode exactly: Figma wins where it defines a value. Blue, the brand
+ * blue, is one of them, and wears the console's own pairing. Any other color
+ * is derived:
  *
- * 1. White text on the color already reads (4.5:1): the fill is the color,
- *    `on` is white.
- * 2. The color carries white text only at the large-text bar (3:1 up to
- *    4.5:1) and near-black text reads on it at 4.5:1: the fill KEEPS the
- *    brand color and `on` flips to near-black, the color's own hue at 8%
- *    lightness. Darkening such a color far enough for white text moves it
- *    visibly off the brand; this is Figma's Pink (#E040FB, 3.34:1). The 3:1
- *    threshold is the one that sends Pink here and Blue (2.43:1) and the
- *    workspace green (2.99:1) to rule 3, as Figma draws them.
- * 3. Otherwise the fill is the color darkened in 2% HSL-lightness steps until
- *    white reaches 4.5:1, and `on` is white.
+ * 1. White text on the color reads at 3:1 or better: the fill is the color,
+ *    `on` is white. Content on a filled control is always white (Zach,
+ *    2026-10-19: "Just like the web app the solid buttons should have white
+ *    text"), and a brand color white reads on at the large-text bar keeps
+ *    its own fill rather than moving off the brand, the console's own
+ *    pairing; this is Figma's Pink (#E040FB, 3.34:1).
+ * 2. Otherwise the fill is the color darkened in 2% HSL-lightness steps until
+ *    white reaches 4.5:1, and `on` is white. The 3:1 threshold is the one
+ *    that sends the workspace green (2.99:1) here, as Figma draws it.
  *
  * hover and pressed are the fill 4% and 8% darker (HSL lightness), soft is
  * the color at 16% alpha, ring is the color, icon is the color darkened in 2%
@@ -749,29 +852,18 @@ export const THEME_ACCENT_SWATCHES: readonly ThemeAccentSwatch[] = [
  */
 export function deriveAccent(color: string): ThemeAccent | null {
   if (!isThemeColor(color)) return null
-  const raw = color.toLowerCase()
+  const raw = THEME_RETIRED_ACCENTS[color.toLowerCase()] ?? color.toLowerCase()
   const named = THEME_ACCENTS.find((entry) => entry.accent.ring === raw)
   if (named) return { ...named.accent }
   const white = '#ffffff'
-  const onWhite = themeContrast(raw, white)
-  let fill = raw
-  let on = white
-  if (onWhite < THEME_TEXT_CONTRAST) {
-    const rgb = channels(raw) as [number, number, number]
-    const [h, s] = toHsl(rgb)
-    const nearBlack = fromHsl(h, Math.min(s, 0.8), DARK_ON_LIGHTNESS)
-    if (onWhite >= THEME_NON_TEXT_CONTRAST && themeContrast(raw, nearBlack) >= THEME_TEXT_CONTRAST) {
-      on = nearBlack
-    } else {
-      fill = walkToContrast(raw, white, THEME_TEXT_CONTRAST, -1)
-    }
-  }
+  const fill =
+    themeContrast(raw, white) >= THEME_NON_TEXT_CONTRAST ? raw : walkToContrast(raw, white, THEME_TEXT_CONTRAST, -1)
   return {
     fill,
     icon: walkToContrast(raw, LIGHT_PAGE, THEME_NON_TEXT_CONTRAST, -1),
     soft: withAlpha(raw, 0.16),
     ring: raw,
-    on,
+    on: white,
     hover: shiftLightness(fill, -0.04),
     pressed: shiftLightness(fill, -0.08),
     ...accentText(raw),

@@ -509,7 +509,7 @@ private struct ListingBody: View {
     if plugin, state.installedVersion != nil {
       if state.updateAvailable, let offered {
         Button("Update to v\(offered)") { open(.install(state.scope)) }
-          .buttonStyle(.borderedProminent).disabled(!installable || runner.busy).accessibilityIdentifier("listing-update")
+          .buttonStyle(.aglynProminent).disabled(!installable || runner.busy).accessibilityIdentifier("listing-update")
       }
       Button(state.scope == .org ? "Remove from the workspace" : "Remove from this site", role: .destructive) { open(.uninstall(state.scope ?? .host)) }
         .disabled(!installable || runner.busy).accessibilityIdentifier("listing-uninstall")
@@ -519,7 +519,7 @@ private struct ListingBody: View {
       } label: {
         Label(targets.contains(.host) ? "Install on this site" : "Install", systemImage: "arrow.down.circle")
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(!installable || runner.busy || (plugin && offered == nil))
       .accessibilityIdentifier("listing-install")
       if targets.contains(.org), targets.contains(.host) {

@@ -373,9 +373,16 @@ vendor, and it does not move as a conversation grows.
   pages and their listings, the creations, the first posts and products, the
   welcome email) carries `cacheTtl: '1h'` on its routing row
   (`AiRoutingRow.cacheTtl` in `providers/routing.ts`), and
-  `runValidatedGeneration` puts it on the request, so every breakpoint goes
-  out as `ttl: "1h"`. A guided start writes each route's prefix once and the
+  `runValidatedGeneration` puts it on the request, so every shared breakpoint
+  (the doctrine and the door's rules, the same bytes for every org) goes out
+  as `ttl: "1h"`. A guided start writes each route's prefix once and the
   next one, minutes or an hour later, reads it instead of writing it again.
+  A job's own markers, a site's block and the plan's conversation, keep five
+  minutes on every row (AGL-4050, `aiCacheMarkerTtls` in
+  `providers/contract.ts`): only that job reads them, so the hour's write
+  never pays back. The hour markers always come first, since the API refuses
+  an hour-long entry after a five-minute one, and a shared marker that would
+  follow a job's is sent at five minutes instead.
   Every other row keeps the provider's five minutes. An hour-long write
   costs 2× the input price, where a five-minute one costs 1.25×: the
   Anthropic adapter reads the hour's share of the writes
@@ -384,7 +391,8 @@ vendor, and it does not move as a conversation grows.
   ledger add the difference (`aiCacheWriteHourSurchargeUsd`), so neither
   the credits drawn nor the provider cost reads low. The cache spec's
   *a site job's routes keep their prefix for the hour* section holds which
-  rows ask for it and that a deployed request sends it on every marker.
+  rows ask for it and that a deployed request sends it on every shared
+  marker; *each job's own markers keep five minutes* holds the split.
 
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save
@@ -511,8 +519,8 @@ request and 16 batched.
   In a development run the first request over a cached prefix is sent
   alone and the others follow it. Production's beat runs one step at a
   time, so it never needed this and never gets it.
-- **The hour-long cache.** In a live run every breakpoint asks for
-  `ttl: "1h"`, since an agent re-runs an eval every ten to forty minutes,
+- **The hour-long cache.** In a live run every shared breakpoint asks for
+  `ttl: "1h"` (a job's own markers keep five minutes, as in production), since an agent re-runs an eval every ten to forty minutes,
   past the default five. `AGLYN_AI_CACHE_TTL=5m` turns every request back to
   five minutes, a site job's routes included, for a one-off sweep that will
   not run again within the hour. Production asks for the hour only on a

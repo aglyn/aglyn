@@ -38,6 +38,8 @@ import PickupDeliveryQueueCard from './console/pickup-delivery-queue-card.compon
 import MemberPostsCard from './console/member-posts-card.component'
 import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
+import PosCheckInsCard from './console/pos-ops/pos-check-ins-card.component'
+import PosDayTotalsCard from './console/pos-ops/pos-day-totals-card.component'
 import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.component'
 import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
 import PaymentMethodsCard from './console/payment-methods-card.component'
@@ -46,6 +48,7 @@ import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
 import PosDevicesCard from './console/pos-devices-card.component'
+import PosHardwareCard from './console/pos-hardware-card.component'
 import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
 import ReturnsCard from './console/returns-card.component'
@@ -169,6 +172,18 @@ function sectionBody(
               size: { xs: 12 },
               children: <RecoveryQueueCard hostId={hostId} />,
             },
+            // One day's or one event's totals across every register, shift
+            // and cashier (AGL-4037), above the shifts it adds up.
+            {
+              size: { xs: 12 },
+              children: <PosDayTotalsCard hostId={hostId} canManagePos={canManagePos} />,
+            },
+            // Who is due at the window and who checked in (AGL-4043), beside
+            // the day's totals.
+            {
+              size: { xs: 12 },
+              children: <PosCheckInsCard hostId={hostId} canManagePos={canManagePos} />,
+            },
             {
               size: { xs: 12 },
               children: <PosShiftHistoryCard hostId={hostId} />,
@@ -261,6 +276,14 @@ function sectionBody(
         <RegisterHardwareCards key="hardware" hostId={hostId} />,
         <PosDevicesCard
           key="devices"
+          hostId={hostId}
+          canManagePos={canManagePos}
+        />,
+        // Card readers bought from the platform (AGL-4038), after the card
+        // that registers them. Draws nothing until the deployment opens the
+        // shop.
+        <PosHardwareCard
+          key="hardware-shop"
           hostId={hostId}
           canManagePos={canManagePos}
         />,

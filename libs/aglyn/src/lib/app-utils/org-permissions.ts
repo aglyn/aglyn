@@ -17,11 +17,20 @@
 
 import type { AglynOrgMember, OrgRole } from '../foundation'
 import {
-  listPluginOrgPermissions,
+  listPluginCatalogPermissions,
   subscribePluginEntitlements,
 } from '../plugin-manager/plugin-entitlements'
+import { subscribePluginPermissions } from '../plugin-manager/plugin-permissions'
 import { ORG_ROLE_PERMISSION_KEYS } from './org-roles'
-import { CORE_ORG_PERMISSION_ENTRIES, CORE_ORG_ROLE_GRANTS } from './org-role-grants'
+import {
+  CORE_ORG_PERMISSION_ENTRIES,
+  CORE_ORG_PERMISSION_GROUPS,
+  CORE_ORG_ROLE_GRANTS,
+  type OrgPermissionGroup,
+  type OrgPermissionScope,
+} from './org-role-grants'
+
+export type { OrgPermissionGroup, OrgPermissionScope }
 
 /**
  * Granular org permissions (AGL-243) layered on the 4 org roles: each
@@ -73,6 +82,14 @@ export interface OrgPermissionDefinition {
   description: string
   /** The plugin that declared the key; absent for a core key. */
   pluginId?: string
+  /** The `ORG_PERMISSION_GROUPS` id the role editor files it under (AGL-4047). */
+  group: string
+  /** Where it is decided: `org`, or `site` for a key a site collaborator holds per site. */
+  scope: OrgPermissionScope
+  /** Each org role's verdict when nothing refines it (`DEFAULT_ROLE_PERMISSIONS`). */
+  roleDefaults: Readonly<Record<OrgRole, boolean>>
+  /** Each host role's verdict, for a `site` key. */
+  hostRoleDefaults?: Readonly<Record<string, boolean>>
 }
 
 /**
@@ -99,7 +116,18 @@ export interface OrgPermissionDefinition {
  */
 const CORE_ORG_PERMISSIONS: readonly OrgPermissionDefinition[] =
   // One table, shared with the native apps through the contracts (AGL-3950).
-  CORE_ORG_PERMISSION_ENTRIES.map((entry) => ({ ...entry, key: entry.key as CoreOrgPermission }))
+  CORE_ORG_PERMISSION_ENTRIES.map((entry) => ({
+    ...entry,
+    key: entry.key as CoreOrgPermission,
+    group: entry.group ?? 'organization',
+    scope: 'org' as const,
+    roleDefaults: {
+      owner: CORE_ORG_ROLE_GRANTS.owner.includes(entry.key),
+      admin: CORE_ORG_ROLE_GRANTS.admin.includes(entry.key),
+      editor: CORE_ORG_ROLE_GRANTS.editor.includes(entry.key),
+      viewer: CORE_ORG_ROLE_GRANTS.viewer.includes(entry.key),
+    },
+  }))
 
 /** The core keys: a plugin may add keys beside them and never redefine one. */
 const CORE_ORG_PERMISSION_KEYS: ReadonlySet<string> = new Set(
@@ -111,14 +139,7 @@ const LEGACY_PERMISSION_KEYS: ReadonlySet<string> = new Set<string>(
   ORG_ROLE_PERMISSION_KEYS,
 )
 
-/** The core keys each org role holds when nothing refines it (`org-role-grants.ts`). */
-const CORE_ROLE_GRANTS: Record<OrgRole, ReadonlySet<string>> = {
-  owner: new Set(CORE_ORG_ROLE_GRANTS.owner),
-  admin: new Set(CORE_ORG_ROLE_GRANTS.admin),
-  editor: new Set(CORE_ORG_ROLE_GRANTS.editor),
-  viewer: new Set(CORE_ORG_ROLE_GRANTS.viewer),
-}
-
+/** The org roles, in the order `DEFAULT_ROLE_PERMISSIONS` lists them. */
 const ORG_ROLES: readonly OrgRole[] = ['owner', 'admin', 'editor', 'viewer']
 
 /**
@@ -137,6 +158,21 @@ const ORG_ROLES: readonly OrgRole[] = ['owner', 'admin', 'editor', 'viewer']
 export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = []
 
 export const ORG_PERMISSION_KEYS: readonly OrgPermission[] = []
+
+/**
+ * The groups the catalog's keys are filed under, in display order (AGL-4047):
+ * the core groups, then one per plugin group a declaration names. Live, like
+ * `ORG_PERMISSIONS`; a group with no key is left out.
+ */
+export const ORG_PERMISSION_GROUPS: readonly OrgPermissionGroup[] = []
+
+/**
+ * The catalog keys that came through `registerPluginPermissions` (AGL-4047):
+ * the keys the per-tier resolver (`resolveRolePermissions`) also answers,
+ * which a caller holding a catalog-resolved map lays over that resolver's
+ * answer so a custom role reaches them. Live.
+ */
+export const TIER_PERMISSION_KEYS: readonly OrgPermission[] = []
 
 const NO_PERMISSIONS = {} as Record<OrgPermission, boolean>
 
@@ -175,14 +211,16 @@ function replaceEntries(
 }
 
 /**
- * Rebuilds the live catalog: the core keys, then every key a plugin declared.
+ * Rebuilds the live catalog: the core keys, then every key a plugin declared
+ * through either declaration API (`listPluginCatalogPermissions`, AGL-4047).
  * A declaration naming a core or legacy key is refused — that key keeps its
  * own meaning and defaults — and logged once.
  */
 function syncCatalog(): void {
   const definitions: OrgPermissionDefinition[] = [...CORE_ORG_PERMISSIONS]
-  const declaredDefaults = new Map<string, Readonly<Record<OrgRole, boolean>>>()
-  for (const declared of listPluginOrgPermissions()) {
+  const tierKeys: string[] = []
+  const groups: OrgPermissionGroup[] = CORE_ORG_PERMISSION_GROUPS.map((group) => ({ ...group }))
+  for (const declared of listPluginCatalogPermissions()) {
     if (
       CORE_ORG_PERMISSION_KEYS.has(declared.key) ||
       LEGACY_PERMISSION_KEYS.has(declared.key)
@@ -202,23 +240,30 @@ function syncCatalog(): void {
       label: declared.label,
       description: declared.description,
       pluginId: declared.pluginId,
+      group: declared.group,
+      scope: declared.hostRoleDefaults ? 'site' : 'org',
+      roleDefaults: declared.roleDefaults,
+      ...(declared.hostRoleDefaults ? { hostRoleDefaults: declared.hostRoleDefaults } : {}),
     })
-    declaredDefaults.set(declared.key, declared.roleDefaults)
+    if (declared.source === 'tier') tierKeys.push(declared.key)
+    if (!groups.some((group) => group.id === declared.group)) {
+      groups.push({ id: declared.group, label: declared.groupLabel, pluginId: declared.pluginId })
+    }
   }
   const keys = definitions.map((definition) => definition.key)
   replaceItems(ORG_PERMISSIONS, definitions)
   replaceItems(ORG_PERMISSION_KEYS, keys)
+  replaceItems(
+    ORG_PERMISSION_GROUPS,
+    groups.filter((group) => definitions.some((definition) => definition.group === group.id)),
+  )
+  replaceItems(TIER_PERMISSION_KEYS, tierKeys)
   replaceEntries(NO_PERMISSIONS, Object.fromEntries(keys.map((key) => [key, false])))
   for (const role of ORG_ROLES) {
     replaceEntries(
       DEFAULT_ROLE_PERMISSIONS[role],
       Object.fromEntries(
-        keys.map((key) => [
-          key,
-          declaredDefaults.has(key)
-            ? declaredDefaults.get(key)?.[role] === true
-            : CORE_ROLE_GRANTS[role].has(key),
-        ]),
+        definitions.map((definition) => [definition.key, definition.roleDefaults[role] === true]),
       ),
     )
   }
@@ -226,6 +271,34 @@ function syncCatalog(): void {
   for (const key of [...keys, ...LEGACY_PERMISSION_KEYS]) {
     CATALOG_AND_LEGACY_KEYS.add(key)
   }
+}
+
+/**
+ * The `registerPluginPermissions` keys of a catalog-resolved map (AGL-4047).
+ *
+ * Those keys are answered twice: by the per-tier resolver
+ * (`resolveRolePermissions`, the role's tier default and the member's
+ * override) and, now that they are catalog keys, by `resolveOrgPermissions`
+ * with every layer — the custom role's included. A caller that builds its
+ * map from the first spreads this over it, so the custom role a member
+ * carries reaches `managePos` the way it reaches `hosts.create`.
+ */
+export function tierPermissionsOf(
+  granted: Readonly<Record<string, boolean>> | null | undefined,
+): Record<string, boolean> {
+  const picked: Record<string, boolean> = {}
+  if (!granted) return picked
+  for (const key of TIER_PERMISSION_KEYS) {
+    if (typeof granted[key] === 'boolean') picked[key] = granted[key]
+  }
+  return picked
+}
+
+/** One catalog key by name, or undefined. */
+export function orgPermissionDefinition(
+  permission: OrgPermission,
+): OrgPermissionDefinition | undefined {
+  return ORG_PERMISSIONS.find((definition) => definition.key === permission)
 }
 
 /** `orgs/{orgId}/roles/{roleId}` — a named custom permission set. */
@@ -453,3 +526,5 @@ export function toLegacyPermissions(
 
 syncCatalog()
 subscribePluginEntitlements(syncCatalog)
+// The second declaration API feeds the same catalog (AGL-4047).
+subscribePluginPermissions(syncCatalog)

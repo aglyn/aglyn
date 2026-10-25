@@ -658,6 +658,9 @@ async function buildDeclaredSectionUrls(
       // A soft delete the filter cannot see — a product keeps
       // `status: 'active'` when it is deleted — is left out in memory.
       if (declared.skipWhen && raw[declared.skipWhen]) continue
+      // A page switched off (AGL-4060): only an explicit `false`, since the
+      // switch is on for every row written before it existed.
+      if (declared.skipWhenFalse && raw[declared.skipWhenFalse] === false) continue
       const path = pluginSitemapSectionPath(declared, raw[declared.slugField ?? 'slug'])
       if (!path) continue
       let lastmod: string | undefined

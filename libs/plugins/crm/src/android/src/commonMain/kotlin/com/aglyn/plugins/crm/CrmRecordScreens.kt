@@ -1,6 +1,7 @@
 package com.aglyn.plugins.crm
 
 import com.aglyn.ui.MenuAction
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.OverflowMenu
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,11 +23,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -79,6 +78,7 @@ import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.fieldDisplay
 import com.aglyn.ui.fieldProblems

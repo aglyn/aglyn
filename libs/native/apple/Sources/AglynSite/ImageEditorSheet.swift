@@ -151,7 +151,7 @@ struct ImageEditorSheet: View {
           }
           .accessibilityIdentifier("image-edit-rotate-right")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.aglynSecondary)
         Toggle("Flip horizontally", isOn: Binding(get: { settings.flipH }, set: { settings.flipH = $0; Task { await redraw(session) } }))
           .accessibilityIdentifier("image-edit-flip-h")
         Toggle("Flip vertically", isOn: Binding(get: { settings.flipV }, set: { settings.flipV = $0; Task { await redraw(session) } }))

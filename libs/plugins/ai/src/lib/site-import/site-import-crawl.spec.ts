@@ -267,6 +267,13 @@ describe('robots.txt', () => {
     expect(calls.map((call) => call.url)).toEqual(['https://down-robots.com/robots.txt'])
   })
 
+  it('reads on past a robots.txt bot protection refuses, and keeps the status the home page was refused with', async () => {
+    const inventory = await crawlSiteForImport({ domain: 'guarded-garden.com', maxPages: 10 })
+    expect(inventory.stoppedBy).toBeNull()
+    expect(inventory.pages).toEqual([])
+    expect(inventory.skipped).toEqual([{ url: 'https://guarded-garden.com/', reason: 'http-error', status: 403 }])
+  })
+
   it('treats a 404 robots.txt as allowing everything, and finds pages by links when there is no sitemap', async () => {
     const inventory = await crawlSiteForImport({ domain: 'plain-plumbing.com', maxPages: 10 })
     expect(inventory.robots.found).toBe(false)

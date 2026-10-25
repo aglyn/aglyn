@@ -33,11 +33,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -72,6 +70,7 @@ import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OpeningHoursPicker
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
@@ -80,6 +79,7 @@ import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
@@ -787,7 +787,7 @@ private fun toneColor(tone: StatusTone) = when (tone) {
   StatusTone.SUCCESS -> com.aglyn.ui.LocalAglynPalette.current.success.text
   StatusTone.WARNING -> com.aglyn.ui.LocalAglynPalette.current.warning.text
   StatusTone.ERROR -> MaterialTheme.colorScheme.error
-  StatusTone.INFO -> MaterialTheme.colorScheme.primary
+  StatusTone.INFO -> com.aglyn.ui.aglynAccentText
   StatusTone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
@@ -882,6 +882,7 @@ private fun ListBlock(
             androidx.compose.material3.FilterChip(
               selected = chosen == value,
               onClick = { chosen = if (chosen == value) "" else value },
+              colors = com.aglyn.ui.aglynFilterChipColors(),
               label = { Text(value) },
               modifier = Modifier.testTag("list-chip-$value"),
             )

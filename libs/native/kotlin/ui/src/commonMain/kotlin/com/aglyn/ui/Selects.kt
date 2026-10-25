@@ -154,6 +154,6 @@ fun ChoiceDialog(
       }
     },
     confirmButton = {},
-    dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(dismissLabel) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text(dismissLabel) } },
   )
 }

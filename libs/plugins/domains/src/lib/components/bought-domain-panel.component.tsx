@@ -36,7 +36,10 @@ import {
 import { useState } from 'react'
 import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
 import type { DomainRegistrationView } from '../model/registration'
-import { formatDay, formatMoney, useDomainsFetch } from './domains-api'
+import { ConnectSiteDialog, type ConnectableSite } from './connect-site-dialog.component'
+import { DnsRecordsSection } from './dns-records-section.component'
+import { formatDay, formatMoney, isWorkspaceScope, useDomainsFetch, type DomainsScope } from './domains-api'
+import { RegistrantContactSection } from './registrant-contact-section.component'
 
 /*
  * A DOMAIN THIS SITE BOUGHT (AGL-3962): where it stands, when it renews and
@@ -44,7 +47,47 @@ import { formatDay, formatMoney, useDomainsFetch } from './domains-api'
  * and the controls an owner of a name expects — auto-renew, renew now, and
  * the code to move it elsewhere. Every state the sweep can leave a name in
  * has a sentence here, so nothing reads as "stuck".
+ *
+ * One panel on both pages (AGL-4040). On a site's Custom Domain page it
+ * manages the names bought for that site; on the workspace's Domains page it
+ * also connects a name to any site or disconnects it, and holds the
+ * registrant contact and the DNS records.
  */
+
+/**
+ * What is left after a move onto a site that did not finish (AGL-4040): the
+ * sweep put things back, or could not, and says which domain to reconnect.
+ */
+export function swapNotice(registration: Pick<DomainRegistrationView, 'domain' | 'failure'>): string | null {
+  const failure = registration.failure ?? ''
+  if (failure === 'swap-timed-out') {
+    return `Connecting ${registration.domain} to a site didn’t finish, so it was undone and the site kept its own domain. Try connecting it again.`
+  }
+  if (failure.startsWith('swap-undo-failed:')) {
+    const left = failure.slice('swap-undo-failed:'.length)
+    return left === registration.domain
+      ? `Connecting ${registration.domain} to a site didn’t finish, and it couldn’t be put back on the site it served. Connect it to a site again.`
+      : `Connecting ${registration.domain} to a site didn’t finish, and ${left} couldn’t be put back on that site, so it is on its free address. Connect ${left} to it again.`
+  }
+  return null
+}
+
+/** Where a transfer in stands, by the registrar's state, in a sentence. */
+export function transferStateSentence(state: string | null): string {
+  switch (state) {
+    case 'pending_unlock':
+    case 'pending_registry_unlock':
+      return 'Waiting for the domain to be unlocked. If it is still locked at your current registrar, unlock it there.'
+    case 'pending_new_auth_code':
+      return 'The registrar asked for a new transfer code. Contact support with the domain name.'
+    case 'pending_transfer':
+    case 'submitting_transfer':
+    case 'pending_insert':
+      return 'Your current registrar has the request. It usually releases the domain within five days, sometimes after emailing you to approve it.'
+    default:
+      return 'The transfer has started. It can take up to about a week.'
+  }
+}
 
 const NO_BILLING =
   'Only a workspace member who manages billing can change this.'
@@ -56,7 +99,11 @@ function statusChip(registration: DomainRegistrationView): {
   switch (registration.status) {
     case 'charging':
     case 'registering':
-      return { label: 'Registering…', color: 'info' }
+      return { label: registration.origin === 'transfer-in' ? 'Starting transfer…' : 'Registering…', color: 'info' }
+    case 'transferring-in':
+      return { label: 'Moving here…', color: 'info' }
+    case 'refunded':
+      return { label: 'Not completed', color: 'default' }
     case 'connecting':
       return { label: 'Connecting to your site…', color: 'info' }
     case 'expired':
@@ -70,25 +117,47 @@ function statusChip(registration: DomainRegistrationView): {
   }
 }
 
+/** What the workspace's Domains page adds: the sites to connect to. */
+export interface BoughtDomainWorkspace {
+  sites: readonly ConnectableSite[]
+  /** Each site's current domain, by site id; '' for none. */
+  siteDomains: Readonly<Record<string, string>>
+  /** Whether the site the name names serves it now. */
+  connected: boolean
+}
+
 export interface BoughtDomainPanelProps {
-  hostId: string
+  scope: DomainsScope
   registration: DomainRegistrationView
   billingPermission: boolean
   billingHref: string | null
   onChanged: () => void
+  /** Present on the workspace's Domains page. */
+  workspace?: BoughtDomainWorkspace
+  /** On a site's page: the Domains page, where contacts and DNS are managed. */
+  domainsHref?: string | null
 }
 
 export function BoughtDomainPanel(props: BoughtDomainPanelProps) {
-  const { hostId, registration, billingPermission, billingHref, onChanged } = props
+  const { scope, registration, billingPermission, billingHref, onChanged, workspace, domainsHref } = props
   const request = useDomainsFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [authCode, setAuthCode] = useState<string | null>(null)
   const [transferError, setTransferError] = useState<string | null>(null)
-  const chip = statusChip(registration)
+  const [connectOpen, setConnectOpen] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const atWorkspace = isWorkspaceScope(scope) && Boolean(workspace)
+  const chip = workspace && registration.status === 'active' && !workspace.connected
+    ? { label: 'Not connected', color: 'default' as const }
+    : statusChip(registration)
   const active = registration.status === 'active'
-  const notConnected = active && Boolean(registration.failure?.startsWith('connect-'))
+  // On a site's page: bought for it, and not serving it.
+  const notConnected = !atWorkspace && active && Boolean(registration.failure?.startsWith('connect-'))
+  const siteName = (hostId: string | null) =>
+    workspace?.sites.find((site) => site.id === hostId)?.name ?? 'its site'
 
   const act = async (
     route: (typeof DOMAINS_API_ROUTES)[keyof typeof DOMAINS_API_ROUTES],
@@ -97,7 +166,7 @@ export function BoughtDomainPanel(props: BoughtDomainPanelProps) {
   ) => {
     setBusy(true)
     try {
-      await request(route, { body: { hostId, domain: registration.domain, ...body } })
+      await request(route, { body: { ...scope, domain: registration.domain, ...body } })
       enqueueSnackbar(done, { variant: 'success', persist: false })
     } catch (caught) {
       enqueueSnackbar((caught as Error).message, { variant: 'error', allowDuplicate: true })
@@ -112,11 +181,31 @@ export function BoughtDomainPanel(props: BoughtDomainPanelProps) {
     setTransferError(null)
     try {
       const answer = await request<{ authCode: string }>(DOMAINS_API_ROUTES.transferOut, {
-        body: { hostId, domain: registration.domain },
+        body: { ...scope, domain: registration.domain },
       })
       setAuthCode(answer.authCode)
     } catch (caught) {
       setTransferError((caught as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const connect = async (siteId: string) => {
+    setBusy(true)
+    setConnectError(null)
+    try {
+      await request(DOMAINS_API_ROUTES.connect, {
+        body: { ...scope, domain: registration.domain, siteId },
+      })
+      setConnectOpen(false)
+      enqueueSnackbar(`${registration.domain} is connecting to ${siteName(siteId)}`, {
+        variant: 'success',
+        persist: false,
+      })
+      onChanged()
+    } catch (caught) {
+      setConnectError((caught as Error).message)
     } finally {
       setBusy(false)
     }
@@ -143,10 +232,31 @@ export function BoughtDomainPanel(props: BoughtDomainPanelProps) {
         </Typography>
       ) : null}
 
-      {registration.status === 'registering' || registration.status === 'charging' ? (
+      {(registration.status === 'registering' || registration.status === 'charging') &&
+      registration.origin !== 'transfer-in' ? (
         <Alert severity="info">
           {'The registrar is registering it. This usually takes under a minute; you can leave this page.'}
         </Alert>
+      ) : null}
+      {registration.status === 'transferring-in' ? (
+        <Alert severity="info">
+          {`${transferStateSentence(registration.transferStatus)} The domain keeps its current DNS until it arrives, so its website and email keep working.${registration.transferStartedAtMs ? ` Started ${formatDay(registration.transferStartedAtMs)}.` : ''}`}
+        </Alert>
+      ) : null}
+      {registration.status === 'refunded' ? (
+        <Alert severity="info">
+          {registration.origin === 'transfer-in'
+            ? 'The transfer didn’t complete, so the domain stayed at its current registrar. Any charge for it was refunded.'
+            : 'It couldn’t be registered, so any charge for it was refunded.'}
+        </Alert>
+      ) : null}
+      {swapNotice(registration) ? (
+        <Alert severity={registration.failure?.startsWith('swap-undo-failed:') ? 'error' : 'info'}>
+          {swapNotice(registration)}
+        </Alert>
+      ) : null}
+      {atWorkspace && workspace && active && workspace.connected ? (
+        <Typography variant="body2">{`Connected to ${siteName(registration.hostId)}.`}</Typography>
       ) : null}
       {registration.status === 'connecting' ? (
         <Alert severity="info">
@@ -251,15 +361,87 @@ export function BoughtDomainPanel(props: BoughtDomainPanelProps) {
               </Button>
             </BlockedControl>
           ) : null}
+          {atWorkspace && active ? (
+            <Button
+              size="small"
+              variant={workspace?.connected ? 'text' : 'contained'}
+              disabled={busy}
+              onClick={() => {
+                setConnectError(null)
+                setConnectOpen(true)
+              }}
+            >
+              {workspace?.connected ? 'Move to another site' : 'Connect to a site'}
+            </Button>
+          ) : null}
+          {atWorkspace && active && workspace?.connected ? (
+            <Button size="small" color="warning" disabled={busy} onClick={() => setDisconnectOpen(true)}>
+              {'Disconnect'}
+            </Button>
+          ) : null}
         </Stack>
       ) : null}
+
+      {!atWorkspace && domainsHref && (active || registration.status === 'expired') ? (
+        <Typography variant="body2" color="text.secondary">
+          {'The registrant contact and DNS records are on the '}
+          <Button size="small" href={domainsHref} sx={{ verticalAlign: 'baseline' }}>
+            {'Domains page'}
+          </Button>
+        </Typography>
+      ) : null}
+
+      {atWorkspace && isWorkspaceScope(scope) && (active || registration.status === 'expired') ? (
+        <Stack spacing={3} sx={{ pt: 1 }}>
+          <RegistrantContactSection orgId={scope.orgId} domain={registration.domain} editable={active} />
+          {active ? <DnsRecordsSection orgId={scope.orgId} domain={registration.domain} /> : null}
+        </Stack>
+      ) : null}
+
+      {workspace ? (
+        <ConnectSiteDialog
+          open={connectOpen}
+          domain={registration.domain}
+          currentHostId={workspace.connected ? registration.hostId : null}
+          sites={workspace.sites}
+          siteDomains={workspace.siteDomains}
+          busy={busy}
+          error={connectError}
+          onClose={() => setConnectOpen(false)}
+          onConnect={(siteId) => void connect(siteId)}
+        />
+      ) : null}
+      <Dialog open={disconnectOpen} onClose={busy ? undefined : () => setDisconnectOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>{`Disconnect ${registration.domain}?`}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {`${siteName(registration.hostId)} goes back to its free address. ${registration.domain} stays in your workspace, registered to you, and can be connected again at any time.`}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisconnectOpen(false)} disabled={busy}>
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            disabled={busy}
+            onClick={() => {
+              setDisconnectOpen(false)
+              void act(DOMAINS_API_ROUTES.disconnect, {}, `${registration.domain} is disconnected`)
+            }}
+          >
+            {'Disconnect'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={transferOpen} onClose={() => setTransferOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{`Move ${registration.domain} to another registrar`}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Typography variant="body2">
-              {'Start the transfer at the registrar you are moving to; it will ask for the transfer code below. Moving is free here, and the domain stays yours throughout.'}
+              {'Start the transfer at the registrar you are moving to; it will ask for the transfer code below. Moving is free here, and the domain stays yours throughout. The domain registry decides when a domain may move: one registered or moved in the last 60 days usually has to wait, and the registrar tells us the date.'}
             </Typography>
             <Typography variant="body2">
               {'To keep this site working at the domain, keep its DNS records pointing here at your new registrar. Without them, the site goes back to its free address.'}
