@@ -178,7 +178,7 @@ fun TemplateStrip(text: String, action: String, onOpen: () -> Unit, onDismiss: (
     Row(Modifier.padding(start = space(2f), end = space(0.5f), top = space(1f), bottom = space(1f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       Icon(AglynIcons.named("widgets"), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
       Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
-      androidx.compose.material3.TextButton(onClick = onOpen, enabled = enabled, modifier = Modifier.testTag("template-strip-open")) { Text(action) }
+      TextButton(onClick = onOpen, enabled = enabled, modifier = Modifier.testTag("template-strip-open")) { Text(action) }
       androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.testTag("template-strip-dismiss")) {
         Icon(AglynIcons.named("close"), contentDescription = "Dismiss", Modifier.size(18.dp))
       }

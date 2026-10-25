@@ -184,15 +184,14 @@ public struct SiteHeaderCard: View {
         Label("Visit site", systemImage: "arrow.up.right.square")
           .foregroundStyle(AglynColor.primaryContrast)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(AglynColor.primary)
+      .buttonStyle(.aglynProminent)
       .controlSize(.large)
       .accessibilityIdentifier("home-visit-site")
     }
     Button(action: onSwitch) {
       Label("Switch site", systemImage: "arrow.left.arrow.right")
     }
-    .buttonStyle(.bordered)
+    .buttonStyle(.aglynSecondary)
     .controlSize(.large)
     .help("Switch workspace or site (⌘K)")
     .accessibilityIdentifier("home-switcher")
@@ -326,7 +325,7 @@ public struct ActivityRow: View {
           Text(subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
         }
       }
-      Circle().fill(unread ? AglynColor.tint : .clear).frame(width: 8, height: 8).padding(.top, 8)
+      Circle().fill(unread ? AglynColor.primary : .clear).frame(width: 8, height: 8).padding(.top, 8)
         .accessibilityHidden(true)
     }
     .contentShape(Rectangle())

@@ -294,7 +294,7 @@ struct BasketPanel: View {
             }
             .frame(maxWidth: .infinity)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .controlSize(.large)
           .disabled(model.cart.isEmpty || model.charging || model.register == nil)
           .keyboardShortcut(.return, modifiers: .command)
@@ -304,7 +304,7 @@ struct BasketPanel: View {
           Button(action: onOfflineCash) {
             Text("Take cash offline").frame(maxWidth: .infinity)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .controlSize(.large)
           .disabled(model.cart.isEmpty || !model.offline.ready || model.register == nil)
           .accessibilityIdentifier("charge-offline")

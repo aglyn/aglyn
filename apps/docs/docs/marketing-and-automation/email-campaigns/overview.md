@@ -20,8 +20,11 @@ flowchart LR
 
 :::info Plan availability
 **Campaign email starts at Pro.** Free and Starter include a monthly campaign allowance
-of zero, so a campaign of any size is refused before it sends. From Pro up the allowance
-rises with the plan.
+of zero. On those plans the composer says so at the top, with an **Upgrade** button,
+and **Send** and **Schedule** stay off. You can still write the email, save it as a
+draft and send yourself a test. From Pro up the allowance rises with the plan, and
+the composer says the same thing when this month's allowance is spent or the audience
+is bigger than what is left.
 
 **Account email is not part of that.** Order receipts, password resets, booking
 confirmations and replies to form submissions send on **every** plan, Free included, and

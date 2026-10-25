@@ -145,6 +145,12 @@ describe('the sharp native libraries are traced into the lambda (AGL-1471)', () 
     },
   )
 
+  it('declares the include for the plugin route, beside its WASM', () => {
+    // AGL-4048: commerce draws a card reader's start-up screen with sharp on
+    // a plugin route, so that lambda needs libvips like the media routes.
+    expect(includes).toMatch(/'\/api\/\[\.\.\.pluginApi\]':\s*\[[^\]]*\.\.\.SHARP_NATIVE_LIBRARIES/)
+  })
+
   it('points at directories that actually hold a native library', () => {
     const declared = /const SHARP_NATIVE_LIBRARIES = \[([^\]]*)\]/.exec(config)
     expect(declared).not.toBeNull()

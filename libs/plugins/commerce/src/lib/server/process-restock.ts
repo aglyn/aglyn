@@ -157,6 +157,10 @@ export async function scanRestockAlerts(
     }
     const total = CommerceModel.productInventory(product)
     if (total != null && total <= 0) continue
+    // Sold in person only (AGL-4060): the email's one button is the product's
+    // page, which is not served. The alert waits, unstamped, and goes out once
+    // the product sells online again.
+    if (!CommerceModel.productSellsOnline(product)) continue
     let loaded = templateCache.get(hostRef.id)
     if (loaded === undefined) {
       loaded = await // The template, or the built-in copy in the site's header and

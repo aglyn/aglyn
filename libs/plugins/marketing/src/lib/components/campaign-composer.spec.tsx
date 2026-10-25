@@ -45,6 +45,8 @@ import { useEffect } from 'react'
 jest.setTimeout(30_000)
 
 const FIRESTORE = {}
+/** The workspace's plan; Free has no campaign email. */
+let mockOrgPlan = 'scale'
 
 /** Every `/api/campaigns/send` body this render posted, in order. */
 let posted: Array<Record<string, any>> = []
@@ -71,7 +73,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     data: { uid: 'uid-test', getIdToken: async () => 'token' },
   }),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
-  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
+  useOrgPlan: () => ({ org: { $id: 'org-1', plan: mockOrgPlan }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
@@ -544,5 +546,41 @@ describe('the merge tags', () => {
       (screen.getByLabelText('Message', { exact: false }) as HTMLInputElement)
         .value,
     ).toBe('Hello {{firstName|there}}')
+  })
+})
+
+describe('a plan without campaign email', () => {
+  afterEach(() => {
+    mockOrgPlan = 'scale'
+  })
+
+  it('says so with an upgrade path BEFORE Send, and keeps Send disabled', async () => {
+    mockOrgPlan = 'free'
+    await mount()
+    type('Subject', 'Spring sale')
+    type('Message', 'Ends Sunday')
+    await settle(0)
+
+    expect(
+      screen.getByText(/Your plan does not include campaign email/),
+    ).toBeTruthy()
+    expect(screen.getByText(/Included from Pro\./)).toBeTruthy()
+    const send = screen.getByText('Send campaign').closest('button')!
+    expect(send.disabled).toBe(true)
+    expect(
+      screen.getByLabelText('Campaign email is included from Pro.'),
+    ).toBeTruthy()
+
+    fireEvent.click(send)
+    await settle(0)
+    expect(confirmations).toHaveLength(0)
+  })
+
+  it('shows no upsell on a plan that includes campaign email', async () => {
+    await mount()
+
+    expect(
+      screen.queryByText(/Your plan does not include campaign email/),
+    ).toBeNull()
   })
 })

@@ -185,6 +185,7 @@ async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   const idToken = bearer(headers)
+  const action = String((body as any)?.action ?? (method === 'POST' ? 'add' : ''))
 
   // The confirmation link is the ONE unauthenticated path, deliberately: the
   // person who opened the mailbox may not be signed in on that device, and
@@ -237,8 +238,6 @@ async function handler(request: Request): Promise<Response> {
     if (method !== 'POST') {
       return Response.json({ error: 'Method not allowed' }, { status: 405 })
     }
-
-    const action = String((body as any)?.action ?? 'add')
 
     if (action === 'add') {
       const outcome = await addAccountEmail(caller.uid, (body as any)?.address)
@@ -310,9 +309,10 @@ async function handler(request: Request): Promise<Response> {
         const forbidden =
           outcome.refusal === 'sso-governed-escape' ||
           outcome.refusal === 'sso-governed-lockout'
+        const conflict = outcome.refusal === 'claimed-by-another-account'
         return Response.json(
           { error: outcome.message, reason: outcome.refusal },
-          { status: forbidden ? 403 : 400 },
+          { status: forbidden ? 403 : conflict ? 409 : 400 },
         )
       }
       return Response.json({ ok: true }, { status: 200 })
@@ -324,7 +324,14 @@ async function handler(request: Request): Promise<Response> {
     // for anything else, so a real failure keeps the answer below.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
-    console.error('[account/emails] failed', error)
+    // The method, action and error code lead the line, so a burst can be
+    // read without opening each stack (AGL-4041). The log drain keeps only
+    // the request line; this line is in the Vercel runtime logs.
+    console.error(
+      '[account/emails] failed',
+      JSON.stringify({ method, action, code: (error as any)?.code ?? null }),
+      error,
+    )
     return Response.json({ error: 'Could not update your email addresses' }, { status: 500 })
   }
 }

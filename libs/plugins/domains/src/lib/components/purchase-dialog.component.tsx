@@ -18,13 +18,7 @@
 'use client'
 
 import {
-  COUNTRY_OPTIONS,
-  countryOption,
-  type CountryOption,
-} from '@aglyn/aglyn/app-utils/country-options'
-import {
   Alert,
-  Autocomplete,
   Button,
   Checkbox,
   Dialog,
@@ -34,7 +28,6 @@ import {
   FormControlLabel,
   Link,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import { LEGAL_ORIGIN } from '@aglyn/aglyn/app-utils/published-legal-pages'
@@ -45,14 +38,26 @@ import {
   DomainsRequestError,
   formatMoney,
   useDomainsFetch,
+  type ContactDefaults,
   type DomainOfferView,
+  type DomainsScope,
 } from './domains-api'
+import {
+  badFieldsSentence,
+  contactFormValue,
+  RegistrantContactFields,
+  type ContactFormValue,
+} from './registrant-contact-fields.component'
 
 /*
  * BUYING ONE NAME (AGL-3962): what it costs now and every year after, who it
  * is registered to, and the terms — the three things a registrar requires and
  * a first-time buyer has never been asked. Nothing technical is asked here:
  * no nameservers, no records, no years to choose.
+ *
+ * Bought from the workspace's Domains page, or for a site that already has
+ * a domain, the name goes into the workspace unassigned (AGL-4040), and the
+ * dialog says so before the click.
  */
 
 /**
@@ -66,57 +71,54 @@ export const DOMAIN_TERMS_URL = `${LEGAL_ORIGIN}/legal/terms`
 export const ICANN_REGISTRANT_RIGHTS_URL =
   'https://www.icann.org/resources/pages/benefits-2013-09-16-en'
 
-interface ContactForm {
-  firstName: string
-  lastName: string
-  companyName: string
-  email: string
-  phone: string
-  address1: string
-  address2: string
-  city: string
-  state: string
-  zip: string
-}
-
-const FIELD_LABELS: Record<string, string> = {
-  firstName: 'First name',
-  lastName: 'Last name',
-  email: 'Email',
-  phone: 'Phone',
-  address1: 'Street address',
-  city: 'City',
-  state: 'State or region',
-  zip: 'Postal code',
-  country: 'Country',
+/** The terms checkbox a purchase and a transfer in both ask for. */
+export function DomainTermsCheckbox(props: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <FormControlLabel
+      control={
+        <Checkbox
+          checked={props.checked}
+          onChange={(event) => props.onChange(event.target.checked)}
+          disabled={props.disabled}
+        />
+      }
+      label={
+        <Typography variant="body2">
+          {'I agree to the '}
+          <Link href={DOMAIN_TERMS_URL} target="_blank" rel="noopener">
+            {'domain registration terms'}
+          </Link>
+          {' and have read the '}
+          <Link href={ICANN_REGISTRANT_RIGHTS_URL} target="_blank" rel="noopener">
+            {'registrant rights and responsibilities'}
+          </Link>
+          {'. The domain renews every year until I turn auto-renew off.'}
+        </Typography>
+      }
+    />
+  )
 }
 
 export interface PurchaseDialogProps {
   open: boolean
-  hostId: string
+  scope: DomainsScope
   offer: DomainOfferView | null
-  defaults: { firstName: string; lastName: string; email: string }
+  defaults: ContactDefaults
+  /** The name goes into the workspace, connected to no site. */
+  intoWorkspace: boolean
   onClose: () => void
-  onBought: (registration: DomainRegistrationView) => void
+  onBought: (registration: DomainRegistrationView, intoWorkspace: boolean) => void
 }
 
 export function PurchaseDialog(props: PurchaseDialogProps) {
-  const { open, hostId, defaults, onClose, onBought } = props
+  const { open, scope, defaults, intoWorkspace, onClose, onBought } = props
   const request = useDomainsFetch()
   const [offer, setOffer] = useState<DomainOfferView | null>(props.offer)
-  const [form, setForm] = useState<ContactForm>({
-    firstName: defaults.firstName,
-    lastName: defaults.lastName,
-    companyName: '',
-    email: defaults.email,
-    phone: '',
-    address1: '',
-    address2: '',
-    city: '',
-    state: '',
-    zip: '',
-  })
-  const [country, setCountry] = useState<CountryOption | null>(countryOption('US'))
+  const [form, setForm] = useState<ContactFormValue>(contactFormValue(defaults))
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -132,35 +134,25 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
   }, [open, props.offer])
 
   if (!offer) return null
-  const set = (field: keyof ContactForm) => (event: { target: { value: string } }) =>
-    setForm((current) => ({ ...current, [field]: event.target.value }))
-  const fieldProps = (field: keyof ContactForm, required = true) => ({
-    value: form[field],
-    onChange: set(field),
-    required,
-    error: badFields.includes(field),
-    disabled: busy,
-    size: 'small' as const,
-  })
 
   const submit = async () => {
     setBusy(true)
     setError(null)
     setBadFields([])
     try {
-      const answer = await request<{ registration: DomainRegistrationView }>(
+      const answer = await request<{ registration: DomainRegistrationView; intoWorkspace?: boolean }>(
         DOMAINS_API_ROUTES.purchase,
         {
           body: {
-            hostId,
+            ...scope,
             domain: offer.domain,
             expectedFirstYearCents: offer.firstYearCents,
             acceptTerms: agreed,
-            contact: { ...form, country: country?.code ?? '' },
+            contact: form,
           },
         },
       )
-      onBought(answer.registration)
+      onBought(answer.registration, answer.intoWorkspace ?? intoWorkspace)
     } catch (caught) {
       if (caught instanceof DomainsRequestError) {
         if (caught.code === 'price-changed') {
@@ -172,11 +164,7 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
         }
         const fields = caught.payload['fields']
         if (Array.isArray(fields)) setBadFields(fields.map(String))
-        setError(
-          Array.isArray(fields) && fields.length
-            ? `Check these details: ${fields.map((field) => FIELD_LABELS[String(field)] ?? field).join(', ')}.`
-            : caught.message,
-        )
+        setError(Array.isArray(fields) && fields.length ? badFieldsSentence(fields.map(String)) : caught.message)
       } else {
         setError('Something went wrong. Try again.')
       }
@@ -198,7 +186,9 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
               {`Then ${formatMoney(offer.renewalCents)} a year. We email you about 45 days before each renewal and charge the card on file about 30 days before. Turn auto-renew off at any time.`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {'We set the domain up for your site. There is nothing to configure.'}
+              {intoWorkspace
+                ? 'It goes into your workspace’s domains, not connected to a site. Connect it to any of your sites from the Domains page when you’re ready.'
+                : 'We set the domain up for your site. There is nothing to configure.'}
             </Typography>
           </Stack>
 
@@ -207,66 +197,16 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
             <Typography variant="body2" color="text.secondary">
               {'Every domain is registered to a real person or business, who owns it. These details go to the registrar and are hidden from public domain lookups.'}
             </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField label="First name" {...fieldProps('firstName')} sx={{ flex: 1 }} />
-              <TextField label="Last name" {...fieldProps('lastName')} sx={{ flex: 1 }} />
-            </Stack>
-            <TextField label="Business name (optional)" {...fieldProps('companyName', false)} />
-            <TextField
-              label="Email"
-              type="email"
-              {...fieldProps('email')}
-              helperText="The registrar emails this address once to confirm it. Confirm it to keep the domain."
-            />
-            <TextField label="Phone" type="tel" {...fieldProps('phone')} />
-            <TextField label="Street address" {...fieldProps('address1')} />
-            <TextField label="Apartment, suite (optional)" {...fieldProps('address2', false)} />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField label="City" {...fieldProps('city')} sx={{ flex: 2 }} />
-              <TextField label="State or region" {...fieldProps('state')} sx={{ flex: 1 }} />
-              <TextField label="Postal code" {...fieldProps('zip')} sx={{ flex: 1 }} />
-            </Stack>
-            <Autocomplete
-              options={COUNTRY_OPTIONS}
-              value={country}
-              onChange={(_event, next) => setCountry(next)}
-              getOptionLabel={(option) => option.label}
-              isOptionEqualToValue={(option, value) => option.code === value.code}
+            <RegistrantContactFields
+              value={form}
+              onChange={setForm}
+              badFields={badFields}
               disabled={busy}
-              size="small"
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Country or region"
-                  required
-                  error={badFields.includes('country')}
-                />
-              )}
+              emailHelp="The registrar emails this address once to confirm it. Confirm it to keep the domain."
             />
           </Stack>
 
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={agreed}
-                onChange={(event) => setAgreed(event.target.checked)}
-                disabled={busy}
-              />
-            }
-            label={
-              <Typography variant="body2">
-                {'I agree to the '}
-                <Link href={DOMAIN_TERMS_URL} target="_blank" rel="noopener">
-                  {'domain registration terms'}
-                </Link>
-                {' and have read the '}
-                <Link href={ICANN_REGISTRANT_RIGHTS_URL} target="_blank" rel="noopener">
-                  {'registrant rights and responsibilities'}
-                </Link>
-                {'. The domain renews every year until I turn auto-renew off.'}
-              </Typography>
-            }
-          />
+          <DomainTermsCheckbox checked={agreed} onChange={setAgreed} disabled={busy} />
           {error ? <Alert severity="error">{error}</Alert> : null}
         </Stack>
       </DialogContent>

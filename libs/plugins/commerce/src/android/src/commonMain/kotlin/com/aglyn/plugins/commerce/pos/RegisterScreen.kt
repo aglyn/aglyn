@@ -49,11 +49,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -101,10 +99,12 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.QuantityStepper
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SkeletonGrid
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
@@ -536,7 +536,7 @@ private fun ProductTile(item: PosItem, inBasket: Int, currency: String, onClick:
         minLines = 2,
         overflow = TextOverflow.Ellipsis,
       )
-      Text(price, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+      Text(price, style = MaterialTheme.typography.bodyLarge, color = com.aglyn.ui.aglynAccentText, fontWeight = FontWeight.SemiBold, maxLines = 1)
       // Every tile keeps this line, so the grid's rows line up.
       Text(
         when {
@@ -599,6 +599,7 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
             val on = option.id in chosen
             androidx.compose.material3.FilterChip(
               selected = on,
+              colors = com.aglyn.ui.aglynFilterChipColors(),
               onClick = {
                 val others = sheet.picks.filter { it.groupId != group.id }
                 val mine = when {
@@ -816,7 +817,7 @@ private fun HoldsDialog(model: RegisterModel, onDismiss: () -> Unit) {
               Column(Modifier.weight(1f)) {
                 Text(held.label, style = MaterialTheme.typography.titleSmall)
                 Text(
-                  "${held.cart.count} items · ${money(held.cart.subtotalCents - held.cart.discountCents, model.currency)}",
+                  "${held.cart.count} ${if (held.cart.count == 1) "item" else "items"} · ${money(held.cart.subtotalCents - held.cart.discountCents, model.currency)}",
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

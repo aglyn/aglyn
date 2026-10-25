@@ -366,6 +366,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "waivers",
+    "label": "Waivers",
+    "alwaysOnForWorkspace": true,
+    "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+    "siteOff": {
+      "stops": "Switching Waivers off for this site stops its Sign waiver elements rendering, closes its share links, and refuses new signatures, online or at the window.",
+      "keeps": "Every signature already taken is kept, with its signed copy and audit trail, and Waivers keeps working on the workspace’s other sites."
+    }
+  },
+  {
     "id": "ad-conversions",
     "label": "Ad conversions",
     "alwaysOnForWorkspace": true,
@@ -427,6 +437,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "weglot": "elements",
   "music": "elements",
   "help-desks": "console-only",
+  "waivers": "elements",
   "ad-conversions": "console-only",
   "domains": "console-only",
 }
@@ -591,6 +602,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "relatedProductIds",
         "giftCard",
         "lowStockThreshold",
+        "sellOnline",
         "shipping",
         "createdAtMs",
         "updatedAtMs",
@@ -804,6 +816,18 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "name": "posOfflineSales",
     "mediaScan": "none",
     "mediaScanReason": "The offline register's sync records (AGL-3625): one per cash sale rung offline, holding its order id, flags and stock conflicts, written only by the sync route. No content field, and a busy offline register writes one per sale."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "checkIns",
+    "mediaScan": "none",
+    "mediaScanReason": "Who is due at the check-in window on a day and who checked them in (AGL-4043): a customer's name and contact details, an item name, a status and a wristband, written only by the check-in route. No content field, and a busy day writes one per person."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "checkInDays",
+    "mediaScan": "none",
+    "mediaScanReason": "When each day's check-ins were last brought in line with its orders and stays (AGL-4043): a time and a flag, written only by the check-in route."
   },
   {
     "pluginId": "commerce",
@@ -1223,6 +1247,7 @@ export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSec
     },
     "path": "/products/{slug}",
     "skipWhen": "deletedAt",
+    "skipWhenFalse": "sellOnline",
     "lastmod": [
       "updatedAtMs",
       "createdAtMs"
@@ -2563,7 +2588,7 @@ export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
  * The plugins whose person eraser a person erasure may not run without
  * (AGL-3080): each keeps a share of the person the erasure promises to remove.
  */
-export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ["bookings","commerce","crm","email","loyalty"]
+export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ["bookings","commerce","crm","email","loyalty","waivers"]
 
 /**
  * The plugins whose sales the operator's sales tax return may not be filed
