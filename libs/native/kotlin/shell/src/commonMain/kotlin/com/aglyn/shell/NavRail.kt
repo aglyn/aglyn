@@ -1,13 +1,14 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.fastTooltipEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -46,16 +49,19 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aglyn.contracts.railWorkspaces
+import com.aglyn.contracts.workspaceInitial
 import com.aglyn.core.AccountPreferences
 import com.aglyn.core.AuthUser
 import com.aglyn.core.PinAnswer
 import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.WithTooltip
+import com.aglyn.ui.fastTooltip
 import com.aglyn.ui.WorkspaceTile
 import com.aglyn.ui.readableOn
 import com.aglyn.ui.shellColors
@@ -77,9 +83,10 @@ internal class RailActions(
 
 
 /**
- * The workspace rail (Mac, iPad, Android tablet, desktop): up to five pinned workspaces in the person's order (drag to
- * reorder), a divider, up to three recent ones, then "All workspaces" with the total; an account with eight workspaces
- * or fewer sees them all and no All tile. At the foot: Create new, Admin for staff, and the person's photo.
+ * The workspace rail (Mac, iPad, Android tablet, desktop), Figma Rail 12:338 "Many workspaces" for every account however
+ * few workspaces it has (AGL-3996 / AGL-4000): up to five pinned workspaces in the person's order (drag to reorder), a
+ * divider, up to three recent under "Recent", a divider, then "All workspaces" with the total, which opens the picker
+ * where pins are edited. At the foot: Admin for staff, Create new, and the person's photo. Every gap is 8.
  */
 @Composable
 internal fun WorkspaceRail(
@@ -95,75 +102,106 @@ internal fun WorkspaceRail(
   val m = com.aglyn.ui.shellMetrics
   val rail = railWorkspaces(workspace.orgs.map { it.id }, prefs.pinned, prefs.recentOrgs)
   val byId = workspace.orgs.associateBy { it.id }
+  // Every rail target names itself fast on hover, one bubble for the whole column, kept clear of the rail.
+  val tips = com.aglyn.ui.rememberFastTooltipState()
+  androidx.compose.runtime.CompositionLocalProvider(LocalRailTooltips provides tips) {
   Column(
     // PINNED starts the rail at the gap between its sections (17, Figma Rail 12:338); the brand's mark is the Home tab.
-    modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).padding(top = 17.dp, bottom = 12.dp).testTag("workspace-rail"),
+    modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).fastTooltipEdge(tips).padding(top = 17.dp, bottom = m.railFoot).testTag("workspace-rail"),
     horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(RailGap),
   ) {
     Column(
       Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(m.tileGap - 4.dp),
+      verticalArrangement = Arrangement.spacedBy(RailGap),
     ) {
       if (rail.pinned.isNotEmpty()) {
         RailLabel("Pinned")
         PinnedTiles(services, workspace, prefs, rail.pinned, unread, actions)
       }
-      val after = if (rail.allTile) rail.recent else rail.rest
-      if (after.isNotEmpty()) {
+      if (rail.recent.isNotEmpty()) {
         if (rail.pinned.isNotEmpty()) RailDivider()
-        if (rail.allTile) RailLabel("Recent")
-        for (orgId in after) {
+        RailLabel("Recent")
+        for (orgId in rail.recent) {
           val org = byId[orgId] ?: continue
           RailTile(services, workspace, prefs, orgId, org.name, pinned = false, index = -1, count = 0, unread[orgId] ?: 0, actions)
         }
       }
       if (rail.allTile) {
-        RailDivider()
+        if (rail.pinned.isNotEmpty() || rail.recent.isNotEmpty()) RailDivider()
         AllWorkspacesTile(rail.total.toInt(), actions.all)
       }
     }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(m.tileGap + 4.dp)) {
-      WithTooltip("Create new") {
-        Surface(
-          onClick = actions.create,
-          shape = RoundedCornerShape(m.utilityRadius),
-          color = MaterialTheme.colorScheme.primary,
-          contentColor = MaterialTheme.colorScheme.onPrimary,
-          modifier = Modifier.size(m.utility).testTag("rail-create").semantics { contentDescription = "Create new" },
-        ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("add"), null, Modifier.size(m.rowIcon)) } }
-      }
-      actions.admin?.let { admin ->
-        WithTooltip("Admin") {
-          Surface(
-            onClick = admin,
-            shape = RoundedCornerShape(m.utilityRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.size(m.utility).testTag("rail-admin").semantics { contentDescription = "Admin" },
-          ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("admin_panel_settings"), null, Modifier.size(m.rowIcon)) } }
-        }
-      }
-      AccountAvatar(user, size = m.avatar.value.toInt(), onClick = actions.account, modifier = Modifier.testTag("rail-account"))
+    // The foot (Figma Rail, Staff = Yes): Admin (Figma's bare outline shield, Icon/admin 3:142) above Create new, then the
+    // account, each in a utility box.
+    actions.admin?.let { admin ->
+      Surface(
+        onClick = admin,
+        shape = RoundedCornerShape(m.utilityRadius),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(m.utility).railTooltip("Admin").testTag("rail-admin").semantics { contentDescription = "Admin" },
+      ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("shield"), null, Modifier.size(m.utilityIcon)) } }
     }
+    Surface(
+      onClick = actions.create,
+      shape = RoundedCornerShape(m.utilityRadius),
+      color = MaterialTheme.colorScheme.primary,
+      contentColor = MaterialTheme.colorScheme.onPrimary,
+      modifier = Modifier.size(m.utility).railTooltip("Create new").testTag("rail-create").semantics { contentDescription = "Create new" },
+    ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("add"), null, Modifier.size(m.utilityIcon)) } }
+    Box(Modifier.size(m.utility), contentAlignment = Alignment.Center) {
+      AccountAvatar(user, size = m.avatar.value.toInt(), onClick = actions.account, modifier = Modifier.testTag("rail-account"), tooltip = tips)
+      // The bubble is a popup placed in window coordinates beside its target; it sits here only so it adds no gap.
+      com.aglyn.ui.FastTooltipHost(tips)
+    }
+  }
   }
 }
 
+/** The rail's one name bubble, for the targets inside it. */
+private val LocalRailTooltips = androidx.compose.runtime.staticCompositionLocalOf<com.aglyn.ui.FastTooltipState?> { null }
+
+/** This rail target's name in the rail's bubble (hover only; touch has its long-press menu header). */
+@Composable
+private fun Modifier.railTooltip(label: String, hint: String? = null): Modifier =
+  LocalRailTooltips.current?.let { this.then(Modifier.fastTooltip(it, label, hint)) } ?: this
+
+/** The rail's one rhythm: 8 between its tiles, captions, dividers and foot buttons (Figma Rail's auto layout). */
+private val RailGap = 8.dp
+
+/**
+ * A one-line text's full line height, as Figma lays it out: Compose's default trims the leading above the first line
+ * and below the last, which made each rail caption 1.5–3.5 dp short and pulled every tile under it up (AGL-4000).
+ */
+private val FullLineBox = androidx.compose.ui.text.style.LineHeightStyle(
+  androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
+)
+
 @Composable
 private fun RailLabel(text: String) {
+  val m = com.aglyn.ui.shellMetrics
   Text(
     text.uppercase(),
-    style = MaterialTheme.typography.labelSmall,
-    fontSize = com.aglyn.ui.shellMetrics.railLabel,
-    letterSpacing = androidx.compose.ui.unit.TextUnit(0.06f, androidx.compose.ui.unit.TextUnitType.Em),
-    color = shellColors.onRail,
+    // The caption's whole line box (Figma: 12 Compact / 16 Touch), never trimmed to the glyphs, so the tiles under it
+    // sit where Figma puts them.
+    style = MaterialTheme.typography.labelSmall.copy(lineHeightStyle = FullLineBox),
+    fontSize = m.railLabel,
+    lineHeight = m.railLabelLine,
+    letterSpacing = m.railLabelTracking,
+    // Figma's text/tertiary.
+    color = com.aglyn.ui.LocalThemeSurfaces.current?.textTertiary ?: shellColors.onRail,
     fontWeight = FontWeight.SemiBold,
-    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+    maxLines = 1,
+    modifier = Modifier.testTag("rail-label-${text.lowercase()}"),
   )
 }
 
+/** Between the rail's sections: a 24/28 hairline in border/strong, which reads on the rail's ground. */
 @Composable
 private fun RailDivider() {
-  HorizontalDivider(Modifier.width(com.aglyn.ui.shellMetrics.tile).padding(vertical = 6.dp), color = shellColors.divider)
+  Box(Modifier.width(com.aglyn.ui.shellMetrics.railDivider).height(1.dp).background(MaterialTheme.colorScheme.outline).testTag("rail-divider"))
 }
 
 /** The pinned tiles, which a vertical drag puts in a new order (saved as the account's pins, the console's too). */
@@ -178,7 +216,7 @@ private fun PinnedTiles(
 ) {
   val byId = workspace.orgs.associateBy { it.id }
   val m = com.aglyn.ui.shellMetrics
-  val slot = with(LocalDensity.current) { (m.tile + 8.dp + m.tileGap).toPx() }
+  val slot = with(LocalDensity.current) { (m.ringBox + RailGap).toPx() }
   var dragging by remember { mutableStateOf<String?>(null) }
   var offset by remember { mutableFloatStateOf(0f) }
   for ((index, orgId) in pinned.withIndex()) {
@@ -225,13 +263,26 @@ private fun RailTile(
   val (light, dark) = orgLogoUrls(workspace, orgId, services.api.origin)
   val selected = workspace.org?.id == orgId
   val m = com.aglyn.ui.shellMetrics
-  Box(Modifier.width(m.railWidth), contentAlignment = Alignment.Center) {
+  Box(Modifier.width(m.railWidth).height(m.ringBox), contentAlignment = Alignment.Center) {
     // The selected workspace's 3 dp bar at the rail's edge, beside its ring.
     if (selected) Box(Modifier.align(Alignment.CenterStart).width(3.dp).height(m.selectionBar).clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)).background(shellColors.ring))
-    WithTooltip(if (index in 0..4) "$name  ${shortcutLabel(index + 1)}" else name) {
-      Box(
+    // Every tile keeps its ring's box, so the column keeps Figma's 8 between boxes; the badge sits off the corner as
+    // Figma's Badge does, drawn unclipped so it is never cut. Measured on Rail 254:20207 / 254:20162, selected or not:
+    // the fill's top is the ring box's top, its right edge 2 past the ring box (Compact) or 2 inside it (Touch); the
+    // 2 dp cut-out around it in the rail's ground is what this offset places.
+    val badgeAt = if (m.compact) DpOffset(4.dp, (-2).dp) else DpOffset(0.dp, (-2).dp)
+    WorkspaceTile(
+      name, light, dark, color, size = m.tile, selected = selected, badge = unread, cornerRadius = m.tileRadius, badgeSize = m.badge,
+      ringBox = m.ringBox, ringRadius = m.ringRadius, initialSize = m.tileInitial, initials = workspaceInitial(name), reserveRing = true,
+      badgeRing = shellColors.rail, badgeOffset = badgeAt,
+    )
+    // The tile's press target over it: the ring's box, its ripple clipped to the ring's corners. Hovering it names the
+    // workspace in full at once (a pin carries its shortcut as the hint).
+    Box(
         Modifier
-          .clip(RoundedCornerShape(m.tileRadius + 4.dp))
+          .size(m.ringBox)
+          .railTooltip(name, if (index in 0..4 && LocalShowShortcuts.current) shortcutLabel(index + 1) else null)
+          .clip(RoundedCornerShape(m.ringRadius))
           .pointerInput(orgId) {
             awaitPointerEventScope {
               while (true) {
@@ -249,13 +300,18 @@ private fun RailTile(
             contentDescription = if (unread > 0) "$name, $unread unread" else name
             this.selected = selected
           }
-          .padding(2.dp)
           .testTag("rail-tile-$orgId"),
-      ) {
-        WorkspaceTile(name, light, dark, color, size = m.tile, selected = selected, badge = unread, cornerRadius = m.tileRadius, badgeSize = m.badge, ringBox = m.ringBox, ringRadius = m.ringRadius, initialSize = m.tileInitial)
-      }
-    }
+      )
+    // A long press (touch) or right-click opens the menu, headed by the workspace's full name.
     DropdownMenu(menu, onDismissRequest = { menu = false }) {
+      Text(
+        name,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 2,
+        modifier = Modifier.padding(horizontal = if (m.compact) 16.dp else 12.dp, vertical = 8.dp).widthIn(max = 280.dp).testTag("rail-menu-name"),
+      )
+      HorizontalDivider()
       if (pinned) {
         MenuRow("Unpin", "keep_off") { menu = false; services.accountPrefs.unpin(orgId) }
         if (index > 0) MenuRow("Move up", "arrow_upward") { menu = false; services.accountPrefs.movePin(orgId, -1) }
@@ -290,23 +346,35 @@ internal fun MenuRow(label: String, icon: String?, trailing: String? = null, ena
   )
 }
 
-/** The last tile: every workspace, with the total under it; opens the workspace picker. */
+/**
+ * The last tile: every workspace, with the total under it; opens the workspace picker, where pins are edited (Figma Rail
+ * All workspaces 97:14737 / 12:279): the grid on the sunken ground inside a border/subtle hairline, the total in the
+ * secondary text, in a box 66 tall.
+ */
 @Composable
 private fun AllWorkspacesTile(total: Int, onClick: () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
-  WithTooltip("All workspaces") {
-    Column(
-      Modifier.clip(RoundedCornerShape(m.tileRadius)).combinedClickableCompat(onClick).padding(4.dp).testTag("rail-all")
-        .semantics { contentDescription = "All workspaces, $total" },
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      Box(
-        Modifier.size(m.tile).clip(RoundedCornerShape(m.tileRadius)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        contentAlignment = Alignment.Center,
-      ) { Icon(AglynIcons.named("grid_view"), null, Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-      Spacer(Modifier.height(2.dp))
-      Text(total.toString(), style = MaterialTheme.typography.labelMedium, fontSize = m.railLabel * 1.2f, color = shellColors.onRail)
-    }
+  val shape = RoundedCornerShape(m.tileRadius)
+  Column(
+    Modifier.width(m.ringBox).height(m.allTileHeight).railTooltip("All workspaces").clip(RoundedCornerShape(m.ringRadius)).combinedClickableCompat(onClick).testTag("rail-all")
+      .semantics { contentDescription = "All workspaces, $total" },
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(m.allTileGap, Alignment.CenterVertically),
+  ) {
+    Box(
+      Modifier.size(m.tile).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+      contentAlignment = Alignment.Center,
+    ) { Icon(AglynIcons.named("grid_view"), null, Modifier.size(m.allTileIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Text(
+      total.toString(),
+      style = MaterialTheme.typography.labelMedium.copy(lineHeightStyle = FullLineBox),
+      fontSize = m.allTileTotal,
+      lineHeight = if (m.compact) 12.sp else 16.sp,
+      fontWeight = if (m.allTileTotalBold) FontWeight.Bold else FontWeight.SemiBold,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+      modifier = Modifier.testTag("rail-all-total"),
+    )
   }
 }
 
@@ -315,7 +383,7 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit) = this.combine
 
 /** The person's photo (their initials until the profile has one): opens the account menu. */
 @Composable
-internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, modifier: Modifier = Modifier, tooltip: com.aglyn.ui.FastTooltipState? = null) {
   val fill = MaterialTheme.colorScheme.tertiary
   val name = user?.displayName?.takeIf { it.isNotBlank() } ?: user?.email ?: "?"
   val content: @Composable () -> Unit = {
@@ -325,6 +393,9 @@ internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, m
   }
   if (onClick == null) {
     Box(modifier) { content() }
+  } else if (tooltip != null) {
+    // On the rail: the person's own name in the rail's bubble, so a second signed-in account is told apart at a glance.
+    Surface(onClick = onClick, shape = CircleShape, modifier = modifier.fastTooltip(tooltip, name).semantics { contentDescription = "Your account" }) { content() }
   } else {
     WithTooltip("Your account") {
       Surface(onClick = onClick, shape = CircleShape, modifier = modifier.semantics { contentDescription = "Your account" }) { content() }

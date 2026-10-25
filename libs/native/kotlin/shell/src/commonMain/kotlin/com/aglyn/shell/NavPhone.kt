@@ -228,7 +228,7 @@ private fun ScopeChip(services: ShellServices, workspace: WorkspaceState, prefs:
     modifier = Modifier.widthIn(max = 260.dp).testTag("scope-chip").semantics { contentDescription = "$name. Switch workspace or site" },
   ) {
     Row(Modifier.padding(start = 6.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      WorkspaceTile(org?.name ?: name, light, dark, color, size = 24.dp)
+      WorkspaceTile(org?.name ?: name, light, dark, color, size = 24.dp, initials = com.aglyn.contracts.workspaceInitial(org?.name ?: name))
       Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
       Icon(AglynIcons.named("expand_more"), null, Modifier.size(18.dp))
     }

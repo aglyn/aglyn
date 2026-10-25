@@ -222,7 +222,7 @@ internal fun StorePicker(
             items(sellable, key = { it.id }) { store ->
               AglynListItem(
                 title = store.name,
-                supporting = store.subdomain.ifEmpty { null },
+                supporting = store.address,
                 icon = AglynIcons.named("storefront"),
                 selected = store.id == workspace.site?.id,
                 trailing = { Icon(AglynIcons.named("chevron_right"), null) },

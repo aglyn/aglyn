@@ -45,6 +45,7 @@ import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.core.siteAddress
+import com.aglyn.core.siteListAddress
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.site.SiteAreas
@@ -167,7 +168,7 @@ private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Bo
   // shows it), and the status.
   com.aglyn.ui.ScaffoldListRow(
     title = row.name,
-    detail = listOfNotNull(row.cname ?: siteAddress(row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
+    detail = listOfNotNull(siteListAddress((host as? Live.Ready)?.value?.string("cname")?.trim()?.ifEmpty { null } ?: row.cname, row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
     kind = com.aglyn.ui.ScaffoldRowKind.SITE,
     selected = selected,
     leading = { com.aglyn.ui.ScaffoldRowTile("public", mediaPreviewUrl(favicon, context.api.origin, row.id, 160)) },

@@ -103,7 +103,7 @@ internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, or
     items(workspace.sites, key = { "site-${it.id}" }) { site ->
       AglynListItem(
         title = site.name,
-        supporting = site.subdomain.ifEmpty { null },
+        supporting = site.address,
         icon = AglynIcons.named("public"),
         imageUrl = mediaPreviewUrl(site.favicon, origin, site.id, 160),
         trailing = { RadioButton(selected = site.id == workspace.site?.id, onClick = null) },

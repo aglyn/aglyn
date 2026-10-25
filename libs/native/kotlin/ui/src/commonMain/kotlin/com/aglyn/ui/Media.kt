@@ -87,7 +87,10 @@ fun RemoteImage(
   }
 }
 
-/** The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. */
+/**
+ * The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. Art the decoders
+ * cannot read (an SVG logo, which the media CDN serves unchanged) is read as the CDN's PNG of it ([mediaRasterUrl]).
+ */
 @Composable
 internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   val loader = LocalImageLoader.current
@@ -95,7 +98,10 @@ internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   LaunchedEffect(url, loader) {
     if (url == null || loader == null || image != null) return@LaunchedEffect
     image = try {
-      loader.load(url)?.decodeToImageBitmap()?.also { ImageCache.put(url, it) }
+      val bytes = loader.load(url)
+      (bytes?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() }
+        ?: bytes?.let { com.aglyn.core.mediaRasterUrl(url) }?.let { png -> loader.load(png)?.decodeToImageBitmap() })
+        ?.also { ImageCache.put(url, it) }
     } catch (error: CancellationException) {
       throw error
     } catch (_: Throwable) {

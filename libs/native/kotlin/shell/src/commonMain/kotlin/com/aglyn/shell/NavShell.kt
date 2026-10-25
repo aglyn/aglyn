@@ -87,7 +87,6 @@ import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.shellColors
 import com.aglyn.ui.space
-import com.aglyn.ui.workspaceTint
 import kotlinx.coroutines.launch
 
 /** The slot the AI panel's widget is drawn in (its plugin's, e.g. Assist). */
@@ -139,10 +138,14 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val compactChrome = LocalUsesCompactChrome.current
   val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
 
-  // The workspace on screen is the most recent one; each account remembers the workspaces it holds for links.
-  LaunchedEffect(workspace.org?.id) { workspace.org?.id?.let(services.accountPrefs::openedOrg) }
-  LaunchedEffect(workspace.orgs) {
-    services.accounts?.rememberWorkspaces(workspace.orgs.map { it.slug })
+  // The workspace on screen is the most recent one, once the account's preferences have loaded: on a fresh install the
+  // first workspace opens before they arrive, and was never recorded (AGL-4000). Each account remembers the workspaces it
+  // holds for links.
+  LaunchedEffect(workspace.org?.id, prefs.loaded) { workspace.org?.id?.let(services.accountPrefs::openedOrg) }
+  LaunchedEffect(workspace.orgs) { services.accounts?.rememberWorkspaces(workspace.orgs.map { it.slug }) }
+  // The rail's tiles' logos: its pins and recents as the preferences load (they often arrive after the workspaces, and a
+  // recent one past the first eight then kept its initial; AGL-4000), and the first eight for the menus.
+  LaunchedEffect(workspace.orgs, prefs.pinned, prefs.recentOrgs) {
     services.workspace.loadLogos((prefs.pinned + prefs.recentOrgs + workspace.orgs.take(8).map { it.id }).distinct())
   }
   // Moving to another scope leaves its settings mode.
@@ -206,19 +209,20 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
   val allGroups = scopeGroups + settingsGroups.orEmpty()
 
-  val (orgColor, tints) = workspace.org?.id?.let { rememberWorkspaceColor(it, workspace, prefs, services.api.origin) } ?: (null to false)
   val dark = MaterialTheme.colorScheme.background.let { (it.red + it.green + it.blue) / 3 < 0.5f }
-  // A workspace's color is its rail tile and a light wash over the sidebar while it is on screen (unless the Sidebar
-  // setting is Plain). Only a white-label workspace's brand color stands in for the accent ([workspaceAccent]); a picked
-  // or logo color never does, so the accent stays the account theme's (Aglyn blue unless the person picked one).
-  val brand = orgColor?.takeIf { tints }
+  // A workspace's color is its rail tile and nothing else: no surface (rail, sidebar, list column, chrome) wears a wash of
+  // it (Zach, 2026-10-19: "this looks green"; AGL-4000). Only a white-label workspace's brand color stands in for the
+  // accent ([workspaceAccent]); a picked or logo color never does, so the accent stays the account theme's (Aglyn blue
+  // unless the person picked one).
   val accentOrg = workspace.org?.id
   val accentEntitlements = accentOrg?.let { services.entitlements.state(it).collectAsState().value }
   LaunchedEffect(accentOrg) { accentOrg?.let { services.entitlements.load(it) } }
   val accent = accentOrg?.let { id ->
-    workspaceAccent(workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true, useWorkspaceBrand = prefs.theme.useWorkspaceBrand)
+    workspaceAccent(
+      workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true,
+      useWorkspaceBrand = prefs.theme.useWorkspaceBrand, pickedAccent = prefs.theme.accent,
+    )
   }?.let { com.aglyn.ui.colorOfHex(it) }
-  val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
   // A site on screen that is deleted (or taken away) leaves for the whole workspace's Sites, as View all sites does, never
@@ -351,9 +355,13 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   // A phone (never the desktop's narrow window) draws the brand's bold look in the Aglyn theme (AGL-3990).
   WorkspaceBrandTheme(services, dark, accent, phone = !wide && !compactChrome) {
-  val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
-  // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
-  val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
+  // The sidebar is Plain (the theme's neutral surface) unless the person picked Tinted, and even then the Aglyn theme's
+  // stays neutral: Tinted blends 5% of the accent in force into it, never a workspace's own color (Apple's
+  // `AglynColor.sidebar`; AGL-4000).
+  val shell = com.aglyn.ui.shellColors(
+    MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current,
+    sidebarAccent = com.aglyn.ui.LocalAccent.current?.fill.takeIf { sidebarTinted(prefs.theme) },
+  )
   CompositionLocalProvider(
     androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
@@ -562,7 +570,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             VerticalDivider(color = shellColors.divider)
           }
           if (!chrome.sidebarHidden) {
-            NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, tint, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
+            NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
             VerticalDivider(color = shellColors.divider)
           }
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
@@ -607,7 +615,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
               if (assistTitle != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
-                Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
+                // The AI panel stays on the neutral ground, never a tinted sidebar's (AGL-4000).
+                Column(Modifier.width(380.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("ai-panel")) {
                   // Figma AI panel 18:485's header: ✦ in the accent, the title, Close.
                   Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(if (com.aglyn.ui.shellMetrics.compact) space(2.25f) else space(2.5f)), tint = com.aglyn.ui.LocalAccent.current?.icon ?: MaterialTheme.colorScheme.primary)
@@ -977,6 +986,19 @@ private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = n
 @Composable
 private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSelect: () -> Unit, onClose: () -> Unit, homeMark: @Composable () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
+  if (tab.pinned) {
+    // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded), drawn plain in every state:
+    // selected, hovered or pressed, it has no plate and no border (Figma Titlebar/Home tab 117:16049). A plate made the
+    // mark read as a button (Zach, 2026-10-19; AGL-4000).
+    Box(
+      Modifier.height(if (m.compact) 28.dp else 36.dp).testTag("tab-${tab.id}")
+        .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onSelect)
+        .semantics { this.selected = selected; role = Role.Tab; contentDescription = "Home: ${tab.title}" }
+        .padding(horizontal = 9.dp),
+      contentAlignment = Alignment.Center,
+    ) { homeMark() }
+    return
+  }
   Surface(
     onClick = onSelect,
     shape = RoundedCornerShape(m.controlRadius),
@@ -985,13 +1007,6 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
     modifier = Modifier.height(if (m.compact) 28.dp else 36.dp).widthIn(max = 260.dp).testTag("tab-${tab.id}")
       .semantics { this.selected = selected; role = Role.Tab },
   ) {
-    if (tab.pinned) {
-      // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded).
-      Box(Modifier.padding(horizontal = 9.dp).semantics { contentDescription = "Home: ${tab.title}" }, contentAlignment = Alignment.Center) {
-        homeMark()
-      }
-      return@Surface
-    }
     Row(Modifier.padding(start = 10.dp, end = if (closable) 2.dp else 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
       Icon(AglynIcons.named(tab.icon ?: "tab"), null, Modifier.size(14.dp), tint = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
       val split = tab.title.lastIndexOf(" — ")
