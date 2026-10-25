@@ -85,7 +85,7 @@ fun BarcodeScanSheet(
     ) {
       Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
-        FilledTonalIconToggleButton(checked = torch, onCheckedChange = { torch = it }) {
+        FilledTonalIconToggleButton(checked = torch, onCheckedChange = { torch = it }, colors = aglynTonalIconToggleButtonColors()) {
           Icon(AglynIcons.named(if (torch) "flashlight_off" else "flashlight_on"), if (torch) "Turn the light off" else "Turn the light on")
         }
       }

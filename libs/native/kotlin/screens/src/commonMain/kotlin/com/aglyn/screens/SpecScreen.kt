@@ -881,6 +881,7 @@ private fun ListBlock(
             androidx.compose.material3.FilterChip(
               selected = chosen == value,
               onClick = { chosen = if (chosen == value) "" else value },
+              colors = com.aglyn.ui.aglynFilterChipColors(),
               label = { Text(value) },
               modifier = Modifier.testTag("list-chip-$value"),
             )

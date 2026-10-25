@@ -247,6 +247,7 @@ fun ListScreenScaffold(
           InputChip(
             selected = true,
             onClick = { groups[choice.group]?.firstOrNull()?.let(onPick) },
+            colors = aglynInputChipColors(),
             label = { Text(choice.label) },
             trailingIcon = { Icon(AglynIcons.named("close"), "Clear ${choice.label}", Modifier.size(14.dp)) },
             shape = if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else MaterialTheme.shapes.small,

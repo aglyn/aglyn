@@ -488,9 +488,9 @@ internal fun SearchResultsScreen(
     }
     if (groups.size > 1) {
       Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        androidx.compose.material3.FilterChip(only == null, onClick = { only = null }, label = { Text("All") }, modifier = Modifier.testTag("search-results-all"))
+        androidx.compose.material3.FilterChip(only == null, onClick = { only = null }, label = { Text("All") }, colors = com.aglyn.ui.aglynFilterChipColors(), modifier = Modifier.testTag("search-results-all"))
         for ((group, heading) in groups) {
-          androidx.compose.material3.FilterChip(only == group, onClick = { only = if (only == group) null else group }, label = { Text(heading) }, modifier = Modifier.testTag("search-results-$group"))
+          androidx.compose.material3.FilterChip(only == group, onClick = { only = if (only == group) null else group }, label = { Text(heading) }, colors = com.aglyn.ui.aglynFilterChipColors(), modifier = Modifier.testTag("search-results-$group"))
         }
       }
     }
