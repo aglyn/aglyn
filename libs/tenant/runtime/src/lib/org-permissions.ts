@@ -26,6 +26,7 @@ import {
   type ResolvedOrgPermissionSet,
   listPluginPermissionKeys,
   ORG_ROLE_TIER,
+  tierPermissionsOf,
 } from '@aglyn/aglyn/server'
 import {
   resolveMemberOrgPermissions,
@@ -235,6 +236,11 @@ export async function resolveOrgPermissions(
       permissions: {
         ...resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
         ...toLegacyPermissions(granular, role),
+        // The plugin keys as the ONE catalog resolved them (AGL-4047): the
+        // role default, then the custom role, then the member's override. The
+        // tier spread above knows no custom role, so a role that grants an
+        // editor `managePos`, or takes it from an admin, is read from here.
+        ...tierPermissionsOf(granular),
         // LAST, so a per-member override wins (AGL-2474). The legacy spread
         // above rebuilds all six keys from the dotted catalog every time and
         // would otherwise stomp nothing here — but plugin keys are absent from

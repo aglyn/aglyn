@@ -199,7 +199,7 @@ fun <T> LoadContent(
         failedTitle,
         body = load.message,
         icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
-        action = { androidx.compose.material3.OutlinedButton(shape = controlShape(), onClick = onRetry) { Text("Try again") } },
+        action = { OutlinedButton(shape = controlShape(), onClick = onRetry) { Text("Try again") } },
       )
       is Load.Ready -> content(load.value)
     }

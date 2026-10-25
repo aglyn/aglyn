@@ -201,6 +201,7 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
       'Toggle Review platforms',
       'Toggle Music player',
       'Toggle Help desks',
+      'Toggle Waivers',
       'Toggle Ad conversions',
       'Toggle Domains',
     ])

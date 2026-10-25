@@ -636,8 +636,11 @@ struct AssistSlot: View {
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
     let row = scope.row(for: navigation.section)
-    let title = [navigation.section == .home ? "Home" : row?.label, scope.site?.name ?? scope.org?.name]
-      .compactMap { $0 }.joined(separator: " · ")
+    let place = navigation.section == .home ? "Home" : row?.label
+    let scopeName = scope.site?.name ?? scope.org?.name
+    let title = [place, scopeName].compactMap { $0 }.joined(separator: " · ")
+    // The context chip wears the place's own icon (Figma AI sheet 21:314, AI panel 18:485).
+    let icon = navigation.section == .home ? "house" : (row?.appleIcon ?? "eye")
     let orgSlug = model.workspace?.org?.slug ?? ""
     let site = scope.site
     let route =
@@ -650,7 +653,9 @@ struct AssistSlot: View {
         }
       }
     }
-    .environment(\.aglynSlotParams, ["route": route, "title": title])
+    .environment(
+      \.aglynSlotParams,
+      ["route": route, "title": title, "icon": icon, "place": place ?? "", "scope": scopeName ?? ""])
   }
 
   /// A row's console path within its scope, from the manifest's console reference.
@@ -682,6 +687,7 @@ struct ShellStack: View {
               RouteView(route: route)
             }
           }
+          .phoneAssistOnPushed(route)
           .wideBarHidden()
         }
     }
@@ -1115,36 +1121,12 @@ struct PhoneShell: View {
   }
 
   #if os(iOS)
-    /// Figma Phone/Tab item: a grey line icon and secondary label at rest; the accent icon and primary label when in use;
-    /// a count on the accent.
-    static func styleTabBar() {
-      let item = UITabBarItemAppearance()
-      item.normal.iconColor = UIColor(AglynColor.textTertiary)
-      item.normal.titleTextAttributes = [.foregroundColor: UIColor(AglynColor.secondaryText)]
-      item.selected.iconColor = UIColor(AglynColor.primary)
-      item.selected.titleTextAttributes = [.foregroundColor: UIColor(AglynColor.textPrimary)]
-      item.normal.badgeBackgroundColor = UIColor(AglynColor.primary)
-      item.normal.badgeTextAttributes = [.foregroundColor: UIColor(AglynColor.primaryContrast)]
-      let appearance = UITabBarAppearance()
-      appearance.configureWithDefaultBackground()
-      appearance.stackedLayoutAppearance = item
-      appearance.inlineLayoutAppearance = item
-      appearance.compactInlineLayoutAppearance = item
-      UITabBar.appearance().standardAppearance = appearance
-      UITabBar.appearance().scrollEdgeAppearance = appearance
-    }
-  #endif
+    /// Figma Phone/Tab item, in the theme in force: the shared `AglynPhoneTabBar` (the bold look's pill and gradient +
+    /// on a phone in the Aglyn theme, AGL-3990).
+    static func styleTabBar() { AglynPhoneTabBar.style() }
 
-  #if os(iOS)
-  /// Create new's tile in the tab bar: a white "+" on the accent, 48 by 36 points with a 12-point radius.
-  @MainActor static var createTile: UIImage? {
-    let tile = Image(systemName: "plus").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
-      .frame(width: 48, height: 36)
-      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.primary))
-    let renderer = ImageRenderer(content: tile)
-    renderer.scale = 3
-    return renderer.uiImage
-  }
+    /// Create new's tile in the tab bar (`AglynPhoneTabBar.createTile`).
+    @MainActor static var createTile: UIImage? { AglynPhoneTabBar.createTile }
   #endif
 
   var body: some View {
@@ -1160,8 +1142,13 @@ struct PhoneShell: View {
                 // The centre tab is the filled accent "+" tile (Figma Phone/Tab bar, Create), drawn as it is.
                 Image(uiImage: tile.withRenderingMode(.alwaysOriginal)).renderingMode(.original).accessibilityLabel("Create")
               } else {
-                // Line icons, as Figma's tab bar (a tab bar fills its symbols unless told not to).
-                Label(tab.title, systemImage: tab.icon).environment(\.symbolVariants, .none)
+                // Line icons, as Figma's tab bar (a tab bar fills its symbols unless told not to); in the bold look the
+                // tab in use is its white icon on the #00B0FF pill.
+                if navigation.section == tab.section, let pill = AglynPhoneTabBar.activeIcon(tab.icon) {
+                  Label { Text(tab.title) } icon: { Image(uiImage: pill).renderingMode(.original) }
+                } else {
+                  Label(tab.title, systemImage: tab.icon).environment(\.symbolVariants, .none)
+                }
               }
             #else
               Label(tab.title, systemImage: tab.icon)
@@ -1194,16 +1181,27 @@ struct PhoneShell: View {
     }
     .sheet(isPresented: $navigation.showCreate) { CreateNewSheet().environment(model).environment(navigation) }
     .sheet(isPresented: $navigation.showAssist) {
+      // Figma iPhone / Sheet / AI 21:314: the grabber, the title centered, Done in the trailing corner, then the panel.
       NavigationStack {
         AssistSlot()
           .navigationTitle("\(model.brandName) AI")
           #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AglynColor.paper, for: .navigationBar)
           #endif
-          .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { navigation.showAssist = false } } }
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button("Done") { navigation.showAssist = false }
+                .fontWeight(.semibold)
+                .tint(AglynColor.textPrimary)
+                .accessibilityIdentifier("assist-done")
+            }
+          }
       }
       .environment(model).environment(navigation)
       .presentationDetents([.large])
+      .presentationDragIndicator(.visible)
+      .presentationBackground(AglynColor.paper)
     }
     .onChange(of: navigation.section, initial: true) { previous, section in
       // The centre tab is Create new: it opens the sheet and stays on the tab you were on.
@@ -1232,29 +1230,39 @@ struct PhoneTopBar: ViewModifier {
       content.toolbar {
         if sizeClass == .compact {
         ToolbarItem(placement: .topBarLeading) { ScopeChip() }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          Button {
-            navigation.showOneBox = true
-          } label: {
-            Label("Search or jump to", systemImage: "magnifyingglass")
+        // One item, not a group: with search, the bell, AI and your photo as separate items, a phone's bar folds the
+        // last of them into a "More" menu, and AI must stay one tap away (Figma Phone/Top bar 273:20194).
+        ToolbarItem(placement: .topBarTrailing) {
+          HStack(spacing: AglynSpace.one) {
+            Button {
+              navigation.showOneBox = true
+            } label: {
+              Label("Search or jump to", systemImage: "magnifyingglass")
+            }
+            // Grey, as Figma's top bar (22:499); the accent is for the action in use.
+            .tint(AglynColor.secondaryText)
+            .accessibilityIdentifier("topbar-search")
+            Button {
+              navigation.showNotifications = true
+            } label: {
+              Label("Notifications", systemImage: "bell")
+            }
+            .tint(AglynColor.secondaryText)
+            .accessibilityIdentifier("topbar-bell")
+            // Your AI, one tap away on every screen, as the Mac's and iPad's title bar has it (Figma Phone/Top bar
+            // 273:20194): after the bell, before your photo.
+            if AssistSlot.available(model) {
+              PhoneAssistButton()
+            }
+            Button {
+              navigation.showAccount = true
+            } label: {
+              AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 28)
+            }
+            .accessibilityLabel("Your account")
+            .accessibilityIdentifier("topbar-account")
           }
-          // Grey, as Figma's top bar (22:499); the accent is for the action in use.
-          .tint(AglynColor.secondaryText)
-          .accessibilityIdentifier("topbar-search")
-          Button {
-            navigation.showNotifications = true
-          } label: {
-            Label("Notifications", systemImage: "bell")
-          }
-          .tint(AglynColor.secondaryText)
-          .accessibilityIdentifier("topbar-bell")
-          Button {
-            navigation.showAccount = true
-          } label: {
-            AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 28)
-          }
-          .accessibilityLabel("Your account")
-          .accessibilityIdentifier("topbar-account")
+          .labelStyle(.iconOnly)
         }
         }
       }
@@ -1267,6 +1275,52 @@ struct PhoneTopBar: ViewModifier {
 extension View {
   /// The phone's top bar, on a tab's first screen.
   func phoneTopBar() -> some View { modifier(PhoneTopBar()) }
+
+  /// Your AI on a phone's pushed screen (Figma Phone/Top bar, Pushed): on the navigation bar's trailing edge, after the
+  /// screen's own actions, so it is one tap away wherever you are.
+  func phoneAssistOnPushed(_ route: Route) -> some View { modifier(PhoneAssistOnPushed(route: route)) }
+}
+
+/// The top bar's AI button: a grey line ✦ like the bell beside it, opening the AI sheet.
+struct PhoneAssistButton: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+
+  var body: some View {
+    Button {
+      navigation.showAssist = true
+    } label: {
+      Label("\(model.brandName) AI", systemImage: "sparkles")
+    }
+    .tint(AglynColor.secondaryText)
+    .accessibilityIdentifier("topbar-ai")
+  }
+}
+
+private struct PhoneAssistOnPushed: ViewModifier {
+  @Environment(AppModel.self) private var model
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+  #endif
+  let route: Route
+
+  /// The in-app browser keeps its own bar (Figma 22:712): its page is not a screen the AI reads.
+  private var shown: Bool {
+    if case .web = route { return false }
+    return AssistSlot.available(model)
+  }
+
+  func body(content: Content) -> some View {
+    #if os(iOS)
+      content.toolbar {
+        if sizeClass == .compact && shown {
+          ToolbarItem(placement: .topBarTrailing) { PhoneAssistButton() }
+        }
+      }
+    #else
+      content
+    #endif
+  }
 }
 
 /// The scope chip: the site (or the whole workspace) the phone stands in; opens the two-step picker.
@@ -1291,11 +1345,12 @@ struct ScopeChip: View {
         Text(name).font(AglynFont.strongSubheadline).lineLimit(1)
         Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
       }
-      // Figma Phone/Scope chip 11:313: a filled sunken capsule, no border, 6 points before the picture and 12 after.
+      // Figma Phone/Scope chip 11:313: a filled sunken capsule, no border, 6 points before the picture and 12 after (raised
+      // with a hairline in the phone's bold look, AGL-3990).
       .padding(.leading, 6)
       .padding(.trailing, 12)
       .padding(.vertical, 4)
-      .background(Capsule().fill(AglynColor.sunken))
+      .aglynPhoneChip()
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Switch, \(name)")
@@ -1315,7 +1370,7 @@ struct MenuScreen: View {
         // Your AI and help sit in Menu on a phone, never floating over content (Figma 22:176, "Quick").
         HStack(spacing: 10) {
           if AssistSlot.available(model) {
-            quick("\(model.brandName) AI", "sparkles") { navigation.showAssist = true }
+            quick("\(model.brandName) AI", "sparkles", ai: true) { navigation.showAssist = true }
               .accessibilityIdentifier("menu-ai")
           }
           Menu {
@@ -1338,26 +1393,37 @@ struct MenuScreen: View {
       }
       SidebarList(scope: scope, push: true)
     }
-    // The list sits on the paper surface under the title, which stays on the page ground (Figma 22:176).
-    .background(AglynColor.paper, ignoresSafeAreaEdges: [])
-    .background(AglynColor.page)
+    // The list sits on the paper surface under the title, which stays on the page ground (Figma 22:176); in the bold
+    // look the panel's top corners round and the ground carries the brand's glow (AGL-3990).
+    .aglynPhonePanel()
+    .aglynPhoneGround()
     .navigationTitle(scope.modeTitle ?? "Menu")
   }
 
-  private func quick(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) { quickLabel(title, icon) }.buttonStyle(.plain)
+  private func quick(_ title: String, _ icon: String, ai: Bool = false, action: @escaping () -> Void) -> some View {
+    Button(action: action) { quickLabel(title, icon, ai: ai) }.buttonStyle(.plain)
   }
 
   /// One of Menu's two quick buttons: an icon and a label on a 44-point card.
-  private func quickLabel(_ title: String, _ icon: String) -> some View {
-    HStack(spacing: 10) {
-      Image(systemName: icon).font(.system(size: 17)).foregroundStyle(AglynColor.accentIcon)
-      Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
+  /// In the phone's bold look (AGL-3990) the AI card wears the brand's wash and its sparkle the gradient, and help's
+  /// icon is the quiet secondary shade.
+  private func quickLabel(_ title: String, _ icon: String, ai: Bool = false) -> some View {
+    let bold = AglynThemeRuntime.shared.phoneBold
+    let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+    return HStack(spacing: 10) {
+      if ai {
+        AglynAIGlyph(size: 17)
+      } else {
+        Image(systemName: icon).font(.system(size: 17)).foregroundStyle(bold ? AglynColor.secondaryText : AglynColor.accentIcon)
+      }
+      Text(title).font(.system(size: 15, weight: bold ? .semibold : .medium)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 14)
     .frame(maxWidth: .infinity, minHeight: 44)
-    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.sunken))
+    .background {
+      if ai && bold { shape.fill(AglynBrandGradient.wash) } else { shape.fill(AglynColor.sunken) }
+    }
     .contentShape(Rectangle())
   }
 }

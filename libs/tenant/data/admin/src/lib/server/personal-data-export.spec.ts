@@ -510,6 +510,10 @@ describe('exportOrgData', () => {
       marketplaceListings: { l1: { profileId: 'o1', title: 'Widget' } },
       platformRevenue: { r1: { orgId: 'o1', gross: 1000, tax: 82 } },
       storefrontTaxCollected: { s1: { orgId: 'o1', tax: 12 } },
+      posHardwareSales: {
+        hw_1: { orgId: 'o1', taxCents: 0, totalCents: 14_000 },
+        hw_2: { orgId: 'other', taxCents: 0, totalCents: 9_000 },
+      },
       supportTickets: { t1: { orgId: 'o1', subject: 'Billing' } },
       apiIdempotency: {
         i1: { orgId: 'o1' },
@@ -557,6 +561,7 @@ describe('exportOrgData', () => {
       'marketplaceListings',
       'platformRevenue',
       'storefrontTaxCollected',
+      'posHardwareSales',
     ]) {
       expect([collection, result.data[collection]?.length]).toEqual([
         collection,

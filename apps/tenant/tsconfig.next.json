@@ -332,6 +332,12 @@
       "@aglyn/plugins-weglot/*": [
         "../../libs/plugins/weglot/src/lib/*"
       ],
+      "@aglyn/plugins-waivers": [
+        "../../libs/plugins/waivers/src/index.ts"
+      ],
+      "@aglyn/plugins-waivers/*": [
+        "../../libs/plugins/waivers/src/lib/*"
+      ],
       "@aglyn/shared-data-enums": [
         "../../libs/shared/data/enums/src/index.ts"
       ],

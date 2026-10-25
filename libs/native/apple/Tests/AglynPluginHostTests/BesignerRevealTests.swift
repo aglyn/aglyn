@@ -31,7 +31,9 @@ final class BesignerRevealTests: XCTestCase {
   func testThePaintedSignalWaitsForTheEditorBarAndNoLoadingOverlay() {
     let script = BesignerReveal.paintedScript
     XCTAssertTrue(script.contains("aglyn-besigner-logo-full"))
-    XCTAssertTrue(script.contains("getBoundingClientRect"))
+    // Mounted is enough: the compact bar (an iPad split, a phone) hides the wordmark, and the iPad drive sat on
+    // "Still opening" over a drawn editor while the signal asked for it on screen.
+    XCTAssertFalse(script.contains("getBoundingClientRect"))
     XCTAssertTrue(script.contains(".progress-bar-top"))
     XCTAssertTrue(script.contains("readyState"))
   }

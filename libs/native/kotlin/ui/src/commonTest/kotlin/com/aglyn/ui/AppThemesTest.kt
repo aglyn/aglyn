@@ -18,12 +18,27 @@ class AppThemesTest {
       for (dark in listOf(false, true)) {
         val page = if (dark) Color(0xFF1E262E) else Color.White
         val accent = deriveAccent(raw, dark)
-        assertTrue(contrastRatio(accent.onFill, accent.fill) >= 4.5f, "fill of $raw")
+        // White on every fill (AGL-3990), at the large-text bar at least: the console's own pairing for a brand color.
+        assertEquals(Color.White.toHex(), accent.onFill.toHex(), "on of $raw")
+        assertTrue(contrastRatio(accent.onFill, accent.fill) >= 2.4f, "fill of $raw")
         assertTrue(contrastRatio(accent.text, page) >= 4.5f, "text of $raw on dark=$dark")
         assertTrue(accent.fillPressed.luminance() <= accent.fillHover.luminance() && accent.fillHover.luminance() <= accent.fill.luminance())
         assertEquals(raw.toHex(), accent.ring.toHex())
       }
     }
+  }
+
+  @Test
+  fun theBrandBlueIsTheConsolesPrimary() {
+    // #00B0FF under white; #0077AD as text on light, #4DC8FF on dark (AGL-3990, the console's primary.dark).
+    val light = deriveAccent(Color(0xFF00B0FF), false)
+    val dark = deriveAccent(Color(0xFF00B0FF), true)
+    assertEquals(Color(0xFF00B0FF).toHex(), light.fill.toHex())
+    assertEquals(Color.White.toHex(), light.onFill.toHex())
+    assertEquals(Color(0xFF0077AD).toHex(), light.text.toHex())
+    assertEquals(Color(0xFF4DC8FF).toHex(), dark.text.toHex())
+    // An accent saved from the retired #0073AE swatch reads as the brand blue.
+    assertEquals(light, deriveAccent(Color(0xFF0073AE), false))
   }
 
   @Test
@@ -59,6 +74,26 @@ class AppThemesTest {
     assertNotEquals(AglynLightColorScheme.primary, scheme.primary)
     // No theme, no accent: the generated scheme untouched.
     assertEquals(AglynLightColorScheme, themedColorScheme(AglynLightColorScheme, null, null, dark = false))
+  }
+
+  @Test
+  fun aPhoneInTheBrandsLookDrawsTheBoldGrounds() {
+    // Figma Theme mode 223:0 (AGL-3990): a sky-tinted ground under white panels in light, navy in dark.
+    assertEquals("#EDF9FF", phoneBoldSurfaces(dark = false).canvas.toHex().uppercase())
+    assertEquals(Color.White.toHex(), phoneBoldSurfaces(dark = false).surface.toHex())
+    assertEquals("#07181F", phoneBoldSurfaces(dark = true).canvas.toHex().uppercase())
+    // Only the Aglyn theme in the brand blue (a retired blue reads as it); a picked accent or another theme keeps its own.
+    assertTrue(isBrandLook(AppThemeName.AGLYN, null))
+    assertTrue(isBrandLook(AppThemeName.AGLYN, "#00B0FF"))
+    assertTrue(isBrandLook(AppThemeName.AGLYN, "#0073AE"))
+    assertEquals(false, isBrandLook(AppThemeName.AGLYN, "#7A5CF0"))
+    assertEquals(false, isBrandLook(AppThemeName.QUIET, null))
+    for (dark in listOf(false, true)) {
+      val s = phoneBoldSurfaces(dark)
+      for (ground in listOf(s.canvas, s.surface, s.raised, s.sunken)) {
+        assertTrue(contrastRatio(s.textPrimary, ground) >= 4.5f && contrastRatio(s.textTertiary, ground) >= 4.5f, "text on $ground dark=$dark")
+      }
+    }
   }
 
   @Test

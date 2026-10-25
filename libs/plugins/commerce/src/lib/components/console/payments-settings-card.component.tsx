@@ -328,29 +328,26 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 'sale, what Stripe charges to take the payment. It is not a ' +
                 `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin.`}
             </Typography>
-            {/* EVERY TENDER, AND HOW EACH IS COLLECTED (AGL-2111).
+            {/* WHICH REGISTER TENDERS CARRY THE FEE, AND HOW EACH IS
+                COLLECTED (AGL-2111, AGL-4036).
 
-                Until now this card said "per sale" and meant it for online and
-                card sales only: cash and room-charge sales at the register
-                recorded no fee at all, so a merchant could read this sentence,
-                ring everything as cash, and pay nothing. The fee now attaches
-                to the sale on every tender, which makes the sentence above
-                true — and creates a second, visible collection route the
-                merchant has to be told about BEFORE it appears on their
-                invoice, because it is money leaving by a door they have never
-                seen it leave by.
+                Card and room-charge payments at the register carry the fee;
+                cash, gift cards and store credit carry none
+                (`CommerceModel.paymentCarriesPlatformFee`). A room charge's
+                fee leaves by a door the merchant has never seen money leave
+                by, their monthly invoice, so it is said here BEFORE it
+                appears there.
 
                 Shown only when a rate actually applies: on a 0% plan there is
                 nothing to collect either way, and the paragraph would be noise
                 on the card of the merchants who upgraded to escape fees. */}
             {physicalPct > 0 || digitalPct > 0 ? (
               <Typography variant="body2" color="text.secondary">
-                {'The fee is charged on the sale, not on how it was paid — ' +
-                  'in-person cash and room-charge sales carry it too. On card ' +
-                  'sales it is deducted from your Stripe payout; on cash and ' +
-                  'room-charge sales there is no payout to deduct from, so it ' +
-                  `is added to your monthly ${Aglyn.PLATFORM_BRAND_LEGAL_NAME} ` +
-                  'invoice instead.'}
+                {'At the register, cash, gift card and store credit payments ' +
+                  'carry no fee. On card payments it is deducted from your ' +
+                  'Stripe payout; on room-charge payments there is no payout to ' +
+                  'deduct from, so it is added to your monthly ' +
+                  `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} invoice instead.`}
               </Typography>
             ) : null}
           </>

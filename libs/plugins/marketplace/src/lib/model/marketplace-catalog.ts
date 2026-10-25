@@ -42,6 +42,7 @@ export const ARTIFACT_TYPE_LABELS: Record<MarketplaceArtifactType, string> = {
   emailTemplate: 'Email template',
   emailStarter: 'Email starter',
   theme: 'Theme',
+  siteStarter: 'Site starter',
 }
 
 /** Where an installed artifact lives. */
@@ -78,6 +79,9 @@ export const INSTALL_TARGETS: Record<
   // (AGL-1020). Applying one org-wide would repaint every site at once from a
   // control that says "install".
   theme: ['host'],
+  // A site starter installs by creating a site from it (AGL-4049), never
+  // into an existing one.
+  siteStarter: ['host'],
 }
 
 /** A plugin install pin — the version-pinned doc the install API writes. */

@@ -425,7 +425,7 @@ private struct DeviceReaderSection: View {
         systemImage: reader.kind == .tapToPay ? "wave.3.right" : "creditcard.and.123"
       ) {
         Button("Connect") { run { await controls.connect(to: reader, hostID: hostID, sessions: sessions) } }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(busy)
           .accessibilityIdentifier("device-reader-connect-\(reader.id)")
       }
