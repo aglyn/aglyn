@@ -253,6 +253,47 @@ public struct AglynRowButtonStyle: ButtonStyle {
   }
 }
 
+/// A row that does one thing (Open the lead in the CRM, Add to a marketing list, Add join collection): its words in the
+/// accent text color (the error color when destructive), a › when it opens another screen, the row's hover and the
+/// pointing hand; never a bordered pill or a tinted wash (Zach, 2026-10-20). In a plain form its hover runs the row's
+/// whole width.
+public struct AglynActionRow: View {
+  let title: String
+  let systemImage: String?
+  let opens: Bool
+  let destructive: Bool
+  let action: () -> Void
+
+  public init(
+    _ title: String, systemImage: String? = nil, opens: Bool = false, destructive: Bool = false,
+    action: @escaping () -> Void
+  ) {
+    self.title = title
+    self.systemImage = systemImage
+    self.opens = opens
+    self.destructive = destructive
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      HStack(spacing: AglynSpace.one) {
+        if let systemImage { Image(systemName: systemImage).frame(width: 20) }
+        Text(title)
+        Spacer(minLength: AglynSpace.one)
+        if opens {
+          Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(AglynColor.textTertiary)
+            .accessibilityHidden(true)
+        }
+      }
+      .foregroundStyle(destructive ? AglynColor.error : AglynColor.tint)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.aglynRow)
+  }
+}
+
 /// A row that opens something shows the pointing hand on the Mac, as a link does (Zach, 2026-10-19: "it's not obvious
 /// this is clickable").
 struct AglynLinkPointer: ViewModifier {

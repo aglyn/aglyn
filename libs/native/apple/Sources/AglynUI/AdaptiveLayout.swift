@@ -83,6 +83,8 @@ public struct ListDetailLayout<List: View, Detail: View>: View {
 /// detail column folds away and the list, its empty state centered, takes
 /// the width.
 public struct AglynListDetailColumns<List: View, Detail: View>: View {
+  /// The screen's list toolbar (`aglynSearchable`), drawn atop the list column rather than across both columns.
+  @Environment(\.aglynListColumnToolbar) private var toolbar
   let list: List
   let detail: Detail
   let listWidth: CGFloat
@@ -102,21 +104,23 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
       // Both columns stand on the content surface (Zach, 2026-10-19: never a grey ground): the list's rows on E, and the
       // detail's forms plain (`AglynGroupedForm`), its sections on the surface with no cards.
       if showsDetail {
-        list
-          .environment(\.aglynListColumn, true)
+        listColumn
           .frame(
             minWidth: max(320, listWidth - 40), idealWidth: listWidth, maxWidth: max(440, listWidth), maxHeight: .infinity,
             alignment: .top)
           .background(AglynColor.paper)
-        Divider()
+        // The 1-point hairline in the border token between the list and its detail, the full height of the columns
+        // (Zach 10/20: with every column on the same surface, the hairline is what says where one ends).
+        AglynColumnHairline()
         detail
           .environment(\.aglynDetailColumn, true)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(AglynColor.paper)
       } else {
-        list.environment(\.aglynListColumn, true).aglynListColumn()
+        listColumn.aglynListColumn()
       }
     }
+    .preference(key: AglynListToolbarPlacedKey.self, value: toolbar != nil)
     .animation(.snappy(duration: 0.2), value: showsDetail)
     #if os(iOS)
       // Two scroll views side by side leave the bar no single one to collapse a large title into, so the title
@@ -125,5 +129,22 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbarBackground(.visible, for: .navigationBar)
     #endif
+  }
+
+  /// The list, its toolbar atop it; the toolbar is not handed further down.
+  private var listColumn: some View {
+    list
+      .environment(\.aglynListColumn, true)
+      .safeAreaInset(edge: .top, spacing: 0) { toolbar }
+      .environment(\.aglynListColumnToolbar, nil)
+  }
+}
+
+/// The 1-point vertical hairline between two columns (the list and its detail), in the border token.
+public struct AglynColumnHairline: View {
+  public init() {}
+
+  public var body: some View {
+    Rectangle().fill(AglynColor.divider).frame(width: 1).frame(maxHeight: .infinity).accessibilityHidden(true)
   }
 }
