@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -536,6 +537,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, tint, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
             VerticalDivider(color = shellColors.divider)
           }
+          // The content area stands on the theme's surface, every column alike, never the grey canvas (AGL-4012).
+          val shellRow = this
+          com.aglyn.ui.ContentGround { with(shellRow) {
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
             val crumbsSlot = remember { com.aglyn.ui.PageCrumbsSlot() }
             if (route !is Route.Web) {
@@ -584,6 +588,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
             }
           }
+          } }
         }
       }
       if (tabs.overview) TabOverview(tabs, onSelect = ::selectTab, onReopen = { tab -> tabs.closed.remove(tab); tabs.closed.add(0, tab); reopenTab() })
@@ -903,7 +908,9 @@ private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = n
   val edge = com.aglyn.ui.LocalContentInset.current ?: com.aglyn.ui.contentInset()
   val firstPads = steps.firstOrNull()?.let { it.open != null && steps.size > 1 } == true
   Row(
-    Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),
+    // Figma 13:3: 24 above the trail, 16 tall; the head below keeps its own 16 (com.aglyn.ui.HeadMetrics).
+    Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = com.aglyn.ui.HeadMetrics.top)
+      .heightIn(min = com.aglyn.ui.HeadMetrics.crumbs).testTag("title-crumb"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {

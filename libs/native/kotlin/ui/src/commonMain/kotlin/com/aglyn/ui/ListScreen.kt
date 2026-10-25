@@ -131,6 +131,22 @@ fun ListHeaderAction(label: String, icon: String, onClick: () -> Unit, modifier:
   }
 }
 
+/**
+ * A content head's measures on the desktop and tablet (Figma Mac Sites 13:3 / iPad 13:1880, Orders 13:483; Apple's
+ * AglynHeadMetrics): 24 above the breadcrumbs (16 tall), 16 between them and the title row, the title row as tall as the
+ * filled 36 button with the button centered on it, 16 to the list toolbar and 16 from it to the list. A list beside its
+ * detail heads its own column without breadcrumbs: 20 above its 28 title row, 12 to the toolbar and 12 to the rows.
+ */
+object HeadMetrics {
+  val top = 24.dp
+  val crumbs = 16.dp
+  val gap = 16.dp
+  val titleRow = 36.dp
+  val listColumnTop = 20.dp
+  val listColumnTitleRow = 28.dp
+  val listColumnGap = 12.dp
+}
+
 /** The primary action of a list screen: its one filled button. */
 data class PrimaryAction(val id: String, val label: String, val icon: String = "add", val enabled: Boolean = true, val run: () -> Unit)
 
@@ -175,8 +191,13 @@ fun ListScreenScaffold(
   // E, or what is left of it inside a list pane that already brings its content in (LocalContentInset).
   val edge = LocalContentInset.current ?: contentInset()
   Column(modifier.fillMaxSize().testTag("$tag-screen")) {
+    // The head's rhythm (HeadMetrics) on the desktop and tablet; a phone keeps its own.
+    val headTop = when { !compactHead -> space(1f); inListColumn -> HeadMetrics.listColumnTop; else -> HeadMetrics.gap }
+    val headGap = when { !compactHead -> space(1.5f); inListColumn -> HeadMetrics.listColumnGap; else -> HeadMetrics.gap }
+    val toolbarGap = when { !compactHead -> space(1f); inListColumn -> HeadMetrics.listColumnGap; else -> HeadMetrics.gap }
+    val titleRow = when { !compactHead -> 0.dp; inListColumn -> HeadMetrics.listColumnTitleRow; else -> HeadMetrics.titleRow }
     Row(
-      Modifier.fillMaxWidth().padding(start = edge, end = edge, top = space(1f), bottom = space(1.5f)),
+      Modifier.fillMaxWidth().padding(start = edge, end = edge, top = headTop, bottom = headGap).heightIn(min = titleRow).testTag("$tag-title-row"),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
@@ -205,7 +226,7 @@ fun ListScreenScaffold(
       if (more.isNotEmpty() && compactHead) OverflowMenu(more, contentDescription = "More actions", boxed = true)
     }
     Row(
-      Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = space(1f)),
+      Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = toolbarGap).testTag("$tag-toolbar"),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
@@ -289,14 +310,21 @@ fun ScaffoldListRow(
   val padV = if (phone || site) 12.dp else 10.dp
   val gap = if (site) 14.dp else 12.dp
   val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-  // The tile and the trailing figure sit on the column's content inset E; the selection's fill reaches past them.
-  val outer = ((LocalContentInset.current ?: contentInset()) - padH).coerceAtLeast(0.dp)
+  val inset = LocalContentInset.current ?: contentInset()
+  // The tile and the trailing figure sit on the column's content inset E. In a list column beside its detail the
+  // selection is square and the column's whole width (AGL-4012); elsewhere its fill reaches a little past them.
+  val square = squareListSelection()
+  val outer = if (square) 0.dp else (inset - padH).coerceAtLeast(0.dp)
+  val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
   Row(
-    modifier.fillMaxWidth().padding(horizontal = outer, vertical = 1.dp).clip(shape)
-      .background(if (selected) shellColors.selected else Color.Transparent)
-      .clickable(onClick = onClick)
+    modifier.fillMaxWidth()
+      .then(
+        if (square) Modifier.squareRowGround(selected, interaction)
+        else Modifier.padding(horizontal = outer, vertical = 1.dp).clip(shape).background(if (selected) shellColors.selected else Color.Transparent),
+      )
+      .clickable(interactionSource = interaction, indication = if (square) null else androidx.compose.material3.ripple(), onClick = onClick)
       .heightIn(min = height)
-      .padding(horizontal = padH, vertical = padV)
+      .padding(horizontal = if (square) inset else padH, vertical = padV)
       .semantics(mergeDescendants = true) { if (selected) this.selected = true },
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(gap),
