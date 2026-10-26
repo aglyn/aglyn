@@ -25,8 +25,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   AD_AUDIENCE_PROVIDER_LABELS,
+  AD_AUDIENCE_STAGE_LABELS,
   emailDomain,
   readAdAudienceConfig,
+  type AdAudienceProvider,
+  type AdAudienceStage,
 } from '@aglyn/tenant-data-admin/server/ad-audience-sync'
 import {
   readAdAudienceAccounts,
@@ -59,6 +62,10 @@ import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operat
  * - `?force=1` on the scheduled POST sends a set that shrank by more than
  *   half, which a run otherwise holds as a likely failed read.
  * - The report and the log carry counts only: no address, no hash.
+ * - Beside each provider's all-holders list, the report carries every STAGE
+ *   (AGL-4072) — free and not published, free and published, paid, lapsed —
+ *   with its eligible count whether or not its lists are configured, and
+ *   each configured stage list's own outcome.
  */
 
 export const AD_AUDIENCE_SYNC_JOB_ID = 'ad-audience-sync'
@@ -116,30 +123,47 @@ async function handler(request: Request): Promise<Response> {
       console.info('[ad-audience-sync] release_ad_audience_sync is off; nothing sent')
       return Response.json({ ok: true, dryRun, flagOn, skipped: 'flag-off' }, { status: 200 })
     }
+    const operatorDomain = emailDomain(operatorIdentity().supportEmail)
+    const internalDomains = operatorDomain ? [operatorDomain] : []
     const { accounts } = await readAdAudienceAccounts({
       firestore,
       listUserPage: listUsersAcrossPools,
       bannedEmails: (emails) => accountBannedRecipients(emails, firestore),
       now,
+      internalDomains,
     })
-    const operatorDomain = emailDomain(operatorIdentity().supportEmail)
     const report = await runAdAudienceSync({
       dryRun,
       flagOn,
       force,
       config: readAdAudienceConfig(),
-      internalDomains: operatorDomain ? [operatorDomain] : [],
+      internalDomains,
       accounts,
       firestore,
       fetch: fetch as unknown as AudienceFetch,
       now,
     })
-    for (const [provider, result] of Object.entries(report.providers)) {
+    const lists = [
+      ...Object.entries(report.providers).map(([provider, result]) => ({
+        provider: provider as AdAudienceProvider,
+        stage: null as AdAudienceStage | null,
+        result,
+      })),
+      ...Object.entries(report.stages ?? {}).flatMap(([stage, stageReport]) =>
+        Object.entries(stageReport.providers).map(([provider, result]) => ({
+          provider: provider as AdAudienceProvider,
+          stage: stage as AdAudienceStage,
+          result,
+        })),
+      ),
+    ]
+    for (const { provider, stage, result } of lists) {
       if (result.outcome !== 'failed' && result.outcome !== 'held-shrink') continue
+      const label = AD_AUDIENCE_PROVIDER_LABELS[provider]
       await raiseConsoleOperatorAlert('ops.adAudienceSyncFailed', {
-        dedupeKey: `ad-audience-sync:${provider}`,
+        dedupeKey: stage ? `ad-audience-sync:${provider}:${stage}` : `ad-audience-sync:${provider}`,
         context: {
-          provider: AD_AUDIENCE_PROVIDER_LABELS[provider as keyof typeof AD_AUDIENCE_PROVIDER_LABELS],
+          provider: stage ? `${label} (${AD_AUDIENCE_STAGE_LABELS[stage]} list)` : label,
           detail: result.error ?? result.outcome,
         },
       })

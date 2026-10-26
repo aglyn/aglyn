@@ -21,24 +21,33 @@ import {
   isAccountBanLockdownReason,
   LOCKDOWNS_COLLECTION,
 } from '@aglyn/aglyn/app-utils/lockdown'
-import { FieldPath } from 'firebase-admin/firestore'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import {
   AD_AUDIENCE_EXCLUSIONS,
+  AD_AUDIENCE_LAPSE_MS,
   AD_AUDIENCE_PROVIDERS,
+  AD_AUDIENCE_STAGES,
   adAudienceExclusion,
+  adAudienceStages,
   buildGoogleMemberRequests,
   buildGoogleTokenRequest,
   buildLinkedInUserRequests,
   buildMetaReplaceRequests,
   diffAudience,
   hashAudienceEmail,
+  instantMs,
+  isOwnPublishedScreen,
+  isRealActivityAction,
   isSuspiciousShrink,
   linkedInRefusedCount,
   resolveAccountCountry,
   type AdAudienceAccount,
   type AdAudienceConfig,
   type AdAudienceExclusion,
+  type AdAudienceListConfig,
   type AdAudienceProvider,
+  type AdAudienceStage,
   type AudienceRequest,
 } from './ad-audience-sync'
 
@@ -58,6 +67,11 @@ import {
  * the only way to take it out of a Google list or a LinkedIn segment is the
  * hash this sync sent it under. Admin-SDK only; no client rule opens either.
  * No address is stored, and neither addresses nor hashes are ever logged.
+ *
+ * A STAGE list (AGL-4072) keeps the same two things under its own document,
+ * `adAudienceSync/{provider}--{stage}`, so each stage has its own ledger, its
+ * own diff and its own shrink guard, and nothing one list does can touch what
+ * another was sent.
  */
 
 export const AD_AUDIENCE_SYNC_COLLECTION = 'adAudienceSync'
@@ -66,6 +80,19 @@ export const AD_AUDIENCE_MEMBERS_SUBCOLLECTION = 'members'
 const MEMBER_CHUNK = 5_000
 /** Auth pages walked per run (1,000 accounts each). */
 const MAX_AUTH_PAGES = 500
+/** Page documents read per page of the published-page scan. */
+const SCREEN_PAGE = 5_000
+/** Change-log entries read per page while looking for one the person made. */
+const ACTIVITY_PAGE = 25
+/** Pages of change log read per account before it is called quiet. */
+const ACTIVITY_PAGES = 4
+/** Accounts whose recent activity is read at once. */
+const ACTIVITY_CONCURRENCY = 20
+
+/** The ledger document of one list: the provider's own, or `{provider}--{stage}`. */
+export function adAudienceLedgerId(provider: AdAudienceProvider, stage?: AdAudienceStage | null): string {
+  return stage ? `${provider}--${stage}` : provider
+}
 
 /** The Auth page reader, as `listUsersAcrossPools` answers it. */
 export type ListUsersPage = (
@@ -79,6 +106,11 @@ export type ListUsersPage = (
       emailVerified: boolean
       disabled: boolean
       customClaims?: Record<string, unknown>
+      /**
+       * Only `creationTime` is read. `lastSignInTime` and `lastRefreshTime`
+       * are never activity: a silent re-sign-in moves both with nobody there.
+       */
+      metadata?: { creationTime?: string }
     }
   }>
   nextPageToken: string | null | undefined
@@ -90,6 +122,16 @@ export interface AdAudienceReadDeps {
   /** The account-ban list's answer for these addresses, lowercased. */
   bannedEmails: (emails: readonly string[]) => Promise<Set<string>>
   now: number
+  /**
+   * The operator's own domains. Only narrows whose recent activity is read:
+   * an internal account is in no list, so its change log is not looked at.
+   */
+  internalDomains?: readonly string[]
+  /**
+   * The newest real activity of one account since `sinceMs`, or null. The
+   * Firestore reader `readRecentActivityAtMs` unless a spec passes its own.
+   */
+  recentActivity?: (uid: string, sinceMs: number) => Promise<number | null>
 }
 
 /** A number for each reason; never a person. */
@@ -101,9 +143,11 @@ export interface AdAudienceSelection {
   excluded: ExclusionCounts
   /** How the eligible accounts' country was decided. */
   countrySource: { billing: number; signup: number }
+  /** The eligible accounts in each stage (AGL-4072). */
+  stages: Record<AdAudienceStage, AdAudienceAccount[]>
 }
 
-/** Every account, with the facts eligibility reads. */
+/** Every account, with the facts eligibility and the stage lists read. */
 export async function readAdAudienceAccounts(
   deps: AdAudienceReadDeps,
 ): Promise<{ accounts: AdAudienceAccount[] }> {
@@ -123,15 +167,51 @@ export async function readAdAudienceAccounts(
     if (typeof geo?.country === 'string') signupCountry.set(doc.id, geo.country)
   }
 
-  // Billing countries of the workspaces each account owns.
-  const orgs = await db.collection('orgs').select('ownerUid', 'contact.address.country').get()
+  // The workspaces each account owns, in one query: their billing countries,
+  // whether any is on a paid plan, and the sites they hold. The plan is
+  // `resolveEffectivePlan`'s, the one every entitlement reads — a canceled
+  // subscription is Free, a staff comp is the plan it grants — and it needs
+  // only the org document's own fields (the derived `billingStatus` included).
+  const orgs = await db
+    .collection('orgs')
+    .select(
+      'ownerUid',
+      'contact.address.country',
+      'plan',
+      'billingStatus',
+      'subscription.status',
+      'entitlements.planComp',
+      'hosts',
+    )
+    .get()
   const billing = new Map<string, string[]>()
+  const paidOwners = new Set<string>()
+  const hostOwner = new Map<string, string>()
   for (const doc of orgs.docs) {
     const owner = doc.get('ownerUid')
+    if (typeof owner !== 'string' || !owner) continue
     const country = doc.get('contact.address.country')
-    if (typeof owner !== 'string' || !owner || typeof country !== 'string' || !country) continue
-    billing.set(owner, [...(billing.get(owner) ?? []), country])
+    if (typeof country === 'string' && country) {
+      billing.set(owner, [...(billing.get(owner) ?? []), country])
+    }
+    const data = (doc.data() ?? {}) as Record<string, unknown>
+    if (resolveEffectivePlan(data as never) !== 'free') paidOwners.add(owner)
+    const hosts = data['hosts']
+    if (hosts && typeof hosts === 'object') {
+      for (const hostId of Object.keys(hosts as Record<string, unknown>)) hostOwner.set(hostId, owner)
+    }
   }
+
+  // The stage facts never hold up the all-holders list: a read that fails
+  // leaves the accounts in no stage tonight, which every stage list's shrink
+  // hold (or its refusal to send an empty replace) keeps from reaching a
+  // provider, and the main list is synced as ever.
+  const publishedOwners = await readOwnPublishedOwners(db, hostOwner, deps.now).catch(
+    (error: unknown): null => {
+      console.error('[ad-audience-sync] the published-page read failed; no stage tonight', error)
+      return null
+    },
+  )
 
   // Account locks: `lockdowns/user--{uid}`, by document id range.
   const locks = await db
@@ -166,6 +246,16 @@ export async function readAdAudienceAccounts(
         banned: false,
         billingCountries: billing.get(record.uid) ?? [],
         signupCountry: signupCountry.get(record.uid) ?? null,
+        ...(publishedOwners
+          ? {
+              stageFacts: {
+                createdAtMs: instantMs(record.metadata?.creationTime),
+                ownsPaidWorkspace: paidOwners.has(record.uid),
+                ownsPublishedSite: publishedOwners.has(record.uid),
+                lastActivityAtMs: null,
+              },
+            }
+          : {}),
       })
     }
     pageToken = listed.nextPageToken ?? undefined
@@ -182,19 +272,145 @@ export async function readAdAudienceAccounts(
   for (const account of accounts) {
     if (account.email && banned.has(account.email.trim().toLowerCase())) account.banned = true
   }
+
+  // Recent activity, for the only accounts it can change anything for: those
+  // in the audience and old enough to lapse. Everyone else's change log is
+  // never read, which keeps the nightly cost to the accounts that matter.
+  const since = deps.now - AD_AUDIENCE_LAPSE_MS
+  const recentActivity =
+    deps.recentActivity ?? ((uid: string, sinceMs: number) => readRecentActivityAtMs(db, uid, sinceMs))
+  const internalDomains = deps.internalDomains ?? []
+  const candidates = accounts.filter((account) => {
+    const created = account.stageFacts?.createdAtMs
+    return (
+      typeof created === 'number' &&
+      created < since &&
+      !adAudienceExclusion(account, { internalDomains })
+    )
+  })
+  let activityFailures = 0
+  for (let index = 0; index < candidates.length; index += ACTIVITY_CONCURRENCY) {
+    await Promise.all(
+      candidates.slice(index, index + ACTIVITY_CONCURRENCY).map(async (account) => {
+        try {
+          const at = await recentActivity(account.uid, since)
+          if (account.stageFacts) account.stageFacts.lastActivityAtMs = at
+        } catch {
+          // Unknown is not quiet: out of every stage tonight, never lapsed by mistake.
+          delete account.stageFacts
+          activityFailures += 1
+        }
+      }),
+    )
+  }
+  if (activityFailures) {
+    console.error(`[ad-audience-sync] recent activity unread for ${activityFailures} accounts; in no stage tonight`)
+  }
   return { accounts }
 }
 
-/** The eligible accounts and the counts of everyone left out. */
+/**
+ * The owners of a site with a page of their own published, from one scan of
+ * every page document (`hosts/{hostId}/screens/{id}`), paged by path and
+ * reading only the fields the test needs. One query instead of one per site;
+ * a page whose site no workspace holds counts for nobody.
+ */
+async function readOwnPublishedOwners(
+  db: FirebaseFirestore.Firestore,
+  hostOwner: ReadonlyMap<string, string>,
+  now: number,
+): Promise<Set<string>> {
+  const owners = new Set<string>()
+  if (!hostOwner.size) return owners
+  const base = db
+    .collectionGroup('screens')
+    .orderBy(FieldPath.documentId())
+    .select('publishedAt', 'deletedAt', 'createdAt', 'updatedAt', 'createdBy')
+    .limit(SCREEN_PAGE)
+  let after: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  for (;;) {
+    const page = await (after ? base.startAfter(after) : base).get()
+    for (const doc of page.docs) {
+      // `hosts/{hostId}/screens/{screenId}`; any other `screens` is not a site's.
+      const [root, hostId] = doc.ref.path.split('/')
+      const owner = root === 'hosts' ? hostOwner.get(hostId) : undefined
+      if (!owner || owners.has(owner)) continue
+      if (isOwnPublishedScreen((doc.data() ?? {}) as Record<string, unknown>, now)) owners.add(owner)
+    }
+    if (page.docs.length < SCREEN_PAGE) break
+    after = page.docs[page.docs.length - 1]
+  }
+  return owners
+}
+
+/**
+ * The newest thing one account DID since `sinceMs`, or null when nothing was
+ * recorded. Two signals, both read through collection-group indexes that
+ * already exist for the staff activity feed and the AI job list:
+ *
+ * - **Change-log entries** under the account's id, on any site's or
+ *   workspace's log (`hosts/{id}/activity`, `orgs/{id}/activity`): page
+ *   edits, publishes, form and CRM actions, settings. Entries the platform
+ *   writes under the person's id without them acting
+ *   (`isRealActivityAction`) are skipped.
+ * - **AI jobs the account started** (`orgs/{id}/aiJobs` by `createdBy`). The
+ *   start only: a job's later updates are the platform's.
+ *
+ * Firebase's sign-in and token-refresh times, and the device "last seen"
+ * stamps, are never read: a silent re-sign-in moves them with nobody there.
+ */
+export async function readRecentActivityAtMs(
+  db: FirebaseFirestore.Firestore,
+  uid: string,
+  sinceMs: number,
+): Promise<number | null> {
+  const since = Timestamp.fromMillis(sinceMs)
+  const jobs = db
+    .collectionGroup('aiJobs')
+    .where('createdBy', '==', uid)
+    .where('createdAt', '>=', since)
+    .orderBy('createdAt', 'desc')
+    .select('createdAt')
+    .limit(1)
+    .get()
+  const log = db
+    .collectionGroup('activity')
+    .where('actorId', '==', uid)
+    .where('createdAt', '>=', since)
+    .orderBy('createdAt', 'desc')
+    .select('action', 'createdAt')
+    .limit(ACTIVITY_PAGE)
+  let newest: number | null = null
+  let after: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  // Newest first, so the first real entry is the newest; a page of nothing
+  // but platform entries reads the next one, a few pages at most.
+  for (let page = 0; page < ACTIVITY_PAGES && newest === null; page += 1) {
+    const entries = await (after ? log.startAfter(after) : log).get()
+    const real = entries.docs.find((doc) => isRealActivityAction(doc.get('action')))
+    if (real) newest = instantMs(real.get('createdAt')) ?? sinceMs
+    if (entries.docs.length < ACTIVITY_PAGE) break
+    after = entries.docs[entries.docs.length - 1]
+  }
+  const job = (await jobs).docs[0]
+  const started = job ? (instantMs(job.get('createdAt')) ?? sinceMs) : null
+  return newest === null ? started : started === null ? newest : Math.max(newest, started)
+}
+
+/** The eligible accounts, the counts of everyone left out, and each stage. */
 export function selectAdAudience(
   accounts: readonly AdAudienceAccount[],
   internalDomains: readonly string[],
+  now: number = Date.now(),
 ): AdAudienceSelection {
   const excluded = Object.fromEntries(
     AD_AUDIENCE_EXCLUSIONS.map((reason) => [reason, 0]),
   ) as ExclusionCounts
   const eligible: AdAudienceAccount[] = []
   const countrySource = { billing: 0, signup: 0 }
+  const stages = Object.fromEntries(AD_AUDIENCE_STAGES.map((stage) => [stage, []])) as unknown as Record<
+    AdAudienceStage,
+    AdAudienceAccount[]
+  >
   for (const account of accounts) {
     const reason = adAudienceExclusion(account, { internalDomains })
     if (reason) {
@@ -204,8 +420,9 @@ export function selectAdAudience(
     eligible.push(account)
     const { source } = resolveAccountCountry(account)
     if (source) countrySource[source] += 1
+    for (const stage of adAudienceStages(account, now)) stages[stage].push(account)
   }
-  return { scanned: accounts.length, eligible, excluded, countrySource }
+  return { scanned: accounts.length, eligible, excluded, countrySource, stages }
 }
 
 /** The set one provider should hold. Two addresses may share a hash. */
@@ -225,14 +442,18 @@ export function providerHashes(
  * STATE
  *=========================================*/
 
-/** What one provider was last sent. */
+/**
+ * What one list was last sent: the provider's all-holders list, or with
+ * `stage` that stage's list, each from its own ledger.
+ */
 export async function readSentHashes(
   firestore: FirebaseFirestore.Firestore,
   provider: AdAudienceProvider,
+  stage?: AdAudienceStage | null,
 ): Promise<string[]> {
   const chunks = await firestore
     .collection(AD_AUDIENCE_SYNC_COLLECTION)
-    .doc(provider)
+    .doc(adAudienceLedgerId(provider, stage))
     .collection(AD_AUDIENCE_MEMBERS_SUBCOLLECTION)
     .get()
   const hashes: string[] = []
@@ -243,14 +464,26 @@ export async function readSentHashes(
   return hashes
 }
 
-/** Replace what one provider was last sent, and its counts. */
+/** The list a ledger write is for. */
+interface LedgerList {
+  provider: AdAudienceProvider
+  stage: AdAudienceStage | null
+}
+
+/** The fields that say which list a state document belongs to. */
+const ledgerFields = (list: LedgerList) => ({
+  provider: list.provider,
+  ...(list.stage ? { stage: list.stage } : {}),
+})
+
+/** Replace what one list was last sent, and its counts. */
 async function writeSentState(
   firestore: FirebaseFirestore.Firestore,
-  provider: AdAudienceProvider,
+  list: LedgerList,
   hashes: readonly string[],
   state: Record<string, unknown>,
 ): Promise<void> {
-  const ref = firestore.collection(AD_AUDIENCE_SYNC_COLLECTION).doc(provider)
+  const ref = firestore.collection(AD_AUDIENCE_SYNC_COLLECTION).doc(adAudienceLedgerId(list.provider, list.stage))
   const members = ref.collection(AD_AUDIENCE_MEMBERS_SUBCOLLECTION)
   const existing = await members.get()
   const runs: string[][] = []
@@ -264,19 +497,19 @@ async function writeSentState(
   for (const doc of existing.docs) {
     if (!keep.has(doc.id)) await doc.ref.delete()
   }
-  await ref.set({ provider, ...state, members: hashes.length, chunks: runs.length }, { merge: true })
+  await ref.set({ ...ledgerFields(list), ...state, members: hashes.length, chunks: runs.length }, { merge: true })
 }
 
-/** The counts of a run on the provider's state document, members untouched. */
+/** The counts of a run on the list's state document, members untouched. */
 async function writeRunState(
   firestore: FirebaseFirestore.Firestore,
-  provider: AdAudienceProvider,
+  list: LedgerList,
   state: Record<string, unknown>,
 ): Promise<void> {
   await firestore
     .collection(AD_AUDIENCE_SYNC_COLLECTION)
-    .doc(provider)
-    .set({ provider, ...state }, { merge: true })
+    .doc(adAudienceLedgerId(list.provider, list.stage))
+    .set({ ...ledgerFields(list), ...state }, { merge: true })
 }
 
 /*==========================================
@@ -398,6 +631,17 @@ export interface ProviderReport {
   error?: string
 }
 
+/** One stage's list on every provider (AGL-4072). */
+export interface StageReport {
+  /**
+   * The eligible accounts in the stage. Counted for every stage on every
+   * run, whether or not any of its lists is configured, so the report says
+   * when a stage is big enough to be worth a list.
+   */
+  eligible: number
+  providers: Record<AdAudienceProvider, ProviderReport>
+}
+
 export interface AdAudienceSyncReport {
   dryRun: boolean
   flagOn: boolean
@@ -406,6 +650,7 @@ export interface AdAudienceSyncReport {
   excluded: ExclusionCounts
   countrySource: { billing: number; signup: number }
   providers: Record<AdAudienceProvider, ProviderReport>
+  stages: Record<AdAudienceStage, StageReport>
 }
 
 export interface AdAudienceRunOptions {
@@ -425,93 +670,137 @@ export interface AdAudienceRunOptions {
   log?: (line: string) => void
 }
 
+/**
+ * One list on one provider: read what it was last sent, diff, and — unless
+ * this run may not send — send and record. The all-holders list and every
+ * stage list go through exactly this, each against its own ledger.
+ */
+async function syncList(
+  options: AdAudienceRunOptions,
+  log: (line: string) => void,
+  list: LedgerList,
+  listConfig: AdAudienceListConfig,
+  hashes: string[],
+  /** Added to the clock for Meta's session id, which must be unique per run and audience. */
+  sessionOffset: number,
+): Promise<ProviderReport> {
+  const { provider, stage } = list
+  const name = stage ? `${provider} ${stage}` : provider
+  const config = listConfig[provider]
+  const base = { eligible: hashes.length, previous: 0, toAdd: 0, toRemove: 0 }
+  if (!config) {
+    // A stage list nobody set up is the normal case; its line is the stage's.
+    if (!stage) log(`[ad-audience-sync] ${provider} skipped — set ${listConfig.missing[provider].join(', ')}`)
+    return { ...base, outcome: 'unconfigured', missing: listConfig.missing[provider] }
+  }
+  const previous = await readSentHashes(options.firestore, provider, stage)
+  const diff = diffAudience(previous, hashes)
+  const counts = {
+    ...base,
+    previous: previous.length,
+    toAdd: diff.toAdd.length,
+    toRemove: diff.toRemove.length,
+  }
+  const outcome = (value: ProviderOutcome, extra: Partial<ProviderReport> = {}): ProviderReport => {
+    log(
+      `[ad-audience-sync] ${name} ${value}: eligible ${counts.eligible}, ` +
+        `previous ${counts.previous}, add ${counts.toAdd}, remove ${counts.toRemove}` +
+        (extra.error ? ` — ${extra.error}` : ''),
+    )
+    return { ...counts, outcome: value, ...extra }
+  }
+  if (options.dryRun) return outcome('dry-run')
+  if (!options.flagOn) return outcome('flag-off')
+  const stamp = { lastRunAtMs: options.now, eligible: counts.eligible }
+  if (!diff.toAdd.length && !diff.toRemove.length) {
+    await writeRunState(options.firestore, list, { ...stamp, lastOutcome: 'unchanged' })
+    return outcome('unchanged')
+  }
+  // Meta replaces with what it is sent, and an empty replace is no replace.
+  if (!hashes.length) {
+    await writeRunState(options.firestore, list, { ...stamp, lastOutcome: 'empty' })
+    return outcome('empty', { error: 'no eligible account; the audience was left as it is' })
+  }
+  if (!options.force && isSuspiciousShrink(previous.length, hashes.length)) {
+    await writeRunState(options.firestore, list, { ...stamp, lastOutcome: 'held-shrink' })
+    return outcome('held-shrink', {
+      error: `the audience would shrink from ${previous.length} to ${hashes.length}; held until a run with force`,
+    })
+  }
+  try {
+    if (provider === 'meta') {
+      await sendMeta(
+        options.fetch,
+        config as NonNullable<AdAudienceConfig['meta']>,
+        hashes,
+        options.now + sessionOffset,
+      )
+    } else if (provider === 'google') {
+      await sendGoogle(options.fetch, config as NonNullable<AdAudienceConfig['google']>, diff)
+    } else {
+      await sendLinkedIn(options.fetch, config as NonNullable<AdAudienceConfig['linkedin']>, diff)
+    }
+  } catch (error) {
+    // The stored set stays as it was: the next run retries the whole diff,
+    // and every provider takes a repeated add or remove without harm.
+    const message = error instanceof AudienceSendError ? error.message : `${provider} send failed`
+    if (!(error instanceof AudienceSendError)) console.error(`[ad-audience-sync] ${name}`, error)
+    await writeRunState(options.firestore, list, {
+      ...stamp,
+      lastOutcome: 'failed',
+      lastError: message,
+    })
+    return outcome('failed', { error: message })
+  }
+  await writeSentState(options.firestore, list, hashes, {
+    ...stamp,
+    lastOutcome: 'sent',
+    lastSentAtMs: options.now,
+    lastAdded: counts.toAdd,
+    lastRemoved: counts.toRemove,
+    lastError: null,
+  })
+  return outcome('sent')
+}
+
 export async function runAdAudienceSync(options: AdAudienceRunOptions): Promise<AdAudienceSyncReport> {
   const log = options.log ?? ((line: string) => console.info(line))
-  const selection = selectAdAudience(options.accounts, options.internalDomains)
-  const providers = {} as Record<AdAudienceProvider, ProviderReport>
+  const selection = selectAdAudience(options.accounts, options.internalDomains, options.now)
 
+  const providers = {} as Record<AdAudienceProvider, ProviderReport>
   for (const provider of AD_AUDIENCE_PROVIDERS) {
-    const hashes = providerHashes(provider, selection.eligible)
-    const config = options.config[provider]
-    const base = { eligible: hashes.length, previous: 0, toAdd: 0, toRemove: 0 }
-    if (!config) {
-      providers[provider] = { ...base, outcome: 'unconfigured', missing: options.config.missing[provider] }
-      log(`[ad-audience-sync] ${provider} skipped — set ${options.config.missing[provider].join(', ')}`)
-      continue
-    }
-    const previous = await readSentHashes(options.firestore, provider)
-    const diff = diffAudience(previous, hashes)
-    const counts = {
-      ...base,
-      previous: previous.length,
-      toAdd: diff.toAdd.length,
-      toRemove: diff.toRemove.length,
-    }
-    const outcome = (value: ProviderOutcome, extra: Partial<ProviderReport> = {}) => {
-      providers[provider] = { ...counts, outcome: value, ...extra }
-      log(
-        `[ad-audience-sync] ${provider} ${value}: eligible ${counts.eligible}, ` +
-          `previous ${counts.previous}, add ${counts.toAdd}, remove ${counts.toRemove}` +
-          (extra.error ? ` — ${extra.error}` : ''),
+    providers[provider] = await syncList(
+      options,
+      log,
+      { provider, stage: null },
+      options.config,
+      providerHashes(provider, selection.eligible),
+      0,
+    )
+  }
+
+  // The stage lists: each a subset of the same eligible audience, each with
+  // its own ledger, diff and shrink guard. Each failing alone, like a provider.
+  const stages = {} as Record<AdAudienceStage, StageReport>
+  for (const [index, stage] of AD_AUDIENCE_STAGES.entries()) {
+    const members = selection.stages[stage]
+    const stageProviders = {} as Record<AdAudienceProvider, ProviderReport>
+    for (const provider of AD_AUDIENCE_PROVIDERS) {
+      stageProviders[provider] = await syncList(
+        options,
+        log,
+        { provider, stage },
+        options.config.stages[stage],
+        providerHashes(provider, members),
+        index + 1,
       )
     }
-    if (options.dryRun) {
-      outcome('dry-run')
-      continue
-    }
-    if (!options.flagOn) {
-      outcome('flag-off')
-      continue
-    }
-    const stamp = { lastRunAtMs: options.now, eligible: counts.eligible }
-    if (!diff.toAdd.length && !diff.toRemove.length) {
-      await writeRunState(options.firestore, provider, { ...stamp, lastOutcome: 'unchanged' })
-      outcome('unchanged')
-      continue
-    }
-    // Meta replaces with what it is sent, and an empty replace is no replace.
-    if (!hashes.length) {
-      await writeRunState(options.firestore, provider, { ...stamp, lastOutcome: 'empty' })
-      outcome('empty', { error: 'no eligible account; the audience was left as it is' })
-      continue
-    }
-    if (!options.force && isSuspiciousShrink(previous.length, hashes.length)) {
-      await writeRunState(options.firestore, provider, { ...stamp, lastOutcome: 'held-shrink' })
-      outcome('held-shrink', {
-        error: `the audience would shrink from ${previous.length} to ${hashes.length}; held until a run with force`,
-      })
-      continue
-    }
-    try {
-      if (provider === 'meta') {
-        await sendMeta(options.fetch, config as NonNullable<AdAudienceConfig['meta']>, hashes, options.now)
-      } else if (provider === 'google') {
-        await sendGoogle(options.fetch, config as NonNullable<AdAudienceConfig['google']>, diff)
-      } else {
-        await sendLinkedIn(options.fetch, config as NonNullable<AdAudienceConfig['linkedin']>, diff)
-      }
-    } catch (error) {
-      // The stored set stays as it was: the next run retries the whole diff,
-      // and every provider takes a repeated add or remove without harm.
-      const message = error instanceof AudienceSendError ? error.message : `${provider} send failed`
-      if (!(error instanceof AudienceSendError)) console.error(`[ad-audience-sync] ${provider}`, error)
-      await writeRunState(options.firestore, provider, {
-        ...stamp,
-        lastOutcome: 'failed',
-        lastError: message,
-      })
-      outcome('failed', { error: message })
-      continue
-    }
-    await writeSentState(options.firestore, provider, hashes, {
-      ...stamp,
-      lastOutcome: 'sent',
-      lastSentAtMs: options.now,
-      lastAdded: counts.toAdd,
-      lastRemoved: counts.toRemove,
-      lastError: null,
-    })
-    outcome('sent')
+    const unset = AD_AUDIENCE_PROVIDERS.filter((provider) => stageProviders[provider].outcome === 'unconfigured')
+    log(
+      `[ad-audience-sync] stage ${stage}: eligible ${members.length}` +
+        (unset.length ? `; no list set on ${unset.join(', ')}` : ''),
+    )
+    stages[stage] = { eligible: members.length, providers: stageProviders }
   }
 
   return {
@@ -522,5 +811,6 @@ export async function runAdAudienceSync(options: AdAudienceRunOptions): Promise<
     excluded: selection.excluded,
     countrySource: selection.countrySource,
     providers,
+    stages,
   }
 }
