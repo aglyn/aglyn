@@ -107,6 +107,9 @@ export const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
  */
 const CALL_TIMEOUT_MS = 6_000
 
+/** The pause before a 5xx is asked again: long enough to step past a blip. */
+const TRANSIENT_RETRY_DELAY_MS = 400
+
 /**
  * How many GCIP tenant pools the SSO check samples.
  *
@@ -174,8 +177,26 @@ interface ToolkitReply {
  * does add is fidelity: this is the same endpoint, the same key and the same
  * App Check precondition a real sign-in goes through, so a configuration
  * change that would break sign-in breaks this first.
+ *
+ * A 5xx is asked once more before it counts. Identity Platform answers the
+ * odd request with a 503 while every other request around it is fine — one
+ * `accounts:update` 503 on 2026-10-26 15:14Z held the verification door red
+ * for a whole probe TTL while every customer's verification link worked. A
+ * browser's SDK call that met the same 503 would be one retry from working
+ * too, so a single one is not a shut door. A provider outage answers 5xx to
+ * both asks and still reads `provider-unavailable`.
  */
 async function callIdentityToolkit(
+  method: string,
+  body: Record<string, unknown>,
+): Promise<ToolkitReply> {
+  const reply = await callIdentityToolkitOnce(method, body)
+  if (!reply.answered || reply.status < 500) return reply
+  await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
+  return callIdentityToolkitOnce(method, body)
+}
+
+async function callIdentityToolkitOnce(
   method: string,
   body: Record<string, unknown>,
 ): Promise<ToolkitReply> {

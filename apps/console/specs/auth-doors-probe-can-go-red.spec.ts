@@ -522,6 +522,39 @@ describe('email-verification goes red', () => {
     })
   })
 
+  // Identity Platform answers the odd request 503 while the rest are fine.
+  // The probe asks again, so ONE 503 is not a red; a provider that answers
+  // 503 to both asks is, and it names itself (2026-10-26 15:14Z).
+  it('stays green through a single 503 from the redemption endpoint', async () => {
+    const replies = [
+      { status: 503, body: { error: { message: 'The service is currently unavailable.' } } },
+      mockToolkitReplies['accounts:update'],
+    ]
+    Object.defineProperty(mockToolkitReplies, 'accounts:update', {
+      get: () => replies.shift() ?? replies[0],
+      enumerable: true,
+    })
+    const { status, body } = await invoke()
+    expect(status).toBe(200)
+    expect(doorOf(body, 'emailVerification')).toMatchObject({ ok: true })
+    expect(
+      mockRequestedMethods.filter((method) => method === 'accounts:update'),
+    ).toHaveLength(2)
+  })
+
+  it('when the redemption endpoint answers 503 to the retry too', async () => {
+    mockToolkitReplies['accounts:update'] = {
+      status: 503,
+      body: { error: { message: 'The service is currently unavailable.' } },
+    }
+    const { status, body } = await invoke()
+    expect(status).toBe(503)
+    expect(doorOf(body, 'emailVerification')).toMatchObject({
+      ok: false,
+      code: 'redeem-provider-unavailable',
+    })
+  })
+
   // The whole point of AGL-2668: the outage this door slept through is one
   // where every clause above passes and no mail is sent anyway.
   it('when the cooldown refuses to let a brand-new account send', async () => {
@@ -897,6 +930,8 @@ describe('classifyIdentityToolkitFailure', () => {
     [403, 'Requests to this API are blocked.', 'api-key-rejected'],
     [400, 'INVALID_OOB_CODE', 'refused'],
     [400, 'TOO_MANY_ATTEMPTS_TRY_LATER : We have blocked all requests from this device due to unusual activity.', 'throttled'],
+    [503, 'The service is currently unavailable.', 'provider-unavailable'],
+    [500, '', 'provider-unavailable'],
   ])('maps %s %s to %s', (status, message, expected) => {
     expect(classifyIdentityToolkitFailure(status as number, message as string)).toBe(
       expected,
@@ -907,7 +942,7 @@ describe('classifyIdentityToolkitFailure', () => {
   // travel into the body — the classifier's whole job is to end the string.
   it('never returns anything derived from the message text', () => {
     const verdict = classifyIdentityToolkitFailure(
-      500,
+      400,
       'project aglyn-main service account firebase-adminsdk@example failed',
     )
     expect(verdict).toBe('refused')
