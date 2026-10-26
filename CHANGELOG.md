@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **besigner:** phone toolbar above the keyboard; handle drags keep the edit ([AGL-4069](https://linear.app/aglyn/issue/AGL-4069))
+- **console:** every sign-in lands in sign-in history, including a browser signed back in from its session cookie, which staff sign-in history now labels ([#2012](https://github.com/aglyn/aglyn/pull/2012))
 
 ## v1.0.0-beta.283 — 2026-10-25
 
