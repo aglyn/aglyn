@@ -97,6 +97,30 @@ export function signUpDoorFor(
   return null
 }
 
+/**
+ * The provider a sign-up came through, when the token in hand is not the
+ * one the sign-up minted (AGL-3706).
+ *
+ * The console restores a session on another `.aglyn.com` host by minting a
+ * custom token, so every request after that hop carries `custom` as its
+ * `sign_in_provider`. A sign-up whose own page was torn down before it
+ * recorded anything reaches its workspace backstop on the far side of that
+ * hop, where the token can no longer name a door. The auth record still can:
+ * a brand-new account holds the one provider it was created with. Only a
+ * `custom` token defers to it, and only when the record names exactly one
+ * sign-up provider; every other token decides on its own, as before.
+ */
+export function signUpProviderFor(
+  tokenProvider: string | null | undefined,
+  recordProviderIds: readonly string[],
+): string | null {
+  if (tokenProvider !== 'custom') return tokenProvider ?? null
+  const doors = [...new Set(recordProviderIds)].filter(
+    (id) => signUpDoorFor(id) !== null,
+  )
+  return doors.length === 1 ? doors[0] : tokenProvider
+}
+
 /** What wrote a record: a door at creation, an organization copying its creator's, or the backfill. */
 export type AcquisitionRecordedBy = 'signup' | 'sso' | 'org-creation' | 'backfill'
 
