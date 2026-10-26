@@ -1327,6 +1327,18 @@ every one blank. Set them on the **console only**.
 | `GOOGLE_AUDIENCE_SYNC_USER_LIST_ID` | Aglyn-only / your own | Runtime, console | The id of an empty Customer Match list (contact information) in that account. Accept the Customer Match terms in Google Ads first: each upload states that they are accepted. |
 | `LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN` | Aglyn-only / your own | Runtime, console | A member access token with `rw_dmp_segments`, from a developer app LinkedIn has approved for Matched Audiences. A secret. |
 | `LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID` | Aglyn-only / your own | Runtime, console | The DMP segment's id (or its `urn:li:dmpSegment:` URN). |
+| `META_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_AUDIENCE_ID` | Optional | Runtime, console | The Custom Audience for the **free, not published** stage list, made the same way as the main one. Unset, that stage is not sent to Meta. |
+| `META_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_AUDIENCE_ID` | Optional | Runtime, console | The Custom Audience for the **free, published** stage list, made the same way as the main one. Unset, that stage is not sent to Meta. |
+| `META_AUDIENCE_SYNC_STAGE_PAID_AUDIENCE_ID` | Optional | Runtime, console | The Custom Audience for the **paid** stage list, made the same way as the main one. Unset, that stage is not sent to Meta. |
+| `META_AUDIENCE_SYNC_STAGE_LAPSED_AUDIENCE_ID` | Optional | Runtime, console | The Custom Audience for the **lapsed** stage list, made the same way as the main one. Unset, that stage is not sent to Meta. |
+| `GOOGLE_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_USER_LIST_ID` | Optional | Runtime, console | The Customer Match list for the **free, not published** stage list, in the same Google Ads account. Unset, that stage is not sent to Google. |
+| `GOOGLE_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_USER_LIST_ID` | Optional | Runtime, console | The Customer Match list for the **free, published** stage list, in the same Google Ads account. Unset, that stage is not sent to Google. |
+| `GOOGLE_AUDIENCE_SYNC_STAGE_PAID_USER_LIST_ID` | Optional | Runtime, console | The Customer Match list for the **paid** stage list, in the same Google Ads account. Unset, that stage is not sent to Google. |
+| `GOOGLE_AUDIENCE_SYNC_STAGE_LAPSED_USER_LIST_ID` | Optional | Runtime, console | The Customer Match list for the **lapsed** stage list, in the same Google Ads account. Unset, that stage is not sent to Google. |
+| `LINKEDIN_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_SEGMENT_ID` | Optional | Runtime, console | The DMP segment for the **free, not published** stage list. Unset, that stage is not sent to LinkedIn. |
+| `LINKEDIN_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_SEGMENT_ID` | Optional | Runtime, console | The DMP segment for the **free, published** stage list. Unset, that stage is not sent to LinkedIn. |
+| `LINKEDIN_AUDIENCE_SYNC_STAGE_PAID_SEGMENT_ID` | Optional | Runtime, console | The DMP segment for the **paid** stage list. Unset, that stage is not sent to LinkedIn. |
+| `LINKEDIN_AUDIENCE_SYNC_STAGE_LAPSED_SEGMENT_ID` | Optional | Runtime, console | The DMP segment for the **lapsed** stage list. Unset, that stage is not sent to LinkedIn. |
 
 Google and LinkedIn have no replace, so the job keeps the hashes it last sent
 to each, server-side in `adAudienceSync/{provider}/members`, to remove an
@@ -1335,6 +1347,30 @@ address is gone. No address is stored and nothing is logged but counts. A night
 whose audience would shrink by more than half is held and raises an operator
 alert, since that is likelier a failed read than real churn; a `POST` with
 `?force=1` sends it.
+
+Beside that one list, each provider can keep a **stage list** for each of four
+stages, so ads to people who already have an account can fit where they are.
+Every stage is a subset of the same eligible audience:
+
+- **free, not published**: owns no workspace on a paid plan, and no site with a
+  page of its own published (a page a person made or edited; the starter page
+  every new site is born with does not count);
+- **free, published**: owns no workspace on a paid plan, and at least one such
+  published page;
+- **paid**: owns a workspace whose plan, as the billing rules resolve it, is a
+  paid one (a staff comp counts; a canceled subscription does not);
+- **lapsed**: the account is more than 30 days old and nothing it did in the
+  last 30 days was recorded: no entry of its own in a site's or workspace's
+  change log, and no AI job it started. Sign-in times are not activity, because
+  a browser can sign a person back in with nobody there. A lapsed account is
+  also in one of the other three.
+
+A stage list reuses its provider's credentials and needs only its own list id;
+create each one by hand, as for the main list. Unset, the stage is not sent.
+Each keeps its own record of what it was sent
+(`adAudienceSync/{provider}--{stage}/members`) and its own shrink hold. The
+`GET` report counts every stage's eligible accounts whether or not its lists are
+set, so you can wait until a stage is big enough to be worth a list.
 
 **Inline vendor boots need the CSP nonce.** Every advertising tag the console
 mounts is a pair — an inline boot that declares the consent state and configures

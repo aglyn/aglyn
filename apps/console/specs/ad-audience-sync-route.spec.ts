@@ -24,7 +24,8 @@
  * The nightly account-holder audience route (AGL-3780). The rules are walked
  * in `tenant-data-admin`'s `ad-audience-sync.spec.ts`; this holds the door to
  * them: the cron secret alone may send, a GET and a staff caller only read,
- * the release flag gates every send, and a failed provider raises an alert.
+ * the release flag gates every send, and a failed provider raises an alert —
+ * and so does a failed stage list (AGL-4072), under its own key.
  */
 
 export {}
@@ -106,6 +107,16 @@ const report = (outcome: string) => ({
     google: { outcome, eligible: 2, previous: 0, toAdd: 2, toRemove: 0, error: 'google answered 401: bad token' },
     linkedin: { outcome: 'unconfigured', eligible: 2, previous: 0, toAdd: 0, toRemove: 0 },
   },
+  stages: {
+    paid: {
+      eligible: 1,
+      providers: {
+        meta: { outcome: 'unconfigured', eligible: 1, previous: 0, toAdd: 0, toRemove: 0 },
+        google: { outcome: 'unconfigured', eligible: 1, previous: 0, toAdd: 0, toRemove: 0 },
+        linkedin: { outcome: 'unconfigured', eligible: 1, previous: 0, toAdd: 0, toRemove: 0 },
+      },
+    },
+  },
 })
 
 beforeEach(() => {
@@ -146,6 +157,12 @@ describe('/api/admin/ad-audience-sync', () => {
     const response = await GET(call('GET'))
     expect(response.status).toBe(200)
     expect(mockRun).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true, flagOn: false }))
+    // Every stage's count rides the report, its lists set or not.
+    expect(await response.json()).toMatchObject({ stages: { paid: { eligible: 1 } } })
+    // The read is told the operator's domains, so it reads no internal change log.
+    expect(mockReadAccounts).toHaveBeenCalledWith(
+      expect.objectContaining({ internalDomains: expect.any(Array) }),
+    )
   })
 
   it('the scheduled POST beats, and sends nothing — reads nothing — while the flag is off', async () => {
@@ -168,6 +185,29 @@ describe('/api/admin/ad-audience-sync', () => {
     expect(mockAlert).toHaveBeenCalledWith('ops.adAudienceSyncFailed', {
       dedupeKey: 'ad-audience-sync:google',
       context: { provider: 'Google', detail: 'google answered 401: bad token' },
+    })
+  })
+
+  it('alerts for a stage list under its own key, naming the list', async () => {
+    mockFlagOn = true
+    const held = report('sent')
+    held.stages.paid.providers.meta = {
+      outcome: 'held-shrink',
+      eligible: 1,
+      previous: 40,
+      toAdd: 0,
+      toRemove: 39,
+      error: 'the audience would shrink from 40 to 1; held until a run with force',
+    } as never
+    mockRun.mockResolvedValue(held)
+    await POST(call('POST'))
+    expect(mockAlert).toHaveBeenCalledTimes(1)
+    expect(mockAlert).toHaveBeenCalledWith('ops.adAudienceSyncFailed', {
+      dedupeKey: 'ad-audience-sync:meta:paid',
+      context: {
+        provider: 'Meta (paid list)',
+        detail: 'the audience would shrink from 40 to 1; held until a run with force',
+      },
     })
   })
 
