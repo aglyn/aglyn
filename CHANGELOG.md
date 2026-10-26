@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.285 — 2026-10-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.284...v1.0.0-beta.285)
+
+### Added
+
+- **ads:** stage lists beside the account-holder audience ([AGL-4072](https://linear.app/aglyn/issue/AGL-4072))
+
+### Fixed
+
+- **health:** one Identity Platform 503 no longer turns Ways in red ([AGL-4073](https://linear.app/aglyn/issue/AGL-4073))
+
 ## v1.0.0-beta.284 — 2026-10-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/ec3ea7daa...v1.0.0-beta.284)
