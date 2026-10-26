@@ -95,6 +95,7 @@ export interface ProviderAnswer {
     | 'api-key-rejected'
     | 'appcheck-rejected'
     | 'throttled'
+    | 'provider-unavailable'
     | 'refused'
 }
 
@@ -120,6 +121,10 @@ export interface ProviderAnswer {
  *    the CALLER, keyed on its address. It says the endpoint is up and says
  *    nothing about the door, so it gets a member of its own rather than
  *    reading as any of the four above (AGL-3419).
+ *  - a 5xx — the provider itself failing. The probe has already asked twice
+ *    by the time a 5xx reaches here (`callIdentityToolkit`), so this is a
+ *    provider outage that outlived a retry, not a one-off blip, and it says
+ *    so rather than reading as the anonymous `refused`.
  *
  * `message` is read only to CHOOSE a member of the set; it is never returned,
  * and the default is the anonymous `refused` rather than anything derived
@@ -129,6 +134,7 @@ export function classifyIdentityToolkitFailure(
   status: number,
   message: string,
 ): ProviderAnswer['verdict'] {
+  if (status >= 500) return 'provider-unavailable'
   const text = String(message ?? '').toUpperCase()
   if (text.includes('APP CHECK') || text.includes('APPCHECK')) {
     return 'appcheck-rejected'
