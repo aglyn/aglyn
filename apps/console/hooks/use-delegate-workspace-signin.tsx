@@ -77,7 +77,8 @@ export function useDelegateWorkspaceSignIn(
       // yields a token, sign in directly.
       for (let attempt = 0; active && attempt < 6; attempt++) {
         try {
-          const response = await fetch('/api/auth/session')
+          // `intent=restore`: recorded in sign-in history as a restore.
+          const response = await fetch('/api/auth/session?intent=restore')
           if (response.ok) {
             const payload = await response.json().catch(() => null)
             if (payload?.token && active && !auth.currentUser) {

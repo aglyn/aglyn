@@ -165,7 +165,9 @@ async function restoreFromSharedCookie(
   isActive: () => boolean,
 ): Promise<void> {
   try {
-    const response = await fetch('/api/auth/session')
+    // `intent=restore`: this tab has no local sign-in and will sign in with
+    // the token, so the route records it in sign-in history as a restore.
+    const response = await fetch('/api/auth/session?intent=restore')
     if (!response.ok || !isActive()) return
     const payload = await response.json()
     if (payload?.token && isActive()) {
