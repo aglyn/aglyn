@@ -388,13 +388,17 @@ export async function recordDeviceAndMaybeAlert(
     if (snapshot.exists) {
       // Known device: touch it, say nothing. This is the idempotence that
       // keeps the alert believable — routine sign-ins are silent.
-      const seen = Number((snapshot.data() as Record<string, unknown>)?.['lastSeenAt'] ?? 0)
-      if (
-        via === 'session' &&
-        params.touchMinIntervalMs &&
-        seen &&
-        params.nowMs - seen < params.touchMinIntervalMs
-      ) {
+      // Read the row only when it can skip the write: a `session` check seen
+      // within the interval. A real sign-in and a restore always stamp.
+      const seen =
+        via === 'session' && params.touchMinIntervalMs
+          ? Number(
+              (typeof snapshot.data === 'function'
+                ? (snapshot.data() as Record<string, unknown> | undefined)
+                : undefined)?.['lastSeenAt'] ?? 0,
+            )
+          : 0
+      if (seen && params.touchMinIntervalMs && params.nowMs - seen < params.touchMinIntervalMs) {
         logDeviceRecord(via, 'recent')
         return { newDevice: false, alerted: false }
       }
