@@ -44,9 +44,23 @@ export interface StaffDeviceRow {
   ip: string | null
   firstSeenMs: number | null
   lastSeenMs: number | null
+  /** `sign-in`, `restore` or `session`; optional for an older API response. */
+  lastSeenVia?: string | null
   revokedAtMs: number | null
   revokedBy: string | null
   alertSuppressedAtMs: number | null
+}
+
+/**
+ * How the last use came about, when it was not someone signing in. A restore
+ * is the browser being signed back in silently from the session cookie — a
+ * tab reloading after its local sign-in was cleared — so "last used" alone
+ * would read as the person coming back when nobody did.
+ */
+function seenViaNote(via: string | null | undefined): string {
+  if (via === 'restore') return ' (signed back in automatically)'
+  if (via === 'session') return ' (already signed in)'
+  return ''
 }
 
 export interface StaffUserDeviceSessionsCardProps {
@@ -258,7 +272,7 @@ export function StaffUserDeviceSessionsCard({
                       [
                         device.location || 'Unknown location',
                         device.ip ? `IP ${device.ip}` : null,
-                        `last used ${formatSeen(device.lastSeenMs)}`,
+                        `last used ${formatSeen(device.lastSeenMs)}${seenViaNote(device.lastSeenVia)}`,
                         device.firstSeenMs
                           ? `first seen ${formatSeen(device.firstSeenMs)}`
                           : null,
