@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.284 — 2026-10-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/ec3ea7daa...v1.0.0-beta.284)
+
+### Added
+
+- **native:** both apps report crashes, errors and Analytics to Firebase ([AGL-4067](https://linear.app/aglyn/issue/AGL-4067))
+
+### Fixed
+
+- **besigner:** phone toolbar above the keyboard; handle drags keep the edit ([AGL-4069](https://linear.app/aglyn/issue/AGL-4069))
+- **console:** every sign-in lands in sign-in history, including a browser signed back in from its session cookie, which staff sign-in history now labels ([#2012](https://github.com/aglyn/aglyn/pull/2012), [#2013](https://github.com/aglyn/aglyn/pull/2013))
+
 ## v1.0.0-beta.283 — 2026-10-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.282...v1.0.0-beta.283)

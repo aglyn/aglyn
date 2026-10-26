@@ -53,6 +53,16 @@ struct RootView<Shell: View>: View {
         reduceMotion: reduceMotion, isReady: { [model] in model.auth?.ready ?? true },
         docksToLockup: { [self] in self.stage == .signedOut || self.stage == .verify })
     }
+    // The screen on show where no navigation change announces it (AGL-4067): the shell's first, and the signed-out ones.
+    .onChange(of: stage, initial: true) { _, stage in
+      switch stage {
+      case .shell: navigation.reportScreen()
+      case .signedOut: Telemetry.screen("sign_in")
+      case .verify: Telemetry.screen("verify_email")
+      case .device: Telemetry.screen("device")
+      case .configProblem, .waiting: break
+      }
+    }
     .tint(AglynColor.tint)
     .toggleStyle(AglynToggleStyle())
     .font(AglynFont.body)

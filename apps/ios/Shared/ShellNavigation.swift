@@ -94,8 +94,8 @@ enum ShellPicker: String, Identifiable, Hashable {
 @MainActor
 @Observable
 final class ShellNavigation {
-  var section: ShellSection = .home
-  var paths: [ShellSection: [Route]] = [:]
+  var section: ShellSection = .home { didSet { reportScreen() } }
+  var paths: [ShellSection: [Route]] = [:] { didSet { reportScreen() } }
   /// Asks for the site picker (the older single switcher's name, kept for every screen that offers "Choose a site").
   var showSwitcher = false
   /// The picker open in this window, nil for none.
@@ -118,7 +118,7 @@ final class ShellNavigation {
   /// group's row too (one selection in the sidebar).
   var starKey: String?
   /// Whether this tab is the one in front of its window (always, where the shell has no tabs).
-  var front = true
+  var front = true { didSet { reportScreen() } }
   /// The workspace and site this tab's screens read while another tab is in front, and until its own are back on its
   /// return (P9): the app keeps one workspace store, so without this a hidden tab's screens followed the tab in front
   /// and reloaded, losing their place.
@@ -343,5 +343,52 @@ extension FocusedValues {
   var shellTabs: TabStrip? {
     get { self[ShellTabsKey.self] }
     set { self[ShellTabsKey.self] = newValue }
+  }
+}
+
+// MARK: Telemetry (AGL-4067)
+
+extension Route {
+  /// The screen's KEY for Analytics and crash reports ("site.pages", "besigner"): never a site, page or person name,
+  /// never a URL or a search.
+  var telemetryKey: String {
+    switch self {
+    case .screen(let id, _), .area(let id, _): id
+    case .besigner: "besigner"
+    case .unavailable: "unavailable"
+    case .settings: "settings"
+    case .notificationSettings: "notification_settings"
+    case .analytics: "analytics"
+    case .notifications: "notifications"
+    case .themeSettings: "theme_settings"
+    case .view: "detail"
+    case .web: "web"
+    case .searchResults: "search_results"
+    case .modeList: "settings_list"
+    }
+  }
+}
+
+extension ShellSection {
+  /// The section's KEY, as `Route.telemetryKey` names a pushed screen.
+  var telemetryKey: String {
+    switch self {
+    case .home: "home"
+    case .notifications: "notifications"
+    case .settings: "settings"
+    case .more: "more"
+    case .analytics: "analytics"
+    case .plugin(let screen), .place(let screen, _): screen
+    }
+  }
+}
+
+extension ShellNavigation {
+  /// What this tab shows, by key: the top of the section's stack, else the section.
+  var screenKey: String { paths[section]?.last?.telemetryKey ?? section.telemetryKey }
+
+  /// Tells Telemetry the screen on show when this tab is the one in front (it ignores a repeat).
+  func reportScreen() {
+    if front { Telemetry.screen(screenKey) }
   }
 }

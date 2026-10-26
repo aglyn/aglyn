@@ -318,7 +318,29 @@ export interface RecordDeviceParams {
   deviceId: string
   client: SignInClient
   nowMs: number
+  /**
+   * How this browser came to be signed in, stamped as `lastSeenVia`:
+   * `sign-in` is a real one (the mint), `restore` is the cookie exchange
+   * signing a browser back in that had lost its local sign-in (a Safari tab
+   * reloading after a week, say), and `session` is an already signed-in page
+   * checking its cookie. Absent is `sign-in`.
+   */
+  via?: DeviceSeenVia
+  /**
+   * Skip the write when the known device was seen this recently. The
+   * exchange runs on every page load; touching the row each time would be a
+   * write per navigation for no new information.
+   */
+  touchMinIntervalMs?: number
+  /**
+   * False records without ever emailing. The exchange passes false: a browser
+   * holding a valid session cookie but no device cookie predates the device
+   * registry, and mailing every such account "new sign-in" would be noise.
+   */
+  alert?: boolean
 }
+
+export type DeviceSeenVia = 'sign-in' | 'restore' | 'session'
 
 export interface RecordDeviceOutcome {
   newDevice: boolean
@@ -331,6 +353,15 @@ export interface RecordDeviceOutcome {
    * three different outcomes into one.
    */
   suppression?: SuppressionVerdict
+}
+
+/**
+ * One line per device write, so a sign-in that leaves no row in sign-in history
+ * is visible in the logs rather than only by its absence (2026-10-25: 56
+ * accounts made since Oct 1 had no device row at all, and nothing said why).
+ */
+function logDeviceRecord(via: DeviceSeenVia, outcome: 'new' | 'touched' | 'recent'): void {
+  console.info('[auth/device]', JSON.stringify({ via, outcome }))
 }
 
 /**
@@ -353,17 +384,34 @@ export async function recordDeviceAndMaybeAlert(
     const ref = devices.doc(params.deviceId)
     const snapshot = await ref.get()
 
+    const via = params.via ?? 'sign-in'
     if (snapshot.exists) {
       // Known device: touch it, say nothing. This is the idempotence that
       // keeps the alert believable — routine sign-ins are silent.
+      // Read the row only when it can skip the write: a `session` check seen
+      // within the interval. A real sign-in and a restore always stamp.
+      const seen =
+        via === 'session' && params.touchMinIntervalMs
+          ? Number(
+              (typeof snapshot.data === 'function'
+                ? (snapshot.data() as Record<string, unknown> | undefined)
+                : undefined)?.['lastSeenAt'] ?? 0,
+            )
+          : 0
+      if (seen && params.touchMinIntervalMs && params.nowMs - seen < params.touchMinIntervalMs) {
+        logDeviceRecord(via, 'recent')
+        return { newDevice: false, alerted: false }
+      }
       await ref.set(
         {
           lastSeenAt: params.nowMs,
+          lastSeenVia: via,
           ip: params.client.ip,
           location: params.client.location,
         },
         { merge: true },
       )
+      logDeviceRecord(via, 'touched')
       return { newDevice: false, alerted: false }
     }
 
@@ -412,6 +460,7 @@ export async function recordDeviceAndMaybeAlert(
       location: params.client.location,
       createdAt: params.nowMs,
       lastSeenAt: params.nowMs,
+      lastSeenVia: via,
       ...(suppression?.suppress
         ? {
             alertSuppressedAt: params.nowMs,
@@ -420,7 +469,8 @@ export async function recordDeviceAndMaybeAlert(
         : {}),
     })
 
-    if (!hasPriorDevice || !params.email) {
+    logDeviceRecord(via, 'new')
+    if (!hasPriorDevice || !params.email || params.alert === false) {
       return { newDevice: true, alerted: false }
     }
     if (suppression?.suppress) {

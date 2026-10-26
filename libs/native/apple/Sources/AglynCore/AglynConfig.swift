@@ -100,6 +100,10 @@ public struct AglynConfig: Equatable, Sendable {
   /// Whether Sign in with Apple is offered (`AGLYN_APPLE_SIGN_IN`): it needs the app's Sign in with Apple capability and
   /// the Firebase project's Apple provider, so a build turns it on once both exist.
   public var appleSignIn: Bool = false
+  /// Whether crash reports, non-fatal errors and Analytics are collected (`AGLYN_TELEMETRY`, AGL-4067): on for a release
+  /// build pointed at production, off by default whenever an emulator or a local console is configured, so a debug build
+  /// on the emulator stack never reports. `AglynFirebase.configure` also keeps it off in any DEBUG build.
+  public var telemetry: Bool = true
 
   public static let keys = [
     "AGLYN_CONSOLE_URL", "AGLYN_FIREBASE_API_KEY", "AGLYN_FIREBASE_AUTH_DOMAIN",
@@ -107,7 +111,7 @@ public struct AglynConfig: Equatable, Sendable {
     "AGLYN_FIREBASE_MESSAGING_SENDER_ID", "AGLYN_AUTH_EMULATOR_HOST",
     "AGLYN_FIRESTORE_EMULATOR_HOST", "AGLYN_GOOGLE_IOS_CLIENT_ID", "AGLYN_GOOGLE_WEB_CLIENT_ID",
     "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID", "AGLYN_APP_CHECK", "AGLYN_LEGAL_ORIGIN", "AGLYN_APPLE_SIGN_IN",
-    "AGLYN_DOCS_ORIGIN",
+    "AGLYN_DOCS_ORIGIN", "AGLYN_TELEMETRY",
   ]
 
   /// True for the hosts a local development stack runs on.
@@ -135,6 +139,16 @@ public struct AglynConfig: Equatable, Sendable {
     case "on", "true", "yes", "1": return true
     case "off", "false", "no", "0": return false
     default: throw AglynConfigError.appCheckSetting(clean(value))
+    }
+  }
+
+  /// `AGLYN_TELEMETRY`: on or off, or unset for the default (on, except on a local stack). Anything else is off: a
+  /// typo never turns collection on.
+  static func telemetrySetting(_ value: String?, localStack: Bool) -> Bool {
+    switch clean(value).lowercased() {
+    case "": return !localStack
+    case "on", "true", "yes", "1": return !localStack
+    default: return false
     }
   }
 
@@ -192,7 +206,8 @@ public struct AglynConfig: Equatable, Sendable {
       appCheck: try appCheckSetting(env["AGLYN_APP_CHECK"], localStack: localStack),
       legalOrigin: legalOriginSetting(env["AGLYN_LEGAL_ORIGIN"]),
       docsOrigin: originSetting(env["AGLYN_DOCS_ORIGIN"], default: defaultDocsOrigin),
-      appleSignIn: ["yes", "on", "true", "1"].contains(clean(env["AGLYN_APPLE_SIGN_IN"]).lowercased())
+      appleSignIn: ["yes", "on", "true", "1"].contains(clean(env["AGLYN_APPLE_SIGN_IN"]).lowercased()),
+      telemetry: telemetrySetting(env["AGLYN_TELEMETRY"], localStack: localStack)
     )
   }
 

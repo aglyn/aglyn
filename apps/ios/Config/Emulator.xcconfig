@@ -23,6 +23,8 @@ AGLYN_PASSKEY_RP_ID =
 AGLYN_LEGAL_ORIGIN = https:/$()/aglyn.com
 AGLYN_DOCS_ORIGIN = https:/$()/docs.aglyn.com
 AGLYN_APPLE_SIGN_IN = NO
+// Crash reports and Analytics: off, so a debug build on the emulator stack never reports (AGL-4067).
+AGLYN_TELEMETRY = off
 
 // Debug builds have an identity of their own (AGL-3994): "Aglyn Debug" (com.aglyn.app.debug) and "Aglyn POS Debug"
 // (com.aglyn.pos.debug). A debug build launched from DerivedData then never registers under the shipped bundle id, so it

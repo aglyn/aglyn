@@ -82,6 +82,12 @@ export interface DeviceRow {
   ip: string | null
   firstSeenMs: number | null
   lastSeenMs: number | null
+  /**
+   * How it was last seen: `sign-in`, `restore` (signed back in silently from
+   * the session cookie, with nobody signing in) or `session` (a signed-in page
+   * checking its cookie). Null on rows recorded before this was stamped.
+   */
+  lastSeenVia?: string | null
   /** Set once this device has been signed out (AGL-1959). */
   revokedAtMs: number | null
   /** `owner` or `staff` — who ended it (AGL-1513). */
@@ -148,6 +154,8 @@ export async function readDeviceRows(
         ip: typeof data['ip'] === 'string' ? data['ip'] : null,
         firstSeenMs: Number(data['createdAt'] ?? 0) || null,
         lastSeenMs: Number(data['lastSeenAt'] ?? 0) || null,
+        lastSeenVia:
+          typeof data['lastSeenVia'] === 'string' ? data['lastSeenVia'] : null,
         // A revoked device keeps its row rather than disappearing: deleting it
         // would hide the device and revoke nothing, and the same browser would
         // then read as BRAND NEW on its next sign-in.

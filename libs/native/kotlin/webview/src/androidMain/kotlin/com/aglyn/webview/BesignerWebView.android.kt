@@ -98,7 +98,10 @@ actual fun BesignerWebView(
         cookies.flush()
         ready = true
       }
-      is ConsoleSessionResult.Failed -> error = result.error
+      is ConsoleSessionResult.Failed -> {
+        com.aglyn.core.Telemetry.record(IllegalStateException("The Besigner's console session was not made."), "webview.console_session")
+        error = result.error
+      }
     }
     http.close()
   }
@@ -131,6 +134,9 @@ actual fun BesignerWebView(
                     val reply: suspend () -> BridgeReply? = when (parsed) {
                       is ParsedBridgeMessage.Rejected -> {
                         Log.w("AglynBridge", "dropped a bridge message: ${parsed.reason.wire}")
+                        com.aglyn.core.Telemetry.record(
+                          IllegalStateException("The app refused a bridge call."), "webview.bridge_refused:${parsed.reason.wire}",
+                        )
                         parsed.id?.let { id -> { BridgeReply.Error(id, "The app does not offer that.") } }
                       }
                       is ParsedBridgeMessage.Accepted -> {
@@ -139,6 +145,7 @@ actual fun BesignerWebView(
                           try {
                             BridgeReply.Ok(request.id, bridge.handlers.getValue(request.method)(request.params))
                           } catch (error: Exception) {
+                            com.aglyn.core.Telemetry.record(error, "webview.bridge:${request.method}")
                             BridgeReply.Error(request.id, error.message ?: "The app could not do that.")
                           }
                         }
@@ -155,6 +162,16 @@ actual fun BesignerWebView(
             )
           }
           webViewClient = object : WebViewClient() {
+            // A Besigner page that did not load is told to Telemetry (AGL-4067); the page shows WebView's own error.
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+              val offline = error.errorCode in setOf(ERROR_HOST_LOOKUP, ERROR_CONNECT, ERROR_TIMEOUT)
+              if (request.isForMainFrame && !offline) {
+                com.aglyn.core.Telemetry.record(
+                  IllegalStateException("A Besigner page did not load (WebView error ${error.errorCode})."), "webview.navigation:${error.errorCode}",
+                )
+              }
+            }
+
             override fun onPageFinished(view: WebView, url: String?) {
               // The script itself defines nothing on a page from another origin.
               if (bridge != null && isTrustedUrl(url, listOf(origin))) {

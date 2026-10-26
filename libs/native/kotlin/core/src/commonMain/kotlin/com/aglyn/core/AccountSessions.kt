@@ -203,11 +203,20 @@ class AccountSessions(
   override suspend fun beginImpersonation(customToken: String, tenantId: String?) = current.beginImpersonation(customToken, tenantId)
   override suspend fun endImpersonation() = current.endImpersonation()
   override suspend fun idToken(forceRefresh: Boolean): String? = current.idToken(forceRefresh)
-  override suspend fun signInWithEmail(email: String, password: String) = current.signInWithEmail(email, password)
-  override suspend fun signInWithCustomToken(token: String) = current.signInWithCustomToken(token)
-  override suspend fun signInWithCustomToken(token: String, tenantId: String?) = current.signInWithCustomToken(token, tenantId)
-  override suspend fun signUpWithEmail(email: String, password: String): AuthUser = current.signUpWithEmail(email, password)
-  override suspend fun signInWithGoogle(googleIdToken: String): Boolean = current.signInWithGoogle(googleIdToken)
+  override suspend fun signInWithEmail(email: String, password: String) =
+    tracked(TelemetryEvent.SIGN_IN, "password") { current.signInWithEmail(email, password) }
+  override suspend fun signInWithCustomToken(token: String) =
+    tracked(TelemetryEvent.SIGN_IN, "custom_token") { current.signInWithCustomToken(token) }
+  override suspend fun signInWithCustomToken(token: String, tenantId: String?) =
+    tracked(TelemetryEvent.SIGN_IN, "custom_token") { current.signInWithCustomToken(token, tenantId) }
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser =
+    tracked(TelemetryEvent.SIGN_UP, "password") { current.signUpWithEmail(email, password) }
+  override suspend fun signInWithGoogle(googleIdToken: String): Boolean =
+    tracked(TelemetryEvent.SIGN_IN, "google") { current.signInWithGoogle(googleIdToken) }
+
+  /** Runs a sign-in or sign-up and, once it succeeds, logs [event] with how (AGL-4067): the method only, never who. */
+  private inline fun <T> tracked(event: TelemetryEvent, method: String, body: () -> T): T =
+    body().also { Telemetry.event(event, mapOf("method" to method)) }
   override suspend fun reload() = current.reload()
   override suspend fun applyActionCode(code: String) = current.applyActionCode(code)
   override suspend fun verifyPasswordResetCode(code: String): String = current.verifyPasswordResetCode(code)

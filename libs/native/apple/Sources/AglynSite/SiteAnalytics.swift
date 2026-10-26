@@ -146,6 +146,7 @@ public final class SiteAnalyticsModel {
         let body = try await api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
         if case .bool(let value)? = body?["features"]?["screenAnalytics"] { entitled = value } else { entitled = false }
       } catch {
+        Telemetry.record(error, "site_analytics.entitlement")
         entitlementFailed = true
       }
     }

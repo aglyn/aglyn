@@ -63,7 +63,7 @@ function firestoreWithDevices(seed: Record<string, Record<string, unknown>>) {
     []
   const devicesCollection = {
     doc: (id: string) => ({
-      get: async () => ({ exists: id in docs }),
+      get: async () => ({ exists: id in docs, data: () => docs[id] }),
       set: async (
         data: Record<string, unknown>,
         options?: { merge?: boolean },
@@ -172,6 +172,45 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     expect(writes[0]).toMatchObject({ id: 'device-known', merge: true })
     expect(writes[0].data.lastSeenAt).toBe(NOW)
     expect(writes[0].data.createdAt).toBeUndefined()
+  })
+
+  it('skips the write when a signed-in page checks in again within the interval', async () => {
+    const { firestore, writes } = firestoreWithDevices({
+      'device-known': { createdAt: 1, lastSeenAt: NOW - 60_000 },
+    })
+    const outcome = await recordDeviceAndMaybeAlert({
+      ...params(firestore, { deviceId: 'device-known' }),
+      via: 'session',
+      touchMinIntervalMs: 10 * 60_000,
+    })
+
+    expect(outcome).toEqual({ newDevice: false, alerted: false })
+    expect(writes).toHaveLength(0)
+  })
+
+  it('stamps how the device was last seen, and a restore always writes', async () => {
+    const { firestore, writes } = firestoreWithDevices({
+      'device-known': { createdAt: 1, lastSeenAt: NOW - 60_000 },
+    })
+    await recordDeviceAndMaybeAlert({
+      ...params(firestore, { deviceId: 'device-known' }),
+      via: 'restore',
+      touchMinIntervalMs: 10 * 60_000,
+    })
+
+    expect(writes).toHaveLength(1)
+    expect(writes[0].data).toMatchObject({ lastSeenAt: NOW, lastSeenVia: 'restore' })
+  })
+
+  it('never emails when told not to, even for a new device on an account with one', async () => {
+    const { firestore, docs } = firestoreWithDevices({
+      'device-old': { createdAt: 1 },
+    })
+    const outcome = await recordDeviceAndMaybeAlert({ ...params(firestore), alert: false })
+
+    expect(outcome).toEqual({ newDevice: true, alerted: false })
+    expect(docs['device-new']).toBeDefined()
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
   it('records but never alerts on the first device ever seen', async () => {

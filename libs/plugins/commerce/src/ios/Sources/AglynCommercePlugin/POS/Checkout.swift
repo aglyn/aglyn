@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynCore
 import AglynUI
 import Foundation
 import Observation
@@ -379,6 +380,8 @@ final class Checkout {
         let change = payment.map(\.changeCents).flatMap { $0 > 0 ? $0 : nil } ?? changeCents
         step = .receipt(changeCents: change)
         notice = nil
+        // The tender only (AGL-4067): never an amount, an item or anything about the customer.
+        Telemetry.event(.posSaleCompleted, saleCompletedParameters(answer.sale, last: payment))
       } else {
         step = .tender
         notice = CheckoutNotice(
@@ -395,6 +398,14 @@ final class Checkout {
       notice = CheckoutNotice(tone: .error, message: message)
     case .unknown: break
     }
+  }
+
+  /// What `pos_sale_completed` carries: the tender that finished the sale (`card`, `cash`, `gift_card`…) and whether it
+  /// was split across tenders.
+  func saleCompletedParameters(_ sale: PosSale, last payment: PosSalePayment?) -> [String: String] {
+    let tender = payment?.method ?? sale.payments.last?.method ?? "unknown"
+    let split = sale.payments.filter { $0.status == "succeeded" }.count > 1
+    return ["tender": tender, "split": split ? "yes" : "no"]
   }
 
   /// Reads the sale again: after a lost answer, or when the app reopens on it.

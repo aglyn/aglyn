@@ -117,7 +117,10 @@ struct ComponentIconPicker: View {
       failed = false
       if !search.isEmpty { try? await Task.sleep(nanoseconds: 300_000_000) }
       guard !Task.isCancelled else { return }
-      do { found = try await searchComponentIcons(api, search: search) } catch is CancellationError {} catch { failed = true }
+      do { found = try await searchComponentIcons(api, search: search) } catch is CancellationError {} catch {
+        Telemetry.record(error, "site.component_icons")
+        failed = true
+      }
     }
   }
 }

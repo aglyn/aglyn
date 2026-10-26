@@ -335,6 +335,7 @@ public final class WorkspaceStore {
   }
 
   public func selectOrg(_ orgID: String) {
+    reportPick(orgID: orgID, hostID: nil)
     pendingOrgSlug = nil
     pendingHostSlug = nil
     picked = WorkspacePick(orgID: orgID, hostID: nil)
@@ -344,6 +345,7 @@ public final class WorkspaceStore {
   /// Picks a workspace and one of its sites at once, as a notification about
   /// that site does; the site holds once the workspace's sites name it.
   public func select(orgID: String, hostID: String?) {
+    reportPick(orgID: orgID, hostID: hostID)
     pendingOrgSlug = nil
     pendingHostSlug = nil
     picked = WorkspacePick(orgID: orgID, hostID: hostID)
@@ -351,6 +353,7 @@ public final class WorkspaceStore {
   }
 
   public func selectSite(_ hostID: String?) {
+    reportPick(orgID: effective.orgID, hostID: hostID)
     pendingOrgSlug = nil
     pendingHostSlug = nil
     picked.hostID = hostID
@@ -380,6 +383,14 @@ public final class WorkspaceStore {
       pendingHostSlug = hostSlug
     }
     return true
+  }
+
+  /// Analytics for a pick (AGL-4067): `workspace_switch` when another workspace replaces the one on show, `site_open`
+  /// when a site is opened. No ids or names go with either.
+  private func reportPick(orgID: String?, hostID: String?) {
+    let shown = effective
+    if let orgID, let current = shown.orgID, orgID != current { Telemetry.event(.workspaceSwitch) }
+    if let hostID, hostID != shown.hostID { Telemetry.event(.siteOpen) }
   }
 
   /// Keeps the site listener on the org that is actually shown.

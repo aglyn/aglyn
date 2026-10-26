@@ -1,8 +1,12 @@
 // "Aglyn POS" for Android: com.aglyn.pos. Configured by build fields, never by a
 // google-services.json; the debug build points at the local emulator stack.
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
+  // Crash reports (AGL-4067): the build id every report is matched by, and the R8 mapping upload for release bundles.
+  alias(libs.plugins.firebase.crashlytics)
 }
 
 /** A build setting from -Paglyn.<name>=… or the environment, else [fallback]. */
@@ -47,9 +51,13 @@ android {
   buildFeatures {
     buildConfig = true
     compose = true
+    // google_app_id for Analytics (buildTypes below).
+    resValues = true
   }
 
   buildTypes {
+    val releaseFirebaseAppId = setting("firebaseAppId", "1:543499566626:android:c66921bb5d51cf8b0d147b")
+    crashlyticsAppId(releaseFirebaseAppId)
     // Stripe Terminal's real readers (Tap to Pay, Bluetooth). Off: the SDK's
     // simulated readers only, until Stripe Terminal live mode is set up.
     val liveReaders = setting("terminalLiveReaders", "false").toBoolean().toString()
@@ -60,12 +68,18 @@ android {
       buildConfigField("String", "FIREBASE_API_KEY", quoted(setting("firebaseApiKey", "emulator-api-key")))
       buildConfigField("String", "FIREBASE_AUTH_DOMAIN", quoted(setting("firebaseAuthDomain", "localhost")))
       buildConfigField("String", "FIREBASE_PROJECT_ID", quoted(emulatorProject))
-      buildConfigField("String", "FIREBASE_APP_ID", quoted(setting("firebaseAppId", "1:000000000000:android:emulator")))
+      val debugFirebaseAppId = setting("firebaseAppId", "1:000000000000:android:emulator")
+      buildConfigField("String", "FIREBASE_APP_ID", quoted(debugFirebaseAppId))
+      // Analytics reads the app id from this resource, not from FirebaseOptions (AGL-4067); collection stays off here.
+      resValue("string", "google_app_id", debugFirebaseAppId)
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "000000000000")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(setting("authEmulatorHost", "10.0.2.2:9099")))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(setting("firestoreEmulatorHost", "10.0.2.2:8082")))
       // Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
+      // Crash reports and Analytics: never from a debug build (AGL-4067).
+      buildConfigField("String", "TELEMETRY", quoted("off"))
+      configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
       buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("debugGoogleWebClientId", "")))
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
@@ -82,13 +96,22 @@ android {
       buildConfigField("String", "FIREBASE_API_KEY", quoted(setting("firebaseApiKey", "AIzaSyCZwXDRwRP_fhDsmG_xDC3zKfYfwEh42D4")))
       buildConfigField("String", "FIREBASE_AUTH_DOMAIN", quoted(setting("firebaseAuthDomain", "aglyn-main.firebaseapp.com")))
       buildConfigField("String", "FIREBASE_PROJECT_ID", quoted(setting("firebaseProjectId", "aglyn-main")))
-      buildConfigField("String", "FIREBASE_APP_ID", quoted(setting("firebaseAppId", "1:543499566626:android:c66921bb5d51cf8b0d147b")))
+      buildConfigField("String", "FIREBASE_APP_ID", quoted(releaseFirebaseAppId))
+      // Analytics reads the app id from this resource, not from FirebaseOptions (AGL-4067). The manifest removes Firebase's
+      // init provider, so the resource never starts Firebase by itself.
+      resValue("string", "google_app_id", releaseFirebaseAppId)
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "543499566626")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(""))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(""))
       // Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a release build attests itself
       // through Play Integrity.
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "on")))
+      // Crash reports, non-fatal errors and Analytics (AGL-4067): on for a release build on production; -Paglyn.telemetry=off
+      // turns them off for a build that must not report.
+      buildConfigField("String", "TELEMETRY", quoted(setting("telemetry", "on")))
+      // The R8 mapping file goes to Crashlytics only from tools/scripts/native-release.mjs (-Paglyn.crashlyticsMappingUpload=true),
+      // never from a local or CI build.
+      configure<CrashlyticsExtension> { mappingFileUploadEnabled = setting("crashlyticsMappingUpload", "false").toBoolean() }
       // The Firebase project's Web OAuth client id, the audience of Google's ID token for "Continue with Google". Google also
       // needs an Android OAuth client for com.aglyn.pos and its signing certificates (apps/android/README.md, "What Zach owes").
       buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com")))
@@ -128,4 +151,31 @@ dependencies {
   implementation(libs.stripe.paymentsheet)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+}
+
+/**
+ * The Firebase app id the Crashlytics plugin uploads the release mapping file under. The plugin reads it from the
+ * google-services plugin's task for the variant (`processReleaseGoogleServices`, its `gmpAppId` file); with Firebase
+ * configured in code there is no google-services.json and that plugin is not applied, so a stand-in task of that name
+ * carries the file this build writes from its own setting. The stand-in does no work of its own and adds no resources:
+ * Firebase still starts from AndroidFirebase alone.
+ */
+abstract class WriteFirebaseAppId : DefaultTask() {
+  @get:Input abstract val appId: Property<String>
+  @get:OutputFile abstract val file: RegularFileProperty
+
+  @TaskAction fun write() = file.get().asFile.writeText(appId.get())
+}
+
+fun crashlyticsAppId(appId: String) {
+  val file = layout.buildDirectory.file("generated/crashlytics/release/gmpAppId.txt")
+  val write = tasks.register<WriteFirebaseAppId>("writeReleaseFirebaseAppId") {
+    this.appId.set(appId)
+    this.file.set(file)
+  }
+  tasks.register<com.google.gms.googleservices.GoogleServicesTask>("processReleaseGoogleServices") {
+    dependsOn(write)
+    enabled = false
+    gmpAppId.set(file)
+  }
 }

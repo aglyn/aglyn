@@ -94,6 +94,42 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
  * user's tokens were revoked.
  */
 
+/** How often a signed-in page checking its cookie may touch its device row. */
+const SESSION_TOUCH_MIN_INTERVAL_MS = 10 * 60 * 1000
+/** How long a sign-in waits on its device record before leaving it to `after()`. */
+const DEVICE_RECORD_WAIT_MS = 1500
+
+/**
+ * Records the device, waiting up to `DEVICE_RECORD_WAIT_MS` for it before the
+ * response goes out, and keeping it alive past that with `after()`.
+ *
+ * It was `after()` alone, and on 2026-10-25 production showed sign-ins with no
+ * row: two `200` mints at 00:18:54Z wrote nothing (the newest `lastSeenAt`
+ * anywhere was 16:40Z) and logged no error, and 56 of 178 accounts made since
+ * Oct 1 had no sign-in history at all. Starting the write before responding
+ * means it no longer depends on post-response work being run. The recorder
+ * never throws, so a slow or failing registry still cannot fail a sign-in; the
+ * wait is capped so it cannot hold one up for long either.
+ */
+async function recordDeviceBriefly(
+  params: () => Parameters<typeof recordDeviceAndMaybeAlert>[0],
+): Promise<void> {
+  // Built inside the guard: even reaching Firestore can throw, and nothing in
+  // here may turn a sign-in into a failure.
+  let work: Promise<unknown>
+  try {
+    work = recordDeviceAndMaybeAlert(params())
+  } catch (error) {
+    console.error('[auth/device] record could not start', error)
+    return
+  }
+  after(() => work)
+  await Promise.race([
+    work,
+    new Promise((resolve) => setTimeout(resolve, DEVICE_RECORD_WAIT_MS)),
+  ])
+}
+
 function cookieAttributes(request: Request, maxAgeSeconds: number) {
   const onWorkspaceDomain = isWorkspaceDomainHost(request.headers.get('host'))
   return [
@@ -698,24 +734,23 @@ async function handler(request: Request): Promise<Response> {
       }
       // New-device recognition (AGL-665): a long-lived HttpOnly device-id
       // cookie, re-set on every mint so an active browser never lapses. The
-      // Firestore lookup, the device record and any alert email all run in
-      // `after()` — sign-in latency and sign-in success owe nothing to them.
+      // record is started here and waited on for a moment, then left to
+      // `after()` — see `recordDeviceBriefly` for why it is no longer
+      // `after()` alone.
       const knownDeviceId = readCookie(request, DEVICE_COOKIE)
       const deviceId =
         signInIdentity && (knownDeviceId || crypto.randomUUID())
       if (signInIdentity && deviceId) {
         const identity = signInIdentity
-        const client = describeSignInClient(request.headers)
-        after(async () => {
-          await recordDeviceAndMaybeAlert({
-            firestore: firebaseAdmin.app().firestore(),
-            uid: identity.uid,
-            email: identity.email,
-            deviceId,
-            client,
-            nowMs: Date.now(),
-          })
-        })
+        await recordDeviceBriefly(() => ({
+          firestore: firebaseAdmin.app().firestore(),
+          uid: identity.uid,
+          email: identity.email,
+          deviceId,
+          client: describeSignInClient(request.headers),
+          nowMs: Date.now(),
+          via: 'sign-in',
+        }))
       }
       // Pair the session cookie with the tenant sidecar (set to the tenant, or
       // cleared for a default-tenant session so a stale tenant cookie from a
@@ -873,12 +908,43 @@ async function handler(request: Request): Promise<Response> {
           decoded.uid,
           developerClaims,
         )
+        // This exchange is a sign-in too: the custom token it hands back is
+        // what a browser that lost its local sign-in signs back in with, and
+        // Firebase stamps it as one. It used to leave no trace in the device
+        // registry, so an account's "last sign-in" moved while its sign-in
+        // history did not (2026-10-25: a Safari tab reloading after nine days
+        // read as the person coming back). `intent=restore` is the client
+        // saying it is about to use the token; without it this is a signed-in
+        // page checking its cookie, recorded as `session` and at most every
+        // ten minutes. Never emailed (`alert: false`), and never for a staff
+        // impersonation, which must not appear as the customer's own device.
+        const exchangeDeviceId = isImpersonationSession(decoded)
+          ? null
+          : readCookie(request, DEVICE_COOKIE) || crypto.randomUUID()
+        if (exchangeDeviceId) {
+          const restoring =
+            new URL(request.url).searchParams.get('intent') === 'restore'
+          await recordDeviceBriefly(() => ({
+            firestore: firebaseAdmin.app().firestore(),
+            uid: decoded.uid,
+            email: decoded.email ? String(decoded.email) : null,
+            deviceId: exchangeDeviceId,
+            client: describeSignInClient(request.headers),
+            nowMs: Date.now(),
+            via: restoring ? 'restore' : 'session',
+            touchMinIntervalMs: SESSION_TOUCH_MIN_INTERVAL_MS,
+            alert: false,
+          }))
+        }
         // `uid` names the account the cookie belongs to, so a tab holding a
         // different one adopts the cookie instead of keeping a stale user
         // (`sessionNamesAnotherAccount`).
-        return Response.json(
+        return jsonWithCookie(
           { token, uid: decoded.uid, tenantId: sessionTenantId ?? null },
-          { status: 200 },
+          200,
+          exchangeDeviceId && exchangeDeviceId !== readCookie(request, DEVICE_COOKIE)
+            ? `${DEVICE_COOKIE}=${exchangeDeviceId}; ${cookieAttributes(request, DEVICE_COOKIE_MAX_AGE_S)}`
+            : undefined,
         )
       } catch (error) {
         const code = (error as { code?: string })?.code ?? ''

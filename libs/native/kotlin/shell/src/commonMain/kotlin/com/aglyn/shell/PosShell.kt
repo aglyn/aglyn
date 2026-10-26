@@ -107,6 +107,7 @@ fun PosShell(
       val state = auth
       val authScreen = state is AuthState.SignedOut ||
         (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
+      ReportAuthScreen(state, services.authFlow.landing, impersonation != null)
       LaunchHost(
         services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed,
         launchMark = launchMark, mayStart = launchScreenGone,
@@ -241,6 +242,10 @@ internal fun StorePicker(
 @Composable
 private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState, onSwitchStore: () -> Unit) {
   val navigator = remember { ShellNavigator() }
+  // Crash reports name the person by Firebase uid only (AGL-4067); the register's own screen is its home.
+  androidx.compose.runtime.LaunchedEffect(uid) { com.aglyn.core.Telemetry.user(uid) }
+  val screenKey = navigator.current?.telemetryKey ?: "pos.register"
+  androidx.compose.runtime.LaunchedEffect(screenKey) { com.aglyn.core.Telemetry.screen(screenKey) }
   val version by services.registry.version.collectAsState()
   val register = remember(version) {
     services.registry.screens(NativeApp.POS).firstOrNull { it.placement == PosPlacement.REGISTER }

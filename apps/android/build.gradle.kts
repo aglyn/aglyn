@@ -6,4 +6,7 @@ plugins {
   alias(libs.plugins.kotlin.serialization) apply false
   alias(libs.plugins.compose.compiler) apply false
   alias(libs.plugins.compose.multiplatform) apply false
+  alias(libs.plugins.firebase.crashlytics) apply false
+  // On the classpath for its GoogleServicesTask only (gradle/libs.versions.toml); never applied.
+  alias(libs.plugins.google.services) apply false
 }
