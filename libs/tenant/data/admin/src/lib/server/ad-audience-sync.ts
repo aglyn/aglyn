@@ -28,6 +28,11 @@ import { createHash } from 'node:crypto'
  * and conversion APIs are the ad-conversions plugin, which this shares
  * nothing with.
  *
+ * Beside that one all-holders list, each provider may keep a STAGE list per
+ * stage (AGL-4072): free and not published, free and published, paid, and
+ * lapsed. Each is a subset of the same eligible audience, configured by its
+ * own list id, and synced, recorded and guarded exactly like the main list.
+ *
  * Everything here is pure — normalization, hashing, who is eligible, the
  * add/remove diff and each provider's request — so the spec walks every rule
  * without a network. `ad-audience-sync-run.ts` reads the accounts, sends and
@@ -129,6 +134,27 @@ export interface AdAudienceAccount {
   billingCountries: readonly string[]
   /** `users/{uid}.acquisition.geo.country`: where the sign-up request came from. */
   signupCountry: string | null
+  /**
+   * The facts the STAGE lists read (AGL-4072). Optional so an account read
+   * without them is simply in no stage; eligibility never looks at them.
+   */
+  stageFacts?: AdAudienceStageFacts
+}
+
+/** What decides an eligible account's stage (AGL-4072). */
+export interface AdAudienceStageFacts {
+  /** When the Auth account was made (`metadata.creationTime`), or null. */
+  createdAtMs: number | null
+  /** The account OWNS a workspace whose effective plan is a paid one. */
+  ownsPaidWorkspace: boolean
+  /** The account owns a site with a page of its own that is published. */
+  ownsPublishedSite: boolean
+  /**
+   * The newest real activity found inside the lapse window, or null when
+   * none was found there. Only read for an account old enough to lapse; it is
+   * never a sign-in time.
+   */
+  lastActivityAtMs: number | null
 }
 
 /** Why an account is left out. Counted in every report; never per person. */
@@ -244,6 +270,141 @@ export function adAudienceExclusion(
 }
 
 /*==========================================
+ * STAGES (AGL-4072)
+ *=========================================*/
+
+/**
+ * The stage lists kept beside the all-holders list, so the ads for people
+ * who already have an account can say something that fits where they are.
+ * Each one is a SUBSET of the eligible audience — every exclusion above
+ * still applies first — and each is optional, sent only when its own list id
+ * is set.
+ *
+ * - `free-unpublished` — owns no workspace on a paid plan, and no site with a
+ *   page of its own published.
+ * - `free-published` — owns no workspace on a paid plan, and at least one
+ *   site with a page of its own published.
+ * - `paid` — owns at least one workspace on a paid plan.
+ * - `lapsed` — the account is more than 30 days old and nothing it did in the
+ *   last 30 days was recorded. It overlaps the other three on purpose: a
+ *   paying account that went quiet is both.
+ */
+export const AD_AUDIENCE_STAGES = ['free-unpublished', 'free-published', 'paid', 'lapsed'] as const
+export type AdAudienceStage = (typeof AD_AUDIENCE_STAGES)[number]
+
+export const AD_AUDIENCE_STAGE_LABELS: Record<AdAudienceStage, string> = {
+  'free-unpublished': 'free, not published',
+  'free-published': 'free, published',
+  paid: 'paid',
+  lapsed: 'lapsed',
+}
+
+/** How long an account must be quiet, and old, to be lapsed. */
+export const AD_AUDIENCE_LAPSE_DAYS = 30
+export const AD_AUDIENCE_LAPSE_MS = AD_AUDIENCE_LAPSE_DAYS * 86_400_000
+
+/**
+ * Change-log actions the platform writes under the person's id that are not
+ * the person doing anything: the site made at sign-up, the starter it was
+ * filled from, and an AI job's output landing (the job's START is what
+ * counts, and it is read on its own). The same set the weekly activity
+ * report leaves out.
+ */
+const NOT_A_PERSON_ACTING = new Set(['ai.job.output', 'Created the site', 'Started from the starter site'])
+
+/** Whether one change-log entry's action is something the person did. */
+export function isRealActivityAction(action: unknown): boolean {
+  return typeof action === 'string' && Boolean(action) && !NOT_A_PERSON_ACTING.has(action)
+}
+
+/**
+ * An instant in milliseconds off a stored value in whichever form it reached
+ * this reader — a Firestore `Timestamp`, `{ seconds }` or `{ _seconds }`, a
+ * `Date`, a number or an ISO string — or null.
+ */
+export function instantMs(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.getTime()
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  if (typeof value !== 'object') return null
+  const toMillis = (value as { toMillis?: unknown }).toMillis
+  if (typeof toMillis === 'function') {
+    const ms = Number(toMillis.call(value))
+    return Number.isFinite(ms) ? ms : null
+  }
+  const record = value as { seconds?: unknown; _seconds?: unknown }
+  const seconds = Number(record.seconds ?? record._seconds)
+  return Number.isFinite(seconds) ? seconds * 1000 : null
+}
+
+/** A page document's fields the published test reads. */
+export interface AdAudienceScreenFacts {
+  publishedAt?: unknown
+  deletedAt?: unknown
+  createdAt?: unknown
+  updatedAt?: unknown
+  createdBy?: unknown
+}
+
+/**
+ * Whether one page counts as the account's own and published: live
+ * (`publishedAt` set and not in the future, not deleted) and worked on by a
+ * person — made by one (`createdBy`), or saved more than a minute after it
+ * was made.
+ *
+ * The second half is why "has a published site" cannot be read off the site:
+ * every new site is born a published starter website, so a site that is live
+ * says nothing about whether its owner did anything. It is the weekly
+ * activity report's test, less the page's version history, which is one more
+ * read per page and moves with `updatedAt` anyway.
+ */
+export function isOwnPublishedScreen(screen: AdAudienceScreenFacts, now: number): boolean {
+  if (screen.deletedAt) return false
+  const published = instantMs(screen.publishedAt)
+  if (published === null || published > now) return false
+  if (typeof screen.createdBy === 'string' && screen.createdBy) return true
+  const created = instantMs(screen.createdAt) ?? 0
+  const updated = instantMs(screen.updatedAt) ?? 0
+  return updated - created > 60_000
+}
+
+/**
+ * Whether an account has lapsed: older than the window, and no real activity
+ * found inside it. An account with no creation time is never lapsed — there
+ * is no telling it from one made today.
+ *
+ * Only what the platform recorded the person DOING counts — their entries in
+ * a site's or workspace's change log and the AI jobs they started. Firebase's
+ * `lastSignInTime` and `lastRefreshTime` are deliberately not read: a browser
+ * tab reloading in the background signs the person back in silently, which
+ * moves both with nobody there.
+ */
+export function isLapsedAccount(facts: AdAudienceStageFacts, now: number): boolean {
+  if (facts.createdAtMs === null) return false
+  if (now - facts.createdAtMs <= AD_AUDIENCE_LAPSE_MS) return false
+  return facts.lastActivityAtMs === null || now - facts.lastActivityAtMs > AD_AUDIENCE_LAPSE_MS
+}
+
+/**
+ * Every stage an ELIGIBLE account is in. Eligibility is the caller's: this
+ * classifies, it does not include. An account read without stage facts is
+ * in none.
+ */
+export function adAudienceStages(account: AdAudienceAccount, now: number): AdAudienceStage[] {
+  const facts = account.stageFacts
+  if (!facts) return []
+  const stages: AdAudienceStage[] = [
+    facts.ownsPaidWorkspace ? 'paid' : facts.ownsPublishedSite ? 'free-published' : 'free-unpublished',
+  ]
+  if (isLapsedAccount(facts, now)) stages.push('lapsed')
+  return stages
+}
+
+/*==========================================
  * THE DIFF
  *=========================================*/
 
@@ -305,12 +466,22 @@ export interface LinkedInAudienceConfig {
   segmentId: string
 }
 
-export interface AdAudienceConfig {
+/** One list on each provider: its settings, or null with the names it lacks. */
+export interface AdAudienceListConfig {
   meta: MetaAudienceConfig | null
   google: GoogleAudienceConfig | null
   linkedin: LinkedInAudienceConfig | null
   /** For each provider left unconfigured, the variables it is missing. */
   missing: Record<AdAudienceProvider, string[]>
+}
+
+export interface AdAudienceConfig extends AdAudienceListConfig {
+  /**
+   * The stage lists (AGL-4072). Each reuses its provider's credentials and
+   * names only its own list id, so a stage is configured when the provider's
+   * credentials are set and that stage's id is too.
+   */
+  stages: Record<AdAudienceStage, AdAudienceListConfig>
 }
 
 /**
@@ -329,41 +500,84 @@ export function adAudienceEnv(): Record<string, string | undefined> {
     GOOGLE_AUDIENCE_SYNC_USER_LIST_ID: process.env.GOOGLE_AUDIENCE_SYNC_USER_LIST_ID,
     LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN: process.env.LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN,
     LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID: process.env.LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID,
+    // The stage lists (AGL-4072): one list id per provider and stage.
+    META_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_AUDIENCE_ID:
+      process.env.META_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_AUDIENCE_ID,
+    META_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_AUDIENCE_ID:
+      process.env.META_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_AUDIENCE_ID,
+    META_AUDIENCE_SYNC_STAGE_PAID_AUDIENCE_ID: process.env.META_AUDIENCE_SYNC_STAGE_PAID_AUDIENCE_ID,
+    META_AUDIENCE_SYNC_STAGE_LAPSED_AUDIENCE_ID: process.env.META_AUDIENCE_SYNC_STAGE_LAPSED_AUDIENCE_ID,
+    GOOGLE_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_USER_LIST_ID:
+      process.env.GOOGLE_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_USER_LIST_ID,
+    GOOGLE_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_USER_LIST_ID:
+      process.env.GOOGLE_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_USER_LIST_ID,
+    GOOGLE_AUDIENCE_SYNC_STAGE_PAID_USER_LIST_ID: process.env.GOOGLE_AUDIENCE_SYNC_STAGE_PAID_USER_LIST_ID,
+    GOOGLE_AUDIENCE_SYNC_STAGE_LAPSED_USER_LIST_ID: process.env.GOOGLE_AUDIENCE_SYNC_STAGE_LAPSED_USER_LIST_ID,
+    LINKEDIN_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_SEGMENT_ID:
+      process.env.LINKEDIN_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_SEGMENT_ID,
+    LINKEDIN_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_SEGMENT_ID:
+      process.env.LINKEDIN_AUDIENCE_SYNC_STAGE_FREE_PUBLISHED_SEGMENT_ID,
+    LINKEDIN_AUDIENCE_SYNC_STAGE_PAID_SEGMENT_ID: process.env.LINKEDIN_AUDIENCE_SYNC_STAGE_PAID_SEGMENT_ID,
+    LINKEDIN_AUDIENCE_SYNC_STAGE_LAPSED_SEGMENT_ID: process.env.LINKEDIN_AUDIENCE_SYNC_STAGE_LAPSED_SEGMENT_ID,
   }
 }
 
-const REQUIRED: Record<AdAudienceProvider, readonly string[]> = {
-  meta: ['META_AUDIENCE_SYNC_ACCESS_TOKEN', 'META_AUDIENCE_SYNC_AUDIENCE_ID'],
+/** Each provider's credentials: what every one of its lists shares. */
+const CREDENTIALS: Record<AdAudienceProvider, readonly string[]> = {
+  meta: ['META_AUDIENCE_SYNC_ACCESS_TOKEN'],
   google: [
     'GOOGLE_AUDIENCE_SYNC_CLIENT_ID',
     'GOOGLE_AUDIENCE_SYNC_CLIENT_SECRET',
     'GOOGLE_AUDIENCE_SYNC_REFRESH_TOKEN',
     'GOOGLE_AUDIENCE_SYNC_CUSTOMER_ID',
-    'GOOGLE_AUDIENCE_SYNC_USER_LIST_ID',
   ],
-  linkedin: ['LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN', 'LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID'],
+  linkedin: ['LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN'],
+}
+
+/** The all-holders list id on each provider. */
+const LIST_ID: Record<AdAudienceProvider, string> = {
+  meta: 'META_AUDIENCE_SYNC_AUDIENCE_ID',
+  google: 'GOOGLE_AUDIENCE_SYNC_USER_LIST_ID',
+  linkedin: 'LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID',
+}
+
+const LIST_ID_SUFFIX: Record<AdAudienceProvider, string> = {
+  meta: 'AUDIENCE_ID',
+  google: 'USER_LIST_ID',
+  linkedin: 'SEGMENT_ID',
+}
+
+const PROVIDER_PREFIX: Record<AdAudienceProvider, string> = {
+  meta: 'META_AUDIENCE_SYNC',
+  google: 'GOOGLE_AUDIENCE_SYNC',
+  linkedin: 'LINKEDIN_AUDIENCE_SYNC',
+}
+
+/**
+ * The variable that holds one stage's list id on one provider, e.g.
+ * `META_AUDIENCE_SYNC_STAGE_FREE_UNPUBLISHED_AUDIENCE_ID`. Every name it
+ * builds is read literally in `adAudienceEnv`.
+ */
+export function stageListVariable(provider: AdAudienceProvider, stage: AdAudienceStage): string {
+  const name = stage.toUpperCase().replace(/-/g, '_')
+  return `${PROVIDER_PREFIX[provider]}_STAGE_${name}_${LIST_ID_SUFFIX[provider]}`
 }
 
 const digits = (value: string) => value.replace(/\D/g, '')
 
 /**
- * Each provider's settings, or null with the names it lacks. A provider is
- * configured only when every required variable is set; a half-configured one
- * is skipped, never half-sent.
- *
- * The Meta audience is never created here. Creating one when the id is unset
- * would mint a fresh, empty audience on every run whose variable was lost, and
- * the ads targeting the real one would go on pointing at it, so the id is
- * required and the audience is made once, by hand.
+ * One list on every provider, given the variable that names its id on each.
+ * Shared by the all-holders list and every stage, so the credentials are
+ * read, and normalized, in exactly one way.
  */
-export function readAdAudienceConfig(
-  env: Record<string, string | undefined> = adAudienceEnv(),
-): AdAudienceConfig {
-  const value = (name: string) => String(env[name] ?? '').trim()
+function readListConfig(
+  value: (name: string) => string,
+  listVariable: Record<AdAudienceProvider, string>,
+): AdAudienceListConfig {
   const missing = Object.fromEntries(
     AD_AUDIENCE_PROVIDERS.map((provider) => [
       provider,
-      REQUIRED[provider].filter((name) => !value(name)),
+      [...CREDENTIALS[provider], listVariable[provider]].filter((name) => !value(name)),
     ]),
   ) as Record<AdAudienceProvider, string[]>
   const loginCustomerId = digits(value('GOOGLE_AUDIENCE_SYNC_LOGIN_CUSTOMER_ID'))
@@ -373,7 +587,7 @@ export function readAdAudienceConfig(
       : {
           accessToken: value('META_AUDIENCE_SYNC_ACCESS_TOKEN'),
           // `act_` belongs to the ad account, never to an audience id.
-          audienceId: value('META_AUDIENCE_SYNC_AUDIENCE_ID'),
+          audienceId: value(listVariable.meta),
         },
     google: missing.google.length
       ? null
@@ -384,17 +598,49 @@ export function readAdAudienceConfig(
           // Google Ads shows `841-500-9958`; the API takes the digits.
           customerId: digits(value('GOOGLE_AUDIENCE_SYNC_CUSTOMER_ID')),
           loginCustomerId: loginCustomerId || null,
-          userListId: digits(value('GOOGLE_AUDIENCE_SYNC_USER_LIST_ID')),
+          userListId: digits(value(listVariable.google)),
         },
     linkedin: missing.linkedin.length
       ? null
       : {
           accessToken: value('LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN'),
           // The segment URN's id, whichever form was pasted.
-          segmentId: value('LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID').replace(/^urn:li:dmpSegment:/, ''),
+          segmentId: value(listVariable.linkedin).replace(/^urn:li:dmpSegment:/, ''),
         },
     missing,
   }
+}
+
+/**
+ * Each provider's settings, or null with the names it lacks. A provider is
+ * configured only when every required variable is set; a half-configured one
+ * is skipped, never half-sent.
+ *
+ * The Meta audience is never created here. Creating one when the id is unset
+ * would mint a fresh, empty audience on every run whose variable was lost, and
+ * the ads targeting the real one would go on pointing at it, so the id is
+ * required and the audience is made once, by hand. The same holds for every
+ * stage list: an unset stage id is a stage that is not sent, never one made.
+ *
+ * A stage list never depends on the all-holders list's id: it needs only
+ * its provider's credentials and its own id.
+ */
+export function readAdAudienceConfig(
+  env: Record<string, string | undefined> = adAudienceEnv(),
+): AdAudienceConfig {
+  const value = (name: string) => String(env[name] ?? '').trim()
+  const stages = Object.fromEntries(
+    AD_AUDIENCE_STAGES.map((stage) => [
+      stage,
+      readListConfig(
+        value,
+        Object.fromEntries(
+          AD_AUDIENCE_PROVIDERS.map((provider) => [provider, stageListVariable(provider, stage)]),
+        ) as Record<AdAudienceProvider, string>,
+      ),
+    ]),
+  ) as Record<AdAudienceStage, AdAudienceListConfig>
+  return { ...readListConfig(value, LIST_ID), stages }
 }
 
 /*==========================================
