@@ -8100,7 +8100,9 @@
     "gift_card": "A gift card balance can only be checked online."
   },
   "POS_OFFLINE_FLAG_LABELS": {
+    "card-amount-differs": "The card was charged a different amount than the sale’s total; the payment records what Stripe took",
     "card-declined": "The card taken offline was declined when it was charged; the order is unpaid",
+    "card-fee-short": "Stripe took less than the platform fee from this card’s payout; the rest goes on the workspace’s Aglyn invoice",
     "card-not-charged": "The card taken offline could not be charged; the order is unpaid",
     "cash-short": "The cash recorded is less than the total",
     "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",

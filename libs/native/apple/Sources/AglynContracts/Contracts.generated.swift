@@ -3844,7 +3844,9 @@ public enum PosOfflineCardForward: String, Codable, CaseIterable, Hashable, Send
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
+  case cardAmountDiffers = "card-amount-differs"
   case cardDeclined = "card-declined"
+  case cardFeeShort = "card-fee-short"
   case cardNotCharged = "card-not-charged"
   case cashShort = "cash-short"
   case cashierUnverified = "cashier-unverified"

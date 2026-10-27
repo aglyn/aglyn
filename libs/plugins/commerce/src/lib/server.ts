@@ -331,6 +331,34 @@ registerPluginJob({
 })
 
 /**
+ * Cards taken offline whose sale never synced (AGL-4039).
+ *
+ * HOURLY. The alert falls due six hours after the intent was first seen, and
+ * Stripe's authorization lasts about two days, so an hour's delay costs
+ * nothing and leaves the beat one collection-group range read that is empty in
+ * the ordinary case. It never captures: without the sale there is no fee to
+ * capture with, so it tells the operator and the site's managers instead.
+ *
+ * Not gated on `isEmailConfigured()`: the console notification and the
+ * operator alert both work without mail.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'offline-card-unsynced',
+  intervalMinutes: 60,
+  description:
+    'Tell the operator and the site when a card taken offline reached Stripe but its sale never synced (AGL-4039).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    const { scanUnsyncedOfflineCards } = await import('./server/pos-offline-card-reconcile')
+    const scan = await scanUnsyncedOfflineCards(gate)
+    if (scan.alerted) {
+      console.warn(`commerce: ${scan.alerted} cards taken offline have no synced sale`)
+    }
+  },
+})
+
+/**
  * A visitor's payment door: it opens a Stripe Checkout Session for whoever
  * calls it, so the dispatcher holds it to the card-testing counters
  * (AGL-3363). Declared here, beside the registration, so the door cannot

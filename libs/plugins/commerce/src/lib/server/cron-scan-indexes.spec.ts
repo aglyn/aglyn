@@ -121,6 +121,17 @@ describe('commerce cron collection-group scans (AGL-1793)', () => {
     )
   })
 
+  // `pos-offline-card-reconcile.ts` (AGL-4039):
+  //   collectionGroup('offlineCardCharges').where('alertDueAtMs','<=',now)
+  //     .orderBy('alertDueAtMs','asc').limit(100)
+  // Without it the sweep fails every beat, and a card taken offline whose
+  // sale never synced is never told to anyone.
+  it('declares the COLLECTION_GROUP index on offlineCardCharges.alertDueAtMs', () => {
+    expect(scopes(override('offlineCardCharges', 'alertDueAtMs'))).toContain(
+      'COLLECTION_GROUP:ASCENDING',
+    )
+  })
+
   // The review links expire on their own: a TTL policy on `expiresAt`.
   it('declares the TTL on reviewTokens.expiresAt (AGL-3736)', () => {
     const entry = override('reviewTokens', 'expiresAt') as
@@ -133,6 +144,7 @@ describe('commerce cron collection-group scans (AGL-1793)', () => {
     ['checkouts', 'status'],
     ['restockAlerts', 'notifiedAtMs'],
     ['orders', 'reviewRequestDueAtMs'],
+    ['offlineCardCharges', 'alertDueAtMs'],
     // `createdAtMs` is read per-host all over the console's order lists, so
     // this one would be the most expensive automatic index to lose.
     ['orders', 'createdAtMs'],

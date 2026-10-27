@@ -17,6 +17,7 @@
 
 import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { commerceBillingWebhookHandler } from './billing-webhook'
+import { posOfflineCardOrderMoney } from './pos-offline-card-order'
 import {
   reportedRefundLedger,
   standInPersonRecords,
@@ -1971,5 +1972,60 @@ describe('a refund made outside the console (AGL-3363)', () => {
     await expect(
       deliver('charge.refunded', { ...refunded(1000), payment_intent: 'pi_other' }),
     ).resolves.toBeUndefined()
+  })
+})
+
+describe('a register card sale taken offline (AGL-4039)', () => {
+  /**
+   * The offline sync used to keep the intent only inside `payments[0]`, which
+   * neither the single-charge lookup nor the split lookup reads, so a
+   * chargeback on such a sale matched no order. Seeded exactly as the sync
+   * writes the order now.
+   */
+  const seedOfflineOrder = (orderLevelIntent: boolean) => {
+    const money = posOfflineCardOrderMoney({
+      settled: {
+        kind: 'captured',
+        intentId: 'pi_offline_card',
+        amountCents: 4100,
+        feeCents: 230,
+        expectedFeeCents: 230,
+        takeShareCents: 82,
+        livemode: false,
+        brand: 'visa',
+        last4: '4242',
+      },
+      totals: { itemsCents: 4100, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 4100 },
+      planTakeCents: 82,
+      soldAtMs: 1_000,
+      nowMs: 2_000,
+      cashierId: 'cashier-1',
+      feeOrgId: 'org-1',
+    })
+    const fields = orderLevelIntent ? money.fields : { feeCollection: money.fields['feeCollection'] }
+    docs.set('hosts/host-1/orders/order-offline', {
+      status: money.status,
+      channel: 'pos',
+      lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 4100 }],
+      totals: money.totals,
+      payments: [money.payment],
+      ...fields,
+      offline: { saleKey: 'order-offline', soldAtMs: 1_000, syncedAtMs: 2_000, syncedBy: 'cashier-1', flags: [] },
+    })
+  }
+
+  it('claims the chargeback and flags the sale', async () => {
+    seedOfflineOrder(true)
+    await expect(
+      deliver('charge.dispute.created', disputeEvent({ amount: 4100, payment_intent: 'pi_offline_card' })),
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
+    expect(docs.get('hosts/host-1/orders/order-offline')?.dispute).toMatchObject({ id: 'dp_1', amountCents: 4100 })
+  })
+
+  it('matched no order while the intent was kept only inside the payment (the defect)', async () => {
+    seedOfflineOrder(false)
+    await expect(
+      deliver('charge.dispute.created', disputeEvent({ amount: 4100, payment_intent: 'pi_offline_card' })),
+    ).resolves.toEqual({ claimed: false })
   })
 })

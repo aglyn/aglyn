@@ -53,6 +53,8 @@ import {
   type PosOpsDeps,
   type PosOpsStaff,
 } from './pos-ops-gate'
+import { posOfflineCardChargeRef, reportPosOfflineCardWrongAccount } from './pos-offline-card-reconcile'
+import { posOfflineCardOrderMoney, type PosOfflineCardSettled } from './pos-offline-card-order'
 import { notifyPosSaleCompleted } from './pos-sale'
 import { POS_CURRENCY, posCardApplicationFeeCents, posTerminalAvailable } from './pos-stripe'
 import {
@@ -158,11 +160,25 @@ export interface PosOfflineCardDeps {
   /** Turns Stripe's offline mode on for the site's readers; false when Stripe refused. */
   enableOffline(hostId: string): Promise<boolean>
   retrieve(paymentIntentId: string): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }>
+  /**
+   * Captures with the platform fee. A failure carries Stripe's HTTP status
+   * when Stripe answered; a request that never got an answer throws.
+   */
   capture(
     paymentIntentId: string,
     applicationFeeCents: number,
     idempotencyKey: string,
-  ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }>
+  ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status?: number }>
+  /** Tells the operator a card was made out to another account. Never throws. */
+  wrongAccount(input: {
+    hostId: string
+    orderId: string
+    paymentIntentId: string
+    status: string
+    amountCents: number
+    destination: string
+    expected: string
+  }): Promise<void>
 }
 
 export function defaultPosOfflineCardDeps(): PosOfflineCardDeps {
@@ -175,6 +191,7 @@ export function defaultPosOfflineCardDeps(): PosOfflineCardDeps {
     enableOffline: ensurePosOfflineCardConfiguration,
     retrieve: retrievePosOfflineCardIntent,
     capture: capturePosOfflineCardIntent,
+    wrongAccount: reportPosOfflineCardWrongAccount,
   }
 }
 
@@ -367,26 +384,61 @@ async function buildPosOfflineKitCard(
   return { ...base, destination, available: true }
 }
 
+/** A card made out to a Stripe account that is not the store's. */
+interface OfflineCardWrongAccount {
+  destination: string
+  expected: string
+  status: string
+  amountCents: number
+}
+
 /** What became of a card taken offline, as the sync settles it. */
 type OfflineCardSettlement =
-  | {
-      kind: 'captured'
-      intentId: string
-      feeCents: number
-      takeShareCents: number
-      livemode: boolean
-      brand?: string
-      last4?: string
-    }
-  | { kind: 'unpaid'; flag: 'card-declined' | 'card-not-charged'; intentId?: string; message: string; brand?: string; last4?: string }
+  | (PosOfflineCardSettled & { wrongAccount?: OfflineCardWrongAccount })
   | { kind: 'wait'; outcome: PosOfflineSaleOutcome }
+
+/** Statuses in which an intent holds the customer's money or has taken it. */
+const INTENT_HOLDS_MONEY: ReadonlySet<string> = new Set(['requires_capture', 'processing', 'succeeded'])
+
+/**
+ * How long after a capture that Stripe answered with a 5xx the sync waits
+ * before reading "still waiting for capture" as the definite answer.
+ */
+export const POS_OFFLINE_CAPTURE_SETTLE_MS = 60_000
+
+/**
+ * The capture's idempotency key (AGL-4039). Attempt 0 is the key every
+ * capture used before attempts existed, so a retry of one already in flight
+ * still finds it.
+ *
+ * WHY AN ATTEMPT. Stripe keeps the answer to an idempotent request for a day,
+ * failures included, so a capture that failed once on a per-sale key would
+ * fail the same way on every sync for a day, deep into the two days the
+ * authorization lasts. The attempt moves on only when the previous one
+ * DEFINITELY did not capture: Stripe refused it with a 4xx (not 409, a
+ * request with the same key still running, and not 429, rate limited), or it
+ * answered 5xx and the intent still waits for capture a minute later. A
+ * request that got no answer at all throws before anything is recorded, so it
+ * retries on the same key. Every sync reads the intent before it captures,
+ * and Stripe captures an intent once, so a new key can never capture twice.
+ */
+export function posOfflineCaptureKey(hostId: string, saleKey: string, attempt: number): string {
+  const base = `pos-offline-capture:${hostId}:${saleKey}`
+  return attempt > 0 ? `${base}:${attempt}` : base
+}
+
+/** A capture Stripe refused for good: retrying the same key would replay the refusal. */
+export function posOfflineCaptureRefused(status: number | undefined): boolean {
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 409 && status !== 429
+}
 
 /**
  * Reads the card of a sale rung offline and settles it: captured with the
  * platform fee (the card tender's share of the take, by the one tender rule,
  * plus Stripe's processing cost, exactly as an online reader payment), or
- * unpaid when the bank declined it or Stripe never took it. Anything Stripe
- * has not finished yet waits on the register for the next sync.
+ * unpaid when the bank declined it, Stripe never took it, or it was made out
+ * to a Stripe account that is not the store's. Anything Stripe has not
+ * finished yet waits on the register for the next sync.
  */
 async function settleOfflineCard(
   context: SyncContext,
@@ -411,28 +463,90 @@ async function settleOfflineCard(
   const read = await deps.card.retrieve(card.paymentIntentId)
   if ('error' in read) return wait(`The card payment could not be checked yet: ${read.error}`)
   let intent = read.intent
+  // The amount is NOT checked here: what Stripe took is what the customer
+  // paid, and a difference from the server's total is flagged on the order
+  // (`posOfflineCardOrderMoney`), never a reason to leave the sale unrecorded.
   if (
     intent.metadata['kind'] !== POS_OFFLINE_CARD_INTENT_KIND ||
     intent.metadata['saleKey'] !== saleKey ||
     intent.metadata['hostId'] !== staff.hostId ||
-    intent.amount !== sale.totals.totalCents ||
     intent.currency !== POS_CURRENCY
   ) {
     return { kind: 'wait', outcome: refused(saleKey, 'invalid', 'The card payment does not belong to this sale.', false) }
   }
   const found = { ...details, ...(intent.brand ? { brand: intent.brand } : {}), ...(intent.last4 ? { last4: intent.last4 } : {}) }
+  // THE DESTINATION. The device made this intent out to the account its
+  // offline kit named, and a kit can be stale (the store reconnected Stripe)
+  // or a register tampered with. Money that holds or has moved is only ever
+  // captured into, or recorded as paid to, the store's account as it is now.
+  if (INTENT_HOLDS_MONEY.has(intent.status)) {
+    const expected = await deps.card.merchantAccount(staff.hostId, staff.org)
+    if (!expected) {
+      return wait('This store’s Stripe account cannot take card payments right now. The card syncs once it can.')
+    }
+    if (intent.destination !== expected) {
+      return {
+        kind: 'unpaid',
+        flag: 'card-not-charged',
+        intentId: intent.id,
+        message: 'The card was made out to a Stripe account that is not this store’s, so it was not charged here.',
+        ...found,
+        wrongAccount: { destination: intent.destination, expected, status: intent.status, amountCents: intent.amount },
+      }
+    }
+  }
   const takeShareCents = CommerceModel.posTenderTakeCents('card_present', takeFee)
+  const expectedFeeCents = posCardApplicationFeeCents({ takeShareCents, chargeCents: intent.amount })
   if (intent.status === 'requires_capture') {
-    const feeCents = posCardApplicationFeeCents({ takeShareCents, chargeCents: intent.amount })
-    const captured = await deps.card.capture(intent.id, feeCents, `pos-offline-capture:${staff.hostId}:${saleKey}`)
-    if ('error' in captured) return wait(`The card payment could not be captured yet: ${captured.error}`)
+    const chargeRef = posOfflineCardChargeRef(staff.hostRef, saleKey)
+    const charge = ((await chargeRef.get()).data() ?? {}) as Record<string, unknown>
+    let attempt = Math.max(0, Math.round(Number(charge['captureAttempt'] ?? 0)) || 0)
+    if (
+      charge['captureUncertainAttempt'] === attempt &&
+      deps.now() - Number(charge['captureUncertainAtMs'] ?? 0) >= POS_OFFLINE_CAPTURE_SETTLE_MS
+    ) {
+      // The 5xx left the outcome unknown; the intent still waiting for
+      // capture a minute later says it did not capture.
+      attempt += 1
+      await chargeRef.set(
+        {
+          captureAttempt: attempt,
+          captureUncertainAttempt: FieldValue.delete(),
+          captureUncertainAtMs: FieldValue.delete(),
+        },
+        { merge: true },
+      )
+    }
+    const captured = await deps.card.capture(intent.id, expectedFeeCents, posOfflineCaptureKey(staff.hostId, saleKey, attempt))
+    if ('error' in captured) {
+      const stamp = { hostId: staff.hostId, saleKey, updatedAtMs: deps.now() }
+      if (posOfflineCaptureRefused(captured.status)) {
+        await chargeRef.set(
+          {
+            ...stamp,
+            captureAttempt: attempt + 1,
+            lastCaptureStatus: captured.status,
+            lastCaptureError: captured.error.slice(0, 300),
+          },
+          { merge: true },
+        )
+      } else if (typeof captured.status === 'number' && captured.status >= 500) {
+        await chargeRef.set(
+          { ...stamp, captureUncertainAttempt: attempt, captureUncertainAtMs: deps.now() },
+          { merge: true },
+        )
+      }
+      return wait(`The card payment could not be captured yet: ${captured.error}`)
+    }
     intent = captured.intent
   }
   if (intent.status === 'succeeded') {
     return {
       kind: 'captured',
       intentId: intent.id,
+      amountCents: intent.amount,
       feeCents: intent.applicationFeeCents,
+      expectedFeeCents,
       takeShareCents,
       livemode: intent.livemode,
       ...found,
@@ -735,19 +849,36 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
     else flags.add('cashier-unverified')
   }
 
-  // The offline register takes cash only, and cash carries no platform fee
-  // (AGL-4036): the plan's take is worked out and then settled by the one
-  // predicate every tender answers to, so a sale synced from the queue is
-  // charged exactly what the same sale rung online is.
+  // Cash carries no platform fee (AGL-4036): the plan's take is worked out
+  // and then settled by the one predicate every tender answers to, so a sale
+  // synced from the queue is charged exactly what the same sale rung online
+  // is.
   const planTake = takeFeeCents(deps, staff, lineItems, totals)
   // A card taken offline settles with Stripe BEFORE the order is written: a
   // capture that fails leaves the sale on the register for the next sync,
   // and a repeat after a lost answer finds the first capture (AGL-4039).
   const settled = byCard ? await settleOfflineCard(context, sale, planTake) : null
   if (settled?.kind === 'wait') return settled.outcome
-  if (settled?.kind === 'unpaid') flags.add(settled.flag)
-  const takeFee = byCard ? (settled?.kind === 'captured' ? settled.takeShareCents : 0) : CommerceModel.posTenderTakeCents('cash', planTake)
-  totals = { ...totals, feeCents: takeFee }
+  // The card's money, decided once against the server's totals: the fee it
+  // settled, the shortfall to invoice, and the order-level intent the refund
+  // and the dispute lookup read.
+  const cardMoney = settled
+    ? posOfflineCardOrderMoney({
+        settled,
+        totals,
+        planTakeCents: planTake,
+        soldAtMs: soldAt.atMs,
+        nowMs: now,
+        cashierId,
+        feeOrgId: staff.orgId ?? '',
+      })
+    : null
+  for (const flag of cardMoney?.flags ?? []) flags.add(flag)
+  const cashTake = CommerceModel.posTenderTakeCents('cash', planTake)
+  totals = cardMoney ? cardMoney.totals : { ...totals, feeCents: cashTake }
+  // What accrues to the org's month with the order: the cash take (none
+  // since AGL-4036) or the part of a card's fee its payout did not carry.
+  const invoiceCents = cardMoney ? cardMoney.invoiceCents : cashTake
   const changeCents = byCard ? 0 : Math.max(0, sale.cashTenderedCents - totals.totalCents)
   const flagList = [...flags]
   const stamp: PosOfflineOrderStamp = {
@@ -780,7 +911,7 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       ? `Cash — received ${money(sale.cashTenderedCents)}, change ${money(changeCents)}. ` +
         'Rung while the register was offline.'
       : settled.kind === 'captured'
-        ? `${cardName} — ${money(totals.totalCents)}, taken while the register was offline and charged when it reconnected.`
+        ? `${cardName} — ${money(settled.amountCents)}, taken while the register was offline and charged when it reconnected.`
         : `${cardName} — ${money(totals.totalCents)} taken while the register was offline was not paid: ${settled.message}`.slice(0, 500)
     const timeline: CommerceModel.OrderTimelineEvent[] = [
       { atMs: soldAt.atMs, event: settled?.kind === 'unpaid' ? 'payment-failed' : 'paid', detail: paidDetail },
@@ -796,7 +927,7 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       orderRef,
       CommerceModel.withOrderListFields(orderRef.id, {
         number,
-        status: settled?.kind === 'unpaid' ? 'pending' : 'paid',
+        status: cardMoney ? cardMoney.status : 'paid',
         channel: 'pos',
         registerId: sale.registerId,
         cashierId,
@@ -812,39 +943,24 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
           : totals.taxCents > 0
             ? 'manual'
             : 'none',
-        ...(takeFee > 0 ? { feeCollection: settled ? ('payout' as const) : ('invoice' as const) } : {}),
-        payments: settled
-          ? [
-              {
-                id: 'pay_card_offline',
-                method: 'card_present',
-                amountCents: totals.totalCents,
-                status: settled.kind === 'captured' ? 'succeeded' : 'failed',
-                atMs: soldAt.atMs,
-                ...(settled.kind === 'captured'
-                  ? { settledAtMs: now, takeFeeCents: settled.takeShareCents, feeCents: settled.feeCents, livemode: settled.livemode }
-                  : { takeFeeCents: 0, feeCents: 0, failureMessage: settled.message.slice(0, 300) }),
-                ...(settled.intentId ? { paymentIntentId: settled.intentId } : {}),
-                ...(settled.brand ? { cardBrand: settled.brand } : {}),
-                ...(settled.last4 ? { last4: settled.last4 } : {}),
-                cashierId,
-              } satisfies CommerceModel.OrderPayment,
-            ]
+        ...(cardMoney ? cardMoney.fields : cashTake > 0 ? { feeCollection: 'invoice' as const } : {}),
+        payments: cardMoney
+          ? [cardMoney.payment]
           : [
-          {
-            id: 'pay_cash',
-            method: 'cash',
-            amountCents: totals.totalCents,
-            status: 'succeeded',
-            atMs: soldAt.atMs,
-            settledAtMs: soldAt.atMs,
-            takeFeeCents: takeFee,
-            feeCents: 0,
-            cashierId,
-            cashTenderedCents: sale.cashTenderedCents,
-            changeCents,
-          } satisfies CommerceModel.OrderPayment,
-        ],
+              {
+                id: 'pay_cash',
+                method: 'cash',
+                amountCents: totals.totalCents,
+                status: 'succeeded',
+                atMs: soldAt.atMs,
+                settledAtMs: soldAt.atMs,
+                takeFeeCents: cashTake,
+                feeCents: 0,
+                cashierId,
+                cashTenderedCents: sale.cashTenderedCents,
+                changeCents,
+              } satisfies CommerceModel.OrderPayment,
+            ],
         customerEmail: customer.email || null,
         timeline,
         offline: stamp,
@@ -869,12 +985,32 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       ...(settled?.kind === 'unpaid' ? { unpaid: true } : {}),
     }
     transaction.create(recordRef, record)
-    // The take accrues with the order, in the same transaction (AGL-2111).
-    // A card's share was netted from its payout by the capture instead.
-    if (takeFee > 0 && feeRef && !settled) {
+    // The intent's record says its sale synced, in the same commit, so the
+    // webhook and the unsynced-card sweep never report a sale that landed.
+    if (settled?.intentId) {
+      transaction.set(
+        posOfflineCardChargeRef(hostRef, sale.saleKey),
+        {
+          hostId: staff.hostId,
+          saleKey: sale.saleKey,
+          paymentIntentId: settled.intentId,
+          registerId: sale.registerId,
+          synced: true,
+          orderId: orderRef.id,
+          syncedAtMs: now,
+          updatedAtMs: now,
+          alertDueAtMs: FieldValue.delete(),
+        },
+        { merge: true },
+      )
+    }
+    // The fee no payout carried accrues with the order, in the same
+    // transaction (AGL-2111): a card's share was netted from its payout by
+    // the capture, and only a shortfall in that lands here.
+    if (invoiceCents > 0 && feeRef) {
       transaction.set(
         feeRef,
-        { month: feeMonth, feeCents: FieldValue.increment(takeFee), orders: FieldValue.increment(1) },
+        { month: feeMonth, feeCents: FieldValue.increment(invoiceCents), orders: FieldValue.increment(1) },
         { merge: true },
       )
     }
@@ -889,6 +1025,14 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       return refused(sale.saleKey, 'conflict', 'Another sale already used this key.', false)
     }
     return replayOf(record)
+  }
+  if (settled?.kind === 'unpaid' && settled.wrongAccount && settled.intentId) {
+    await deps.card!.wrongAccount({
+      hostId: staff.hostId,
+      orderId: orderRef.id,
+      paymentIntentId: settled.intentId,
+      ...settled.wrongAccount,
+    })
   }
   const finished = await finishSale(context, recordRef, orderRef, committed.record)
   return {

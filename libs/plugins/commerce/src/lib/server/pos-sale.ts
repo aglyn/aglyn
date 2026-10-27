@@ -423,8 +423,13 @@ export async function completePosSale(
 
   // Stock comes off exactly once, here, compounding across lines of one
   // product (AGL-1828) and atomically against other channels (AGL-2320).
+  //
+  // Except for a sale rung OFFLINE (AGL-3625): the customer left with the
+  // goods, so the offline sync took the stock when it recorded the sale,
+  // paid or not. One whose card failed and is collected later at the
+  // register (AGL-4039) completes here, and must not take it a second time.
   const products = new Map<string, CommerceModel.HostProduct>()
-  for (const line of order.lineItems ?? []) {
+  for (const line of order.offline ? [] : order.lineItems ?? []) {
     try {
       if (!products.has(line.productId)) {
         const snapshot = await hostRef.collection('products').doc(line.productId).get()

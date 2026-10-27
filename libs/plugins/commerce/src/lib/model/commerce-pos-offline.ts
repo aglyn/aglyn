@@ -201,6 +201,8 @@ export type PosOfflineFlag =
   | 'cashier-unverified'
   | 'card-declined'
   | 'card-not-charged'
+  | 'card-amount-differs'
+  | 'card-fee-short'
 
 /** Each flag in the words the order and the register show. */
 export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
@@ -220,6 +222,8 @@ export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
   'cashier-unverified': 'The PIN-switched cashier could not be confirmed; the sale is under the signed-in member',
   'card-declined': 'The card taken offline was declined when it was charged; the order is unpaid',
   'card-not-charged': 'The card taken offline could not be charged; the order is unpaid',
+  'card-amount-differs': 'The card was charged a different amount than the sale’s total; the payment records what Stripe took',
+  'card-fee-short': 'Stripe took less than the platform fee from this card’s payout; the rest goes on the workspace’s Aglyn invoice',
 }
 
 /** A line whose stock went short when the sale synced. */

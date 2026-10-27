@@ -22,6 +22,7 @@ import type {
 import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { refundHandler } from './refund'
+import { posOfflineCardOrderMoney } from './pos-offline-card-order'
 import {
   reportedRefundLedger,
   standInPersonRecords,
@@ -1756,5 +1757,62 @@ describe('refunding a split-tender register sale (AGL-3607)', () => {
     expect(result.body.error).toContain('$25.00')
     expect(refundCalls).toHaveLength(0)
     expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+})
+
+describe('a card taken offline on the app reader (AGL-4039)', () => {
+  const totals = { itemsCents: 5000, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 5000 }
+  // The order exactly as the offline sync writes it for a captured card.
+  const money = posOfflineCardOrderMoney({
+    settled: {
+      kind: 'captured',
+      intentId: 'pi_offline_card',
+      amountCents: 5000,
+      feeCents: 275,
+      expectedFeeCents: 275,
+      takeShareCents: 100,
+      livemode: false,
+      brand: 'visa',
+      last4: '4242',
+    },
+    totals,
+    planTakeCents: 100,
+    soldAtMs: 1_000,
+    nowMs: 2_000,
+    cashierId: 'cashier-1',
+    feeOrgId: 'org-1',
+  })
+  const offlineOrder = {
+    status: money.status,
+    channel: 'pos',
+    registerId: 'front',
+    lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 }],
+    totals: money.totals,
+    payments: [money.payment],
+    ...money.fields,
+    offline: { saleKey: 'order-1', soldAtMs: 1_000, syncedAtMs: 2_000, syncedBy: 'cashier-1', flags: [] },
+  }
+
+  it('refunds against the card’s own intent', async () => {
+    docs.set('hosts/host-1/orders/order-1', offlineOrder)
+    const result = await post({}, { 'idempotency-key': 'offline-1' })
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+    expect(refundCalls[0].paymentIntent).toBe('pi_offline_card')
+    expect(refundCalls[0].amount).toBe('5000')
+    expect(storedOrder().status).toBe('refunded')
+  })
+
+  it('had no payment to refund while the intent was kept only inside the payment (the defect)', async () => {
+    const withoutOrderIntent: Record<string, unknown> = { ...offlineOrder }
+    delete withoutOrderIntent['paymentIntentId']
+    delete withoutOrderIntent['paymentIntentIds']
+    docs.set('hosts/host-1/orders/order-1', withoutOrderIntent)
+    // The fallback reads a Checkout Session by the order id, which no
+    // register sale has: the double refuses that call, and nothing is refunded.
+    expectServerError()
+    const result = await post({}, { 'idempotency-key': 'offline-2' })
+    expect(result.status).not.toBe(200)
+    expect(refundCalls).toHaveLength(0)
   })
 })
