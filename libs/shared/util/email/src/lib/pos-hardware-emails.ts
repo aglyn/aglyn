@@ -20,7 +20,9 @@
  *
  * The commerce plugin's POS hardware shop sends these to the person who
  * placed the order: the order received, the parcel shipped with its
- * tracking, and the parcel delivered with the way to set the reader up. The
+ * tracking, the parcel delivered with the way to set the reader up, and the
+ * order canceled and refunded because the workspace was deleted or the
+ * buyer's account closed before it shipped. The
  * platform is the seller, so they are SYSTEM emails in the platform's brand
  * (or the workspace's white label), not a store's own emails to its buyers.
  *
@@ -40,6 +42,7 @@ export const POS_HARDWARE_EMAIL_KEYS = {
   received: 'pos-hardware-order-received',
   shipped: 'pos-hardware-order-shipped',
   delivered: 'pos-hardware-order-delivered',
+  canceled: 'pos-hardware-order-canceled',
 } as const
 
 const SOURCE = 'libs/plugins/commerce/src/lib/server/pos-hardware-notify.ts'
@@ -84,6 +87,16 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
       name: 'order.setupUrl',
       description: 'The POS devices card, where a reader is added to a register',
       sample: `${origin}${SAMPLE_POS_PAGE}#pos-devices`,
+    },
+    refunded: {
+      name: 'order.refunded',
+      description: 'What was refunded to the card, shipping and tax included',
+      sample: '$123.45',
+    },
+    cancelReason: {
+      name: 'order.cancelReason',
+      description: 'Why the order was canceled, as the end of a sentence',
+      sample: 'the Test Org workspace was deleted',
     },
   }
 }
@@ -162,6 +175,29 @@ export function posHardwareSystemEmailTemplates(
         { block: 'text', text: '1. Charge it and switch it on.\n2. Connect it to Wi-Fi from the reader’s Settings.\n3. On the reader, generate a pairing code.\n4. On the POS devices card, choose Add card reader and enter the code.', variant: 'details' },
         { block: 'button', label: 'Set up your reader', href: '{{order.setupUrl}}' },
         { block: 'text', text: 'The M2 pairs by Bluetooth from the {{brand.productName}} POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
+      ],
+      footerReason: footer,
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.canceled,
+      name: 'Card reader order canceled and refunded',
+      description:
+        'Sent when a card reader order from the POS hardware shop is canceled ' +
+        'and refunded in full because the workspace that bought it was ' +
+        'deleted, or the account that placed it was closed, before it shipped.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your card reader order {{order.number}} was canceled and refunded',
+      mergeTokens: [t.org, t.site, t.number, t.items, t.refunded, t.cancelReason],
+      defaultBody: [
+        { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your hardware order was canceled and refunded', variant: 'heading' },
+        { block: 'text', text: 'Your order had not shipped yet when {{order.cancelReason}}, so we canceled it and refunded the full amount, shipping and tax included, to the card you paid with.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nRefunded: {{order.refunded}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: 'Nothing will ship, and there is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. If a parcel from this order arrives anyway, contact support before opening it and we will arrange its return.', variant: 'body' },
+        { block: 'button', label: 'Contact support', href: '{{brand.supportUrl}}' },
+        { block: 'text', text: 'Order {{order.number}} for {{org.name}}.', variant: 'caption' },
       ],
       footerReason: footer,
       source: SOURCE,

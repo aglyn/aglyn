@@ -558,6 +558,29 @@ export interface PosHardwareTracking {
   url: string | null
 }
 
+/**
+ * Why an order was canceled and refunded: by staff on the Hardware orders
+ * page, or because the workspace that bought it was deleted or the account
+ * that placed it was closed before it shipped (AGL-4038 closure).
+ */
+export type PosHardwareCancelReason = 'staff' | 'workspace-closed' | 'account-closed'
+
+/**
+ * One entry of the tax Stripe computed on a hardware checkout, as the
+ * storefront's tax rows store it (`StorefrontTaxLine`): the amount, the base
+ * it was applied to (`taxable_amount`, null when Stripe did not state one)
+ * and the rate, for the working papers of the platform's own return.
+ */
+export interface PosHardwareTaxLine {
+  amountCents: number
+  taxabilityReason: string | null
+  taxRateId: string | null
+  taxableAmountCents: number | null
+  jurisdiction: string | null
+  rateState: string | null
+  percentage: number | null
+}
+
 /** `orgs/{orgId}/hardwareOrders/{orderId}`, written only by the server. */
 export interface PosHardwareOrder {
   orgId: string
@@ -585,6 +608,10 @@ export interface PosHardwareOrder {
   taxCents: number
   totalCents: number
   currency: string
+  /** Whether Stripe Tax computed the tax on the checkout. Absent on orders before it was recorded. */
+  automaticTax?: boolean
+  /** Stripe's tax breakdown for the checkout, when Stripe Tax computed it. */
+  taxLines?: PosHardwareTaxLine[]
   stripeCheckoutSessionId: string
   stripePaymentIntentId: string | null
   /** Stripe's hardware order id, recorded by staff (phase 2 sets it itself). */
@@ -604,6 +631,8 @@ export interface PosHardwareOrder {
   refundId?: string | null
   /** The cents Stripe reported refunding. */
   refundedCents?: number
+  /** Why it was canceled, when it was. */
+  cancelReason?: PosHardwareCancelReason
   /** When the buyer's account was erased and their details taken off the order. */
   buyerErasedAtMs?: number
 }
@@ -645,6 +674,10 @@ export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
  * Written in the same transaction as every write to the order, from the
  * order as it stands after that write, so the two never disagree and a
  * missing record heals on the next write.
+ *
+ * KEPT SEVEN YEARS FROM THE SALE, THEN DELETED. Every write stamps
+ * `expiresAt` ({@link posHardwareSaleExpiry}) and the Firestore TTL policy on
+ * `posHardwareSales.expiresAt` deletes the record once it passes.
  *=========================================*/
 
 /** The top-level collection of retained hardware sale records. */
@@ -664,6 +697,10 @@ export interface PosHardwareSaleRecord {
   currency: string
   /** The sales tax sourcing input: country, state and postal code, never the street. */
   shipTo: PosHardwareTaxRegion | null
+  /** Whether Stripe Tax computed the tax; null on orders before it was recorded. */
+  automaticTax: boolean | null
+  /** Stripe's tax breakdown: the base each rate was applied to, for the return. */
+  taxLines: PosHardwareTaxLine[]
   stripeCheckoutSessionId: string | null
   stripePaymentIntentId: string | null
   stripeHardwareOrderId: string | null
@@ -680,6 +717,58 @@ export interface PosHardwareSaleRecord {
   registeredAtMs: number | null
   canceledAtMs: number | null
   refundedAtMs: number | null
+  /**
+   * When the record is deleted: {@link POS_HARDWARE_SALE_RETENTION_YEARS}
+   * after the sale, by the Firestore TTL policy on `posHardwareSales.expiresAt`.
+   * Null when the record states no sale date, which keeps it rather than
+   * guessing a date to delete it by.
+   */
+  expiresAt: Date | null
+}
+
+/**
+ * How long the platform keeps a hardware sale record (AGL-4038): seven years
+ * from the sale, then the record is deleted. Longer than the four years Texas
+ * requires for sales tax records, a margin for an audit of an older period.
+ */
+export const POS_HARDWARE_SALE_RETENTION_YEARS = 7
+
+/**
+ * When a sale record expires: the same calendar instant, seven years after
+ * the sale was paid (the order's creation where no payment time is stated).
+ * A sale on 29 February expires on 1 March, a day late rather than early.
+ * Null when there is no sale time, so the record is kept, never reaped at
+ * the epoch.
+ */
+export function posHardwareSaleExpiry(
+  order: Pick<PosHardwareOrder, 'paidAtMs' | 'createdAtMs'>,
+): Date | null {
+  const saleAtMs = [order.paidAtMs, order.createdAtMs].find(
+    (value) => typeof value === 'number' && Number.isFinite(value) && value > 0,
+  )
+  if (saleAtMs === undefined) return null
+  const expires = new Date(saleAtMs)
+  expires.setUTCFullYear(expires.getUTCFullYear() + POS_HARDWARE_SALE_RETENTION_YEARS)
+  return expires
+}
+
+/** A tax line as the record keeps it: every field picked, every figure an integer. */
+function saleTaxLine(line: Partial<PosHardwareTaxLine> | null | undefined): PosHardwareTaxLine {
+  const integerOrNull = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
+  const numberOrNull = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  const textOf = (value: unknown): string | null =>
+    typeof value === 'string' && value ? value : null
+  return {
+    amountCents: integerOrNull(line?.amountCents) ?? 0,
+    taxabilityReason: textOf(line?.taxabilityReason),
+    taxRateId: textOf(line?.taxRateId),
+    taxableAmountCents: integerOrNull(line?.taxableAmountCents),
+    jurisdiction: textOf(line?.jurisdiction),
+    rateState: textOf(line?.rateState),
+    percentage: numberOrNull(line?.percentage),
+  }
 }
 
 const stampOrNull = (value: unknown): number | null =>
@@ -727,6 +816,8 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     totalCents: order.totalCents ?? 0,
     currency: order.currency ?? POS_HARDWARE_CURRENCY,
     shipTo: posHardwareTaxRegion(order),
+    automaticTax: typeof order.automaticTax === 'boolean' ? order.automaticTax : null,
+    taxLines: (Array.isArray(order.taxLines) ? order.taxLines : []).map(saleTaxLine),
     stripeCheckoutSessionId: textOrNull(order.stripeCheckoutSessionId),
     stripePaymentIntentId: textOrNull(order.stripePaymentIntentId),
     stripeHardwareOrderId: textOrNull(order.stripeHardwareOrderId),
@@ -743,6 +834,8 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     registeredAtMs: stampOrNull(order.registeredAtMs),
     canceledAtMs: stampOrNull(order.canceledAtMs),
     refundedAtMs: stampOrNull(order.refundedAtMs),
+    // The TTL policy's field: the record outlives the workspace, not the law.
+    expiresAt: posHardwareSaleExpiry(order),
   }
 }
 

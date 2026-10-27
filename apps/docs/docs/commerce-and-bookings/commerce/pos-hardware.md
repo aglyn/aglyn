@@ -189,6 +189,19 @@ card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
 **Who can buy:** an admin or editor of the site with the **Use the point of
 sale** permission, on a plan that includes POS.
 
+### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
+
+When a workspace is
+[deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
+every hardware order it placed that has not shipped yet is canceled and the
+full amount, shipping and tax included, is refunded to the card it was paid
+with. The same happens to the orders a person placed when they
+[close their account](../../workspace-and-billing/manage-account.md#close-account-deleted).
+The person who placed the order gets an email saying it was canceled and
+refunded. The workspace deletion or the account closing goes ahead right away;
+it never waits for an order. Orders that have already shipped are not
+affected.
+
 ### Records of your purchases {#hardware-purchase-records}
 
 Aglyn is the seller of these readers, so it keeps a record of each sale for tax
@@ -196,8 +209,9 @@ and accounting: the items and their prices, shipping, tax, the total, the order'
 status dates, Stripe's payment references, and the state, ZIP code and country it
 shipped to. That record stays after the workspace is
 [deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
-for as long as tax law requires. It never holds the buyer's name, email, phone,
-street address or tracking number.
+and is kept for seven years from the sale, then deleted. It never holds the
+buyer's name, email, phone, street address or tracking number. If an order is
+canceled and refunded, the record says so.
 
 If the person who placed an order
 [closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),

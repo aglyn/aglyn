@@ -18,6 +18,7 @@
 // The registry's own module, not the data layer's barrel: boot needs the
 // registry, not the whole server surface.
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginOrgEraser } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginUserEraser } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
@@ -57,10 +58,19 @@ export function registerCommerceConsoleServerDeclarations(): void {
     { pluginId: BUNDLE_ID },
   )
   // Commerce's share of an ACCOUNT erasure (AGL-4038): every POS hardware
-  // order the person placed keeps its amounts and its tax region, with the
+  // order the person placed that has not shipped is canceled and refunded in
+  // full, then every one keeps its amounts and its tax region, with the
   // buyer taken off it. Loaded with the first erasure.
   registerPluginUserEraser(
     async (request) => (await import('./server/pos-hardware-user-eraser')).posHardwareUserEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // Commerce's share of a WORKSPACE erasure (AGL-4038): every hardware order
+  // the workspace bought that has not shipped is canceled and refunded in
+  // full before the erasure deletes it, and the buyer and staff are told.
+  // Never fails the erasure. Loaded with the first erasure.
+  registerPluginOrgEraser(
+    async (request) => (await import('./server/pos-hardware-closure')).posHardwareOrgEraser(request),
     { pluginId: BUNDLE_ID },
   )
   // A site's earlier orders, for a plugin that reads history behind the

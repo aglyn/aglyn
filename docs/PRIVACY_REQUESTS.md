@@ -210,6 +210,16 @@ POST /api/admin/users/manage
 Authorization: Bearer <super-staff ID token>
 ```
 
+**Card reader orders that have not shipped are canceled and refunded first
+(AGL-4038).** Erasing a person cancels every POS hardware order they placed
+that is still paid or placed with Stripe but not shipped, refunds it in full
+to the card and emails them that it was canceled, then takes their name,
+email, phone, street and tracking off every order they placed. Erasing a
+workspace does the same for every unshipped order of the workspace before its
+data goes. Neither waits on Stripe: a refund Stripe refuses is raised to staff
+as a **must** operator alert, to be refunded by hand, and the erasure goes on.
+Tell the requester this when they have an order in flight.
+
 It refuses with `skippedReason: 'owns-orgs'` and a `blockers` list if they own
 a workspace. That refusal is correct — deleting a workspace as a side effect of
 closing a personal account is consent nobody gave. Tell them which orgs need
@@ -347,7 +357,8 @@ Work this list, not the tree.
 **Deliberately excluded from erasure, and disclose them on an access request**
 - `platformRevenue`, `storefrontTaxCollected`, `posHardwareSales` — statutory
   tax records (AGL-1811/AGL-1904/AGL-4038; the last is Aglyn's own sale of POS
-  hardware to the workspace, with no buyer details in it). GDPR Art. 17(3)(b) exempts them from erasure; it does
+  hardware to the workspace, with no buyer details in it, kept **seven years
+  from the sale** and then deleted by its TTL). GDPR Art. 17(3)(b) exempts them from erasure; it does
   **not** exempt them from access. If a transaction of theirs is in there, it
   is disclosable.
 - `contactSuppressions` — kept precisely so we can honour "stop contacting me".

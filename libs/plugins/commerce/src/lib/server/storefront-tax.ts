@@ -199,7 +199,15 @@ function address(source: any): StorefrontTaxRow['customerAddress'] {
  * with the rate object inline; an invoice carries `total_taxes[]` (rate under
  * `tax_rate_details.tax_rate`) or the older `total_tax_amounts[]` (`tax_rate`,
  * an id or an expanded object). All three map onto one stored line.
+ *
+ * Exported for the POS hardware shop's own sales (AGL-4038), whose tax rows
+ * keep the same lines: one reading of Stripe's breakdown for every half of
+ * the return.
  */
+export function stripeTaxBreakdownLines(source: any): StorefrontTaxLine[] {
+  return taxLines(source)
+}
+
 function taxLines(source: any): StorefrontTaxLine[] {
   const entries: any[] = Array.isArray(source?.total_details?.breakdown?.taxes)
     ? source.total_details.breakdown.taxes

@@ -28,7 +28,8 @@
  *
  * Distinct magnitudes per bucket on purpose — $34.00 storefront tax under the
  * platform's registration, $57.00 at a merchant's own rate, $78.00 marketplace
- * net — so a figure on screen can only have come from its own bucket.
+ * net, $425.00 of the platform's own card reader sales — so a figure on
+ * screen can only have come from its own bucket.
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
@@ -98,6 +99,35 @@ export const TAX_RETURN_SOURCE_DOCS: Record<string, Record<string, unknown>> = {
     transferCents: 120_000,
     refundedCents: 40_000,
     createdAt: Q3(7),
+  },
+  // The platform's OWN sale of a card reader shipped to Texas (AGL-4038):
+  // $425.00 of items and shipping and $35.06 of tax, figures no other
+  // section holds, so a hardware line on screen can only come from here.
+  'posHardwareSales/hw_tx': {
+    orderId: 'hw_tx',
+    orgId: 'org-3',
+    totalCents: 46_006,
+    taxCents: 3_506,
+    currency: 'usd',
+    shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+    automaticTax: true,
+    taxLines: [
+      {
+        amountCents: 3_506,
+        taxableAmountCents: 42_500,
+        taxabilityReason: 'standard_rated',
+        taxRateId: 'txr_tx',
+        jurisdiction: 'Texas',
+        rateState: 'TX',
+        percentage: 8.25,
+      },
+    ],
+    status: 'delivered',
+    livemode: true,
+    paidAtMs: Q3(8).getTime(),
+    refundedCents: null,
+    refundedAtMs: null,
+    canceledAtMs: null,
   },
 }
 
@@ -558,6 +588,291 @@ const SECTIONS_UNDER_ANY_BRAND = [
     ],
     outcome: 'answered',
     pluginId: 'commerce',
+  },
+  {
+    "id": "posHardware",
+    "name": "Card reader hardware",
+    "title": "Card reader hardware — {brand}’s own sales",
+    "help": "Card readers and accessories {brand} sold to workspaces from the POS hardware shop. {brand} is the seller, so these are its own sales; they are recorded apart from its invoices and are not in the filing figures above.",
+    "intro": "{brand} is the seller of record for every card reader order, so these are {brand}’s OWN sales, not facilitated ones. They are recorded apart from its invoices, so none of this is in the Webfile figures above: the card reader hardware lines beneath them say what to add. Refunds are counted in the period they were made and never netted.",
+    "truncated": false,
+    "undatedRows": 0,
+    "findings": [
+      {
+        "id": "posHardwareSalesNotInFigures",
+        "severity": "review",
+        "count": 42500,
+        "label": "Texas card reader hardware sales are not in Items 1–3",
+        "detail": "Cents. {brand} sold these card readers itself, so they are its own sales, recorded apart from its invoices and NOT included in Items 1–3. Add the card reader hardware lines beneath the figures before filing."
+      },
+      {
+        "id": "posHardwareUntaxed",
+        "severity": "review",
+        "count": 0,
+        "label": "Card reader hardware sold into Texas without tax",
+        "detail": "Sold while Stripe Tax was off for the hardware shop, so no tax was collected. If the sale was taxable in Texas, the tax is still owed, out of {brand}’s receipt."
+      },
+      {
+        "id": "posHardwareMissingTaxableBase",
+        "severity": "review",
+        "count": 0,
+        "label": "Card reader hardware orders with tax but no stated base",
+        "detail": "Tax was collected but Stripe’s taxable_amount was not recorded on the order, so the hardware taxable-sales line understates the base. Read the Checkout Session in Stripe with the tax breakdown expanded."
+      },
+      {
+        "id": "posHardwareMissingShipTo",
+        "severity": "review",
+        "count": 0,
+        "label": "Card reader hardware orders with no ship-to region",
+        "detail": "Listed as Not stated, and in no state’s figures. If the order shipped to Texas, the hardware lines understate its sales."
+      },
+      {
+        "id": "posHardwareCanceledWithoutRefund",
+        "severity": "review",
+        "count": 0,
+        "label": "Canceled card reader hardware orders with no refund recorded",
+        "detail": "Counted as sales: the order is marked canceled or refunded, but no refund was recorded on it. Check the payment in Stripe."
+      }
+    ],
+    "filingLines": [
+      {
+        "item": "Item 1 (add)",
+        "label": "Texas card reader hardware sales (NOT in Item 1 above)",
+        "dollars": "425.00",
+        "note": "{brand}’s own sales of card readers shipped to Texas, excluding the tax: the items and the shipping. Add to Item 1."
+      },
+      {
+        "item": "Item 2 (add)",
+        "label": "Texas card reader hardware taxable sales (NOT in Item 2 above)",
+        "dollars": "425.00",
+        "note": "Stripe’s taxable_amount on each order, once per order. Add to Item 2."
+      },
+      {
+        "item": "—",
+        "label": "Texas card reader hardware tax collected (NOT in the reconciliation above)",
+        "dollars": "35.06",
+        "note": "What Stripe Tax charged on those orders. Add it to the tax collected above before reconciling."
+      },
+      {
+        "item": "—",
+        "label": "Texas card reader hardware refunds made in this period (stated, not netted)",
+        "dollars": "0.00",
+        "note": "Receipts excluding tax refunded in this period, on orders paid in this or an earlier period; the tax refunded with them was $0.00. Stated beside the sales, as the invoices’ refunds are, and applying them is the preparer’s decision."
+      }
+    ],
+    "tables": [
+      {
+        "description": "Sales by where each order shipped, which is where its sales tax is sourced, and the refunds made in this period beside them. A state other than the one filed here is the figure an economic-nexus threshold there is measured against.",
+        "columns": [
+          {
+            "label": "Ship-to state"
+          },
+          {
+            "label": "Orders",
+            "numeric": true
+          },
+          {
+            "label": "Total sales",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Taxable sales",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Tax collected",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Refunded in period",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Tax refunded",
+            "numeric": true,
+            "money": true
+          }
+        ],
+        "rows": [
+          {
+            "key": "US-TX",
+            "cells": [
+              {
+                "text": "US-TX",
+                "tag": {
+                  "label": "Registered",
+                  "tone": "attention"
+                }
+              },
+              {
+                "text": "1"
+              },
+              {
+                "text": "$425.00",
+                "strong": true
+              },
+              {
+                "text": "$425.00"
+              },
+              {
+                "text": "$35.06"
+              },
+              {
+                "text": "$0.00"
+              },
+              {
+                "text": "$0.00"
+              }
+            ]
+          }
+        ],
+        "empty": "No card reader hardware was sold or refunded in this period.",
+        "footnote": "Test-mode orders are in no figure. A refund is counted in the period it was made, whenever the order was paid."
+      }
+    ],
+    "figures": [
+      {
+        "label": "Orders paid in this period",
+        "value": "1",
+        "note": "Every ship-to state. Live orders only."
+      }
+    ],
+    "exports": [
+      {
+        "placement": "jurisdictions",
+        "rows": [
+          [
+            "Card reader hardware — {brand}’s OWN sales by ship-to state (NOT in the filing figures above)"
+          ],
+          [
+            "Ship-to state",
+            "Orders",
+            "Total sales (USD)",
+            "Taxable sales (USD)",
+            "Tax collected (USD)",
+            "Refunded in period (USD)",
+            "Tax refunded (USD)"
+          ],
+          [
+            "US-TX",
+            "1",
+            "425.00",
+            "425.00",
+            "35.06",
+            "0.00",
+            "0.00"
+          ]
+        ]
+      },
+      {
+        "placement": "sections",
+        "rows": [
+          [
+            "Card reader hardware orders in this period (posHardwareSales) — NOT in the filing figures above"
+          ],
+          [
+            "Order",
+            "Paid (UTC)",
+            "Status",
+            "Ship-to state",
+            "Country",
+            "Total sales (USD)",
+            "Taxable sales (USD)",
+            "Tax collected (USD)",
+            "Refunded (USD)",
+            "Refunded at (UTC)",
+            "In this period as"
+          ],
+          [
+            "hw_tx",
+            "2026-08-08T12:00:00.000Z",
+            "delivered",
+            "TX",
+            "US",
+            "425.00",
+            "425.00",
+            "35.06",
+            "0.00",
+            "",
+            "sale"
+          ]
+        ]
+      }
+    ],
+    "summary": {
+      "periodStart": "2026-07-01T00:00:00.000Z",
+      "periodEnd": "2026-10-01T00:00:00.000Z",
+      "orders": 1,
+      "totalSalesCents": 42500,
+      "taxableSalesCents": 42500,
+      "taxCollectedCents": 3506,
+      "byJurisdiction": {
+        "US-TX": {
+          "transactionCount": 1,
+          "totalSalesCents": 42500,
+          "taxableSalesCents": 42500,
+          "taxCollectedCents": 3506,
+          "taxabilityReasons": {
+            "standard_rated": {
+              "lines": 1,
+              "taxableAmountCents": 42500,
+              "taxCollectedCents": 3506
+            }
+          },
+          "rates": [
+            {
+              "taxRateId": "txr_tx",
+              "percentage": 8.25,
+              "rateState": "TX",
+              "jurisdiction": "Texas",
+              "lines": 1,
+              "taxableAmountCents": 42500,
+              "taxCollectedCents": 3506
+            }
+          ],
+          "untaxedOrders": 0,
+          "refundedOrders": 0,
+          "refundedSalesCents": 0,
+          "refundedTaxCents": 0
+        }
+      },
+      "refunds": {
+        "orders": 0,
+        "refundedCents": 0,
+        "refundedSalesCents": 0,
+        "refundedTaxCents": 0
+      },
+      "excluded": {
+        "testModeOrders": 0
+      },
+      "attention": {
+        "untaxedOrders": 0,
+        "ordersMissingTaxableBase": 0,
+        "ordersMissingShipTo": 0,
+        "canceledWithoutRefund": 0
+      }
+    },
+    "rows": [
+      {
+        "orderId": "hw_tx",
+        "paidAt": "2026-08-08T12:00:00.000Z",
+        "status": "delivered",
+        "state": "TX",
+        "country": "US",
+        "totalSalesCents": 42500,
+        "taxableSalesCents": 42500,
+        "taxCents": 3506,
+        "refundedCents": 0,
+        "refundedAt": null,
+        "inPeriodAs": "sale"
+      }
+    ],
+    "outcome": "answered",
+    "pluginId": "commerce"
   },
   {
     id: 'marketplace',

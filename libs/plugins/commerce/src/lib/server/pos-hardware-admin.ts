@@ -29,7 +29,6 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_STATUS_STAMP,
-  posHardwareRefundable,
   posHardwareSaleRecord,
   type PosHardwareOrder,
   type PosHardwareOrderStatus,
@@ -37,8 +36,8 @@ import {
 } from '../model/pos-hardware'
 import { fulfillmentTrackingUrl } from '../model/tracking-url'
 import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
+import { cancelAndRefundPosHardwareOrder } from './pos-hardware-cancel'
 import { sendPosHardwareEmail } from './pos-hardware-notify'
-import { posStripe } from './pos-stripe'
 
 /*==========================================
  * `/api/commerce/admin/hardware-orders` (AGL-4038): the staff end of the POS
@@ -178,7 +177,7 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
     if (action === 'cancel' || action === 'refund') {
-      return await refundOrder(firestore, ref, orgId, orderId, action, actor)
+      return await refundOrder(firestore, orgId, orderId, action, actor)
     }
     return json({ error: 'Unknown action' }, 400)
   } catch (error) {
@@ -266,83 +265,42 @@ async function updateOrder(
 
 async function refundOrder(
   firestore: any,
-  ref: any,
   orgId: string,
   orderId: string,
   action: 'cancel' | 'refund',
   actor: Actor,
 ): Promise<Response> {
-  const finalStatus: PosHardwareOrderStatus = action === 'cancel' ? 'canceled' : 'refunded'
-  // Claim the refund under the lock first, so the order cannot be marked
-  // shipped while the money is on its way back, and two presses refund once.
-  const claim = await firestore.runTransaction(async (transaction: any) => {
-    const snapshot = await transaction.get(ref)
-    if (!snapshot.exists) throw new Refusal('No such order', 404)
-    const order = snapshot.data() as PosHardwareOrder & { refundRequestedAtMs?: number }
-    if (order.status === finalStatus) return { order, already: true }
-    if (!posHardwareRefundable(order.status)) {
+  const finalStatus = action === 'cancel' ? 'canceled' : 'refunded'
+  // The one cancel-and-refund path (`pos-hardware-cancel.ts`), which a
+  // workspace or account closure takes too: claimed under the lock, refunded
+  // once under one key, settled with the sale record.
+  const result = await cancelAndRefundPosHardwareOrder({ orgId, orderId, finalStatus, reason: 'staff' })
+  switch (result.outcome) {
+    case 'missing':
+      throw new Refusal('No such order', 404)
+    case 'already':
+      return json({ ok: true, order: staffView(orderId, result.order) })
+    case 'not-refundable':
       throw new Refusal(
         'This order has shipped, so it can no longer be canceled or refunded here. Arrange a return with Stripe instead.',
         409,
       )
-    }
-    if (!order.stripePaymentIntentId) throw new Refusal('This order has no payment to refund.', 409)
-    transaction.update(ref, { refundRequestedAtMs: Date.now() })
-    return { order, already: false }
-  })
-  if (claim.already) return json({ ok: true, order: staffView(orderId, claim.order) })
-
-  const refund = await posStripe('POST', 'refunds', {
-    params: {
-      payment_intent: claim.order.stripePaymentIntentId,
-      'metadata[type]': 'pos-hardware-order',
-      'metadata[orderId]': orderId,
-      'metadata[orgId]': orgId,
-    },
-    // One refund per order, whichever of the two acts asked for it.
-    idempotencyKey: `pos-hw-refund-${orderId}`,
-  })
-  if (!refund.ok || !refund.body?.id) {
-    await ref.update({ refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete() }).catch(() => undefined)
-    console.error('[pos-hardware-admin] refund refused', orderId, refund.status, refund.body?.error?.code)
-    return json({ error: String(refund.body?.error?.message ?? '') || 'Stripe refused the refund.' }, 502)
+    case 'no-payment':
+      throw new Refusal('This order has no payment to refund.', 409)
+    case 'refused':
+      return json({ error: result.message }, 502)
   }
-  const now = Date.now()
-  const patch = {
-    status: finalStatus,
-    [POS_HARDWARE_STATUS_STAMP[finalStatus]]: now,
-    updatedAtMs: now,
-    refundId: String(refund.body.id),
-    refundedCents: Number(refund.body.amount ?? claim.order.totalCents ?? 0),
-    refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete(),
-  }
-  const settled = { ...claim.order }
-  delete settled.refundRequestedAtMs
-  const after: PosHardwareOrder = {
-    ...settled,
-    status: finalStatus,
-    [POS_HARDWARE_STATUS_STAMP[finalStatus]]: now,
-    updatedAtMs: now,
-    refundId: patch.refundId,
-    refundedCents: patch.refundedCents,
-  }
-  // The order and its retained sale record move together: the record is
-  // what the refund is accounted from once the workspace is gone.
-  await firestore.runTransaction(async (transaction: any) => {
-    transaction.update(ref, patch)
-    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
-  })
   await addAdminAudit(firestore, {
     action: `pos-hardware-order-${action}`,
     ...actor,
     scope: 'posHardwareOrder',
     target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
     orgId,
-    before: { status: claim.order.status },
-    after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
+    before: { status: result.before.status },
+    after: { status: finalStatus, refundId: result.order.refundId, refundedCents: result.order.refundedCents },
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
-  return json({ ok: true, order: staffView(orderId, after) })
+  return json({ ok: true, order: staffView(orderId, result.order) })
 }
 
 export { handler as posHardwareAdminOrders }
