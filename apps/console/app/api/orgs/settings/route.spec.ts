@@ -57,6 +57,8 @@ let mockActivity: unknown[][] = []
 let mockDeferred: unknown[] = []
 /** Whether the lockdown verdict should refuse. */
 let mockLockdownResponse: Response | null = null
+/** Platform events raised to the plugins, in order (AGL-4048). */
+let mockRaised: unknown[][] = []
 
 const mockVerifyIdToken = jest.fn()
 const mockFetch = jest.fn()
@@ -153,6 +155,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
    * the endpoint enforces.
    */
   strandedDependents: mockEnabledPlugins.strandedDependents,
+  runPluginEventHandlers: async (...args: unknown[]) => {
+    mockRaised.push(args)
+    return { handled: 1, failed: [] }
+  },
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: await request.json(),
@@ -250,6 +256,7 @@ beforeEach(() => {
   mockDocs = new Map()
   mockActivity = []
   mockDeferred = []
+  mockRaised = []
   mockLockdownResponse = null
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
@@ -771,5 +778,85 @@ describe('update-profile: the dark-mode org logo', () => {
 
     expect(response.status).toBe(400)
     expect(mockDocs.get(`orgs/${ORG}`)?.['logoDarkUrl']).toBe(undefined)
+  })
+})
+
+/**
+ * A changed logo is told to the plugins (AGL-4048) — a store's card readers
+ * draw it on their start-up screen — through core's `org.logo.changed`, and
+ * only once the save has answered: the event is deferred with `after()`, so
+ * nothing a plugin does on it holds the save up or can fail it.
+ */
+describe('a changed workspace logo is raised to the plugins after the save (AGL-4048)', () => {
+  /** Runs the deferred work, which here holds no Stripe call: no phone is sent. */
+  async function runDeferred(): Promise<void> {
+    for (const callback of mockDeferred) await (callback as () => Promise<void>)()
+  }
+
+  it('raises org.logo.changed for a new profile logo, after answering', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, { ...mockDocs.get(`orgs/${ORG}`), logoUrl: 'https://example.com/old.png' })
+
+    const response = await POST(
+      post({ orgId: ORG, action: 'update-profile', logoUrl: 'https://example.com/new.png' }),
+    )
+
+    expect(response.status).toBe(200)
+    // Not raised in front of the answer.
+    expect(mockRaised).toEqual([])
+    await runDeferred()
+    expect(mockRaised).toEqual([
+      [
+        'org.logo.changed',
+        { orgId: ORG, actor: { uid: 'staff-1', email: null }, changed: ['logo'] },
+      ],
+    ])
+  })
+
+  it('names a new dark-mode logo too, and raises nothing when no logo moved', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      logoUrl: 'https://example.com/logo.png',
+      logoDarkUrl: 'https://example.com/logo-white.png',
+    })
+
+    await POST(post({ orgId: ORG, action: 'update-profile', logoUrl: 'https://example.com/logo.png' }))
+    await runDeferred()
+    expect(mockRaised).toEqual([])
+
+    await POST(
+      post({
+        orgId: ORG,
+        action: 'update-profile',
+        logoUrl: 'https://example.com/logo.png',
+        logoDarkUrl: 'https://example.com/logo-white-2.png',
+      }),
+    )
+    await runDeferred()
+    expect(mockRaised.map((args) => (args[1] as { changed: string[] }).changed)).toEqual([['logoDark']])
+  })
+
+  it('raises it for a new white-label brand logo', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      brandingProfile: { logoUrl: 'https://example.com/brand.png' },
+    })
+
+    const response = await POST(
+      post({
+        orgId: ORG,
+        action: 'update-branding',
+        brandingProfile: { logoUrl: 'https://example.com/brand-2.png' },
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockRaised).toEqual([])
+    await runDeferred()
+    expect(mockRaised.map((args) => [args[0], (args[1] as { changed: string[] }).changed])).toEqual([
+      ['org.logo.changed', ['brandLogo']],
+    ])
   })
 })

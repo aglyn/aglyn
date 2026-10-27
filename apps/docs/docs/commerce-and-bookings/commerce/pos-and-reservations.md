@@ -34,8 +34,10 @@ limit** until you remove them or upgrade again — none are deleted.
 
 ## Who can do what at the register {#who-can-do-what-at-the-register}
 
-Anyone who is an admin or editor on the site with the **Use the point of sale**
-permission can open the register. Six finer permissions then decide which of its
+Anyone with the **Use the point of sale** permission for the site can open the
+register. The permission decides on its own: owners, admins and editors hold it by
+default and viewers don't, and a site viewer you grant it in a custom role or for
+one member works the register too. Five finer permissions then decide which of its
 jobs are theirs:
 
 | Permission | What it covers |
@@ -45,7 +47,6 @@ jobs are theirs:
 | **Give discounts at the register** | The register's **Discount %**. A shopper's discount code and the store's own promotions apply without it |
 | **Cash drawer and shifts** | Opening and closing shifts, cash in and out, X and Z reports, and opening the drawer without a sale |
 | **Registers and devices** | Adding, changing and removing card readers, receipt printers and customer displays, and the reader start-up screen |
-| **Buy point of sale hardware** | Placing an order on the **Hardware** card |
 
 Each one follows **Use the point of sale** until you set it, so everyone who could
 use the register keeps exactly what they had. To narrow one, for example a
@@ -54,6 +55,10 @@ cashier who rings sales but does not refund, deny it in a
 or for one member. A control someone does not hold stays on screen, disabled,
 with the reason. A cashier switched in with a PIN needs **Sell at the register**
 too.
+
+**Buy point of sale hardware** follows **Use the point of sale** the same way, and
+also stands on its own, so someone can order readers without working the register.
+See [Who can buy hardware](pos-hardware.md#who-can-buy-hardware).
 
 ## The register
 
@@ -428,9 +433,8 @@ screen locks for 15 minutes.
 Paired kiosks are listed with your customer displays under **Products →
 Point of sale → POS devices**, where **Sign out** unpairs one.
 
-Pairing from either place needs the same access as the register itself: an
-admin or editor on the site with the **Use the point of sale** permission, on a plan
-that includes POS. For anyone else the **POS devices** card shows why
+Pairing from either place needs the same access as the register itself: the
+**Use the point of sale** permission for the site, on a plan that includes POS. For anyone else the **POS devices** card shows why
 **Pair display** is unavailable.
 
 ## Reservations

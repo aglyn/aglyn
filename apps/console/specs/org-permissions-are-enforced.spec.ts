@@ -144,6 +144,14 @@ const CATALOG = [
 const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   'org.settings': ["'org.settings'"],
   'org.auditLog': ["'org.auditLog'"],
+  // AGL-4047: the three settings sections that asked for the owner or admin
+  // role. `/api/orgs/api-keys` creates and revokes under `org.apiKeys`;
+  // `/api/orgs/risk-notices` and `/api/hosts/page-holds` read holds and take a
+  // review request under `org.holds`; the CRM's `/api/crm/erase-person` files
+  // an erasure under `org.privacy`.
+  'org.apiKeys': ["'org.apiKeys'"],
+  'org.privacy': ["'org.privacy'"],
+  'org.holds': ["'org.holds'"],
   'billing.view': ["'billing.view'"],
   'billing.manage': ["'billing.manage'"],
   'members.manage': ["'members.manage'", 'permissions.manageMembers'],
@@ -203,7 +211,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(12)
+    expect(CATALOG.length).toBe(15)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

@@ -14,9 +14,10 @@ and the register's rules under the site's **Admin → Plugins → Commerce**.
 
 :::info Plan availability
 These are part of the point of sale, so they need **Pro** or above, like the
-register itself. Only members who can use the register — a site **admin** or
-**editor** whose **Manage POS** permission is on — can open shifts, switch in,
-look customers up or take returns.
+register itself. Only members who can use the register — anyone with the **Use
+the point of sale** permission for the site, which owners, admins and editors hold
+by default — can open shifts, switch in, look customers up or take returns. Each
+also needs its own [finer permission](pos-and-reservations.md#who-can-do-what-at-the-register).
 :::
 
 ## Shifts and the cash drawer

@@ -46,6 +46,12 @@ const GATES: Array<{ surface: string; key: string; route: string }> = [
   { surface: 'components/media/org-default-sharing-card.component.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'hooks/use-plugin-switchboard.ts', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
+  // The three sections that stayed on the owner or admin role until their
+  // routes moved to keys of their own.
+  { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.apiKeys', route: 'app/api/orgs/api-keys/route.ts' },
+  { surface: 'components/org-api-keys-card.component.tsx', key: 'org.apiKeys', route: 'app/api/orgs/api-keys/route.ts' },
+  { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.holds', route: 'app/api/orgs/risk-notices/route.ts' },
+  { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.privacy', route: '../../libs/plugins/crm/src/lib/server/erase-person.ts' },
 ]
 
 describe('console gates ask the key their route checks (AGL-4047)', () => {
@@ -67,8 +73,23 @@ describe('console gates ask the key their route checks (AGL-4047)', () => {
       'components/org-sso-card.component.tsx',
       'components/media/org-default-sharing-card.component.tsx',
       'hooks/use-plugin-switchboard.ts',
+      'app/(app)/[orgSlug]/settings/(sections)/layout.tsx',
+      'components/org-api-keys-card.component.tsx',
     ]) {
       expect(read(surface)).not.toContain('canManageOrg(')
     }
+  })
+
+  it('the holds surfaces and the CRM’s erase item ask the same keys as their routes', () => {
+    // A held page offers "Request a review" on the route's own answer, which
+    // now asks `org.holds`, as the review route does.
+    expect(read('app/api/hosts/page-holds/route.ts')).toMatch(/memberHasOrgPermission\([^)]*'org\.holds'/)
+    // The record page's "Erase this person" asks `org.privacy`, org-wide.
+    const erase = read('../../libs/plugins/crm/src/lib/components/use-can-erase-people.ts')
+    expect(erase).toContain("granted['org.privacy']")
+    expect(erase).toContain('isOrgWideMember(member)')
+    expect(read('../../libs/plugins/crm/src/lib/components/erase-person-action.tsx')).not.toContain(
+      'useCanManageCrmSettings',
+    )
   })
 })

@@ -26,6 +26,8 @@ const gate = {
   entitled: true,
   /** The register's finer keys (AGL-4047); absent follows `managePos`. */
   finer: {} as Record<string, boolean>,
+  /** A role or override that grants (true) the register; undefined: the site role's default. */
+  granted: undefined as boolean | undefined,
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -45,8 +47,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: jest.fn(() => gate.entitled),
 }))
+// As the real resolver answers for a site (AGL-4047): nothing for someone
+// with no access to it, the site role's default otherwise, and a grant over
+// that default.
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: jest.fn(async () => ({ permissions: { managePos: gate.managePos, ...gate.finer } })),
+  resolveOrgPermissions: jest.fn(async (uid: string, context: { hostId?: string }) => ({
+    permissions: {
+      managePos:
+        gate.managePos &&
+        jest
+          .requireActual('../testing/site-register-permissions')
+          .siteRegisterVerdict(store.current.read(`hosts/${context?.hostId}`)?.['memberRoles'], uid, gate.granted),
+      ...gate.finer,
+    },
+  })),
 }))
 const signing = { configured: true }
 jest.mock('./download', () => ({
@@ -95,6 +109,7 @@ beforeEach(() => {
   gate.managePos = true
   gate.entitled = true
   gate.finer = {}
+  gate.granted = undefined
   store.current.write(`hosts/${HOST}`, {
     displayName: 'Corner Cafe',
     memberRoles: { manager: 'admin', clerk: 'editor', reader: 'viewer', author: 'author' },
@@ -113,7 +128,7 @@ const STAR = {
 }
 
 describe('POST /api/commerce/printers — the gate (AGL-3619)', () => {
-  it('needs a signed-in admin or editor with managePos on a plan with POS', async () => {
+  it('needs a signed-in member holding managePos for this site, on a plan with POS', async () => {
     expect((await call(STAR, null)).status).toBe(401)
     expect((await call(STAR, 'reader')).status).toBe(403)
     expect((await call(STAR, 'author')).status).toBe(403)
@@ -125,6 +140,13 @@ describe('POST /api/commerce/printers — the gate (AGL-3619)', () => {
     expect((await call(STAR)).status).toBe(403)
     gate.entitled = true
     expect((await call(STAR, 'clerk')).status).toBe(200)
+  })
+
+  it('asks the permission, not the site role: a viewer granted the register sets a printer up (AGL-4047)', async () => {
+    gate.granted = true
+    expect((await call({ ...STAR, deviceId: '00-11-62-AB-CD-01' }, 'reader')).status).toBe(200)
+    // Still nothing for someone with no access to the site.
+    expect((await call({ ...STAR, deviceId: '00-11-62-AB-CD-02' }, 'stranger')).status).toBe(403)
   })
 
   it('sets printers up with the devices key, opens the drawer with the drawer key, and reprints with neither (AGL-4047)', async () => {

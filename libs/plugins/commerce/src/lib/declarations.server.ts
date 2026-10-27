@@ -93,6 +93,17 @@ export function registerCommerceServerDeclarations(): void {
       (await import('./server/payment-method-domains')).onHostDomainReleased(payload),
     { pluginId: BUNDLE_ID },
   )
+  // A logo saved on the workspace's profile or brand reaches its stores'
+  // card readers now (AGL-4048), once the save has answered; the
+  // `pos-reader-splash-refresh` beat stays the backstop. The drawing and the
+  // Stripe calls arrive with the first event, not with the boot.
+  registerPluginEventHandler(
+    'org.logo.changed',
+    async (payload) => {
+      await (await import('./server/pos-reader-splash')).onOrgLogoChanged(payload)
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // The store's catalog, as a shopping-channel feed reads it (AGL-3637).
   registerPluginProductCatalog(lazyCatalog, { pluginId: BUNDLE_ID })
   // Counts another warehouse keeps, applied as a stock-take (AGL-3634): a

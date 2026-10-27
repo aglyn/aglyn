@@ -201,8 +201,9 @@ person opts in again themselves, for example through one of your forms.
 **Erase this person** is the privacy erasure — what you use when someone asks
 to be forgotten under GDPR, the CCPA or any similar law. It removes the person
 from *every* site in the workspace, whoever captured them, and it cannot be
-undone. Only a workspace admin or owner can do it; for everyone else the item
-is present but disabled, and its tooltip says who can. It is offered on a
+undone. It takes the **Privacy requests** permission over the whole workspace,
+which owners and admins hold by default; for everyone else the item is present
+but disabled, and its tooltip says why. It is offered on a
 site's hub and on the
 [organization's](./overview.md#at-the-organization-level) alike. The same erasure
 can be filed by address, without opening a record, from

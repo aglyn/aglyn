@@ -84,10 +84,11 @@ afterAll(() => resetPluginEntitlementsForTests())
 describe('the org catalog carries the keys plugins declare', () => {
   it('lists them after the core keys, in plugin order, with their owner', () => {
     const keys = [...ORG_PERMISSION_KEYS]
-    expect(keys.slice(0, 10)).not.toContain('reviews.reply')
+    // The thirteen core keys first (AGL-4047 added three).
+    expect(keys.slice(0, 13)).not.toContain('reviews.reply')
     // Neither plugin is first-party, so they order by id.
-    expect(keys.slice(10)).toEqual(['bookings.refund', 'reviews.reply', 'reviews.export'])
-    expect(pluginOrgPermissionKeys()).toEqual(keys.slice(10))
+    expect(keys.slice(13)).toEqual(['bookings.refund', 'reviews.reply', 'reviews.export'])
+    expect(pluginOrgPermissionKeys()).toEqual(keys.slice(13))
     expect(ORG_PERMISSIONS.find((entry) => entry.key === 'reviews.reply')).toMatchObject({
       label: 'Reply to reviews',
       pluginId: 'acme-reviews',
@@ -124,7 +125,7 @@ describe('the org catalog carries the keys plugins declare', () => {
 
   it('a key never outlives its registration', () => {
     resetPluginEntitlementsForTests()
-    expect(ORG_PERMISSION_KEYS).toHaveLength(10)
+    expect(ORG_PERMISSION_KEYS).toHaveLength(13)
     expect(DEFAULT_ROLE_PERMISSIONS.editor['reviews.reply']).toBeUndefined()
     expect(hostPermissionKeys()).toEqual([])
   })

@@ -926,11 +926,19 @@ service cloud.firestore {
       // staff and by an org-wide member who may run the register (owner,
       // admin or editor without a `managePos` override of false); the
       // console itself reads them through the plugin's route.
+      //
+      // And by an org-wide member whose resolved permissions say they may
+      // buy hardware (AGL-4047): `posBuyHardware` stands on its own, so a
+      // member granted it without the register — a bookkeeper — sees the
+      // orders they place, as the shop's route shows them. `memberStamps`
+      // grants nothing to a member the projection has not stamped, so it
+      // only ever widens the role arm for a member somebody granted it.
       match /hardwareOrders/{orderId} {
         allow read: if isStaff() ||
           (isOrgWideMember() && orgNotSuspended() &&
-           orgMember().role in ['owner', 'admin', 'editor'] &&
-           memberGrants('managePos'));
+           ((orgMember().role in ['owner', 'admin', 'editor'] &&
+             memberGrants('managePos')) ||
+            memberStamps('posBuyHardware')));
         allow write: if false;
       }
 
@@ -3059,6 +3067,38 @@ service cloud.firestore {
       return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
     /**
+     * Was this permission written down as granted for this member, by the
+     * workspace that owns the site (AGL-4047)?
+     *
+     * The site's twin of the org rules' `memberStamps`, for a key the host
+     * role cannot carry: the plugin keys a custom role or an override can
+     * hand to a site viewer, which the POS routes now decide on alone. The
+     * same default chain — the member's `resolvedPermissions` stamp, else
+     * their own overrides, else `false` — so it grants nothing to a member
+     * the projection has not reached. Callers conjoin it with
+     * `isHostMember`, which is what scopes a stamp written for the whole
+     * workspace to a site the member can reach.
+     *
+     * Two document reads: the host (`hostMemberRole` already paid for it,
+     * and identical get()s are billed once) and the member.
+     */
+    function hostOrgMemberStamps(hostId, permission) {
+      let orgId = get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', '');
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+      return member.get('resolvedPermissions', member.get('permissions', {}))
+        .get(permission, false) == true;
+    }
+    /**
+     * May this member read a REGISTER sale on this site (AGL-4047)? A member
+     * of the site, the order rung at the register, and `posSell` — which
+     * refines `managePos`, so a stamped grant of it means both.
+     */
+    function canReadRegisterSale(hostId) {
+      return isSignedIn() && isHostMember(hostId) &&
+        resource.data.get('channel', '') == 'pos' &&
+        hostOrgMemberStamps(hostId, 'posSell');
+    }
+    /**
      * Is the `suspended*` family on this document an ACTIVE suspension right
      * now? (AGL-1981.)
      *
@@ -3830,8 +3870,15 @@ service cloud.firestore {
       // is the shape the comment already claimed. `diff()` reports CHANGED
       // keys only, so a patch that spells out an unchanged `status` still
       // passes — the AGL-1795/1813/1824 property, unchanged.
+      // A REGISTER SALE is also read by whoever may ring one here (AGL-4047):
+      // the register reads back the order it just made for its receipt. The
+      // POS routes decide on the register's keys alone, not the site role, so
+      // a site viewer the workspace grants `posSell` rings a sale; this is
+      // the read that sale's receipt needs. A `pos` order only — an online
+      // order's shopper address and history stay with `canReadHostSensitive`.
       match /orders/{orderId} {
-        allow read: if isStaff() || canReadHostSensitive(hostId);
+        allow read: if isStaff() || canReadHostSensitive(hostId) ||
+          canReadRegisterSale(hostId);
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            request.resource.data.diff(resource.data)

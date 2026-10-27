@@ -78,7 +78,6 @@ jest.mock('../hooks/use-branding', () => ({
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
-  canManageOrg: () => true,
   checkEntitlement: () => mockEntitled,
 }))
 
@@ -114,6 +113,12 @@ jest.mock('../constants/docs-links', () => ({
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ ...mockOrgState, orgId: 'org-1' }),
+}))
+
+// The key the route checks (AGL-4047), granted: the card's own gate.
+jest.mock('../hooks/use-org-permissions', () => ({
+  __esModule: true,
+  default: () => ({ loaded: true, can: (key: string) => key === 'org.apiKeys' }),
 }))
 
 jest.mock('../hooks/use-org-scope', () => ({

@@ -77,6 +77,9 @@ function sourceWords(
   if (explained.source === 'refines' && explained.refines) {
     return `follows "${orgPermissionLabel(explained.refines)}"`
   }
+  if (explained.source === 'follows' && explained.follows) {
+    return `follows "${orgPermissionLabel(explained.follows)}"`
+  }
   return `from the ${roleWord} role`
 }
 
@@ -85,7 +88,8 @@ function inheritWords(explained: ExplainedPermission, roleWord: string, customRo
   if (typeof explained.customRole === 'boolean') {
     return `Inherit: ${explained.customRole ? 'allowed' : 'denied'} by the "${customRoleName ?? 'custom'}" role`
   }
-  if (explained.refines) return `Inherit: follows "${orgPermissionLabel(explained.refines)}"`
+  const followed = explained.refines ?? explained.follows
+  if (followed) return `Inherit: follows "${orgPermissionLabel(followed)}"`
   return `Inherit: ${explained.roleDefault ? 'allowed' : 'not allowed'} for the ${roleWord} role`
 }
 

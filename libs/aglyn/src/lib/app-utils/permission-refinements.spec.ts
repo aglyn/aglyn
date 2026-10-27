@@ -47,6 +47,9 @@ beforeAll(() => {
     { key: 'tillRefund', pluginId: 'shop', label: 'Till refunds', defaults: TIER, refines: 'useTill' },
     { key: 'tillBigRefund', pluginId: 'shop', label: 'Big refunds', defaults: TIER, refines: 'tillRefund' },
     { key: 'tillNowhere', pluginId: 'shop', label: 'Refines nothing known', defaults: TIER, refines: 'noSuchKey' },
+    // Follows the till without needing it: ordering till paper is not ringing sales.
+    { key: 'tillSupplies', pluginId: 'shop', label: 'Order till supplies', defaults: TIER, follows: 'useTill' },
+    { key: 'tillLost', pluginId: 'shop', label: 'Follows nothing known', defaults: TIER, follows: 'noSuchKey' },
   ])
   registerPluginEntitlements({
     pluginId: 'desk',
@@ -63,6 +66,13 @@ beforeAll(() => {
         description: 'Close it.',
         roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
         refines: 'desk.use',
+      },
+      {
+        key: 'desk.order',
+        label: 'Order for the desk',
+        description: 'Order its supplies.',
+        roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
+        follows: 'desk.use',
       },
     ],
   })
@@ -176,6 +186,97 @@ describe('permission refinements (AGL-4047)', () => {
       useTill: true,
       tillRefund: false,
     })
+  })
+
+  it('carries a key that only follows from either declaration API, and drops one to an unknown key', () => {
+    expect(ORG_PERMISSION_REFINEMENTS).toEqual(
+      expect.arrayContaining([
+        ['tillSupplies', 'useTill', 'follows'],
+        ['desk.order', 'desk.use', 'follows'],
+      ]),
+    )
+    expect(ORG_PERMISSION_REFINEMENTS.map(([key]) => key)).not.toContain('tillLost')
+    expect(orgPermissionDefinition('tillSupplies')).toMatchObject({ follows: 'useTill' })
+    expect(orgPermissionDefinition('tillSupplies')?.refines).toBeUndefined()
+    expect(orgPermissionDefinition('tillLost')?.follows).toBeUndefined()
+    expect(pluginPermissionRefinements()).toEqual(
+      expect.arrayContaining([['tillSupplies', 'useTill', 'follows']]),
+    )
+  })
+
+  it('follows the key where nothing sets it, on every resolver, and is granted on its own', () => {
+    for (const role of ['owner', 'admin', 'editor', 'viewer'] as const) {
+      expect(resolveOrgPermissions({ role })['tillSupplies']).toBe(resolveOrgPermissions({ role })['useTill'])
+      const tier = resolveRolePermissions(role === 'owner' ? 'admin' : role)
+      expect(tier['tillSupplies']).toBe(tier['useTill'])
+    }
+    // Moved with the till by a custom role or an override, as a refinement is.
+    expect(resolveOrgPermissions({ role: 'viewer', permissions: { useTill: true } })['tillSupplies']).toBe(true)
+    expect(
+      resolveOrgPermissions({ role: 'editor', roleId: 'r1' }, { permissions: { useTill: false } })['tillSupplies'],
+    ).toBe(false)
+    // Unlike a refinement, granted without the till…
+    const books = resolveOrgPermissions({ role: 'viewer', permissions: { tillSupplies: true } })
+    expect(books).toMatchObject({ useTill: false, tillSupplies: true })
+    expect(resolveRolePermissions('viewer', { tillSupplies: true })['tillSupplies']).toBe(true)
+    expect(
+      resolveOrgPermissions({ role: 'editor', roleId: 'r1' }, { permissions: { useTill: false, tillSupplies: true } })[
+        'tillSupplies'
+      ],
+    ).toBe(true)
+    expect(
+      resolveRolePermissions('books', null, {
+        books: { name: 'Books', permissions: { useTill: false, tillSupplies: true } },
+      })['tillSupplies'],
+    ).toBe(true)
+    // …and refused beside it.
+    expect(resolveOrgPermissions({ role: 'editor', permissions: { tillSupplies: false } })).toMatchObject({
+      useTill: true,
+      tillSupplies: false,
+    })
+    expect(resolveOrgPermissions({ role: 'viewer', permissions: { 'desk.order': true } })['desk.order']).toBe(true)
+    expect(resolveOrgPermissions({ role: 'admin', permissions: { 'desk.use': false } })['desk.order']).toBe(false)
+    expect(projectMemberResolvedPermissions({ role: 'viewer', permissions: { tillSupplies: true } })).toMatchObject({
+      useTill: false,
+      tillSupplies: true,
+    })
+  })
+
+  it('explains a key that follows, and never says the followed key holds it back', () => {
+    expect(explainOrgPermissions({ role: 'editor' })['tillSupplies']).toMatchObject({
+      granted: true,
+      source: 'follows',
+      follows: 'useTill',
+    })
+    const own = explainOrgPermissions({ role: 'viewer', permissions: { tillSupplies: true } })['tillSupplies']
+    expect(own).toMatchObject({ granted: true, source: 'override', follows: 'useTill' })
+    expect(own.heldBy).toBeUndefined()
+  })
+
+  it('carries a key that follows to the native apps’ table, whose resolver applies it the same way', () => {
+    const table = assembleOrgRoleGrants(ORG_ROLE_GRANTS, [
+      { key: 'useTill', label: 'Use the till', pluginId: 'shop', defaults: TIER },
+      { key: 'tillSupplies', label: 'Order till supplies', pluginId: 'shop', defaults: TIER, follows: 'useTill' },
+    ])
+    expect(table.permissions.find((entry) => entry.key === 'tillSupplies')).toMatchObject({ follows: 'useTill' })
+    expect(table.permissions.find((entry) => entry.key === 'tillSupplies')?.refines).toBeUndefined()
+    expect(rolePermissions(table, 'editor')['tillSupplies']).toBe(true)
+    expect(rolePermissions(table, 'viewer', null, { permissions: { useTill: true } })['tillSupplies']).toBe(true)
+    expect(rolePermissions(table, 'editor', { permissions: { useTill: false } })['tillSupplies']).toBe(false)
+    expect(rolePermissions(table, 'viewer', null, { permissions: { tillSupplies: true } })).toMatchObject({
+      useTill: false,
+      tillSupplies: true,
+    })
+    expect(rolePermissions(table, 'editor', null, { permissions: { tillSupplies: false } })['tillSupplies']).toBe(false)
+  })
+
+  it('leaves a key that follows as a map already resolved it', () => {
+    expect(
+      refinePermissionMap({ useTill: false, tillSupplies: true }, [['tillSupplies', 'useTill', 'follows']]),
+    ).toEqual({ useTill: false, tillSupplies: true })
+    expect(
+      refinePermissionMap({ useTill: true, tillSupplies: false }, [['tillSupplies', 'useTill', 'follows']], [{}]),
+    ).toEqual({ useTill: true, tillSupplies: true })
   })
 
   it('holds a map already resolved with every layer to its broader keys, and drops a loop', () => {

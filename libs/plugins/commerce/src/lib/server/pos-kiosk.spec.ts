@@ -57,7 +57,20 @@ jest.mock('@aglyn/aglyn/plugin-manager/record-captured-contact', () => ({
 }))
 jest.mock('@aglyn/shared-util-email', () => ({ isEmailConfigured: () => false, sendEmail: async () => undefined }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: mockState.managePos } }),
+  // As the real resolver answers for a site (AGL-4047): nothing for someone
+  // with no access to it, the site role's default otherwise.
+  resolveOrgPermissions: async (uid: string, context: { hostId?: string }) => ({
+    permissions: {
+      managePos:
+        mockState.managePos &&
+        jest
+          .requireActual('../testing/site-register-permissions')
+          .siteRegisterVerdict(
+            jest.requireActual('../testing/fake-firestore').fakeDocs.get(`hosts/${context?.hostId}`)?.memberRoles,
+            uid,
+          ),
+    },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({ merchantAccountIsReady: () => true }))
 jest.mock('@aglyn/tenant-data-admin', () => {

@@ -196,6 +196,20 @@ export interface PluginEventPayloads {
     uid: string
     permissions: Record<string, boolean>
   }
+  /**
+   * The workspace's own logo changed (AGL-4048): the logo or dark-mode logo
+   * on its organization profile, or the logo of its white-label brand.
+   * Raised once the save has answered, never in front of it, so a handler
+   * that redraws the logo somewhere of its own — a device's start-up
+   * screen, a generated image — does so now rather than on its next pass,
+   * and the person saving waits on none of it. `changed` names which logos
+   * moved; a handler that draws only some of them may ignore the rest.
+   */
+  'org.logo.changed': {
+    orgId: string
+    actor: PluginEventActor
+    changed: ReadonlyArray<'logo' | 'logoDark' | 'brandLogo' | 'brandLogoDark'>
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

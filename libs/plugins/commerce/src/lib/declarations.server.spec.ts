@@ -56,6 +56,13 @@ describe('registerCommerceServerDeclarations', () => {
     expect(listPluginEventHandlers('host.domain.released')).toEqual([BUNDLE_ID])
   })
 
+  it('subscribes to a changed workspace logo for card reader start-up screens (AGL-4048)', () => {
+    resetPluginEventHandlersForTests()
+    registerCommerceServerDeclarations()
+    registerCommerceServerDeclarations()
+    expect(listPluginEventHandlers('org.logo.changed')).toEqual([BUNDLE_ID])
+  })
+
   it('publishes the store catalog shopping channels read as this plugin’s (AGL-3637)', () => {
     registerCommerceServerDeclarations()
     expect(pluginProductCatalog()).toBeDefined()

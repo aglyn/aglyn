@@ -3210,6 +3210,7 @@ public struct OrderUnresolvedLine: Codable, Hashable, Sendable {
 public struct OrgPermissionDeclaration: Codable, Hashable, Sendable {
   public var defaults: OrgPermissionDeclarationDefaults?
   public var description: String?
+  public var follows: String?
   public var group: String?
   public var groupLabel: String?
   public var hostRoleDefaults: [String: Bool]?
@@ -3219,9 +3220,10 @@ public struct OrgPermissionDeclaration: Codable, Hashable, Sendable {
   public var refines: String?
   public var roleDefaults: [String: Bool]?
 
-  public init(defaults: OrgPermissionDeclarationDefaults? = nil, description: String? = nil, group: String? = nil, groupLabel: String? = nil, hostRoleDefaults: [String: Bool]? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, roleDefaults: [String: Bool]? = nil) {
+  public init(defaults: OrgPermissionDeclarationDefaults? = nil, description: String? = nil, follows: String? = nil, group: String? = nil, groupLabel: String? = nil, hostRoleDefaults: [String: Bool]? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, roleDefaults: [String: Bool]? = nil) {
     self.defaults = defaults
     self.description = description
+    self.follows = follows
     self.group = group
     self.groupLabel = groupLabel
     self.hostRoleDefaults = hostRoleDefaults
@@ -3247,6 +3249,7 @@ public struct OrgPermissionDeclarationDefaults: Codable, Hashable, Sendable {
 
 public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var description: String
+  public var follows: String?
   public var group: String?
   public var key: String
   public var label: String
@@ -3254,8 +3257,9 @@ public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var refines: String?
   public var scope: OrgPermissionScope?
 
-  public init(description: String, group: String? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
+  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
     self.description = description
+    self.follows = follows
     self.group = group
     self.key = key
     self.label = label

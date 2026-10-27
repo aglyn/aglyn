@@ -58,8 +58,9 @@ interface PrinterManager {
 }
 
 /**
- * The register's gate (`pos-order.ts`): `admin` or `editor` on THIS site,
- * `managePos` on the member's permissions, and `pos` on the owning plan.
+ * The register's gate (`pos-order.ts`): `managePos` on the member's
+ * permissions as resolved for THIS site — the key decides, not the site role
+ * (AGL-4047) — and `pos` on the owning plan.
  */
 export async function authorizePrinterManager(
   req: PluginApiRequest,
@@ -80,8 +81,6 @@ export async function authorizePrinterManager(
   }
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
   if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  const role = (host.get('memberRoles') ?? {})[uid]
-  if (role !== 'admin' && role !== 'editor') return { ok: false, status: 403, error: 'Not permitted' }
   const membership = await resolveOrgPermissions(uid, { hostId })
   if (!membership.permissions.managePos) return { ok: false, status: 403, error: 'Not permitted' }
   if (permission && !holdsPosPermission(membership.permissions, permission)) {

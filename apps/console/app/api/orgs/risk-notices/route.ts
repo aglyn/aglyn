@@ -29,25 +29,29 @@
  *   the row's status or its held send, so no owner can release a hold or
  *   lift a lock from here.
  *
- * Owners and admins only; staff may read.
+ * Whoever holds "Holds and reviews" (`org.holds`, AGL-4047) over the whole
+ * workspace; staff may read. The key is on for owners and admins by default,
+ * the two roles this asked for before, so a custom role or an override can
+ * now hand it to another member, or take it from an admin, and the console's
+ * Holds & reviews section asks the same key. The notices themselves are
+ * still emailed to the owners and admins.
  */
 
 // lockdown-423: exempt — the appeal path. A locked workspace's owners must still be able to read why
 // and ask for a review; it writes only a note onto the platform's own abuse-queue row, never to the
 // workspace.
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { isOrgWideMember, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
   listOwnerRiskNotices,
+  memberHasOrgPermission,
   requestRiskReview,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-
-const MANAGER_ROLES = new Set(['owner', 'admin'])
 
 /** Firestore ids the notice seam mints: 40 hex. */
 const NOTICE_ID = /^[a-f0-9]{40}$/
@@ -74,12 +78,18 @@ async function handler(request: Request): Promise<Response> {
     }
     const isStaff = decoded['staff'] === true
     const actor = await resolveOrgMembership(decoded.uid, orgId)
-    const isManager = MANAGER_ROLES.has(String(actor?.member?.role))
+    const isManager =
+      isOrgWideMember(actor?.member) &&
+      (await memberHasOrgPermission(orgId, actor?.member, 'org.holds'))
 
     if (method === 'GET') {
       if (!isManager && !isStaff) {
         return Response.json(
-          { error: 'Holds and reviews are for the workspace’s owners and admins' },
+          {
+            error: 'Your role does not include "Holds and reviews" — ask an organization admin',
+            reason: 'permission',
+            permission: 'org.holds',
+          },
           { status: 403 },
         )
       }
@@ -93,7 +103,11 @@ async function handler(request: Request): Promise<Response> {
     // A review is asked for by the workspace, never on its behalf.
     if (!isManager) {
       return Response.json(
-        { error: 'Only the workspace’s owners and admins can request a review' },
+        {
+          error: 'Your role does not include "Holds and reviews" — ask an organization admin',
+          reason: 'permission',
+          permission: 'org.holds',
+        },
         { status: 403 },
       )
     }

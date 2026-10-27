@@ -23,13 +23,21 @@ import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permis
  * where no custom role or override sets one, it follows `managePos` — so a
  * member keeps exactly the register they had until somebody narrows it.
  */
-export type PosPermission =
+export type PosRegisterPermission =
   | 'posSell'
   | 'posRefund'
   | 'posDiscount'
   | 'posCashDrawer'
   | 'posDevices'
-  | 'posBuyHardware'
+
+/**
+ * The register's keys and `posBuyHardware`, which stands on its own
+ * (AGL-4047): it FOLLOWS `managePos` where no custom role or override sets
+ * it, so every member keeps the hardware shop they had, but it may be
+ * granted without the register — a bookkeeper who orders the store's readers
+ * and never rings a sale.
+ */
+export type PosPermission = PosRegisterPermission | 'posBuyHardware'
 
 /** The tier defaults `managePos` has, which every finer key mirrors. */
 const POS_TIER_DEFAULTS = { admin: true, editor: true, viewer: false } as const
@@ -99,10 +107,11 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
     key: 'posBuyHardware',
     pluginId: 'commerce',
     label: 'Buy point of sale hardware',
-    description: 'Order card readers and other hardware from the hardware shop.',
+    description:
+      'Order card readers and other hardware from the hardware shop. Follows "Use the point of sale" unless a role or member sets it, and may be allowed without it.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
-    refines: 'managePos',
+    follows: 'managePos',
   },
 ]
 
@@ -117,12 +126,31 @@ export function posPermissionLabel(permission: PosPermission): string {
  * that does not carry the finer key at all follows `managePos` — the
  * resolvers always carry it once commerce has registered, so an absent key
  * is a map built before that, which keeps the register it had.
+ *
+ * `posBuyHardware` stands on its own: its own verdict when the map carries
+ * one, granted with or without `managePos`, and `managePos`'s when it does
+ * not.
  */
 export function holdsPosPermission(
   permissions: Readonly<Record<string, boolean | undefined>> | null | undefined,
   permission: PosPermission,
 ): boolean {
+  if (permission === 'posBuyHardware') {
+    const own = permissions?.[permission]
+    return typeof own === 'boolean' ? own : permissions?.['managePos'] === true
+  }
   return permissions?.['managePos'] === true && permissions?.[permission] !== false
+}
+
+/**
+ * Whether a member may open the hardware shop at all (AGL-4047): see what
+ * it offers and what the store ordered. Whoever works the register, and
+ * whoever may buy hardware without working it.
+ */
+export function mayVisitPosHardwareShop(
+  permissions: Readonly<Record<string, boolean | undefined>> | null | undefined,
+): boolean {
+  return permissions?.['managePos'] === true || holdsPosPermission(permissions, 'posBuyHardware')
 }
 
 /** The refusal a register route answers when a finer key is not held. */

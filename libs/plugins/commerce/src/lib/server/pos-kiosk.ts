@@ -139,11 +139,12 @@ async function authorizeKiosk(
     hostRef.collection('registers').doc(device.registerId).get(),
   ])
   if (!host.exists || !register.exists) return refuse(401, 'This kiosk is not paired.')
-  const role = (host.get('memberRoles') ?? {})[device.createdBy]
+  // The member who paired it must still work the register here: the key
+  // decides, not the site role (AGL-4047).
   const membership = device.createdBy
     ? await resolveOrgPermissions(device.createdBy, { hostId: device.hostId })
     : null
-  if ((role !== 'admin' && role !== 'editor') || !membership?.permissions?.managePos) {
+  if (!membership?.permissions?.managePos) {
     return refuse(403, 'This kiosk needs a staff member to pair it again.')
   }
   const owner = await getOrgForHost(device.hostId)
@@ -704,11 +705,8 @@ export function readPosKioskUnlock(token: unknown, deviceId: string, nowMs: numb
   }
 }
 
-/** Whether a member may still unlock: their role and `managePos` today. */
+/** Whether a member may still unlock: `managePos` here today, whatever their site role (AGL-4047). */
 async function mayUnlock(gate: KioskGate, memberUid: string): Promise<boolean> {
-  const host = await gate.hostRef.get()
-  const role = (host.get('memberRoles') ?? {})[memberUid]
-  if (role !== 'admin' && role !== 'editor') return false
   const membership = await resolveOrgPermissions(memberUid, { hostId: gate.hostId })
   return membership?.permissions?.managePos === true
 }
@@ -744,13 +742,14 @@ async function unlock(gate: KioskGate, req: PluginApiRequest, body: Record<strin
   if (claim.kind === 'locked') {
     return { status: 423, body: { error: 'Too many wrong PINs. Try again later.', lockedUntilMs: claim.lockedUntilMs } }
   }
+  // Members of this site only, any role: `mayUnlock` below asks the key.
   const host = await gate.hostRef.get()
   const roles = (host.get('memberRoles') ?? {}) as Record<string, string>
   const pins = await gate.hostRef.collection('posStaffPins').limit(50).get()
   let matched = ''
   for (const doc of pins.docs) {
     const uid = String(doc.id)
-    if (roles[uid] !== 'admin' && roles[uid] !== 'editor') continue
+    if (!roles[uid]) continue
     if (Number(doc.get('lockedUntilMs') ?? 0) > now) continue
     const hash = String(doc.get('pinScrypt') ?? '')
     if (hash && verifyMemberPassword(pin, hash)) {

@@ -172,10 +172,11 @@ export function permissionChoiceCounts(
 
 /**
  * Which layer decided a member's verdict for a key: their org role's default,
- * their custom role, their own override, or (`refines`) the broader key a
- * key refines, which it follows where nothing sets it (AGL-4047).
+ * their custom role, their own override, (`refines`) the broader key a key
+ * refines, which it follows where nothing sets it, or (`follows`) the key a
+ * key follows without needing it (AGL-4047).
  */
-export type PermissionSource = 'role' | 'customRole' | 'override' | 'refines'
+export type PermissionSource = 'role' | 'customRole' | 'override' | 'refines' | 'follows'
 
 /** One key's verdict for a member, and where it came from. */
 export interface ExplainedPermission {
@@ -189,6 +190,8 @@ export interface ExplainedPermission {
   override?: boolean
   /** The broader key this one refines, when it does. */
   refines?: string
+  /** The key this one follows without needing it, when it does. */
+  follows?: string
   /**
    * The broader key that holds this one back: set when a custom role or an
    * override allows the key but the key it refines is not granted.
@@ -226,11 +229,14 @@ export function explainOrgPermissions(
             ? 'customRole'
             : definition.refines
               ? 'refines'
-              : 'role',
+              : definition.follows
+                ? 'follows'
+                : 'role',
       roleDefault,
       ...(typeof fromRole === 'boolean' ? { customRole: fromRole } : {}),
       ...(typeof fromOverride === 'boolean' ? { override: fromOverride } : {}),
       ...(definition.refines ? { refines: definition.refines } : {}),
+      ...(definition.follows ? { follows: definition.follows } : {}),
       ...(definition.refines && stored === true && !isGranted ? { heldBy: definition.refines } : {}),
     }
   }

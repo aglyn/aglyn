@@ -28,7 +28,10 @@ import {
 import { checkEntitlement, resolveBrandingProfile } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import type { PluginEventPayloads } from '@aglyn/aglyn/plugin-manager/plugin-events'
+import type { PluginJobHostGate } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgDoc, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { siteLockdownJobGate } from '@aglyn/tenant-data-admin/server/tenant-write-lockdown'
 import {
   isPosReaderSplashChoice,
   POS_READER_SPLASH_DEVICE_TYPES,
@@ -89,14 +92,17 @@ import { savePosReaderConfiguration } from './pos-terminal'
  *     stale (a logo changed since);
  *   - when staff change the default, for every store with a Location
  *     (`pos-reader-splash-admin.ts`);
+ *   - when a logo is saved on the organization profile or the brand, for
+ *     every store of that workspace with a Location, once the save has
+ *     answered: core's `org.logo.changed` event ({@link onOrgLogoChanged});
  *   - on the commerce plugin's `pos-reader-splash-refresh` beat, for every
  *     store with a Location whose key went stale with nobody opening the
- *     card: a logo changed on the organization profile or the brand, or the
+ *     card: the backstop for an event that failed, and the only path for a
  *     logo's file replaced in the media library ({@link refreshPosReaderSplashes}).
  *
- * Never on the payment path, and never on a logo's save: drawing and
- * uploading takes a second or two, and a reader with an older screen still
- * takes the payment.
+ * Never on the payment path, and never IN FRONT of a logo's save: drawing
+ * and uploading takes a second or two, and a reader with an older screen
+ * still takes the payment.
  *
  * ## Test mode first
  *
@@ -575,7 +581,26 @@ export async function applyPosReaderSplashToStores(
     .filter((doc) => doc.id === 'config' && doc.get('stripeLocationId'))
     .map((doc) => doc.ref.path.split('/')[1])
     .filter(Boolean)
-  const queue = hostIds.slice(0, POS_READER_SPLASH_SWEEP_WINDOW)
+  await applyPosReaderSplashQueue(hostIds.slice(0, POS_READER_SPLASH_SWEEP_WINDOW), counts, {
+    ...options,
+    platform,
+    orgOf: ownerOrgOf,
+  })
+  return { ...counts, more: docs.length > POS_READER_SPLASH_SWEEP_WINDOW }
+}
+
+/** Works through `hostIds` a few at a time, counting each store's outcome into `counts`. */
+async function applyPosReaderSplashQueue(
+  hostIds: string[],
+  counts: PosReaderSplashSweep,
+  options: {
+    platform: PlatformSplashDoc
+    orgOf: (hostId: string) => Promise<Record<string, any> | null>
+    isLocked?: (hostId: string) => Promise<boolean>
+    retryFailedAfterMs?: number
+  },
+): Promise<void> {
+  const queue = [...hostIds]
   await Promise.all(
     Array.from({ length: POS_READER_SPLASH_SWEEP_CONCURRENCY }, async () => {
       for (let hostId = queue.shift(); hostId; hostId = queue.shift()) {
@@ -583,10 +608,9 @@ export async function applyPosReaderSplashToStores(
           counts.skipped += 1
           continue
         }
-        const org = await ownerOrgOf(hostId)
         const result = await applyPosReaderSplash(hostId, {
-          org,
-          platform,
+          org: await options.orgOf(hostId),
+          platform: options.platform,
           ...(options.retryFailedAfterMs ? { retryFailedAfterMs: options.retryFailedAfterMs } : {}),
         })
         if (result.outcome === 'applied' || result.outcome === 'cleared') counts.applied += 1
@@ -596,7 +620,6 @@ export async function applyPosReaderSplashToStores(
       }
     }),
   )
-  return { ...counts, more: docs.length > POS_READER_SPLASH_SWEEP_WINDOW }
 }
 
 /** How long a background pass leaves a screen Stripe refused before trying it again. */
@@ -619,6 +642,48 @@ export async function refreshPosReaderSplashes(gate: {
     isLocked: (hostId) => gate.isLocked(hostId),
     retryFailedAfterMs: POS_READER_SPLASH_RETRY_FAILED_AFTER_MS,
   })
+}
+
+/**
+ * Core's `org.logo.changed` (AGL-4048): a logo saved on the organization
+ * profile or the white-label brand reaches the readers of every store of
+ * that workspace now, not on the next beat. Raised after the save has
+ * answered, so nobody waits on it.
+ *
+ * {@link applyPosReaderSplash} for each store, the call the POS devices card
+ * makes: a store with no Location, or whose screen does not show the logo
+ * that moved (a dark-mode logo, a store showing its own image), costs reads
+ * and no Stripe call. A store that is locked is left alone, and a screen
+ * Stripe refused waits as it does on the beat; the beat, which stays, is
+ * the backstop for anything this misses. Never throws.
+ */
+export async function onOrgLogoChanged(
+  payload: Pick<PluginEventPayloads['org.logo.changed'], 'orgId'>,
+  gate: PluginJobHostGate = siteLockdownJobGate(),
+): Promise<PosReaderSplashSweep> {
+  const counts: PosReaderSplashSweep = { applied: 0, unchanged: 0, failed: 0, skipped: 0, more: false }
+  const orgId = String(payload.orgId ?? '').trim()
+  if (!orgId || !posTerminalAvailable()) return counts
+  try {
+    const org = await getOrgDoc(orgId)
+    if (!org) return counts
+    const snapshot = await firestore()
+      .collection('hosts')
+      .where('orgId', '==', orgId)
+      .limit(POS_READER_SPLASH_SWEEP_WINDOW + 1)
+      .get()
+    const hostIds = (snapshot.docs as Array<{ id: string }>).map((doc) => String(doc.id))
+    await applyPosReaderSplashQueue(hostIds.slice(0, POS_READER_SPLASH_SWEEP_WINDOW), counts, {
+      platform: await readPlatformSplash(),
+      orgOf: async () => ({ ...(org as Record<string, any>), id: orgId }),
+      isLocked: (hostId) => gate.isLocked(hostId),
+      retryFailedAfterMs: POS_READER_SPLASH_RETRY_FAILED_AFTER_MS,
+    })
+    return { ...counts, more: hostIds.length > POS_READER_SPLASH_SWEEP_WINDOW }
+  } catch (error) {
+    console.error('[pos-reader-splash] a changed logo could not reach the readers', orgId, error)
+    return counts
+  }
 }
 
 /*==========================================

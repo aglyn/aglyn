@@ -78,16 +78,17 @@ const placedOn = (ms: number) =>
 export interface PosHardwareCardProps {
   hostId: string
   /**
-   * Whether the viewer may work this site's register — the same gate the
-   * shop's route asks (`managePos` on an admin or editor role). The shop is
-   * the register's hardware, so a viewer who may not run it is not shown it.
+   * Whether the viewer may work this site's register (`managePos`). The shop
+   * is the register's hardware, so whoever works it is shown the shop.
    */
   canManagePos?: boolean
   /**
    * Whether the viewer may start a checkout (AGL-4047): the "Buy point of
-   * sale hardware" key on top of `canManagePos`, which the route asks of a
-   * checkout. Without it the card still shows the shop and the orders, with
-   * Check out disabled and the reason. Absent follows `canManagePos`.
+   * sale hardware" key the route asks of a checkout. It stands on its own,
+   * so a member who holds it without the register is shown the shop and
+   * their orders too. Someone who works the register without it sees the
+   * shop with Check out disabled and the reason. Absent follows
+   * `canManagePos`.
    */
   canBuyHardware?: boolean
 }
@@ -120,9 +121,11 @@ export function PosHardwareCard({
   const [busy, setBusy] = useState(false)
   const [returned, setReturned] = useState<'placed' | 'canceled' | null>(null)
   const uid = user?.uid ?? ''
+  // The route's own door (AGL-4047): the register, or the key to buy.
+  const mayVisit = canManagePos || canBuyHardware
 
   useEffect(() => {
-    if (!user || !canManagePos) return
+    if (!user || !mayVisit) return
     let active = true
     void posHardwareCatalog(user, hostId)
       .then((answer) => {
@@ -136,7 +139,7 @@ export function PosHardwareCard({
     }
     // Keyed on the person, not the session object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, hostId, canManagePos])
+  }, [uid, hostId, mayVisit])
 
   const available = catalog?.available === true
 
