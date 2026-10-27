@@ -441,6 +441,94 @@ public struct BookingWindow: Codable, Hashable, Sendable {
   }
 }
 
+public struct CheckInCustomer: Codable, Hashable, Sendable {
+  public var contactId: String?
+  public var customerKey: String
+  public var email: String?
+  public var items: [String]
+  public var name: String?
+  public var phone: String?
+  public var unitsCheckedIn: Double
+  public var unitsDue: Double
+
+  public init(contactId: String? = nil, customerKey: String, email: String? = nil, items: [String], name: String? = nil, phone: String? = nil, unitsCheckedIn: Double, unitsDue: Double) {
+    self.contactId = contactId
+    self.customerKey = customerKey
+    self.email = email
+    self.items = items
+    self.name = name
+    self.phone = phone
+    self.unitsCheckedIn = unitsCheckedIn
+    self.unitsDue = unitsDue
+  }
+}
+
+public struct CheckInDayTotals: Codable, Hashable, Sendable {
+  public var checkedIn: Double
+  public var expected: Double
+  public var rainChecks: Double
+
+  public init(checkedIn: Double, expected: Double, rainChecks: Double) {
+    self.checkedIn = checkedIn
+    self.expected = expected
+    self.rainChecks = rainChecks
+  }
+}
+
+public struct CheckInRainCheck: Codable, Hashable, Sendable {
+  public var atMs: Double
+  public var byName: String?
+  public var byUid: String
+  public var claimedDayKey: String?
+  public var fromDayKey: String
+  public var kind: CheckInRainCheckKind
+  public var toDayKey: String?
+
+  public init(atMs: Double, byName: String? = nil, byUid: String, claimedDayKey: String? = nil, fromDayKey: String, kind: CheckInRainCheckKind, toDayKey: String? = nil) {
+    self.atMs = atMs
+    self.byName = byName
+    self.byUid = byUid
+    self.claimedDayKey = claimedDayKey
+    self.fromDayKey = fromDayKey
+    self.kind = kind
+    self.toDayKey = toDayKey
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CheckInRainCheckKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case date = "date"
+  case `open` = "open"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CheckInStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case checkedIn = "checked_in"
+  case expected = "expected"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct CheckInWristband: Codable, Hashable, Sendable {
+  public var color: String?
+  public var number: String?
+
+  public init(color: String? = nil, number: String? = nil) {
+    self.color = color
+    self.number = number
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ContentSchemaType: String, Codable, CaseIterable, Hashable, Sendable {
   case article = "Article"
@@ -1038,6 +1126,108 @@ public struct FunnelStepResult: Codable, Hashable, Sendable {
   }
 }
 
+public struct HostCheckIn: Codable, Hashable, Sendable {
+  public var channel: HostCheckInChannel
+  public var checkedInAtMs: Double?
+  public var checkedInBy: String?
+  public var checkedInByName: String?
+  public var checkInAttempt: String?
+  public var contactId: String?
+  public var createdAtMs: Double
+  public var customerEmail: String?
+  public var customerEmailLower: String?
+  public var customerKey: String
+  public var customerName: String?
+  public var customerPhone: String?
+  public var dayKey: String
+  public var itemName: String
+  public var lineIndex: Double?
+  public var orderId: String?
+  public var orderLabel: String?
+  public var productId: String?
+  public var rainCheck: CheckInRainCheck?
+  public var rainCheckOpen: Bool?
+  public var rainCheckUndoneAtMs: Double?
+  public var rainCheckUndoneBy: String?
+  public var reservationId: String?
+  public var searchTokens: [String]
+  public var source: HostCheckInSource
+  public var status: CheckInStatus
+  public var undoneAtMs: Double?
+  public var undoneBy: String?
+  public var unitCount: Double
+  public var unitIndex: Double
+  public var updatedAtMs: Double
+  public var variantId: String?
+  public var variantLabel: String?
+  public var wristband: CheckInWristband?
+
+  public init(channel: HostCheckInChannel, checkedInAtMs: Double? = nil, checkedInBy: String? = nil, checkedInByName: String? = nil, checkInAttempt: String? = nil, contactId: String? = nil, createdAtMs: Double, customerEmail: String? = nil, customerEmailLower: String? = nil, customerKey: String, customerName: String? = nil, customerPhone: String? = nil, dayKey: String, itemName: String, lineIndex: Double? = nil, orderId: String? = nil, orderLabel: String? = nil, productId: String? = nil, rainCheck: CheckInRainCheck? = nil, rainCheckOpen: Bool? = nil, rainCheckUndoneAtMs: Double? = nil, rainCheckUndoneBy: String? = nil, reservationId: String? = nil, searchTokens: [String], source: HostCheckInSource, status: CheckInStatus, undoneAtMs: Double? = nil, undoneBy: String? = nil, unitCount: Double, unitIndex: Double, updatedAtMs: Double, variantId: String? = nil, variantLabel: String? = nil, wristband: CheckInWristband? = nil) {
+    self.channel = channel
+    self.checkedInAtMs = checkedInAtMs
+    self.checkedInBy = checkedInBy
+    self.checkedInByName = checkedInByName
+    self.checkInAttempt = checkInAttempt
+    self.contactId = contactId
+    self.createdAtMs = createdAtMs
+    self.customerEmail = customerEmail
+    self.customerEmailLower = customerEmailLower
+    self.customerKey = customerKey
+    self.customerName = customerName
+    self.customerPhone = customerPhone
+    self.dayKey = dayKey
+    self.itemName = itemName
+    self.lineIndex = lineIndex
+    self.orderId = orderId
+    self.orderLabel = orderLabel
+    self.productId = productId
+    self.rainCheck = rainCheck
+    self.rainCheckOpen = rainCheckOpen
+    self.rainCheckUndoneAtMs = rainCheckUndoneAtMs
+    self.rainCheckUndoneBy = rainCheckUndoneBy
+    self.reservationId = reservationId
+    self.searchTokens = searchTokens
+    self.source = source
+    self.status = status
+    self.undoneAtMs = undoneAtMs
+    self.undoneBy = undoneBy
+    self.unitCount = unitCount
+    self.unitIndex = unitIndex
+    self.updatedAtMs = updatedAtMs
+    self.variantId = variantId
+    self.variantLabel = variantLabel
+    self.wristband = wristband
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostCheckInChannel: String, Codable, CaseIterable, Hashable, Sendable {
+  case draft = "draft"
+  case marketplace = "marketplace"
+  case online = "online"
+  case pos = "pos"
+  case reservation = "reservation"
+  case subscription = "subscription"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostCheckInSource: String, Codable, CaseIterable, Hashable, Sendable {
+  case order = "order"
+  case reservation = "reservation"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct HostEventDeclaration: Codable, Hashable, Sendable {
   public var label: String
   public var order: Double
@@ -1163,8 +1353,9 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var timeline: [OrderTimelineEvent]?
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
+  public var useDayKeys: [String]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -1217,6 +1408,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.timeline = timeline
     self.totals = totals
     self.unresolvedLines = unresolvedLines
+    self.useDayKeys = useDayKeys
   }
 }
 
@@ -2630,10 +2822,11 @@ public struct OrderLineItem: Codable, Hashable, Sendable {
   public var sku: String?
   public var supplierId: String?
   public var unitAmountCents: Double
+  public var useDayKey: String?
   public var variantId: String?
   public var variantLabel: String?
 
-  public init(fulfillmentId: String? = nil, modifiers: [OrderLineModifier]? = nil, name: String, productId: String, productType: ProductType? = nil, quantity: Double, sku: String? = nil, supplierId: String? = nil, unitAmountCents: Double, variantId: String? = nil, variantLabel: String? = nil) {
+  public init(fulfillmentId: String? = nil, modifiers: [OrderLineModifier]? = nil, name: String, productId: String, productType: ProductType? = nil, quantity: Double, sku: String? = nil, supplierId: String? = nil, unitAmountCents: Double, useDayKey: String? = nil, variantId: String? = nil, variantLabel: String? = nil) {
     self.fulfillmentId = fulfillmentId
     self.modifiers = modifiers
     self.name = name
@@ -2643,6 +2836,7 @@ public struct OrderLineItem: Codable, Hashable, Sendable {
     self.sku = sku
     self.supplierId = supplierId
     self.unitAmountCents = unitAmountCents
+    self.useDayKey = useDayKey
     self.variantId = variantId
     self.variantLabel = variantLabel
   }
@@ -4355,10 +4549,12 @@ public enum ProductChannelFactsCondition: String, Codable, CaseIterable, Hashabl
 }
 
 public struct ProductCheckIn: Codable, Hashable, Sendable {
+  public var askUseDate: Bool?
   public var enabled: Bool
   public var headcount: Double?
 
-  public init(enabled: Bool, headcount: Double? = nil) {
+  public init(askUseDate: Bool? = nil, enabled: Bool, headcount: Double? = nil) {
+    self.askUseDate = askUseDate
     self.enabled = enabled
     self.headcount = headcount
   }
@@ -5378,6 +5574,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let businessToneLabels: [String: String]
   public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
+  public let checkInBatchMax: Int
+  public let checkInMaxHeadcount: Int
+  public let checkInUseDayMaxAheadDays: Int
+  public let checkInWristbandColors: [String]
+  public let checkInWristbandMax: Int
   public let checkoutShippingCountryCodes: [String]
   public let checkoutShippingCountryNames: [String: String]
   public let code128Patterns: [[Double]]
@@ -5570,6 +5771,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardWarningShare: Double
   public let platformBrandName: String
   public let posCashEventLabels: [String: String]
+  public let posCheckInRoute: String
   public let posDayReportMaxDays: Int
   public let posDayReportRoute: String
   public let posDisplayMaxLines: Int
@@ -5721,6 +5923,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case businessToneLabels = "BUSINESS_TONE_LABELS"
     case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
+    case checkInBatchMax = "CHECK_IN_BATCH_MAX"
+    case checkInMaxHeadcount = "CHECK_IN_MAX_HEADCOUNT"
+    case checkInUseDayMaxAheadDays = "CHECK_IN_USE_DAY_MAX_AHEAD_DAYS"
+    case checkInWristbandColors = "CHECK_IN_WRISTBAND_COLORS"
+    case checkInWristbandMax = "CHECK_IN_WRISTBAND_MAX"
     case checkoutShippingCountryCodes = "CHECKOUT_SHIPPING_COUNTRY_CODES"
     case checkoutShippingCountryNames = "CHECKOUT_SHIPPING_COUNTRY_NAMES"
     case code128Patterns = "CODE128_PATTERNS"
@@ -5913,6 +6120,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
     case platformBrandName = "PLATFORM_BRAND_NAME"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
+    case posCheckInRoute = "POS_CHECK_IN_ROUTE"
     case posDayReportMaxDays = "POS_DAY_REPORT_MAX_DAYS"
     case posDayReportRoute = "POS_DAY_REPORT_ROUTE"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"

@@ -3578,6 +3578,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             return {
               productId: line.productId,
               ...(line.variantId ? { variantId: line.variantId } : {}),
+              // The day the buyer chose to use a check-in item (AGL-4043),
+              // checked when the session was made.
+              ...(CommerceModel.isCheckInDayKey(line.useDayKey) ? { useDayKey: line.useDayKey } : {}),
               name: product.name,
               ...(variant && Object.keys(variant.options ?? {}).length
                 ? {

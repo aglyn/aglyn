@@ -286,6 +286,21 @@
       }
     ]
   },
+  "CHECK_IN_BATCH_MAX": 50,
+  "CHECK_IN_MAX_HEADCOUNT": 50,
+  "CHECK_IN_USE_DAY_MAX_AHEAD_DAYS": 730,
+  "CHECK_IN_WRISTBAND_COLORS": [
+    "Red",
+    "Orange",
+    "Yellow",
+    "Green",
+    "Blue",
+    "Purple",
+    "Pink",
+    "White",
+    "Black"
+  ],
+  "CHECK_IN_WRISTBAND_MAX": 24,
   "CHECKOUT_SHIPPING_COUNTRY_CODES": [
     "US",
     "CA",
@@ -8071,6 +8086,7 @@
     "paid_out": "Paid out",
     "refund": "Cash refund"
   },
+  "POS_CHECK_IN_ROUTE": "/api/commerce/pos-check-in",
   "POS_DAY_REPORT_MAX_DAYS": 31,
   "POS_DAY_REPORT_ROUTE": "/api/commerce/pos-day-report",
   "POS_DISPLAY_MAX_LINES": 60,

@@ -28,6 +28,7 @@ import type { OrderLineModifier } from './product-modifiers'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
+import { isCheckInDayKey } from './commerce-check-in-product'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
 import type { OrderPayment } from './commerce-pos'
@@ -115,6 +116,12 @@ export interface OrderLineItem {
   supplierId?: string
   /** Fulfillment id once this line ships (AGL-288). */
   fulfillmentId?: string
+  /**
+   * The day the buyer chose to use a check-in item (a day pass bought ahead,
+   * AGL-4043), `YYYY-MM-DD` on the store's calendar. Absent: it is due on
+   * the day the order was placed.
+   */
+  useDayKey?: string
 }
 
 export interface OrderTotals {
@@ -404,6 +411,13 @@ export interface OrderCredit {
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
+  /**
+   * The distinct use days its lines name (`OrderLineItem.useDayKey`,
+   * AGL-4043), stamped by every creator through `withOrderListFields` so the
+   * window finds a pass bought ahead on the day it is for. Absent when no
+   * line names one.
+   */
+  useDayKeys?: string[]
   /** Optional lines the buyer added at checkout (AGL-3635); see {@link OrderExtra}. */
   extras?: OrderExtra[]
   /**
@@ -1073,10 +1087,14 @@ export function computeBuyNowOrder(
     metadataCents(metadata.unitAmountCents) ||
     Math.max(0, Math.round(goodsCents / quantity))
   const variantId = String(metadata.variantId ?? '')
+  // The day the buyer chose to use a check-in item (AGL-4043), checked when
+  // the session was made; re-read only for its shape here.
+  const useDayKey = isCheckInDayKey(metadata.useDayKey) ? String(metadata.useDayKey) : ''
   const lineItems: OrderLineItem[] = [
     {
       productId: String(metadata.productId ?? ''),
       ...(variantId ? { variantId } : {}),
+      ...(useDayKey ? { useDayKey } : {}),
       name: snapshot.name,
       ...(snapshot.variantLabel ? { variantLabel: snapshot.variantLabel } : {}),
       ...(snapshot.sku ? { sku: snapshot.sku } : {}),

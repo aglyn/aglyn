@@ -366,6 +366,14 @@ describe('computeBuyNowOrder', () => {
     expect(computeBuyNowOrder(SESSION, SNAPSHOT).lineItems[0].quantity).toBe(3)
   })
 
+  it('records the day the buyer chose for a pass, and nothing that is not a day (AGL-4043)', () => {
+    const chosen = { ...SESSION, metadata: { ...SESSION.metadata, useDayKey: '2027-01-20' } }
+    expect(computeBuyNowOrder(chosen, SNAPSHOT).lineItems[0].useDayKey).toBe('2027-01-20')
+    expect(computeBuyNowOrder(SESSION, SNAPSHOT).lineItems[0]).not.toHaveProperty('useDayKey')
+    const junk = { ...SESSION, metadata: { ...SESSION.metadata, useDayKey: 'soon' } }
+    expect(computeBuyNowOrder(junk, SNAPSHOT).lineItems[0]).not.toHaveProperty('useDayKey')
+  })
+
   it('prices the line at the product, not at the whole charge', () => {
     expect(
       computeBuyNowOrder(SESSION, SNAPSHOT).lineItems[0].unitAmountCents,

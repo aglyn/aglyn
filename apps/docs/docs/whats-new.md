@@ -27,6 +27,17 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — passes for a day, and rain checks
+
+- **[Sell passes for a day the buyer picks](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
+  turn on **Ask the buyer which day** under a product's **Check-in**, and the
+  product page offers an optional date. The pass is due at the window on that
+  day; without one, it is for the day it is bought, as before.
+- **[Rain checks](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
+  move a pass nobody has used yet to a later day, or leave it open for any
+  later day, from the register's check-in or **Today's check-ins**. Each one
+  records who gave it and the day it was on, and can be undone.
+
 ## October 2026 — day totals, campground units and walk-ins
 
 - **[Every refund in the day totals](commerce-and-bookings/commerce/pos-operations.md#day-and-event-totals)** —

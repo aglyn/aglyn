@@ -153,6 +153,52 @@ describe('the product page', () => {
   })
 })
 
+describe('a pass bought for a day the buyer picks (pass dates)', () => {
+  const pass = (asks: boolean) =>
+    candle({
+      name: 'Day pass',
+      type: 'service',
+      options: [],
+      variants: [{ id: 'v1', priceUsd: 40, soldOut: false, ...(asks ? { asksUseDate: true } : {}) }],
+      ...(asks ? { useDayTimeZone: 'America/Chicago' } : {}),
+    })
+
+  it('offers an optional day on a variant that asks for one, and none otherwise', async () => {
+    mockSite.pageData = { commerce: { product: pass(true) } }
+    const { unmount } = render(<ProductDetail />)
+    expect((await screen.findAllByLabelText('Day you will use it (optional)')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Leave it blank to use it the day you buy.')).toBeTruthy()
+    unmount()
+    mockSite.pageData = { commerce: { product: pass(false) } }
+    render(<ProductDetail />)
+    await act(async () => undefined)
+    expect(screen.queryByText('Leave it blank to use it the day you buy.')).toBeNull()
+  })
+
+  it('adds a pass with no day chosen without one, for the day it is bought', async () => {
+    mockSite.pageData = { commerce: { product: pass(true) } }
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/api/commerce/cart')
+        ? { ok: true, status: 200, json: async () => ({ lines: [], count: 1 }) }
+        : { ok: false, status: 404, json: async () => ({}) },
+    )
+    render(<ProductDetail />)
+    await screen.findAllByLabelText('Day you will use it (optional)')
+    fireEvent.click(screen.getByText('Add to cart'))
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/commerce/cart'))).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/commerce/cart'))!
+    expect(JSON.parse(String(init.body))).toEqual({
+      hostId: 'host-1',
+      action: 'add',
+      productId: 'p1',
+      variantId: 'v1',
+      quantity: 1,
+    })
+  })
+})
+
 describe('related products', () => {
   beforeEach(() => {
     mockSite.pageData = { commerce: { product: { id: 'p1' } } }

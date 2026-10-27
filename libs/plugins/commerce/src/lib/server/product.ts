@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { readStoreDay } from './store-day'
 
 export interface PublicProductDetail {
   id: string
@@ -48,7 +49,17 @@ export interface PublicProductDetail {
      * It is already public information: it prints on receipts and invoices.
      */
     sku?: string
+    /**
+     * The buyer may choose the day they will use it (a pass bought ahead,
+     * AGL-4043): the page offers an optional date. Absent when it does not.
+     */
+    asksUseDate?: true
   }>
+  /**
+   * The store's time zone, sent only when a variant asks for a use day, so
+   * the page offers no day that has passed on the store's calendar.
+   */
+  useDayTimeZone?: string
   tags?: string[]
   /** Recurring billing (AGL-303) so the PDP frames the price. */
   subscription?: { interval: 'month' | 'year'; trialDays?: number }
@@ -71,7 +82,9 @@ export interface PublicProductDetail {
 export function toPublicProductDetail(
   id: string,
   product: ReturnType<typeof CommerceModel.liftLegacyProduct>,
+  options: { timeZone?: string | null } = {},
 ): PublicProductDetail {
+  const asksUseDate = productAsksUseDateAnywhere(product)
   return {
     id,
     name: product.name,
@@ -94,13 +107,22 @@ export function toPublicProductDetail(
         product.oversellPolicy !== 'backorder',
       ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
       ...(variant.sku ? { sku: variant.sku } : {}),
+      ...(CommerceModel.productAsksUseDate(product, variant.id) ? { asksUseDate: true as const } : {}),
     })),
+    ...(asksUseDate ? { useDayTimeZone: options.timeZone || 'UTC' } : {}),
     ...(product.tags?.length ? { tags: product.tags } : {}),
     ...(product.subscription ? { subscription: product.subscription } : {}),
     ...(product.subscription && product.subscriptionOptional
       ? { subscriptionOptional: true }
       : {}),
   }
+}
+
+/** Whether any variant of a product asks the buyer for a use day (AGL-4043). */
+export function productAsksUseDateAnywhere(
+  product: Pick<ReturnType<typeof CommerceModel.liftLegacyProduct>, 'variants' | 'checkIn'>,
+): boolean {
+  return product.variants.some((variant) => CommerceModel.productAsksUseDate(product, variant.id))
 }
 
 /**
@@ -131,7 +153,11 @@ export const productHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown product' })
     }
     const product = CommerceModel.liftLegacyProduct(raw)
-    const detail = toPublicProductDetail(docSnapshot.id, product)
+    // The store's calendar, only for a product that asks for a use day.
+    const timeZone = productAsksUseDateAnywhere(product)
+      ? (await readStoreDay(firestore.collection('hosts').doc(hostId))).timeZone
+      : null
+    const detail = toPublicProductDetail(docSnapshot.id, product, { timeZone })
     res.setHeader(
       'Cache-Control',
       'public, s-maxage=60, stale-while-revalidate=300',

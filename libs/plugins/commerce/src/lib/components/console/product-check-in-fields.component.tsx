@@ -46,10 +46,12 @@ function variantLabel(variant: CheckInVariant): string {
 
 /**
  * Check-in at the window (AGL-4043): whether each item sold of this product
- * is somebody to check in on the day it was bought — a day pass, a camping
+ * is somebody to check in on the day it is for — a day pass, a camping
  * spot, parking — and how many people one item admits. A product with
  * options can turn it on or off per variant ("Spectator" needs no
- * wristband) and give a variant its own number of people.
+ * wristband) and give a variant its own number of people. "Ask the buyer
+ * which day" lets an online buyer pick the day (a pass bought ahead);
+ * without an answer it is the day they buy.
  *
  * Memoized on its own props like every section of this editor (AGL-3423).
  */
@@ -57,6 +59,14 @@ export const ProductCheckInFields = memo(function ProductCheckInFields(props: Pr
   const { checkIn, variants, update } = props
   const enabled = checkIn?.enabled === true
   const headcount = checkIn?.headcount ?? 1
+  const askUseDate = checkIn?.askUseDate === true
+  /** The product's setting with one part changed, keeping the others. */
+  const productOn = (patch: Partial<CommerceModel.ProductCheckIn>): CommerceModel.ProductCheckIn => ({
+    enabled: true,
+    headcount,
+    ...(askUseDate ? { askUseDate: true } : {}),
+    ...patch,
+  })
 
   const setProduct = (next: CommerceModel.ProductCheckIn) => update({ checkIn: next })
   // Written against the draft as it stands, so a price typed meanwhile is kept.
@@ -78,15 +88,13 @@ export const ProductCheckInFields = memo(function ProductCheckInFields(props: Pr
         control={
           <Switch
             checked={enabled}
-            onChange={(event) =>
-              setProduct(event.target.checked ? { enabled: true, headcount } : { enabled: false })
-            }
+            onChange={(event) => setProduct(event.target.checked ? productOn({}) : { enabled: false })}
           />
         }
         label="Needs check-in"
       />
       <Typography variant="body2" color="text.secondary">
-        {'Each one sold, online or at the register, is somebody to check in at the window on the day it was bought, ' +
+        {'Each one sold, online or at the register, is somebody to check in at the window on the day it is for, ' +
           'with an optional wristband number or color.'}
       </Typography>
       {enabled ? (
@@ -94,11 +102,32 @@ export const ProductCheckInFields = memo(function ProductCheckInFields(props: Pr
           label="People per item"
           size="small"
           value={headcount}
-          onChange={(event) => setProduct({ enabled: true, headcount: headcountFrom(event.target.value) })}
+          onChange={(event) => setProduct(productOn({ headcount: headcountFrom(event.target.value) }))}
           helperText={headcount > 1 ? `Buying 3 makes ${3 * headcount} check-ins` : 'Buying 3 makes 3 check-ins'}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           sx={{ maxWidth: (theme) => theme.spacing(28) }}
         />
+      ) : null}
+      {enabled ? (
+        <FormControlLabel
+          control={
+            <Switch
+              checked={askUseDate}
+              onChange={(event) => {
+                const { askUseDate: _was, ...rest } = productOn({})
+                setProduct(event.target.checked ? { ...rest, askUseDate: true } : rest)
+              }}
+            />
+          }
+          label="Ask the buyer which day"
+        />
+      ) : null}
+      {enabled ? (
+        <Typography variant="body2" color="text.secondary">
+          {askUseDate
+            ? 'Buyers online can pick the day they will use it, from today on. If they skip it, it is for the day they buy.'
+            : 'It is for the day it is bought. Turn this on to sell passes ahead for a day the buyer picks.'}
+        </Typography>
       ) : null}
       {variants.length > 1
         ? variants.map((variant) => {
@@ -118,7 +147,11 @@ export const ProductCheckInFields = memo(function ProductCheckInFields(props: Pr
                       picked === 'product'
                         ? undefined
                         : picked === 'on'
-                          ? { enabled: true, headcount: own?.headcount ?? headcount }
+                          ? {
+                              enabled: true,
+                              headcount: own?.headcount ?? headcount,
+                              ...(askUseDate ? { askUseDate: true } : {}),
+                            }
                           : { enabled: false },
                     )
                   }}
@@ -134,9 +167,31 @@ export const ProductCheckInFields = memo(function ProductCheckInFields(props: Pr
                     size="small"
                     value={own?.headcount ?? 1}
                     onChange={(event) =>
-                      setVariant(variant.id, { enabled: true, headcount: headcountFrom(event.target.value) })
+                      setVariant(variant.id, {
+                        enabled: true,
+                        headcount: headcountFrom(event.target.value),
+                        ...(own?.askUseDate ? { askUseDate: true } : {}),
+                      })
                     }
                     slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                    sx={{ flex: 1 }}
+                  />
+                ) : null}
+                {choice === 'on' ? (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={own?.askUseDate === true}
+                        onChange={(event) =>
+                          setVariant(variant.id, {
+                            enabled: true,
+                            headcount: own?.headcount ?? 1,
+                            ...(event.target.checked ? { askUseDate: true } : {}),
+                          })
+                        }
+                      />
+                    }
+                    label="Ask which day"
                     sx={{ flex: 1 }}
                   />
                 ) : null}
