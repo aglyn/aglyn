@@ -225,6 +225,22 @@ describe('the end of a sale (AGL-3608)', () => {
     expect(poll.body.state.receipt.channels).toEqual(['email', 'none'])
   })
 
+  it('shows another plugin’s screen only as core’s seam shapes it (AGL-4042)', async () => {
+    const token = await pairDisplay()
+    const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g.1' } }
+    await call({ action: 'push', ...SITE, state: { mode: 'screen', promptId: 's1', screen } }, { staff: true })
+    let poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state).toMatchObject({ mode: 'screen', promptId: 's1', screen })
+    // A page outside the console's public pages never reaches the display.
+    await call(
+      { action: 'push', ...SITE, state: { mode: 'screen', promptId: 's2', screen: { ...screen, path: 'https://evil.example.com' } } },
+      { staff: true },
+    )
+    poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state.mode).toBe('idle')
+    expect(poll.body.state.screen).toBeUndefined()
+  })
+
   it("formats in the store's chosen currency", async () => {
     const token = await pairDisplay()
     fakeDocs.set('hosts/host-1/settings/store', { currency: 'CAD' })

@@ -2450,6 +2450,7 @@ enum class PosDisplayMode(val raw: String) {
     IDLE("idle"),
     PROCESSING("processing"),
     RECEIPT("receipt"),
+    SCREEN("screen"),
     THANKS("thanks"),
     TIP("tip"),
     UNKNOWN(""),
@@ -2484,6 +2485,13 @@ internal object PosDisplayResponseTipChoiceSerializer :
     RawEnumSerializer<PosDisplayResponseTipChoice>("com.aglyn.contracts.PosDisplayResponseTipChoice", PosDisplayResponseTipChoice.entries, PosDisplayResponseTipChoice.UNKNOWN, { it.raw })
 
 @Serializable
+data class PosDisplayScreen(
+    val params: Map<String, String>,
+    val path: String,
+    val pluginId: String,
+)
+
+@Serializable
 data class PosDisplayState(
     val cart: PosDisplayCart? = null,
     val currency: String? = null,
@@ -2492,6 +2500,7 @@ data class PosDisplayState(
     val promptId: String? = null,
     val receipt: PosDisplayStateReceipt? = null,
     val response: PosDisplayResponse? = null,
+    val screen: PosDisplayScreen? = null,
     val tip: PosDisplayStateTip? = null,
     val updatedAtMs: Double,
 )

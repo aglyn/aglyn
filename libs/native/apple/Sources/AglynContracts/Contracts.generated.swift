@@ -3715,6 +3715,7 @@ public enum PosDisplayMode: String, Codable, CaseIterable, Hashable, Sendable {
   case idle = "idle"
   case processing = "processing"
   case receipt = "receipt"
+  case screen = "screen"
   case thanks = "thanks"
   case tip = "tip"
   case unknown = ""
@@ -3762,6 +3763,18 @@ public enum PosDisplayResponseTipChoice: String, Codable, CaseIterable, Hashable
   }
 }
 
+public struct PosDisplayScreen: Codable, Hashable, Sendable {
+  public var params: [String: String]
+  public var path: String
+  public var pluginId: String
+
+  public init(params: [String: String], path: String, pluginId: String) {
+    self.params = params
+    self.path = path
+    self.pluginId = pluginId
+  }
+}
+
 public struct PosDisplayState: Codable, Hashable, Sendable {
   public var cart: PosDisplayCart?
   public var currency: String?
@@ -3770,10 +3783,11 @@ public struct PosDisplayState: Codable, Hashable, Sendable {
   public var promptId: String?
   public var receipt: PosDisplayStateReceipt?
   public var response: PosDisplayResponse?
+  public var screen: PosDisplayScreen?
   public var tip: PosDisplayStateTip?
   public var updatedAtMs: Double
 
-  public init(cart: PosDisplayCart? = nil, currency: String? = nil, mode: PosDisplayMode, processing: PosDisplayStateProcessing? = nil, promptId: String? = nil, receipt: PosDisplayStateReceipt? = nil, response: PosDisplayResponse? = nil, tip: PosDisplayStateTip? = nil, updatedAtMs: Double) {
+  public init(cart: PosDisplayCart? = nil, currency: String? = nil, mode: PosDisplayMode, processing: PosDisplayStateProcessing? = nil, promptId: String? = nil, receipt: PosDisplayStateReceipt? = nil, response: PosDisplayResponse? = nil, screen: PosDisplayScreen? = nil, tip: PosDisplayStateTip? = nil, updatedAtMs: Double) {
     self.cart = cart
     self.currency = currency
     self.mode = mode
@@ -3781,6 +3795,7 @@ public struct PosDisplayState: Codable, Hashable, Sendable {
     self.promptId = promptId
     self.receipt = receipt
     self.response = response
+    self.screen = screen
     self.tip = tip
     self.updatedAtMs = updatedAtMs
   }

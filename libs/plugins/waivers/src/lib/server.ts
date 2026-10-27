@@ -29,6 +29,7 @@ type Modules = {
   templates: typeof import('./server/template-routes')
   signatures: typeof import('./server/signature-routes')
   public: typeof import('./server/public-routes')
+  display: typeof import('./server/display-routes')
 }
 
 const lazy =
@@ -39,7 +40,9 @@ const lazy =
         ? await import('./server/template-routes')
         : module === 'signatures'
           ? await import('./server/signature-routes')
-          : await import('./server/public-routes')
+          : module === 'display'
+            ? await import('./server/display-routes')
+            : await import('./server/public-routes')
     ) as Modules[K]
     return pick(loaded)(request)
   }
@@ -81,6 +84,10 @@ export function registerWaiversConsoleApi(): void {
     [WAIVERS_API_ROUTES.signAtWindow, lazy('signatures', (routes) => routes.signAtWindowRoute)],
     [WAIVERS_API_ROUTES.paper, lazy('signatures', (routes) => routes.paperRoute)],
     [WAIVERS_API_ROUTES.status, lazy('signatures', (routes) => routes.statusRoute)],
+    // The register's customer display (AGL-4042): a grant for staff, and the
+    // display's signing with it. Console only, where the display's page is.
+    [WAIVERS_API_ROUTES.displayGrant, lazy('display', (routes) => routes.displayGrantRoute)],
+    [WAIVERS_API_ROUTES.signOnDisplay, lazy('display', (routes) => routes.signOnDisplayRoute)],
   ]
   for (const [path, handler] of routes) registerPluginApiRoute(path, { web: (request) => handler(request) })
 }
