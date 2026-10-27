@@ -300,6 +300,37 @@ describe('when the widget says "Only N left" (AGL-4044)', () => {
   })
 })
 
+describe('guests and check-in per guest (AGL-4043)', () => {
+  it('saves how the resource is checked in', async () => {
+    collections['resources'] = [cabin]
+    render(<ReservationsCard hostId="host-1" />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'At check-in' }))
+    fireEvent.click(screen.getByRole('option', { name: 'One check-in per guest' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    expect((setDoc as jest.Mock).mock.calls[0][1].checkInPerGuest).toBe(true)
+  })
+
+  it('books a walk-in with its guest count, and refuses more than the cabin sleeps', async () => {
+    collections['resources'] = [{ ...cabin, capacity: 4 }]
+    render(<ReservationsCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Walk-in' }))
+    fireEvent.change(screen.getByLabelText('Check-in'), { target: { value: iso(TODAY + 1 * DAY) } })
+    fireEvent.change(screen.getByLabelText('Check-out'), { target: { value: iso(TODAY + 2 * DAY) } })
+    fireEvent.change(screen.getByLabelText('Guests'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith('Guests must be a whole number from 1 to 4', expect.anything()),
+    )
+    expect(authorizedFetch).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Guests'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+    await waitFor(() => expect(authorizedFetch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(authorizedFetch.mock.calls[0][2].body)).toMatchObject({ guests: 3 })
+  })
+})
+
 describe('a walk-in on a several-unit resource', () => {
   const walkIn = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Walk-in' }))

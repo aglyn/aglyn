@@ -44,6 +44,13 @@ import {
 import { posDayReportRange } from '../model/commerce-pos-day-report'
 import type { HostOrder } from '../model/commerce-orders'
 import {
+  readStayCheckInMode as readStayCheckInModeValue,
+  stayChecksInPerGuest,
+  STAY_CHECK_IN_MODES,
+  type HostResource,
+  type StayCheckInMode,
+} from '../model/commerce-reservations'
+import {
   authorizePosOps,
   defaultPosOpsDeps,
   posOpsBody,
@@ -63,6 +70,7 @@ import { onPosSaleCompleted, type PosSaleCompletedEvent } from './pos-sale'
  *   POST { hostId, action: 'check_in', checkIns: [{ id, wristband? }], registerId?, cashierAssertion? }
  *   POST { hostId, action: 'undo',     id }
  *   POST { hostId, action: 'wristband', id, wristband }
+ *   POST { hostId, action: 'stay_mode', mode: 'resource' | 'stay' | 'guest', day? }
  *   POST { hostId, action: 'rain_check', id, kind: 'open' | 'date', day? }
  *   POST { hostId, action: 'undo_rain_check', id }
  *   GET  ?hostId=…&day=YYYY-MM-DD[&format=csv]   the day's list
@@ -143,6 +151,15 @@ export async function readCheckInDay(
   const range = posDayReportRange({ from: day, to: day, nowMs: deps.now(), timeZone })
   if ('error' in range) return { ok: false, error: 'Choose the day as YYYY-MM-DD.' }
   return { ok: true, dayKey: range.from, startMs: range.startMs, endMs: range.endMs, timeZone }
+}
+
+/** Where the store's stay check-in control lives (AGL-4043). */
+export const STAY_CHECK_IN_SETTINGS_DOC = 'checkIn'
+
+/** The store's control for how stays are checked in; each resource's own setting when unset. */
+export async function readStayCheckInMode(hostRef: FirebaseFirestore.DocumentReference): Promise<StayCheckInMode> {
+  const snapshot = await hostRef.collection('settings').doc(STAY_CHECK_IN_SETTINGS_DOC).get()
+  return readStayCheckInModeValue(snapshot.exists ? snapshot.get('stays') : undefined)
 }
 
 /** Reads documents by reference, a few hundred at a time. */
@@ -282,11 +299,17 @@ export async function reconcileCheckInDay(
     ...new Set(stays.map((doc) => String(doc.get('resourceId') ?? '')).filter((id) => posOpsCleanId(id))),
   ]
   const resourceNames = new Map<string, string>()
+  const perGuestResources = new Set<string>()
+  // How stays are checked in (AGL-4043): the store's control, else each
+  // resource's own setting. Read only on a day with stays to check in.
+  const stayMode = stays.length ? await readStayCheckInMode(hostRef) : 'resource'
   for (const snapshot of await readAll(
     deps.firestore(),
     resourceIds.map((id) => hostRef.collection('resources').doc(id)),
   )) {
-    if (snapshot.exists) resourceNames.set(snapshot.id, String(snapshot.get('name') ?? ''))
+    if (!snapshot.exists) continue
+    resourceNames.set(snapshot.id, String(snapshot.get('name') ?? ''))
+    if (stayChecksInPerGuest(snapshot.data() as HostResource, stayMode)) perGuestResources.add(snapshot.id)
   }
 
   const due = new Map<string, DueCheckIn>()
@@ -313,11 +336,14 @@ export async function reconcileCheckInDay(
   }
   for (const doc of stays) {
     readStays.add(doc.id)
+    const resourceId = String(doc.get('resourceId') ?? '')
     for (const [id, entry] of dueCheckInsForReservation({
       reservationId: doc.id,
       reservation: doc.data() as Record<string, any>,
-      resourceName: resourceNames.get(String(doc.get('resourceId') ?? '')) ?? null,
+      resourceName: resourceNames.get(resourceId) ?? null,
       dayKey: day.dayKey,
+      // A resource gone since the stay was booked is checked in once per stay.
+      perGuest: perGuestResources.has(resourceId) || (stayMode === 'guest' && !resourceNames.has(resourceId)),
     })) {
       owed.add(id)
       due.set(id, entry)
@@ -644,6 +670,24 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
       return { status: 200, body: { checkIn: outcome.row } }
     }
 
+    case 'stay_mode': {
+      // The store's quick control for stays (AGL-4043): one check-in per
+      // stay, one per guest, or each resource's own setting. The day asked
+      // for is brought in line at once, so the window sees the change.
+      const mode = body['mode']
+      if (!(STAY_CHECK_IN_MODES as readonly unknown[]).includes(mode)) {
+        return { status: 400, body: { error: 'Choose per resource, one per stay or one per guest.' } }
+      }
+      const day = await readCheckInDay(deps, staff.hostRef, staff.org, body['day'])
+      if ('error' in day) return { status: 400, body: { error: day.error } }
+      await staff.hostRef
+        .collection('settings')
+        .doc(STAY_CHECK_IN_SETTINGS_DOC)
+        .set({ stays: mode, updatedAtMs: deps.now(), updatedBy: staff.uid }, { merge: true })
+      await reconcileCheckInDay(deps, staff.hostRef, day, { force: true })
+      return { status: 200, body: { stayCheckIn: mode, dayKey: day.dayKey } }
+    }
+
     case 'rain_check':
     case 'undo_rain_check': {
       const id = cleanCheckInId(body['id'])
@@ -735,7 +779,10 @@ async function handleDayList(deps: PosOpsDeps, req: PluginApiRequest): Promise<O
     .where('dayKey', '==', day.dayKey)
     .limit(CHECK_IN_DAY_CEILING + 1)
     .get()
-  const rows = sortCheckInRows(snapshot.docs.slice(0, CHECK_IN_DAY_CEILING).map(rowOf))
+  const [rows, stayCheckIn] = await Promise.all([
+    Promise.resolve(sortCheckInRows(snapshot.docs.slice(0, CHECK_IN_DAY_CEILING).map(rowOf))),
+    readStayCheckInMode(staff.hostRef),
+  ])
   if (format === 'csv') {
     return { status: 200, csv: checkInDayCsv(rows, day.timeZone), filename: `check-ins-${day.dayKey}.csv` }
   }
@@ -746,6 +793,8 @@ async function handleDayList(deps: PosOpsDeps, req: PluginApiRequest): Promise<O
       timeZone: day.timeZone,
       totals: checkInDayTotals(rows),
       checkIns: rows,
+      // How stays are checked in, for the screen's quick control.
+      stayCheckIn,
       truncated: truncated || snapshot.docs.length > CHECK_IN_DAY_CEILING,
     },
   }

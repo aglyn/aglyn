@@ -250,6 +250,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
     checkIn: string
     checkOut: string
     guestName: string
+    /** How many guests (AGL-4043); '' sends none. */
+    guests: string
     /** One walk-in attempt: a retry of it finds its own stay (AGL-4046). */
     attemptId: string
   } | null>(null)
@@ -359,6 +361,11 @@ export function ReservationsCard(props: ReservationsCardProps) {
     if (!resource) return
     const checkInDayMs = Date.parse(`${walkIn.checkIn}T00:00:00Z`)
     const checkOutDayMs = Date.parse(`${walkIn.checkOut}T00:00:00Z`)
+    const guests = walkIn.guests.trim() ? Number(walkIn.guests) : undefined
+    const guestsProblem = CommerceModel.reservationGuestsProblem(guests, resource)
+    if (guestsProblem) {
+      return void enqueueSnackbar(guestsProblem, { variant: 'warning', persist: false })
+    }
     /*
      * The stay is priced FIRST, and its `problem` stops the walk-in: the quote
      * is the one rule for what can be booked (no nights, under the minimum
@@ -446,6 +453,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
             checkInDayMs,
             checkOutDayMs,
             guestName: walkIn.guestName || undefined,
+            ...(guests !== undefined ? { guests } : {}),
             reservationId: walkIn.attemptId,
           }),
         },
@@ -592,6 +600,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
                 checkIn: '',
                 checkOut: '',
                 guestName: '',
+                guests: '',
                 attemptId: Aglyn.createResourceUid(),
               })
             }
@@ -623,6 +632,9 @@ export function ReservationsCard(props: ReservationsCardProps) {
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {[
                     reservation.guestName ?? reservation.guestEmail ?? 'Guest',
+                    ...(reservation.guests
+                      ? [`${CommerceModel.reservationGuests(reservation)} guest${CommerceModel.reservationGuests(reservation) === 1 ? '' : 's'}`]
+                      : []),
                     `${usd(reservation.paidCents)} / ${usd(reservation.totalCents)} paid`,
                   ].join(' · ')}
                 </Typography>
@@ -801,6 +813,22 @@ export function ReservationsCard(props: ReservationsCardProps) {
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
           ) : null}
+          <TextField
+            select
+            label="At check-in"
+            value={resourceDraft?.checkInPerGuest ? 'guest' : 'stay'}
+            onChange={(event) =>
+              setResourceDraft((prev) =>
+                prev ? { ...prev, checkInPerGuest: event.target.value === 'guest' } : prev,
+              )
+            }
+            helperText="One per guest gives each guest their own check-in and wristband. The check-in screen can set every stay at once."
+            size="small"
+            fullWidth
+          >
+            <MenuItem value="stay">{'One check-in per stay'}</MenuItem>
+            <MenuItem value="guest">{'One check-in per guest'}</MenuItem>
+          </TextField>
           <Stack direction="row" spacing={1}>
             <TextField
               label="Nightly rate ($)"
@@ -973,6 +1001,20 @@ export function ReservationsCard(props: ReservationsCardProps) {
               )
             }
             size="small"
+          />
+          <TextField
+            label="Guests"
+            value={walkIn?.guests ?? ''}
+            onChange={(event) =>
+              setWalkIn((prev) =>
+                prev ? { ...prev, guests: event.target.value.replace(/\D/g, '') } : prev,
+              )
+            }
+            helperText={`Optional, up to ${CommerceModel.resourceGuestCeiling(
+              (resourceDocs ?? []).find((item: any) => item.$id === walkIn?.resourceId),
+            )}. Each guest gets a check-in when the stay is checked in per guest.`}
+            size="small"
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           />
         </DialogContent>
         <DialogActions>

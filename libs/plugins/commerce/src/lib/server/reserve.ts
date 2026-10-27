@@ -51,6 +51,9 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
   const checkOutDayMs = CommerceModel.toDayMs(Number(body.checkOutDayMs ?? 0))
   const guestName = String(body.guestName ?? '').trim().slice(0, 120)
   const guestEmail = String(body.guestEmail ?? '').trim().toLowerCase().slice(0, 120)
+  // How many guests the stay is for (AGL-4043): optional, checked against
+  // what the resource sleeps once it is read.
+  const guestsAsked = body.guests === undefined || body.guests === null || body.guests === '' ? undefined : Number(body.guests)
   // One reservation attempt, minted by the widget (AGL-1697). Node lowercases
   // incoming headers, but read both spellings — the plugin API request type
   // makes no promise about casing.
@@ -206,6 +209,11 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     if (quote.problem) {
       await claim.release()
       return res.status(400).json({ error: quote.problem })
+    }
+    const guestsProblem = CommerceModel.reservationGuestsProblem(guestsAsked, resource)
+    if (guestsProblem) {
+      await claim.release()
+      return res.status(400).json({ error: guestsProblem })
     }
 
     const chargeCents = quote.depositCents || quote.totalCents
@@ -381,6 +389,7 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
         checkOutDayMs,
         guestName: guestName || null,
         guestEmail: guestEmail || null,
+        ...(guestsAsked !== undefined ? { guests: guestsAsked } : {}),
         nights: quote.nights,
         totalCents: quote.totalCents,
         depositCents: quote.depositCents,

@@ -126,3 +126,17 @@ describe('a one-unit resource', () => {
     expect(await screen.findByText('Those dates are unavailable.')).toBeTruthy()
   })
 })
+
+describe('how many guests (AGL-4043)', () => {
+  it('asks up to what one unit sleeps, and holds the button for more', async () => {
+    payload = { resource: { ...resource, capacity: 4 }, unavailable: [] }
+    await pick('2026-07-08', '2026-07-10')
+    expect(await screen.findByText('Up to 4')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'guest@example.com' } })
+    fireEvent.change(screen.getByLabelText('Guests (optional)'), { target: { value: '5' } })
+    expect(screen.getByText('Guests must be a whole number from 1 to 4')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Reserve now' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Guests (optional)'), { target: { value: '3' } })
+    expect((screen.getByRole('button', { name: 'Reserve now' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+})

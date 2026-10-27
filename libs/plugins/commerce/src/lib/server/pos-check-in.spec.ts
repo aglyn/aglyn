@@ -66,6 +66,7 @@ async function dayList(query: Record<string, string> = {}) {
     dayKey: string
     totals: { expected: number; checkedIn: number; rainChecks: number }
     checkIns: CheckInRow[]
+    stayCheckIn: string
   }
 }
 
@@ -585,6 +586,72 @@ describe('rain checks', () => {
     const outcome = await handlePosCheckIn(h.deps, get({ format: 'csv' }))
     if (!('csv' in outcome)) throw new Error('expected a spreadsheet')
     expect(outcome.csv).toContain(',Rain check,,,,,"Rain check from Fri, Jan 15: good on any later day"')
+  })
+})
+
+describe('stays checked in per stay or per guest', () => {
+  beforeEach(() => {
+    h.memory.seed('hosts/shop/resources/cabin', { name: 'Cabin 3', nightlyRateUsd: 90, capacity: 4 })
+    h.memory.seed('hosts/shop/resources/hookup', { name: 'RV hookup', nightlyRateUsd: 60, checkInPerGuest: true })
+    h.memory.seed('hosts/shop/reservations/family', {
+      resourceId: 'hookup',
+      status: 'confirmed',
+      checkInDayMs: DAY_MS,
+      checkOutDayMs: DAY_MS + 86_400_000,
+      guestName: 'Sam Rivera',
+      guests: 3,
+    })
+    h.memory.seed('hosts/shop/reservations/couple', {
+      resourceId: 'cabin',
+      status: 'confirmed',
+      checkInDayMs: DAY_MS,
+      checkOutDayMs: DAY_MS + 86_400_000,
+      guestName: 'Pat Lee',
+      guests: 2,
+    })
+  })
+
+  const stays = async (query: Record<string, string> = {}) =>
+    (await dayList(query)).checkIns.filter((row) => row.source === 'reservation').map((row) => `${row.id} ${row.status}`)
+
+  it('follows each resource: one per guest where it says so, one per stay elsewhere', async () => {
+    expect(await stays()).toEqual([
+      'r_couple_2027-01-15_0 expected',
+      'r_family_2027-01-15_0 expected',
+      'r_family_2027-01-15_1 expected',
+      'r_family_2027-01-15_2 expected',
+    ])
+    expect((await dayList()).stayCheckIn).toBe('resource')
+  })
+
+  it('lets the store set every stay at once, keeping anyone already checked in', async () => {
+    await dayList()
+    await post({ action: 'check_in', checkIns: [{ id: 'r_family_2027-01-15_1' }] })
+    const set = await post({ action: 'stay_mode', mode: 'stay' })
+    expect(set).toMatchObject({ status: 200, body: { stayCheckIn: 'stay', dayKey: '2027-01-15' } })
+    expect(h.memory.read('hosts/shop/settings/checkIn')).toMatchObject({ stays: 'stay', updatedBy: 'cashier' })
+    // Seen at once: the waiting guests go, the one checked in stays.
+    expect(await stays()).toEqual([
+      'r_couple_2027-01-15_0 expected',
+      'r_family_2027-01-15_0 expected',
+      'r_family_2027-01-15_1 checked_in',
+    ])
+    await post({ action: 'stay_mode', mode: 'guest' })
+    expect(await stays()).toEqual([
+      'r_couple_2027-01-15_0 expected',
+      'r_couple_2027-01-15_1 expected',
+      'r_family_2027-01-15_0 expected',
+      'r_family_2027-01-15_1 checked_in',
+      'r_family_2027-01-15_2 expected',
+    ])
+    expect(h.memory.read('hosts/shop/checkIns/r_couple_2027-01-15_0')).toMatchObject({ unitCount: 2 })
+    expect((await dayList()).stayCheckIn).toBe('guest')
+  })
+
+  it('is gated as checking in is, and takes only its three choices', async () => {
+    expect((await post({ action: 'stay_mode', mode: 'guest' }, 'viewer')).status).toBe(403)
+    expect((await post({ action: 'stay_mode', mode: 'everyone' })).status).toBe(400)
+    expect(h.memory.read('hosts/shop/settings/checkIn')).toBeUndefined()
   })
 })
 

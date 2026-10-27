@@ -31,8 +31,14 @@ import {
   fewestUnitsLeft,
   isRangeAvailable,
   MAX_RESOURCE_UNITS,
+  MAX_RESERVATION_GUESTS,
   PENDING_RESERVATION_HOLD_MS,
+  readStayCheckInMode,
+  reservationGuests,
+  reservationGuestsProblem,
   resourceFewLeftAt,
+  resourceGuestCeiling,
+  stayChecksInPerGuest,
   resourceUnits,
   unitsLeftByNight,
   unitsTakenByNight,
@@ -300,6 +306,34 @@ describe('the store sets when "Only N left" shows (AGL-4044)', () => {
     expect(
       fewestUnitsLeft([{ dayMs: night(1), unitsLeft: 1 }], night(0), night(3), 0),
     ).toBeNull()
+  })
+})
+
+describe('guests on a stay, and checking them in (AGL-4043)', () => {
+  it('takes 1 up to what one unit sleeps, else up to 50, and reads none as 1', () => {
+    expect(resourceGuestCeiling({ capacity: 6 })).toBe(6)
+    expect(resourceGuestCeiling({})).toBe(MAX_RESERVATION_GUESTS)
+    expect(resourceGuestCeiling({ capacity: 500 })).toBe(50)
+    expect(reservationGuestsProblem(undefined, { capacity: 6 })).toBeNull()
+    expect(reservationGuestsProblem('', { capacity: 6 })).toBeNull()
+    expect(reservationGuestsProblem(6, { capacity: 6 })).toBeNull()
+    expect(reservationGuestsProblem(7, { capacity: 6 })).toMatch(/1 to 6/)
+    expect(reservationGuestsProblem(0, { capacity: 6 })).toMatch(/1 to 6/)
+    expect(reservationGuestsProblem(2.5, {})).toMatch(/1 to 50/)
+    expect(reservationGuestsProblem(2, { capacity: 1 })).toBe('This stay sleeps 1 guest')
+    expect(reservationGuests({ guests: 4 })).toBe(4)
+    expect(reservationGuests({})).toBe(1)
+    expect(reservationGuests({ guests: -3 })).toBe(1)
+  })
+
+  it('checks in per guest where the resource says so, unless the store sets every stay', () => {
+    expect(readStayCheckInMode(undefined)).toBe('resource')
+    expect(readStayCheckInMode('nonsense')).toBe('resource')
+    expect(readStayCheckInMode('guest')).toBe('guest')
+    expect(stayChecksInPerGuest({ checkInPerGuest: true }, 'resource')).toBe(true)
+    expect(stayChecksInPerGuest({}, 'resource')).toBe(false)
+    expect(stayChecksInPerGuest({ checkInPerGuest: true }, 'stay')).toBe(false)
+    expect(stayChecksInPerGuest({}, 'guest')).toBe(true)
   })
 })
 

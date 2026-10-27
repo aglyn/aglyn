@@ -373,6 +373,16 @@ describe('what is checked before the write', () => {
     const res = await call('editor', walkIn({ checkOutDayMs: IN }))
     expect(res).toMatchObject({ statusCode: 400, body: { error: 'Choose at least one night' } })
   })
+
+  it('books the guest count, up to what the resource sleeps (AGL-4043)', async () => {
+    writeDoc('hosts/h1/resources/cabin', { name: 'Cabin', nightlyRateUsd: 120, capacity: 4 }, false)
+    const tooMany = await call('editor', walkIn({ guests: 5 }))
+    expect(tooMany).toMatchObject({ statusCode: 400, body: { error: 'Guests must be a whole number from 1 to 4' } })
+    expect(stays()).toEqual([])
+    const res = await call('editor', walkIn({ guests: 4 }))
+    expect(res.statusCode).toBe(200)
+    expect(stays()[0]).toMatchObject({ guests: 4 })
+  })
 })
 
 describe('a one-unit resource, as before', () => {
