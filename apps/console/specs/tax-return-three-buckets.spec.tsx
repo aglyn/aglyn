@@ -41,7 +41,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { TaxReturnPayload } from '../utils/tx-return-webfile'
 import { TAX_RETURN_SOURCE_SECTIONS } from './fixtures/tax-return-sources.fixture'
 
@@ -281,6 +281,39 @@ describe('facilitated sales by buyer state reach the screen (AGL-1956)', () => {
     // by-state table.
     expect(text).toContain('$3000.00')
     expect(text).toContain('US-TX')
+  })
+
+  it('sorts a source’s table by any column, and back to the source’s own order', async () => {
+    await rendered()
+    // The table drawn under that heading: the first one after it.
+    let next = screen.getByText('Facilitated sales by buyer state').nextElementSibling
+    while (next && !(next.tagName === 'TABLE' || next.querySelector('table'))) next = next.nextElementSibling
+    const table = (next?.tagName === 'TABLE' ? next : next?.querySelector('table')) as HTMLElement
+    const states = () =>
+      within(table)
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.querySelector('td')?.textContent?.match(/^[A-Z]{2}-[A-Z]{2}/)?.[0])
+    // The source's order: the filing state first, then by sales.
+    expect(states()).toEqual(['US-TX', 'US-CA', 'US-OK'])
+    fireEvent.click(within(table).getByText('Buyer state'))
+    expect(states()).toEqual(['US-CA', 'US-OK', 'US-TX'])
+    fireEvent.click(within(table).getByText('Buyer state'))
+    expect(states()).toEqual(['US-TX', 'US-OK', 'US-CA'])
+    // A third press hands the table back to the source's own order.
+    fireEvent.click(within(table).getByText('Buyer state'))
+    expect(states()).toEqual(['US-TX', 'US-CA', 'US-OK'])
+    // A money column sorts by the figure: $1943.00, $1966.00, $3000.00.
+    fireEvent.click(within(table).getByText('Total sales'))
+    expect(states()).toEqual(['US-OK', 'US-CA', 'US-TX'])
+  })
+
+  it('draws the platform’s own card reader sales as their own card, with what to add (AGL-4038)', async () => {
+    const text = await rendered()
+    expect(text).toContain('Card reader hardware — Aglyn’s own sales')
+    // $425.00 is only in the hardware section.
+    expect(text).toContain('$425.00')
+    expect(text).toMatch(/none of this is in the Webfile figures above/i)
   })
 
   it('relabels the platformRevenue table so it stops claiming to be the nexus list', async () => {

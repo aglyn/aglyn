@@ -77,6 +77,7 @@ import {
   type StorefrontTaxReturnRowInput,
   type StorefrontTaxSummary,
 } from '../model/storefront-tax-summary'
+import { readPosHardwareTaxReturn } from './pos-hardware-tax-return-source'
 
 /** One row of the storefront listing, as the working papers carry it. */
 export interface StorefrontTaxRow {
@@ -580,8 +581,25 @@ export function storefrontTaxReturnAnswer(
 }
 
 /**
- * The storefront's source, registered on the console's API surface: the
- * staff return awaits that surface before it asks.
+ * Commerce's source, registered on the console's API surface: the staff
+ * return awaits that surface before it asks. It answers two sections, one per
+ * kind of sale commerce records apart: the storefront's facilitated sales
+ * (below) and the POS hardware shop's, which are the operator's own
+ * (`pos-hardware-tax-return-source.ts`, AGL-4038). Either read failing
+ * refuses both, so a half-read commerce never reads as a complete one.
+ */
+export const commerceTaxReturnSource: TaxReturnSource = {
+  async read(request) {
+    const [storefront, hardware] = await Promise.all([
+      readStorefrontTaxReturn(request),
+      readPosHardwareTaxReturn(request),
+    ])
+    return [storefront, hardware]
+  },
+}
+
+/**
+ * The storefront's section.
  *
  * Two queries, and the second is the honesty check: the period query ranges
  * on `paidAt`, and a Firestore range query CANNOT match a document whose
@@ -589,30 +607,30 @@ export function storefrontTaxReturnAnswer(
  * every period. The equality probe counts those rows, over all of them, and
  * the platform blocks the return on any.
  */
-export const commerceTaxReturnSource: TaxReturnSource = {
-  async read(request) {
-    const collection = firebaseAdmin.app().firestore().collection('storefrontTaxCollected')
-    const [inPeriod, undated] = await Promise.all([
-      collection
-        .where('paidAt', '>=', request.start)
-        .where('paidAt', '<', request.end)
-        .limit(request.rowCap + 1)
-        .get(),
-      collection.where('paidAt', '==', null).count().get(),
-    ])
-    const rows: StorefrontTaxReturnRowInput[] = inPeriod.docs
-      .slice(0, request.rowCap)
-      .map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
-      }))
-    return storefrontTaxReturnAnswer(
-      {
-        rows,
-        truncated: inPeriod.size > request.rowCap,
-        undatedRows: Number(undated.data().count ?? 0),
-      },
-      request,
-    )
-  },
+export async function readStorefrontTaxReturn(
+  request: TaxReturnSourceRequest,
+): Promise<TaxReturnSourceAnswer> {
+  const collection = firebaseAdmin.app().firestore().collection('storefrontTaxCollected')
+  const [inPeriod, undated] = await Promise.all([
+    collection
+      .where('paidAt', '>=', request.start)
+      .where('paidAt', '<', request.end)
+      .limit(request.rowCap + 1)
+      .get(),
+    collection.where('paidAt', '==', null).count().get(),
+  ])
+  const rows: StorefrontTaxReturnRowInput[] = inPeriod.docs
+    .slice(0, request.rowCap)
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
+    }))
+  return storefrontTaxReturnAnswer(
+    {
+      rows,
+      truncated: inPeriod.size > request.rowCap,
+      undatedRows: Number(undated.data().count ?? 0),
+    },
+    request,
+  )
 }

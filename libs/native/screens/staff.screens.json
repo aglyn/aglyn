@@ -9356,6 +9356,13 @@
             "description": "Sent when a card reader order from the POS hardware shop is delivered, with the way to set the reader up at a register.",
             "deliveredBy": "resend",
             "editable": true
+          },
+          {
+            "key": "pos-hardware-order-canceled",
+            "name": "Card reader order canceled and refunded",
+            "description": "Sent when a card reader order from the POS hardware shop is canceled and refunded in full because the workspace that bought it was deleted, or the account that placed it was closed, before it shipped.",
+            "deliveredBy": "resend",
+            "editable": true
           }
         ],
         "tokens": {
@@ -15924,6 +15931,53 @@
               "name": "order.ordersUrl",
               "description": "The Hardware card, where the order and its status are",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-hardware"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-canceled": [
+            {
+              "name": "org.name",
+              "description": "The workspace that placed the order",
+              "sample": "Test Org"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the order was placed from",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.refunded",
+              "description": "What was refunded to the card, shipping and tax included",
+              "sample": "$123.45"
+            },
+            {
+              "name": "order.cancelReason",
+              "description": "Why the order was canceled, as the end of a sentence",
+              "sample": "the Test Org workspace was deleted"
             },
             {
               "name": "brand.productName",

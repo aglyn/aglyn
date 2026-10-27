@@ -33,11 +33,15 @@ import {
   POS_HARDWARE_MAX_UNITS,
   POS_HARDWARE_ORDER_STATUSES,
   POS_HARDWARE_SKUS,
+  POS_HARDWARE_SALE_RETENTION_YEARS,
   posHardwareOffers,
   posHardwareRefundable,
+  posHardwareSaleExpiry,
+  posHardwareSaleRecord,
   posHardwareUnitCents,
   pricePosHardwareCart,
   type PosHardwareConfig,
+  type PosHardwareOrder,
 } from './pos-hardware'
 
 const ENV = {
@@ -297,5 +301,54 @@ describe('an order moves forward, and is refunded only before it ships', () => {
 
   it('refunds only a paid or ordered order', () => {
     expect(POS_HARDWARE_ORDER_STATUSES.filter(posHardwareRefundable)).toEqual(['paid', 'ordered'])
+  })
+})
+
+describe('a sale record is kept seven years from the sale, then deleted (AGL-4038 retention)', () => {
+  const at = (iso: string) => Date.parse(iso)
+
+  it('expires seven calendar years after the sale was paid, to the instant', () => {
+    expect(POS_HARDWARE_SALE_RETENTION_YEARS).toBe(7)
+    expect(posHardwareSaleExpiry({ paidAtMs: at('2026-11-03T15:04:05.678Z'), createdAtMs: 1 })?.toISOString()).toBe(
+      '2033-11-03T15:04:05.678Z',
+    )
+  })
+
+  it('is not expired a moment before the seventh anniversary, and is at it', () => {
+    const expires = posHardwareSaleExpiry({ paidAtMs: at('2026-12-31T23:59:59.999Z'), createdAtMs: 1 }) as Date
+    // The TTL deletes once `expiresAt` is past: inside the period, it is not.
+    expect(expires.getTime() > at('2033-12-31T23:59:59.998Z')).toBe(true)
+    expect(expires.getTime() <= at('2033-12-31T23:59:59.999Z')).toBe(true)
+  })
+
+  it('keeps a 29 February sale a day longer rather than a day shorter', () => {
+    expect(posHardwareSaleExpiry({ paidAtMs: at('2028-02-29T12:00:00.000Z'), createdAtMs: 1 })?.toISOString()).toBe(
+      '2035-03-01T12:00:00.000Z',
+    )
+  })
+
+  it('falls back to when the order was made, and keeps a record with no date at all', () => {
+    expect(posHardwareSaleExpiry({ paidAtMs: undefined as never, createdAtMs: at('2026-10-27T00:00:00Z') })?.toISOString()).toBe(
+      '2033-10-27T00:00:00.000Z',
+    )
+    // Never reaped at the epoch: no date, no expiry, and the TTL leaves it.
+    expect(posHardwareSaleExpiry({ paidAtMs: undefined as never, createdAtMs: 0 })).toBeNull()
+  })
+
+  it('is stamped on the record every write makes, from the order', () => {
+    const order = {
+      orgId: 'org-1',
+      lines: [],
+      subtotalCents: 0,
+      shipping: { method: 'standard', cents: 0, address: null },
+      taxCents: 0,
+      totalCents: 0,
+      status: 'refunded',
+      createdAtMs: at('2026-11-03T00:00:00Z'),
+      paidAtMs: at('2026-11-03T00:00:01Z'),
+      refundedAtMs: at('2027-01-05T00:00:00Z'),
+    } as unknown as PosHardwareOrder
+    // The sale, not the refund, starts the clock.
+    expect(posHardwareSaleRecord('hw_1', order).expiresAt?.toISOString()).toBe('2033-11-03T00:00:01.000Z')
   })
 })

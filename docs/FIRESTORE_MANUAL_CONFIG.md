@@ -116,6 +116,7 @@ running the deploy, which is the one action that can destroy them.
 | `adConversionEvents` | `expiresAt` | A purchase or lead owed to one Ad conversions connection (AGL-3694), top-level: hashed user data, the IP address and user agent while it is pending, a tombstone without them once sent. **14 days** (`EVENT_TTL_MS` in the same file), stamped when the event is owed. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 | `stockPhotoSearches` | `expiresAt` | What a stock photo library answered one search (AGL-3660), top-level, keyed by a SHA-256 of the provider and the request's canonical parameters (never the API key): the hits — the library's photo ids, sizes, page and image addresses, contributor names and tags. **No workspace's data**: the search words are a site's kind and a section's subject. **24 hours** (`STOCK_PHOTO_SEARCH_CACHE_MS` in `libs/plugins/stock-photos/src/lib/constants.ts`), which Pixabay's API terms ask of every request; `createFirestoreSearchCache` stamps it and treats an entry past it as absent on read. Its `photos` array is exempt from single-field indexing. |
 | `reviewTokens` | `expiresAt` | The single-use review links from the review-request email (AGL-3736), `hosts/{hostId}/reviewTokens/{sha256}`: the order id, the product id and the **buyer's email**, keyed by the SHA-256 of the token (the token itself is never stored). **60 days** (`REVIEW_TOKEN_TTL_MS` in `libs/plugins/commerce/src/lib/model/product-reviews.ts`), stamped by `stageReviewTokens` in `libs/plugins/commerce/src/lib/server/review-tokens.ts`; expiry is also enforced on redemption, so a missing policy costs storage, not a working link. Closed to every client in the rules. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `posHardwareSales` | `expiresAt` | The platform's retained record of each POS hardware sale (AGL-4038), top-level and keyed by the order id: the lines, amounts, tax and Stripe's tax breakdown, Stripe ids, status dates and the ship-to country, state and postal code — never the buyer. Kept past a workspace's erasure as a tax record, and **seven years from the sale** (`POS_HARDWARE_SALE_RETENTION_YEARS` in `libs/plugins/commerce/src/lib/model/pos-hardware.ts`), longer than the four years Texas requires. Every write rebuilds the record through `posHardwareSaleRecord`, which stamps `posHardwareSaleExpiry(order)`; a record with no sale date gets no stamp and is kept. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -219,6 +220,10 @@ gcloud firestore fields ttls update expiresAt \
 # AGL-3736 — OWED, run after the index deploy that declares it:
 gcloud firestore fields ttls update expiresAt \
   --collection-group=reviewTokens --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-4038 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=posHardwareSales --enable-ttl \
   --project=aglyn-main --database='(default)'
 # verify:
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'

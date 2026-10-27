@@ -172,6 +172,39 @@ describe('the tax return sources', () => {
     expect(sections[0]).toMatchObject({ title: 'second' })
   })
 
+  it('answers a plugin that records two kinds of sale as two sections, in its order', async () => {
+    registerTaxReturnSource(
+      { read: async () => [answer({ id: 'sales' }), answer({ id: 'ownSales', name: 'Own sale' })] },
+      { pluginId: 'shop' },
+    )
+    registerTaxReturnSource({ read: async () => answer({ id: 'resale' }) }, { pluginId: 'resale' })
+    const sections = await readTaxReturnSources(REQUEST, ['shop', 'resale'])
+    expect(sections.map((section) => [section.pluginId, section.id, section.outcome])).toEqual([
+      ['shop', 'sales', 'answered'],
+      ['shop', 'ownSales', 'answered'],
+      ['resale', 'resale', 'answered'],
+    ])
+  })
+
+  it('refuses the whole plugin when one of its sections is malformed, never half of it', async () => {
+    registerTaxReturnSource(
+      { read: async () => [answer(), { ...answer({ id: 'ownSales' }), rows: undefined } as never] },
+      { pluginId: 'shop' },
+    )
+    const sections = await readTaxReturnSources(REQUEST, ['shop'])
+    expect(sections).toEqual([
+      { outcome: 'refused', pluginId: 'shop', id: 'shop', reason: expect.stringContaining('no rows') },
+    ])
+  })
+
+  it('refuses a plugin that answered an empty list, which is not "nothing sold"', async () => {
+    registerTaxReturnSource({ read: async () => [] }, { pluginId: 'shop' })
+    const sections = await readTaxReturnSources(REQUEST, ['shop'])
+    expect(sections).toEqual([
+      { outcome: 'refused', pluginId: 'shop', id: 'shop', reason: expect.stringContaining('no section') },
+    ])
+  })
+
   it('refuses to register something that cannot read', () => {
     expect(() => registerTaxReturnSource({} as never, { pluginId: 'shop' })).toThrow(/read/)
   })

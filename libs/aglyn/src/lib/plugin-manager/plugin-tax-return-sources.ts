@@ -37,6 +37,14 @@
  * figures, its tables and figures for the screen, its blocks for the export,
  * and its own summary and rows carried whole for the audit.
  *
+ * A plugin that records two KINDS of sale apart — sales it facilitated for
+ * merchants and sales the operator made itself, say — answers one section
+ * per kind, as a list. Each is its own card, with its own truncation, its own
+ * undated rows and its own findings, because one card over two collections
+ * could only say "these rows exceeded the cap" without saying which. The
+ * list is all or nothing: an empty list or one malformed section refuses the
+ * plugin, so a half-answered plugin never reads as a complete one.
+ *
  * ## ⛔ AN UNREAD SOURCE REFUSES, IT NEVER READS AS ZERO
  *
  * Decided before anything else, because this is a legal filing. A source
@@ -240,13 +248,16 @@ export type TaxReturnSection =
 
 export interface TaxReturnSource {
   /**
-   * This plugin's sales for one period. May throw: the return refuses the
-   * source rather than read a throw as nothing sold.
+   * This plugin's sales for one period: one section, or one per kind of sale
+   * it records apart (see the module note). May throw: the return refuses
+   * the source rather than read a throw as nothing sold.
    */
-  read(request: TaxReturnSourceRequest): Promise<TaxReturnSourceAnswer>
+  read(
+    request: TaxReturnSourceRequest,
+  ): Promise<TaxReturnSourceAnswer | readonly TaxReturnSourceAnswer[]>
 }
 
-/** Every source answers; one per plugin. */
+/** Every source answers; one per plugin, with one section or several. */
 export const TAX_RETURN_SOURCES = definePluginServiceContract<TaxReturnSource>(
   'core.tax-return-sources',
   { multiple: true },
@@ -329,46 +340,63 @@ export async function readTaxReturnSources(
       .filter((pluginId) => !declared.includes(pluginId)),
   ].filter((pluginId, index, all) => all.indexOf(pluginId) === index)
 
-  const answers = await Promise.all(
-    order.map(async (pluginId): Promise<TaxReturnSection> => {
+  const perPlugin = await Promise.all(
+    order.map(async (pluginId): Promise<TaxReturnSection[]> => {
       const source = registered.find((entry) => entry.pluginId === pluginId)?.impl
       if (!source) {
         console.error(
           `[tax-return] "${pluginId}" declares a tax return source and none is ` +
             'registered in this process; its sales cannot be read.',
         )
-        return {
-          outcome: 'refused',
-          pluginId,
-          id: pluginId,
-          reason:
-            `The “${pluginId}” plugin sells through the platform and registered ` +
-            'nothing to read its sales with.',
-        }
-      }
-      try {
-        const answer = await source.read(request)
-        const problem = malformed(answer)
-        if (problem) {
-          return {
+        return [
+          {
             outcome: 'refused',
             pluginId,
             id: pluginId,
-            reason: `The “${pluginId}” plugin answered ${problem}.`,
-          }
+            reason:
+              `The “${pluginId}” plugin sells through the platform and registered ` +
+              'nothing to read its sales with.',
+          },
+        ]
+      }
+      try {
+        const answered = await source.read(request)
+        const sections: readonly TaxReturnSourceAnswer[] = Array.isArray(answered)
+          ? answered
+          : [answered as TaxReturnSourceAnswer]
+        // All or nothing: a plugin that answered no section, or one section
+        // the return cannot print, is refused whole, so a half-answered plugin
+        // never reads as a complete one.
+        const problem = sections.length
+          ? sections.map(malformed).find((found) => found !== null)
+          : 'no section'
+        if (problem) {
+          return [
+            {
+              outcome: 'refused',
+              pluginId,
+              id: pluginId,
+              reason: `The “${pluginId}” plugin answered ${problem}.`,
+            },
+          ]
         }
-        return { ...answer, outcome: 'answered', pluginId }
+        return sections.map(
+          (section): TaxReturnSection => ({ ...section, outcome: 'answered', pluginId }),
+        )
       } catch (error) {
         console.error(`[tax-return] "${pluginId}" failed to read its sales`, error)
-        return {
-          outcome: 'refused',
-          pluginId,
-          id: pluginId,
-          reason: `The “${pluginId}” plugin could not read its sales for this period.`,
-        }
+        return [
+          {
+            outcome: 'refused',
+            pluginId,
+            id: pluginId,
+            reason: `The “${pluginId}” plugin could not read its sales for this period.`,
+          },
+        ]
       }
     }),
   )
+  const answers = perPlugin.flat()
 
   // Two sources under one id would print two cards and one set of findings
   // under the same key, and a finding that names the wrong source's rows is

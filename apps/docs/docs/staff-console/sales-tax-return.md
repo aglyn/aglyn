@@ -289,8 +289,58 @@ money and are never summed.
 
 Each plugin that sells through the platform — the storefront, the marketplace — adds
 its own card with what it sold in the period, attributed the way that plugin measures
-it. A plugin card that says its sales **could not be read** means none of them are in
+it. A plugin that records two kinds of sale apart adds a card for each: commerce adds
+one for merchants' storefront sales and one for the card readers Aglyn sells itself.
+A plugin card that says its sales **could not be read** means none of them are in
 any figure on the page: do not file until it reads.
+
+Every table on a plugin's card sorts by any of its columns: select a column's
+header once for ascending, again for descending, and a third time to return to the
+card's own order, which leads with the row that matters most.
+
+## Card reader hardware — Aglyn's own sales {#hardware-sales}
+
+Aglyn is the seller of record for every card reader a workspace buys from the
+[POS hardware shop](../commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn),
+so these are **Aglyn's own sales**, not facilitated ones. They are recorded apart
+from Aglyn's invoices, so they are **not** in Items 1–3, and they are not in the
+storefront card either: nothing on the page counts them twice. The **Card reader
+hardware** card states them on their own, and the lines it adds beneath the Form
+01-114 figures say what to add:
+
+| Line | What to do with it |
+| --- | --- |
+| **Item 1 (add)** — Texas card reader hardware sales | Add to Item 1. The items and shipping on orders shipped to Texas, excluding the tax. |
+| **Item 2 (add)** — Texas card reader hardware taxable sales | Add to Item 2. Stripe's taxable amount on each order, counted once per order even when Stripe states it for the state, county and city separately. |
+| Texas card reader hardware tax collected | Add to the tax collected line before reconciling. |
+| Texas card reader hardware refunds made in this period | Stated, never netted, like the invoices' refunds: applying them is the preparer's decision. |
+
+While any hardware sold into Texas in the period, the review finding **Texas card
+reader hardware sales are not in Items 1–3** says so, so the figures above are never
+read as the whole of Aglyn's sales.
+
+How a period is counted:
+
+- **A sale belongs to the period it was paid in**, from the first instant of the
+  period up to, not including, the first instant of the next. An order canceled later
+  is still a sale of the period it was paid in.
+- **A refund belongs to the period it was made in**, whenever the order was paid.
+  An order paid and refunded in the same period shows as both a sale and a refund.
+  Hardware refunds are whole, so the tax refunded is the order's own tax.
+- **An order canceled when its workspace was deleted or its buyer's account closed**
+  is refunded in full, so it counts the same way: a sale when paid, a refund when
+  canceled.
+- **Test-mode orders are not sales.** They are in no figure, and the card says how
+  many were left out.
+- **The jurisdiction is where the order shipped**, the state shown on the card's
+  **Ship-to state** table. That table also lists every other state, which is the
+  figure an economic-nexus threshold there is measured against.
+
+The card's other review findings: card readers sold into Texas **without tax** (sold
+while Stripe Tax was off for the shop; the tax may still be owed), orders taxed **with
+no stated base**, orders with **no ship-to region**, and orders marked **canceled with
+no refund recorded**. The working papers export carries every order of the period,
+with its paid date, status, ship-to state, amounts and refund.
 
 ## Facilitated sales by buyer state
 

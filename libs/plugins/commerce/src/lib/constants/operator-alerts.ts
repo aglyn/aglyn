@@ -159,6 +159,53 @@ export const COMMERCE_POS_OFFLINE_CARD_WRONG_ACCOUNT: OperatorAlertDefinition = 
   defaultEnabled: true,
 }
 
+/**
+ * A hardware order already placed with Stripe was canceled and refunded
+ * because its workspace was deleted or the account that placed it closed
+ * (AGL-4038). The merchant has their money back; the platform has paid Stripe
+ * for hardware that is still on its way unless someone cancels it there.
+ */
+export const COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING: OperatorAlertDefinition = {
+  type: 'commerce.posHardwareCanceledAfterOrdering',
+  pluginId: BUNDLE_ID,
+  label: 'Hardware order canceled after it was placed with Stripe',
+  description:
+    'A workspace was deleted, or the account that placed a hardware order was closed, after staff had placed the order with Stripe. The merchant was refunded in full. Cancel the order in the Stripe Dashboard’s Terminal hardware shop before it ships, or arrange its return with Stripe.',
+  tier: 'must',
+  category: 'payments',
+  title: 'Cancel hardware order {{orderNumber}} with Stripe',
+  // `{{stripeOrder}}` is ` (Stripe order …)` or blank, so the sentence reads
+  // either way.
+  body:
+    'Hardware order {{orderNumber}} ({{amount}}: {{items}}) was canceled and refunded in full to the merchant because {{reason}}, but it had already been placed with Stripe{{stripeOrder}}. Cancel it in the Stripe Dashboard’s Terminal hardware shop before it ships; if it has shipped, arrange its return with Stripe.',
+  link: '/admin/hardware-orders',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
+/**
+ * Stripe refused the refund of an unshipped hardware order while its
+ * workspace or its buyer's account was closing (AGL-4038). The closure went
+ * ahead, as decided, so the order may be gone from the staff page with the
+ * merchant's money still held.
+ */
+export const COMMERCE_POS_HARDWARE_REFUND_FAILED: OperatorAlertDefinition = {
+  type: 'commerce.posHardwareRefundFailed',
+  pluginId: BUNDLE_ID,
+  label: 'Hardware refund failed when a workspace or account closed',
+  description:
+    'A hardware order had not shipped when its workspace was deleted or the account that placed it was closed, and Stripe refused its refund. The closure went ahead without it. Refund the payment in full in the Stripe Dashboard.',
+  tier: 'must',
+  category: 'payments',
+  title: 'Refund hardware order {{orderNumber}} by hand: {{amount}}',
+  body:
+    'Hardware order {{orderNumber}} ({{amount}}) had not shipped when {{reason}}, and Stripe refused its refund: {{error}}. The closure went ahead. Refund payment {{paymentIntentId}} in full in the Stripe Dashboard{{orderedNote}}.',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
@@ -167,4 +214,6 @@ export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_POS_HARDWARE_ORDER,
   COMMERCE_POS_OFFLINE_CARD_UNSYNCED,
   COMMERCE_POS_OFFLINE_CARD_WRONG_ACCOUNT,
+  COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING,
+  COMMERCE_POS_HARDWARE_REFUND_FAILED,
 ]

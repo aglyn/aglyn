@@ -526,7 +526,8 @@ for the how-to.
   Point of sale**, including the Stripe Reader S710 with its own 4G connection.
   Stripe ships them straight to you, the card shows each order's status and
   tracking, and you're emailed as it ships and arrives, with the steps to add the
-  reader to a register.
+  reader to a register. If the workspace is deleted, or the account that placed
+  an order is closed, before the order ships, it is canceled and refunded in full.
 -->
 
 ## October 2026 — send a DoorDash courier for your local deliveries

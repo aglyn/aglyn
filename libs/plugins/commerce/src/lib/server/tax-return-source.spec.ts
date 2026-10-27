@@ -73,6 +73,12 @@ function mockQuery(
         (data) => {
           const held = data[field]
           if (op === '==') return held === value
+          // A number ranges against a number (the hardware records' `…AtMs`).
+          if (typeof held === 'number' && typeof value === 'number') {
+            if (op === '>=') return held >= value
+            if (op === '<') return held < value
+            return false
+          }
           if (!(held instanceof Date)) return false
           if (op === '>=') return held >= (value as Date)
           if (op === '<') return held < (value as Date)
@@ -107,6 +113,7 @@ import {
 } from '../model/storefront-tax-summary'
 import {
   commerceTaxReturnSource,
+  readStorefrontTaxReturn,
   storefrontFacilitatedJurisdictionRows,
   storefrontFilingLines,
   storefrontPlatformLiableCents,
@@ -681,7 +688,7 @@ describe('the storefront’s tax return source', () => {
       ...AGLYN_LIABLE_ROW,
       paidAt: new Date('2026-11-01T00:00:00Z'),
     })
-    const answer = await commerceTaxReturnSource.read(REQUEST)
+    const answer = await readStorefrontTaxReturn(REQUEST)
     const summary = answer.summary as ReturnType<typeof storefrontTaxSummary>
     expect(summary.aglynLiable.taxCollectedCents).toBe(825)
     expect(summary.aglynLiable.taxableSalesCents).toBe(10000)
@@ -695,10 +702,32 @@ describe('the storefront’s tax return source', () => {
     mockDocs.set('storefrontTaxCollected/a', { ...AGLYN_LIABLE_ROW })
     mockDocs.set('storefrontTaxCollected/b', { ...AGLYN_LIABLE_ROW })
     mockDocs.set('storefrontTaxCollected/undated', { ...AGLYN_LIABLE_ROW, paidAt: null })
-    const answer = await commerceTaxReturnSource.read({ ...REQUEST, rowCap: 1 })
+    const answer = await readStorefrontTaxReturn({ ...REQUEST, rowCap: 1 })
     // Both are the platform's to BLOCK on; the source's job is to say so.
     expect(answer.truncated).toBe(true)
     expect(answer.rows).toHaveLength(1)
     expect(answer.undatedRows).toBe(1)
+  })
+
+  it('answers commerce as two sections, the storefront and the hardware shop, each from its own records (AGL-4038)', async () => {
+    mockDocs.set('storefrontTaxCollected/cs_q3', { ...AGLYN_LIABLE_ROW, id: undefined })
+    mockDocs.set('posHardwareSales/hw_q3', {
+      orderId: 'hw_q3',
+      totalCents: 24_825,
+      taxCents: 1_705,
+      shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+      automaticTax: true,
+      taxLines: [{ amountCents: 1_705, taxableAmountCents: 23_120 }],
+      status: 'shipped',
+      livemode: true,
+      paidAtMs: Date.UTC(2026, 7, 20),
+    })
+    const answered = await commerceTaxReturnSource.read(REQUEST)
+    const sections = Array.isArray(answered) ? answered : [answered]
+    expect(sections.map((section) => section.id)).toEqual(['storefront', 'posHardware'])
+    // The storefront never reads a hardware record, and the other way round.
+    expect(sections[0].rows).toHaveLength(1)
+    expect(sections[1].rows).toHaveLength(1)
+    expect((sections[1].summary as { totalSalesCents: number }).totalSalesCents).toBe(23_120)
   })
 })

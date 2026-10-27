@@ -95,6 +95,7 @@ that blurs the two is worse than one that admits the gap. Commands in
 | `imports` (under an email list) | `expiresAt` | **15 days** — 7 to apply, the 7-day undo window, and a day | An email list import's ledger: up to 25 sample shared-mailbox addresses **verbatim**, the file's column names that read as a bought list, the consent sample's counts, and the `uid` of whoever stated permission. Read only while its job can still write; each member's consent record keeps who attested, so nothing needs the ledger afterwards. | `list-members.server.ts` stamps `listImportLedgerExpiry(Date.now())` on every dry run (AGL-3549) |
 | `funnelJourneys` | `expiresAt` | **90 days** | One recorded site visit, for funnels: its steps in order (paths, record ids, event names) with server times and where it arrived from. Keyed by a random id held in one browser tab's session storage; recorded only on a site with a funnel and only with the visitor's analytics consent. A visit a form submission ended also carries the submitter's address (`personEmail`), so a drop-off follow-up can reach them; an anonymous visit identifies nobody. Deleted with the person by the funnels plugin's person eraser. | `journey-beacon.ts` stamps `journeyExpiresAt(now)` (AGL-3605) |
 | `funnelResults` | `expiresAt` | **2 days** | A funnel's computed result — counts and rates — cached by the results route. | `funnel-results.server.ts` stamps `expiresAt` (AGL-3605) |
+| `posHardwareSales` | `expiresAt` | **7 years from the sale** | The platform's retained record of each POS hardware sale (the platform is the seller of record): lines, amounts, tax and Stripe's tax breakdown, Stripe ids, status dates, and the ship-to country, state and postal code. No buyer. Kept past a workspace's erasure as a tax record (below), and this is what ends it. A record with no sale date is not stamped and is kept rather than reaped at the epoch. | `posHardwareSaleRecord` stamps `posHardwareSaleExpiry(order)` on every write — the webhook, the staff route, the cancel path and the account eraser (AGL-4038) |
 
 `apps/console/specs/retention-ttl-config.spec.ts` asserts every policy as
 a three-part configuration — declared in the index file, documented with a
@@ -274,6 +275,22 @@ byte that sentence calls content. An org with no surviving listing keeps nothing
 at all. Both branches, and the emptiness of the tombstone, are pinned by
 `erase-publisher-identity.emulator.spec.ts`.
 
+**An unshipped hardware order is canceled and refunded by either closure
+(AGL-4038).** Before anything is erased or redacted, an order still `paid` or
+`ordered` — not yet shipped — is canceled and refunded in full on the
+platform's Stripe account through the staff page's own path and idempotency
+key (`pos-hardware-cancel.ts`), the buyer is emailed
+(`pos-hardware-order-canceled`), and staff get a **must** operator alert when
+it had already been placed with Stripe or when Stripe refuses the refund.
+`eraseOrg` reaches it through commerce's org eraser, which runs first among
+the erasure's steps while the workspace still stands; `eraseUser` through the
+user eraser below, before it takes the buyer off the order. Neither ever
+fails or holds the closure: a refusal is counted in the plugin report
+(`hardwareRefundsFailed`) and alerted, and the closure goes on. Shipped,
+delivered and registered orders are untouched. The retained
+`posHardwareSales` record is rewritten with the refund in the same
+transaction, so the tax record of a canceled sale says it was refunded.
+
 **Hardware orders are erased by the org and redacted by the person (AGL-4038).**
 `eraseUser` runs commerce's user eraser, which finds every
 `hardwareOrders` document whose `createdBy` is the person (a collection-group
@@ -319,7 +336,7 @@ whose instruction, and how many threads it destroyed.
 | --- | --- | --- |
 | `platformRevenue` | Per-transaction **tax filing records** (gross, tax, jurisdiction); the quarterly Texas return is their sum. GDPR Art. 17(3)(b) exempts records kept to comply with a legal obligation. Texas requires four years. It is org-keyed **by field** — exactly the shape `deleteDocsByOrgId` eats — which is the trap. | `erase-org-tax-retention.emulator.spec.ts`; the `$never` note at `erase.ts:188` (AGL-1811) |
 | `storefrontTaxCollected` | Same shape, same reason: sales tax charged to shoppers on an org's storefront, including tax a `mode: 'stripe'` store collects under Aglyn's own Texas registration. | `erase.ts:199` (AGL-1904) |
-| `posHardwareSales` | Aglyn's OWN sale of each card reader order a workspace placed in the POS hardware shop (Aglyn is seller of record): lines, amounts, tax, Stripe ids, status dates and the ship-to **country, state and postal code** (the sales-tax sourcing input). Written beside `orgs/{orgId}/hardwareOrders/{orderId}` in the same transaction as every write to it. Holds **no** buyer: no uid, name, email, phone, street or tracking. The order under the org, which does hold them, dies with `recursiveDelete(orgs/{orgId})` as before. | `erase-org-tax-retention.emulator.spec.ts`; the `$never` note in `erase.ts` (AGL-4038) |
+| `posHardwareSales` | Aglyn's OWN sale of each card reader order a workspace placed in the POS hardware shop (Aglyn is seller of record): lines, amounts, tax and Stripe's tax breakdown, Stripe ids, status dates and the ship-to **country, state and postal code** (the sales-tax sourcing input). Written beside `orgs/{orgId}/hardwareOrders/{orderId}` in the same transaction as every write to it. Holds **no** buyer: no uid, name, email, phone, street or tracking. The order under the org, which does hold them, dies with `recursiveDelete(orgs/{orgId})` as before. Kept **seven years from the sale**, then deleted by the `expiresAt` TTL policy (declared, OWED in gcloud — the table above); the staff sales tax return reads it as the hardware shop's section. | `erase-org-tax-retention.emulator.spec.ts`; the `$never` note in `erase.ts`; `posHardwareSaleExpiry` in `pos-hardware.spec.ts` (AGL-4038) |
 | `contactSuppressions` | A do-not-contact record must **keep** the identifier in order to recognise it and avoid contacting it again. Privacy Policy §11 states this in terms: "we will delete it from your account and keep it only on a limited internal do-not-contact list, used for nothing else". | `contact-suppression.ts` (AGL-1592) |
 
 These four are the only intended survivors. Everything else that survives an

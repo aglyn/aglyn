@@ -287,6 +287,9 @@ When you close your account, Aglyn permanently deletes:
 - **Your name and email on your support messages.** See below for what remains.
 - **Your details on POS hardware orders you placed** — your name, email, phone,
   the street address and the tracking. The workspace keeps the order and its amounts.
+  An order you placed that has not shipped yet is
+  [canceled and refunded in full](../commerce-and-bookings/commerce/pos-hardware.md#hardware-orders-at-closure)
+  first, and you get an email saying so.
 
 ### What is kept, and for how long {#close-account-kept}
 
@@ -299,7 +302,7 @@ When you close your account, Aglyn permanently deletes:
 | **Backup copies** | Aglyn's backups can still hold the account until they age out. If a backup is ever restored, the closure is applied again. | Up to 14 weeks (98 days). |
 | **Product analytics** | Usage analytics collected by Google Analytics. They are not tied to your account. | 14 months. |
 | **Do-not-contact entry** | Only if you asked Aglyn to stop contacting you: a one-way hashed entry on an internal do-not-contact list, used for nothing else, so Aglyn keeps honoring your request. | Kept so the request keeps being honored. |
-| **Payment records** | Stripe keeps its own payment records on its own schedule. Sales-tax records for a workspace's storefront transactions, and Aglyn's records of [card readers a workspace bought from Aglyn](../commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records) (the items, amounts, tax, and the state, ZIP code and country they shipped to, with no name or street address), are kept after a workspace is deleted because tax law requires it. | Set by Stripe and by tax law; Texas requires four years for sales-tax filing records. |
+| **Payment records** | Stripe keeps its own payment records on its own schedule. Sales-tax records for a workspace's storefront transactions, and Aglyn's records of [card readers a workspace bought from Aglyn](../commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records) (the items, amounts, tax, and the state, ZIP code and country they shipped to, with no name or street address), are kept after a workspace is deleted because tax law requires it. | Set by Stripe and by tax law; Texas requires four years for sales-tax filing records. Aglyn keeps its card reader sale records seven years from the sale, then deletes them. |
 
 ### If you can't sign in, or closing is refused {#close-account-help}
 

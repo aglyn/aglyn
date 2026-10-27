@@ -1499,7 +1499,7 @@ And declare it, in `plugins.config.json`:
 
 | API | Semantics |
 | --- | --- |
-| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. Its `read` answers one section, or a list of them — one per kind of sale the plugin records apart, each its own card. A list is all or nothing: an empty one, or one malformed section, refuses the plugin. |
 | `readTaxReturnSources(request)` | Every source's answer, declared sources first. **Never throws, never drops a declared source.** |
 | `PLUGIN_TAX_RETURN_SOURCES` | The plugins that declared `taxReturnSource`, compiled from the config. |
 

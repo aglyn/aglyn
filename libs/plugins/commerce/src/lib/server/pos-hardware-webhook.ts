@@ -30,6 +30,8 @@ import {
 } from '../model/pos-hardware'
 import { hardwareOrdersRef, posHardwareSaleRef } from './pos-hardware'
 import { raisePosHardwareOrderAlert, sendPosHardwareEmail } from './pos-hardware-notify'
+import { posStripe } from './pos-stripe'
+import { stripeTaxBreakdownLines } from './storefront-tax'
 
 /*==========================================
  * A PAID HARDWARE CHECKOUT BECOMES AN ORDER (AGL-4038).
@@ -49,6 +51,13 @@ import { raisePosHardwareOrderAlert, sendPosHardwareEmail } from './pos-hardware
  * NOTHING ON THE WIRE IS TRUSTED FOR WHAT IT NAMES. The lines are re-read
  * against the catalog; the amounts are Stripe's own totals for the session;
  * an unreadable session is logged and ignored rather than half-recorded.
+ *
+ * THE TAX BASE IS KEPT, NEVER INFERRED. Where Stripe Tax computed the tax,
+ * the session's breakdown — the base each rate was applied to — is read back
+ * (the delivered event does not carry it) and kept on the order and its sale
+ * record, because the platform's sales tax return reports that base as its
+ * taxable sales. A read that fails records no lines, and the return counts
+ * the order as taxed with no stated base rather than as a zero base.
  *=========================================*/
 
 function addressFrom(raw: any): PosHardwareAddress | null {
@@ -122,6 +131,10 @@ export function posHardwareOrderFromSession(
       taxCents,
       totalCents,
       currency: String(session?.currency ?? POS_HARDWARE_CURRENCY),
+      automaticTax: session?.automatic_tax?.enabled === true,
+      // From whatever breakdown the delivered session carries; the handler
+      // reads the expanded one where Stripe Tax ran.
+      taxLines: stripeTaxBreakdownLines(session),
       stripeCheckoutSessionId: String(session?.id ?? ''),
       stripePaymentIntentId:
         (typeof paymentIntent === 'string' ? paymentIntent : String(paymentIntent?.id ?? '')) || null,
@@ -133,6 +146,27 @@ export function posHardwareOrderFromSession(
       updatedAtMs: now,
       paidAtMs: now,
     },
+  }
+}
+
+/**
+ * The session with its tax breakdown, which the delivered event does not
+ * carry, or the delivered session when the read fails. Never throws: the
+ * order is recorded either way.
+ */
+async function withTaxBreakdown(session: any): Promise<any> {
+  if (session?.automatic_tax?.enabled !== true) return session
+  if (Array.isArray(session?.total_details?.breakdown?.taxes)) return session
+  const id = String(session?.id ?? '')
+  if (!id) return session
+  try {
+    const read = await posStripe('GET', `checkout/sessions/${encodeURIComponent(id)}`, {
+      params: { 'expand[]': 'total_details.breakdown' },
+    })
+    return read.ok && read.body?.id === id ? read.body : session
+  } catch (error) {
+    console.error('[pos-hardware] the tax breakdown could not be read', id, error)
+    return session
   }
 }
 
@@ -167,7 +201,7 @@ export const posHardwareBillingWebhookHandler: BillingWebhookHandler = async ({ 
   if (object?.mode !== 'payment' || object?.payment_status !== 'paid') {
     return { claimed: true, ...(hostId ? { hostId } : {}) }
   }
-  const parsed = posHardwareOrderFromSession(object)
+  const parsed = posHardwareOrderFromSession(await withTaxBreakdown(object))
   if (!parsed) {
     console.error('[pos-hardware] a paid hardware session could not be read', String(object?.id ?? ''))
     return { claimed: true, ...(hostId ? { hostId } : {}) }
