@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.286 — 2026-10-27
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.285...v1.0.0-beta.286)
+
+### Fixed
+
+- **signup:** the workspace backstop records a sign-up's acquisition after the host hop ([AGL-3706](https://linear.app/aglyn/issue/AGL-3706), [AGL-4021](https://linear.app/aglyn/issue/AGL-4021))
+
 ## v1.0.0-beta.285 — 2026-10-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.284...v1.0.0-beta.285)
