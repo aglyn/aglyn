@@ -227,7 +227,7 @@ export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
   'card-declined': 'The card taken offline was declined when it was charged; the order is unpaid',
   'card-not-charged': 'The card taken offline could not be charged; the order is unpaid',
   'card-amount-differs': 'The card was charged a different amount than the sale’s total; the payment records what Stripe took',
-  'card-fee-short': 'Stripe took less than the platform fee from this card’s payout; the rest goes on the workspace’s Aglyn invoice',
+  'card-fee-short': 'Stripe took less than the platform fee from this card’s payout; the rest goes on the workspace’s monthly invoice',
 }
 
 /** A line whose stock went short when the sale synced. */
