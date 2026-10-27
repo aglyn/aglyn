@@ -27,6 +27,19 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — waivers on your own site, your own adult age
+
+- **[Share links open on your site](commerce-and-bookings/commerce/waivers.md#share-it-before-riders-arrive)** —
+  a waiver's link and QR code now open at **/sign-waiver** on your own site, with
+  your header and footer, on your custom domain or your `.aglyn.app` address.
+  Links you already handed out still work.
+- **[An adult age for each waiver](commerce-and-bookings/commerce/waivers.md#minors)** —
+  choose 18 to 21. Younger signers need a parent or guardian, and a guardian
+  signs only for riders under it. Waivers you already wrote stay at 18.
+- **[Signed waivers kept after an erasure request](commerce-and-bookings/commerce/waivers.md#keeping-signed-waivers)** —
+  when someone who signed asks to be erased, their signed waivers are kept as your
+  record for the years you set (7 to start), then deleted.
+
 ## October 2026 — passes for a day, and rain checks
 
 - **[Sell passes for a day the buyer picks](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —

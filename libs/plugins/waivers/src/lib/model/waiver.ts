@@ -51,6 +51,29 @@ export interface WaiverDraft {
   checkboxes: WaiverCheckbox[]
   allowMinors: boolean
   validity: WaiverValidity
+  /**
+   * The age, in whole years, from which a signer is an adult on this waiver
+   * (AGL-4042): anyone younger needs a parent or guardian to sign for them,
+   * and a minor on a guardian's signature must be younger. Each waiver sets
+   * its own, so a store where the age of majority differs says so on the
+   * waiver it applies to. A waiver saved before the setting existed reads as
+   * {@link WAIVER_DEFAULT_ADULT_AGE}; read it through {@link waiverAdultAge}.
+   */
+  adultAge?: number
+}
+
+/** The adult age a waiver starts at, and the one every waiver saved before the setting reads as. */
+export const WAIVER_DEFAULT_ADULT_AGE = 18
+
+/** The adult ages a waiver may set, whole years. */
+export const WAIVER_ADULT_AGE_RANGE = { min: 18, max: 21 } as const
+
+/** The adult age a waiver applies: its own setting, or the default for one saved before it. */
+export function waiverAdultAge(waiver: Pick<WaiverDraft, 'adultAge'> | null | undefined): number {
+  const age = Number(waiver?.adultAge)
+  return Number.isInteger(age) && age >= WAIVER_ADULT_AGE_RANGE.min && age <= WAIVER_ADULT_AGE_RANGE.max
+    ? age
+    : WAIVER_DEFAULT_ADULT_AGE
 }
 
 /** A waiver as stored, under `orgs/{orgId}/waivers/{waiverId}`. */
@@ -214,9 +237,17 @@ export function normalizeWaiverDraft(
   }
   const validity = normalizeValidity(input['validity'])
   if (typeof validity === 'string') return { ok: false, error: validity }
+  const rawAge = input['adultAge']
+  const adultAge = rawAge === undefined || rawAge === null || rawAge === '' ? WAIVER_DEFAULT_ADULT_AGE : Number(rawAge)
+  if (!Number.isInteger(adultAge) || adultAge < WAIVER_ADULT_AGE_RANGE.min || adultAge > WAIVER_ADULT_AGE_RANGE.max) {
+    return {
+      ok: false,
+      error: `Choose an adult age from ${WAIVER_ADULT_AGE_RANGE.min} to ${WAIVER_ADULT_AGE_RANGE.max}.`,
+    }
+  }
   return {
     ok: true,
-    draft: { title, body, checkboxes, allowMinors: input['allowMinors'] === true, validity },
+    draft: { title, body, checkboxes, allowMinors: input['allowMinors'] === true, validity, adultAge },
   }
 }
 
@@ -225,7 +256,13 @@ export function draftChangesText(before: WaiverDraft, after: WaiverDraft): boole
   return JSON.stringify(waiverSnapshot(before)) !== JSON.stringify(waiverSnapshot(after))
 }
 
-/** The parts of a waiver a version freezes. */
+/**
+ * The parts of a waiver a version freezes. The adult age is one of them: it
+ * decides who may sign for themselves and who a guardian may sign for, so
+ * changing it starts a version like any other change to what a signer
+ * agrees to. A waiver saved before the setting reads as the default, so a
+ * save that leaves it there starts no version.
+ */
 export function waiverSnapshot(draft: WaiverDraft): WaiverDraft {
   return {
     title: draft.title,
@@ -233,6 +270,7 @@ export function waiverSnapshot(draft: WaiverDraft): WaiverDraft {
     checkboxes: draft.checkboxes.map((box) => ({ id: box.id, label: box.label })),
     allowMinors: draft.allowMinors,
     validity: draft.validity,
+    adultAge: waiverAdultAge(draft),
   }
 }
 

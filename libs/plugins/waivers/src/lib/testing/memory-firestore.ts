@@ -20,8 +20,8 @@
  * `create()` that refuses an existing document, `update()` that refuses an
  * absent one, equality and range filters, ordering and limits, and
  * transactions whose writes are buffered and applied at commit, one body at
- * a time, and `startAfter` a snapshot. Only what this plugin's server half
- * calls.
+ * a time, `startAfter` a snapshot, and a collection-group query across every
+ * collection of one name. Only what this plugin's server half calls.
  */
 
 type Data = Record<string, any>
@@ -29,6 +29,7 @@ type Data = Record<string, any>
 export interface MemoryFirestore {
   docs: Map<string, Data>
   collection(name: string): any
+  collectionGroup(name: string): any
   runTransaction<T>(fn: (transaction: any) => Promise<T>): Promise<T>
   batch(): any
 }
@@ -104,8 +105,21 @@ export function createMemoryFirestore(): MemoryFirestore {
     }
   }
 
+  /** Whether a document path sits directly in the collection a query names. */
+  type Scope = (key: string) => boolean
+  const inCollection =
+    (path: string): Scope =>
+    (key) =>
+      key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/')
+  const inGroup =
+    (name: string): Scope =>
+    (key) => {
+      const parts = key.split('/')
+      return parts.length % 2 === 0 && parts[parts.length - 2] === name
+    }
+
   function query(
-    path: string,
+    scope: Scope,
     filters: Array<[string, string, unknown]>,
     order: Array<[string, 'asc' | 'desc']>,
     max: number | null,
@@ -136,9 +150,8 @@ export function createMemoryFirestore(): MemoryFirestore {
         }
       })
     const run = () => {
-      const prefix = `${path}/`
       let rows = [...docs.entries()]
-        .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'))
+        .filter(([key]) => scope(key))
         .filter(([, data]) => matches(data))
         .map(([key]) => snapshot(key))
       for (const [field, direction] of [...order].reverse()) {
@@ -158,11 +171,11 @@ export function createMemoryFirestore(): MemoryFirestore {
     }
     return {
       where: (field: string, op: string, value: unknown) =>
-        query(path, [...filters, [field, op, value]], order, max, after),
+        query(scope, [...filters, [field, op, value]], order, max, after),
       orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') =>
-        query(path, filters, [...order, [field, direction]], max, after),
-      limit: (count: number) => query(path, filters, order, count, after),
-      startAfter: (snapshot: { ref: { path: string } }) => query(path, filters, order, max, snapshot.ref.path),
+        query(scope, filters, [...order, [field, direction]], max, after),
+      limit: (count: number) => query(scope, filters, order, count, after),
+      startAfter: (snapshot: { ref: { path: string } }) => query(scope, filters, order, max, snapshot.ref.path),
       get: async () => run(),
     }
   }
@@ -171,7 +184,7 @@ export function createMemoryFirestore(): MemoryFirestore {
     return {
       path,
       doc: (id?: string) => docRef(`${path}/${id ?? `generated-${++generated}`}`),
-      ...query(path, [], [], null),
+      ...query(inCollection(path), [], [], null),
     }
   }
 
@@ -180,6 +193,7 @@ export function createMemoryFirestore(): MemoryFirestore {
   return {
     docs,
     collection: (name: string) => collectionRef(name),
+    collectionGroup: (name: string) => query(inGroup(name), [], [], null),
     runTransaction<T>(fn: (transaction: any) => Promise<T>): Promise<T> {
       const run = queue.then(async () => {
         const buffered: Array<() => void> = []

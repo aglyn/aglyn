@@ -14,9 +14,9 @@ and riders and guests sign it:
 - **at the window**, on a tablet you hand them;
 - **on paper**, if they'd rather, and you record it with a photo of the page.
 
-A parent or guardian can sign for riders under 18. Every signature keeps the exact
-words that were signed, and the signer gets a signed copy as a PDF by email. Staff
-can find anyone's waiver by name, email or day.
+A parent or guardian can sign for riders under the waiver's adult age, 18 unless you
+change it. Every signature keeps the exact words that were signed, and the signer gets
+a signed copy as a PDF by email. Staff can find anyone's waiver by name, email or day.
 
 Waivers come with every plan that includes selling, at no extra cost. Open them from
 the site's **Waivers** tab.
@@ -53,10 +53,13 @@ one.
 4. Under **Boxes every signer must tick**, add the statements a signer must agree to
    one by one, like *I have read this waiver and I understand it.* Nobody can sign
    until every box is ticked.
-5. Leave **A parent or guardian may sign for riders under 18** on if minors ride.
-6. Choose how long **one signature is good for** (see
+5. Choose the **Adult age**, from 18 to 21. Signers younger than that need a parent
+   or guardian to sign for them (see [Minors](#minors)). It starts at 18.
+6. Leave **A parent or guardian may sign for riders under 18** on if minors ride. The
+   number in it follows the adult age you chose.
+7. Choose how long **one signature is good for** (see
    [How long a signature lasts](#how-long-a-signature-lasts)).
-7. Select **Save**, then **Publish**.
+8. Select **Save**, then **Publish**.
 
 A waiver takes signatures only while it is **Published**. **Unpublish** pauses it, and
 **Retire** stops it for good. Neither one touches the signatures already taken.
@@ -68,11 +71,12 @@ should cover and how your state treats waivers, especially ones signed for minor
 
 ### Versions
 
-Every time you save a change to the words, the boxes, the minors setting or how long
-it lasts, the waiver gets a new **version**. **Version history** lists each one.
-Signatures already taken keep the version they signed, and their signed copy shows
-those words, not the new ones. If a waiver changes while somebody is filling it in,
-they're asked to read the new version before they sign.
+Every time you save a change to the words, the boxes, the adult age, the minors setting
+or how long it lasts, the waiver gets a new **version**. **Version history** lists each one.
+Signatures already taken keep the version they signed and stay valid for the days they
+cover, and their signed copy shows those words, not the new ones. If a waiver changes
+while somebody is filling it in, they're asked to read the new version before they
+sign.
 
 ## How long a signature lasts
 
@@ -82,7 +86,7 @@ they're asked to read the new version before they sign.
 - **A number of days**: that many days, the signing day included. Pick **A year** for
   365.
 
-## Share it before riders arrive
+## Share it before riders arrive {#share-it-before-riders-arrive}
 
 On the **Waivers** card, select **Share** beside a waiver:
 
@@ -90,10 +94,22 @@ On the **Waivers** card, select **Share** beside a waiver:
 - **Download QR code** gives you a code to print for the gate, the window or your
   ticket emails.
 
-The link opens a page made for phones. The signer reads the waiver, fills in their
-name, email, phone and date of birth, ticks the boxes, signs with a finger or types
-their name, and agrees to sign electronically. They see a confirmation, and a signed
-copy goes to their email.
+The link opens on your own site, at **/sign-waiver**, with your site's header and
+footer: on your custom domain when one is connected, or on your site's `.aglyn.app`
+address. If you connect a custom domain later, links and QR codes you already
+handed out still work: your `.aglyn.app` address sends signers on to it.
+
+The page is made for phones. The signer reads the waiver, fills in their name, email,
+phone and date of birth, ticks the boxes, signs with a finger or types their name, and
+agrees to sign electronically. They see a confirmation, and a signed copy goes to
+their email.
+
+The **/sign-waiver** page is there on every site with Waivers on. To design that page
+yourself, make a page at that address with a **Sign waiver** element on it, and your
+page is shown instead.
+
+Links and QR codes made before share links moved to your site opened on Aglyn's own
+address. They still work, and send signers on to your site.
 
 ### On your site
 
@@ -132,13 +148,20 @@ that address.
 
 ## Minors
 
+Each waiver sets its own **Adult age**, from 18 to 21. It starts at 18, and every
+waiver written before the setting existed reads as 18. The examples here use 18.
+
 When **A parent or guardian may sign for riders under 18** is on, the signer can turn
 on **I'm also signing for riders under 18** and add each minor's full name and date of
 birth, then say how they're related to them, like *Parent* or *Legal guardian*. One
 signature covers the adult and every minor on it.
 
-The signer must be 18 or older. Anyone under 18 can't sign for themselves, and a
-"minor" who is 18 or older is asked to sign their own waiver.
+The signer must be the adult age or older on the day they sign. Anyone younger can't
+sign for themselves, and a "minor" who is the adult age or older is asked to sign
+their own waiver. Someone whose birthday is today counts as that age today.
+
+Changing the adult age starts a new version. Signatures already taken stay valid for
+the version they signed.
 
 ## Paper waivers
 
@@ -196,8 +219,41 @@ already have for them, with the signing on their timeline. Their source reads
 
 Signatures are stored privately in your workspace. They're never in your media
 library, and only the people with **Collect waivers** or **Manage waivers** can see
-them. When you erase a person from your workspace, every waiver they signed is erased
-with it, including the minors they signed for.
+them.
+
+## Keeping signed waivers after an erasure request {#keeping-signed-waivers}
+
+A signed waiver is your record of what a rider agreed to. So when you
+[erase a person](../../workspace-and-billing/signing-in-and-sessions.md#erasing-a-person) from your workspace,
+the waivers they signed are kept, not erased:
+
+- each one is kept for your **retention period**, then deleted, with its drawn
+  signature and any photo of a paper page;
+- its link to the person's contact is removed, because the contact is erased;
+- on the **Signatures** card its status reads **Kept until** and the date it will be
+  deleted, and its record says when the person asked.
+
+The retention period is counted from the last day the waiver covers. For a waiver
+signed for minors, it's counted from the day the youngest of them reaches the waiver's
+adult age, if that's later. A waiver whose period has already run out is deleted when
+the erasure runs.
+
+To set the period:
+
+1. Go to **Sites → your site → Admin → Plugins** and select **Waivers**.
+2. On the **Waivers settings** card, set **Years to keep a signed waiver after its
+   signer asks to be erased**, from 1 to 30. It starts at 7.
+3. Press **Save site settings**.
+
+To give every site in a workspace the same period, set it on the plugin's workspace
+page under **Plugins**. Each site follows that period unless you change it on the
+site's own page. A longer period also applies to waivers you're already keeping. A
+shorter one applies to erasure requests made after the change.
+
+:::caution Ask your lawyer
+Aglyn doesn't know how long you need to keep a signed waiver. Ask your own lawyer,
+especially about waivers signed for minors.
+:::
 
 ## Related
 

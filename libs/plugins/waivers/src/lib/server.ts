@@ -21,7 +21,7 @@
  * made from here; the Firestore rules refuse all of them to clients.
  */
 
-import { registerPluginApiRoute } from '@aglyn/aglyn/server'
+import { registerPluginApiRoute, registerSitePageResolver } from '@aglyn/aglyn/server'
 import { WAIVERS_API_ROUTES } from './constants/bundle-common'
 
 type Handler = (request: Request) => Promise<Response>
@@ -54,9 +54,18 @@ function registerPublicRoutes(): void {
   })
 }
 
-/** Tenant API registration, named in `plugins.config.json` as `tenantApi`. */
+/**
+ * Tenant API registration, named in `plugins.config.json` as `tenantApi`:
+ * the signer's two doors, and the store's own signing page at
+ * `/sign-waiver`, where a share link and its QR code open (the resolver and
+ * the composition behind it load on the first request no published page
+ * claims).
+ */
 export function registerWaiversApi(): void {
   registerPublicRoutes()
+  registerSitePageResolver(async (context) =>
+    (await import('./server/site-page')).waiversSitePageResolver(context),
+  )
 }
 
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */

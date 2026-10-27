@@ -23,7 +23,9 @@ import {
   normalizeWaiverDraft,
   validThroughDayKey,
   validityLabel,
+  waiverAdultAge,
   waiverBodyText,
+  waiverSnapshot,
   type WaiverDraft,
 } from './waiver'
 import {
@@ -68,7 +70,14 @@ describe('a waiver draft', () => {
     const result = normalizeWaiverDraft({ ...DRAFT, title: '  Rider   release ' })
     expect(result).toEqual({
       ok: true,
-      draft: { title: 'Rider release', body: DRAFT.body, checkboxes: DRAFT.checkboxes, allowMinors: true, validity: { kind: 'visit' } },
+      draft: {
+        title: 'Rider release',
+        body: DRAFT.body,
+        checkboxes: DRAFT.checkboxes,
+        allowMinors: true,
+        validity: { kind: 'visit' },
+        adultAge: 18,
+      },
     })
   })
 
@@ -97,6 +106,25 @@ describe('a waiver draft', () => {
     expect(draftChangesText(DRAFT, { ...DRAFT, body: `${DRAFT.body}\n\nMore.` })).toBe(true)
     expect(draftChangesText(DRAFT, { ...DRAFT, allowMinors: false })).toBe(true)
     expect(draftChangesText(DRAFT, { ...DRAFT, validity: { kind: 'days', days: 365 } })).toBe(true)
+    expect(draftChangesText(DRAFT, { ...DRAFT, adultAge: 19 })).toBe(true)
+  })
+
+  it('reads a waiver saved before the adult age setting as 18, and saving it there starts no version', () => {
+    expect(waiverAdultAge(DRAFT)).toBe(18)
+    expect(waiverAdultAge({ adultAge: 21 })).toBe(21)
+    expect(waiverAdultAge({ adultAge: 40 })).toBe(18)
+    expect(waiverSnapshot(DRAFT).adultAge).toBe(18)
+    expect(draftChangesText(DRAFT, { ...DRAFT, adultAge: 18 })).toBe(false)
+  })
+
+  it('takes an adult age of 18 to 21 whole years, and says what to fix otherwise', () => {
+    const age = (adultAge: unknown) => normalizeWaiverDraft({ ...DRAFT, adultAge })
+    expect(age(undefined)).toMatchObject({ ok: true, draft: { adultAge: 18 } })
+    expect(age(21)).toMatchObject({ ok: true, draft: { adultAge: 21 } })
+    expect(age('19')).toMatchObject({ ok: true, draft: { adultAge: 19 } })
+    for (const bad of [17, 22, 18.5, 'eighteen']) {
+      expect(age(bad)).toEqual({ ok: false, error: 'Choose an adult age from 18 to 21.' })
+    }
   })
 
   it('reads its words as plain text: headings, paragraphs, bullets and numbers, no syntax', () => {
@@ -171,6 +199,25 @@ describe('a signing', () => {
   it('counts whole years to the day', () => {
     expect(ageOn('2008-10-24', '2026-10-24')).toBe(18)
     expect(ageOn('2008-10-25', '2026-10-24')).toBe(17)
+  })
+
+  it('decides who is an adult by the waiver’s own adult age, at the boundary', () => {
+    const at21 = { ...DRAFT, adultAge: 21 }
+    const sign = (input: Record<string, unknown>, waiver: WaiverDraft & { version: number } = at21) =>
+      normalizeSignInput({ ...SIGNING, ...input }, waiver, '2026-10-24', { method: 'online' })
+    const errorOf = (result: ReturnType<typeof sign>) => (result.ok === false ? result.error : null)
+    // A signer 21 today is an adult; one a day short of it is not.
+    expect(errorOf(sign({ signer: { ...SIGNING.signer, dateOfBirth: '2005-10-24' } }))).toBeNull()
+    expect(errorOf(sign({ signer: { ...SIGNING.signer, dateOfBirth: '2005-10-25' } }))).toBe(
+      'Anyone under 21 needs a parent or guardian to sign for them.',
+    )
+    // The same 19-year-old signs for themselves on an 18 waiver.
+    expect(errorOf(sign({ signer: { ...SIGNING.signer, dateOfBirth: '2007-01-01' } }, DRAFT))).toBeNull()
+    // A guardian signs for a 20-year-old on a 21 waiver, and not for one who turns 21 today.
+    expect(errorOf(sign({ minors: [{ name: 'Sam Lee', dateOfBirth: '2005-10-25' }] }))).toBeNull()
+    expect(errorOf(sign({ minors: [{ name: 'Sam Lee', dateOfBirth: '2005-10-24' }] }))).toBe(
+      'Sam Lee is 21 or older, so they sign their own waiver.',
+    )
   })
 
   it('signs the waiver’s own text, the same for every signer, consent last', () => {

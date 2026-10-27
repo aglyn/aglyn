@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
+import { registerPluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
 import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { WAIVERS_CONTACT_SOURCE_DECLARATION, WAIVERS_PLUGIN_ID } from './constants/bundle-common'
 import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
+import { WAIVERS_CONFIG_SCHEMA } from './constants/settings'
 
 let declared = false
 
@@ -34,12 +36,18 @@ let declared = false
  * created reads "Waiver signed" in the CRM's lists, chips and reports rather
  * than the raw word. Loaded in the console's browser and on both servers, so
  * every surface that labels a source has it before it renders.
+ *
+ * And its settings schema (AGL-428): how many years a signed waiver is kept
+ * after its signer asks to be erased. The console's generic settings card
+ * draws it at workspace and site scope, and the eraser and the retention job
+ * read it through `getPluginConfig`, so both need it registered first.
  */
 export function registerWaiversDeclarations(): void {
   if (declared) return
   declared = true
   registerPluginPermissions(WAIVERS_PERMISSION_DECLARATIONS)
   registerPluginContactSource(WAIVERS_CONTACT_SOURCE_DECLARATION, { pluginId: WAIVERS_PLUGIN_ID })
+  registerPluginConfigSchema(WAIVERS_CONFIG_SCHEMA)
 }
 
 registerWaiversDeclarations()

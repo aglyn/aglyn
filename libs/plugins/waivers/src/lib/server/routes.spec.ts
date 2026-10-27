@@ -23,8 +23,9 @@ import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-f
 import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
 import { setWaiversEmailSenderForTests, type WaiverEmail } from './emails'
 import { setWaiversGateDepsForTests } from './gate'
-import { eraseWaiversPerson } from './person-eraser'
+import { eraseWaiversPerson, setWaiversErasureDepsForTests } from './person-eraser'
 import { publicSignRoute, publicWaiverRoute } from './public-routes'
+import { runWaiversRetentionJob } from './retention-job'
 import { setWaiversClockForTests } from './sign'
 import {
   paperRoute,
@@ -42,7 +43,8 @@ import { templateRoute, templatesRoute } from './template-routes'
  * the version every saved change starts, the public doors a signer uses with
  * no account (honeypot, rate limit, a press retried once), the window's
  * tablet, a paper waiver with its photo, search, export, the signed PDF,
- * voiding, a person's status for a day, and erasure.
+ * voiding, a person's status for a day, erasure (which keeps a signed waiver
+ * for the store's retention period) and the retention job that deletes it.
  */
 
 const captures: Array<Record<string, unknown>> = []
@@ -100,6 +102,8 @@ let db: MemoryFirestore
 let sent: WaiverEmail[]
 let files: Map<string, Uint8Array>
 let plan = 'starter'
+/** Each site's waiver retention period, in years, as its settings resolve. */
+let retentionYears: Record<string, number> = {}
 
 beforeEach(() => {
   db = createMemoryFirestore()
@@ -120,6 +124,15 @@ beforeEach(() => {
     read: async (path) => files.get(path) ?? null,
   })
   setWaiversClockForTests(() => NOW)
+  retentionYears = {}
+  setWaiversErasureDepsForTests({
+    bucket: () => ({
+      deleteFiles: async ({ prefix }) => {
+        for (const path of [...files.keys()]) if (path.startsWith(prefix)) files.delete(path)
+      },
+    }),
+    retentionYears: async (_orgId, hostId) => retentionYears[hostId] ?? 7,
+  })
   setWaiversGateDepsForTests({
     verifyIdToken: async (token) => {
       const decoded = TOKENS[token]
@@ -134,6 +147,9 @@ beforeEach(() => {
     db.docs.set(`hosts/${hostId}`, {
       displayName: 'Acme Motocross',
       timeZone: 'America/Chicago',
+      // The site's own addresses: the track on its platform address, the
+      // other site on a custom domain that serves.
+      ...(hostId === HOST ? { subdomain: 'acme-track' } : { subdomain: 'acme-other', cname: 'rides.example.com' }),
       memberRoles: {
         'uid-admin': 'admin',
         'uid-clerk': 'editor',
@@ -151,6 +167,7 @@ afterAll(() => {
   setWaiversEmailSenderForTests(null)
   setWaiversGateDepsForTests(null)
   setWaiversClockForTests(null)
+  setWaiversErasureDepsForTests(null)
 })
 
 function call(
@@ -489,14 +506,182 @@ describe('voiding and status', () => {
   })
 })
 
-describe('erasing a person', () => {
-  it('removes every signature they signed, and counts without writing on a dry run', async () => {
+describe('a waiver edited after it was signed', () => {
+  it('keeps every signature valid for the version it signed, and takes new ones on the new version only', async () => {
     const waiver = await publishedWaiver()
     await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
-    const request = { orgId: ORG, email: 'jordan@example.com', key: 'k', atMs: NOW, contactIds: [] }
-    expect(await eraseWaiversPerson({ ...request, dryRun: true })).toEqual({ signatures: 1 })
-    expect(signatures()).toHaveLength(1)
-    expect(await eraseWaiversPerson({ ...request, dryRun: false })).toEqual({ signatures: 1 })
+    const [before] = signatures()
+    const edited = await (
+      await call(templatesRoute, 'POST', {
+        body: { waiverId: waiver.id, waiver: { ...WAIVER, body: `${WAIVER.body}\n\nNo passengers.` } },
+      })
+    ).json()
+    expect(edited.waiver.version).toBe(2)
+    const [after] = signatures()
+    // The record still names version 1 and the exact words it agreed to.
+    expect(after).toMatchObject({ version: 1, signedText: before.signedText, signedTextSha256: before.signedTextSha256 })
+    expect(after.signedText).not.toContain('No passengers.')
+    const status = await (
+      await call(statusRoute, 'GET', { token: 'tok-clerk', query: { email: 'jordan@example.com', dayKey: '2026-10-24' } })
+    ).json()
+    expect(status).toMatchObject({ signed: true, label: 'Waiver signed' })
+    // A signer still holding version 1 is sent to read version 2.
+    const stale = await call(publicSignRoute, 'POST', { token: null, body: signing(waiver, { attemptKey: 'attempt-0002' }) })
+    expect(stale.status).toBe(409)
+    const fresh = await call(publicSignRoute, 'POST', {
+      token: null,
+      body: signing({ id: waiver.id, version: 2 }, { attemptKey: 'attempt-0003' }),
+    })
+    expect(fresh.status).toBe(201)
+    expect(signatures().map((one) => one.version).sort()).toEqual([1, 2])
+  })
+})
+
+describe('the adult age a waiver sets', () => {
+  it('serves it to the signing page and checks every signing against it, at the boundary', async () => {
+    const waiver = await publishedWaiver({ adultAge: 21 })
+    const answer = await (await call(publicWaiverRoute, 'GET', { token: null, query: { waiverId: waiver.id } })).json()
+    expect(answer).toMatchObject({ adultAge: 21, waiver: { adultAge: 21 } })
+    const short = await call(publicSignRoute, 'POST', {
+      token: null,
+      body: signing(waiver, { signer: { name: 'Jordan Lee', email: 'jordan@example.com', dateOfBirth: '2005-10-25' }, minors: [] }),
+    })
+    expect(short.status).toBe(400)
+    expect((await short.json()).error).toBe('Anyone under 21 needs a parent or guardian to sign for them.')
+    const today = await call(publicSignRoute, 'POST', {
+      token: null,
+      body: signing(waiver, {
+        attemptKey: 'attempt-0021',
+        signer: { name: 'Jordan Lee', email: 'jordan@example.com', dateOfBirth: '2005-10-24' },
+        minors: [{ name: 'Sam Lee', dateOfBirth: '2005-10-25' }],
+      }),
+    })
+    expect(today.status).toBe(201)
+    expect(signatures()[0]).toMatchObject({ adultAge: 21, minors: [{ name: 'Sam Lee' }] })
+  })
+
+  it('starts a version when it changes, and reads an older waiver as 18', async () => {
+    const { waiver } = await (await call(templatesRoute, 'POST', { body: { waiver: WAIVER } })).json()
+    expect(waiver.adultAge).toBe(18)
+    const older = `orgs/${ORG}/waivers/${waiver.id}`
+    const stored = { ...(db.docs.get(older) as Record<string, unknown>) }
+    delete stored['adultAge']
+    db.docs.set(older, stored)
+    const unchanged = await (await call(templatesRoute, 'POST', { body: { waiverId: waiver.id, waiver: WAIVER } })).json()
+    expect(unchanged.waiver.version).toBe(1)
+    const raised = await (
+      await call(templatesRoute, 'POST', { body: { waiverId: waiver.id, waiver: { ...WAIVER, adultAge: 19 } } })
+    ).json()
+    expect(raised.waiver).toMatchObject({ version: 2, adultAge: 19 })
+    expect(db.docs.get(`${older}/versions/2`)).toMatchObject({ adultAge: 19 })
+  })
+})
+
+describe('the share link', () => {
+  it('opens on the store’s own site: its platform address, or its custom domain', async () => {
+    const waiver = await publishedWaiver()
+    const listed = await (await call(templatesRoute, 'GET')).json()
+    expect(listed.signPageOrigin).toBe('https://acme-track.aglyn.app')
+    const one = await (await call(publicWaiverRoute, 'GET', { token: null, query: { waiverId: waiver.id } })).json()
+    expect(one.signUrl).toBe(`https://acme-track.aglyn.app/sign-waiver?waiver=${waiver.id}`)
+    const list = await (await call(publicWaiverRoute, 'GET', { token: null })).json()
+    expect(list.signUrl).toBe('https://acme-track.aglyn.app/sign-waiver')
+    const other = await (await call(templatesRoute, 'GET', { host: OTHER_HOST })).json()
+    expect(other.signPageOrigin).toBe('https://rides.example.com')
+  })
+})
+
+describe('erasing a person', () => {
+  const request = { orgId: ORG, email: 'jordan@example.com', key: 'k', atMs: NOW, contactIds: ['contact-1'] }
+
+  async function signed() {
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+    return signatures()[0]
+  }
+
+  it('keeps each signed waiver as the store’s record, unlinked from the erased person, and counts on a dry run', async () => {
+    const before = await signed()
+    expect(before.contactId).toBe('contact-1')
+    expect(await eraseWaiversPerson({ ...request, dryRun: true })).toEqual({ signatures: 1, kept: 1, deleted: 0 })
+    expect(signatures()[0]).toEqual(before)
+    expect(await eraseWaiversPerson({ ...request, dryRun: false })).toEqual({ signatures: 1, kept: 1, deleted: 0 })
+    const [kept] = signatures()
+    // Seven years from the youngest rider (born 2014-09-30) coming of age.
+    const until = Date.UTC(2039, 9, 1)
+    expect(kept).toMatchObject({
+      signer: before.signer,
+      minors: before.minors,
+      signedText: before.signedText,
+      contactId: null,
+      erasure: { requestedAtMs: NOW },
+      retainUntilMs: until,
+    })
+    expect(files.has(kept.signature.imagePath)).toBe(true)
+    // The list says it is kept, and until when.
+    const rows = (await (await call(signaturesRoute, 'GET')).json()).signatures
+    expect(rows[0]).toMatchObject({ retainedUntilMs: until, voided: false })
+    // Run again (a retried erasure), it writes nothing new.
+    await eraseWaiversPerson({ ...request, atMs: NOW + 1000, dryRun: false })
+    expect(signatures()[0]).toMatchObject({ erasure: { requestedAtMs: NOW }, retainUntilMs: until })
+  })
+
+  it('reads each site’s own period', async () => {
+    retentionYears[HOST] = 2
+    await signed()
+    await eraseWaiversPerson({ ...request, dryRun: false })
+    expect(signatures()[0].retainUntilMs).toBe(Date.UTC(2034, 9, 1))
+  })
+
+  it('deletes a signed waiver whose period has already run out, with its files', async () => {
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver, { minors: [], guardianRelationship: '' }) })
+    const [stored] = signatures()
+    expect(files.has(stored.signature.imagePath)).toBe(true)
+    const tenYearsOn = NOW + 10 * 366 * 24 * 60 * 60 * 1000
+    expect(await eraseWaiversPerson({ ...request, atMs: tenYearsOn, dryRun: false })).toEqual({
+      signatures: 1,
+      kept: 0,
+      deleted: 1,
+    })
     expect(signatures()).toHaveLength(0)
+    expect(files.has(stored.signature.imagePath)).toBe(false)
+  })
+})
+
+describe('the retention job', () => {
+  const tick = (nowMs: number) => runWaiversRetentionJob({ nowMs, deadlineMs: Date.now() + 60_000 })
+
+  async function keptAfterErasure() {
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver, { minors: [], guardianRelationship: '' }) })
+    await call(publicSignRoute, 'POST', {
+      token: null,
+      body: signing(waiver, {
+        attemptKey: 'attempt-0002',
+        signer: { name: 'Casey Moss', email: 'casey@example.com', phone: '', dateOfBirth: '1980-01-01' },
+        minors: [],
+      }),
+    })
+    await eraseWaiversPerson({ orgId: ORG, email: 'jordan@example.com', key: 'k', atMs: NOW, contactIds: [], dryRun: false })
+    return signatures().find((one) => one.emailLower === 'jordan@example.com')
+  }
+
+  it('leaves a kept waiver alone until its period runs out, then deletes it and its files', async () => {
+    const kept = await keptAfterErasure()
+    expect(kept.retainUntilMs).toBe(Date.UTC(2033, 9, 25))
+    expect(await tick(kept.retainUntilMs - 1)).toEqual({ due: 0, deleted: 0, extended: 0 })
+    expect(signatures()).toHaveLength(2)
+    expect(await tick(kept.retainUntilMs)).toEqual({ due: 1, deleted: 1, extended: 0 })
+    // Only the erased signer's waiver goes; nobody else's is touched.
+    expect(signatures().map((one) => one.emailLower)).toEqual(['casey@example.com'])
+    expect(files.has(kept.signature.imagePath)).toBe(false)
+  })
+
+  it('keeps it for the longer period when the store lengthened it since', async () => {
+    const kept = await keptAfterErasure()
+    retentionYears[HOST] = 10
+    expect(await tick(kept.retainUntilMs)).toEqual({ due: 1, deleted: 0, extended: 1 })
+    expect(signatures().find((one) => one.id === kept.id)?.retainUntilMs).toBe(Date.UTC(2036, 9, 25))
   })
 })

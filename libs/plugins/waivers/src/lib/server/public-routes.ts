@@ -17,16 +17,19 @@
 
 import { NO_CLIENT_ADDRESS_BUCKET, readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { consumeRateLimit } from '@aglyn/tenant-data-admin'
-import { validityLabel, type WaiverTemplate } from '../model/waiver'
-import { WAIVER_ADULT_AGE, WAIVER_ESIGN_CONSENT, signatureWindowLabel } from '../model/waiver-signature'
+import { validityLabel, waiverAdultAge, type WaiverTemplate } from '../model/waiver'
+import { WAIVER_ESIGN_CONSENT, signatureWindowLabel } from '../model/waiver-signature'
+import { waiverSiteOrigin, waiverSiteSignUrl } from '../model/waiver-share'
 import { isDocumentId, waiversRefs } from './db'
 import { json, publicSite, readJsonBody, refuse } from './gate'
 import { requestAudit } from './signature-routes'
 import { readSignableWaiver, recordSignature, siteBusinessName } from './sign'
 
 /*==========================================
- * THE SIGNER'S DOORS (AGL-4042), with no account: the share link's page on
- * the console, and the site's Sign waiver element. Reading names only what a
+ * THE SIGNER'S DOORS (AGL-4042), with no account: the store's own signing
+ * page a share link opens, the site's Sign waiver element, and the console's
+ * old share-link page, which sends a signer on to the store's site by the
+ * `signUrl` each answer carries. Reading names only what a
  * signer is shown; signing is held to the forms plugin's protection — a
  * honeypot field a person never sees, answered as a success so a bot learns
  * nothing, and a per-site, per-address rate limit — on top of the
@@ -45,6 +48,8 @@ export interface PublicWaiver {
   checkboxes: WaiverTemplate['checkboxes']
   allowMinors: boolean
   validityText: string
+  /** The waiver's own adult age: younger signers need a guardian, and a guardian signs only for younger riders. */
+  adultAge: number
 }
 
 export interface PublicWaiverAnswer {
@@ -52,6 +57,14 @@ export interface PublicWaiverAnswer {
   waiver: PublicWaiver
   consent: { text: string; version: number }
   adultAge: number
+  /** The store's own signing page for this waiver, or `null` for a site with no public address. */
+  signUrl: string | null
+}
+
+/** The store's own signing page, for one waiver or the list, or `null` for a site with no public address. */
+function siteSignUrl(host: Record<string, unknown>, waiverId?: string | null): string | null {
+  const origin = waiverSiteOrigin(host)
+  return origin ? waiverSiteSignUrl(origin, waiverId) : null
 }
 
 function publicWaiver(waiver: WaiverTemplate): PublicWaiver {
@@ -63,6 +76,7 @@ function publicWaiver(waiver: WaiverTemplate): PublicWaiver {
     checkboxes: waiver.checkboxes,
     allowMinors: waiver.allowMinors,
     validityText: validityLabel(waiver.validity),
+    adultAge: waiverAdultAge(waiver),
   }
 }
 
@@ -85,6 +99,7 @@ export async function publicWaiverRoute(request: Request): Promise<Response> {
     return json({
       site: { name: siteBusinessName(site.host) },
       waivers: snapshot.docs.map((doc) => ({ id: doc.id, title: String(doc.get('title') ?? '') })),
+      signUrl: siteSignUrl(site.host),
     })
   }
   if (!isDocumentId(waiverId)) return refuse(404, 'This waiver is not available.')
@@ -94,7 +109,8 @@ export async function publicWaiverRoute(request: Request): Promise<Response> {
     site: { name: siteBusinessName(site.host) },
     waiver: publicWaiver(found.waiver),
     consent: { text: WAIVER_ESIGN_CONSENT.text, version: WAIVER_ESIGN_CONSENT.version },
-    adultAge: WAIVER_ADULT_AGE,
+    adultAge: waiverAdultAge(found.waiver),
+    signUrl: siteSignUrl(site.host, found.waiver.id),
   }
   return json(answer)
 }

@@ -30,6 +30,8 @@ import { ShareWaiverDialog } from './share-waiver-dialog.component'
 export interface WaiversListCardProps {
   hostId: string
   waivers: WaiverTemplate[] | null
+  /** The store's own site, where a share link opens; `null` for a site with no public address. */
+  signPageOrigin?: string | null
   error: string | null
   canManage: boolean
   canCollect: boolean
@@ -129,7 +131,12 @@ export function WaiversListCard(props: WaiversListCardProps) {
           noRowsDescription="Write your waiver once, publish it, and riders can sign it before they arrive or at the window."
         />
       </Stack>
-      <ShareWaiverDialog hostId={props.hostId} waiver={sharing} onClose={() => setSharing(null)} />
+      <ShareWaiverDialog
+        hostId={props.hostId}
+        waiver={sharing}
+        signPageOrigin={props.signPageOrigin ?? null}
+        onClose={() => setSharing(null)}
+      />
     </CardDisplay>
   )
 }
