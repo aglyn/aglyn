@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { CONTACT_SOURCE_LABELS } from '../app-utils/contacts'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   definePluginServiceContract,
@@ -386,4 +387,27 @@ export function pluginContactSource(
     (one) => one.key === key,
   )
   return entry ? { ...entry.impl, pluginId: entry.pluginId } : null
+}
+
+/**
+ * How a contact's source word reads on screen, wherever it came from: the
+ * core's own words from {@link CONTACT_SOURCE_LABELS}, then the label a
+ * plugin declared for its door with {@link registerPluginContactSource},
+ * then `fallback` when one is given, else the word itself.
+ *
+ * The core's map is a closed `Record<ContactSource, string>`, and a plugin's
+ * door is an open string by design, so a list, a chip or a report that read
+ * the map alone showed a plugin's raw word (`waiver` rather than its label).
+ * This is the one place both are asked, in that order, so a plugin cannot
+ * relabel a core source. It answers from what is registered in THIS process:
+ * a plugin that declares its door from its `declarations` entry is known in
+ * the console's browser and on both servers before a page renders.
+ */
+export function labelContactSource(source: unknown, fallback?: string): string {
+  const word = typeof source === 'string' ? source.trim() : ''
+  if (!word) return fallback ?? ''
+  if (Object.hasOwn(CONTACT_SOURCE_LABELS, word)) {
+    return CONTACT_SOURCE_LABELS[word as keyof typeof CONTACT_SOURCE_LABELS]
+  }
+  return pluginContactSource(word)?.label || (fallback ?? word)
 }

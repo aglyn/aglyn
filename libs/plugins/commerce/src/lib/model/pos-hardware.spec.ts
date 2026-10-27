@@ -29,7 +29,10 @@ import {
   parsePosHardwareConfig,
   POS_HARDWARE_DEFAULT_MARKUP_BPS,
   POS_HARDWARE_ENV,
+  POS_HARDWARE_MAX_PER_LINE,
+  POS_HARDWARE_MAX_UNITS,
   POS_HARDWARE_ORDER_STATUSES,
+  POS_HARDWARE_SKUS,
   posHardwareOffers,
   posHardwareRefundable,
   posHardwareUnitCents,
@@ -190,6 +193,52 @@ describe('pricePosHardwareCart: the server prices the basket', () => {
   })
 })
 
+describe('the catalog (AGL-4038)', () => {
+  it('holds every reader and accessory the register sells, by Stripe’s own names', () => {
+    expect(POS_HARDWARE_SKUS.map((sku) => [sku.id, sku.kind, sku.stripeProductName])).toEqual([
+      ['stripe-reader-s710', 'reader', 'Stripe Reader S710'],
+      ['stripe-reader-s700', 'reader', 'Stripe Reader S700'],
+      ['stripe-reader-t600', 'reader', 'Stripe Reader T600'],
+      ['bbpos-wisepos-e', 'reader', 'BBPOS WisePOS E'],
+      ['stripe-reader-m2', 'reader', 'Stripe Reader M2'],
+      ['stripe-reader-s700-dock', 'accessory', 'Stripe Reader S700/S710 Dock'],
+      ['stripe-reader-hub', 'accessory', 'Stripe Reader Hub'],
+      ['stripe-reader-s700-case', 'accessory', 'Stripe Reader S700/S710 Case'],
+      ['stripe-reader-s700-cable', 'accessory', 'Stripe Reader S700/S710 Cable'],
+      ['stripe-reader-charger', 'accessory', 'Stripe Reader Charger'],
+      ['stripe-reader-m2-dock', 'accessory', 'Stripe Reader M2 Dock'],
+      ['stripe-reader-m2-mount', 'accessory', 'Stripe Reader M2 Mount'],
+      ['bbpos-wisepos-e-dock', 'accessory', 'BBPOS WisePOS E Dock'],
+      ['bbpos-wisepos-e-power-cable', 'accessory', 'BBPOS WisePOS E 5ft Power Cable'],
+    ])
+  })
+
+  it('lists readers before accessories, so the card offers readers first', () => {
+    const kinds = POS_HARDWARE_SKUS.map((sku) => sku.kind)
+    expect(kinds.lastIndexOf('reader')).toBeLessThan(kinds.indexOf('accessory'))
+  })
+
+  it('carries no price: every figure comes from the environment', () => {
+    for (const sku of POS_HARDWARE_SKUS) {
+      expect(Object.keys(sku).sort()).toEqual(
+        ['displayName', 'id', 'kind', 'stripeProductName', 'use', ...(sku.mayBeDiscontinued ? ['mayBeDiscontinued'] : [])].sort(),
+      )
+    }
+  })
+
+  it('marks the WisePOS E, and only it, as one Stripe may stop selling', () => {
+    expect(POS_HARDWARE_SKUS.filter((sku) => sku.mayBeDiscontinued).map((sku) => sku.id)).toEqual(['bbpos-wisepos-e'])
+    const config = parsePosHardwareConfig({
+      ...ENV,
+      [POS_HARDWARE_ENV.prices]: JSON.stringify({ 'bbpos-wisepos-e': 24_900, 'stripe-reader-t600': 32_900 }),
+    }) as PosHardwareConfig
+    expect(posHardwareOffers(config).map((offer) => [offer.sku, offer.mayBeDiscontinued])).toEqual([
+      ['stripe-reader-t600', false],
+      ['bbpos-wisepos-e', true],
+    ])
+  })
+})
+
 describe('the lines a Checkout Session carries', () => {
   it('round-trips through the metadata', () => {
     const config = parsePosHardwareConfig(ENV) as PosHardwareConfig
@@ -200,6 +249,27 @@ describe('the lines a Checkout Session carries', () => {
     if (!priced.ok) throw new Error('expected a priced basket')
     const encoded = encodePosHardwareLines(priced.lines)
     expect(encoded.length).toBeLessThan(500)
+    expect(decodePosHardwareLines(encoded)).toEqual(priced.lines)
+  })
+
+  it('fits Stripe’s 500-character metadata value with every item at the highest accepted price', () => {
+    // The widest basket the cart allows: every item in the catalog, the spare
+    // units on one line, each priced at the parser's ceiling with its
+    // highest markup, so each unit price has the most digits it can have.
+    const prices = Object.fromEntries(POS_HARDWARE_SKUS.map((sku) => [sku.id, 1_000_000]))
+    const config = parsePosHardwareConfig({
+      ...ENV,
+      [POS_HARDWARE_ENV.prices]: JSON.stringify(prices),
+      [POS_HARDWARE_ENV.markupBps]: '100000',
+    }) as PosHardwareConfig
+    const spare = Math.min(POS_HARDWARE_MAX_PER_LINE, POS_HARDWARE_MAX_UNITS - POS_HARDWARE_SKUS.length + 1)
+    const priced = pricePosHardwareCart(
+      config,
+      POS_HARDWARE_SKUS.map((sku, index) => ({ sku: sku.id, quantity: index === 0 ? spare : 1 })),
+    )
+    if (!priced.ok) throw new Error('expected a priced basket')
+    const encoded = encodePosHardwareLines(priced.lines)
+    expect(encoded.length).toBeLessThanOrEqual(500)
     expect(decodePosHardwareLines(encoded)).toEqual(priced.lines)
   })
 

@@ -302,6 +302,35 @@ registerPluginJob({
 })
 
 /**
+ * Card reader start-up screens (AGL-4048) that went stale with nobody opening
+ * the POS devices card: a logo changed on the organization profile or the
+ * white-label brand, or the logo's file replaced in the media library. Every
+ * 15 minutes, like the recovery pair: a store whose screen did not move costs
+ * a few reads and no Stripe call, and nothing a merchant saves waits on it.
+ * A screen Stripe refused is retried after six hours here, and at once when
+ * the card is opened.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'pos-reader-splash-refresh',
+  intervalMinutes: RECOVERY_JOB_INTERVAL_MINUTES,
+  description:
+    'Bring card reader start-up screens up to date after a logo change (AGL-4048).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY) return
+    const { refreshPosReaderSplashes } = await import('./server/pos-reader-splash')
+    const result = await refreshPosReaderSplashes(gate)
+    if (result.applied || result.failed || result.more) {
+      console.info(
+        `commerce: reader start-up screens — ${result.applied} updated, ` +
+          `${result.failed} failed${result.more ? ', more stores than one pass reaches' : ''}`,
+      )
+    }
+  },
+})
+
+/**
  * A visitor's payment door: it opens a Stripe Checkout Session for whoever
  * calls it, so the dispatcher holds it to the card-testing counters
  * (AGL-3363). Declared here, beside the registration, so the door cannot

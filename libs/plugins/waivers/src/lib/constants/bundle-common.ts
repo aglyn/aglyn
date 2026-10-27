@@ -75,6 +75,16 @@ export const WAIVERS_PERMISSIONS = {
 export const WAIVERS_CONTACT_SOURCE = 'waiver'
 
 /**
+ * The CRM capture door this plugin declares (core `registerPluginContactSource`):
+ * what a contact's source, and a timeline entry from a signature, read as.
+ */
+export const WAIVERS_CONTACT_SOURCE_DECLARATION = {
+  source: WAIVERS_CONTACT_SOURCE,
+  label: 'Waiver signed',
+  openLabel: 'Open waiver',
+} as const
+
+/**
  * The register's check-in zone this plugin fills (AGL-4043 hosts it in the
  * commerce plugin), named by id only: a plugin never imports another.
  */

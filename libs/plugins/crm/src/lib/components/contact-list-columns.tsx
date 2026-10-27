@@ -19,10 +19,9 @@
 import {
   activityTimeLabel,
   CONTACT_LIFECYCLE_STAGE_LABELS,
-  CONTACT_SOURCE_LABELS,
   EMAIL_STATE_LABELS,
-  type ContactSource,
 } from '@aglyn/aglyn'
+import { labelContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import {
   hiddenFilterColumns,
   listFilterColumn,
@@ -248,7 +247,7 @@ export function contactListColumns(
           {Object.keys(row.sources ?? {}).map((source) => (
             <Chip
               key={source}
-              label={CONTACT_SOURCE_LABELS[source as ContactSource] ?? source}
+              label={labelContactSource(source)}
               size="small"
             />
           ))}

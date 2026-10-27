@@ -18,6 +18,7 @@
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   capturePluginContact,
+  labelContactSource,
   listPluginContactSources,
   pluginContactCaptureWriter,
   pluginContactSource,
@@ -246,5 +247,41 @@ describe('plugin contact capture', () => {
     expect(() =>
       registerPluginContactCaptureWriter(rolodexPlugin().writer),
     ).toThrow(/no owner/)
+  })
+})
+
+describe('labelContactSource: how a source word reads on screen', () => {
+  it('answers the core’s own words from its map', () => {
+    expect(labelContactSource('order')).toBe('Customer')
+    expect(labelContactSource('manual')).toBe('Added by hand')
+  })
+
+  it('answers a plugin’s door with the label it declared, not its raw word', () => {
+    expect(labelContactSource('kiosk')).toBe('kiosk')
+    declareSilos()
+    expect(labelContactSource('kiosk')).toBe('Guest book')
+    expect(labelContactSource(' mailer ')).toBe('Newsletter box')
+    unregisterPluginServices('kiosk')
+    expect(labelContactSource('kiosk')).toBe('kiosk')
+  })
+
+  it('never lets a plugin relabel a core source', () => {
+    registerPluginContactSource({ source: 'form', label: 'Sign-up sheet' }, { pluginId: 'kiosk' })
+    expect(labelContactSource('form')).toBe('Form')
+  })
+
+  it('reads an unknown word as itself, and nothing as nothing', () => {
+    expect(labelContactSource('carrier-pigeon')).toBe('carrier-pigeon')
+    expect(labelContactSource('')).toBe('')
+    expect(labelContactSource(undefined)).toBe('')
+    expect(labelContactSource(42)).toBe('')
+  })
+
+  it('answers the caller’s fallback for a word nobody labels, and only then', () => {
+    declareSilos()
+    expect(labelContactSource('carrier-pigeon', 'Capture')).toBe('Capture')
+    expect(labelContactSource('', 'Capture')).toBe('Capture')
+    expect(labelContactSource('kiosk', 'Capture')).toBe('Guest book')
+    expect(labelContactSource('booking', 'Capture')).toBe('Booking')
   })
 })

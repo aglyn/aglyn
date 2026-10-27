@@ -18,12 +18,12 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
-  CONTACT_SOURCE_LABELS,
   type ConsentGroup,
   type ContactSource,
   MARKETING_BASIS_LABELS,
   readMarketingBasis,
 } from '@aglyn/aglyn'
+import { labelContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { personKeyInBrowser } from '../model/person-key-web'
 /*
  * The component path and NOT the marketing barrel: that barrel is the entry
@@ -233,7 +233,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
               {sources.map((source) => (
                 <Chip
                   key={source}
-                  label={CONTACT_SOURCE_LABELS[source] ?? source}
+                  label={labelContactSource(source)}
                   size="small"
                 />
               ))}

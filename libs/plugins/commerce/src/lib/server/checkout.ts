@@ -156,14 +156,18 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!product || product.deletedAt) {
       return res.status(404).json({ error: 'Unknown product' })
     }
-    // Sold in person only (AGL-4060): bought at the register, the kiosk or
-    // the POS apps, never through the site's Buy now.
-    if (!CommerceModel.productSellsOnline(product)) {
-      return res.status(404).json({ error: 'Unknown product' })
-    }
     // Variant pricing (AGL-292): the buyer's selection maps to a variant;
     // absent variantId keeps the legacy default-variant behavior.
     const lifted = CommerceModel.liftLegacyProduct(product)
+    // For sale online at all (AGL-4060): live, ACTIVE and sold online, the
+    // one check the cart's checkout makes of every line. A draft or archived
+    // product has no page, so Buy now answers it the 404 the product page
+    // does; a product sold in person only is bought at the register, the
+    // kiosk or the POS apps, never here. Asked of the LIFTED product, as the
+    // cart asks it, so a legacy document with no status still sells.
+    if (!CommerceModel.productListedOnline(lifted)) {
+      return res.status(404).json({ error: 'Unknown product' })
+    }
     const variant = variantId
       ? lifted.variants.find((item) => item.id === variantId)
       : lifted.variants[0]

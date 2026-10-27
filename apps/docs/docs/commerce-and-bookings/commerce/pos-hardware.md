@@ -33,9 +33,10 @@ The register takes card-present payments on Stripe's smart readers:
 | Reader | Notes |
 | --- | --- |
 | **Stripe Reader S700** / **S710** | Android-based smart reader for the countertop or the hand. |
+| **Stripe Reader T600** | Countertop smart reader, on Wi-Fi or on Ethernet with the hub. |
 | **BBPOS WisePOS E** | Countertop smart reader. |
 
-Both are sold by Stripe. They are smart readers: each one talks to Stripe
+All are sold by Stripe. They are smart readers: each one talks to Stripe
 over its own internet connection, so it does not need to be plugged into
 or paired by Bluetooth with the device the register runs on. Card readers
 are shown in the console only when they are available for your store.
@@ -106,9 +107,10 @@ A workspace on a white-label plan never shows the Aglyn screen: its readers
 show its own logo unless it picks an image.
 
 Your choice goes to every reader on the site, including ones you add later.
-Readers pick up a change within about ten minutes. If you change your logo,
-open the **POS devices** card again to send the new one. Any admin or editor
-who can use the point of sale can change it.
+Readers pick up a change within about ten minutes. If you change your logo, or
+replace its file in your media library, your readers get the new one within
+about half an hour; open the **POS devices** card to send it right away. Any
+admin or editor who can use the point of sale can change it.
 
 ## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
 
@@ -130,11 +132,15 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 | --- | --- |
 | **Stripe Reader S710** | Handheld with its own 4G connection, for events and parking lots |
 | **Stripe Reader S700** | Handheld or countertop reader on Wi-Fi |
+| **Stripe Reader T600** | Countertop reader on Wi-Fi, or on Ethernet with the hub |
 | **BBPOS WisePOS E** | Countertop reader on Wi-Fi |
 | **Stripe Reader M2** | Pairs with the Aglyn POS app on your phone or tablet by Bluetooth |
-| Charging docks and the M2 mount | Keep a reader charged and in place at the counter |
+| Charging docks for the S700/S710, the WisePOS E and the M2, and the M2 mount | Keep a reader charged and in place at the counter |
+| The Stripe Reader Hub | Connects an S700, S710 or T600 to Ethernet and power |
+| A case for the S700/S710, and spare cables and chargers | Protect a handheld reader, or replace a lost cable or charger |
 
-The card shows only what is available to order, with its price.
+The card shows only what is available to order, with its price. Stripe may stop
+selling the BBPOS WisePOS E, and the card says so beside it.
 
 **Place an order**
 

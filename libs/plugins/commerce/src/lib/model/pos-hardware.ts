@@ -81,11 +81,18 @@ export const POS_HARDWARE_DEFAULT_MARKUP_BPS = 3000
 export type PosHardwareSkuId =
   | 'stripe-reader-s710'
   | 'stripe-reader-s700'
+  | 'stripe-reader-t600'
   | 'stripe-reader-m2'
   | 'bbpos-wisepos-e'
   | 'stripe-reader-s700-dock'
-  | 'bbpos-wisepos-e-dock'
+  | 'stripe-reader-hub'
+  | 'stripe-reader-s700-case'
+  | 'stripe-reader-s700-cable'
+  | 'stripe-reader-charger'
+  | 'stripe-reader-m2-dock'
   | 'stripe-reader-m2-mount'
+  | 'bbpos-wisepos-e-dock'
+  | 'bbpos-wisepos-e-power-cable'
 
 export interface PosHardwareSku {
   id: PosHardwareSkuId
@@ -96,6 +103,13 @@ export interface PosHardwareSku {
   displayName: string
   /** One line on what it is for. */
   use: string
+  /**
+   * Set when Stripe may stop selling the item. The shop still sells it while
+   * its price is configured, and the Hardware card says so beside it, so a
+   * merchant choosing between readers is not surprised later. Remove the
+   * item's price once Stripe stops selling it, as for any other item.
+   */
+  mayBeDiscontinued?: boolean
 }
 
 /**
@@ -119,11 +133,19 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     use: 'Handheld or countertop reader on Wi-Fi',
   },
   {
+    id: 'stripe-reader-t600',
+    kind: 'reader',
+    stripeProductName: 'Stripe Reader T600',
+    displayName: 'Stripe Reader T600',
+    use: 'Countertop reader on Wi-Fi, or on Ethernet with the hub',
+  },
+  {
     id: 'bbpos-wisepos-e',
     kind: 'reader',
     stripeProductName: 'BBPOS WisePOS E',
     displayName: 'BBPOS WisePOS E',
     use: 'Countertop reader on Wi-Fi',
+    mayBeDiscontinued: true,
   },
   {
     id: 'stripe-reader-m2',
@@ -135,9 +157,51 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
   {
     id: 'stripe-reader-s700-dock',
     kind: 'accessory',
-    stripeProductName: 'Stripe Reader S700 Dock',
+    stripeProductName: 'Stripe Reader S700/S710 Dock',
     displayName: 'Charging dock for the S700 and S710',
     use: 'Keeps the reader charged at the counter and adds an Ethernet port',
+  },
+  {
+    id: 'stripe-reader-hub',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader Hub',
+    displayName: 'Hub for the S700, S710 and T600',
+    use: 'Connects the reader to Ethernet and power',
+  },
+  {
+    id: 'stripe-reader-s700-case',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader S700/S710 Case',
+    displayName: 'Case for the S700 and S710',
+    use: 'Protects a handheld reader on the move',
+  },
+  {
+    id: 'stripe-reader-s700-cable',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader S700/S710 Cable',
+    displayName: 'Cable for the S700 and S710',
+    use: 'A spare cable for the reader',
+  },
+  {
+    id: 'stripe-reader-charger',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader Charger',
+    displayName: 'Charger for Stripe readers',
+    use: 'A spare wall charger',
+  },
+  {
+    id: 'stripe-reader-m2-dock',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader M2 Dock',
+    displayName: 'Charging dock for the M2',
+    use: 'Keeps the M2 charged at the counter',
+  },
+  {
+    id: 'stripe-reader-m2-mount',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader M2 Mount',
+    displayName: 'Mount for the M2',
+    use: 'Holds the M2 in place at the counter',
   },
   {
     id: 'bbpos-wisepos-e-dock',
@@ -147,11 +211,11 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     use: 'Keeps the reader charged at the counter and adds an Ethernet port',
   },
   {
-    id: 'stripe-reader-m2-mount',
+    id: 'bbpos-wisepos-e-power-cable',
     kind: 'accessory',
-    stripeProductName: 'Stripe Reader M2 Mount',
-    displayName: 'Mount for the M2',
-    use: 'Holds the M2 in place at the counter',
+    stripeProductName: 'BBPOS WisePOS E 5ft Power Cable',
+    displayName: '5 ft power cable for the WisePOS E',
+    use: 'A spare power cable for the reader',
   },
 ]
 
@@ -276,6 +340,8 @@ export interface PosHardwareOffer {
   name: string
   use: string
   unitCents: number
+  /** Stripe may stop selling it ({@link PosHardwareSku.mayBeDiscontinued}). */
+  mayBeDiscontinued: boolean
 }
 
 /** The items on offer, readers first, in catalog order. */
@@ -290,6 +356,7 @@ export function posHardwareOffers(config: PosHardwareConfig): PosHardwareOffer[]
         name: sku.displayName,
         use: sku.use,
         unitCents: posHardwareUnitCents(cost, config.markupBps),
+        mayBeDiscontinued: sku.mayBeDiscontinued === true,
       },
     ]
   })
@@ -358,8 +425,9 @@ export function pricePosHardwareCart(
  * THE CHECKOUT SESSION'S METADATA.
  *
  * The webhook builds the order from the session Stripe hands back, so the
- * lines ride in its metadata in a compact form (`sku*qty*unit;…`, well inside
- * Stripe's 500-character value limit for the at most seven distinct items),
+ * lines ride in its metadata in a compact form (`sku*qty*unit;…`, inside
+ * Stripe's 500-character value limit even with every item in the catalog in
+ * one basket at the highest price the config accepts, which a spec holds),
  * and the webhook re-reads every one against the catalog rather than trusting
  * a name from the wire.
  *=========================================*/

@@ -32,6 +32,8 @@
  *   image against Stripe's rules, and brings every store up to date.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
@@ -114,9 +116,14 @@ jest.mock('@aglyn/tenant-data-admin/server/id-token-refusal', () => ({
 
 import { posReaderSplashImageProblem, POS_READER_SPLASH_FAMILIES } from '../model/pos-reader-splash'
 import { posReaderSplashAdmin } from './pos-reader-splash-admin'
-import { applyPosReaderSplash, posReaderSplashHandler } from './pos-reader-splash'
+import {
+  applyPosReaderSplash,
+  POS_READER_SPLASH_RETRY_FAILED_AFTER_MS,
+  posReaderSplashHandler,
+  refreshPosReaderSplashes,
+} from './pos-reader-splash'
 import { renderPosReaderSplash } from './pos-reader-splash-render'
-import { savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
+import { ensurePosOfflineCardConfiguration, savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
 
 interface StripeCall {
   method: string
@@ -131,6 +138,8 @@ let fileCounter = 0
 let configurationCounter = 0
 /** Run as Stripe creates a configuration, to stage a racing first write. */
 let onConfigurationCreate: (() => void) | null = null
+/** Stripe refuses every configuration write while set. */
+let refuseConfigurations = false
 let externalImage: Buffer | null = null
 
 const fetchMock = jest.fn(async (url: any, init: any) => {
@@ -160,6 +169,9 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
   })
   if (target.host === 'files.stripe.com' && path === 'files') {
     return { ok: true, status: 200, json: async () => ({ id: `file_${++fileCounter}` }) }
+  }
+  if (refuseConfigurations && path.startsWith('terminal/configurations')) {
+    return { ok: false, status: 400, json: async () => ({ error: { code: 'parameter_invalid' } }) }
   }
   if (path === 'terminal/configurations' && init?.method === 'POST') {
     onConfigurationCreate?.()
@@ -285,6 +297,7 @@ beforeEach(() => {
   fileCounter = 0
   configurationCounter = 0
   onConfigurationCreate = null
+  refuseConfigurations = false
   externalImage = null
   mockManagePos = true
   mockBlocked = null
@@ -482,6 +495,188 @@ describe('applying a store’s screen', () => {
     await seedPlatformDefault()
     process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
     expect((await applyPosReaderSplash('host-1')).outcome).toBe('skipped')
+    expect(stripeOnly()).toHaveLength(0)
+  })
+})
+
+describe('the refresh beat: a logo change reaches the readers with no card opened', () => {
+  const open = { isLocked: async () => false }
+  const uploads = () => stripeOnly().filter((call) => call.host === 'files.stripe.com')
+
+  async function logoApplied() {
+    await seedOrgLogo()
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo1' }
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', splash: { choice: 'logo', updatedAtMs: 1 } })
+    expect((await applyPosReaderSplash('host-1')).outcome).toBe('applied')
+    stripeCalls.length = 0
+    return String(fakeDocs.get(configPath)?.['splashAppliedKey'])
+  }
+
+  it('makes no Stripe call while nothing changed', async () => {
+    await logoApplied()
+    expect(await refreshPosReaderSplashes(open)).toEqual({ applied: 0, unchanged: 1, failed: 0, skipped: 0, more: false })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('sends a new organization logo on the next beat, onto the same configuration, once', async () => {
+    const before = await logoApplied()
+    mockStorage.set('orgs/org-1/media/logo2', { body: await png(600, 300) })
+    fakeDocs.set('orgs/org-1/media/logo2', { contentType: 'image/png', sizeBytes: 2048, contentSha256: 'd'.repeat(64), visibleTo: ['org'] })
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo2' }
+
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 1, failed: 0 })
+    expect(uploads()).toHaveLength(2)
+    expect(configurationWrites().map((call) => call.path)).toEqual(['terminal/configurations/tmc_new1'])
+    expect(stripeOnly().some((call) => call.path.startsWith('terminal/locations'))).toBe(false)
+    expect(fakeDocs.get(configPath)?.['splashAppliedKey']).not.toBe(before)
+
+    stripeCalls.length = 0
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 0, unchanged: 1 })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('sends a logo whose file was replaced in the media library', async () => {
+    await logoApplied()
+    fakeDocs.set('orgs/org-1/media/logo1', { ...fakeDocs.get('orgs/org-1/media/logo1'), contentSha256: 'e'.repeat(64) })
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 1 })
+    expect(uploads()).toHaveLength(2)
+  })
+
+  it('leaves a locked store as it is', async () => {
+    await logoApplied()
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo-gone' }
+    const asked: string[] = []
+    const locked = { isLocked: async (hostId: string) => (asked.push(hostId), true) }
+    expect(await refreshPosReaderSplashes(locked)).toMatchObject({ applied: 0, skipped: 1 })
+    expect(asked).toEqual(['host-1'])
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('waits before retrying a screen that failed, while opening the card retries at once', async () => {
+    await logoApplied()
+    fakeDocs.set('orgs/org-1/media/logo1', { ...fakeDocs.get('orgs/org-1/media/logo1'), contentSha256: 'f'.repeat(64) })
+    mockBlocked = 'quarantined'
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ failed: 1 })
+    const failed = fakeDocs.get(configPath) as Record<string, unknown>
+    expect(typeof failed['splashFailedKey']).toBe('string')
+
+    // Inside the wait the beat leaves it, and does not stamp a new failure.
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ failed: 0, skipped: 1 })
+    expect(fakeDocs.get(configPath)?.['splashFailedAtMs']).toBe(failed['splashFailedAtMs'])
+
+    // The card's own apply is not held back by it.
+    expect((await applyPosReaderSplash('host-1')).outcome).toBe('failed')
+
+    // Once the wait is over the beat tries again, and a fixed logo goes out.
+    mockBlocked = null
+    fakeDocs.set(configPath, {
+      ...fakeDocs.get(configPath),
+      splashFailedAtMs: Date.now() - POS_READER_SPLASH_RETRY_FAILED_AFTER_MS - 1,
+    })
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 1 })
+    expect(fakeDocs.get(configPath)?.['splashProblem']).toBeUndefined()
+  })
+
+  it('does nothing in live mode until Terminal live mode is on', async () => {
+    await logoApplied()
+    fakeDocs.set('orgs/org-1/media/logo1', { ...fakeDocs.get('orgs/org-1/media/logo1'), contentSha256: '9'.repeat(64) })
+    process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
+    expect(await refreshPosReaderSplashes(open)).toEqual({ applied: 0, unchanged: 0, failed: 0, skipped: 0, more: false })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('is scheduled: the commerce server registers the beat at module scope, asking the lock', () => {
+    const server = readFileSync(join(__dirname, '..', 'server.ts'), 'utf8')
+    const block = /registerPluginJob\(\{[\s\S]*?name:\s*'pos-reader-splash-refresh'[\s\S]*?\n\}\)/.exec(server)?.[0] ?? ''
+    expect(block).toContain("lockdown: { scope: 'per-host' }")
+    expect(block).toContain('refreshPosReaderSplashes(gate)')
+    expect(server.indexOf(block)).toBeLessThan(server.indexOf('export function register'))
+  })
+})
+
+describe('offline card mode on the same configuration (AGL-4039)', () => {
+  const offlineWrites = () => configurationWrites().filter((call) => call.params.get('offline[enabled]') === 'true')
+
+  it('turns it on in one new configuration, assigned once, and then makes no Stripe call', async () => {
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    const [create] = configurationWrites()
+    expect(create.path).toBe('terminal/configurations')
+    expect(create.key).toBe('pos-configuration:host-1:offline')
+    expect(create.params.get('offline[enabled]')).toBe('true')
+    const assign = stripeOnly().find((call) => call.path === 'terminal/locations/tml_ours')
+    expect(assign?.params.get('configuration_overrides')).toBe('tmc_new1')
+    expect(fakeDocs.get(configPath)).toMatchObject({
+      stripeConfigurationId: 'tmc_new1',
+      stripeConfigurationAssigned: true,
+      offlineEnabled: true,
+      offlineConfigurationId: 'tmc_new1',
+    })
+
+    stripeCalls.length = 0
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('shares tipping’s configuration: an update naming only offline, no second configuration or assignment', async () => {
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', stripeConfigurationId: 'tmc_tips', tippingKey: '15,18,20' })
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    const writes = configurationWrites()
+    expect(writes.map((call) => call.path)).toEqual(['terminal/configurations/tmc_tips'])
+    expect([...writes[0].params.keys()]).toEqual(['offline[enabled]'])
+    expect(stripeOnly().some((call) => call.path.startsWith('terminal/locations'))).toBe(false)
+    expect(fakeDocs.get(configPath)).toMatchObject({ stripeConfigurationId: 'tmc_tips', offlineConfigurationId: 'tmc_tips' })
+  })
+
+  it('racing tipping to the first write, lands on the winner’s configuration and keeps the winner’s id', async () => {
+    // Tipping claims the site's configuration while offline mode's create is
+    // in flight. Before AGL-4039's fix offline mode then overwrote the id
+    // with its own, unassigned configuration, so the readers kept the
+    // winner's, which never had offline turned on.
+    onConfigurationCreate = () => {
+      fakeDocs.set(configPath, { ...fakeDocs.get(configPath), stripeConfigurationId: 'tmc_tips', stripeConfigurationAssigned: true })
+    }
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    expect(stripeOnly().map((call) => `${call.method} ${call.path}`)).toEqual([
+      'POST terminal/configurations',
+      'POST terminal/configurations/tmc_tips',
+      'DELETE terminal/configurations/tmc_new1',
+    ])
+    expect(offlineWrites().map((call) => call.path)).toEqual(['terminal/configurations', 'terminal/configurations/tmc_tips'])
+    expect(fakeDocs.get(configPath)).toMatchObject({
+      stripeConfigurationId: 'tmc_tips',
+      stripeConfigurationAssigned: true,
+      offlineEnabled: true,
+      offlineConfigurationId: 'tmc_tips',
+    })
+  })
+
+  it('finishes an assignment a previous first write left owing', async () => {
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', stripeConfigurationId: 'tmc_owed', stripeConfigurationAssigned: false })
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    const assign = stripeOnly().find((call) => call.path === 'terminal/locations/tml_ours')
+    expect(assign?.params.get('configuration_overrides')).toBe('tmc_owed')
+    expect(fakeDocs.get(configPath)).toMatchObject({ stripeConfigurationAssigned: true, offlineConfigurationId: 'tmc_owed' })
+  })
+
+  it.each([
+    ['set on a configuration the site no longer uses', { offlineEnabled: true, offlineConfigurationId: 'tmc_old' }],
+    ['recorded before it named its configuration', { offlineEnabled: true }],
+    ['on a configuration still owed its assignment', { offlineEnabled: true, offlineConfigurationId: 'tmc_tips', stripeConfigurationAssigned: false }],
+  ])('sets it again when the flag was %s', async (_label, cached) => {
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', stripeConfigurationId: 'tmc_tips', ...cached })
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    expect(offlineWrites().map((call) => call.path)).toEqual(['terminal/configurations/tmc_tips'])
+    expect(fakeDocs.get(configPath)?.['offlineConfigurationId']).toBe('tmc_tips')
+  })
+
+  it('answers false and records nothing when Stripe refuses it, or the site has no Location', async () => {
+    refuseConfigurations = true
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(false)
+    expect(fakeDocs.get(configPath)?.['offlineEnabled']).toBeUndefined()
+    refuseConfigurations = false
+    stripeCalls.length = 0
+    fakeDocs.set(configPath, {})
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(false)
     expect(stripeOnly()).toHaveLength(0)
   })
 })
