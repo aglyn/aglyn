@@ -425,14 +425,19 @@ beforeEach(() => {
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
   mockResolveOrgPermissions.mockClear()
-  mockResolveOrgPermissions.mockResolvedValue({
-    orgId: 'org-1',
-    role: 'admin',
-    isOwner: true,
-    permissions: { managePos: true },
-    orgWide: true,
-    hostRole: 'admin',
-  } as any)
+  // As the real resolver answers (AGL-4047): someone with no access to the
+  // site holds nothing, whatever the route is asked.
+  ;(mockResolveOrgPermissions as jest.Mock).mockImplementation(async (uid: string, context: { hostId?: string }) => {
+    const onSite = Boolean(docs.get(`hosts/${context?.hostId}`)?.['memberRoles']?.[uid])
+    return {
+      orgId: 'org-1',
+      role: 'admin',
+      isOwner: onSite,
+      permissions: { managePos: onSite },
+      orgWide: onSite,
+      hostRole: onSite ? 'admin' : null,
+    }
+  })
 
   // `editor`, not `manager` (AGL-2262): the projection has no such role,
   // and the register admitted it only because the gate was a denylist.
@@ -2328,47 +2333,53 @@ describe('the managePos permission gates the register (AGL-2474)', () => {
   })
 })
 
-describe('who may ring a sale (AGL-2262)', () => {
-  async function postAs(role: unknown) {
-    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': role } })
+/**
+ * WHO MAY RING A SALE: THE KEYS DECIDE, NOT THE SITE ROLE (AGL-4047).
+ *
+ * The route asked for `admin` or `editor` in the site's `memberRoles` (an
+ * allowlist, AGL-2262) as well as `managePos`. It now asks the permissions
+ * alone, as resolved for this site, so the resolver here answers the way the
+ * real one does: a site's role decides the default (`managePos` on for admin
+ * and editor, off for author and viewer), a grant or a refusal moves it, and
+ * someone with no access to the site holds nothing at all.
+ */
+describe('who may ring a sale (AGL-2262, AGL-4047)', () => {
+  const TIER_DEFAULT: Record<string, boolean> = { admin: true, editor: true, author: false, viewer: false }
+  async function postAs(role: string | undefined, granted?: boolean) {
+    docs.set('hosts/host-1', { memberRoles: role ? { 'cashier-1': role } : {} })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'editor',
+      isOwner: false,
+      permissions: { managePos: role ? (granted ?? TIER_DEFAULT[role] === true) : false },
+      orgWide: Boolean(role),
+      hostRole: role ?? null,
+    } as any)
     return post({ payment: 'cash', cashReceivedCents: 500 })
   }
 
-  it('refuses a role the projection could never have written', async () => {
-    // A legacy value, a typo, or a role someone adds later — and none of them
-    // is a decision to let that person take money.
-    //
-    // `manager` is on this list because it is the role people REACH for when
-    // they mean "the person who may override at the till" (AGL-2372), and it
-    // has never existed: `HostAccessRole` is `admin | editor | author |
-    // viewer`. Anyone building an elevated register control has to build it
-    // out of those four, or decide to mint a fifth.
-    for (const role of ['manager', 'contributor', 'billing', 'member', '']) {
-      const result = await postAs(role)
-      expect(result.status).toBe(403)
-    }
-    expect(orderDocs()).toHaveLength(0)
-  })
-
-  it('still refuses a viewer and a stranger', async () => {
+  it('refuses a viewer, an author and a stranger who were never granted the register', async () => {
     expect((await postAs('viewer')).status).toBe(403)
+    expect((await postAs('author')).status).toBe(403)
     expect((await postAs(undefined)).status).toBe(403)
     expect(orderDocs()).toHaveLength(0)
   })
 
-  /**
-   * AND REFUSES AN `author`, which is a role the projection CAN produce.
-   *
-   * The cases above are all values `hostRoleFor` could never write, so they
-   * prove the allowlist rejects nonsense and nothing more. `author` (AGL-2334)
-   * arrived AFTER AGL-2262 closed, is grantable on any host through
-   * `/api/hosts/members`, and is admitted by the `!role || role === 'viewer'`
-   * denylist this route used to carry — so it is the one value that
-   * distinguishes the two forms on a role that really exists. An author edits
-   * content; taking cash and minting a card QR is not editing content.
-   */
-  it('refuses an author, a role that DOES exist and is not a cashier', async () => {
-    expect((await postAs('author')).status).toBe(403)
+  it('rings the sale for a site viewer the workspace grants the register', async () => {
+    const result = await postAs('viewer', true)
+    expect(result.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  it('refuses an admin a role narrows, whatever their site role says', async () => {
+    expect((await postAs('admin', false)).status).toBe(403)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('refuses a site that does not exist before asking anything else', async () => {
+    docs.delete('hosts/host-1')
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(404)
     expect(orderDocs()).toHaveLength(0)
   })
 

@@ -1563,6 +1563,23 @@ describe('who may refund (AGL-2372)', () => {
     expect(refundCalls).toHaveLength(0)
   })
 
+  it('reaches the register’s refund rules for a site viewer granted the register, by permission alone (AGL-4047)', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'cashier-1' })
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'viewer' } })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'viewer',
+      isOwner: false,
+      permissions: { managePos: true },
+      orgWide: true,
+      hostRole: 'viewer',
+    } as any)
+    const reached = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(reached.status).toBe(403)
+    expect(reached.body.error).toBe('Refunds of online orders require an admin of the whole workspace')
+    expect(refundCalls).toHaveLength(0)
+  })
+
   it('still admits an org-wide admin — the control refuses, it does not block', async () => {
     // The other half of every allowlist: proof it did not simply close.
     const result = await post({}, { 'idempotency-key': 'attempt-a' })

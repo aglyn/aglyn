@@ -2137,6 +2137,7 @@ data class OrderUnresolvedLine(
 data class OrgPermissionDeclaration(
     val defaults: OrgPermissionDeclarationDefaults? = null,
     val description: String? = null,
+    val follows: String? = null,
     val group: String? = null,
     val groupLabel: String? = null,
     val hostRoleDefaults: Map<String, Boolean>? = null,
@@ -2157,6 +2158,7 @@ data class OrgPermissionDeclarationDefaults(
 @Serializable
 data class OrgPermissionEntry(
     val description: String,
+    val follows: String? = null,
     val group: String? = null,
     val key: String,
     val label: String,

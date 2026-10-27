@@ -362,18 +362,20 @@ function sectionBody(
  * this page only has to say what each section contains.
  */
 export function CommerceConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, section, sections, basePath, permissions, hostRole } = props
+  const { hostId, section, sections, basePath, permissions } = props
   /*
    * The register's own gate, for the devices card's Pair display (AGL-3712):
-   * `managePos` on a site role that may run it — what the server's
-   * `mayWorkRegister` asks. The server stays the enforcement point.
+   * `managePos` — what the server's `mayWorkRegister` asks. The key decides,
+   * not the site role (AGL-4047). The server stays the enforcement point.
    */
-  const canManagePos = permissions?.managePos === true && hostRole?.canPublish === true
+  const canManagePos = permissions?.managePos === true
   // The register's finer keys (AGL-4047), each following `managePos` unless a
   // role or the member sets it — what the devices and hardware routes ask.
+  // Buying hardware stands on its own: the Hardware card is this page's for a
+  // member who holds it without the register.
   const pos = {
     canSetUpDevices: canManagePos && holdsPosPermission(permissions, 'posDevices'),
-    canBuyHardware: canManagePos && holdsPosPermission(permissions, 'posBuyHardware'),
+    canBuyHardware: holdsPosPermission(permissions, 'posBuyHardware'),
     canCashDrawer: canManagePos && holdsPosPermission(permissions, 'posCashDrawer'),
   }
 

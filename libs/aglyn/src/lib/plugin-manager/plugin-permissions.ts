@@ -49,10 +49,24 @@ export interface PluginPermission {
    * the broader key's.
    */
   refines?: string
+  /**
+   * A key this one takes its verdict from where no custom role or override
+   * sets it, WITHOUT needing it (AGL-4047). Unlike `refines`, it may be
+   * granted while that key is refused — buying hardware for a store whose
+   * register the member does not work — so a key that stops refining one and
+   * follows it instead leaves every member with exactly the access they had,
+   * and can then be granted on its own. Its `defaults` should be the followed
+   * key's. Ignored on a key that also `refines`.
+   */
+  follows?: string
 }
 
-/** A key, and the broader key it refines (`PluginPermission.refines`). */
-export type PermissionRefinement = readonly [key: string, refines: string]
+/**
+ * A key, the key it takes its verdict from, and how
+ * (`PluginPermission.refines` / `.follows`): a two-entry pair refines its
+ * broader key, one marked `'follows'` only follows it.
+ */
+export type PermissionRefinement = readonly [key: string, refines: string, kind?: 'follows']
 
 /*
  * One registry per process, keyed on `globalThis` under `Symbol.for`, like
@@ -183,11 +197,28 @@ export function pluginPermissionDefaults(
 export function pluginPermissionRefinements(): PermissionRefinement[] {
   const refinements: PermissionRefinement[] = []
   for (const permission of pluginPermissions.values()) {
-    if (permission.refines && permission.refines !== permission.key) {
-      refinements.push([permission.key, permission.refines])
-    }
+    const refinement = permissionRefinementOf(permission)
+    if (refinement) refinements.push(refinement)
   }
   return refinements
+}
+
+/**
+ * One declaration's refinement, or null: the key it refines, else the key it
+ * follows, never itself. Shared by both declaration APIs' catalogs.
+ */
+export function permissionRefinementOf(declaration: {
+  key: string
+  refines?: string
+  follows?: string
+}): PermissionRefinement | null {
+  if (declaration.refines && declaration.refines !== declaration.key) {
+    return [declaration.key, declaration.refines]
+  }
+  if (declaration.follows && declaration.follows !== declaration.key) {
+    return [declaration.key, declaration.follows, 'follows']
+  }
+  return null
 }
 
 /**
@@ -230,6 +261,11 @@ function orderRefinements(
  * map's own verdict for the key stands, narrowed by the broader key; that is
  * the pass for a map whose refining keys were already resolved with every
  * layer, and then had stored values laid back over them.
+ *
+ * A key that only FOLLOWS (`'follows'`) takes the followed key's verdict
+ * where no layer sets it, and a layer's own value where one does, granted or
+ * not, whatever the followed key says. Without layers it is left as the map
+ * has it.
  */
 export function refinePermissionMap<T extends Record<string, boolean>>(
   map: T,
@@ -238,7 +274,7 @@ export function refinePermissionMap<T extends Record<string, boolean>>(
 ): T {
   if (!refinements.length) return map
   const refined: Record<string, boolean> = { ...map }
-  for (const [key, parent] of orderRefinements(refinements)) {
+  for (const [key, parent, kind] of orderRefinements(refinements)) {
     const held = refined[parent] === true
     if (layers) {
       let stored: boolean | undefined
@@ -246,8 +282,9 @@ export function refinePermissionMap<T extends Record<string, boolean>>(
         const value = layer?.[key]
         if (typeof value === 'boolean') stored = value
       }
-      refined[key] = held && (stored === undefined ? true : stored)
-    } else {
+      if (kind === 'follows') refined[key] = stored === undefined ? held : stored
+      else refined[key] = held && (stored === undefined ? true : stored)
+    } else if (kind !== 'follows') {
       refined[key] = held && refined[key] === true
     }
   }

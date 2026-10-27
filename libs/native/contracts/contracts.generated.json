@@ -7554,12 +7554,12 @@
         "scope": "org"
       },
       {
-        "description": "Order card readers and other hardware from the hardware shop.",
+        "description": "Order card readers and other hardware from the hardware shop. Follows \"Use the point of sale\" unless a role or member sets it, and may be allowed without it.",
+        "follows": "managePos",
         "group": "commerce",
         "key": "posBuyHardware",
         "label": "Buy point of sale hardware",
         "pluginId": "commerce",
-        "refines": "managePos",
         "scope": "org"
       },
       {

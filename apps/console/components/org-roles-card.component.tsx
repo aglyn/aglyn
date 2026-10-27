@@ -66,11 +66,13 @@ const ROLE_WORDS = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: '
 
 /**
  * What "inherit" means for a key in a custom role: the org roles that hold it
- * by default, or, for a key that refines a broader one (AGL-4047), that key.
+ * by default, or, for a key that refines or follows another (AGL-4047), that
+ * key.
  */
 function inheritHint(definition: OrgPermissionDefinition): string {
-  if (definition.refines) {
-    return `Inherit: follows "${orgPermissionLabel(definition.refines)}"`
+  const followed = definition.refines ?? definition.follows
+  if (followed) {
+    return `Inherit: follows "${orgPermissionLabel(followed)}"`
   }
   const holders = (Object.keys(ROLE_WORDS) as Array<keyof typeof ROLE_WORDS>)
     .filter((role) => definition.roleDefaults[role])

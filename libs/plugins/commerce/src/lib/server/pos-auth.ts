@@ -38,24 +38,47 @@ export type PosStaffGate =
   | { ok: true; staff: PosStaff }
   | { ok: false; status: number; error: string }
 
+/** Who works the register: `managePos`, as resolved for the site (AGL-4047). */
+export function worksPosRegister(
+  permissions: Readonly<Record<string, boolean | undefined>> | null | undefined,
+): boolean {
+  return permissions?.['managePos'] === true
+}
+
 /**
- * The register's gate, shared by every POS route (AGL-3607): the same three
+ * The register's gate, shared by every POS route (AGL-3607): the same
  * questions `pos-order.ts` asks, in the same order, so a payment, a reader or
  * a display pairing is refused to exactly the people a sale is refused to.
  *
  * 1. A Firebase ID token.
- * 2. `admin` or `editor` on THIS site (`memberRoles`), an allowlist so a role
- *    added later is refused until someone decides otherwise (AGL-2262).
- * 3. `managePos` on the member's resolved permissions (AGL-2474), and the
- *    `pos` plan entitlement on the org that owns the site.
- * 4. When the route names one, the finer register key its action needs
+ * 2. `managePos` on the member's permissions as resolved FOR THIS SITE
+ *    (AGL-2474) — or what `admits` asks instead — and the `pos` plan
+ *    entitlement on the org that owns the site.
+ * 3. When the route names one, the finer register key its action needs
  *    (AGL-4047): `posSell`, `posDevices`, `posBuyHardware` and the rest,
  *    each following `managePos` unless a role or the member sets it.
+ *
+ * THE KEYS DECIDE, NOT THE SITE ROLE (AGL-4047). This asked for `admin` or
+ * `editor` in the site's `memberRoles` as well, which is exactly the set the
+ * key is on for by default, so nobody who had the register loses it. The
+ * resolver answers for this site: an org-wide member from their org role,
+ * custom role and overrides; a site collaborator from the role they hold
+ * here and their overrides; and anyone without access to the site with
+ * nothing. So a site viewer the workspace grants the register works it, and
+ * an admin a role narrows is refused. A site no workspace owns resolves
+ * against the caller's own workspace, and is refused by the plan step, which
+ * reads the plan of the workspace that owns the site.
  */
 export async function authorizePosStaff(
   req: PluginApiRequest,
   hostId: string,
   permission?: PosPermission,
+  /**
+   * Who the route admits before the finer key: whoever works the register,
+   * unless the route says otherwise — the hardware shop also admits a member
+   * who may buy hardware without the register.
+   */
+  admits: (permissions: Readonly<Record<string, boolean | undefined>>) => boolean = worksPosRegister,
 ): Promise<PosStaffGate> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -77,12 +100,8 @@ export async function authorizePosStaff(
     .doc(hostId)
     .get()
   if (!hostSnapshot.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[uid]
-  if (memberRole !== 'admin' && memberRole !== 'editor') {
-    return { ok: false, status: 403, error: 'Not permitted' }
-  }
   const membership = await resolveOrgPermissions(uid, { hostId })
-  if (!membership.permissions.managePos) {
+  if (!admits(membership.permissions ?? {})) {
     return { ok: false, status: 403, error: 'Not permitted' }
   }
   if (permission && !holdsPosPermission(membership.permissions, permission)) {

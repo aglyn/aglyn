@@ -926,11 +926,19 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
 match /hardwareOrders/{orderId} {
 allow read: if isStaff() ||
 (isOrgWideMember() && orgNotSuspended() &&
-orgMember().role in ['owner', 'admin', 'editor'] &&
-memberGrants('managePos'));
+((orgMember().role in ['owner', 'admin', 'editor'] &&
+memberGrants('managePos')) ||
+memberStamps('posBuyHardware')));
 allow write: if false;
 }
 
@@ -3074,6 +3082,38 @@ return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
 
 
 
+function hostOrgMemberStamps(hostId, permission) {
+let orgId = get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', '');
+let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+return member.get('resolvedPermissions', member.get('permissions', {}))
+.get(permission, false) == true;
+}
+
+
+
+
+
+function canReadRegisterSale(hostId) {
+return isSignedIn() && isHostMember(hostId) &&
+resource.data.get('channel', '') == 'pos' &&
+hostOrgMemberStamps(hostId, 'posSell');
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3830,8 +3870,15 @@ allow read: if isStaff() || canReadHostSensitive(hostId);
 
 
 
+
+
+
+
+
+
 match /orders/{orderId} {
-allow read: if isStaff() || canReadHostSensitive(hostId);
+allow read: if isStaff() || canReadHostSensitive(hostId) ||
+canReadRegisterSale(hostId);
 allow update: if isStaff() ||
 (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
 request.resource.data.diff(resource.data)

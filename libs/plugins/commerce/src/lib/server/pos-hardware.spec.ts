@@ -361,19 +361,50 @@ describe('the shop route', () => {
     expect(refused.status).toBe(403)
     expect(refused.body.error).toContain('Buy point of sale hardware')
     expect(stripeCalls).toHaveLength(0)
-    // Granted outright, it checks out; it never reaches past `managePos`.
+    // Granted outright, it checks out.
     mockBuyHardware = true
     const bought = await shop(
       { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
       { attemptKey: 'attempt-2' },
     )
     expect(bought.status).toBe(200)
+  })
+
+  it('lets a member who may buy hardware without the register see the shop, their orders and check out (AGL-4047)', async () => {
     mockManagePos = false
-    const held = await shop(
+    mockBuyHardware = true
+    expect((await shop({ action: 'catalog' })).status).toBe(200)
+    expect((await shop({ action: 'orders' })).status).toBe(200)
+    const bought = await shop(
       { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
-      { attemptKey: 'attempt-3' },
+      { attemptKey: 'attempt-hw-only' },
     )
-    expect(held.status).toBe(403)
+    expect(bought.status).toBe(200)
+    expect(stripeCalls.filter((call) => call.path === 'checkout/sessions')).toHaveLength(1)
+    // With neither the register nor the key, the shop is shut.
+    mockBuyHardware = undefined
+    expect((await shop({ action: 'catalog' })).status).toBe(403)
+    mockBuyHardware = false
+    expect((await shop({ action: 'orders' })).status).toBe(403)
+  })
+
+  it('refuses a checkout to a member who works the register with buying hardware denied (AGL-4047)', async () => {
+    mockManagePos = true
+    mockBuyHardware = false
+    const refused = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-denied' },
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Buy point of sale hardware')
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('asks the permissions, not the site role: a site viewer granted the register is admitted (AGL-4047)', async () => {
+    fakeDocs.set('hosts/host-1', { name: 'Corner Cafe', memberRoles: { 'manager-1': 'viewer' } })
+    expect((await shop({ action: 'catalog' })).status).toBe(200)
+    mockManagePos = false
+    expect((await shop({ action: 'catalog' })).status).toBe(403)
   })
 
   it('makes a PLATFORM checkout session priced on the server, under one key per attempt', async () => {

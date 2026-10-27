@@ -36,6 +36,7 @@ import {
   type PosHardwareConfig,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
+import { mayVisitPosHardwareShop } from '../model/plugin-permissions'
 import { authorizePosStaff, posIdempotencyKey, posRequestBody } from './pos-auth'
 import { posStripe, posTerminalAvailable } from './pos-stripe'
 
@@ -47,9 +48,12 @@ import { posStripe, posTerminalAvailable } from './pos-stripe'
  *   checkout  a Stripe Checkout Session for the basket, on the PLATFORM
  *   orders    this site's hardware orders, newest first
  *
- * Gated like the register (`authorizePosStaff`: an admin or editor of the
- * site with `managePos`, on a plan with POS), because the readers it sells
- * are the register's; a checkout also needs `posBuyHardware` (AGL-4047).
+ * Gated like the register (`authorizePosStaff`, on a plan with POS), because
+ * the readers it sells are the register's, with one difference (AGL-4047):
+ * the shop admits whoever works the register (`managePos`) AND whoever may
+ * buy hardware (`posBuyHardware`), which stands on its own — a bookkeeper
+ * with no register orders the store's readers. A checkout needs
+ * `posBuyHardware`; seeing the catalog and the site's orders needs either.
  *
  * THE SALE IS THE PLATFORM'S. The session is created with the platform key
  * and NO connected account, `transfer_data` or application fee: the merchant
@@ -140,11 +144,17 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
   const body = posRequestBody(req)
   const hostId = String(body['hostId'] ?? '')
   const action = String(body['action'] ?? '')
-  // BUYING IS ITS OWN KEY (AGL-4047): anyone who works the register sees what
-  // the shop offers and what this site ordered, and only a member holding
-  // "Buy point of sale hardware" — which follows `managePos` until a role or
-  // the member sets it — starts a checkout that the workspace pays for.
-  const gate = await authorizePosStaff(req, hostId, action === 'checkout' ? 'posBuyHardware' : undefined)
+  // BUYING IS ITS OWN KEY (AGL-4047): anyone who works the register or may
+  // buy hardware sees what the shop offers and what this site ordered, and
+  // only a member holding "Buy point of sale hardware" — which follows
+  // `managePos` until a role or the member sets it, and may be granted
+  // without it — starts a checkout that the workspace pays for.
+  const gate = await authorizePosStaff(
+    req,
+    hostId,
+    action === 'checkout' ? 'posBuyHardware' : undefined,
+    mayVisitPosHardwareShop,
+  )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
   const config = posHardwareConfig()

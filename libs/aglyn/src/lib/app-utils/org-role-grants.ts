@@ -63,6 +63,13 @@ export interface OrgPermissionEntry {
    * key. Absent for a key that refines nothing.
    */
   refines?: string
+  /**
+   * The key this one follows where no custom role or override sets it,
+   * without needing it (AGL-4047): granted on its own, it holds while that
+   * key is refused. Absent for a key that follows nothing, and for one that
+   * refines.
+   */
+  follows?: string
 }
 
 /** A heading the role editor groups keys under. */
@@ -104,6 +111,8 @@ export interface OrgPermissionDeclaration {
   pluginId?: string
   /** The broader key it refines (AGL-4047). */
   refines?: string
+  /** The key it follows without needing it (AGL-4047). */
+  follows?: string
 }
 
 /** A custom role (`orgs/{orgId}/roles/{roleId}`) or a member's overrides: explicit verdicts per key. */
@@ -279,6 +288,9 @@ export function assembleOrgRoleGrants(
       ...(group ? { group } : {}),
       scope: declaration.hostRoleDefaults ? 'site' : 'org',
       ...(declaration.refines && declaration.refines !== declaration.key ? { refines: declaration.refines } : {}),
+      ...(declaration.follows && declaration.follows !== declaration.key && !declaration.refines
+        ? { follows: declaration.follows }
+        : {}),
     })
     if (group && !groupIds.has(group)) {
       groupIds.add(group)
@@ -321,11 +333,18 @@ export function rolePermissions(
     }
   }
   // A key that refines a broader one (AGL-4047) is never held without it, and
-  // follows it where neither layer set the key. Applied broader keys first, so
-  // a chain settles in one pass; a refinement that loops is left alone.
+  // follows it where neither layer set the key; a key that only follows one
+  // takes its verdict where neither layer set the key, and nothing more.
+  // Applied broader keys first, so a chain settles in one pass; a refinement
+  // that loops is left alone.
   const broader = new Map<string, string>()
+  const followsOnly = new Set<string>()
   for (const entry of catalog.permissions) {
     if (entry.refines && entry.refines in out) broader.set(entry.key, entry.refines)
+    else if (entry.follows && entry.follows in out) {
+      broader.set(entry.key, entry.follows)
+      followsOnly.add(entry.key)
+    }
   }
   const depth = (key: string): number => {
     const seen = new Set<string>()
@@ -349,7 +368,8 @@ export function rolePermissions(
       const value = layer?.permissions?.[key]
       if (typeof value === 'boolean') stored = value
     }
-    out[key] = out[broader.get(key) as string] === true && (stored === undefined ? true : stored)
+    const held = out[broader.get(key) as string] === true
+    out[key] = followsOnly.has(key) ? (stored === undefined ? held : stored) : held && (stored === undefined ? true : stored)
   }
   return out
 }

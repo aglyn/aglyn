@@ -172,43 +172,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
-    // AN ALLOWLIST (AGL-2262), matching `cancel-order.ts`, `fulfill-order.ts`
-    // and the Firestore rules' own `hostMemberRole(hostId) in
-    // ['admin','editor']`. The old `!role || role === 'viewer'` denylist
-    // admitted every string that was not literally `viewer` on the route that
-    // takes cash, mints a card QR and decrements real inventory.
-    // The union has since GROWN: `HostAccessRole` is `admin | editor | author
-    // | viewer` (AGL-2334), and `author` is grantable on this host through
-    // `/api/hosts/members`. So this allowlist now refuses a role a real
-    // projection CAN produce, deliberately — an author edits content and does
-    // not take money. That is the whole reason it is an allowlist: a role
-    // added later is refused until someone decides otherwise, rather than
-    // admitted by the silence of a denylist.
+    if (!hostSnapshot.exists) return res.status(404).json({ error: 'Unknown site' })
+    // THE KEYS DECIDE, NOT THE SITE ROLE (AGL-4047). This route asked for
+    // `admin` or `editor` in the site's `memberRoles` (an allowlist, AGL-2262)
+    // AND `managePos` (AGL-2474). Those two agreed for everyone by default —
+    // `managePos` is on for exactly the admin and editor tiers — so dropping
+    // the role check takes the register from nobody. What changes is who the
+    // workspace can hand it to: a site viewer granted `managePos` rings sales,
+    // and an admin a role narrows is refused, as the waivers doors already do.
     //
-    // What it does NOT decide is WHOSE admin. `memberRoles` is a per-host
-    // projection, so a SITE COLLABORATOR granted `admin` on this one site
-    // (`hostAccess: { [hostId]: 'admin' }`, `allHosts: false`) is
-    // indistinguishable here from an org owner. That is correct for ringing a
-    // sale — they were invited to run this till — but it means this value
-    // alone cannot carry an elevated, manager-only control such as the
-    // AGL-2372 oversell override. The discriminator is `orgWide` on the
-    // membership resolved just below, not the role string.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not permitted' })
-    }
-    // THE `managePos` PERMISSION, actually read (AGL-2474). The allowlist
-    // above is a HOST-level fact and stays — it is what the Firestore rules
-    // enforce and dropping it would widen this route. This is the org-level
-    // half: `managePos` was declared by COMMERCE_PERMISSIONS, resolved into
-    // every permission map, displayed nowhere and read by nothing, so the
-    // capability was inert. Both must hold, matching the marketplace
-    // install/publish routes' resolveOrgPermissions + memberRoles pairing.
-    //
-    // Behaviour is unchanged for anyone who has not been given an explicit
-    // override: `managePos` defaults to true for the admin and editor tiers,
-    // which is exactly the set the allowlist already admits. What it adds is
-    // the ability to REVOKE POS from one admin without demoting them.
+    // `resolveOrgPermissions` answers for THIS site: an org-wide member from
+    // their org role, custom role and overrides; a site collaborator from the
+    // role they hold here and their overrides; and anyone without access to
+    // the site with nothing. Whose admin a member is stays the `orgWide`
+    // discriminator below, for the manager-only controls such as the AGL-2372
+    // oversell override; a site role alone never carried those.
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.managePos) {
       return res.status(403).json({ error: 'Not permitted' })

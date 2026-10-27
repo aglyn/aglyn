@@ -74,6 +74,19 @@ describe('setting a PIN', () => {
     expect((await pin({ action: 'set', pin: '4826', memberUid: 'viewer' }, 'owner')).status).toBe(404)
   })
 
+  it('sets a PIN for, and lists, whoever holds the register, whatever their site role (AGL-4047)', async () => {
+    h.memberships['viewer'] = { ...h.memberships['viewer']!, permissions: { managePos: true } }
+    expect((await pin({ action: 'set', pin: '4826', memberUid: 'viewer' }, 'owner')).status).toBe(200)
+    expect(((await pin({ action: 'roster' })).body['members'] as Array<{ uid: string }>).map((m) => m.uid)).toContain(
+      'viewer',
+    )
+    // An editor refused the sell key cannot be switched in, so is not listed.
+    h.memberships['cashier'] = { ...h.memberships['cashier']!, permissions: { managePos: true, posSell: false } }
+    expect(((await pin({ action: 'roster' })).body['members'] as Array<{ uid: string }>).map((m) => m.uid)).not.toContain(
+      'cashier',
+    )
+  })
+
   it('reports and clears', async () => {
     expect((await pin({ action: 'status' })).body['hasPin']).toBe(true)
     await pin({ action: 'clear' })

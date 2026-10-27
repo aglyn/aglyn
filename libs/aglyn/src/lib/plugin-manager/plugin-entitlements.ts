@@ -189,6 +189,11 @@ export interface PluginOrgPermissionDeclaration {
    * `PluginPermission.refines`.
    */
   refines?: string
+  /**
+   * A key this one takes its verdict from where nothing sets it, without
+   * needing it (AGL-4047). See `PluginPermission.follows`.
+   */
+  follows?: string
 }
 
 /**
@@ -210,6 +215,8 @@ export interface PluginCatalogPermission {
   source: 'catalog' | 'tier'
   /** The broader key this one refines, when it does. */
   refines?: string
+  /** The key this one follows without needing it, when it does. */
+  follows?: string
 }
 
 export interface PluginEntitlementRegistration {
@@ -429,6 +436,7 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
       source: 'catalog',
       ...(permission.refines ? { refines: permission.refines } : {}),
+      ...(permission.follows ? { follows: permission.follows } : {}),
     })
   }
   for (const permission of listPluginPermissions()) {
@@ -442,6 +450,7 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
       source: 'tier',
       ...(permission.refines ? { refines: permission.refines } : {}),
+      ...(permission.follows ? { follows: permission.follows } : {}),
     })
   }
   return [...byPlugin.keys()]

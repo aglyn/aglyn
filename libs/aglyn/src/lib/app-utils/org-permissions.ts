@@ -21,6 +21,7 @@ import {
   subscribePluginEntitlements,
 } from '../plugin-manager/plugin-entitlements'
 import {
+  permissionRefinementOf,
   refinePermissionMap,
   subscribePluginPermissions,
   type PermissionRefinement,
@@ -100,6 +101,13 @@ export interface OrgPermissionDefinition {
    * key. Only a plugin's key refines, and only a key the catalog holds.
    */
   refines?: OrgPermission
+  /**
+   * The key this one follows where no custom role or override sets it,
+   * without needing it (AGL-4047): granted on its own, it holds while that
+   * key is refused. Only a plugin's key follows, and only a key the catalog
+   * holds; a key that refines does not also follow.
+   */
+  follows?: OrgPermission
 }
 
 /**
@@ -185,8 +193,9 @@ export const ORG_PERMISSION_GROUPS: readonly OrgPermissionGroup[] = []
 export const TIER_PERMISSION_KEYS: readonly OrgPermission[] = []
 
 /**
- * Every catalog key that refines a broader one, with that key (AGL-4047).
- * Live, like `ORG_PERMISSIONS`. A resolver lays it over its map with
+ * Every catalog key that refines a broader one, with that key (AGL-4047),
+ * and every key that only follows one, marked `'follows'`. Live, like
+ * `ORG_PERMISSIONS`. A resolver lays it over its map with
  * `refinePermissionMap`.
  */
 export const ORG_PERMISSION_REFINEMENTS: readonly PermissionRefinement[] = []
@@ -262,6 +271,7 @@ function syncCatalog(): void {
       roleDefaults: declared.roleDefaults,
       ...(declared.hostRoleDefaults ? { hostRoleDefaults: declared.hostRoleDefaults } : {}),
       ...(declared.refines ? { refines: declared.refines } : {}),
+      ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {
@@ -276,12 +286,16 @@ function syncCatalog(): void {
     if (definition.refines && (!known.has(definition.refines) || definition.refines === definition.key)) {
       delete definition.refines
     }
+    if (definition.follows && (!known.has(definition.follows) || definition.follows === definition.key)) {
+      delete definition.follows
+    }
   }
   replaceItems(
     ORG_PERMISSION_REFINEMENTS,
-    definitions
-      .filter((definition) => definition.refines)
-      .map((definition) => [definition.key, definition.refines as string] as const),
+    definitions.flatMap((definition) => {
+      const refinement = permissionRefinementOf(definition)
+      return refinement ? [refinement] : []
+    }),
   )
   replaceItems(ORG_PERMISSIONS, definitions)
   replaceItems(ORG_PERMISSION_KEYS, keys)
@@ -374,7 +388,8 @@ export function resolveOrgPermissions(
     }
   }
   // A key that refines a broader one (AGL-4047) follows it where neither
-  // layer set the key, and is never held without it.
+  // layer set the key, and is never held without it; a key that only follows
+  // one takes its verdict where neither layer set the key, and nothing more.
   return refinePermissionMap(merged, ORG_PERMISSION_REFINEMENTS, [
     member.roleId ? customRole?.permissions : undefined,
     member.permissions,

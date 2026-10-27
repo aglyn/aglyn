@@ -224,15 +224,15 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       membership.orgWide === true &&
       membership.hostRole === 'admin'
     // THE REGISTER'S OWN REFUNDS (AGL-3609). A member who works the register
-    // — `admin` or `editor` on this site with `managePos` — may refund a POS
-    // order up to the site's cashier refund limit, and above it with a
-    // workspace admin's PIN. Decided below, once the order and the amount are
-    // known; every other refund still needs the workspace admin above.
+    // — `managePos` with the register's refund key, as resolved for this site
+    // (AGL-4047), whatever their site role — may refund a POS order up to the
+    // site's cashier refund limit, and above it with a workspace admin's PIN.
+    // Decided below, once the order and the amount are known; every other
+    // refund still needs the workspace admin above.
     const registerStaff =
       !workspaceAdmin &&
-      (memberRole === 'admin' || memberRole === 'editor') &&
       // The register's refund key (AGL-4047), which follows `managePos`
-      // unless a role or the member sets it.
+      // unless a role or the member sets it, and is never held without it.
       holdsPosPermission(membership.permissions, 'posRefund')
     if (!workspaceAdmin && !registerStaff) {
       return res.status(403).json({
