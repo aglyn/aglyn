@@ -125,6 +125,12 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ ...mockOrgState, orgId: 'org-1' }),
 }))
 
+// The card gates on the key its route checks (AGL-4047), read through the
+// permissions hook: this reader holds it, as the role above does.
+jest.mock('../hooks/use-org-permissions', () => {
+  const value = { loaded: true, can: () => true, permissions: {}, granted: {} }
+  return { __esModule: true, default: () => value, useOrgPermissions: () => value }
+})
 jest.mock('../hooks/use-org-scope', () => ({
   __esModule: true,
   default: () => ({ currentOrg: { $id: 'org-1', role: 'admin' } }),

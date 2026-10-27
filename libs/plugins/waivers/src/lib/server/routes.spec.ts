@@ -80,6 +80,8 @@ const TOKENS: Record<string, Record<string, unknown> & { uid: string }> = {
   'tok-admin': { uid: 'uid-admin', email: 'ada@example.com', name: 'Ada Admin', email_verified: true },
   'tok-clerk': { uid: 'uid-clerk', email: 'sam@example.com', name: 'Sam Clerk', email_verified: true },
   'tok-viewer': { uid: 'uid-viewer', email: 'vic@example.com', email_verified: true },
+  'tok-window': { uid: 'uid-window', email: 'wes@example.com', name: 'Wes Window', email_verified: true },
+  'tok-narrowed': { uid: 'uid-narrowed', email: 'nia@example.com', email_verified: true },
   'tok-unverified': { uid: 'uid-admin', email: 'ada@example.com', email_verified: false },
 }
 /** What each member's role resolves to. The clerk may take signatures and not write waivers. */
@@ -87,6 +89,11 @@ const PERMISSIONS: Record<string, Record<string, boolean>> = {
   'uid-admin': { manageWaivers: true, collectWaivers: true },
   'uid-clerk': { manageWaivers: false, collectWaivers: true },
   'uid-viewer': {},
+  // A site viewer the workspace trusts at the window (AGL-4047): granted
+  // `collectWaivers` by a custom role or an override, with no editor role.
+  'uid-window': { manageWaivers: false, collectWaivers: true },
+  // A site admin a custom role took both keys from.
+  'uid-narrowed': { manageWaivers: false, collectWaivers: false },
 }
 
 let db: MemoryFirestore
@@ -127,7 +134,13 @@ beforeEach(() => {
     db.docs.set(`hosts/${hostId}`, {
       displayName: 'Acme Motocross',
       timeZone: 'America/Chicago',
-      memberRoles: { 'uid-admin': 'admin', 'uid-clerk': 'editor', 'uid-viewer': 'viewer' },
+      memberRoles: {
+        'uid-admin': 'admin',
+        'uid-clerk': 'editor',
+        'uid-viewer': 'viewer',
+        'uid-window': 'viewer',
+        'uid-narrowed': 'admin',
+      },
     })
   }
 })
@@ -349,6 +362,17 @@ describe('signing at the window', () => {
   it('refuses a viewer', async () => {
     const waiver = await publishedWaiver()
     expect((await call(signAtWindowRoute, 'POST', { token: 'tok-viewer', body: signing(waiver) })).status).toBe(403)
+  })
+
+  it('decides by the key, not the role: a viewer granted collectWaivers takes it, an admin refused it does not (AGL-4047)', async () => {
+    const waiver = await publishedWaiver()
+    const taken = await call(signAtWindowRoute, 'POST', { token: 'tok-window', body: signing(waiver) })
+    expect(taken.status).toBe(201)
+    expect((await call(signaturesRoute, 'GET', { token: 'tok-window' })).status).toBe(200)
+    // Collecting is not writing waivers.
+    expect((await call(templatesRoute, 'POST', { token: 'tok-window', body: { waiver: WAIVER } })).status).toBe(403)
+    expect((await call(signAtWindowRoute, 'POST', { token: 'tok-narrowed', body: signing(waiver) })).status).toBe(403)
+    expect((await call(templatesRoute, 'GET', { token: 'tok-narrowed' })).status).toBe(403)
   })
 })
 

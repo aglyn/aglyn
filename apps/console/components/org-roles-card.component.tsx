@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  canManageOrg,
   type AglynOrgCustomRole,
 } from '@aglyn/aglyn'
 import {
@@ -56,6 +55,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { useReleaseFlags } from '../hooks/use-release-flags'
+import useOrgPermissions from '../hooks/use-org-permissions'
 
 interface RoleDraft extends AglynOrgCustomRole {
   $id?: string
@@ -111,7 +111,11 @@ export function OrgRolesCard() {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `members.manage` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('members.manage')
   const [roles, setRoles] = useState<Array<RoleDraft & { $id: string }>>([])
   const [editor, setEditor] = useState<RoleDraft | null>(null)
   const [busy, setBusy] = useState(false)

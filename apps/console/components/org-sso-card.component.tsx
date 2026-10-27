@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { canManageOrg, checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement } from '@aglyn/aglyn'
 import { protectsIfDesignated, ssoEnforcementLoses } from '@aglyn/aglyn/app-utils/sso-enforcement'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -42,6 +42,7 @@ import { docsHelp } from '../constants/docs-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgScope } from '../hooks/use-org-scope'
+import useOrgPermissions from '../hooks/use-org-permissions'
 
 interface DomainClaim {
   domain: string
@@ -204,7 +205,11 @@ export function OrgSsoCard() {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `org.settings` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('org.settings')
   const entitled = checkEntitlement(org, 'ssoEnabled')
 
   const [sso, setSso] = useState<SsoConfig>({})

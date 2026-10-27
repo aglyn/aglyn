@@ -71,6 +71,13 @@ performs the action, not merely used to hide a button — so a role reliably lim
 a member can do, whichever route they reach it by. Members without billing or settings
 permissions don't see those tabs at all either.
 
+The console follows the same permissions as the server. Someone allowed **Manage
+members** can change roles, custom roles and per-member permissions on the Team page,
+whatever their org role, and someone allowed **Organization settings** gets the
+Profile, Plugins, Branding and Single sign-on settings and the General settings form.
+Changing the workspace URL and handing the workspace over stay with the owner, and
+API keys stay with owners and admins.
+
 There is deliberately no permission for **marketing** surfaces (announcement bars,
 popups, campaigns). Those belong to a **site**, not to the organization, and access to
 them follows the member's role on that site — see
