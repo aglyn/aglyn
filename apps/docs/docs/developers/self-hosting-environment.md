@@ -1183,7 +1183,7 @@ price, a shipping figure is set, and card readers are available (a test key, or
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `POS_HARDWARE_SHOP_ENABLED` | Optional | Runtime, console | Exactly `true` opens the shop. Anything else keeps it hidden. |
-| `POS_HARDWARE_PRICES` | Optional | Runtime, console | JSON of Stripe's own price for each item, in cents, keyed by `stripe-reader-s710`, `stripe-reader-s700`, `bbpos-wisepos-e`, `stripe-reader-m2`, `stripe-reader-s700-dock`, `bbpos-wisepos-e-dock` or `stripe-reader-m2-mount`. An item with no price, or a malformed one, is not offered. |
+| `POS_HARDWARE_PRICES` | Optional | Runtime, console | JSON of Stripe's own price for each item, in cents, keyed by `stripe-reader-s710`, `stripe-reader-s700`, `stripe-reader-t600`, `bbpos-wisepos-e`, `stripe-reader-m2`, `stripe-reader-s700-dock`, `stripe-reader-hub`, `stripe-reader-s700-case`, `stripe-reader-s700-cable`, `stripe-reader-charger`, `stripe-reader-m2-dock`, `stripe-reader-m2-mount`, `bbpos-wisepos-e-dock` or `bbpos-wisepos-e-power-cable`. An item with no price, or a malformed one, is not offered. |
 | `POS_HARDWARE_MARKUP_BPS` | Optional | Runtime, console | The markup on Stripe's price as a whole number of basis points (hundredths of a percent). Unset is the default, `3000`. `0` sells at Stripe's price; a value that is not a whole number hides the shop. |
 | `POS_HARDWARE_SHIPPING` | Optional | Runtime, console | JSON of a flat shipping amount in cents for each speed offered: `standard`, `express`, `priority`. The merchant pays it. |
 | `POS_HARDWARE_AUTOMATIC_TAX` | Optional | Runtime, console | Exactly `true` turns on Stripe automatic tax for hardware checkouts, on the platform's own tax registrations. |

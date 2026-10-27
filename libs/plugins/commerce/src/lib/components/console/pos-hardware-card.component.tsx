@@ -305,6 +305,11 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
                   <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
                     {offer.use}
                   </Typography>
+                  {offer.mayBeDiscontinued ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {'Stripe may stop selling this reader.'}
+                    </Typography>
+                  ) : null}
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                     <Typography variant="body1">{formatPosHardwareCents(offer.unitCents)}</Typography>
                     <TextField
