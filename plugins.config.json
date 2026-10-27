@@ -3351,7 +3351,8 @@
             "posCheckIn"
           ],
           "publicRoutes": [
-            "/sign"
+            "/sign",
+            "/display-sign"
           ]
         }
       }

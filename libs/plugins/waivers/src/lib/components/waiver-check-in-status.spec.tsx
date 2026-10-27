@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { act, render, screen } from '@testing-library/react'
+import { registerCustomerDisplayHost } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { WaiverCheckInStatus, type PosCheckInZoneProps } from './waiver-check-in-status.component'
 
 const request = jest.fn()
@@ -90,5 +91,44 @@ describe('the waiver at check-in', () => {
     await settled({ ...PROPS, email: null, contactId: null })
     expect(request).not.toHaveBeenCalled()
     expect(screen.getByText('Waiver not on file')).toBeTruthy()
+  })
+
+  it('offers the customer display only while the register has one, and puts the signing on it (AGL-4042)', async () => {
+    request.mockImplementation(async (route: string) =>
+      route === 'waivers/display-grant'
+        ? { grant: 'grant-1', expiresAtMs: 1 }
+        : { signed: false, coveredNames: [], label: 'Waiver needed' },
+    )
+    await settled(PROPS)
+    expect(screen.queryByRole('button', { name: 'Customer display' })).toBeNull()
+    const show = jest.fn(async () => true)
+    let withdraw = () => undefined as void
+    await act(async () => {
+      withdraw = registerCustomerDisplayHost({ show })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Customer display' }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    expect(request).toHaveBeenCalledWith('waivers/display-grant', { body: { hostId: 'host-1' } })
+    // A grant and the site, never the customer's name or email.
+    expect(show).toHaveBeenCalledWith({ pluginId: 'waivers', path: '/display-sign', params: { host: 'host-1', grant: 'grant-1' } })
+    expect(screen.getByRole('button', { name: 'On the customer display' })).toBeTruthy()
+    await act(async () => withdraw())
+    expect(screen.queryByRole('button', { name: /customer display/i })).toBeNull()
+  })
+
+  it('says so when the display does not answer', async () => {
+    request.mockImplementation(async (route: string) =>
+      route === 'waivers/display-grant' ? { grant: 'grant-1' } : { signed: false, coveredNames: [], label: 'Waiver needed' },
+    )
+    const withdraw = registerCustomerDisplayHost({ show: async () => false })
+    await settled(PROPS)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Customer display' }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    expect(screen.getByText(/customer display didn’t answer/)).toBeTruthy()
+    withdraw()
   })
 })

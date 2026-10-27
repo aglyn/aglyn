@@ -21,6 +21,8 @@
 import { createHash } from 'crypto'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
+import { setWaiverDisplaySecretForTests } from './display-grant'
+import { displayGrantRoute, signOnDisplayRoute } from './display-routes'
 import { setWaiversEmailSenderForTests, type WaiverEmail } from './emails'
 import { setWaiversGateDepsForTests } from './gate'
 import { eraseWaiversPerson, setWaiversErasureDepsForTests } from './person-eraser'
@@ -124,6 +126,7 @@ beforeEach(() => {
     read: async (path) => files.get(path) ?? null,
   })
   setWaiversClockForTests(() => NOW)
+  setWaiverDisplaySecretForTests(() => 'spec-secret')
   retentionYears = {}
   setWaiversErasureDepsForTests({
     bucket: () => ({
@@ -168,6 +171,7 @@ afterAll(() => {
   setWaiversGateDepsForTests(null)
   setWaiversClockForTests(null)
   setWaiversErasureDepsForTests(null)
+  setWaiverDisplaySecretForTests(null)
 })
 
 function call(
@@ -420,6 +424,67 @@ describe('signing at the window', () => {
     expect((await call(templatesRoute, 'POST', { token: 'tok-window', body: { waiver: WAIVER } })).status).toBe(403)
     expect((await call(signAtWindowRoute, 'POST', { token: 'tok-narrowed', body: signing(waiver) })).status).toBe(403)
     expect((await call(templatesRoute, 'GET', { token: 'tok-narrowed' })).status).toBe(403)
+  })
+})
+
+describe('signing on the register’s customer display', () => {
+  async function grantFor(token = 'tok-clerk', host = HOST) {
+    const response = await call(displayGrantRoute, 'POST', { token, host })
+    return { status: response.status, body: await response.json() }
+  }
+
+  it('grants it only to a member who may take signatures', async () => {
+    expect((await grantFor('tok-viewer')).status).toBe(403)
+    expect((await grantFor('tok-narrowed')).status).toBe(403)
+    expect((await grantFor(null as never)).status).toBe(401)
+    const granted = await grantFor('tok-window')
+    expect(granted.status).toBe(201)
+    expect(granted.body).toMatchObject({ grant: expect.stringMatching(/^aglyn-waiver-display-v1\./), expiresAtMs: NOW + 30 * 60 * 1000 })
+  })
+
+  it('signs with the grant and no session, naming the staff member who put it on the display', async () => {
+    const waiver = await publishedWaiver()
+    const { body } = await grantFor()
+    const response = await call(signOnDisplayRoute, 'POST', {
+      token: null,
+      body: { ...signing(waiver, { signer: { name: 'Jordan Lee', email: '', phone: '', dateOfBirth: '1990-04-02' } }), grant: body.grant },
+    })
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({ people: ['Jordan Lee', 'Pat Lee'], emailed: false })
+    const [stored] = signatures()
+    expect(stored).toMatchObject({
+      method: 'at_window',
+      audit: { staffUid: 'uid-clerk', staffName: 'Sam Clerk', ip: '203.0.113.7' },
+    })
+  })
+
+  it('refuses no grant, a forged one, another site’s, an expired one, and stores nothing', async () => {
+    const waiver = await publishedWaiver()
+    const { body } = await grantFor()
+    const attempts: Array<Record<string, unknown>> = [
+      { ...signing(waiver) },
+      { ...signing(waiver), grant: `${body.grant}x` },
+      { ...signing(waiver), grant: body.grant, hostId: OTHER_HOST },
+    ]
+    for (const attempt of attempts) {
+      const refused = await call(signOnDisplayRoute, 'POST', { token: null, body: attempt })
+      expect(refused.status).toBe(401)
+      expect((await refused.json()).error).toMatch(/expired/)
+    }
+    setWaiversClockForTests(() => NOW + 31 * 60 * 1000)
+    expect((await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })).status).toBe(401)
+    expect(signatures()).toHaveLength(0)
+  })
+
+  it('answers a filled honeypot as a success and limits a flood', async () => {
+    const waiver = await publishedWaiver()
+    const { body } = await grantFor()
+    expect(
+      (await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant, website: 'spam' } })).status,
+    ).toBe(201)
+    rateAllowed = false
+    expect((await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })).status).toBe(429)
+    expect(signatures()).toHaveLength(0)
   })
 })
 

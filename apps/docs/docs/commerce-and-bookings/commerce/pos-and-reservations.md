@@ -303,6 +303,9 @@ logo (or name) and a welcome line between sales, the basket with its total
 as you ring it up, and it lets the customer choose a tip and a receipt
 themselves.
 
+Other features can use it too. At check-in, [Waivers](waivers.md#on-the-customer-display)
+can open a waiver on the display for the rider to sign.
+
 To pair one, start from either place:
 
 - **On the register**, tap **Pair display** next to the **Register** heading.

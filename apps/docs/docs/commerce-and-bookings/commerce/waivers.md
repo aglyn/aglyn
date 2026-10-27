@@ -155,6 +155,22 @@ Select **Sign waiver** to sign right there on the register's device, the same wa
 is matched to their waiver by the email they bought with, so ask riders to sign with
 that address.
 
+### On the customer display {#on-the-customer-display}
+
+If the register has a [customer display](pos-and-reservations.md#customer-display) connected, a customer who
+still needs a waiver also shows **Customer display**. Select it, and the display
+facing the rider opens the waiver for them to sign. You keep the register's screen.
+It works the same way as [at the window](#sign-at-the-window): the record notes who
+put the waiver on the display, and the rider's email is optional.
+
+- The button reads **On the customer display** while the rider signs, and the status
+  updates when they're done.
+- When the rider selects **Done** or **Cancel**, the display goes back to your store's
+  screen. It also goes back by itself a minute after a signing, or after five minutes
+  nobody touches it.
+- The display can sign waivers for 30 minutes after you select **Customer display**.
+  After that it asks you to show the waiver again.
+
 ## Minors
 
 Each waiver sets its own **Adult age**, from 18 to 21. It starts at 18, and every

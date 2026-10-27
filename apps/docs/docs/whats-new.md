@@ -70,6 +70,9 @@ for the how-to.
 - **[Pick the waiver a Sign waiver element signs](commerce-and-bookings/commerce/waivers.md#on-your-site)** —
   the element's **Waiver** setting lists your waivers by title, so a page can
   open straight to one of them.
+- **[Sign a waiver on the customer display](commerce-and-bookings/commerce/waivers.md#on-the-customer-display)** —
+  at check-in, **Customer display** opens the waiver on the screen facing the
+  rider, so they sign there while you keep the register.
 
 ## October 2026 — passes for a day, and rain checks
 

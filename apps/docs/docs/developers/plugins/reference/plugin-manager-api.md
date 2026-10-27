@@ -421,6 +421,49 @@ declaration that put prop SHAPES there would make every published page carry
 the console's vocabulary. Import this module by its own subpath
 (`@aglyn/aglyn/plugin-manager/plugin-zones`); it is not in the barrel.
 
+## A screen on a paired customer display — `plugin-customer-display`
+
+A register can pair a screen that faces the customer. That screen belongs to
+the plugin that runs the register, so another plugin that needs the customer's
+own hands on a screen — a form to fill in, a document to sign — asks for it
+through core, and neither plugin names the other.
+
+```ts
+// the page running a register, while its display is connected
+useEffect(() => {
+  if (!connected) return undefined
+  return registerCustomerDisplayHost({ show: async (screen) => pushToDisplay(screen) })
+}, [connected])
+
+// ANOTHER plugin's console widget on that page
+const display = useSyncExternalStore(subscribeCustomerDisplayHost, customerDisplayHost, () => null)
+if (display) {
+  await display.show({ pluginId: 'acme-forms', path: '/display-fill', params: { grant } })
+}
+
+// the display, when its state names a screen it has not opened yet
+const href = customerDisplayScreenHref(screen, '/kiosk/acme-pos/display')
+
+// the plugin's public page, when the customer is done
+const back = customerDisplayReturnPath(window.location.search)
+```
+
+| API | Semantics |
+| --- | --- |
+| `CustomerDisplayScreen` | `{ pluginId, path, params }`: one of the asking plugin's own public console pages (`ConsolePublicPage`, at `/kiosk/{pluginId}{path}`), with up to eight short plain string parameters. Never a customer's details: they ride the display's state and its address bar. |
+| `sanitizeCustomerDisplayScreen(raw)` | The screen as a register may store it, or `null`. The display's host checks every screen with it before storing one. |
+| `customerDisplayScreenHref(screen, returnTo)` | Where the display opens the screen: the plugin's page, its parameters, and `return` set to the display's own `/kiosk/…` address. `null` for anything out of shape. |
+| `customerDisplayReturnPath(search)` | The `/kiosk/…` address the screen's page sends the display back to, or `null`. Nothing outside the console's public pages is ever returned. |
+| `registerCustomerDisplayHost(host)` | Offers `{ show(screen) }` to every plugin on the page, replacing any other; answers the function that withdraws it, and only it. |
+| `customerDisplayHost()` / `subscribeCustomerDisplayHost(listener)` | The host on this page, or `null`, and a subscription to it arriving or leaving. |
+| `CUSTOMER_DISPLAY_SCREEN_TTL_MS` | Thirty minutes: how long a screen stays worth opening. Anything a screen's page was handed should not outlive it. |
+
+The display opens only a page the plugin **declared** public
+(`contributes.console.publicRoutes`): the console's public route refuses any
+other before the plugin loads. Client-only and React-free; import it by its
+own subpath (`@aglyn/aglyn/plugin-manager/plugin-customer-display`), it is not
+in the barrel.
+
 ## Host subcollections — `plugin-host-collections`
 
 A plugin writes ordinary documents under `hosts/{hostId}`, and three core

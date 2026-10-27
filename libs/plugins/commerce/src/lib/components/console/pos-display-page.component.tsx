@@ -17,6 +17,7 @@
 'use client'
 
 import type { ConsolePublicPageProps } from '@aglyn/aglyn'
+import { customerDisplayScreenHref } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -53,6 +54,36 @@ export const POS_DISPLAY_ACTIVE_POLL_MS = 1_000
 export const POS_DISPLAY_IDLE_POLL_MS = 3_000
 /** The store's name and logo are re-read this often, so an edit reaches the screen. */
 const BRANDING_REFRESH_MS = 10 * 60 * 1000
+
+/** This page's own address, where another plugin's screen sends the display back. */
+export const POS_DISPLAY_PAGE_PATH = '/kiosk/commerce/pos-display'
+
+/** The prompts of the plugin screens this tab already opened, so coming back opens none again. */
+const OPENED_SCREENS_KEY = 'aglyn.posDisplayOpenedScreens'
+
+/**
+ * Whether this tab may open the screen of a prompt, marking it opened. Session
+ * storage, so it survives the trip to the plugin's page and back and is gone
+ * with the tab. A browser that refuses storage opens no screen at all: it
+ * could not remember coming back, and would open the same one again.
+ */
+export function claimDisplayScreen(promptId: string): boolean {
+  try {
+    const opened = JSON.parse(window.sessionStorage.getItem(OPENED_SCREENS_KEY) ?? '[]') as string[]
+    if (opened.includes(promptId)) return false
+    window.sessionStorage.setItem(OPENED_SCREENS_KEY, JSON.stringify([...opened, promptId].slice(-20)))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Leaves for another plugin's screen; an object so a spec can watch it. */
+export const posDisplayNavigation = {
+  open(href: string): void {
+    window.location.assign(href)
+  },
+}
 
 /**
  * The screen a register turns toward its customer (AGL-3608), served at
@@ -164,6 +195,15 @@ export default function PosDisplayPage(_props: ConsolePublicPageProps) {
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [token, unpaired])
+
+  // Another plugin's screen (AGL-4042): opened once per prompt, at the
+  // plugin's own public page, which sends the display back here when the
+  // customer is done. Back here, the same prompt shows the store's screen.
+  useEffect(() => {
+    if (state?.mode !== 'screen' || !state.screen || !state.promptId) return
+    const href = customerDisplayScreenHref(state.screen, POS_DISPLAY_PAGE_PATH)
+    if (href && claimDisplayScreen(state.promptId)) posDisplayNavigation.open(href)
+  }, [state])
 
   // Keep the screen on while paired. Best effort: a browser without the
   // Wake Lock API, or one that refuses it, just follows its own sleep.
@@ -300,7 +340,8 @@ function PosDisplayBody({
   onAnswer: (answer: PosDisplayAnswer) => void
 }) {
   const idle = <PosDisplayBrandScreen branding={branding} message={branding?.message || 'Welcome'} />
-  if (!state || state.mode === 'idle') return idle
+  // A plugin's screen opens its own page; back here, the store's screen shows.
+  if (!state || state.mode === 'idle' || state.mode === 'screen') return idle
 
   if (state.mode === 'thanks') {
     if (thanksOver) return idle

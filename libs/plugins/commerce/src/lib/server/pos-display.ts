@@ -19,6 +19,7 @@ import { createHash, randomBytes, randomInt } from 'crypto'
 import { consumeRateLimit, firebaseAdmin, getPluginConfig, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { sanitizeCustomerDisplayScreen } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
@@ -431,7 +432,11 @@ async function staffAction(
       return res.status(503).json({ error: 'Could not make a code. Try again.' })
     }
     case 'push': {
-      const state = CommerceModel.sanitizePosDisplayState(body['state'], Date.now())
+      // Another plugin's screen (AGL-4042) is checked by core's seam: a
+      // declared plugin page and a few short parameters, nothing else.
+      const state = CommerceModel.sanitizePosDisplayState(body['state'], Date.now(), {
+        screen: sanitizeCustomerDisplayScreen,
+      })
       // "Text" is never offered on a screen when the store cannot send one.
       if (state.receipt && !pluginSmsAvailable()) {
         const channels = state.receipt.channels.filter((channel) => channel !== 'sms')
