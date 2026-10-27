@@ -657,10 +657,15 @@
       ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-reservations.ts": {
+      "types": [
+        "StayCheckInMode"
+      ],
       "values": [
         "PENDING_RESERVATION_HOLD_MS",
         "MAX_RESOURCE_UNITS",
-        "FEW_UNITS_LEFT"
+        "FEW_UNITS_LEFT",
+        "MAX_RESERVATION_GUESTS",
+        "STAY_CHECK_IN_MODES"
       ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {

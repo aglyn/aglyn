@@ -5124,6 +5124,19 @@ public struct StarResult: Codable, Hashable, Sendable {
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum StayCheckInMode: String, Codable, CaseIterable, Hashable, Sendable {
+  case guest = "guest"
+  case resource = "resource"
+  case stay = "stay"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum StorefrontTaxMode: String, Codable, CaseIterable, Hashable, Sendable {
   case manual = "manual"
   case none = "none"
@@ -5671,6 +5684,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let localFulfillmentQueueTabs: [LocalFulfillmentQueueTab]
   public let marketplaceBrowseQuery: ListQueryDeclaration
   public let maxLabelCopies: Int
+  public let maxReservationGuests: Int
   public let maxResourceUnits: Int
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
@@ -5842,6 +5856,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let starColors: [StarColor]
   public let starredField: String
   public let starredMax: Int
+  public let stayCheckInModes: [StayCheckInMode]
   public let submissionFilterHeaders: [String: String]
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
@@ -6020,6 +6035,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case localFulfillmentQueueTabs = "LOCAL_FULFILLMENT_QUEUE_TABS"
     case marketplaceBrowseQuery = "MARKETPLACE_BROWSE_QUERY"
     case maxLabelCopies = "MAX_LABEL_COPIES"
+    case maxReservationGuests = "MAX_RESERVATION_GUESTS"
     case maxResourceUnits = "MAX_RESOURCE_UNITS"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
@@ -6191,6 +6207,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case starColors = "STAR_COLORS"
     case starredField = "STARRED_FIELD"
     case starredMax = "STARRED_MAX"
+    case stayCheckInModes = "STAY_CHECK_IN_MODES"
     case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"

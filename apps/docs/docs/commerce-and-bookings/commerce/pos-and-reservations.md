@@ -449,6 +449,13 @@ For stays (cabins, rooms, rentals):
    (with a folio summary if the guest charged store purchases to the
    room), walk-ins, no-shows, and cancellations.
 
+**Guests.** The Reservation widget asks how many guests (optional), up to what
+the resource **Sleeps**, or 50 when that isn't set. A walk-in takes the same
+**Guests** field, and the **Reservations** card shows the count on each stay.
+At the check-in window, a resource set to **One check-in per guest** under
+**At check-in** gives each guest their own check-in and wristband; see
+[check-in at the window](pos-operations.md#check-in-at-the-window).
+
 ### Several identical units
 
 When you have several of the same thing, such as 12 RV hookups, 30 tent

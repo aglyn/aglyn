@@ -21,7 +21,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useFirestoreCollection, useUser } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Button, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
@@ -42,6 +42,7 @@ import {
   type CheckInRow,
 } from '../../../model/commerce-check-in'
 import { callPosOps } from './pos-ops-api'
+import type { StayCheckInMode } from '../../../model/commerce-reservations'
 import { PosRainCheckDialog } from './pos-rain-check-dialog.component'
 import { escapeHtml } from '../../../utils/escape-html'
 import CommerceStatTile from '../commerce-stat-tile.component'
@@ -72,7 +73,16 @@ interface DayList {
   totals: CheckInDayTotals
   checkIns: CheckInRow[]
   truncated?: boolean
+  /** How the store checks stays in (AGL-4043). */
+  stayCheckIn?: StayCheckInMode
 }
+
+/** The quick control's choices, in the order the window reads them. */
+const STAY_MODE_LABELS: ReadonlyArray<{ mode: StayCheckInMode; label: string }> = [
+  { mode: 'resource', label: 'As each resource is set' },
+  { mode: 'stay', label: 'One per stay' },
+  { mode: 'guest', label: 'One per guest' },
+]
 
 type Answer =
   | { state: 'idle' | 'loading' }
@@ -145,6 +155,25 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
 
   const list = answer.state === 'ready' ? answer.list : null
   const todayKey = list ? zonedDayKey(Date.now(), list.timeZone) : ''
+
+  const [savingStayMode, setSavingStayMode] = useState(false)
+  /** The store's quick control for stays: one check-in per stay or per guest (AGL-4043). */
+  const setStayMode = useCallback(
+    async (mode: StayCheckInMode) => {
+      setActionError('')
+      setSavingStayMode(true)
+      const done = await callPosOps(user, 'pos-check-in', {
+        hostId,
+        action: 'stay_mode',
+        mode,
+        ...(day?.isValid() ? { day: day.format(DAY_FORMAT) } : {}),
+      })
+      setSavingStayMode(false)
+      if (!done.ok) return setActionError(done.body.error ?? 'The setting could not be saved.')
+      await load()
+    },
+    [user, hostId, day, load],
+  )
 
   const undoRainCheck = useCallback(
     async (row: CheckInRow) => {
@@ -307,6 +336,31 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
             </Button>
           </Stack>
         </LocalizationProvider>
+        <Stack spacing={0.5}>
+          <Typography variant="subtitle2" component="h3" id="stay-check-in-label">
+            {'Stays at check-in'}
+          </Typography>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            aria-labelledby="stay-check-in-label"
+            value={list?.stayCheckIn ?? 'resource'}
+            onChange={(_event, mode: StayCheckInMode | null) => {
+              if (mode && mode !== list?.stayCheckIn) void setStayMode(mode)
+            }}
+            disabled={!canManagePos || !list || savingStayMode}
+            sx={{ flexWrap: 'wrap' }}
+          >
+            {STAY_MODE_LABELS.map((choice) => (
+              <ToggleButton key={choice.mode} value={choice.mode}>
+                {choice.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <Typography variant="caption" color="text.secondary">
+            {'One per guest gives each guest of a stay their own check-in and wristband, by the stay’s guest count.'}
+          </Typography>
+        </Stack>
         {answer.state === 'loading' ? (
           <Typography variant="body2" color="text.secondary">
             {'Reading who is due…'}

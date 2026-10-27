@@ -84,6 +84,12 @@ type Outcome =
   | { status: 200; body: { reservationId: string; replayed?: true } }
   | { status: 409; body: { error: string } }
 
+/*
+ * Body: `{ hostId, resourceId, checkInDayMs, checkOutDayMs, guestName?,
+ * guests?, reservationId? }`. `guests` (AGL-4043) is how many the stay is
+ * for, 1 up to what the resource sleeps; a stay checked in per guest makes a
+ * check-in for each.
+ */
 export function createReservationWalkInHandler(
   options: ProductsWriteDeps = {},
 ): PluginApiHandler {
@@ -101,6 +107,11 @@ export function createReservationWalkInHandler(
       typeof body['guestName'] === 'string'
         ? body['guestName'].trim().slice(0, 120)
         : ''
+    // How many guests (AGL-4043): optional, checked against what the
+    // resource sleeps once it is read.
+    const rawGuests = body['guests']
+    const guestsAsked =
+      rawGuests === undefined || rawGuests === null || rawGuests === '' ? undefined : Number(rawGuests)
     // Optional, client-minted: a retry of the same walk-in (a dropped
     // response on a weak signal) finds its own stay instead of booking a
     // second unit.
@@ -137,6 +148,8 @@ export function createReservationWalkInHandler(
       // stay), shared with the card, the widget and both native apps.
       const quote = CommerceModel.computeReservationQuote(resource, checkInDayMs, checkOutDayMs)
       if (quote.problem) return res.status(400).json({ error: quote.problem })
+      const guestsProblem = CommerceModel.reservationGuestsProblem(guestsAsked, resource)
+      if (guestsProblem) return res.status(400).json({ error: guestsProblem })
 
       const reservations = hostRef.collection('reservations')
       const availability = reservationAvailabilityQuery(reservations, resourceId, checkInDayMs)
@@ -178,6 +191,7 @@ export function createReservationWalkInHandler(
           checkOutDayMs,
           guestName: guestName || null,
           guestEmail: null,
+          ...(guestsAsked !== undefined ? { guests: guestsAsked } : {}),
           nights: quote.nights,
           totalCents: quote.totalCents,
           depositCents: 0,

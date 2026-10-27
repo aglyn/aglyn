@@ -32,7 +32,7 @@ import {
   type HostOrder,
   type OrderChannel,
 } from './commerce-orders'
-import type { HostReservation } from './commerce-reservations'
+import { reservationGuests, type HostReservation } from './commerce-reservations'
 import { posCsvCell } from './commerce-pos-ops'
 import { orderLabelTokens } from './order-list-fields'
 
@@ -255,8 +255,14 @@ export type DueCheckIn = Omit<
   | 'updatedAtMs'
 >
 
-/** The customer fields a due check-in copies from its source, which a later read may refresh. */
+/**
+ * The fields a due check-in copies from its source, which a later read may
+ * refresh: the customer's, and how many check-ins its line or stay makes that
+ * day (a stay checked in per guest changes it when its guests or the store's
+ * control change).
+ */
 export const CHECK_IN_CUSTOMER_FIELDS = [
+  'unitCount',
   'customerKey',
   'customerName',
   'customerEmail',
@@ -342,12 +348,18 @@ export function checkInDayMs(dayKey: string): number | null {
   return check.getUTCDate() === Number(match[3]) && check.getUTCMonth() === Number(match[2]) - 1 ? ms : null
 }
 
-/** The check-in a stay makes on a day it covers; empty on any other day. */
+/**
+ * The check-ins a stay makes on a day it covers; empty on any other day. One
+ * per stay, or with `perGuest` one per guest (`guests`, at least one), each
+ * with its own wristband: the resource's setting under the store's control
+ * (`stayChecksInPerGuest`).
+ */
 export function dueCheckInsForReservation(input: {
   reservationId: string
   reservation: Partial<HostReservation>
   resourceName: string | null
   dayKey: string
+  perGuest?: boolean
 }): Map<string, DueCheckIn> {
   const { reservationId, reservation, dayKey } = input
   const due = new Map<string, DueCheckIn>()
@@ -361,28 +373,33 @@ export function dueCheckInsForReservation(input: {
   }
   const name = text(reservation.guestName) || null
   const email = text(reservation.guestEmail) || null
-  due.set(reservationCheckInId(reservationId, dayKey), {
-    source: 'reservation',
-    orderId: null,
-    orderLabel: null,
-    channel: 'reservation',
-    reservationId,
-    lineIndex: null,
-    unitIndex: 0,
-    unitCount: 1,
-    productId: null,
-    variantId: null,
-    itemName: text(input.resourceName) || 'Stay',
-    variantLabel: null,
-    dayKey,
-    customerKey: checkInCustomerKey({ email, name, fallback: `reservation:${reservationId}` }),
-    customerName: name,
-    customerEmail: email,
-    customerEmailLower: email ? email.toLowerCase() : null,
-    customerPhone: null,
-    contactId: null,
-    searchTokens: checkInSearchTokens({ name, email }),
-  })
+  const unitCount = input.perGuest ? reservationGuests(reservation) : 1
+  const customerKey = checkInCustomerKey({ email, name, fallback: `reservation:${reservationId}` })
+  const searchTokens = checkInSearchTokens({ name, email })
+  for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
+    due.set(reservationCheckInId(reservationId, dayKey, unitIndex), {
+      source: 'reservation',
+      orderId: null,
+      orderLabel: null,
+      channel: 'reservation',
+      reservationId,
+      lineIndex: null,
+      unitIndex,
+      unitCount,
+      productId: null,
+      variantId: null,
+      itemName: text(input.resourceName) || 'Stay',
+      variantLabel: null,
+      dayKey,
+      customerKey,
+      customerName: name,
+      customerEmail: email,
+      customerEmailLower: email ? email.toLowerCase() : null,
+      customerPhone: null,
+      contactId: null,
+      searchTokens,
+    })
+  }
   return due
 }
 

@@ -3951,6 +3951,7 @@
     ]
   },
   "MAX_LABEL_COPIES": 500,
+  "MAX_RESERVATION_GUESTS": 50,
   "MAX_RESOURCE_UNITS": 500,
   "MEDIA_ALT_MAX_LENGTH": 300,
   "MEDIA_ALT_OPTIONS": [
@@ -8534,6 +8535,11 @@
   ],
   "STARRED_FIELD": "starred",
   "STARRED_MAX": 50,
+  "STAY_CHECK_IN_MODES": [
+    "resource",
+    "stay",
+    "guest"
+  ],
   "SUBMISSION_FILTER_HEADERS": {
     "formId": "Form",
     "from": "From",

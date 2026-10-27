@@ -149,6 +149,23 @@ describe("today's check-ins", () => {
     expect(screen.queryByText('Rain check', { selector: 'button' })).toBeNull()
   })
 
+  it('sets how stays are checked in from the screen, for the store (AGL-4043)', async () => {
+    mockFetch.mockImplementation(async (_user: unknown, _url: string, init: RequestInit) =>
+      init.method === 'POST'
+        ? { ok: true, status: 200, json: async () => ({ stayCheckIn: 'guest' }) }
+        : { ok: true, status: 200, json: async () => ({ ...LIST, stayCheckIn: 'resource' }) },
+    )
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    await screen.findByText('Blue #214')
+    expect(screen.getByRole('button', { name: 'As each resource is set' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'One per guest' }))
+    await waitFor(() =>
+      expect(mockFetch.mock.calls.some((call) => (call[2] as RequestInit).method === 'POST')).toBe(true),
+    )
+    const posted = mockFetch.mock.calls.find((call) => (call[2] as RequestInit).method === 'POST')!
+    expect(JSON.parse(String((posted[2] as RequestInit).body))).toEqual({ hostId: 'shop', action: 'stay_mode', mode: 'guest' })
+  })
+
   it('draws nothing for a store with no register', () => {
     mockRegisters = []
     const { container } = render(<PosCheckInsCard hostId="shop" canManagePos />)

@@ -27,6 +27,7 @@ import {
   checkInUseDayProblem,
   describeWristband,
   dueCheckInsForOrder,
+  dueCheckInsForReservation,
   isCheckInDayKey,
   normalizeProductCheckIn,
   normalizeWristband,
@@ -258,5 +259,29 @@ describe('rain checks', () => {
         pass({ status: 'checked_in' }),
       ]),
     ).toEqual({ expected: 2, checkedIn: 1, rainChecks: 1 })
+  })
+})
+
+describe('a stay checked in per guest', () => {
+  const stay = { status: 'confirmed' as const, checkInDayMs: Date.UTC(2027, 0, 15), checkOutDayMs: Date.UTC(2027, 0, 17), guestName: 'Sam Rivera', guests: 3 }
+
+  it('makes one check-in per guest each day, or one for the stay', () => {
+    const perGuest = dueCheckInsForReservation({ reservationId: 's1', reservation: stay, resourceName: 'Cabin 3', dayKey: '2027-01-16', perGuest: true })
+    expect([...perGuest].map(([id, entry]) => `${id} ${entry.unitIndex + 1}/${entry.unitCount}`)).toEqual([
+      'r_s1_2027-01-16_0 1/3',
+      'r_s1_2027-01-16_1 2/3',
+      'r_s1_2027-01-16_2 3/3',
+    ])
+    const perStay = dueCheckInsForReservation({ reservationId: 's1', reservation: stay, resourceName: 'Cabin 3', dayKey: '2027-01-16' })
+    expect([...perStay.keys()]).toEqual(['r_s1_2027-01-16_0'])
+    // No guest count: one, whichever way it is checked in.
+    const unknown = dueCheckInsForReservation({
+      reservationId: 's2',
+      reservation: { ...stay, guests: undefined },
+      resourceName: 'Cabin 3',
+      dayKey: '2027-01-16',
+      perGuest: true,
+    })
+    expect([...unknown.keys()]).toEqual(['r_s2_2027-01-16_0'])
   })
 })
