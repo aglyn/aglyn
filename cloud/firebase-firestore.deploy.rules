@@ -1029,6 +1029,10 @@ allow read, write: if false;
 
 
 
+
+
+
+
 match /outreachMailboxes/{mailboxId} {
 allow read: if canReadOutreach();
 allow write: if false;
@@ -4075,6 +4079,13 @@ subcollection != 'reviewTokens' &&
 
 
 
+
+
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -4098,7 +4109,8 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays']) &&
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
+'waiverTitles']) &&
 
 
 
@@ -4268,7 +4280,8 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays'])));
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
+'waiverTitles'])));
 
 
 
@@ -4327,7 +4340,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
-'checkIns', 'checkInDays'])));
+'checkIns', 'checkInDays', 'waiverTitles'])));
 }
 
 

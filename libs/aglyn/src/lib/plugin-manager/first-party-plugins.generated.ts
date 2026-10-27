@@ -1206,6 +1206,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     }
   },
   {
+    "pluginId": "waivers",
+    "name": "waiverTitles",
+    "mediaScan": "none",
+    "mediaScanReason": "Each waiver's title, status, version and last change, mirrored from the org's waivers by the waivers routes (AGL-4042) so the Besigner's Sign waiver element can pick one. No content field: a waiver's words stay in the org's waivers, and nothing here can name a library asset."
+  },
+  {
     "pluginId": "sales-channels",
     "name": "salesChannels",
     "mediaScan": "none",
@@ -2006,6 +2012,23 @@ export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker
     "singular": "dataset",
     "plural": "datasets",
     "page": "the Data page"
+  },
+  {
+    "pluginId": "waivers",
+    "kind": "waivers",
+    "attribute": "waiver-select",
+    "scope": "host",
+    "collection": "waiverTitles",
+    "nameField": "title",
+    "where": [
+      {
+        "field": "pickable",
+        "equals": true
+      }
+    ],
+    "singular": "waiver",
+    "plural": "waivers",
+    "page": "the Waivers page"
   },
 ]
 

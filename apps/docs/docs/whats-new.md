@@ -49,6 +49,9 @@ for the how-to.
 - **[Signed waivers kept after an erasure request](commerce-and-bookings/commerce/waivers.md#keeping-signed-waivers)** —
   when someone who signed asks to be erased, their signed waivers are kept as your
   record for the years you set (7 to start), then deleted.
+- **[Pick the waiver a Sign waiver element signs](commerce-and-bookings/commerce/waivers.md#on-your-site)** —
+  the element's **Waiver** setting lists your waivers by title, so a page can
+  open straight to one of them.
 
 ## October 2026 — passes for a day, and rain checks
 

@@ -48,6 +48,25 @@ export const WAIVERS_COLLECTIONS = {
 } as const
 
 /**
+ * Each waiver's title and status, mirrored under its site at
+ * `hosts/{hostId}/waiverTitles/{waiverId}` (AGL-4042), so the Besigner's Sign
+ * waiver element can PICK a waiver from a list (the `waivers` entity picker,
+ * declared in `plugins.config.json`) rather than have an id typed. Holds the
+ * title, the status, whether a picker lists it, the version and when it last
+ * changed: nothing of a waiver's words and nothing of a signature. Written
+ * only by this plugin's routes, in the same write as the waiver; the site's
+ * members read it, and the rules refuse every client write.
+ */
+export const WAIVER_TITLES_SUBCOLLECTION = 'waiverTitles'
+
+/**
+ * The attribute type of the Sign waiver element's waiver picker: the
+ * `waivers` entity picker in `plugins.config.json` lists the site's
+ * `waiverTitles` under it, and the element stores the chosen waiver's id.
+ */
+export const WAIVERS_PICKER_ATTRIBUTE = 'waiver-select'
+
+/**
  * Private Storage, beneath the org prefix that org erasure sweeps. Never the
  * media library: no download token is ever minted for these objects, and the
  * Storage rules refuse every client; the console reads them through the
