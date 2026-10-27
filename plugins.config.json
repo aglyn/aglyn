@@ -570,6 +570,7 @@
               "giftCard",
               "lowStockThreshold",
               "sellOnline",
+              "checkIn",
               "shipping",
               "createdAtMs",
               "updatedAtMs",
