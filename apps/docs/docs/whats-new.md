@@ -27,6 +27,21 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — card readers, contacts and products, tidied up
+
+- **[A new logo reaches your card readers on its own](commerce-and-bookings/commerce/pos-hardware.md#reader-start-up-screen)** —
+  change your logo, or replace its file in your media library, and readers that
+  show it get the new one within about half an hour, without opening the
+  **POS devices** card.
+- **[Waiver signers read "Waiver signed"](commerce-and-bookings/commerce/waivers.md#contacts)** —
+  a contact a waiver signature created shows its source as **Waiver signed** in
+  your contacts list, on their record and in the contact reports.
+- **[New products keep their register settings](commerce-and-bookings/commerce/pos-and-reservations.md)** —
+  **Quick key at the register**, modifiers and check-in are kept when you create a
+  product, not only when you edit it later.
+- **[Draft and archived products can't be bought online](commerce-and-bookings/commerce/catalog.md)** —
+  **Buy now** refuses them, as the cart already did.
+
 ## October 2026 — sell a product in person only
 
 - **[Sell in person only](commerce-and-bookings/commerce/catalog.md#sell-in-person-only)** —
