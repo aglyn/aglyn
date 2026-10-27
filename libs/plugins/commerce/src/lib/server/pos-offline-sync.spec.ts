@@ -17,7 +17,9 @@
 
 import { memoryFirestoreModule } from '../testing/pos-ops-memory-firestore'
 import { posOpsHarness, type PosOpsHarness } from '../testing/pos-ops-harness'
+import { posPermissionLabel } from '../model/plugin-permissions'
 import {
+  POS_OFFLINE_FLAG_LABELS,
   posOfflineSaleTotals,
   POS_OFFLINE_LATE_SYNC_MS,
   POS_OFFLINE_SYNC_BATCH_MAX,
@@ -30,6 +32,9 @@ import type { PosOfflineCardIntent } from './pos-terminal'
 import {
   handlePosOfflineSync,
   posInPersonTax,
+  POS_OFFLINE_CAPTURE_SETTLE_MS,
+  posOfflineCaptureKey,
+  posOfflineCaptureRefused,
   type PosOfflineAfterSale,
   type PosOfflineSyncDeps,
 } from './pos-offline-sync'
@@ -46,6 +51,10 @@ jest.mock('./low-stock', () => ({ alertLowStockCrossing: jest.fn() }))
 jest.mock('./reserve-stock', () => ({ decrementVariantStock: jest.fn() }))
 jest.mock('./pos-sale', () => ({ notifyPosSaleCompleted: jest.fn() }))
 jest.mock('./pos-terminal', () => ({}))
+jest.mock('./pos-offline-card-reconcile', () => ({
+  ...jest.requireActual('./pos-offline-card-reconcile'),
+  reportPosOfflineCardWrongAccount: jest.fn(),
+}))
 
 /**
  * The offline register's sync (AGL-3625): a cash sale rung offline lands as
@@ -395,6 +404,32 @@ describe('what the server flags, never refuses', () => {
     )
   })
 
+  it('records a discount from a member whose role does not include giving one, flagged by name (AGL-4047)', async () => {
+    h.memberships['cashier'] = {
+      ...h.memberships['cashier'],
+      permissions: { ...h.memberships['cashier'].permissions, posDiscount: false },
+    }
+    const discounted = sale({ discountPct: 10 })
+    const [result] = await results([discounted])
+    expect(result.status).toBe('recorded')
+    expect(result.flags).toContain('discount-not-permitted')
+    const recorded = order(discounted.saleKey)!
+    expect(recorded['status']).toBe('paid')
+    expect(recorded['discountPct']).toBe(10)
+    expect(recorded['offline'].flags).toContain('discount-not-permitted')
+    const synced = recorded['timeline'].find((event: any) => event.event === 'offline-synced')
+    expect(synced.detail).toContain(posPermissionLabel('posDiscount'))
+    // The flag names the permission in the words the role editor shows.
+    expect(POS_OFFLINE_FLAG_LABELS['discount-not-permitted']).toContain(`“${posPermissionLabel('posDiscount')}”`)
+    // No discount, nothing to flag; the permission held, nothing to flag.
+    expect((await results([sale({ discountPct: 0 })]))[0].flags).not.toContain('discount-not-permitted')
+    h.memberships['cashier'] = {
+      ...h.memberships['cashier'],
+      permissions: { ...h.memberships['cashier'].permissions, posDiscount: true },
+    }
+    expect((await results([sale({ discountPct: 10 })]))[0].flags).not.toContain('discount-not-permitted')
+  })
+
   it('flags an unknown or over-cap register', async () => {
     const [unknown] = await results([sale({ registerId: 'gone', shiftId: null })])
     expect(unknown.status === 'recorded' && unknown.flags).toEqual(['unknown-register'])
@@ -465,6 +500,11 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
   let intents: Record<string, PosOfflineCardIntent>
   let captures: Array<{ id: string; fee: number; key: string }>
   let offlineEnabled: boolean
+  /** The store's Stripe account as the server reads it at sync; null when it cannot take cards. */
+  let merchant: string | null
+  /** What the next captures answer instead of capturing: a Stripe status, or a thrown network error. */
+  let captureFailures: Array<{ status: number; error: string } | 'network'>
+  let wrongAccounts: Array<Record<string, unknown>>
 
   const intentFor = (queued: PosOfflineSale, overrides: Partial<PosOfflineCardIntent> = {}): PosOfflineCardIntent => ({
     id: `pi_${queued.saleKey.slice(-12)}abc`,
@@ -498,18 +538,32 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     intents = {}
     captures = []
     offlineEnabled = true
+    merchant = 'acct_merchant'
+    captureFailures = []
+    wrongAccounts = []
     deps.card = {
       terminal: async () => ({ available: true, locationId: 'tml_1' }),
-      merchantAccount: async () => 'acct_merchant',
+      merchantAccount: async () => merchant,
       enableOffline: async () => offlineEnabled,
       retrieve: async (id) => (intents[id] ? { ok: true, intent: intents[id] } : { ok: false, error: 'No such payment' }),
       capture: async (id, fee, key) => {
         captures.push({ id, fee, key })
+        const failure = captureFailures.shift()
+        if (failure === 'network') throw new Error('socket hang up')
+        if (failure) return { ok: false, error: failure.error, status: failure.status }
         intents[id] = { ...intents[id], status: 'succeeded', applicationFeeCents: fee }
         return { ok: true, intent: intents[id] }
       },
+      wrongAccount: async (input) => void wrongAccounts.push(input),
     }
   })
+
+  /** The take and fee the capture of the default card sale carries. */
+  const lineTake = Math.round((2400 * 2) / 100) + Math.round((2500 * 2) / 100)
+  const take = Math.max(1, Math.round((lineTake * (4900 - 490)) / 4900))
+  const month = new Date(NOW).toISOString().slice(0, 7)
+  const charge = (saleKey: string) =>
+    h.memory.read(`hosts/shop/terminal/config/offlineCardCharges/${saleKey}`) as Record<string, any> | undefined
 
   const kit = async () =>
     (
@@ -547,13 +601,22 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     const { queued, intent } = cardSale('forwarded')
     const [result] = await results([queued])
     expect(result).toMatchObject({ status: 'recorded', flags: [] })
-    const lineTake = Math.round((2400 * 2) / 100) + Math.round((2500 * 2) / 100)
-    const take = Math.max(1, Math.round((lineTake * (4900 - 490)) / 4900))
     const fee = posCardApplicationFeeCents({ takeShareCents: take, chargeCents: intent.amount })
     expect(captures).toEqual([{ id: intent.id, fee, key: `pos-offline-capture:shop:${queued.saleKey}` }])
     const recorded = order(queued.saleKey)!
     expect(recorded['status']).toBe('paid')
     expect(recorded['feeCollection']).toBe('payout')
+    // The fee the sale settled, as an online card sale's completion counts
+    // it: the take share AND Stripe's processing, not the take alone.
+    expect(recorded['totals'].feeCents).toBe(fee)
+    // The order-level intent the refund route and the dispute lookup read.
+    expect(recorded).toMatchObject({
+      paymentIntentId: intent.id,
+      paymentIntentIds: [intent.id],
+      paidAtMs: queued.soldAtMs,
+    })
+    // Nothing accrues to the month: the payout carried the whole fee.
+    expect(h.memory.read(`orgs/org-1/offlineFees/${month}`)).toBeUndefined()
     expect(recorded['payments'][0]).toMatchObject({
       method: 'card_present',
       status: 'succeeded',
@@ -597,5 +660,178 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     intents[intent.id] = { ...intent, metadata: { ...intent.metadata, saleKey: 'someoneelse0000000' } }
     expect((await results([queued]))[0]).toMatchObject({ status: 'refused', reason: 'invalid', retry: false })
     expect(order(queued.saleKey)).toBeUndefined()
+  })
+
+  it('marks the intent’s record synced in the commit that records the sale', async () => {
+    const { queued, intent } = cardSale('forwarded')
+    // The webhook saw the authorization first, and set the alert clock.
+    h.memory.seed(`hosts/shop/terminal/config/offlineCardCharges/${queued.saleKey}`, {
+      saleKey: queued.saleKey,
+      status: 'requires_capture',
+      synced: false,
+      alertDueAtMs: NOW + 1,
+    })
+    await results([queued])
+    expect(charge(queued.saleKey)).toMatchObject({
+      hostId: 'shop',
+      paymentIntentId: intent.id,
+      synced: true,
+      orderId: queued.saleKey,
+      syncedAtMs: NOW,
+    })
+    expect(charge(queued.saleKey)!['alertDueAtMs']).toBeUndefined()
+  })
+
+  describe('an intent the server first meets already succeeded', () => {
+    it('with no application fee: invoices the whole fee to the month and flags the order, once', async () => {
+      const { queued, intent } = cardSale('forwarded', { status: 'succeeded', applicationFeeCents: 0 })
+      const [result] = await results([queued])
+      const fee = posCardApplicationFeeCents({ takeShareCents: take, chargeCents: intent.amount })
+      expect(captures).toHaveLength(0)
+      expect(result).toMatchObject({ status: 'recorded', flags: ['card-fee-short'] })
+      const recorded = order(queued.saleKey)!
+      expect(recorded['status']).toBe('paid')
+      expect(recorded['feeCollection']).toBe('invoice')
+      expect(recorded['totals'].feeCents).toBe(fee)
+      expect(recorded['payments'][0]).toMatchObject({ status: 'succeeded', feeCents: 0, takeFeeCents: take })
+      expect(h.memory.read(`orgs/org-1/offlineFees/${month}`)).toEqual({ month, feeCents: fee, orders: 1 })
+      // Sent again, it replays: nothing captured, nothing accrued twice.
+      expect((await results([queued]))[0].status).toBe('replayed')
+      expect(captures).toHaveLength(0)
+      expect(h.memory.read(`orgs/org-1/offlineFees/${month}`)).toEqual({ month, feeCents: fee, orders: 1 })
+    })
+
+    it('with the full fee (our capture whose answer was lost): recorded as paid, nothing invoiced', async () => {
+      const { queued, intent } = cardSale('forwarded')
+      const fee = posCardApplicationFeeCents({ takeShareCents: take, chargeCents: intent.amount })
+      intents[intent.id] = { ...intent, status: 'succeeded', applicationFeeCents: fee }
+      const [result] = await results([queued])
+      expect(captures).toHaveLength(0)
+      expect(result).toMatchObject({ status: 'recorded', flags: [] })
+      expect(order(queued.saleKey)!['feeCollection']).toBe('payout')
+      expect(h.memory.read(`orgs/org-1/offlineFees/${month}`)).toBeUndefined()
+    })
+  })
+
+  describe('the destination', () => {
+    it('never captures a card made out to another account: unpaid, flagged, and the operator is told', async () => {
+      const { queued, intent } = cardSale('forwarded', { destination: 'acct_someone_else' })
+      const [result] = await results([queued])
+      expect(captures).toHaveLength(0)
+      expect(result).toMatchObject({ status: 'recorded', flags: ['card-not-charged'] })
+      const recorded = order(queued.saleKey)!
+      expect(recorded['status']).toBe('pending')
+      expect(recorded['paymentIntentId']).toBeUndefined()
+      expect(recorded['payments'][0]).toMatchObject({ status: 'failed', paymentIntentId: intent.id })
+      expect(recorded['payments'][0].failureMessage).toMatch(/not this store’s/)
+      expect(wrongAccounts).toEqual([
+        {
+          hostId: 'shop',
+          orderId: queued.saleKey,
+          paymentIntentId: intent.id,
+          status: 'requires_capture',
+          amountCents: intent.amount,
+          destination: 'acct_someone_else',
+          expected: 'acct_merchant',
+        },
+      ])
+      expect(after).toHaveLength(0)
+    })
+
+    it('never records as paid a card already charged to another account', async () => {
+      const { queued } = cardSale('forwarded', { destination: 'acct_someone_else', status: 'succeeded' })
+      await results([queued])
+      expect(order(queued.saleKey)!['status']).toBe('pending')
+      expect(wrongAccounts[0]).toMatchObject({ status: 'succeeded' })
+    })
+
+    it('waits, uncaptured, while the store’s account cannot take card payments', async () => {
+      merchant = null
+      const { queued } = cardSale('forwarded')
+      expect((await results([queued]))[0]).toMatchObject({ status: 'refused', reason: 'failed', retry: true })
+      expect(captures).toHaveLength(0)
+      expect(order(queued.saleKey)).toBeUndefined()
+    })
+
+    it('records a declined card unpaid without asking about the account', async () => {
+      merchant = null
+      const { queued } = cardSale('declined', { status: 'requires_payment_method', destination: 'acct_someone_else' })
+      expect((await results([queued]))[0]).toMatchObject({ status: 'recorded', flags: ['card-declined'] })
+      expect(wrongAccounts).toHaveLength(0)
+    })
+  })
+
+  it('compares what Stripe took with the server’s restated total, and records what Stripe took', async () => {
+    const { queued, intent } = cardSale('forwarded')
+    // The register's own arithmetic does not add up; the customer paid what
+    // its receipt said, and that is what the intent holds.
+    queued.totals = { ...queued.totals, totalCents: queued.totals.totalCents + 100 }
+    intents[intent.id] = { ...intent, amount: queued.totals.totalCents }
+    const [result] = await results([queued])
+    expect(result.status).toBe('recorded')
+    expect(result.flags).toEqual(expect.arrayContaining(['totals-restated', 'card-amount-differs']))
+    const recorded = order(queued.saleKey)!
+    expect(recorded['status']).toBe('paid')
+    expect(recorded['payments'][0].amountCents).toBe(queued.totals.totalCents)
+    expect(recorded['totals'].totalCents).not.toBe(queued.totals.totalCents)
+    expect(captures[0].fee).toBe(posCardApplicationFeeCents({ takeShareCents: take, chargeCents: queued.totals.totalCents }))
+  })
+
+  it('leaves an unpaid card with the plan take, for the register to collect it by later', async () => {
+    const { queued } = cardSale('declined', { status: 'requires_payment_method' })
+    await results([queued])
+    const recorded = order(queued.saleKey)!
+    expect(recorded).toMatchObject({ status: 'pending', posTakeFeeCents: take, posFeeOrgId: 'org-1' })
+    expect(recorded['totals'].feeCents).toBe(0)
+  })
+
+  describe('the capture’s idempotency key', () => {
+    it('keeps the per-sale key until a capture definitely failed', () => {
+      expect(posOfflineCaptureKey('shop', 'sale0001', 0)).toBe('pos-offline-capture:shop:sale0001')
+      expect(posOfflineCaptureKey('shop', 'sale0001', 2)).toBe('pos-offline-capture:shop:sale0001:2')
+      for (const status of [400, 402, 404]) expect(posOfflineCaptureRefused(status)).toBe(true)
+      for (const status of [undefined, 409, 429, 500, 503]) expect(posOfflineCaptureRefused(status)).toBe(false)
+    })
+
+    it('moves to a new key after Stripe refused the capture, so the next sync can capture', async () => {
+      const { queued, intent } = cardSale('forwarded')
+      captureFailures.push({ status: 400, error: 'This PaymentIntent could not be captured.' })
+      expect((await results([queued]))[0]).toMatchObject({ status: 'refused', retry: true })
+      expect(charge(queued.saleKey)).toMatchObject({ captureAttempt: 1, lastCaptureStatus: 400 })
+      expect((await results([queued]))[0].status).toBe('recorded')
+      expect(captures.map((capture) => capture.key)).toEqual([
+        `pos-offline-capture:shop:${queued.saleKey}`,
+        `pos-offline-capture:shop:${queued.saleKey}:1`,
+      ])
+      expect(order(queued.saleKey)!['paymentIntentId']).toBe(intent.id)
+    })
+
+    it('retries on the same key after a request that got no answer, or one Stripe was still running', async () => {
+      const { queued } = cardSale('forwarded')
+      captureFailures.push('network', { status: 409, error: 'In progress' }, { status: 429, error: 'Too many' })
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        expect((await results([queued]))[0]).toMatchObject({ status: 'refused', retry: true })
+      }
+      expect((await results([queued]))[0].status).toBe('recorded')
+      expect(new Set(captures.map((capture) => capture.key))).toEqual(new Set([`pos-offline-capture:shop:${queued.saleKey}`]))
+      expect(captures).toHaveLength(4)
+    })
+
+    it('after a 5xx, moves on only once the intent still waits for capture a minute later', async () => {
+      const { queued } = cardSale('forwarded')
+      captureFailures.push({ status: 500, error: 'Stripe had a problem' }, { status: 500, error: 'Stripe had a problem' })
+      await results([queued])
+      // Seconds later: the outcome could still be in flight, so the same key.
+      h.clock.now = NOW + 1_000
+      await results([queued])
+      // A minute on and the intent still waits: that attempt did not capture.
+      h.clock.now = NOW + 1_000 + POS_OFFLINE_CAPTURE_SETTLE_MS
+      expect((await results([queued]))[0].status).toBe('recorded')
+      expect(captures.map((capture) => capture.key)).toEqual([
+        `pos-offline-capture:shop:${queued.saleKey}`,
+        `pos-offline-capture:shop:${queued.saleKey}`,
+        `pos-offline-capture:shop:${queued.saleKey}:1`,
+      ])
+    })
   })
 })

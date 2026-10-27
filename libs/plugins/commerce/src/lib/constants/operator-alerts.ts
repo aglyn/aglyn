@@ -116,10 +116,55 @@ export const COMMERCE_POS_HARDWARE_ORDER: OperatorAlertDefinition = {
   defaultEnabled: true,
 }
 
+/**
+ * A card taken offline on the Aglyn POS app's reader reached Stripe, but the
+ * sale it belongs to never synced (AGL-4039). Raised by the hourly sweep once
+ * the intent has waited past `POS_OFFLINE_CARD_UNSYNCED_ALERT_MS`, while there
+ * is still time to sync it before Stripe's authorization lapses.
+ */
+export const COMMERCE_POS_OFFLINE_CARD_UNSYNCED: OperatorAlertDefinition = {
+  type: 'commerce.posOfflineCardUnsynced',
+  pluginId: BUNDLE_ID,
+  label: 'Offline card sale never synced',
+  description:
+    'A card taken offline on a register reached Stripe, but its sale never reached the store. An authorized card is never captured and lapses after about two days; a charged one has no order. The site’s managers are told too.',
+  tier: 'should',
+  category: 'payments',
+  title: 'A {{amount}} card taken offline has no sale',
+  body:
+    'Payment {{paymentIntentId}} ({{status}}) for site {{site}} was taken offline on register {{registerId}} {{age}} ago, and its sale never synced. Ask the store to open that register signed in as the member who rang it so the sale syncs. An authorized card that is not captured lapses about two days after it was taken.',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
+/**
+ * A card taken offline was made out to a Stripe account that is not the
+ * store's (AGL-4039): a stale offline kit, or a register that was tampered
+ * with. The sync never captures it and records the order unpaid.
+ */
+export const COMMERCE_POS_OFFLINE_CARD_WRONG_ACCOUNT: OperatorAlertDefinition = {
+  type: 'commerce.posOfflineCardWrongAccount',
+  pluginId: BUNDLE_ID,
+  label: 'Offline card made out to another Stripe account',
+  description:
+    'A card taken offline on a register was set to pay a Stripe account that is not the store’s. The sale was recorded unpaid and the card was not captured. Check whether the account is the store’s own previous one before capturing it in Stripe, or let the authorization lapse.',
+  tier: 'must',
+  category: 'payments',
+  title: 'A {{amount}} offline card was made out to another Stripe account',
+  body:
+    'Payment {{paymentIntentId}} ({{status}}) on order {{orderId}} for site {{site}} pays account {{destination}}, but the store’s account is {{expected}}. The order is recorded unpaid and nothing was captured. If the payment already succeeded, the money is in that other account: recover or refund it in Stripe.',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
   COMMERCE_SELLER_SHARE_NOT_REVERSED,
   COMMERCE_FEE_REPRICE_REFUSED,
   COMMERCE_POS_HARDWARE_ORDER,
+  COMMERCE_POS_OFFLINE_CARD_UNSYNCED,
+  COMMERCE_POS_OFFLINE_CARD_WRONG_ACCOUNT,
 ]

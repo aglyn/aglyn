@@ -11801,6 +11801,24 @@
       ]
     },
     {
+      "collectionGroup": "offlineCardCharges",
+      "fieldPath": "alertDueAtMs",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "reviewTokens",
       "fieldPath": "expiresAt",
       "ttl": true,

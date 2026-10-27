@@ -2528,11 +2528,14 @@ internal object PosOfflineCardForwardSerializer :
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosOfflineFlagSerializer::class)
 enum class PosOfflineFlag(val raw: String) {
+    CARD_AMOUNT_DIFFERS("card-amount-differs"),
     CARD_DECLINED("card-declined"),
+    CARD_FEE_SHORT("card-fee-short"),
     CARD_NOT_CHARGED("card-not-charged"),
     CASH_SHORT("cash-short"),
     CASHIER_UNVERIFIED("cashier-unverified"),
     CLOCK_ADJUSTED("clock-adjusted"),
+    DISCOUNT_NOT_PERMITTED("discount-not-permitted"),
     DISCOUNT_OVER_LIMIT("discount-over-limit"),
     LATE_SYNC("late-sync"),
     NO_SHIFT("no-shift"),

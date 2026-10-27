@@ -190,6 +190,7 @@ export type PosOfflineFlag =
   | 'tax-differs'
   | 'totals-restated'
   | 'discount-over-limit'
+  | 'discount-not-permitted'
   | 'cash-short'
   | 'stock-short'
   | 'shift-closed'
@@ -201,6 +202,8 @@ export type PosOfflineFlag =
   | 'cashier-unverified'
   | 'card-declined'
   | 'card-not-charged'
+  | 'card-amount-differs'
+  | 'card-fee-short'
 
 /** Each flag in the words the order and the register show. */
 export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
@@ -209,6 +212,9 @@ export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
   'tax-differs': 'The tax rung differs from the store’s rate now; the sale kept the tax it collected',
   'totals-restated': 'The register’s totals did not add up; the server restated them from the lines',
   'discount-over-limit': 'The discount is above this register’s limit',
+  // Names the permission by its label in `plugin-permissions.ts` (AGL-4047);
+  // `pos-offline-sync.spec.ts` holds the two to the same words.
+  'discount-not-permitted': 'The discount was given by a member whose role does not include “Give discounts at the register”',
   'cash-short': 'The cash recorded is less than the total',
   'stock-short': 'Stock went short: more was sold than the shelf held',
   'shift-closed': 'Rung in a shift that closed before the sale synced; its Z report does not include it',
@@ -220,6 +226,8 @@ export const POS_OFFLINE_FLAG_LABELS: Record<PosOfflineFlag, string> = {
   'cashier-unverified': 'The PIN-switched cashier could not be confirmed; the sale is under the signed-in member',
   'card-declined': 'The card taken offline was declined when it was charged; the order is unpaid',
   'card-not-charged': 'The card taken offline could not be charged; the order is unpaid',
+  'card-amount-differs': 'The card was charged a different amount than the sale’s total; the payment records what Stripe took',
+  'card-fee-short': 'Stripe took less than the platform fee from this card’s payout; the rest goes on the workspace’s monthly invoice',
 }
 
 /** A line whose stock went short when the sale synced. */

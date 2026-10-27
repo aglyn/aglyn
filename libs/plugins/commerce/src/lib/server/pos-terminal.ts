@@ -1258,7 +1258,7 @@ export async function capturePosOfflineCardIntent(
   paymentIntentId: string,
   applicationFeeCents: number,
   idempotencyKey: string,
-): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status: number }> {
   const captured = await posStripe('POST', `payment_intents/${encodeURIComponent(paymentIntentId)}/capture`, {
     idempotencyKey,
     params: {
@@ -1266,7 +1266,14 @@ export async function capturePosOfflineCardIntent(
       'expand[]': ['latest_charge'],
     },
   })
-  if (!captured.ok) return { ok: false, error: posStripeErrorMessage(captured.body, 'The card payment could not be captured.') }
+  // The status tells the sync whether this attempt definitely failed (AGL-4039).
+  if (!captured.ok) {
+    return {
+      ok: false,
+      status: captured.status,
+      error: posStripeErrorMessage(captured.body, 'The card payment could not be captured.'),
+    }
+  }
   return { ok: true, intent: offlineCardIntent(captured.body) }
 }
 

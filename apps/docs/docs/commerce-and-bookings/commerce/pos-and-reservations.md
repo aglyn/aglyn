@@ -189,9 +189,11 @@ your customer, so no money changes hands.
 A **split** sale charges the fee only on the part of the sale its card and
 room-charge payments paid: a $100 sale paid $60 by card and
 $40 in cash carries the fee on $60, deducted from that card's payout, and
-nothing on the cash. Sales you ring while the register is
-[offline](pos-operations.md#selling-while-offline) are cash, so they carry no
-fee either. **Tips** carry no platform fee. Stripe's own processing cost on a
+nothing on the cash. Cash sales you ring while the register is
+[offline](pos-operations.md#selling-while-offline) carry no fee either, and a
+card the Aglyn POS app
+[takes offline](pos-operations.md#cards-taken-offline-in-the-aglyn-pos-app)
+carries the card fee, as it would online. **Tips** carry no platform fee. Stripe's own processing cost on a
 card payment is passed through at cost, like any other card sale, and is
 worked out on the whole charge, tip included, because that is what Stripe
 charges on.
