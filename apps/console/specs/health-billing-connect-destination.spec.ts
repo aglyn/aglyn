@@ -105,6 +105,11 @@ const PLATFORM_EVENTS = [
   // Register card readers (AGL-3607).
   'terminal.reader.action_succeeded',
   'terminal.reader.action_failed',
+  // Cards taken offline on the Aglyn POS app reader (AGL-4039).
+  'payment_intent.amount_capturable_updated',
+  'payment_intent.succeeded',
+  'payment_intent.payment_failed',
+  'payment_intent.canceled',
 ]
 
 const platformEndpoint = {

@@ -111,7 +111,7 @@ describe('classifyWebhookDelivery (AGL-1954)', () => {
   })
 
   it('ignored: an event type we never subscribed to', () => {
-    expect(classify({ type: 'payment_intent.succeeded' })).toEqual({
+    expect(classify({ type: 'payment_intent.created' })).toEqual({
       outcome: 'ignored',
       reason: 'not-subscribed',
     })
@@ -181,7 +181,7 @@ describe('unsubscribedRequiredEvents (AGL-1948 / AGL-1798)', () => {
     expect(
       unsubscribedRequiredEvents([
         ...REQUIRED_WEBHOOK_EVENTS,
-        'payment_intent.succeeded',
+        'payment_intent.created',
       ]),
     ).toEqual([])
   })
