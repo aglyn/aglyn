@@ -1942,6 +1942,37 @@ describe('a refund made outside the console (AGL-3363)', () => {
     expect(order()).not.toHaveProperty('externalRefundedCents')
   })
 
+  it('records a register sale’s Dashboard refund for the day totals, once (AGL-4037)', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...docs.get('hosts/host-1/orders/order-1'),
+      channel: 'pos',
+      registerId: 'front',
+      payments: [
+        { id: 'p1', method: 'card_keyed', amountCents: 8000, status: 'succeeded', atMs: 1, paymentIntentId: 'pi_dispute_1' },
+      ],
+    })
+    const records = () =>
+      [...docs.entries()].filter(([path]) => path.startsWith('hosts/host-1/registers/front/orderRefunds/'))
+    await deliver('charge.refunded', { ...refunded(1234), refunds: { data: [{ id: 're_dash' }] } })
+    await deliver('charge.refunded', { ...refunded(1234), refunds: { data: [{ id: 're_dash' }] } })
+    expect(records()).toHaveLength(1)
+    expect(records()[0]![1]).toMatchObject({
+      orderId: 'order-1',
+      registerId: 'front',
+      refundedCents: 1234,
+      tenders: [{ method: 'card_keyed', amountCents: 1234 }],
+      cashierId: null,
+      source: 'stripe',
+      stripeRefundId: 're_dash',
+    })
+    expect(Number(records()[0]![1]['atMs']) > 0).toBe(true)
+  })
+
+  it('leaves no register record for an online order refunded in Stripe', async () => {
+    await deliver('charge.refunded', refunded(1234))
+    expect([...docs.keys()].some((path) => path.includes('/orderRefunds/'))).toBe(false)
+  })
+
   it('a redelivery counts the Dashboard refund once', async () => {
     await deliver('charge.refunded', refunded(1234))
     await deliver('charge.refunded', refunded(1234))

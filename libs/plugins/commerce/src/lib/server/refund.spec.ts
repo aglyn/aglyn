@@ -1727,6 +1727,71 @@ describe('refund and the gift cards the order bought (AGL-3363)', () => {
  * refund: each refund comes off one card that can cover it, and a refund
  * larger than any one card is refused with the largest that fits.
  */
+describe('a register sale refunded from the order dialog counts in the day totals (AGL-4037)', () => {
+  const records = () =>
+    [...docs.entries()].filter(([path]) => path.startsWith('hosts/host-1/registers/front/orderRefunds/'))
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/orders/order-1', {
+      status: 'paid',
+      channel: 'pos',
+      registerId: 'front',
+      paymentIntentId: 'pi_card_a',
+      lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 }],
+      totals: { itemsCents: 5000, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 5000 },
+      payments: [
+        { id: 'a', method: 'card_present', amountCents: 5000, status: 'succeeded', atMs: 1, paymentIntentId: 'pi_card_a' },
+      ],
+    })
+  })
+
+  it('records the refund under the register the sale was rung at, as given', async () => {
+    const before = Date.now()
+    const result = await post({ amountCents: 1200 }, { 'idempotency-key': 'day-1' })
+    expect(result.status).toBe(200)
+    expect(records()).toHaveLength(1)
+    const [path, record] = records()[0]!
+    expect(path).toBe('hosts/host-1/registers/front/orderRefunds/re_1')
+    expect(record).toEqual({
+      orderId: 'order-1',
+      registerId: 'front',
+      atMs: expect.any(Number),
+      refundedCents: 1200,
+      tenders: [{ method: 'card_present', amountCents: 1200 }],
+      cashierId: 'admin-1',
+      source: 'order_dialog',
+      stripeRefundId: 're_1',
+    })
+    expect(record['atMs']).toBeGreaterThanOrEqual(before)
+  })
+
+  it('records each refund once: a retried attempt replays, a second refund is its own', async () => {
+    await post({ amountCents: 1000 }, { 'idempotency-key': 'day-2' })
+    await post({ amountCents: 1000 }, { 'idempotency-key': 'day-2' })
+    expect(records()).toHaveLength(1)
+    await post({ amountCents: 500 }, { 'idempotency-key': 'day-3' })
+    expect(records().map(([, record]) => record['refundedCents'])).toEqual([1000, 500])
+  })
+
+  it('records nothing when Stripe refuses, because nothing was given', async () => {
+    nextRefundOutcome = 'rejected'
+    expectServerError()
+    const result = await post({ amountCents: 1000 }, { 'idempotency-key': 'day-4' })
+    expect(result.status).toBe(502)
+    expect(records()).toHaveLength(0)
+  })
+
+  it('leaves no record for an online order', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...docs.get('hosts/host-1/orders/order-1'),
+      channel: 'online',
+      paymentIntentId: 'pi_live_1',
+    })
+    await post({ amountCents: 1000 }, { 'idempotency-key': 'day-5' })
+    expect([...docs.keys()].some((path) => path.includes('/orderRefunds/'))).toBe(false)
+  })
+})
+
 describe('refunding a split-tender register sale (AGL-3607)', () => {
   beforeEach(() => {
     docs.set('hosts/host-1/orders/order-1', {

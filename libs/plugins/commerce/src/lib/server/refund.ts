@@ -31,6 +31,8 @@ import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conve
 import { createStripeRefund } from './stripe-refund'
 import { posRegisterRefundAuthority } from './pos-refund-authority'
 import { holdsPosPermission } from '../model/plugin-permissions'
+import { posOrderRefundRecord, POS_ORDER_REFUNDS_COLLECTION } from '../model/commerce-pos-day-report'
+import type { PosTenderSource } from '../model/commerce-pos-ops'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -610,6 +612,29 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     let refundedCents = 0
     let fullyRefunded = false
     let closedTheOrder = false
+    // A register sale's refund counts in the day totals on the day it was
+    // given, wherever it was given (AGL-4037): recorded beside the register's
+    // own returns, in the same transaction as the order's count, so the two
+    // cannot disagree. Online orders leave none.
+    const registerRefund = posOrderRefundRecord({
+      orderId,
+      order: order as PosTenderSource & { registerId?: unknown },
+      refundedCents: refundCents,
+      paymentIntentId: String(paymentIntentId),
+      cashierId: decoded.uid,
+      source: 'order_dialog',
+      stripeRefundId: refund.refundId || null,
+      atMs: Date.now(),
+    })
+    const registerRefundRef = registerRefund
+      ? hostRef
+          .collection('registers')
+          .doc(registerRefund.registerId)
+          .collection(POS_ORDER_REFUNDS_COLLECTION)
+          // One record per Stripe refund; a keyed retry replays at the claim
+          // above and never reaches here.
+          .doc(refund.refundId || `${orderId}-${claim?.stripeKey ?? registerRefund.atMs}`)
+      : null
     await firestore.runTransaction(async (transaction) => {
       const fresh = CommerceModel.liftLegacyOrder(
         ((await transaction.get(orderRef)).data() ?? {}) as any,
@@ -667,6 +692,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      if (registerRefund && registerRefundRef) transaction.set(registerRefundRef, registerRefund)
     })
     const payload = { refundedCents, fullyRefunded }
     await claim?.record(200, payload)

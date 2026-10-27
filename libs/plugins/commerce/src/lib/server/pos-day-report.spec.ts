@@ -313,6 +313,100 @@ describe('the totals across every register, shift and cashier', () => {
   })
 })
 
+describe('every refund of a register sale counts, on the day it was given (AGL-4037)', () => {
+  /** A refund given from the order dialog (or in Stripe), as `refund.ts` stores it. */
+  function orderRefund(id: string, data: Record<string, unknown>) {
+    h.memory.seed(`hosts/shop/registers/front/orderRefunds/${id}`, {
+      orderId: 'o-card',
+      registerId: 'front',
+      refundedCents: 700,
+      tenders: [{ method: 'card_present', amountCents: 700 }],
+      cashierId: 'owner',
+      source: 'order_dialog',
+      stripeRefundId: `re_${id}`,
+      ...data,
+    })
+  }
+
+  beforeEach(() => {
+    // A card sale rung yesterday, refunded today from the console.
+    sale('o-card', {
+      registerId: 'front',
+      cashierId: 'cashier',
+      createdAtMs: DAY_START - 5 * HOUR,
+      totals: { totalCents: 3000 },
+      payments: [{ id: 'c1', method: 'card_present', amountCents: 3000, status: 'succeeded' }],
+    })
+  })
+
+  it('counts a refund given from the order dialog today, whenever the sale was', async () => {
+    orderRefund('a', { atMs: DAY_START + 3 * HOUR })
+    const r = (await report()).body['report'] as PosDayReport
+    expect(r.totals).toMatchObject({ orderCount: 0, refundCount: 1, refundsCents: 700, netSalesCents: -700 })
+    expect(r.byTender).toEqual([
+      { method: 'card_present', label: 'Card', salesCents: 0, refundsCents: 700, netCents: -700 },
+    ])
+    expect(r.byRegister.map((row) => [row.name, row.refundCount, row.refundsCents])).toEqual([['Front', 1, 700]])
+    // Who gave it back, not who rang the sale.
+    expect(r.byCashier.map((row) => [row.memberId, row.refundsCents])).toEqual([['owner', 700]])
+    // A card went back: no drawer moved.
+    expect(r.cash.cashRefundsCents).toBe(0)
+  })
+
+  it('counts a refund made in Stripe under no cashier', async () => {
+    orderRefund('s', { atMs: DAY_START + HOUR, cashierId: null, source: 'stripe' })
+    const r = (await report()).body['report'] as PosDayReport
+    expect(r.byCashier.map((row) => [row.memberId, row.name, row.refundsCents])).toEqual([
+      ['', 'No cashier recorded', 700],
+    ])
+  })
+
+  it('counts it on the store’s day: the last millisecond before midnight there, not the first after', async () => {
+    // 23:59:59.999 on the 15th in Chicago is 05:59:59.999Z on the 16th.
+    orderRefund('late', { atMs: DAY_END - 1 })
+    // 00:00 on the 16th in Chicago belongs to the 16th.
+    orderRefund('next', { atMs: DAY_END, refundedCents: 300, tenders: [{ method: 'card_present', amountCents: 300 }] })
+    // 23:59 on the 14th in Chicago belongs to the 14th.
+    orderRefund('before', { atMs: DAY_START - 1, refundedCents: 50, tenders: [{ method: 'card_present', amountCents: 50 }] })
+    const today = (await report()).body['report'] as PosDayReport
+    expect(today.totals.refundsCents).toBe(700)
+    const tomorrow = (await report({ from: '2027-01-16' })).body['report'] as PosDayReport
+    expect(tomorrow.totals.refundsCents).toBe(300)
+    const yesterday = (await report({ from: '2027-01-14' })).body['report'] as PosDayReport
+    expect(yesterday.totals.refundsCents).toBe(50)
+    const both = (await report({ from: '2027-01-14', to: '2027-01-16' })).body['report'] as PosDayReport
+    expect(both.totals.refundCount).toBe(3)
+  })
+
+  it('counts the register’s own returns and the order dialog’s refunds side by side', async () => {
+    orderRefund('a', { atMs: DAY_START + 3 * HOUR })
+    h.memory.seed('hosts/shop/registers/front/returns/r1', {
+      registerId: 'front',
+      cashierId: 'cashier',
+      refundedCents: 1000,
+      tenders: [{ method: 'cash', amountCents: 1000, status: 'refunded' }],
+      atMs: DAY_START + 4 * HOUR,
+    })
+    const r = (await report()).body['report'] as PosDayReport
+    expect(r.totals).toMatchObject({ refundCount: 2, refundsCents: 1700 })
+    expect(r.byTender.map((row) => [row.method, row.refundsCents])).toEqual([
+      ['cash', 1000],
+      ['card_present', 700],
+    ])
+  })
+
+  it('leaves the shift reports alone: a refund away from the register moved no drawer', async () => {
+    h.clock.now = DAY_START + HOUR
+    const opened = await shift({ registerId: 'front', action: 'open', openingFloatCents: 0 })
+    const shiftId = (opened.body['shift'] as { id: string }).id
+    orderRefund('a', { atMs: DAY_START + 2 * HOUR, shiftId })
+    h.clock.now = DAY_START + 3 * HOUR
+    const x = await shift({ registerId: 'front', action: 'x-report' })
+    expect(x.status).toBe(200)
+    expect(x.body['report']).toMatchObject({ refundCount: 0, refundsCents: 0 })
+  })
+})
+
 describe('the spreadsheet', () => {
   it('answers format=csv as a download with every block', async () => {
     sale('o-1', {
