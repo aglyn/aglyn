@@ -145,7 +145,8 @@ the day they are rung.
 the buyer picked, or, when they picked none, on the day the order was placed,
 counted in your site's time zone, whether it was bought online or at the
 register. Guests whose stay covers the day are due too, one check-in for each
-day of the stay. An item refunded on its own, or an order refunded in full or
+day of the stay, or one for each guest (see **Stays: one check-in or one per
+guest** below). An item refunded on its own, or an order refunded in full or
 canceled, is no longer due; anyone already checked in stays on the list.
 
 **Rain checks.** When weather or a closed track means a pass can't be used,
@@ -175,6 +176,17 @@ Someone already checked in shows when and by whom ("Already checked in at
 check-in is recorded under the person who switched in. On a day you are
 checking people in, attaching a customer to a sale who has someone due today
 offers **Check in** on the customer panel too.
+
+**Stays: one check-in or one per guest.** A stay can be checked in once,
+with one wristband, or one guest at a time, each with their own check-in and
+wristband. Set it for each resource with **At check-in** in its editor on the
+**Reservations** card (**One check-in per stay**, the default, or **One
+check-in per guest**). To set every stay at once, use **Stays at check-in** on
+**Today's check-ins**: **As each resource is set**, **One per stay** or **One
+per guest**. The change shows on the list straight away; anyone already checked
+in stays checked in. Checking in per guest uses the stay's guest count, which
+guests enter when they book with the Reservation widget and staff enter on a
+walk-in. A stay with no count gets one check-in.
 
 **Commerce → Orders → Today's check-ins** lists everyone due on a day with
 what they are checked in for, the time, who checked them in, the wristband

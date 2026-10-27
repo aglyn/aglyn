@@ -27,6 +27,16 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — stays checked in per guest
+
+- **[One check-in per guest](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
+  a resource can check its stays in one guest at a time, each with their own
+  wristband, or once per stay as before. **Stays at check-in** on **Today's
+  check-ins** sets every stay at once.
+- **[How many guests](commerce-and-bookings/commerce/pos-and-reservations.md#reservations)** —
+  the Reservation widget and walk-ins take an optional guest count, up to what
+  the resource sleeps.
+
 ## October 2026 — waivers on your own site, your own adult age
 
 - **[Share links open on your site](commerce-and-bookings/commerce/waivers.md#share-it-before-riders-arrive)** —
