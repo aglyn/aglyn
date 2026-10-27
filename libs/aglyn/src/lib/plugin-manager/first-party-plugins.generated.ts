@@ -602,6 +602,8 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "relatedProductIds",
         "giftCard",
         "lowStockThreshold",
+        "modifierGroups",
+        "posQuickKey",
         "sellOnline",
         "checkIn",
         "shipping",

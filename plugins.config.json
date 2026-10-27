@@ -569,6 +569,8 @@
               "relatedProductIds",
               "giftCard",
               "lowStockThreshold",
+              "modifierGroups",
+              "posQuickKey",
               "sellOnline",
               "checkIn",
               "shipping",
