@@ -186,7 +186,8 @@ counts for any day.
 ## Contacts
 
 A signer who gives an email is added to your contacts, or matched to the contact you
-already have for them, with the signing on their timeline.
+already have for them, with the signing on their timeline. Their source reads
+**Waiver signed** in your contacts list, on their record and in the contact reports.
 
 ## Privacy
 

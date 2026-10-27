@@ -23,7 +23,8 @@ import type {
   ContactSource,
   CrmActivityRow,
 } from '@aglyn/aglyn'
-import { CONTACT_SOURCE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn'
+import { labelContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import {
   mdiAccountCircleOutline,
   mdiAccountEditOutline,
@@ -98,7 +99,7 @@ function CapturedRow(props: {
 }) {
   const { interaction, nowMs, href } = props
   const source = interaction.type
-  const label = CONTACT_SOURCE_LABELS[source] ?? String(source)
+  const label = labelContactSource(source) || String(source)
   const icon = SOURCE_ICONS[source]
   const when = new Date(interaction.atMs)
   return (

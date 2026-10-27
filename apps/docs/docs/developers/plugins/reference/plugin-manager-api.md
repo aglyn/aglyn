@@ -1697,6 +1697,7 @@ if (captured?.ok === false) log.warn(captured.reason, captured.error)
 | `capturePluginContact(request)` | `{ ok: true, record: 'contact', contactId, created }` or `{ ok: true, record: 'lead', leadId, created }` — `created: false` is a returning visit — or `{ ok: false, reason, error }`, or **`null` when no plugin keeps people**. `null` and a refusal are different answers: `null` is a workspace with no record system, where nothing has gone wrong. |
 | `registerPluginContactSource({ source, label, openLabel?, recordKind? }, { pluginId? })` | One source word has one owner. `openLabel` is what a link from a timeline entry says, and a door with nothing to open declares none. `recordKind` is the kind `plugin-record-routes` addresses the silo's own document by. |
 | `pluginContactCaptureWriter()` / `listPluginContactSources()` / `pluginContactSource(source)` | The writer with its owner, every declared door, and one by its word. |
+| `labelContactSource(source, fallback?)` | How a contact's source word reads on screen: the core's own label, else the `label` its plugin declared, else `fallback` (or the word itself). A plugin cannot relabel a core source. It answers from what this process registered, so declare a door from your `declarations` entry when the console's browser should label it. |
 
 **A refusal is returned, never thrown.** Each of these silos has already
 accepted the submission or taken the money, so a throw would cost it the thing

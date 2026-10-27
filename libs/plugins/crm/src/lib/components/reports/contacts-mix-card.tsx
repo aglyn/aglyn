@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { labelContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   percent,
@@ -157,9 +158,7 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
           <ReportBreakdown
             rows={mix.sources.map((row) => ({
               key: row.key,
-              label:
-                Aglyn.CONTACT_SOURCE_LABELS[row.key as Aglyn.ContactSource] ??
-                row.key,
+              label: labelContactSource(row.key),
               value: row.count,
             }))}
             emptyText={

@@ -50,6 +50,7 @@ import {
   type CrmPipeline,
   type CrmTask,
 } from '@aglyn/aglyn/server'
+import { labelContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import type { TransferField, TransferFieldType } from '@aglyn/aglyn/data-transfer'
 import {
   COMPANY_TRANSFER_FIELDS,
@@ -567,8 +568,7 @@ export function crmActivityFact(activity: Partial<CrmActivity>): CrmTimelineFact
 export function crmInteractionFact(interaction: Partial<ContactInteraction>): CrmTimelineFact | null {
   const on = crmFactDay(interaction.atMs)
   if (!on) return null
-  const kind =
-    interaction.type && CONTACT_SOURCE_LABELS[interaction.type] ? CONTACT_SOURCE_LABELS[interaction.type] : 'Capture'
+  const kind = labelContactSource(interaction.type, 'Capture')
   const text = crmFactText(interaction.summary, CRM_FACTS_TEXT_MAX)
   return text ? { on, kind, text } : { on, kind }
 }
@@ -671,7 +671,7 @@ export function contactFacts(input: ContactFactsInput): CrmContactFacts {
   const facet = readContactFacet(row, group.groupId)
   const sources = Object.entries(facet.sources ?? {})
     .filter(([, on]) => on === true)
-    .map(([source]) => CONTACT_SOURCE_LABELS[source as keyof typeof CONTACT_SOURCE_LABELS] ?? '')
+    .map(([source]) => labelContactSource(source, ''))
     .filter(Boolean)
   const interactions = interactionsForGroup(facet.interactions, group.hostIds)
   const alternates = Array.isArray(row[CONTACT_ALTERNATE_EMAILS_FIELD])
