@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — cards taken offline settle like cards taken online
+
+- **[Cards taken offline in the Aglyn POS app](commerce-and-bookings/commerce/pos-operations.md#cards-taken-offline-in-the-aglyn-pos-app)**
+  carry the same fee as a card taken online, can be refunded from the order, and
+  have their chargebacks matched to the order. A declined one is an unpaid order
+  you collect at the register with the usual fee for that tender. A card set to
+  pay another Stripe account is never charged into your store, and your site's
+  managers are told when a card reached Stripe but its sale never synced.
+
 ## October 2026 — card readers, contacts and products, tidied up
 
 - **[A new logo reaches your card readers on its own](commerce-and-bookings/commerce/pos-hardware.md#reader-start-up-screen)** —

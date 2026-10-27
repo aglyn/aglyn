@@ -100,7 +100,8 @@ alerts.
 | Security | Staff access granted or a role raised; a plugin verifier regression | Should |
 | Support | A ticket past its response time; new tickets and replies (digest) | Should |
 | Email deliverability | Send-rate governor saturated or unavailable; a recipient gateway blocking a shared domain; the email provider rejecting the key or the shared pool unhealthy | Should |
-| Payments *(commerce)* | A chargeback that could not be routed; sales tax not reversed; a seller's share not reversed; a platform fee correction refused | Must |
+| Payments *(commerce)* | A chargeback that could not be routed; sales tax not reversed; a seller's share not reversed; a platform fee correction refused; a card taken offline that was made out to another Stripe account | Must |
+| Payments *(commerce)* | A card taken offline that reached Stripe but whose sale never synced | Should |
 | Email deliverability *(marketing)* | The events webhook failing, unconfigured or rejecting signatures, so bounces go unsuppressed | Must |
 | Email deliverability *(marketing)* | Campaigns blocked by the reputation breaker | Should |
 | Operations *(AI)* | The platform's AI provider refusing its key or out of credit | Should |

@@ -292,6 +292,33 @@ and says what you should look at, on the order and in the register:
 - A discount above the register's limit, tax that differs from your store's
   rate now, or a device clock that was wrong.
 
+### Cards taken offline in the Aglyn POS app
+
+With **Take cards offline in the point of sale app** turned on in your POS
+settings, the Aglyn POS app's own card reader saves each card while the
+connection is down, and Stripe charges it once the app is back online. The
+sale syncs right after, and:
+
+- **The card is charged like a card taken online.** The platform fee is
+  deducted from that card's payout. If Stripe took less than that fee from the
+  payout, the rest is added to your next monthly invoice and the order says
+  so. The sale can be refunded from the order, and a chargeback on it is
+  matched to the order, like any card sale.
+- **A card the bank declined, or that could not be charged,** is recorded as an
+  **unpaid** order, and the register says so. Collect it another way at the
+  register: the payment you take carries the fee for its tender, as on any
+  other sale, and the stock is not taken off the shelf a second time.
+- **A card set to pay a Stripe account that is not your store's** (for example,
+  one taken before you reconnected Stripe) is not charged into your store. The
+  order is recorded unpaid, and Aglyn is alerted to check it.
+- **A charge that differs from the order's total**: the order shows what Stripe
+  took and asks you to check it against the receipt.
+- **A card that reached Stripe but whose sale never synced**, for example
+  because the app was not opened again by the member who rang it: about six
+  hours later your site's managers get a notification. Open the app that took
+  it, signed in as that member, so the sale syncs. A card that was approved but
+  never charged is released about two days after it was taken.
+
 ### Before you go offline
 
 - The register needs to have been online on that device once, so it has the
