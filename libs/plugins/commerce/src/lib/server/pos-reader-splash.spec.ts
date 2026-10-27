@@ -42,6 +42,10 @@ const sharp = require('sharp')
 let mockManagePos = true
 /** The finer "Registers and devices" key (AGL-4047); undefined follows `managePos`. */
 let mockDevices: boolean | undefined
+/** Stores the default lock gate answers locked (AGL-4048). */
+const mockLockedHosts = new Set<string>()
+/** A role or override that grants (true) or refuses (false) the register; undefined: the site role's default. */
+let mockRegisterGranted: boolean | undefined
 let mockOrg: Record<string, any> = {}
 let mockBlocked: 'locked' | 'quarantined' | null = null
 let mockPublicIp: string | null = '93.184.216.34'
@@ -56,9 +60,23 @@ const TOKENS: Record<string, Record<string, unknown>> = {
   member: { uid: 'manager-1', email_verified: true },
 }
 
+// As the real resolver answers for a site (AGL-4047): nothing for someone
+// with no access to it, the site role's default otherwise, and a grant or a
+// refusal over that default.
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({
-    permissions: { managePos: mockManagePos, ...(mockDevices === undefined ? {} : { posDevices: mockDevices }) },
+  resolveOrgPermissions: async (uid: string, context: { hostId?: string }) => ({
+    permissions: {
+      managePos:
+        mockManagePos &&
+        jest
+          .requireActual('../testing/site-register-permissions')
+          .siteRegisterVerdict(
+            jest.requireActual('../testing/fake-firestore').fakeDocs.get(`hosts/${context?.hostId}`)?.memberRoles,
+            uid,
+            mockRegisterGranted,
+          ),
+      ...(mockDevices === undefined ? {} : { posDevices: mockDevices }),
+    },
   }),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -92,10 +110,16 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       firestore: { FieldValue: fake.fakeFieldValue },
     },
     getOrgForHost: async () => ({ orgId: 'org-1', org: { id: 'org-1', ...mockOrg } }),
+    getOrgDoc: async (orgId: string) => (orgId === 'org-1' ? { $id: 'org-1', ...mockOrg } : null),
     emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
     isImpersonationSession: () => false,
   }
 })
+// The default lock gate a logo event asks (AGL-4048): every store open
+// unless a test locks one.
+jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({
+  siteLockdownJobGate: () => ({ isLocked: async (hostId: string) => mockLockedHosts.has(hostId) }),
+}))
 jest.mock('@aglyn/tenant-data-admin/server/media-variants', () => ({
   loadSharp: async () => jest.requireActual('sharp'),
 }))
@@ -122,10 +146,16 @@ import { posReaderSplashImageProblem, POS_READER_SPLASH_FAMILIES } from '../mode
 import { posReaderSplashAdmin } from './pos-reader-splash-admin'
 import {
   applyPosReaderSplash,
+  onOrgLogoChanged,
   POS_READER_SPLASH_RETRY_FAILED_AFTER_MS,
   posReaderSplashHandler,
   refreshPosReaderSplashes,
 } from './pos-reader-splash'
+import {
+  resetPluginEventHandlersForTests,
+  runPluginEventHandlers,
+} from '@aglyn/aglyn/plugin-manager/plugin-events'
+import { registerCommerceServerDeclarations } from '../declarations.server'
 import { renderPosReaderSplash } from './pos-reader-splash-render'
 import { ensurePosOfflineCardConfiguration, savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
 
@@ -599,6 +629,88 @@ describe('the refresh beat: a logo change reaches the readers with no card opene
   })
 })
 
+describe('a saved logo reaches the readers at once, through core’s org.logo.changed (AGL-4048)', () => {
+  const open = { isLocked: async () => false }
+  const uploads = () => stripeOnly().filter((call) => call.host === 'files.stripe.com')
+
+  async function logoApplied() {
+    await seedOrgLogo()
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo1' }
+    fakeDocs.set('hosts/host-1', { ...fakeDocs.get('hosts/host-1'), orgId: 'org-1' })
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', splash: { choice: 'logo', updatedAtMs: 1 } })
+    expect((await applyPosReaderSplash('host-1')).outcome).toBe('applied')
+    stripeCalls.length = 0
+  }
+
+  async function newLogo() {
+    mockStorage.set('orgs/org-1/media/logo2', { body: await png(600, 300) })
+    fakeDocs.set('orgs/org-1/media/logo2', { contentType: 'image/png', sizeBytes: 2048, contentSha256: 'd'.repeat(64), visibleTo: ['org'] })
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo2' }
+  }
+
+  afterEach(() => mockLockedHosts.clear())
+
+  it('sends the new logo to every store of the workspace with readers, once, and nothing to another workspace', async () => {
+    await logoApplied()
+    // A store of another workspace, and one of this workspace with no readers.
+    fakeDocs.set('hosts/host-9', { orgId: 'org-9' })
+    fakeDocs.set('hosts/host-9/terminal/config', { stripeLocationId: 'tml_theirs' })
+    fakeDocs.set('hosts/host-2', { orgId: 'org-1' })
+    await newLogo()
+
+    expect(await onOrgLogoChanged({ orgId: 'org-1' }, open)).toMatchObject({ applied: 1, failed: 0, unchanged: 0, skipped: 1 })
+    expect(uploads()).toHaveLength(2)
+    expect(configurationWrites().map((call) => call.path)).toEqual(['terminal/configurations/tmc_new1'])
+    expect(fakeDocs.get('hosts/host-9/terminal/config')?.['splashAppliedKey']).toBeUndefined()
+
+    // Raised again with nothing new, it makes no Stripe call.
+    stripeCalls.length = 0
+    expect(await onOrgLogoChanged({ orgId: 'org-1' }, open)).toMatchObject({ applied: 0, unchanged: 1 })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('arrives through the commerce plugin’s subscription, asking the lock for each store', async () => {
+    await logoApplied()
+    await newLogo()
+    resetPluginEventHandlersForTests()
+    registerCommerceServerDeclarations()
+
+    mockLockedHosts.add('host-1')
+    await runPluginEventHandlers('org.logo.changed', {
+      orgId: 'org-1',
+      actor: { uid: 'manager-1', email: null },
+      changed: ['logo'],
+    })
+    expect(stripeOnly()).toHaveLength(0)
+
+    mockLockedHosts.clear()
+    const raised = await runPluginEventHandlers('org.logo.changed', {
+      orgId: 'org-1',
+      actor: { uid: 'manager-1', email: null },
+      changed: ['logo'],
+    })
+    expect(raised).toEqual({ handled: 1, failed: [] })
+    expect(uploads()).toHaveLength(2)
+  })
+
+  it('does nothing for an unknown workspace, or in live mode until Terminal live mode is on', async () => {
+    await logoApplied()
+    await newLogo()
+    expect(await onOrgLogoChanged({ orgId: 'org-404' }, open)).toMatchObject({ applied: 0, unchanged: 0 })
+    process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
+    expect(await onOrgLogoChanged({ orgId: 'org-1' }, open)).toEqual({ applied: 0, unchanged: 0, failed: 0, skipped: 0, more: false })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('never throws: a store that fails is counted, and the beat stays to retry it', async () => {
+    await logoApplied()
+    await newLogo()
+    mockBlocked = 'quarantined'
+    expect(await onOrgLogoChanged({ orgId: 'org-1' }, open)).toMatchObject({ failed: 1 })
+    expect(typeof fakeDocs.get(configPath)?.['splashFailedKey']).toBe('string')
+  })
+})
+
 describe('offline card mode on the same configuration (AGL-4039)', () => {
   const offlineWrites = () => configurationWrites().filter((call) => call.params.get('offline[enabled]') === 'true')
 
@@ -691,6 +803,15 @@ describe('the POS devices card’s setting', () => {
     expect((await store({ action: 'status' }, 'viewer')).status).toBe(403)
     mockManagePos = false
     expect((await store({ action: 'status' })).status).toBe(403)
+  })
+
+  it('asks the permission, not the site role: a viewer granted the register reads it (AGL-4047)', async () => {
+    mockRegisterGranted = true
+    try {
+      expect((await store({ action: 'status' }, 'viewer')).status).toBe(200)
+    } finally {
+      mockRegisterGranted = undefined
+    }
   })
 
   it('is read by anyone at the register and changed only with the devices key (AGL-4047)', async () => {
