@@ -119,21 +119,25 @@ of the address, because the list holds addresses rather than names. See
 ### AI access for collaborators {#collaborator-ai-access}
 
 A site collaborator's AI access is decided **per site**, on the site's **Users**
-card, with two boxes beside each collaborator: **Assist** (the assistant, copy
-rewrites, generating a section) and **Generate** (AI generation jobs and AI
+card: choose **Permissions** beside a collaborator to see every permission that is
+set per site, AI's two among them — **Use AI assistance** (the assistant, copy
+rewrites, generating a section) and **Generate with AI** (AI generation jobs and AI
 edits). The site role sets the default — Admin, Editor and Author get both,
-Viewer gets neither — and the boxes refine it for that person on that site. A
-collaborator on two sites can have AI on one and off on the other.
+Viewer gets neither — and each permission can be set to **Allow**, **Deny** or
+**Inherit** (the site role's default) for that person on that site. A collaborator
+on two sites can have AI on one and off on the other. Each row says whether the
+permission is allowed and whether that comes from the site role or was set for
+this site.
 
-The boxes are not a hide-the-button control: every AI request from the site
-names the site, and the request is refused when the box is unticked, whichever
-surface it came from. A collaborator whose request names no site at all is
-refused too. Changing a box is recorded in the site's activity feed, and the
-boxes become settable once a pending invite has been accepted.
+These are not a hide-the-button control: every AI request from the site names the
+site, and the request is refused when the permission is denied, whichever surface
+it came from. A collaborator whose request names no site at all is refused too.
+Every change is recorded in the site's activity feed, and a collaborator's
+permissions become settable once a pending invite has been accepted.
 
-Organization-wide members are not affected by these boxes; their AI access
-follows their org role, custom role and overrides — see
-[Custom roles & permissions](custom-roles.md#ai-permissions).
+Organization-wide members are not set here; their permissions follow their org
+role, custom role and per-member overrides, set on their Team page — see
+[Custom roles & permissions](custom-roles.md#per-member-overrides).
 
 A site's **Users** card also shows what each collaborator drew from the workspace's AI
 credits **on that site** this month, so an agency can see which client site's people

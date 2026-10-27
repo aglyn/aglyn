@@ -128,6 +128,8 @@ export * from './lib/server/operator-alerts'
 export * from './lib/server/operator-health'
 export * from './lib/server/org-billing'
 export * from './lib/server/organizations'
+// Per-member permission overrides, org-wide and per site (AGL-4047).
+export * from './lib/server/member-permission-overrides'
 // Platform staff take no customer seat, and a workspace is asked to upgrade
 // as a separate step after it is handed over (AGL-3466).
 export * from './lib/server/staff-seat'

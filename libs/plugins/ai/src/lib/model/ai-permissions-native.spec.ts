@@ -20,7 +20,7 @@ import { HOST_ROLE_AI_PERMISSIONS } from './ai-permissions'
 
 /**
  * The native "AI access" screen for a site collaborator restates the role
- * defaults the console's `AiCollaboratorPermissionsCell` computes
+ * defaults the console's per-site Permissions dialog draws
  * (`stored ?? HOST_ROLE_AI_PERMISSIONS[role]`), because a screen spec has no
  * role table. A role default that changes in the plugin must change there.
  */

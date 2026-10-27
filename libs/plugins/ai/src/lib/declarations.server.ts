@@ -82,6 +82,20 @@ export function registerAiServerDeclarations(): void {
       { pluginId: AI_PLUGIN_ID },
     )
   }
+  // THE PLATFORM'S PER-SITE TOGGLE DOOR (AGL-4047). The collaborators card
+  // sets every per-site key through the platform's generic door now, so this
+  // plugin keeps its display copy (`aiPermissions` on the site's roster row,
+  // which the native apps read) in step from the verdict that door wrote.
+  if (!listPluginEventHandlers('host.member.permissions.changed').includes(AI_PLUGIN_ID)) {
+    registerPluginEventHandler(
+      'host.member.permissions.changed',
+      async ({ hostId, memberId, permissions }) => {
+        const { recordAiPermissionsOnRoster } = await import('./server/ai-host-permissions-roster')
+        await recordAiPermissionsOnRoster(hostId, memberId, permissions)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+  }
   // THE PLATFORM'S BILLING EVENTS (AGL-3011). Subscribed at boot for the
   // same reason as the two above: they are raised by the billing webhook,
   // which never loads an AI door, and a workspace's overage standing moving

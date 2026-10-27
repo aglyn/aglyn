@@ -45,6 +45,16 @@ for the how-to.
 - **[A grouped, searchable role editor](workspace-and-billing/teams-and-roles/custom-roles.md#create-a-custom-role)** —
   permissions are grouped by area and by plugin, with a search box, and each is
   **Allow**, **Deny** or **Inherit**, with a switch to set a whole group at once.
+- **[Permissions for one member](workspace-and-billing/teams-and-roles/custom-roles.md#per-member-overrides)** —
+  allow or deny any permission for one person, over their role and custom role,
+  from the **Permissions** card on their Team page or the roster's new
+  **Permissions** column. Each permission shows its final verdict and whether it
+  comes from the role, the custom role or this member, and every change is
+  recorded in the activity log.
+- **[Per-site permissions for collaborators](workspace-and-billing/teams-and-roles/overview.md#collaborator-ai-access)** —
+  a site's **Users** card opens each collaborator's **Permissions** on that site,
+  every per-site permission (AI's two among them) set to **Allow**, **Deny** or the
+  site role's default.
 
 ## October 2026 — digital waivers, signed before riders arrive
 

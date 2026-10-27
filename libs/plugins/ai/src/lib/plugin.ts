@@ -33,13 +33,6 @@ import { lazyWidget } from './lazy-widget'
 /** What a page shows while its code arrives. */
 const PAGE_LOADING = createElement(LinearProgress, { 'aria-label': 'Loading' })
 
-const AiCollaboratorPermissionsCell = lazyWidget(
-  'AiCollaboratorPermissionsCell',
-  () =>
-    import('./components/ai-collaborator-permissions-column.component').then(
-      (m) => m.AiCollaboratorPermissionsCell,
-    ),
-)
 const AiSaveAsComponent = lazyWidget('AiSaveAsComponent', () =>
   import('./components/ai-save-as-component.component').then(
     (m) => m.AiSaveAsComponent,
@@ -447,16 +440,10 @@ export function registerAiConsole(): void {
         permission: 'billing.view',
         Component: AiTopUsersCard,
       },
-      // The collaborators table's AI column (AGL-2927): whether each person
-      // may open the AI doors on the site, per site, ahead of the columns
-      // that report what they drew.
-      {
-        slot: 'hostMembers',
-        widgetId: 'ai-collaborator-permissions',
-        title: 'AI',
-        column: { header: 'AI' },
-        Component: AiCollaboratorPermissionsCell,
-      },
+      // The collaborators table's AI toggles (AGL-2927) are the platform's
+      // own per-site Permissions dialog now (AGL-4047), which draws every
+      // per-site key, these two included; `/api/ai/host-permissions` stays
+      // for the native apps.
       // The copy assistant's besigner controls (AGL-89, AGL-169): Generate a
       // section on every editor's toolbar, and Rewrite with AI under the
       // selected element's fields. Each opens the provider's dialog, and is

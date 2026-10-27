@@ -46,6 +46,7 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import MemberAvatar from '../../../../../components/member-avatar.component'
+import MemberPermissionsEditor from '../../../../../components/member-permissions-editor.component'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
@@ -99,6 +100,30 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [allHosts, setAllHosts] = useState(true)
   const [hostAccess, setHostAccess] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  // The workspace's custom roles, for the Permissions card's "from the
+  // custom role" answers (AGL-4047).
+  const [customRoles, setCustomRoles] = useState<
+    Array<{ $id: string; name?: string; permissions?: Partial<Record<string, boolean>> }>
+  >([])
+  useEffect(() => {
+    if (!currentOrg?.$id || !user) return
+    let active = true
+    void (async () => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/orgs/roles?orgId=${encodeURIComponent(currentOrg.$id)}`,
+        )
+        const payload = await response.json().catch(() => ({}))
+        if (active && Array.isArray(payload?.roles)) setCustomRoles(payload.roles)
+      } catch (error) {
+        console.error(error)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [currentOrg?.$id, user])
 
   const loadMember = useCallback(async () => {
     if (!currentOrg?.$id || !uid) return
@@ -482,6 +507,15 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               </Stack>
             </CardDisplay>
           )}
+          {member ? (
+            <MemberPermissionsEditor
+              layout="card"
+              member={member}
+              roles={customRoles}
+              canManage={canManage}
+              onSaved={() => void loadMember()}
+            />
+          ) : null}
           {canManage && member && passwordInfo ? (
             <CardDisplay
               header={'Password'}

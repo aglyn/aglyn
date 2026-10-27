@@ -501,6 +501,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   customRoles: {
     '#create-a-custom-role': 'On the organization Team page, find the Custom roles card and choose New role.',
+    '#per-member-overrides': 'Need one person to have slightly more (or less) than their role?',
   },
   datasets: {
     '#default-dataset-sharing': 'Default sharing for new datasets, at the top of the organization Data page, decides what a dataset created on a site\'s Data page starts shared with: All sites, or only that site.',

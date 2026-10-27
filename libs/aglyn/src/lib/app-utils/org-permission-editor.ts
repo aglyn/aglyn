@@ -16,9 +16,13 @@
  */
 
 import { filterPluginsByReleaseFlags, resolveEnabledPlugins } from '../plugin-manager/enabled-plugins'
+import type { AglynOrgMember, OrgRole } from '../foundation'
 import {
+  DEFAULT_ROLE_PERMISSIONS,
   ORG_PERMISSION_GROUPS,
   ORG_PERMISSIONS,
+  resolveOrgPermissions,
+  type AglynOrgCustomRole,
   type OrgPermissionDefinition,
   type OrgPermissionGroup,
 } from './org-permissions'
@@ -164,4 +168,149 @@ export function permissionChoiceCounts(
   const counts: Record<PermissionChoice, number> = { inherit: 0, grant: 0, deny: 0 }
   for (const key of keys) counts[permissionChoice(stored, key)] += 1
   return counts
+}
+
+/** Which layer decided a member's verdict for a key. */
+export type PermissionSource = 'role' | 'customRole' | 'override'
+
+/** One key's verdict for a member, and where it came from. */
+export interface ExplainedPermission {
+  granted: boolean
+  source: PermissionSource
+  /** The org role's default, what remains when every layer above is cleared. */
+  roleDefault: boolean
+  /** The custom role's stored value, when the member carries one that sets the key. */
+  customRole?: boolean
+  /** The member's own stored override, when set. */
+  override?: boolean
+}
+
+/**
+ * A member's verdict for every catalog key with the layer that produced it
+ * (AGL-4047): the org role's default, then the custom role (when the member
+ * carries its id and it was supplied), then the member's own override — the
+ * precedence `resolveOrgPermissions` applies, which decides `granted`.
+ */
+export function explainOrgPermissions(
+  member: (Partial<AglynOrgMember> & { roleId?: string | null; permissions?: Partial<Record<string, boolean>> }) | null | undefined,
+  customRole?: AglynOrgCustomRole | null,
+  definitions: readonly OrgPermissionDefinition[] = ORG_PERMISSIONS,
+): Record<string, ExplainedPermission> {
+  const role = ((member?.role as OrgRole | undefined) ?? 'viewer') as OrgRole
+  const granted = resolveOrgPermissions(member as never, customRole ?? null)
+  const out: Record<string, ExplainedPermission> = {}
+  for (const definition of definitions) {
+    const key = definition.key
+    const roleDefault = DEFAULT_ROLE_PERMISSIONS[role]?.[key] === true
+    const fromRole = member?.roleId ? customRole?.permissions?.[key] : undefined
+    const fromOverride = member?.permissions?.[key]
+    out[key] = {
+      granted: member ? granted[key] === true : false,
+      source:
+        typeof fromOverride === 'boolean'
+          ? 'override'
+          : typeof fromRole === 'boolean'
+            ? 'customRole'
+            : 'role',
+      roleDefault,
+      ...(typeof fromRole === 'boolean' ? { customRole: fromRole } : {}),
+      ...(typeof fromOverride === 'boolean' ? { override: fromOverride } : {}),
+    }
+  }
+  return out
+}
+
+/** A request's override changes, read: each named key to `true`, `false` or `null` (clear). */
+export type PermissionOverrideChanges = Record<string, boolean | null>
+
+/**
+ * Reads a body's `permissions` as override changes over the keys a scope
+ * may store, or the reason it cannot: a key outside `allowedKeys`, or a
+ * value that is not a boolean or null. Nothing is coerced.
+ */
+export function parsePermissionOverrides(
+  raw: unknown,
+  allowedKeys: readonly string[],
+): { changes: PermissionOverrideChanges; error?: undefined } | { changes?: undefined; error: string } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { error: 'permissions must map permission keys to true, false or null' }
+  }
+  const allowed = new Set(allowedKeys)
+  const changes: PermissionOverrideChanges = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!allowed.has(key)) return { error: `Unknown permission "${key}"` }
+    // Two branches, not one `=== null` union: the core compiles without
+    // strictNullChecks, where that comparison does not narrow `unknown`.
+    if (typeof value === 'boolean') changes[key] = value
+    else if (value === null) changes[key] = null
+    else return { error: `"${key}" must be true, false or null` }
+  }
+  if (!Object.keys(changes).length) return { error: 'No permission to change' }
+  return { changes }
+}
+
+/**
+ * Why a per-member override write is refused, or null when it may go ahead
+ * (AGL-4047). The route has already checked the actor may manage members;
+ * these are the three things that permission alone does not settle:
+ *
+ * - the workspace's owner keeps every permission, so no override is stored
+ *   on them in either direction;
+ * - nobody but staff changes their own overrides, which would let a member
+ *   who manages people widen their own access;
+ * - nobody but staff and the owner grants a key they do not hold
+ *   themselves, so managing people is not a back door to billing or the
+ *   register.
+ */
+export function overrideWriteRefusal(options: {
+  targetUid: string
+  targetIsOwner: boolean
+  actorUid: string
+  isStaff: boolean
+  /** The actor owns the workspace, and may grant anything the catalog holds. */
+  actorIsOwner?: boolean
+  /** The actor's own resolved verdicts. */
+  actorGranted: Readonly<Record<string, boolean>>
+  changes: PermissionOverrideChanges
+  /** Labels for the refusal's words; absent: the keys. */
+  labelOf?: (key: string) => string
+}): { status: number; error: string } | null {
+  if (options.targetIsOwner) {
+    return { status: 400, error: 'The owner keeps every permission' }
+  }
+  if (options.isStaff) return null
+  if (options.targetUid === options.actorUid) {
+    return { status: 403, error: 'Ask another admin to change your own permissions' }
+  }
+  if (options.actorIsOwner) return null
+  const beyond = Object.entries(options.changes)
+    .filter(([key, value]) => value === true && options.actorGranted[key] !== true)
+    .map(([key]) => (options.labelOf ? options.labelOf(key) : key))
+  if (beyond.length) {
+    return {
+      status: 403,
+      error: `You can only grant permissions you hold yourself: ${beyond.join(', ')}`,
+    }
+  }
+  return null
+}
+
+/**
+ * The override changes that turn `stored` into `draft`: each key whose
+ * choice differs, to `true` / `false`, or to `null` where the draft clears
+ * it. What an editor sends, so a save writes only what was changed.
+ */
+export function overrideChangesBetween(
+  stored: Readonly<Partial<Record<string, unknown>>> | null | undefined,
+  draft: Readonly<Partial<Record<string, unknown>>> | null | undefined,
+): PermissionOverrideChanges {
+  const changes: PermissionOverrideChanges = {}
+  const keys = new Set([...Object.keys(stored ?? {}), ...Object.keys(draft ?? {})])
+  for (const key of keys) {
+    const before = permissionChoice(stored, key)
+    const after = permissionChoice(draft, key)
+    if (before === after) continue
+    changes[key] = after === 'inherit' ? null : after === 'grant'
+  }
+  return changes
 }
