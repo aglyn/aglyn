@@ -131,13 +131,40 @@ product with options can set each variant on its own, so a spectator ticket on
 the same product needs no wristband. Turning it on also covers what was
 already sold today.
 
+**Let buyers pick the day.** Under **Check-in**, turn on **Ask the buyer
+which day** to sell passes ahead. The product page then offers an optional
+**Day you will use it** date picker, from today (on your site's calendar) up to
+two years ahead, never a day that has passed. A buyer who leaves it blank gets
+a pass for the day they buy. Each day is its own line in the cart, the cart
+and the order show the day ("For Sat, Nov 1"), and checkout turns away a pass
+whose day passed while it sat in the cart. A variant with its own check-in
+setting has its own **Ask which day** switch. Sales at the register are for
+the day they are rung.
+
 **What is due on a day.** Each paid order's check-in items are due on the day
-the order was placed, counted in your site's time zone, whether it was bought
-online or at the register. A product has no date of its own, so a pass bought
-today is for today. Guests whose stay covers the day are due too, one
-check-in for each day of the stay. An item refunded on its own, or an order
-refunded in full or canceled, is no longer due; anyone already checked in
-stays on the list.
+the buyer picked, or, when they picked none, on the day the order was placed,
+counted in your site's time zone, whether it was bought online or at the
+register. Guests whose stay covers the day are due too, one check-in for each
+day of the stay. An item refunded on its own, or an order refunded in full or
+canceled, is no longer due; anyone already checked in stays on the list.
+
+**Rain checks.** When weather or a closed track means a pass can't be used,
+give it a rain check instead of a refund: tap **Rain check** beside the person
+at the register, or in **Today's check-ins**, then pick one of these:
+
+- **Open: good on any later day until it is used.** The pass stays on its
+  day, marked **Rain check**, and no longer counts as expected there. On any
+  later day, searching for the person finds it, and checking them in uses it
+  that day.
+- **Move it to a day.** Pick the new day: a day after the one the pass is on
+  that has not passed. The pass leaves its day's list and is expected on the
+  new day.
+
+Each rain check records who gave it, when, and the day the pass was on.
+**Undo rain check** puts the pass back on that day. Undoing the check-in of a
+used rain check opens it again. Rain checks are for passes; change a stay's
+dates on the **Reservations** card. **Check in all** leaves open rain checks
+alone, so each is used on purpose.
 
 **At the register,** tap **Check in**, then search by name, email, phone (or
 its last four digits) or order number. Pick the customer to see each person
@@ -150,8 +177,9 @@ checking people in, attaching a customer to a sale who has someone due today
 offers **Check in** on the customer panel too.
 
 **Commerce → Orders → Today's check-ins** lists everyone due on a day with
-what they are checked in for, the time, who checked them in and the
-wristband, with expected, checked-in and still-to-come counts. Pick a **Day**
+what they are checked in for, the time, who checked them in, the wristband
+and any rain check, with expected, checked-in and still-to-come counts, and a
+**Rain checks** count when a pass on that day has an open one. Pick a **Day**
 to see another one. Every column sorts, **Export CSV** downloads the list as
 a spreadsheet, and **Print** prints it on an 80 mm receipt printer.
 
