@@ -83,6 +83,23 @@ export function addCheckInDays(dayKey: string, days: number): string {
 }
 
 /**
+ * A day as the window and the cart read it: "Sat, Nov 1". It lives here, not
+ * beside the rain checks, because the storefront cart prints a line's use day,
+ * and reaching `commerce-check-in.ts` from the cart pulls the check-in window,
+ * the POS helpers and the receipt into the plugin's eager bytes
+ * (`check:plugin-budgets`).
+ */
+export function checkInDayLabel(dayKey: string | null | undefined): string {
+  if (!isCheckInDayKey(dayKey)) return ''
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${dayKey}T00:00:00Z`))
+}
+
+/**
  * Why a chosen use day cannot be sold, or null: a day that is not a date, a
  * day before `todayKey` (today on the store's calendar), or one further
  * ahead than {@link CHECK_IN_USE_DAY_MAX_AHEAD_DAYS}.

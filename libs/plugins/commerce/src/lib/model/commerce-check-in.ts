@@ -16,6 +16,7 @@
  */
 import {
   addCheckInDays,
+  checkInDayLabel,
   checkInUseDayProblem,
   isCheckInDayKey,
   normalizeProductCheckIn,
@@ -62,6 +63,7 @@ import {
 // The product setting lives in a pure module the native contracts read (AGL-4043).
 export {
   addCheckInDays,
+  checkInDayLabel,
   CHECK_IN_MAX_HEADCOUNT,
   CHECK_IN_USE_DAY_MAX_AHEAD_DAYS,
   checkInUseDayProblem,
@@ -532,17 +534,6 @@ export function checkInDayTotals(
 /*==========================================
  * RAIN CHECKS
  *=========================================*/
-
-/** A day as the window reads it: "Sat, Nov 1". */
-export function checkInDayLabel(dayKey: string | null | undefined): string {
-  if (!isCheckInDayKey(dayKey)) return ''
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${dayKey}T00:00:00Z`))
-}
 
 /**
  * Why a pass cannot be rain-checked as asked, or null. Only a pass bought as

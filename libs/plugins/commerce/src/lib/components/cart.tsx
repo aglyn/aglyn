@@ -27,6 +27,10 @@ import {
 import { isPaymentsNotConfigured } from '@aglyn/aglyn/app-utils/payments-configured'
 import { storefrontPaymentsNotConfiguredText } from '../constants/storefront-payments'
 import * as CommerceModel from '../model'
+// From the pure module, not the model barrel: through the barrel the name
+// resolves via `commerce-check-in.ts`, and that re-export alone makes the
+// check-in window, the POS helpers and the receipt eager (check:plugin-budgets).
+import { checkInDayLabel } from '../model/commerce-check-in-product'
 import { mdiCartOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Badge from '@mui/material/Badge'
@@ -483,7 +487,7 @@ function CartLines(props: {
             </Typography>
             {line.useDayKey ? (
               <Typography variant="caption" color="text.secondary" component="div">
-                {`For ${CommerceModel.checkInDayLabel(line.useDayKey)}`}
+                {`For ${checkInDayLabel(line.useDayKey)}`}
               </Typography>
             ) : null}
             <Typography variant="caption" color="text.secondary">
