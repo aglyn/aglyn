@@ -80,6 +80,8 @@ import {
 } from './plugin-grid-columns.component'
 import { usePluginListColumns } from './plugin-list-columns.component'
 import PluginWidgetSlot from './plugin-widget-slot.component'
+import SitePermissionsDialog, { type SitePermissionsMember } from './site-permissions-dialog.component'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -151,6 +153,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('editor')
   const [busy, setBusy] = useState(false)
+  // The per-site Permissions dialog (AGL-4047): one row's keys on this site.
+  const [permissionsFor, setPermissionsFor] = useState<SitePermissionsMember | null>(null)
 
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
@@ -651,15 +655,34 @@ export function HostMembersCard(props: HostMembersCardProps) {
             member.owner ? (
               '--'
             ) : (
-              <Button
-                size="small"
-                color="error"
-                disabled={busy || !canManage}
-                onClick={handleRemove(member)}
-              >
-                {'Remove'}
-              </Button>
+              <>
+                {/* What this person may do on this site, every per-site
+                    key (AGL-4047). A pending invite has no member document
+                    to carry a toggle yet; the door reads only for people
+                    who manage the site's collaborators. */}
+                <BlockedControl
+                  blocked={member.status === 'invited' || !canManage}
+                  reason={
+                    member.status === 'invited'
+                      ? 'Permissions can be set once the invite is accepted'
+                      : 'Only site admins and members who manage people can see and set permissions'
+                  }
+                >
+                  <Button size="small" onClick={() => setPermissionsFor(member)}>
+                    {'Permissions'}
+                  </Button>
+                </BlockedControl>
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={busy || !canManage}
+                  onClick={handleRemove(member)}
+                >
+                  {'Remove'}
+                </Button>
+              </>
             ),
+            { width: 200 },
           ),
         ],
         HOST_MEMBER_FILTER_FIELDS,
@@ -869,6 +892,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
             'granular permissions.'}
         </Typography>
         <PluginWidgetSlot slot="hostMembers" hostId={hostId} canManage={canManage} />
+        <SitePermissionsDialog
+          hostId={hostId}
+          member={permissionsFor}
+          canManage={canManage}
+          onClose={() => setPermissionsFor(null)}
+        />
       </Stack>
     </CardDisplay>
   )

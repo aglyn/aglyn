@@ -24,14 +24,12 @@ import {
   consoleUserType,
   countManagerSeats,
   isOrgWideMember,
-  ORG_PERMISSIONS,
-  resolveOrgPermissions,
-  type AglynOrgCustomRole,
   type AglynOrgMember,
   type HostAccessRole,
   type OrgRole,
   type OwnerHandoffPreviousOwner,
 } from '@aglyn/aglyn'
+import { permissionChoiceCounts } from '@aglyn/aglyn/app-utils/org-permission-editor'
 import { isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
@@ -84,6 +82,7 @@ import {
   ORG_MEMBER_SELECT_FIELDS,
 } from '../utils/org-member-list-query'
 import MemberAvatar from './member-avatar.component'
+import MemberPermissionsEditor from './member-permissions-editor.component'
 import {
   OWNER_HANDOFF_HINT,
   OwnerHandoffPreviousOwnerField,
@@ -143,6 +142,20 @@ type MemberRow = AglynOrgMember & {
   name: string
   roleKey: string
   accessKey: string
+  /** Keys set for this member alone (AGL-4047), allowed and denied. */
+  overrides: { grant: number; deny: number }
+}
+
+/**
+ * Where a member's Permissions cell puts them in an order (AGL-4047): the
+ * owner (every permission), then members who work on named sites (their
+ * site access decides), then org-wide members by how many keys are set for
+ * them alone.
+ */
+function permissionsSortKey(row: MemberRow): number {
+  if (row.role === 'owner') return -2
+  if (!isOrgWideMember(row)) return -1
+  return row.overrides.grant + row.overrides.deny
 }
 
 /** The org roles, strongest first: how the Role header orders them. */
@@ -161,6 +174,7 @@ const MEMBER_SORTS: Readonly<Record<string, (row: MemberRow) => string | number>
     return rank === -1 ? ROLE_RANK.length : rank
   },
   access: (row) => row.accessKey,
+  permissions: permissionsSortKey,
 }
 
 /** Keeps a cell's own keystrokes from moving the grid's focus. */
@@ -279,6 +293,10 @@ export function OrgMembersCard() {
           name: identity.label || member.$id,
           roleKey: member.role ?? 'viewer',
           accessKey: consoleUserType(member),
+          overrides: permissionChoiceCounts(
+            member.permissions,
+            Object.keys(member.permissions ?? {}),
+          ),
         }
       }),
     [listedMembers],
@@ -792,12 +810,61 @@ export function OrgMembersCard() {
         </Box>
       ),
     },
-    // Columns a plugin contributes, between Access and the actions (AGL-2940).
+    {
+      /*
+       * What is set for this member alone (AGL-4047), and the door to their
+       * Permissions: every key with its verdict and where it came from,
+       * editable in place by anyone who manages people. Sorted by how much
+       * is set for them (`permissionsSortKey`).
+       */
+      field: 'permissions',
+      headerName: 'Permissions',
+      flex: 0.8,
+      minWidth: 160,
+      valueGetter: (_value, row: MemberRow) => permissionsSortKey(row),
+      renderCell: ({ row: member }: { row: MemberRow }) => {
+        const summary =
+          member.role === 'owner'
+            ? 'Every permission'
+            : !isOrgWideMember(member)
+              ? 'By site access'
+              : [
+                  member.overrides.grant ? `${member.overrides.grant} allowed` : '',
+                  member.overrides.deny ? `${member.overrides.deny} denied` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Role defaults'
+        return (
+          <Box sx={{ py: 0.75 }} onKeyDown={stopGridKeys}>
+            <Tooltip
+              title={
+                member.role === 'owner'
+                  ? 'The owner keeps every permission.'
+                  : !isOrgWideMember(member)
+                    ? 'This member works on named sites; their site access decides what they can do there.'
+                    : 'Permissions set for this member alone, over their role and custom role.'
+              }
+            >
+              <Button
+                size="small"
+                sx={{ minWidth: 0, px: 0.5, textTransform: 'none' }}
+                aria-label={`Permissions for ${member.name}`}
+                onClick={() => setPermissionsFor(member)}
+              >
+                {summary}
+              </Button>
+            </Tooltip>
+          </Box>
+        )
+      },
+    },
+    // Columns a plugin contributes, between Permissions and the actions
+    // (AGL-2940).
     ...pluginMemberColumns,
     {
       field: 'actions',
       headerName: '',
-      minWidth: 190,
+      minWidth: 100,
       align: 'right',
       sortable: false,
       filterable: false,
@@ -805,12 +872,6 @@ export function OrgMembersCard() {
       disableColumnMenu: true,
       renderCell: ({ row: member }: { row: MemberRow }) => (
         <Box onKeyDown={stopGridKeys}>
-          <Button
-            size="small"
-            onClick={() => setPermissionsFor(member)}
-          >
-            {'Permissions'}
-          </Button>
           {canManage && member.role !== 'owner' ? (
             <Button
               size="small"
@@ -1223,68 +1284,33 @@ export function OrgMembersCard() {
       <Dialog
         open={Boolean(permissionsFor)}
         onClose={() => setPermissionsFor(null)}
-        maxWidth="xs"
+        maxWidth="md"
         fullWidth
       >
         <DialogTitle>
-          {`Effective permissions — ${
+          {`Permissions — ${
             permissionsFor?.displayName ??
             permissionsFor?.email ??
             permissionsFor?.$id ??
             ''
           }`}
         </DialogTitle>
-        <DialogContent>
-          {permissionsFor
-            ? (() => {
-                // Role defaults → custom role → member overrides (AGL-243),
-                // resolved with the roles list this card already loads.
-                const customRole =
-                  ((permissionsFor as any).roleId
-                    ? (roles.find(
-                        (candidate) =>
-                          candidate.$id === (permissionsFor as any).roleId,
-                      ) as AglynOrgCustomRole | undefined)
-                    : undefined) ?? null
-                const granted = resolveOrgPermissions(
-                  permissionsFor as any,
-                  customRole,
-                )
-                return (
-                  <Stack spacing={0.75} sx={{ pt: 1 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {`Org role: ${permissionsFor.role ?? 'viewer'}` +
-                        (customRole?.name
-                          ? ` · custom role: ${customRole.name}`
-                          : '')}
-                    </Typography>
-                    {ORG_PERMISSIONS.map((definition) => (
-                      <Stack
-                        key={definition.key}
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center' }}
-                      >
-                        <Chip
-                          size="small"
-                          color={granted[definition.key] ? 'success' : 'default'}
-                          variant={granted[definition.key] ? 'filled' : 'outlined'}
-                          label={granted[definition.key] ? 'yes' : 'no'}
-                          sx={{ width: 48 }}
-                        />
-                        <Typography variant="body2">
-                          {definition.label}
-                        </Typography>
-                      </Stack>
-                    ))}
-                  </Stack>
-                )
-              })()
-            : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPermissionsFor(null)}>{'Close'}</Button>
-        </DialogActions>
+        {permissionsFor ? (
+          // Role defaults → custom role → member overrides (AGL-243), each
+          // key's verdict with where it came from, editable in place
+          // (AGL-4047) for anyone who manages people.
+          <MemberPermissionsEditor
+            layout="dialog"
+            member={permissionsFor as never}
+            roles={roles}
+            canManage={canManage}
+            onClose={() => setPermissionsFor(null)}
+            onSaved={() => {
+              setPermissionsFor(null)
+              void refresh()
+            }}
+          />
+        ) : null}
       </Dialog>
     </CardDisplay>
   )

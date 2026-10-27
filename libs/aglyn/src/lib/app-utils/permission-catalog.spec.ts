@@ -28,8 +28,12 @@ import {
 } from './org-permissions'
 import { orgRoleTier, resolveRolePermissions } from './org-roles'
 import {
+  explainOrgPermissions,
   groupOrgPermissions,
   offeredOrgPermissions,
+  overrideChangesBetween,
+  overrideWriteRefusal,
+  parsePermissionOverrides,
   permissionChoice,
   permissionChoiceCounts,
   searchOrgPermissions,
@@ -282,5 +286,66 @@ describe('one permission catalog (AGL-4047)', () => {
       deny: 1,
       inherit: 1,
     })
+  })
+
+  it('explains each verdict with the layer that produced it', () => {
+    const explained = explainOrgPermissions(
+      { role: 'editor', roleId: 'r1', permissions: { 'hosts.create': true } },
+      { permissions: { 'billing.view': true, managePos: false } },
+    )
+    expect(explained['data.manage']).toEqual({ granted: true, source: 'role', roleDefault: true })
+    expect(explained['billing.view']).toEqual({ granted: true, source: 'customRole', roleDefault: false, customRole: true })
+    expect(explained['managePos']).toMatchObject({ granted: false, source: 'customRole', roleDefault: true })
+    expect(explained['hosts.create']).toEqual({ granted: true, source: 'override', roleDefault: false, override: true })
+    // A custom role the member does not carry decides nothing.
+    expect(explainOrgPermissions({ role: 'editor' }, { permissions: { managePos: false } })['managePos'].granted).toBe(true)
+  })
+
+  it('reads a request’s override changes over the keys a scope may store, refusing the rest', () => {
+    const keys = ['hosts.create', 'managePos']
+    expect(parsePermissionOverrides({ 'hosts.create': true, managePos: null }, keys)).toEqual({
+      changes: { 'hosts.create': true, managePos: null },
+    })
+    expect(parsePermissionOverrides({ 'billing.view': true }, keys).error).toMatch(/Unknown permission/)
+    expect(parsePermissionOverrides({ managePos: 'yes' }, keys).error).toMatch(/true, false or null/)
+    expect(parsePermissionOverrides({}, keys).error).toMatch(/No permission/)
+    expect(parsePermissionOverrides(['x'], keys).error).toBeTruthy()
+  })
+
+  it('writes only what changed, null where a key goes back to inherit', () => {
+    expect(
+      overrideChangesBetween({ managePos: true, 'billing.view': false }, { 'billing.view': true, 'hosts.create': false }),
+    ).toEqual({ managePos: null, 'billing.view': true, 'hosts.create': false })
+    expect(overrideChangesBetween({ managePos: true }, { managePos: true })).toEqual({})
+  })
+
+  it('refuses an override on the owner, on oneself, and a grant beyond the actor’s own', () => {
+    const base = {
+      targetUid: 'm1',
+      targetIsOwner: false,
+      actorUid: 'a1',
+      isStaff: false,
+      actorGranted: { 'hosts.create': true, 'billing.manage': false },
+    }
+    expect(overrideWriteRefusal({ ...base, changes: { 'hosts.create': true } })).toBeNull()
+    expect(overrideWriteRefusal({ ...base, targetIsOwner: true, changes: { 'hosts.create': false } })).toEqual({
+      status: 400,
+      error: 'The owner keeps every permission',
+    })
+    // Not even staff restricts the owner.
+    expect(overrideWriteRefusal({ ...base, targetIsOwner: true, isStaff: true, changes: { 'hosts.create': false } })?.status).toBe(400)
+    expect(overrideWriteRefusal({ ...base, targetUid: 'a1', changes: { 'hosts.create': false } })?.status).toBe(403)
+    const beyond = overrideWriteRefusal({
+      ...base,
+      changes: { 'billing.manage': true },
+      labelOf: () => 'Manage billing',
+    })
+    expect(beyond).toEqual({ status: 403, error: 'You can only grant permissions you hold yourself: Manage billing' })
+    // Denying a key the actor lacks narrows, and is allowed; so is clearing one.
+    expect(overrideWriteRefusal({ ...base, changes: { 'billing.manage': false } })).toBeNull()
+    expect(overrideWriteRefusal({ ...base, changes: { 'billing.manage': null } })).toBeNull()
+    // The owner and staff grant anything.
+    expect(overrideWriteRefusal({ ...base, actorIsOwner: true, changes: { 'billing.manage': true } })).toBeNull()
+    expect(overrideWriteRefusal({ ...base, isStaff: true, targetUid: 'a1', changes: { 'billing.manage': true } })).toBeNull()
   })
 })

@@ -67,14 +67,38 @@ control the model does not have.
 
 ## Effective permissions
 
-Not sure what someone can actually do? Every member row has a **Permissions** viewer
-that resolves their org role defaults, custom role, and per-member overrides into the
-final yes/no grant list.
+Not sure what someone can actually do? The roster's **Permissions** column says what
+is set for each member alone — **Role defaults** when nothing is, or how many
+permissions are allowed and denied for them — and sorts by it. Choose it to open the
+member's permissions: every permission with its final verdict and where that verdict
+comes from (their org role, their custom role, or set for this member). The same
+list is the **Permissions** card on the member's own page under **Team**.
 
 ## Per-member overrides
 
-Need one person to have slightly more (or less) than their role? Apply a **per-member
+Need one person to have slightly more (or less) than their role? Set a **per-member
 override** on top of the role instead of creating a whole new role for one exception.
+
+1. Open the member from the **Team** roster (or choose their **Permissions** cell).
+2. In **Permissions**, find the permission (grouped like the role editor, with
+   **Search permissions**) and set it to **Allow** or **Deny**. **Inherit** clears
+   the override, and says what the member falls back to.
+3. Choose **Save permissions**.
+
+Overrides win over both the org role and the custom role. A few rules hold them in
+check:
+
+- Only members who can manage people (`members.manage`) change overrides.
+- The owner keeps every permission, so no override applies to them.
+- Nobody changes their own overrides; ask another admin.
+- You can only allow a permission you hold yourself, so managing people is not a way
+  into billing or the register. The owner can allow anything.
+
+Every change is recorded in the organization's activity log, one row per permission,
+naming who changed it and what it became. Members who work on named sites (not the
+whole workspace) get their permissions from their site access instead; set those per
+site on the site's **Users** card — see
+[AI access for collaborators](overview.md#collaborator-ai-access).
 
 ## Tips
 

@@ -182,6 +182,20 @@ export interface PluginEventPayloads {
     domain: string
     reason: 'detached' | 'site-deleted'
   }
+  /**
+   * A site collaborator's per-site toggles were written through the platform's
+   * own door (AGL-4047), with their verdict for every per-site key after it.
+   * `memberId` is their row on the site's collaborators roster
+   * (`hosts/{hostId}/members/{memberId}`), for a plugin that keeps a display
+   * copy of its own keys there.
+   */
+  'host.member.permissions.changed': {
+    orgId: string
+    hostId: string
+    memberId: string
+    uid: string
+    permissions: Record<string, boolean>
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

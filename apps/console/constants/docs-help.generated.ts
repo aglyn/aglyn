@@ -1417,6 +1417,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   customRoles: {
     '#create-a-custom-role': 'Create a custom role',
+    '#per-member-overrides': 'Per-member overrides',
   },
   datasets: {
     '#default-dataset-sharing': 'Default sharing for new datasets',

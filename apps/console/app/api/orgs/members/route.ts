@@ -30,7 +30,14 @@ import {
   brandMergeTokens,
   resolveBrandingProfile,
   pluginPermissionChanges,
+  ORG_PERMISSION_KEYS,
+  orgPermissionLabel,
 } from '@aglyn/aglyn/server'
+import {
+  overrideWriteRefusal,
+  parsePermissionOverrides,
+} from '@aglyn/aglyn/app-utils/org-permission-editor'
+import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
@@ -53,8 +60,10 @@ import {
   meterOrgEmail,
   notifyUsers,
   removeOrgMember,
+  resolveMemberOrgPermissions,
   resolveMemberPluginPermissionsOnOrg,
   resolveOrgMembership,
+  setMemberPermissionOverrides,
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -566,6 +575,83 @@ async function handler(request: Request): Promise<Response> {
         }
       }
       return Response.json({ ok: true, uid: targetUid }, { status: 200 })
+    }
+
+    if (action === 'permissions') {
+      /*
+       * A member's own overrides (AGL-4047): each catalog key set to allow
+       * (`true`) or deny (`false`), or cleared (`null`) back to their role and
+       * custom role. Gated above on `members.manage`; the owner keeps every
+       * permission, nobody but staff changes their own, and nobody but staff
+       * and the owner grants a key they do not hold.
+       */
+      const targetUid = String(body?.uid ?? '')
+      if (!targetUid) return Response.json({ error: 'Missing uid' }, { status: 400 })
+      let parsed = parsePermissionOverrides(body?.permissions, ORG_PERMISSION_KEYS)
+      // A plugin's key reaches this process through its declarations; a key
+      // the catalog does not hold yet runs the boot step once and asks again
+      // (AGL-3596) rather than refusing a real permission.
+      if (parsed.error && (await runPluginDeclarationsRepair().catch(() => false))) {
+        parsed = parsePermissionOverrides(body?.permissions, ORG_PERMISSION_KEYS)
+      }
+      if (parsed.error || !parsed.changes) return Response.json({ error: parsed.error }, { status: 400 })
+      const targetSnapshot = await firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection('members')
+        .doc(targetUid)
+        .get()
+      if (!targetSnapshot.exists) {
+        return Response.json({ error: 'Member not found' }, { status: 404 })
+      }
+      const refusal = overrideWriteRefusal({
+        targetUid,
+        targetIsOwner: targetUid === ownerUid || targetSnapshot.get('role') === 'owner',
+        actorUid: decoded.uid,
+        isStaff,
+        actorIsOwner: decoded.uid === ownerUid,
+        actorGranted: actor?.member
+          ? await resolveMemberOrgPermissions(orgId, actor.member)
+          : {},
+        changes: parsed.changes,
+        labelOf: orgPermissionLabel,
+      })
+      if (refusal) return Response.json({ error: refusal.error }, { status: refusal.status })
+      const pluginBefore = await resolveMemberPluginPermissionsOnOrg(orgId, targetUid)
+      const { after } = await setMemberPermissionOverrides({
+        orgId,
+        uid: targetUid,
+        changes: parsed.changes,
+      })
+      const targetName = String(
+        targetSnapshot.get('displayName') ?? targetSnapshot.get('email') ?? targetUid,
+      )
+      // One row per key, saying what it became, so the feed answers "who
+      // gave them billing" without a diff.
+      for (const [key, value] of Object.entries(parsed.changes)) {
+        const label = orgPermissionLabel(key)
+        await logOrgActivity(
+          orgId,
+          { uid: decoded.uid, email: decoded.email },
+          value === null
+            ? `Reset ${targetName}'s "${label}" to their role`
+            : `${value ? 'Allowed' : 'Denied'} "${label}" for ${targetName}`,
+          { type: 'member', id: targetUid, name: targetName },
+        )
+      }
+      if (pluginBefore) {
+        const pluginAfter = await resolveMemberPluginPermissionsOnOrg(orgId, targetUid)
+        for (const change of pluginPermissionChanges(pluginBefore, pluginAfter)) {
+          await runPluginEventHandlers('org.permissions.changed', {
+            orgId,
+            actor: { uid: decoded.uid, email: decoded.email ?? null },
+            subject: { type: 'member', id: targetUid, name: targetName },
+            permission: change.permission,
+            granted: change.granted,
+          })
+        }
+      }
+      return Response.json({ ok: true, uid: targetUid, permissions: after }, { status: 200 })
     }
 
     if (action === 'remove') {
