@@ -128,6 +128,9 @@ export const reservationAvailabilityHandler: PluginApiHandler = async (req, res)
         minNights: resource.minNights ?? null,
         depositPct: resource.depositPct ?? null,
         cancellationHours: resource.cancellationHours ?? null,
+        // When the widget's "Only 2 left" starts (AGL-4044), as the store set
+        // it; 0 never shows it.
+        fewLeftAt: CommerceModel.resourceFewLeftAt(resource),
       },
       unavailable,
       // The nights with only a few units left, for the widget's "Only 2
@@ -152,7 +155,7 @@ export const AVAILABILITY_HORIZON_NIGHTS = 730
  * unit left, as closed ranges, and the nights with only a few left.
  */
 export function resourceNightsAvailability(
-  resource: Pick<CommerceModel.HostResource, 'units'>,
+  resource: Pick<CommerceModel.HostResource, 'units' | 'fewLeftAt'>,
   held: CommerceModel.HeldStay[],
   todayMs: number,
   nowMs: number,
@@ -177,6 +180,8 @@ export function resourceNightsAvailability(
   )
   const full: Array<{ fromDayMs: number; toDayMs: number }> = []
   const fewLeft: Array<{ dayMs: number; unitsLeft: number }> = []
+  // The store's threshold for this resource; 0 sends no scarce nights at all.
+  const fewLeftAt = CommerceModel.resourceFewLeftAt(resource)
   for (const night of perNight) {
     if (night.unitsLeft === 0) {
       const last = full[full.length - 1]
@@ -191,7 +196,7 @@ export function resourceNightsAvailability(
     } else if (
       // A few left, and fewer than it has: a three-unit resource nobody has
       // booked does not have "only 3 left".
-      night.unitsLeft <= CommerceModel.FEW_UNITS_LEFT &&
+      night.unitsLeft <= fewLeftAt &&
       night.unitsLeft < night.units
     ) {
       fewLeft.push({ dayMs: night.dayMs, unitsLeft: night.unitsLeft })
