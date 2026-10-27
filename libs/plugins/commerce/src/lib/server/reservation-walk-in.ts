@@ -22,6 +22,7 @@ import * as CommerceModel from '../model'
 import {
   readLiveReservations,
   reservationAvailabilityQuery,
+  reservationsOnPlan,
 } from './reservation-availability-query'
 import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './products-write'
 
@@ -41,8 +42,11 @@ import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './produ
  * console: a verified member with a content-write role on the site
  * (`canWriteHostContent`: admin, editor, author), or staff, while the site,
  * its org and the platform are not frozen. That is `products-write.ts`'s
- * `gate`, reused rather than restated. The commerce plugin must also be on for
- * the site.
+ * `gate`, reused rather than restated, with a refusal that says what booking
+ * a walk-in needs rather than talking about editing. The commerce plugin must
+ * also be on for the site, and the store's plan must take reservations: the
+ * same `commerce` entitlement `/api/commerce/reserve` asks
+ * (`reservationsOnPlan`), so a lapsed plan books through neither door.
  *
  * The stay is written with exactly the fields the card wrote: confirmed, no
  * email, no deposit, nothing paid. Payment is collected at the register.
@@ -54,6 +58,15 @@ export const WALK_IN_TAKEN_EVERY_UNIT =
   'Every unit is taken on at least one of those nights'
 export const WALK_IN_PLUGIN_OFF = 'Reservations are not turned on for this site'
 export const WALK_IN_ID_CONFLICT = 'That walk-in id belongs to another stay'
+/**
+ * A member whose role on the site cannot book a stay: the role it takes, in
+ * plain words, and who can change it. Walk-ins follow the site role (there is
+ * no separate permission for them), so the refusal names the roles.
+ */
+export const WALK_IN_ROLE_REFUSAL =
+  'Booking a walk-in needs the admin, editor or author role on this site — ask an organization admin'
+/** A store whose plan does not take reservations, worded as the plan refusals are. */
+export const WALK_IN_PLAN_REFUSAL = 'Reservations are not included in your plan — see Billing'
 
 /** The refusal for dates with no free unit, worded for the resource. */
 export function walkInTakenMessage(resource: CommerceModel.HostResource): string {
@@ -102,10 +115,16 @@ export function createReservationWalkInHandler(
       return res.status(400).json({ error: 'Missing walk-in details' })
     }
     try {
-      const door = await gate(req, res, hostId, deps)
+      const door = await gate(req, res, hostId, deps, { roleRefusal: WALK_IN_ROLE_REFUSAL })
       if (!door) return
       if (!isHostPluginEnabled(door.org as never, door.host.data() as never, BUNDLE_ID)) {
         return res.status(403).json({ error: WALK_IN_PLUGIN_OFF })
+      }
+      // The plan question every reservation door asks (AGL-1873), before
+      // anything is read or written. Staff impersonating a store still meet
+      // it: the walk-in books for the store, on the store's plan.
+      if (!reservationsOnPlan(door.org)) {
+        return res.status(403).json({ error: WALK_IN_PLAN_REFUSAL })
       }
       const db = deps.firestore()
       const hostRef = db.collection('hosts').doc(hostId)

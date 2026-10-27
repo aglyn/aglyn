@@ -461,7 +461,10 @@ take that many stays:
 - The **Reservations** card shows the units left on each of the next 14
   nights under the resource, for example "3 of 12 left".
 - When a stay's busiest night has three or fewer units left, the
-  Reservation widget tells the guest "Only 2 left".
+  Reservation widget tells the guest "Only 2 left". You choose when that
+  starts: in the resource's editor, **Show “Only N left” at** takes how many
+  free units or fewer bring the line up (it starts at 3). Set it to 0 to
+  never show it. The **Reservations** card marks the nights at or under it.
 - A walk-in takes any unit that is free on every night of the stay, and is
   refused only when some night has none left.
 - Blocking dates on a resource closes every unit on those dates.
@@ -472,6 +475,10 @@ take that many stays:
 - Two staff can't both hand out the last unit as walk-ins either, even from
   different devices: the second is told every unit is taken on at least one
   of those nights (or "Those dates are taken" for a single cabin).
+- Booking a walk-in needs the admin, editor or author role on the site, and a
+  plan that includes reservations, the same as a guest booking online. A
+  member without one of those roles is told which roles can, so they know to
+  ask an organization admin.
 
 **Sleeps** is separate: it is how many guests one unit sleeps, shown for
 information. It never limits how many stays a night can take. Leave

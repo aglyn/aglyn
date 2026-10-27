@@ -91,7 +91,14 @@ dates to see another day or a whole event, up to 31 days at a time, and
   counted cash and the variance.
 
 Sales count on the day they were rung, and refunds on the day they were
-given back, whenever the sale was. **Export CSV** downloads the report as a
+given back, whenever the sale was and wherever the refund was given: at a
+register, from the order's **Refund** button in **Commerce → Orders**, or in
+your Stripe Dashboard. A refund from the order or from Stripe counts under the
+register the sale was rung at, under the person who gave it (Stripe refunds
+show as **No cashier recorded**), and against the card it went back to. It
+moves no cash drawer, so shift reports leave it out. The day is your site's,
+so a refund at 11:59 PM counts that day and one at midnight counts the next.
+**Export CSV** downloads the report as a
 spreadsheet, and **Print** prints it on an 80 mm receipt printer like a Z
 report.
 

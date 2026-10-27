@@ -27,6 +27,20 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — day totals, campground units and walk-ins
+
+- **[Every refund in the day totals](commerce-and-bookings/commerce/pos-operations.md#day-and-event-totals)** —
+  a register sale refunded from its order in **Commerce → Orders**, or in your
+  Stripe Dashboard, now counts in **Day totals** on the day the money went
+  back, beside the refunds given at the register.
+- **[Choose when "Only 2 left" shows](commerce-and-bookings/commerce/pos-and-reservations.md#several-identical-units)** —
+  a resource with several units, such as RV hookups, has a **Show “Only N left”
+  at** setting for the Reservation widget's scarcity line. It starts at 3, as
+  before; 0 never shows it.
+- **[Clearer walk-in refusals](commerce-and-bookings/commerce/pos-and-reservations.md#several-identical-units)** —
+  a walk-in needs a plan that includes reservations, as online bookings do, and
+  a member whose role can't book one is told which roles can.
+
 ## October 2026 — cards taken offline settle like cards taken online
 
 - **[Cards taken offline in the Aglyn POS app](commerce-and-bookings/commerce/pos-operations.md#cards-taken-offline-in-the-aglyn-pos-app)**

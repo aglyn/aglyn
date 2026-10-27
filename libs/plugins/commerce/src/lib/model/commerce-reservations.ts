@@ -420,9 +420,9 @@ export function isRangeAvailable(
 
 /**
  * The widget's scarcity line starts at this many units left (AGL-4044):
- * "Only 2 left", unless the resource sets its own {@link HostResource.fewLeftAt}.
- * Never on a one-unit resource, where every free night would read "Only 1
- * left", and never on a night nothing is booked on.
+ * "Only 2 left". Never on a one-unit resource, where every free night would
+ * read "Only 1 left", and never on a night nothing is booked on.
+ * A resource may set its own threshold, {@link HostResource.fewLeftAt}.
  */
 export const FEW_UNITS_LEFT = 3
 
