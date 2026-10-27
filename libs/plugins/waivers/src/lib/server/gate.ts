@@ -33,15 +33,24 @@ import { isDocumentId, waiversDb } from './db'
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  no such site
- *   403  not an admin or editor of the site, or without the permission the
- *        route needs (`manageWaivers` to write waivers and void, or
- *        `collectWaivers` to read signatures and take them)
+ *   403  without the permission the route needs (`manageWaivers` to write
+ *        waivers and void, or `collectWaivers` to read signatures and take
+ *        them) on THIS site
  *   403  a plan that does not sell
  *
+ * THE KEY DECIDES, NOT THE ROLE (AGL-4047). Both keys are on for a site's
+ * admins and editors and off for its viewers by default, and the resolver
+ * answers them for this site: an org-wide member from their org role, custom
+ * role and overrides, a site collaborator from the role they hold here and
+ * their overrides, and anyone without access to the site with nothing. So
+ * a viewer the workspace trusts at the window (a custom role or an override
+ * that grants `collectWaivers`) takes signatures, and an admin a role
+ * narrows is refused, which a host-role allowlist answered the other way.
+ *
  * A signature holds a signer's date of birth, a minor's name and a drawn
- * signature, so a site's viewers are refused, and staff claims grant nothing
- * here: an Aglyn staff session reads a customer's signers only by
- * impersonating a member who may.
+ * signature, so a site's viewers are refused unless granted, and staff
+ * claims grant nothing here: an Aglyn staff session reads a customer's
+ * signers only by impersonating a member who may.
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -128,8 +137,6 @@ export async function waiversGate(
   const hostSnapshot = await waiversDb().collection('hosts').doc(hostId).get()
   if (!hostSnapshot.exists) return refuse(404, 'Unknown site')
   const host = (hostSnapshot.data() ?? {}) as Record<string, unknown>
-  const role = String((host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (role !== 'admin' && role !== 'editor') return refuse(403, 'Not permitted')
   const permissions = await deps().permissions(decoded.uid, hostId)
   const wanted: readonly WaiversPermission[] = Array.isArray(options.permission)
     ? options.permission

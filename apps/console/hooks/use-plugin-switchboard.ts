@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  canManageOrg,
   FIRST_PARTY_PLUGINS,
   isDefaultOffPerSite,
   isLockedOnForSite,
@@ -34,6 +33,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type { CascadeEntry } from '../components/plugin-disable-cascade-dialog.component'
 import useCurrentOrg from './use-current-org'
 import { useOrgScope } from './use-org-scope'
+import useOrgPermissions from './use-org-permissions'
 
 /**
  * ONE writer of plugin enablement per scope, called by every surface that
@@ -134,7 +134,11 @@ export function useOrgPluginSwitchboard(
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const orgId = currentOrg?.$id ?? ''
-  const canWrite = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `org.settings` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canWrite = orgPermissions.loaded && orgPermissions.can('org.settings')
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
   const labelFor = options.labelFor ?? catalogLabel

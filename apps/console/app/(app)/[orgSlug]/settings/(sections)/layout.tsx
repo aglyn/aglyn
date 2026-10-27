@@ -51,8 +51,12 @@ export default function SettingsSectionsLayout({
 }) {
   const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
-  const { loaded: permissionsLoaded } = useOrgPermissions()
+  const { loaded: permissionsLoaded, can } = useOrgPermissions()
   const canManage = canManageOrg(currentOrg?.role)
+  // The sections whose routes check `org.settings` (AGL-4047) follow that key,
+  // so a custom role that grants or takes it moves the rail with the server.
+  // API keys, Privacy and Holds stay on the role their routes still ask.
+  const managesSettings = permissionsLoaded && can('org.settings')
   const isOwner = currentOrg?.role === 'owner'
   const transferHubVisible = useTransferHubVisible()
   /*
@@ -88,15 +92,15 @@ export default function SettingsSectionsLayout({
    */
   const sections = [
     section(Route.ORG_SETTINGS_GENERAL, 'General'),
-    section(Route.ORG_SETTINGS_PROFILE, 'Profile', canManage),
-    section(Route.ORG_SETTINGS_PLUGINS, 'Plugins', canManage),
+    section(Route.ORG_SETTINGS_PROFILE, 'Profile', managesSettings),
+    section(Route.ORG_SETTINGS_PLUGINS, 'Plugins', managesSettings),
     section(Route.ORG_SETTINGS_API_KEYS, 'API keys', canManage),
-    section(Route.ORG_SETTINGS_BRANDING, 'Branding', canManage),
+    section(Route.ORG_SETTINGS_BRANDING, 'Branding', managesSettings),
     // Shown to every admin, not only entitled orgs (AGL-1210): the
     // unentitled state explains that SSO comes with Enterprise and
     // that setup is self-serve once there. Hiding it would leave
     // "can I do SSO?" unanswerable from inside the product.
-    section(Route.ORG_SETTINGS_SSO, 'Single sign-on', canManage),
+    section(Route.ORG_SETTINGS_SSO, 'Single sign-on', managesSettings),
     // Other plugins' workspace settings (AGL-3711), with the workspace's
     // own setup above the rail's groups (AGL-3713).
     section(Route.ORG_SETTINGS_INTEGRATIONS, 'Integrations', integrations),

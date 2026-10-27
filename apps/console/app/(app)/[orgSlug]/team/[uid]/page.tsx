@@ -17,7 +17,6 @@
 'use client'
 
 import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
-import { canManageOrg } from '@aglyn/aglyn'
 import { mdiAccountOutline } from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
@@ -58,6 +57,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useBranding from '../../../../../hooks/use-branding'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
+import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
 /**
  * Team member detail (AGL-364): org admins/owners inspect and edit a
@@ -75,7 +75,11 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `members.manage` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('members.manage')
 
   const firestore = useFirestore()
   // `undefined`, never `null`, while the workspace resolves (AGL-2350) — see

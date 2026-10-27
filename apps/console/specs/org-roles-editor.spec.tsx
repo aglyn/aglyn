@@ -36,6 +36,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 const mockOrg = { $id: 'org-1', role: 'owner', enabledPlugins: ['commerce', 'ai', 'waivers'] }
 const mockScope = { currentOrg: mockOrg }
+// The card gates on the key its route checks (AGL-4047), read through the
+// permissions hook: this reader holds it, as the role above does.
+jest.mock('../hooks/use-org-permissions', () => {
+  const value = { loaded: true, can: () => true, permissions: {}, granted: {} }
+  return { __esModule: true, default: () => value, useOrgPermissions: () => value }
+})
 jest.mock('../hooks/use-org-scope', () => ({
   __esModule: true,
   default: () => mockScope,

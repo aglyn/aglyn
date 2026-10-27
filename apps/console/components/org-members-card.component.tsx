@@ -18,7 +18,6 @@
 
 import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import {
-  canManageOrg,
   CONSOLE_USER_TYPE_HINTS,
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
@@ -93,6 +92,7 @@ import {
   useStablePluginColumns,
 } from './plugin-grid-columns.component'
 import { usePluginListColumns } from './plugin-list-columns.component'
+import useOrgPermissions from '../hooks/use-org-permissions'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
 
@@ -220,7 +220,11 @@ export function OrgMembersCard() {
     null,
   )
   const orgId = currentOrg?.$id
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `members.manage` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('members.manage')
   // Handing the workspace over is the owner's call, or staff's (AGL-3466) —
   // an admin invites members, and does not give the workspace away.
   const isStaff = useIsStaff() === true

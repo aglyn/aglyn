@@ -22,16 +22,19 @@ Waivers come with every plan that includes selling, at no extra cost. Open them 
 the site's **Waivers** tab.
 
 :::info Who can use it
-A site's **admins** and **editors** can use Waivers. Two permissions decide what each
-person can do, and both are on for admins and editors unless a custom role turns them
-off:
+Two permissions decide who can do what in Waivers. Both are on for a site's
+**admins** and **editors** and off for its **viewers**, and either can be set in a
+[custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md) or for one
+member:
 
 - **Manage waivers**: write, publish and retire waivers, and void a signature.
 - **Collect waivers**: see who signed, sign riders in at the window and record paper
   waivers.
 
-Viewers can't see signatures, because they hold people's dates of birth and their
-children's names.
+The permission decides, not the role: someone at the window whose role is viewer can
+collect waivers once they are allowed **Collect waivers**, and an admin a custom role
+denies it can't. Viewers can't see signatures otherwise, because they hold people's
+dates of birth and their children's names.
 :::
 
 ## Your waivers {#your-waivers}

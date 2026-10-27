@@ -71,6 +71,13 @@ for the how-to.
   role or for one member: sell, refunds and returns, discounts, the cash drawer and
   shifts, registers and devices, and buying hardware. Each follows **Use the point
   of sale** until you set it, so nobody's access changes until you narrow it.
+- **[The console follows each permission](workspace-and-billing/teams-and-roles/custom-roles.md#create-a-custom-role)** —
+  the Team page, the custom roles card and the organization settings now show and
+  hide their controls by the permission each one needs, not by the member's role, so
+  a custom role that allows **Manage members** or **Organization settings** works in
+  the console as it does on the server. **[Waivers](commerce-and-bookings/commerce/waivers.md)**
+  follow **Collect waivers** and **Manage waivers** the same way, so staff at the
+  window can take waivers without an editor role.
 - **[Per-site permissions for collaborators](workspace-and-billing/teams-and-roles/overview.md#collaborator-ai-access)** —
   a site's **Users** card opens each collaborator's **Permissions** on that site,
   every per-site permission (AI's two among them) set to **Allow**, **Deny** or the

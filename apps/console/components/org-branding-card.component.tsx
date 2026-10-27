@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  canManageOrg,
   checkEntitlement,
   resolveBrandingProfile,
 } from '@aglyn/aglyn'
@@ -37,6 +36,7 @@ import { docsHelp } from '../constants/docs-links'
 import MediaUrlField from './media-url-field.component'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgScope } from '../hooks/use-org-scope'
+import useOrgPermissions from '../hooks/use-org-permissions'
 
 /** The editable brand fields (subset of OrgBrandingProfile), all optional. */
 interface BrandingDraft {
@@ -85,7 +85,11 @@ export function OrgBrandingCard() {
   const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const orgId = currentOrg?.$id
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `org.settings` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('org.settings')
   const entitled = checkEntitlement(org, 'whiteLabel')
 
   const [draft, setDraft] = useState<BrandingDraft>(EMPTY_DRAFT)
