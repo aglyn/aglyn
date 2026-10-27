@@ -57,6 +57,16 @@ export interface HostResource {
    * {@link resourceUnits}, never raw.
    */
   units?: number
+  /**
+   * When the booking widget's scarcity line ("Only 2 left") starts, for a
+   * resource with several units (AGL-4044): it shows once this many units or
+   * fewer are free on a night of the stay. Absent is
+   * {@link FEW_UNITS_LEFT}, the line every several-unit resource has always
+   * had; 0 never shows it. A whole number from 0 to
+   * {@link MAX_RESOURCE_UNITS}; read it through {@link resourceFewLeftAt},
+   * never raw.
+   */
+  fewLeftAt?: number
   photoUrls?: string[]
   amenities?: string[]
   nightlyRateUsd: number
@@ -412,24 +422,43 @@ export function isRangeAvailable(
  * The widget's scarcity line starts at this many units left (AGL-4044):
  * "Only 2 left". Never on a one-unit resource, where every free night would
  * read "Only 1 left", and never on a night nothing is booked on.
+ * A resource may set its own threshold, {@link HostResource.fewLeftAt}.
  */
 export const FEW_UNITS_LEFT = 3
 
 /**
+ * When a resource's scarcity line starts: its own `fewLeftAt` as a whole
+ * number from 0 (never) to {@link MAX_RESOURCE_UNITS}, and
+ * {@link FEW_UNITS_LEFT} for anything else (absent, negative, not a number),
+ * so a resource saved before the setting existed reads exactly as it did.
+ */
+export function resourceFewLeftAt(
+  resource: Pick<HostResource, 'fewLeftAt'> | null | undefined,
+): number {
+  const raw = resource?.fewLeftAt
+  if (raw === undefined || raw === null || (raw as unknown) === '') return FEW_UNITS_LEFT
+  const at = Math.floor(Number(raw))
+  if (!Number.isFinite(at) || at < 0) return FEW_UNITS_LEFT
+  return Math.min(MAX_RESOURCE_UNITS, at)
+}
+
+/**
  * The fewest units left across `[checkInDayMs, checkOutDayMs)` when that is
- * {@link FEW_UNITS_LEFT} or fewer and at least one, else null. `fewLeft`
- * lists only the scarce nights, as the availability endpoint sends them; a
- * night it leaves out has more than {@link FEW_UNITS_LEFT} free.
+ * `fewLeftAt` or fewer and at least one, else null. `fewLeft` lists only the
+ * scarce nights, as the availability endpoint sends them; a night it leaves
+ * out has more than the resource's threshold free. `fewLeftAt` is the
+ * resource's threshold ({@link resourceFewLeftAt}); 0 never shows the line.
  */
 export function fewestUnitsLeft(
   fewLeft: Array<{ dayMs: number; unitsLeft: number }> | null | undefined,
   checkInDayMs: number,
   checkOutDayMs: number,
+  fewLeftAt: number = FEW_UNITS_LEFT,
 ): number | null {
   let fewest: number | null = null
   for (const night of fewLeft ?? []) {
     if (night.dayMs < checkInDayMs || night.dayMs >= checkOutDayMs) continue
-    if (!(night.unitsLeft >= 1) || night.unitsLeft > FEW_UNITS_LEFT) continue
+    if (!(night.unitsLeft >= 1) || night.unitsLeft > fewLeftAt) continue
     fewest = fewest === null ? night.unitsLeft : Math.min(fewest, night.unitsLeft)
   }
   return fewest

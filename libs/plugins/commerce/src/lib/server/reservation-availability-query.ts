@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type * as CommerceModel from '../model'
 
 /*
@@ -60,4 +61,15 @@ export function readLiveReservations(snapshot: {
     status: String(docSnapshot.get('status')) as CommerceModel.ReservationStatus,
     createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
   })) as CommerceModel.HostReservation[]
+}
+
+/**
+ * Whether the store's plan takes reservations: the `commerce` entitlement,
+ * the one question every door that books a stay asks before it writes
+ * (AGL-1873 put it on `/api/commerce/reserve`; the staff walk-in asks it too,
+ * AGL-4046). One copy, so a lapsed plan cannot keep booking through one door
+ * while the other refuses.
+ */
+export function reservationsOnPlan(org: unknown): boolean {
+  return checkEntitlement(org as never, 'commerce')
 }

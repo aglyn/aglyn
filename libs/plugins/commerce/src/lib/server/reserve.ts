@@ -26,6 +26,7 @@ import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admi
 import {
   readLiveReservations,
   reservationAvailabilityQuery,
+  reservationsOnPlan,
 } from './reservation-availability-query'
 
 /**
@@ -74,7 +75,7 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // transaction fee — through the one shopper-facing commerce door that
     // skipped the entitlement. Deterministic and merchant-side, so it sits
     // here above the claim with the readiness check.
-    if (!Aglyn.checkEntitlement(ownerOrg?.org as any, 'commerce')) {
+    if (!reservationsOnPlan(ownerOrg?.org)) {
       return res.status(403).json({ error: 'Reservations are not enabled' })
     }
     const ownerId = ownerOrg?.org?.ownerUid

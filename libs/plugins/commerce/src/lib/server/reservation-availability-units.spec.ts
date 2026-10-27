@@ -244,6 +244,41 @@ describe('several units: only the full nights close', () => {
     expect(widgetSaysFree(result.body, 7, 9)).toBe(false)
   })
 
+  it('sends the store’s own threshold, and the scarce nights under it (AGL-4044)', async () => {
+    mockResource.data = { ...mockResource.data, units: 12, fewLeftAt: 10 }
+    // Nights 1..2: 3 and 1 stays, so 9 and 11 left.
+    mockRows.push(stay(1, 3), stay(1, 2), stay(1, 2))
+
+    const result = await run()
+
+    expect(result.body.resource.fewLeftAt).toBe(10)
+    expect(result.body.fewLeft).toEqual([{ dayMs: night(1), unitsLeft: 9 }])
+  })
+
+  it('sends no scarce night when the store turned the line off', async () => {
+    mockResource.data = { ...mockResource.data, fewLeftAt: 0 }
+    mockRows.push(stay(1, 2), stay(1, 2))
+
+    const result = await run()
+
+    expect(result.body.resource.fewLeftAt).toBe(0)
+    expect(result.body.fewLeft).toEqual([])
+    // A full night still closes: the setting is display only.
+    mockRows.push(stay(1, 2))
+    expect((await run()).body.unavailable).toEqual([
+      { fromDayMs: night(1), toDayMs: night(2) },
+    ])
+  })
+
+  it('reads an unset threshold as 3, as it always was', async () => {
+    mockRows.push(stay(1, 2))
+
+    const result = await run()
+
+    expect(result.body.resource.fewLeftAt).toBe(3)
+    expect(result.body.fewLeft).toEqual([{ dayMs: night(1), unitsLeft: 2 }])
+  })
+
   it('lets an abandoned checkout give its unit back', async () => {
     mockRows.push(
       stay(1, 2),

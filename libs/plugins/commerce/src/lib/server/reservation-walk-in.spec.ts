@@ -41,7 +41,9 @@ import {
   createReservationWalkInHandler,
   WALK_IN_GONE,
   WALK_IN_ID_CONFLICT,
+  WALK_IN_PLAN_REFUSAL,
   WALK_IN_PLUGIN_OFF,
+  WALK_IN_ROLE_REFUSAL,
   WALK_IN_TAKEN_EVERY_UNIT,
   WALK_IN_TAKEN_ONE_UNIT,
 } from './reservation-walk-in'
@@ -295,6 +297,33 @@ describe('who may book a walk-in', () => {
     const res = await call(token, walkIn())
     expect(res.statusCode).toBe(200)
     expect(stays()).toHaveLength(1)
+  })
+
+  it('names what booking a walk-in needs, not the editor role (AGL-4046)', async () => {
+    const res = await call('viewer', walkIn())
+    expect(res).toMatchObject({ statusCode: 403, body: { error: WALK_IN_ROLE_REFUSAL } })
+    expect(res.body.error).not.toMatch(/editing/i)
+    expect(res.body.error).toContain('admin, editor or author')
+  })
+
+  it('refuses a store whose plan does not take reservations, as the booking door does', async () => {
+    org = { plan: 'free' }
+    const res = await call('editor', walkIn())
+    expect(res).toMatchObject({ statusCode: 403, body: { error: WALK_IN_PLAN_REFUSAL } })
+    expect(stays()).toEqual([])
+  })
+
+  it('refuses a lapsed paid plan too (the sticky downgrade)', async () => {
+    org = { plan: 'business', billingStatus: 'canceled' }
+    const res = await call('admin', walkIn())
+    expect(res.statusCode).toBe(403)
+    expect(stays()).toEqual([])
+  })
+
+  it('refuses staff on a store whose plan does not take reservations', async () => {
+    org = { plan: 'free' }
+    const res = await call('staff', walkIn())
+    expect(res).toMatchObject({ statusCode: 403, body: { error: WALK_IN_PLAN_REFUSAL } })
   })
 
   it('refuses while the site is locked down (423)', async () => {

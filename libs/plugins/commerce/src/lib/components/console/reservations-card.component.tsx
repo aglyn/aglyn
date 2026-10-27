@@ -107,6 +107,22 @@ function unitsProblem(units: number | undefined): string | null {
 }
 
 /**
+ * The "Only N left" field's problem (AGL-4044), or null when the typed value
+ * is a valid threshold: 0 (never) up to the most units a resource can hold.
+ */
+function fewLeftAtProblem(fewLeftAt: number | undefined): string | null {
+  if (fewLeftAt === undefined) return null
+  if (
+    !Number.isInteger(fewLeftAt) ||
+    fewLeftAt < 0 ||
+    fewLeftAt > CommerceModel.MAX_RESOURCE_UNITS
+  ) {
+    return `A whole number from 0 to ${CommerceModel.MAX_RESOURCE_UNITS}`
+  }
+  return null
+}
+
+/**
  * Reservations console (AGL-311): resources CRUD (nightly pricing,
  * seasons via multipliers, deposits) plus the reservations list with
  * check-in/out, no-show, cancel, and walk-in creation. The storefront
@@ -255,14 +271,20 @@ export function ReservationsCard(props: ReservationsCardProps) {
      * reader can tell it from a field the card meant to write.
      */
     if (unitsProblem(resourceDraft.units)) return
+    if (fewLeftAtProblem(resourceDraft.fewLeftAt)) return
     const seeded = resourceDraft as typeof resourceDraft & { $id?: string }
-    const { id, $id: _syntheticId, units, ...fields } = seeded
+    const { id, $id: _syntheticId, units, fewLeftAt, ...fields } = seeded
     // Units are written as the count the model reads (AGL-4044), and a
     // cleared field as 1 rather than left out: `merge: true` would otherwise
-    // keep a stored 12 the merchant just removed.
-    const data = 'units' in seeded
-      ? { ...fields, units: CommerceModel.resourceUnits({ units }) }
-      : fields
+    // keep a stored 12 the merchant just removed. The "Only N left" threshold
+    // the same way: a cleared field is written as the default it reads as.
+    const data = {
+      ...fields,
+      ...('units' in seeded ? { units: CommerceModel.resourceUnits({ units }) } : {}),
+      ...('fewLeftAt' in seeded
+        ? { fewLeftAt: CommerceModel.resourceFewLeftAt({ fewLeftAt }) }
+        : {}),
+    }
     /**
      * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
      * `data` is the whole stored row spread out of the listener, so
@@ -534,7 +556,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
                     color={
                       night.unitsLeft === 0
                         ? 'error'
-                        : night.unitsLeft <= CommerceModel.FEW_UNITS_LEFT
+                        : night.unitsLeft <=
+                            CommerceModel.resourceFewLeftAt(resource)
                           ? 'warning'
                           : 'default'
                     }
@@ -750,6 +773,34 @@ export function ReservationsCard(props: ReservationsCardProps) {
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
           </Stack>
+          {CommerceModel.resourceUnits(resourceDraft) > 1 ? (
+            <TextField
+              label="Show “Only N left” at"
+              placeholder={String(CommerceModel.FEW_UNITS_LEFT)}
+              value={resourceDraft?.fewLeftAt ?? ''}
+              onChange={(event) =>
+                setResourceDraft((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        fewLeftAt:
+                          event.target.value.replace(/\D/g, '') === ''
+                            ? undefined
+                            : Number(event.target.value.replace(/\D/g, '')),
+                      }
+                    : prev,
+                )
+              }
+              error={Boolean(fewLeftAtProblem(resourceDraft?.fewLeftAt))}
+              helperText={
+                fewLeftAtProblem(resourceDraft?.fewLeftAt) ??
+                'The booking widget says “Only 2 left” once this many or fewer are free on a night. 0 never shows it.'
+              }
+              size="small"
+              fullWidth
+              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+            />
+          ) : null}
           <Stack direction="row" spacing={1}>
             <TextField
               label="Nightly rate ($)"
@@ -849,7 +900,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
             disabled={
               !resourceDraft?.name?.trim() ||
               !((resourceDraft?.nightlyRateUsd ?? 0) > 0) ||
-              Boolean(unitsProblem(resourceDraft?.units))
+              Boolean(unitsProblem(resourceDraft?.units)) ||
+              Boolean(fewLeftAtProblem(resourceDraft?.fewLeftAt))
             }
             onClick={handleResourceSave}
           >

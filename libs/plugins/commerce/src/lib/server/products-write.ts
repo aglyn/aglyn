@@ -101,9 +101,17 @@ export interface Gate {
 
 /**
  * Who may write this site's products, as the rules decide it. Answers the
- * caller's reply on a refusal and returns null.
+ * caller's reply on a refusal and returns null. `roleRefusal` words the
+ * refusal for a member whose site role cannot write, for a route that is
+ * not about products (the walk-in names what booking a stay needs).
  */
-export async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hostId: string, deps: Required<ProductsWriteDeps>): Promise<Gate | null> {
+export async function gate(
+  req: Parameters<PluginApiHandler>[0],
+  res: Reply,
+  hostId: string,
+  deps: Required<ProductsWriteDeps>,
+  options: { roleRefusal?: string } = {},
+): Promise<Gate | null> {
   const authorization = String(req.headers.authorization ?? '')
   const token = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : ''
   if (!token) return void res.status(401).json({ error: 'Unauthenticated' }), null
@@ -122,7 +130,7 @@ export async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hos
   const host = await deps.firestore().collection('hosts').doc(hostId).get()
   if (!host.exists) return void res.status(404).json({ error: 'Unknown site' }), null
   if (!staff && !hostRoleCanWrite((host.get('memberRoles') ?? {})[decoded.uid])) {
-    return void res.status(403).json({ error: ROLE_REFUSAL }), null
+    return void res.status(403).json({ error: options.roleRefusal ?? ROLE_REFUSAL }), null
   }
   const org = ((await deps.orgForHost(hostId))?.org ?? {}) as Record<string, unknown>
   const locked = await deps.lockdown({ staff, uid: decoded.uid, org: org as never, host: host.data() as never, request: { method: 'POST' } as never })

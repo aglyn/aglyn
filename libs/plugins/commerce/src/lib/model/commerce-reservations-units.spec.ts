@@ -27,10 +27,12 @@
 import {
   computeReservationQuote,
   DAY_MS,
+  FEW_UNITS_LEFT,
   fewestUnitsLeft,
   isRangeAvailable,
   MAX_RESOURCE_UNITS,
   PENDING_RESERVATION_HOLD_MS,
+  resourceFewLeftAt,
   resourceUnits,
   unitsLeftByNight,
   unitsTakenByNight,
@@ -268,6 +270,35 @@ describe('fewestUnitsLeft, the widget’s "Only 2 left"', () => {
     expect(fewestUnitsLeft(undefined, night(0), night(6))).toBeNull()
     expect(
       fewestUnitsLeft([{ dayMs: night(0), unitsLeft: 9 }], night(0), night(1)),
+    ).toBeNull()
+  })
+})
+
+describe('the store sets when "Only N left" shows (AGL-4044)', () => {
+  it('reads as 3 until the store sets it, as every resource always has', () => {
+    expect(resourceFewLeftAt({})).toBe(FEW_UNITS_LEFT)
+    expect(resourceFewLeftAt(undefined)).toBe(3)
+    expect(resourceFewLeftAt({ fewLeftAt: -2 })).toBe(3)
+    expect(resourceFewLeftAt({ fewLeftAt: Number.NaN })).toBe(3)
+    expect(resourceFewLeftAt({ fewLeftAt: 'x' as never })).toBe(3)
+  })
+
+  it('takes 0 (never) up to the most units a resource can hold, whole', () => {
+    expect(resourceFewLeftAt({ fewLeftAt: 0 })).toBe(0)
+    expect(resourceFewLeftAt({ fewLeftAt: 10.7 })).toBe(10)
+    expect(resourceFewLeftAt({ fewLeftAt: 9_999 })).toBe(500)
+  })
+
+  it('follows the threshold it is given, and 0 never shows the line', () => {
+    const fewLeft = [
+      { dayMs: night(1), unitsLeft: 8 },
+      { dayMs: night(2), unitsLeft: 5 },
+    ]
+    expect(fewestUnitsLeft(fewLeft, night(0), night(3), 10)).toBe(5)
+    expect(fewestUnitsLeft(fewLeft, night(0), night(3), 6)).toBe(5)
+    expect(fewestUnitsLeft(fewLeft, night(0), night(3))).toBeNull()
+    expect(
+      fewestUnitsLeft([{ dayMs: night(1), unitsLeft: 1 }], night(0), night(3), 0),
     ).toBeNull()
   })
 })

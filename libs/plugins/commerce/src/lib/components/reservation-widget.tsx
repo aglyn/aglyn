@@ -136,6 +136,8 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
         availability.fewLeft,
         checkInDayMs,
         checkOutDayMs,
+        // The store's own threshold for this resource; 0 never shows it.
+        CommerceModel.resourceFewLeftAt(availability.resource),
       )
     }, [availability, checkInDayMs, checkOutDayMs])
 

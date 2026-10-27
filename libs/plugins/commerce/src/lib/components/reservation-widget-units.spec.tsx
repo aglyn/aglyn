@@ -82,6 +82,25 @@ describe('a several-unit resource', () => {
     expect(screen.queryByText(/^Only \d+ left$/)).toBeNull()
   })
 
+  it('follows the threshold the store set for the resource (AGL-4044)', async () => {
+    payload = {
+      ...payload,
+      resource: { ...resource, fewLeftAt: 10 },
+      fewLeft: [{ dayMs: day('2026-07-10'), unitsLeft: 8 }],
+    }
+    await pick('2026-07-10', '2026-07-11')
+
+    expect(await screen.findByText('Only 8 left')).toBeTruthy()
+  })
+
+  it('never shows the line when the store turned it off', async () => {
+    payload = { ...payload, resource: { ...resource, fewLeftAt: 0 } }
+    await pick('2026-07-10', '2026-07-12')
+
+    expect(await screen.findByText('2 nights')).toBeTruthy()
+    expect(screen.queryByText(/^Only \d+ left$/)).toBeNull()
+  })
+
   it('refuses a stay across the full night', async () => {
     await pick('2026-07-11', '2026-07-14')
 
