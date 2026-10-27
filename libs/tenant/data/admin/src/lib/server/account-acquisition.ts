@@ -20,6 +20,7 @@ import {
   buildAccountAcquisition,
   readAccountAcquisition,
   signUpDoorFor,
+  signUpProviderFor,
   type AccountAcquisition,
   type AcquisitionDoor,
 } from '@aglyn/aglyn/app-utils/account-acquisition'
@@ -196,18 +197,26 @@ export interface RecordSignUpAcquisitionInput {
 export async function recordSignUpAcquisition(
   input: RecordSignUpAcquisitionInput,
 ): Promise<RecordAccountAcquisitionResult | null> {
-  const door = signUpDoorFor(input.provider, input.doorHint)
-  if (!door) return null
+  // A `custom` token can name no door until the auth record says which
+  // provider made the account (AGL-3706), so the lookup comes first for it.
+  const custom = input.provider === 'custom'
+  if (!custom && !signUpDoorFor(input.provider, input.doorHint)) return null
   // Across every pool, not the project's alone (AGL-1122): a lookup that
   // cannot see an account answers "not new", which writes nothing.
   const pooled = await findUserByUidAcrossPools(input.uid)
+  const provider = signUpProviderFor(
+    input.provider,
+    (pooled?.record.providerData ?? []).map((info) => info.providerId),
+  )
+  const door = signUpDoorFor(provider, input.doorHint)
+  if (!door) return null
   const createdAtMs = Date.parse(pooled?.record.metadata.creationTime ?? '')
   return recordAccountAcquisition({
     uid: input.uid,
     accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
     touch: input.touch,
     door,
-    provider: input.provider,
+    provider,
     email: input.email,
     headers: input.headers,
     recordedBy: 'signup',

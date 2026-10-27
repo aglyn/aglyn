@@ -23,6 +23,7 @@ import {
   providerLabel,
   readAccountAcquisition,
   signUpDoorFor,
+  signUpProviderFor,
   unknownAccountAcquisition,
 } from './account-acquisition'
 
@@ -100,6 +101,21 @@ describe('building the record at account creation', () => {
     expect(signUpDoorFor('google.com', 'invite')).toBe('signup-google')
     expect(signUpDoorFor('saml.acme', 'signup-google')).toBeNull()
     expect(signUpDoorFor(null)).toBeNull()
+  })
+
+  it('reads the provider off the auth record only for a custom token (AGL-3706)', () => {
+    // The host hop re-signs the person with a custom token; the record still
+    // names the provider the account was created with.
+    expect(signUpProviderFor('custom', ['google.com'])).toBe('google.com')
+    expect(signUpProviderFor('custom', ['password'])).toBe('password')
+    // Two sign-up providers, or none, is not a door the record can name.
+    expect(signUpProviderFor('custom', ['google.com', 'password'])).toBe('custom')
+    expect(signUpProviderFor('custom', [])).toBe('custom')
+    expect(signUpProviderFor('custom', ['saml.acme'])).toBe('custom')
+    // Every other token decides on its own.
+    expect(signUpProviderFor('google.com', ['password'])).toBe('google.com')
+    expect(signUpProviderFor('saml.acme', ['google.com'])).toBe('saml.acme')
+    expect(signUpProviderFor(null, ['google.com'])).toBeNull()
   })
 
   it('says a Google redirect sign-up was one', () => {
