@@ -116,7 +116,7 @@ import { posReaderSplashImageProblem, POS_READER_SPLASH_FAMILIES } from '../mode
 import { posReaderSplashAdmin } from './pos-reader-splash-admin'
 import { applyPosReaderSplash, posReaderSplashHandler } from './pos-reader-splash'
 import { renderPosReaderSplash } from './pos-reader-splash-render'
-import { savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
+import { ensurePosOfflineCardConfiguration, savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
 
 interface StripeCall {
   method: string
@@ -131,6 +131,8 @@ let fileCounter = 0
 let configurationCounter = 0
 /** Run as Stripe creates a configuration, to stage a racing first write. */
 let onConfigurationCreate: (() => void) | null = null
+/** Stripe refuses every configuration write while set. */
+let refuseConfigurations = false
 let externalImage: Buffer | null = null
 
 const fetchMock = jest.fn(async (url: any, init: any) => {
@@ -160,6 +162,9 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
   })
   if (target.host === 'files.stripe.com' && path === 'files') {
     return { ok: true, status: 200, json: async () => ({ id: `file_${++fileCounter}` }) }
+  }
+  if (refuseConfigurations && path.startsWith('terminal/configurations')) {
+    return { ok: false, status: 400, json: async () => ({ error: { code: 'parameter_invalid' } }) }
   }
   if (path === 'terminal/configurations' && init?.method === 'POST') {
     onConfigurationCreate?.()
@@ -285,6 +290,7 @@ beforeEach(() => {
   fileCounter = 0
   configurationCounter = 0
   onConfigurationCreate = null
+  refuseConfigurations = false
   externalImage = null
   mockManagePos = true
   mockBlocked = null
@@ -482,6 +488,93 @@ describe('applying a store’s screen', () => {
     await seedPlatformDefault()
     process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
     expect((await applyPosReaderSplash('host-1')).outcome).toBe('skipped')
+    expect(stripeOnly()).toHaveLength(0)
+  })
+})
+
+describe('offline card mode on the same configuration (AGL-4039)', () => {
+  const offlineWrites = () => configurationWrites().filter((call) => call.params.get('offline[enabled]') === 'true')
+
+  it('turns it on in one new configuration, assigned once, and then makes no Stripe call', async () => {
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    const [create] = configurationWrites()
+    expect(create.path).toBe('terminal/configurations')
+    expect(create.key).toBe('pos-configuration:host-1:offline')
+    expect(create.params.get('offline[enabled]')).toBe('true')
+    const assign = stripeOnly().find((call) => call.path === 'terminal/locations/tml_ours')
+    expect(assign?.params.get('configuration_overrides')).toBe('tmc_new1')
+    expect(fakeDocs.get(configPath)).toMatchObject({
+      stripeConfigurationId: 'tmc_new1',
+      stripeConfigurationAssigned: true,
+      offlineEnabled: true,
+      offlineConfigurationId: 'tmc_new1',
+    })
+
+    stripeCalls.length = 0
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('shares tipping’s configuration: an update naming only offline, no second configuration or assignment', async () => {
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', stripeConfigurationId: 'tmc_tips', tippingKey: '15,18,20' })
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    const writes = configurationWrites()
+    expect(writes.map((call) => call.path)).toEqual(['terminal/configurations/tmc_tips'])
+    expect([...writes[0].params.keys()]).toEqual(['offline[enabled]'])
+    expect(stripeOnly().some((call) => call.path.startsWith('terminal/locations'))).toBe(false)
+    expect(fakeDocs.get(configPath)).toMatchObject({ stripeConfigurationId: 'tmc_tips', offlineConfigurationId: 'tmc_tips' })
+  })
+
+  it('racing tipping to the first write, lands on the winner’s configuration and keeps the winner’s id', async () => {
+    // Tipping claims the site's configuration while offline mode's create is
+    // in flight. Before AGL-4039's fix offline mode then overwrote the id
+    // with its own, unassigned configuration, so the readers kept the
+    // winner's, which never had offline turned on.
+    onConfigurationCreate = () => {
+      fakeDocs.set(configPath, { ...fakeDocs.get(configPath), stripeConfigurationId: 'tmc_tips', stripeConfigurationAssigned: true })
+    }
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    expect(stripeOnly().map((call) => `${call.method} ${call.path}`)).toEqual([
+      'POST terminal/configurations',
+      'POST terminal/configurations/tmc_tips',
+      'DELETE terminal/configurations/tmc_new1',
+    ])
+    expect(offlineWrites().map((call) => call.path)).toEqual(['terminal/configurations', 'terminal/configurations/tmc_tips'])
+    expect(fakeDocs.get(configPath)).toMatchObject({
+      stripeConfigurationId: 'tmc_tips',
+      stripeConfigurationAssigned: true,
+      offlineEnabled: true,
+      offlineConfigurationId: 'tmc_tips',
+    })
+  })
+
+  it('finishes an assignment a previous first write left owing', async () => {
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', stripeConfigurationId: 'tmc_owed', stripeConfigurationAssigned: false })
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    const assign = stripeOnly().find((call) => call.path === 'terminal/locations/tml_ours')
+    expect(assign?.params.get('configuration_overrides')).toBe('tmc_owed')
+    expect(fakeDocs.get(configPath)).toMatchObject({ stripeConfigurationAssigned: true, offlineConfigurationId: 'tmc_owed' })
+  })
+
+  it.each([
+    ['set on a configuration the site no longer uses', { offlineEnabled: true, offlineConfigurationId: 'tmc_old' }],
+    ['recorded before it named its configuration', { offlineEnabled: true }],
+    ['on a configuration still owed its assignment', { offlineEnabled: true, offlineConfigurationId: 'tmc_tips', stripeConfigurationAssigned: false }],
+  ])('sets it again when the flag was %s', async (_label, cached) => {
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', stripeConfigurationId: 'tmc_tips', ...cached })
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(true)
+    expect(offlineWrites().map((call) => call.path)).toEqual(['terminal/configurations/tmc_tips'])
+    expect(fakeDocs.get(configPath)?.['offlineConfigurationId']).toBe('tmc_tips')
+  })
+
+  it('answers false and records nothing when Stripe refuses it, or the site has no Location', async () => {
+    refuseConfigurations = true
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(false)
+    expect(fakeDocs.get(configPath)?.['offlineEnabled']).toBeUndefined()
+    refuseConfigurations = false
+    stripeCalls.length = 0
+    fakeDocs.set(configPath, {})
+    expect(await ensurePosOfflineCardConfiguration('host-1')).toBe(false)
     expect(stripeOnly()).toHaveLength(0)
   })
 })
