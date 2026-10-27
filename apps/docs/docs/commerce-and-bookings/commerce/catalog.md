@@ -21,7 +21,8 @@ compare-at price, weight, image, and inventory count.
 
 - **Types**: `physical` (shippable), `digital` (delivered as downloads), or
   `service`.
-- **Status**: `draft` (invisible to visitors), `active`, or `archived`.
+- **Status**: `draft` (invisible to visitors), `active`, or `archived`. Draft
+  and archived products can't be bought online, from the cart or with Buy now.
   A product created for you rather than added in the editor — a proposed
   product, for one — starts as a draft with no photo, at the price it was given
   (an AI proposal's suggested price) or else a default price, for you to change. It counts toward your plan's product
