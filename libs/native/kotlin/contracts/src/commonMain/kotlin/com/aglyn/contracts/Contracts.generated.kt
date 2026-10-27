@@ -2535,6 +2535,7 @@ enum class PosOfflineFlag(val raw: String) {
     CASH_SHORT("cash-short"),
     CASHIER_UNVERIFIED("cashier-unverified"),
     CLOCK_ADJUSTED("clock-adjusted"),
+    DISCOUNT_NOT_PERMITTED("discount-not-permitted"),
     DISCOUNT_OVER_LIMIT("discount-over-limit"),
     LATE_SYNC("late-sync"),
     NO_SHIFT("no-shift"),

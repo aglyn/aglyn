@@ -17,7 +17,9 @@
 
 import { memoryFirestoreModule } from '../testing/pos-ops-memory-firestore'
 import { posOpsHarness, type PosOpsHarness } from '../testing/pos-ops-harness'
+import { posPermissionLabel } from '../model/plugin-permissions'
 import {
+  POS_OFFLINE_FLAG_LABELS,
   posOfflineSaleTotals,
   POS_OFFLINE_LATE_SYNC_MS,
   POS_OFFLINE_SYNC_BATCH_MAX,
@@ -400,6 +402,32 @@ describe('what the server flags, never refuses', () => {
     expect(result.status === 'recorded' && result.flags).toEqual(
       expect.arrayContaining(['discount-over-limit', 'cash-short']),
     )
+  })
+
+  it('records a discount from a member whose role does not include giving one, flagged by name (AGL-4047)', async () => {
+    h.memberships['cashier'] = {
+      ...h.memberships['cashier'],
+      permissions: { ...h.memberships['cashier'].permissions, posDiscount: false },
+    }
+    const discounted = sale({ discountPct: 10 })
+    const [result] = await results([discounted])
+    expect(result.status).toBe('recorded')
+    expect(result.flags).toContain('discount-not-permitted')
+    const recorded = order(discounted.saleKey)!
+    expect(recorded['status']).toBe('paid')
+    expect(recorded['discountPct']).toBe(10)
+    expect(recorded['offline'].flags).toContain('discount-not-permitted')
+    const synced = recorded['timeline'].find((event: any) => event.event === 'offline-synced')
+    expect(synced.detail).toContain(posPermissionLabel('posDiscount'))
+    // The flag names the permission in the words the role editor shows.
+    expect(POS_OFFLINE_FLAG_LABELS['discount-not-permitted']).toContain(`“${posPermissionLabel('posDiscount')}”`)
+    // No discount, nothing to flag; the permission held, nothing to flag.
+    expect((await results([sale({ discountPct: 0 })]))[0].flags).not.toContain('discount-not-permitted')
+    h.memberships['cashier'] = {
+      ...h.memberships['cashier'],
+      permissions: { ...h.memberships['cashier'].permissions, posDiscount: true },
+    }
+    expect((await results([sale({ discountPct: 10 })]))[0].flags).not.toContain('discount-not-permitted')
   })
 
   it('flags an unknown or over-cap register', async () => {

@@ -3851,6 +3851,7 @@ public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
   case cashShort = "cash-short"
   case cashierUnverified = "cashier-unverified"
   case clockAdjusted = "clock-adjusted"
+  case discountNotPermitted = "discount-not-permitted"
   case discountOverLimit = "discount-over-limit"
   case lateSync = "late-sync"
   case noShift = "no-shift"

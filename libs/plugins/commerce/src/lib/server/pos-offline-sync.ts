@@ -39,6 +39,7 @@ import {
   type PosOfflineStockConflict,
 } from '../model/commerce-pos-offline'
 import { ORDER_PAID_EVENT } from '../model/order-events'
+import { holdsPosPermission } from '../model/plugin-permissions'
 import { posMaxDiscountPct, posOfflineCardSettings } from '../plugin-config'
 import { alertLowStockCrossing } from './low-stock'
 import { notifyOrderBuyer } from './order-notifications'
@@ -812,6 +813,13 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
     flags.add('tax-differs')
   }
   if (sale.discountPct > posMaxDiscountPct(context.config)) flags.add('discount-over-limit')
+  // The cashier's own discount needs `posDiscount` (AGL-4047), as the online
+  // register refuses it without. Offline the sale has already happened, so it
+  // is recorded and flagged rather than dropped. Read for the member who was
+  // signed in, whose membership the gate resolved, as the online check reads it.
+  if (sale.discountPct > 0 && !holdsPosPermission(staff.membership.permissions, 'posDiscount')) {
+    flags.add('discount-not-permitted')
+  }
   const byCard = sale.tender === 'card'
   if (!byCard && sale.cashTenderedCents < totals.totalCents) flags.add('cash-short')
 

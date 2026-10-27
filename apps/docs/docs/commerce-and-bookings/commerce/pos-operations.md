@@ -291,6 +291,9 @@ and says what you should look at, on the order and in the register:
   that cash.
 - A discount above the register's limit, tax that differs from your store's
   rate now, or a device clock that was wrong.
+- A discount given by a member whose role does not include **Give discounts at
+  the register**. The register refuses that discount while online; offline the
+  sale has already happened, so it is recorded and flagged for you to review.
 
 ### Cards taken offline in the Aglyn POS app
 

@@ -8107,6 +8107,7 @@
     "cash-short": "The cash recorded is less than the total",
     "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
     "clock-adjusted": "The device clock was off; the sale is dated when it synced",
+    "discount-not-permitted": "The discount was given by a member whose role does not include “Give discounts at the register”",
     "discount-over-limit": "The discount is above this register’s limit",
     "late-sync": "Synced more than a day after it was rung",
     "no-shift": "Rung with no shift open, on a site that requires one",
