@@ -3022,9 +3022,10 @@ public struct OrgPermissionDeclaration: Codable, Hashable, Sendable {
   public var key: String
   public var label: String
   public var pluginId: String?
+  public var refines: String?
   public var roleDefaults: [String: Bool]?
 
-  public init(defaults: OrgPermissionDeclarationDefaults? = nil, description: String? = nil, group: String? = nil, groupLabel: String? = nil, hostRoleDefaults: [String: Bool]? = nil, key: String, label: String, pluginId: String? = nil, roleDefaults: [String: Bool]? = nil) {
+  public init(defaults: OrgPermissionDeclarationDefaults? = nil, description: String? = nil, group: String? = nil, groupLabel: String? = nil, hostRoleDefaults: [String: Bool]? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, roleDefaults: [String: Bool]? = nil) {
     self.defaults = defaults
     self.description = description
     self.group = group
@@ -3033,6 +3034,7 @@ public struct OrgPermissionDeclaration: Codable, Hashable, Sendable {
     self.key = key
     self.label = label
     self.pluginId = pluginId
+    self.refines = refines
     self.roleDefaults = roleDefaults
   }
 }
@@ -3055,14 +3057,16 @@ public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var key: String
   public var label: String
   public var pluginId: String?
+  public var refines: String?
   public var scope: OrgPermissionScope?
 
-  public init(description: String, group: String? = nil, key: String, label: String, pluginId: String? = nil, scope: OrgPermissionScope? = nil) {
+  public init(description: String, group: String? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
     self.description = description
     self.group = group
     self.key = key
     self.label = label
     self.pluginId = pluginId
+    self.refines = refines
     self.scope = scope
   }
 }

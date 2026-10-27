@@ -40,7 +40,19 @@ export interface PluginPermission {
   group?: string
   /** The heading of a group of the plugin's own; absent: the plugin's catalog label. */
   groupLabel?: string
+  /**
+   * A broader key this one is a finer part of (AGL-4047), such as one action
+   * of a register the broader key opens. A refining key is never granted
+   * while the key it refines is not, and when no custom role or override
+   * sets it, it follows that key — so splitting a key into finer ones leaves
+   * every member with exactly the access they had. Its `defaults` should be
+   * the broader key's.
+   */
+  refines?: string
 }
+
+/** A key, and the broader key it refines (`PluginPermission.refines`). */
+export type PermissionRefinement = readonly [key: string, refines: string]
 
 /*
  * One registry per process, keyed on `globalThis` under `Symbol.for`, like
@@ -165,4 +177,79 @@ export function pluginPermissionDefaults(
     defaults[permission.key] = permission.defaults[tier]
   }
   return defaults
+}
+
+/** The refinements the per-tier registry holds (AGL-4047), as declared. */
+export function pluginPermissionRefinements(): PermissionRefinement[] {
+  const refinements: PermissionRefinement[] = []
+  for (const permission of pluginPermissions.values()) {
+    if (permission.refines && permission.refines !== permission.key) {
+      refinements.push([permission.key, permission.refines])
+    }
+  }
+  return refinements
+}
+
+/**
+ * The refinements in the order they must be applied: a key whose broader key
+ * is itself a refinement after that one, so a chain settles in one pass. A
+ * refinement that loops back on itself is dropped rather than resolved.
+ */
+function orderRefinements(
+  refinements: readonly PermissionRefinement[],
+): PermissionRefinement[] {
+  const broader = new Map<string, string>(refinements.map(([key, parent]) => [key, parent]))
+  const depth = (key: string): number => {
+    const seen = new Set<string>()
+    let steps = 0
+    let current = key
+    while (broader.has(current)) {
+      if (seen.has(current)) return -1
+      seen.add(current)
+      current = broader.get(current) as string
+      steps += 1
+    }
+    return steps
+  }
+  return refinements
+    .map((refinement) => ({ refinement, steps: depth(refinement[0]) }))
+    .filter((entry) => entry.steps > 0)
+    .sort((a, b) => a.steps - b.steps)
+    .map((entry) => entry.refinement)
+}
+
+/**
+ * A resolved permission map with every refining key held to the key it
+ * refines (AGL-4047). A refining key is granted only while its broader key
+ * is.
+ *
+ * With `layers` — the stored decisions the map was resolved from, in the
+ * order they apply (a custom role's map, then a member's overrides) — a
+ * refining key that no layer sets FOLLOWS its broader key: granted exactly
+ * when that key is, whatever its own role default says. Without them, the
+ * map's own verdict for the key stands, narrowed by the broader key; that is
+ * the pass for a map whose refining keys were already resolved with every
+ * layer, and then had stored values laid back over them.
+ */
+export function refinePermissionMap<T extends Record<string, boolean>>(
+  map: T,
+  refinements: readonly PermissionRefinement[],
+  layers?: ReadonlyArray<Readonly<Partial<Record<string, unknown>>> | null | undefined>,
+): T {
+  if (!refinements.length) return map
+  const refined: Record<string, boolean> = { ...map }
+  for (const [key, parent] of orderRefinements(refinements)) {
+    const held = refined[parent] === true
+    if (layers) {
+      let stored: boolean | undefined
+      for (const layer of layers) {
+        const value = layer?.[key]
+        if (typeof value === 'boolean') stored = value
+      }
+      refined[key] = held && (stored === undefined ? true : stored)
+    } else {
+      refined[key] = held && refined[key] === true
+    }
+  }
+  return refined as T
 }

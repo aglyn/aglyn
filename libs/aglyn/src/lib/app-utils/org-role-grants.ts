@@ -57,6 +57,12 @@ export interface OrgPermissionEntry {
   group?: string
   /** Where it is decided; absent reads as `org`. */
   scope?: OrgPermissionScope
+  /**
+   * The broader key this one is a finer part of (AGL-4047): never granted
+   * without it, and following it where no custom role or override sets this
+   * key. Absent for a key that refines nothing.
+   */
+  refines?: string
 }
 
 /** A heading the role editor groups keys under. */
@@ -96,6 +102,8 @@ export interface OrgPermissionDeclaration {
   /** That group's heading, for a group the core does not name. */
   groupLabel?: string
   pluginId?: string
+  /** The broader key it refines (AGL-4047). */
+  refines?: string
 }
 
 /** A custom role (`orgs/{orgId}/roles/{roleId}`) or a member's overrides: explicit verdicts per key. */
@@ -270,6 +278,7 @@ export function assembleOrgRoleGrants(
       ...(declaration.pluginId ? { pluginId: declaration.pluginId } : {}),
       ...(group ? { group } : {}),
       scope: declaration.hostRoleDefaults ? 'site' : 'org',
+      ...(declaration.refines && declaration.refines !== declaration.key ? { refines: declaration.refines } : {}),
     })
     if (group && !groupIds.has(group)) {
       groupIds.add(group)
@@ -310,6 +319,37 @@ export function rolePermissions(
     for (const key of keys) {
       if (typeof values[key] === 'boolean') out[key] = values[key]
     }
+  }
+  // A key that refines a broader one (AGL-4047) is never held without it, and
+  // follows it where neither layer set the key. Applied broader keys first, so
+  // a chain settles in one pass; a refinement that loops is left alone.
+  const broader = new Map<string, string>()
+  for (const entry of catalog.permissions) {
+    if (entry.refines && entry.refines in out) broader.set(entry.key, entry.refines)
+  }
+  const depth = (key: string): number => {
+    const seen = new Set<string>()
+    let steps = 0
+    let current = key
+    while (broader.has(current)) {
+      if (seen.has(current)) return -1
+      seen.add(current)
+      current = broader.get(current) as string
+      steps += 1
+    }
+    return steps
+  }
+  const ordered = [...broader.keys()]
+    .map((key) => ({ key, steps: depth(key) }))
+    .filter((entry) => entry.steps > 0)
+    .sort((a, b) => a.steps - b.steps)
+  for (const { key } of ordered) {
+    let stored: boolean | undefined
+    for (const layer of [customRole, overrides]) {
+      const value = layer?.permissions?.[key]
+      if (typeof value === 'boolean') stored = value
+    }
+    out[key] = out[broader.get(key) as string] === true && (stored === undefined ? true : stored)
   }
   return out
 }

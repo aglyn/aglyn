@@ -156,6 +156,12 @@ You come back to the card, which says the order is in. Orders ship to street
 addresses in the United States; P.O. boxes and military addresses are not
 accepted.
 
+Placing an order needs the **Buy point of sale hardware** permission. Everyone who
+can use the point of sale sees the card and the orders, and **Check out** says why
+it is unavailable to someone without it. Owners, admins and editors hold it with
+the point of sale; to keep ordering to a few people, deny it in a
+[custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions).
+
 **Follow an order**
 
 **Your orders** on the card lists every hardware order placed from this site,

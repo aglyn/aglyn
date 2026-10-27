@@ -39,6 +39,8 @@ import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
 let mockManagePos = true
+/** The finer "Buy point of sale hardware" key (AGL-4047); undefined follows `managePos`. */
+let mockBuyHardware: boolean | undefined
 let mockPlan = 'business'
 const mockSendEmail = jest.fn<Promise<{ sent: boolean }>, [Record<string, unknown>]>(async () => ({ sent: true }))
 const mockRaiseAlert = jest.fn<Promise<{ outcome: string }>, unknown[]>(async () => ({ outcome: 'sent' }))
@@ -55,7 +57,12 @@ const TOKENS: Record<string, Record<string, unknown>> = {
 }
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: mockManagePos } }),
+  resolveOrgPermissions: async () => ({
+    permissions: {
+      managePos: mockManagePos,
+      ...(mockBuyHardware === undefined ? {} : { posBuyHardware: mockBuyHardware }),
+    },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => {
   const fake = jest.requireActual('../testing/fake-firestore')
@@ -262,6 +269,7 @@ beforeEach(() => {
   mockRaiseAlert.mockClear()
   mockAudit.mockClear()
   mockManagePos = true
+  mockBuyHardware = undefined
   mockPlan = 'business'
   refundOk = true
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
@@ -305,6 +313,32 @@ describe('the shop route', () => {
     mockManagePos = false
     expect((await shop({ action: 'catalog' })).status).toBe(403)
     expect((await shop({ action: 'catalog' }, { token: 'stranger' })).status).toBe(403)
+  })
+
+  it('lets only a member holding the buy key check out, and still shows them the shop (AGL-4047)', async () => {
+    mockBuyHardware = false
+    expect((await shop({ action: 'catalog' })).status).toBe(200)
+    expect((await shop({ action: 'orders' })).status).toBe(200)
+    const refused = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-1' },
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Buy point of sale hardware')
+    expect(stripeCalls).toHaveLength(0)
+    // Granted outright, it checks out; it never reaches past `managePos`.
+    mockBuyHardware = true
+    const bought = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-2' },
+    )
+    expect(bought.status).toBe(200)
+    mockManagePos = false
+    const held = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-3' },
+    )
+    expect(held.status).toBe(403)
   })
 
   it('makes a PLATFORM checkout session priced on the server, under one key per attempt', async () => {

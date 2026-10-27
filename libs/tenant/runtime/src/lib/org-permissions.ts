@@ -26,6 +26,8 @@ import {
   type ResolvedOrgPermissionSet,
   listPluginPermissionKeys,
   ORG_ROLE_TIER,
+  ORG_PERMISSION_REFINEMENTS,
+  refinePermissionMap,
   tierPermissionsOf,
 } from '@aglyn/aglyn/server'
 import {
@@ -195,22 +197,30 @@ export async function resolveOrgPermissions(
         // With no host in context there is nothing to scope to, so a scoped
         // member gets the floor rather than their site role — the caller is
         // asking an org-wide question they have no standing to answer.
-        permissions: {
-          ...resolveRolePermissions(hostRole ?? 'viewer'),
-          ...Object.fromEntries(
-            ORG_LEVEL_PERMISSIONS.map((key) => [key, false]),
-          ),
-          // Plugin-key overrides apply to a collaborator TOO (AGL-2474).
-          // Their six built-in keys are deliberately their HOST role's and
-          // not their org role's, but a plugin key revoked on the member doc
-          // is a revocation either way — skipping it here would mean an admin
-          // could take `managePos` off an org-wide member and silently fail to
-          // take it off the contractor actually standing at the register.
-          // ORG_LEVEL_PERMISSIONS still wins above for the keys it names.
-          ...pluginPermissionOverrides(
-            membership.member.permissions as Record<string, boolean>,
-          ),
-        },
+        // A plugin key that refines a broader one (AGL-4047) follows that key
+        // where the member's own overrides leave it unset, and is never held
+        // without it: a collaborator has no custom role, so their overrides
+        // are the only stored layer.
+        permissions: refinePermissionMap(
+          {
+            ...resolveRolePermissions(hostRole ?? 'viewer'),
+            ...Object.fromEntries(
+              ORG_LEVEL_PERMISSIONS.map((key) => [key, false]),
+            ),
+            // Plugin-key overrides apply to a collaborator TOO (AGL-2474).
+            // Their six built-in keys are deliberately their HOST role's and
+            // not their org role's, but a plugin key revoked on the member doc
+            // is a revocation either way — skipping it here would mean an admin
+            // could take `managePos` off an org-wide member and silently fail to
+            // take it off the contractor actually standing at the register.
+            // ORG_LEVEL_PERMISSIONS still wins above for the keys it names.
+            ...pluginPermissionOverrides(
+              membership.member.permissions as Record<string, boolean>,
+            ),
+          },
+          ORG_PERMISSION_REFINEMENTS,
+          [pluginPermissionOverrides(membership.member.permissions as Record<string, boolean>)],
+        ),
         orgWide: false,
         hostRole,
       }
@@ -233,7 +243,10 @@ export async function resolveOrgPermissions(
       orgId: membership.orgId,
       role,
       isOwner: role === 'owner' || role === 'admin',
-      permissions: {
+      // Refined LAST (AGL-4047): the catalog resolved each refining key with
+      // every layer, and the override spread below lays stored values back,
+      // so the pass only holds each such key to the key it refines.
+      permissions: refinePermissionMap({
         ...resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
         ...toLegacyPermissions(granular, role),
         // The plugin keys as the ONE catalog resolved them (AGL-4047): the
@@ -248,7 +261,7 @@ export async function resolveOrgPermissions(
         ...pluginPermissionOverrides(
           membership.member.permissions as Record<string, boolean>,
         ),
-      },
+      }, ORG_PERMISSION_REFINEMENTS),
       orgWide: true,
       hostRole: hostRole ?? ORG_ROLE_PERMISSION_BASE[role],
     }

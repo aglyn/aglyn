@@ -49,7 +49,7 @@ import { posStripe, posTerminalAvailable } from './pos-stripe'
  *
  * Gated like the register (`authorizePosStaff`: an admin or editor of the
  * site with `managePos`, on a plan with POS), because the readers it sells
- * are the register's.
+ * are the register's; a checkout also needs `posBuyHardware` (AGL-4047).
  *
  * THE SALE IS THE PLATFORM'S. The session is created with the platform key
  * and NO connected account, `transfer_data` or application fee: the merchant
@@ -139,11 +139,15 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const body = posRequestBody(req)
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  const action = String(body['action'] ?? '')
+  // BUYING IS ITS OWN KEY (AGL-4047): anyone who works the register sees what
+  // the shop offers and what this site ordered, and only a member holding
+  // "Buy point of sale hardware" — which follows `managePos` until a role or
+  // the member sets it — starts a checkout that the workspace pays for.
+  const gate = await authorizePosStaff(req, hostId, action === 'checkout' ? 'posBuyHardware' : undefined)
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
   const config = posHardwareConfig()
-  const action = String(body['action'] ?? '')
   try {
     switch (action) {
       case 'catalog':

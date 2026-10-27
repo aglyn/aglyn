@@ -7305,6 +7305,12 @@
         "ai.use",
         "ai.generate",
         "managePos",
+        "posSell",
+        "posRefund",
+        "posDiscount",
+        "posCashDrawer",
+        "posDevices",
+        "posBuyHardware",
         "outreach.use",
         "accounting.manage",
         "manageWaivers",
@@ -7317,6 +7323,12 @@
         "ai.use",
         "ai.generate",
         "managePos",
+        "posSell",
+        "posRefund",
+        "posDiscount",
+        "posCashDrawer",
+        "posDevices",
+        "posBuyHardware",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7334,6 +7346,12 @@
         "ai.use",
         "ai.generate",
         "managePos",
+        "posSell",
+        "posRefund",
+        "posDiscount",
+        "posCashDrawer",
+        "posDevices",
+        "posBuyHardware",
         "outreach.use",
         "accounting.manage",
         "manageWaivers",
@@ -7467,11 +7485,65 @@
         "scope": "site"
       },
       {
-        "description": "Open the POS page and record in-person sales.",
+        "description": "Open the point of sale. Each point of sale permission below follows this one unless a role or member sets it.",
         "group": "commerce",
         "key": "managePos",
         "label": "Use the point of sale",
         "pluginId": "commerce",
+        "scope": "org"
+      },
+      {
+        "description": "Ring up sales and take payment at the register, the kiosk and the point of sale apps.",
+        "group": "commerce",
+        "key": "posSell",
+        "label": "Sell at the register",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Refund point of sale orders at the register, up to its refund limit, and take returns and exchanges.",
+        "group": "commerce",
+        "key": "posRefund",
+        "label": "Refunds and returns",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Take a discount off a sale at the register. A shopper’s discount code and the store’s own promotions apply without it.",
+        "group": "commerce",
+        "key": "posDiscount",
+        "label": "Give discounts at the register",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Open and close shifts, record cash in and out, print shift reports and open the drawer without a sale.",
+        "group": "commerce",
+        "key": "posCashDrawer",
+        "label": "Cash drawer and shifts",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Add, change and remove card readers, receipt printers and customer displays, and set the reader screen.",
+        "group": "commerce",
+        "key": "posDevices",
+        "label": "Registers and devices",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Order card readers and other hardware from the hardware shop.",
+        "group": "commerce",
+        "key": "posBuyHardware",
+        "label": "Buy point of sale hardware",
+        "pluginId": "commerce",
+        "refines": "managePos",
         "scope": "org"
       },
       {

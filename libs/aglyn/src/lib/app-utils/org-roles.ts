@@ -18,6 +18,8 @@
 import {
   listPluginPermissionKeys,
   pluginPermissionDefaults,
+  pluginPermissionRefinements,
+  refinePermissionMap,
 } from '../plugin-manager/plugin-permissions'
 
 /**
@@ -152,9 +154,13 @@ export function resolveRolePermissions(
     ...ORG_ROLE_PERMISSION_KEYS,
     ...listPluginPermissionKeys(),
   ]
+  // The custom role's map, when one decides the base: a stored layer for the
+  // refinement pass below.
+  let customLayer: Partial<Record<string, unknown>> | undefined
   if (!builtIn) {
     const custom = customRoles?.[role ?? '']
     if (custom) {
+      customLayer = custom.permissions
       // Plugin tier defaults are re-laid under the viewer base (AGL-2474).
       // Rebuilding from `ORG_ROLE_TIER_PERMISSIONS.viewer` alone dropped every
       // plugin key off a custom-role member's map entirely — `managePos` came
@@ -175,7 +181,12 @@ export function resolveRolePermissions(
     const value = overrides?.[key]
     if (typeof value === 'boolean') permissions[key] = value
   }
-  return permissions
+  // A key that refines a broader one (AGL-4047) follows it where nothing
+  // set the key, and is never held without it.
+  return refinePermissionMap(permissions, pluginPermissionRefinements(), [
+    customLayer,
+    overrides,
+  ])
 }
 
 /** True for the fixed admin/editor/viewer ids. */

@@ -170,8 +170,12 @@ export function permissionChoiceCounts(
   return counts
 }
 
-/** Which layer decided a member's verdict for a key. */
-export type PermissionSource = 'role' | 'customRole' | 'override'
+/**
+ * Which layer decided a member's verdict for a key: their org role's default,
+ * their custom role, their own override, or (`refines`) the broader key a
+ * key refines, which it follows where nothing sets it (AGL-4047).
+ */
+export type PermissionSource = 'role' | 'customRole' | 'override' | 'refines'
 
 /** One key's verdict for a member, and where it came from. */
 export interface ExplainedPermission {
@@ -183,6 +187,13 @@ export interface ExplainedPermission {
   customRole?: boolean
   /** The member's own stored override, when set. */
   override?: boolean
+  /** The broader key this one refines, when it does. */
+  refines?: string
+  /**
+   * The broader key that holds this one back: set when a custom role or an
+   * override allows the key but the key it refines is not granted.
+   */
+  heldBy?: string
 }
 
 /**
@@ -204,17 +215,23 @@ export function explainOrgPermissions(
     const roleDefault = DEFAULT_ROLE_PERMISSIONS[role]?.[key] === true
     const fromRole = member?.roleId ? customRole?.permissions?.[key] : undefined
     const fromOverride = member?.permissions?.[key]
+    const isGranted = member ? granted[key] === true : false
+    const stored = typeof fromOverride === 'boolean' ? fromOverride : typeof fromRole === 'boolean' ? fromRole : undefined
     out[key] = {
-      granted: member ? granted[key] === true : false,
+      granted: isGranted,
       source:
         typeof fromOverride === 'boolean'
           ? 'override'
           : typeof fromRole === 'boolean'
             ? 'customRole'
-            : 'role',
+            : definition.refines
+              ? 'refines'
+              : 'role',
       roleDefault,
       ...(typeof fromRole === 'boolean' ? { customRole: fromRole } : {}),
       ...(typeof fromOverride === 'boolean' ? { override: fromOverride } : {}),
+      ...(definition.refines ? { refines: definition.refines } : {}),
+      ...(definition.refines && stored === true && !isGranted ? { heldBy: definition.refines } : {}),
     }
   }
   return out

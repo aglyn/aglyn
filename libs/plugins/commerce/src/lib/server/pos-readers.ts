@@ -41,10 +41,12 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const body = posRequestBody(req)
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  const action = String(body['action'] ?? '')
+  // Listing the readers is the register's; adding, renaming and removing one
+  // is setting it up (AGL-4047).
+  const gate = await authorizePosStaff(req, hostId, action === 'list' ? undefined : 'posDevices')
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
-  const action = String(body['action'] ?? '')
   try {
     switch (action) {
       case 'list':

@@ -30,6 +30,7 @@ import { raiseOrderEvent } from './order-events'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { createStripeRefund } from './stripe-refund'
 import { posRegisterRefundAuthority } from './pos-refund-authority'
+import { holdsPosPermission } from '../model/plugin-permissions'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -228,7 +229,9 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     const registerStaff =
       !workspaceAdmin &&
       (memberRole === 'admin' || memberRole === 'editor') &&
-      membership.permissions?.managePos === true
+      // The register's refund key (AGL-4047), which follows `managePos`
+      // unless a role or the member sets it.
+      holdsPosPermission(membership.permissions, 'posRefund')
     if (!workspaceAdmin && !registerStaff) {
       return res.status(403).json({
         error:

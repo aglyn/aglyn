@@ -35,6 +35,18 @@ plugin's permissions are listed while the plugin is on for the workspace. Owners
 admins and editors hold the point of sale by default and viewers don't, so a custom
 role can hand the register to a viewer or take it from an editor.
 
+### Point of sale permissions {#point-of-sale-permissions}
+
+**Use the point of sale** (`managePos`) opens the register. Six finer permissions
+split what it covers: **Sell at the register**, **Refunds and returns**, **Give
+discounts at the register**, **Cash drawer and shifts**, **Registers and devices**
+and **Buy point of sale hardware**. Each one follows **Use the point of sale**
+until a role or a member sets it, which is what its **Inherit** says, so a role
+that only turns the point of sale on or off works as it always has. Denying a finer
+permission narrows the register for that role; allowing one never opens the
+register by itself, because each also needs **Use the point of sale**. What each
+covers is in [Who can do what at the register](../../commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register).
+
 ### The AI permissions {#ai-permissions}
 
 Two keys decide who may spend the workspace's AI credits:

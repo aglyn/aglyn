@@ -49,6 +49,7 @@ import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
 import PosDevicesCard from './console/pos-devices-card.component'
 import PosHardwareCard from './console/pos-hardware-card.component'
+import { holdsPosPermission, posPermissionRefusal } from '../model/plugin-permissions'
 import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
 import ReturnsCard from './console/returns-card.component'
@@ -129,6 +130,12 @@ function sectionBody(
   section: CommerceConsoleSectionId,
   hostId: string,
   canManagePos: boolean,
+  /** The register's finer keys this page's cards ask (AGL-4047). */
+  pos: { canSetUpDevices: boolean; canBuyHardware: boolean; canCashDrawer: boolean } = {
+    canSetUpDevices: canManagePos,
+    canBuyHardware: canManagePos,
+    canCashDrawer: canManagePos,
+  },
 ): ReactNode {
   switch (section) {
     case 'catalog':
@@ -273,11 +280,19 @@ function sectionBody(
         <PosStaffPinsCard key="pins" hostId={hostId} />,
         // A register's printers, cash drawer and status (AGL-3619), one card
         // per register, after the list that names them.
-        <RegisterHardwareCards key="hardware" hostId={hostId} />,
+        <RegisterHardwareCards
+          key="hardware"
+          hostId={hostId}
+          blocked={{
+            ...(pos.canSetUpDevices ? {} : { devices: posPermissionRefusal('posDevices') }),
+            ...(pos.canCashDrawer ? {} : { drawer: posPermissionRefusal('posCashDrawer') }),
+          }}
+        />,
         <PosDevicesCard
           key="devices"
           hostId={hostId}
           canManagePos={canManagePos}
+          canSetUpDevices={pos.canSetUpDevices}
         />,
         // Card readers bought from the platform (AGL-4038), after the card
         // that registers them. Draws nothing until the deployment opens the
@@ -286,6 +301,7 @@ function sectionBody(
           key="hardware-shop"
           hostId={hostId}
           canManagePos={canManagePos}
+          canBuyHardware={pos.canBuyHardware}
         />,
       ])
     case 'channels':
@@ -353,6 +369,13 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
    * `mayWorkRegister` asks. The server stays the enforcement point.
    */
   const canManagePos = permissions?.managePos === true && hostRole?.canPublish === true
+  // The register's finer keys (AGL-4047), each following `managePos` unless a
+  // role or the member sets it — what the devices and hardware routes ask.
+  const pos = {
+    canSetUpDevices: canManagePos && holdsPosPermission(permissions, 'posDevices'),
+    canBuyHardware: canManagePos && holdsPosPermission(permissions, 'posBuyHardware'),
+    canCashDrawer: canManagePos && holdsPosPermission(permissions, 'posCashDrawer'),
+  }
 
   /*
    * Nothing, deliberately, while the redirect is in flight.
@@ -365,7 +388,7 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos)}
+      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos, pos)}
     </HubSections>
   )
 }

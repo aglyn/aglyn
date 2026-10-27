@@ -44,6 +44,7 @@ import {
   settlePromotionSlot,
 } from './promotion-hold'
 import { posMaxDiscountPct } from '../plugin-config'
+import { holdsPosPermission, posPermissionRefusal } from '../model/plugin-permissions'
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { notifyPosSaleCompleted } from './pos-sale'
 import { posSaleStamp } from './pos-sale-stamp'
@@ -211,6 +212,16 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.managePos) {
       return res.status(403).json({ error: 'Not permitted' })
+    }
+    // THE REGISTER'S FINER KEYS (AGL-4047), each following `managePos` until
+    // a role or the member sets it: ringing a sale at all, and the cashier's
+    // own percentage off. A shopper's code and the store's promotions are the
+    // merchant's, and apply without the discount key.
+    if (!holdsPosPermission(membership.permissions, 'posSell')) {
+      return res.status(403).json({ error: posPermissionRefusal('posSell') })
+    }
+    if (discountPct > 0 && !holdsPosPermission(membership.permissions, 'posDiscount')) {
+      return res.status(403).json({ error: posPermissionRefusal('posDiscount') })
     }
     const ownerOrg = await getOrgForHost(hostId)
     if (!Aglyn.checkEntitlement(ownerOrg?.org as any, 'pos')) {

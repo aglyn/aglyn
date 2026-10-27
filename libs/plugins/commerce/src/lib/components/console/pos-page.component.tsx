@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { posPermissionRefusal, type PosPermission } from '../../model/plugin-permissions'
 import {
   PRODUCT_LIST_BASE,
   PRODUCT_LIST_QUERY,
@@ -236,7 +237,21 @@ const PosOrdersZone = memo(function PosOrdersZone(props: {
   return <Renderer slot={POS_ORDERS_ZONE.id} hostId={hostId} orgId={undefined} registerId={registerId} />
 })
 
-export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
+export function PosConsolePage({ hostId, basePath, permissions }: ConsolePluginPageProps) {
+  /*
+   * The register's FINER keys (AGL-4047) — discounts, returns, the drawer —
+   * are read here, unlike `managePos` above: the shell admits anyone who may
+   * use the register, and these say which of its controls are theirs. Only an
+   * explicit refusal disables one; a map without the key follows `managePos`,
+   * which the shell already confirmed. The routes refuse either way.
+   */
+  const refusedReason = (key: PosPermission): string | undefined =>
+    permissions?.[key] === false ? posPermissionRefusal(key) : undefined
+  const blockedControls = {
+    returns: refusedReason('posRefund'),
+    shift: refusedReason('posCashDrawer'),
+  }
+  const discountBlocked = refusedReason('posDiscount')
   const WidgetSlot = useConsoleWidgetSlot()
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -815,6 +830,7 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
           registerId={registerId}
           {...(registerName ? { registerName } : {})}
           cashier={cashier}
+          blocked={blockedControls}
           onExchange={(returned) =>
             setCustomer(
               returned.email || returned.name
@@ -825,6 +841,7 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
         />
       ) : null}
       <PosCartPanel
+        {...(discountBlocked ? { discountBlocked } : {})}
         lines={sale ? saleLines : lines}
         shortfalls={sale ? [] : shortfalls}
         onQuantity={(index, quantity) =>

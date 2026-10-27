@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import type { ReactNode } from 'react'
 import { Box, Button, ButtonBase, IconButton, Stack, TextField, Typography } from '@mui/material'
 import type { ModifierSelection, StockShortfall } from '../../../model'
@@ -47,6 +48,11 @@ export interface PosCartPanelProps {
   customer?: ReactNode
   /** Lines can no longer change: a sale is open against them. */
   locked: boolean
+  /**
+   * Why this member may not give a discount (AGL-4047): the "Give discounts
+   * at the register" key refused. The field stays, disabled with the reason.
+   */
+  discountBlocked?: string
 }
 
 /**
@@ -131,16 +137,18 @@ export function PosCartPanel(props: PosCartPanelProps) {
         )}
       </Box>
       <Stack direction="row" spacing={1}>
-        <TextField
-          label="Discount %"
-          value={props.discountPct || ''}
-          onChange={(event) =>
-            props.onDiscountPct(Math.min(100, Math.max(0, Number(event.target.value) || 0)))
-          }
-          disabled={locked}
-          sx={{ width: 120 }}
-          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-        />
+        <BlockedControl blocked={Boolean(props.discountBlocked)} reason={props.discountBlocked ?? ''}>
+          <TextField
+            label="Discount %"
+            value={props.discountPct || ''}
+            onChange={(event) =>
+              props.onDiscountPct(Math.min(100, Math.max(0, Number(event.target.value) || 0)))
+            }
+            disabled={locked}
+            sx={{ width: 120 }}
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          />
+        </BlockedControl>
       </Stack>
       {props.customer}
     </Stack>

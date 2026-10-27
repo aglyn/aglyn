@@ -18,6 +18,7 @@
 
 import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -356,8 +357,12 @@ function PrinterRowView(props: {
   now: number
   call: ReturnType<typeof usePrintersApi>
   onSettings: (printer: PrinterRow) => void
+  /** Why the viewer may not set printers up, or open the drawer (AGL-4047). */
+  blocked?: RegisterHardwareBlocked
 }) {
   const { printer, now, call, onSettings } = props
+  const devices = props.blocked?.devices
+  const drawer = props.blocked?.drawer
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const state = CommerceModel.printerDisplayState(printer.status, now)
@@ -410,20 +415,28 @@ function PrinterRowView(props: {
           color={STATE_COLOR[state]}
           label={label}
         />
-        <Button size="small" onClick={() => send('test')}>
-          {'Test print'}
-        </Button>
-        {printer.kickDrawer ? (
-          <Button size="small" onClick={() => send('drawer')}>
-            {'Open drawer'}
+        <BlockedControl blocked={Boolean(devices)} reason={devices ?? ''}>
+          <Button size="small" onClick={() => send('test')}>
+            {'Test print'}
           </Button>
+        </BlockedControl>
+        {printer.kickDrawer ? (
+          <BlockedControl blocked={Boolean(drawer)} reason={drawer ?? ''}>
+            <Button size="small" onClick={() => send('drawer')}>
+              {'Open drawer'}
+            </Button>
+          </BlockedControl>
         ) : null}
-        <Button size="small" onClick={() => onSettings(printer)}>
-          {'Settings'}
-        </Button>
-        <Button size="small" color="error" onClick={remove}>
-          {'Remove'}
-        </Button>
+        <BlockedControl blocked={Boolean(devices)} reason={devices ?? ''}>
+          <Button size="small" onClick={() => onSettings(printer)}>
+            {'Settings'}
+          </Button>
+        </BlockedControl>
+        <BlockedControl blocked={Boolean(devices)} reason={devices ?? ''}>
+          <Button size="small" color="error" onClick={remove}>
+            {'Remove'}
+          </Button>
+        </BlockedControl>
       </Stack>
       <Typography variant="caption" color="text.secondary">
         {printer.status?.atMs
@@ -437,10 +450,21 @@ function PrinterRowView(props: {
   )
 }
 
+/**
+ * Why the viewer may not do a printer action (AGL-4047), by the register key
+ * it needs: setting printers up (`posDevices`) and opening the drawer without
+ * a sale (`posCashDrawer`). Absent: allowed.
+ */
+export interface RegisterHardwareBlocked {
+  devices?: string
+  drawer?: string
+}
+
 export interface RegisterHardwareCardProps {
   hostId: string
   registerId: string
   registerName: string
+  blocked?: RegisterHardwareBlocked
 }
 
 type ReaderRow = {
@@ -549,6 +573,7 @@ RegisterOtherDevices.displayName = 'RegisterOtherDevices'
 
 export function RegisterHardwareCard(props: RegisterHardwareCardProps) {
   const { hostId, registerId, registerName } = props
+  const devicesBlocked = props.blocked?.devices
   const firestore = useFirestore()
   const call = usePrintersApi(hostId)
   const now = useNow(15_000)
@@ -644,13 +669,15 @@ export function RegisterHardwareCard(props: RegisterHardwareCardProps) {
       help={pluginDocsHelp('posHardware', { anchor: '#receipt-printers' })}
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            onClick={openAdd}
-            disabled={printers.length >= 4}
-          >
-            {'Add printer'}
-          </Button>
+          <BlockedControl blocked={Boolean(devicesBlocked)} reason={devicesBlocked ?? ''}>
+            <Button
+              size="small"
+              onClick={openAdd}
+              disabled={printers.length >= 4}
+            >
+              {'Add printer'}
+            </Button>
+          </BlockedControl>
         ),
       }}
       contentGutterX
@@ -671,6 +698,7 @@ export function RegisterHardwareCard(props: RegisterHardwareCardProps) {
               now={now}
               call={call}
               onSettings={openSettings}
+              {...(props.blocked ? { blocked: props.blocked } : {})}
             />
           ))
         )}
@@ -791,7 +819,7 @@ export function RegisterHardwareCard(props: RegisterHardwareCardProps) {
 RegisterHardwareCard.displayName = 'RegisterHardwareCard'
 
 /** One Hardware card per register on the site. */
-export function RegisterHardwareCards(props: { hostId: string }) {
+export function RegisterHardwareCards(props: { hostId: string; blocked?: RegisterHardwareBlocked }) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: registerDocs } = useFirestoreCollection<{
@@ -814,6 +842,7 @@ export function RegisterHardwareCards(props: { hostId: string }) {
           hostId={hostId}
           registerId={register.$id}
           registerName={register.name || 'Register'}
+          {...(props.blocked ? { blocked: props.blocked } : {})}
         />
       ))}
     </Stack>

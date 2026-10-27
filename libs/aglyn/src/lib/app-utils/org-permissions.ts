@@ -20,7 +20,11 @@ import {
   listPluginCatalogPermissions,
   subscribePluginEntitlements,
 } from '../plugin-manager/plugin-entitlements'
-import { subscribePluginPermissions } from '../plugin-manager/plugin-permissions'
+import {
+  refinePermissionMap,
+  subscribePluginPermissions,
+  type PermissionRefinement,
+} from '../plugin-manager/plugin-permissions'
 import { ORG_ROLE_PERMISSION_KEYS } from './org-roles'
 import {
   CORE_ORG_PERMISSION_ENTRIES,
@@ -90,6 +94,12 @@ export interface OrgPermissionDefinition {
   roleDefaults: Readonly<Record<OrgRole, boolean>>
   /** Each host role's verdict, for a `site` key. */
   hostRoleDefaults?: Readonly<Record<string, boolean>>
+  /**
+   * The broader key this one is a finer part of (AGL-4047): never granted
+   * without it, and following it where no custom role or override sets this
+   * key. Only a plugin's key refines, and only a key the catalog holds.
+   */
+  refines?: OrgPermission
 }
 
 /**
@@ -174,6 +184,13 @@ export const ORG_PERMISSION_GROUPS: readonly OrgPermissionGroup[] = []
  */
 export const TIER_PERMISSION_KEYS: readonly OrgPermission[] = []
 
+/**
+ * Every catalog key that refines a broader one, with that key (AGL-4047).
+ * Live, like `ORG_PERMISSIONS`. A resolver lays it over its map with
+ * `refinePermissionMap`.
+ */
+export const ORG_PERMISSION_REFINEMENTS: readonly PermissionRefinement[] = []
+
 const NO_PERMISSIONS = {} as Record<OrgPermission, boolean>
 
 /**
@@ -244,6 +261,7 @@ function syncCatalog(): void {
       scope: declared.hostRoleDefaults ? 'site' : 'org',
       roleDefaults: declared.roleDefaults,
       ...(declared.hostRoleDefaults ? { hostRoleDefaults: declared.hostRoleDefaults } : {}),
+      ...(declared.refines ? { refines: declared.refines } : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {
@@ -251,6 +269,20 @@ function syncCatalog(): void {
     }
   }
   const keys = definitions.map((definition) => definition.key)
+  const known = new Set<string>(keys)
+  // A refinement of a key the catalog does not hold refines nothing, and is
+  // dropped from the definition so no editor offers a link to nowhere.
+  for (const definition of definitions) {
+    if (definition.refines && (!known.has(definition.refines) || definition.refines === definition.key)) {
+      delete definition.refines
+    }
+  }
+  replaceItems(
+    ORG_PERMISSION_REFINEMENTS,
+    definitions
+      .filter((definition) => definition.refines)
+      .map((definition) => [definition.key, definition.refines as string] as const),
+  )
   replaceItems(ORG_PERMISSIONS, definitions)
   replaceItems(ORG_PERMISSION_KEYS, keys)
   replaceItems(
@@ -341,7 +373,12 @@ export function resolveOrgPermissions(
       if (typeof value === 'boolean') merged[key] = value
     }
   }
-  return merged
+  // A key that refines a broader one (AGL-4047) follows it where neither
+  // layer set the key, and is never held without it.
+  return refinePermissionMap(merged, ORG_PERMISSION_REFINEMENTS, [
+    member.roleId ? customRole?.permissions : undefined,
+    member.permissions,
+  ])
 }
 
 /**

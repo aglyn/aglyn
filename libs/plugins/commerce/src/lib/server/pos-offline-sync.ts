@@ -914,7 +914,7 @@ export async function handlePosOfflineSync(
           Object.entries(req.query ?? {}).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]),
         )
       : posOpsBody(req)
-  const gate = await authorizePosOps(deps, req, body['hostId'])
+  const gate = await authorizePosOps(deps, req, body['hostId'], 'posSell')
   if ('error' in gate) return { status: gate.status, body: { error: gate.error } }
   const staff = gate.staff
   if (req.method === 'GET') {

@@ -393,7 +393,13 @@ async function staffAction(
   res: Parameters<PluginApiHandler>[1],
 ) {
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  // Pairing a customer display and revoking one is setting the register up
+  // (AGL-4047); showing a sale on a paired display is part of the sale.
+  const gate = await authorizePosStaff(
+    req,
+    hostId,
+    action === 'pairing-code' || action === 'revoke' ? 'posDevices' : undefined,
+  )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const registerId = String(body['registerId'] ?? '')
   if (!(await registerExists(hostId, registerId))) {

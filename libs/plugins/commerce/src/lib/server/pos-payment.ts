@@ -95,7 +95,7 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  const gate = await authorizePosStaff(req, hostId, 'posSell')
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   let staff = gate.staff
   const action = String(body['action'] ?? '')

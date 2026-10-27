@@ -2291,6 +2291,32 @@ describe('the managePos permission gates the register (AGL-2474)', () => {
     expect(orderDocs()).toHaveLength(1)
   })
 
+  it('refuses a sale to a member refused the sell key, and a discount to one refused the discount key (AGL-4047)', async () => {
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    const holding = (permissions: Record<string, boolean>) =>
+      mockResolveOrgPermissions.mockResolvedValue({
+        orgId: 'org-1',
+        role: 'admin',
+        isOwner: true,
+        permissions,
+        orgWide: true,
+        hostRole: 'admin',
+      } as any)
+    holding({ managePos: true, posSell: false })
+    const noSale = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(noSale.status).toBe(403)
+    expect(noSale.body.error).toContain('Sell at the register')
+    holding({ managePos: true, posDiscount: false })
+    const noDiscount = await post({ payment: 'cash', cashReceivedCents: 500, discountPct: 10 })
+    expect(noDiscount.status).toBe(403)
+    expect(noDiscount.body.error).toContain('Give discounts at the register')
+    expect(orderDocs()).toHaveLength(0)
+    // Without a discount the same member rings the sale.
+    const sale = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(sale.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+  })
+
   it('resolves the permission against the HOST in context', async () => {
     docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
     await post({ payment: 'cash', cashReceivedCents: 500 })

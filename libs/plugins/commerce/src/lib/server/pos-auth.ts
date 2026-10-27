@@ -20,6 +20,11 @@ import type { PluginApiRequest } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  holdsPosPermission,
+  posPermissionRefusal,
+  type PosPermission,
+} from '../model/plugin-permissions'
 
 /** Who is working the register, once the gate has admitted them. */
 export interface PosStaff {
@@ -43,10 +48,14 @@ export type PosStaffGate =
  *    added later is refused until someone decides otherwise (AGL-2262).
  * 3. `managePos` on the member's resolved permissions (AGL-2474), and the
  *    `pos` plan entitlement on the org that owns the site.
+ * 4. When the route names one, the finer register key its action needs
+ *    (AGL-4047): `posSell`, `posDevices`, `posBuyHardware` and the rest,
+ *    each following `managePos` unless a role or the member sets it.
  */
 export async function authorizePosStaff(
   req: PluginApiRequest,
   hostId: string,
+  permission?: PosPermission,
 ): Promise<PosStaffGate> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -75,6 +84,9 @@ export async function authorizePosStaff(
   const membership = await resolveOrgPermissions(uid, { hostId })
   if (!membership.permissions.managePos) {
     return { ok: false, status: 403, error: 'Not permitted' }
+  }
+  if (permission && !holdsPosPermission(membership.permissions, permission)) {
+    return { ok: false, status: 403, error: posPermissionRefusal(permission) }
   }
   const ownerOrg = await getOrgForHost(hostId)
   if (!Aglyn.checkEntitlement(ownerOrg?.org as any, 'pos')) {
