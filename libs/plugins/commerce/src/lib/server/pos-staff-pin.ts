@@ -21,6 +21,7 @@ import {
   POS_PIN_MAX_ATTEMPTS,
   posPinProblem,
 } from '../model/commerce-pos-ops'
+import { holdsPosPermission } from '../model/plugin-permissions'
 import { hashMemberPassword, verifyMemberPassword } from './membership'
 import {
   authorizePosOps,
@@ -194,8 +195,12 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
       const host = await staff.hostRef.get()
       const role = (host.get('memberRoles') ?? {})[memberUid]
       const membership = await deps.membership(memberUid, staff.hostId)
+      // A cashier switched in by PIN rings sales, so they need the register's
+      // sell key too (AGL-4047), not only the register.
       const allowed =
-        purpose === 'manager' ? isPosManager(role, membership) : mayWorkRegister(role, membership)
+        purpose === 'manager'
+          ? isPosManager(role, membership)
+          : mayWorkRegister(role, membership) && holdsPosPermission(membership.permissions, 'posSell')
       if (!allowed) {
         return {
           status: 403,

@@ -33,6 +33,7 @@ import {
 import { doc } from 'firebase/firestore'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useCallback, useState } from 'react'
 import {
   POS_CASH_EVENT_LABELS,
@@ -56,6 +57,12 @@ export interface PosShiftPanelProps {
   registerName?: string
   /** The PIN-switched cashier's assertion, so the shift names them. */
   cashierAssertion?: string
+  /**
+   * Why this member may not run the drawer (AGL-4047): the "Cash drawer and
+   * shifts" key refused. The shift still shows; its buttons are disabled
+   * with this reason. Absent: allowed.
+   */
+  blocked?: string
 }
 
 type DialogKind = 'open' | 'cash' | 'report' | 'close' | null
@@ -203,43 +210,51 @@ export function PosShiftPanel(props: PosShiftPanelProps) {
                 minute: '2-digit',
               })}`}
             />
-            <Button
-              size="small"
-              onClick={() => {
-                setEventKey(newPosAttemptKey())
-                setDialog('cash')
-              }}
-            >
-              {'Cash in/out'}
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                setReport(null)
-                setDialog('report')
-                void loadReport()
-              }}
-            >
-              {'X report'}
-            </Button>
-            <Button
-              size="small"
-              color="warning"
-              onClick={() => {
-                setReport(null)
-                setDialog('close')
-                void loadReport()
-              }}
-            >
-              {'Close shift'}
-            </Button>
+            <BlockedControl blocked={Boolean(props.blocked)} reason={props.blocked ?? ''}>
+              <Button
+                size="small"
+                onClick={() => {
+                  setEventKey(newPosAttemptKey())
+                  setDialog('cash')
+                }}
+              >
+                {'Cash in/out'}
+              </Button>
+            </BlockedControl>
+            <BlockedControl blocked={Boolean(props.blocked)} reason={props.blocked ?? ''}>
+              <Button
+                size="small"
+                onClick={() => {
+                  setReport(null)
+                  setDialog('report')
+                  void loadReport()
+                }}
+              >
+                {'X report'}
+              </Button>
+            </BlockedControl>
+            <BlockedControl blocked={Boolean(props.blocked)} reason={props.blocked ?? ''}>
+              <Button
+                size="small"
+                color="warning"
+                onClick={() => {
+                  setReport(null)
+                  setDialog('close')
+                  void loadReport()
+                }}
+              >
+                {'Close shift'}
+              </Button>
+            </BlockedControl>
           </>
         ) : (
           <>
             <Chip size="small" label="No shift open" />
-            <Button size="small" variant="outlined" onClick={() => setDialog('open')} disabled={!registerId}>
-              {'Open shift'}
-            </Button>
+            <BlockedControl blocked={Boolean(props.blocked)} reason={props.blocked ?? ''}>
+              <Button size="small" variant="outlined" onClick={() => setDialog('open')} disabled={!registerId}>
+                {'Open shift'}
+              </Button>
+            </BlockedControl>
           </>
         )}
       </Stack>

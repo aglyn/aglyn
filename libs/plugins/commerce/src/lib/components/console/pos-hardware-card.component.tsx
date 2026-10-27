@@ -18,6 +18,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -82,7 +83,18 @@ export interface PosHardwareCardProps {
    * the register's hardware, so a viewer who may not run it is not shown it.
    */
   canManagePos?: boolean
+  /**
+   * Whether the viewer may start a checkout (AGL-4047): the "Buy point of
+   * sale hardware" key on top of `canManagePos`, which the route asks of a
+   * checkout. Without it the card still shows the shop and the orders, with
+   * Check out disabled and the reason. Absent follows `canManagePos`.
+   */
+  canBuyHardware?: boolean
 }
+
+/** Why Check out is not offered to someone who works the register. */
+const BUY_KEY_REASON =
+  'Only a member with the "Buy point of sale hardware" permission can place an order. Ask an organization admin.'
 
 /**
  * The Hardware card (AGL-4038): Stripe card readers and accessories sold by
@@ -94,7 +106,11 @@ export interface PosHardwareCardProps {
  * on the workspace can take. The route answers `available: false` until
  * every price, the markup and the shipping figures are configured.
  */
-export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCardProps) {
+export function PosHardwareCard({
+  hostId,
+  canManagePos = false,
+  canBuyHardware = canManagePos,
+}: PosHardwareCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [catalog, setCatalog] = useState<PosHardwareCatalog | null>(null)
@@ -264,14 +280,16 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={busy || !lines.length || !shipping}
-            onClick={() => void checkout()}
-          >
-            {'Check out'}
-          </Button>
+          <BlockedControl blocked={!canBuyHardware} reason={BUY_KEY_REASON}>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={busy || !lines.length || !shipping}
+              onClick={() => void checkout()}
+            >
+              {'Check out'}
+            </Button>
+          </BlockedControl>
         ),
       }}
       contentGutterX

@@ -27,7 +27,10 @@ import {
   searchOrgPermissions,
   withPermissionChoice,
 } from '@aglyn/aglyn/app-utils/org-permission-editor'
-import type { OrgPermissionDefinition } from '@aglyn/aglyn/app-utils/org-permissions'
+import {
+  orgPermissionLabel,
+  type OrgPermissionDefinition,
+} from '@aglyn/aglyn/app-utils/org-permissions'
 import {
   PermissionChoiceList,
   type PermissionChoiceSection,
@@ -61,8 +64,14 @@ interface RoleDraft extends AglynOrgCustomRole {
 
 const ROLE_WORDS = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: 'Viewer' } as const
 
-/** What "inherit" means for a key in a custom role: the org roles that hold it by default. */
+/**
+ * What "inherit" means for a key in a custom role: the org roles that hold it
+ * by default, or, for a key that refines a broader one (AGL-4047), that key.
+ */
 function inheritHint(definition: OrgPermissionDefinition): string {
+  if (definition.refines) {
+    return `Inherit: follows "${orgPermissionLabel(definition.refines)}"`
+  }
   const holders = (Object.keys(ROLE_WORDS) as Array<keyof typeof ROLE_WORDS>)
     .filter((role) => definition.roleDefaults[role])
     .map((role) => ROLE_WORDS[role])

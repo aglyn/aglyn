@@ -664,11 +664,12 @@ export const posReaderSplashHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const body = posRequestBody(req)
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  const action = String(body['action'] ?? '')
+  // Changing what the readers show is setting them up (AGL-4047); reading it is not.
+  const gate = await authorizePosStaff(req, hostId, action === 'save' ? 'posDevices' : undefined)
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
   const org = staff.org ? { ...staff.org, id: staff.orgId } : null
-  const action = String(body['action'] ?? '')
   try {
     if (action === 'status') return res.status(200).json(await currentStatus(hostId, org))
     if (action !== 'save') return res.status(400).json({ error: 'Unknown action' })

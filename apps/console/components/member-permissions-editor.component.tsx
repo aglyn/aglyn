@@ -17,7 +17,12 @@
 
 'use client'
 
-import { isOrgWideMember, type AglynOrgCustomRole, type AglynOrgMember } from '@aglyn/aglyn'
+import {
+  isOrgWideMember,
+  orgPermissionLabel,
+  type AglynOrgCustomRole,
+  type AglynOrgMember,
+} from '@aglyn/aglyn'
 import {
   explainOrgPermissions,
   groupOrgPermissions,
@@ -64,8 +69,14 @@ function sourceWords(
   roleWord: string,
   customRoleName: string | undefined,
 ): string {
+  // A finer key held back by the broader one it refines (AGL-4047): the
+  // allow stored for it waits on that key.
+  if (explained.heldBy) return `needs "${orgPermissionLabel(explained.heldBy)}"`
   if (explained.source === 'override') return 'set for this member'
   if (explained.source === 'customRole') return `from the "${customRoleName ?? 'custom'}" role`
+  if (explained.source === 'refines' && explained.refines) {
+    return `follows "${orgPermissionLabel(explained.refines)}"`
+  }
   return `from the ${roleWord} role`
 }
 
@@ -74,6 +85,7 @@ function inheritWords(explained: ExplainedPermission, roleWord: string, customRo
   if (typeof explained.customRole === 'boolean') {
     return `Inherit: ${explained.customRole ? 'allowed' : 'denied'} by the "${customRoleName ?? 'custom'}" role`
   }
+  if (explained.refines) return `Inherit: follows "${orgPermissionLabel(explained.refines)}"`
   return `Inherit: ${explained.roleDefault ? 'allowed' : 'not allowed'} for the ${roleWord} role`
 }
 

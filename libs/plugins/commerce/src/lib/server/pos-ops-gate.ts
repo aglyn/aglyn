@@ -26,6 +26,11 @@ import {
   POS_MANAGER_ASSERTION_TTL_MS,
 } from '../model/commerce-pos-ops'
 import type { PrintReport } from '../model/commerce-printers'
+import {
+  holdsPosPermission,
+  posPermissionRefusal,
+  type PosPermission,
+} from '../model/plugin-permissions'
 import { posOpsSettings, type PosOpsSettings } from '../pos-ops-config'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
@@ -46,8 +51,19 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
 export interface PosOpsMembership {
   orgWide: boolean
   hostRole: string | null
-  permissions: { managePos?: boolean }
+  /** `managePos`, and the register's finer keys (AGL-4047) as resolved. */
+  permissions: { managePos?: boolean } & Partial<Record<PosPermission, boolean>>
 }
+
+/** The register's finer keys a membership carries (AGL-4047). */
+const POS_PERMISSION_KEYS: readonly PosPermission[] = [
+  'posSell',
+  'posRefund',
+  'posDiscount',
+  'posCashDrawer',
+  'posDevices',
+  'posBuyHardware',
+]
 
 export interface PosOpsDeps {
   firestore(): FirebaseFirestore.Firestore
@@ -99,7 +115,16 @@ export function defaultPosOpsDeps(): PosOpsDeps {
       return {
         orgWide: resolved.orgWide === true,
         hostRole: resolved.hostRole ?? null,
-        permissions: { managePos: resolved.permissions?.managePos === true },
+        permissions: {
+          managePos: resolved.permissions?.managePos === true,
+          // Each finer key as resolved; absent when the map carries none,
+          // which `holdsPosPermission` reads as following `managePos`.
+          ...Object.fromEntries(
+            POS_PERMISSION_KEYS.filter(
+              (key) => typeof resolved.permissions?.[key] === 'boolean',
+            ).map((key) => [key, resolved.permissions[key] === true]),
+          ),
+        },
       }
     },
     orgForHost: async (hostId) => {
@@ -184,7 +209,10 @@ function cleanId(value: unknown): string {
 
 export { cleanId as posOpsCleanId }
 
-/** Whether a member may work this site's register, by role and permission. */
+/**
+ * Whether a member may work this site's register, by role and permission.
+ * A finer action also needs its own key: `holdsPosPermission`.
+ */
 export function mayWorkRegister(memberRole: unknown, membership: PosOpsMembership): boolean {
   return (memberRole === 'admin' || memberRole === 'editor') && membership.permissions.managePos === true
 }
@@ -198,10 +226,16 @@ export function isPosManager(memberRole: unknown, membership: PosOpsMembership):
   return memberRole === 'admin' && membership.orgWide && membership.hostRole === 'admin'
 }
 
+/**
+ * The register's gate for one route. `permission` names the finer register
+ * key the action needs (AGL-4047) on top of working the register at all; a
+ * member without it is answered 403 naming it.
+ */
 export async function authorizePosOps(
   deps: PosOpsDeps,
   req: PluginApiRequest,
   rawHostId: unknown,
+  permission?: PosPermission,
 ): Promise<PosOpsGate> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : ''
@@ -222,6 +256,9 @@ export async function authorizePosOps(
   const membership = await deps.membership(uid, hostId)
   if (!mayWorkRegister(memberRole, membership)) {
     return { ok: false, status: 403, error: 'Not permitted' }
+  }
+  if (permission && !holdsPosPermission(membership.permissions, permission)) {
+    return { ok: false, status: 403, error: posPermissionRefusal(permission) }
   }
   const owner = await deps.orgForHost(hostId)
   if (!deps.posEntitled(owner?.org ?? null)) {

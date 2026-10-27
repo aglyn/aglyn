@@ -148,6 +148,18 @@ describe('the Hardware card', () => {
     expect(within(wisepos).getByText('Stripe may stop selling this reader.')).toBeTruthy()
   })
 
+  it('shows the shop with Check out disabled and the reason to someone without the buy key (AGL-4047)', async () => {
+    render(<PosHardwareCard hostId="host-1" canManagePos canBuyHardware={false} />)
+    await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
+    fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('2'))
+    const checkout = screen.getByRole('button', { name: 'Check out' }) as HTMLButtonElement
+    expect(checkout.disabled).toBe(true)
+    expect(screen.getByLabelText(/Buy point of sale hardware/)).toBeTruthy()
+    fireEvent.click(checkout)
+    expect(calls.find((call) => call.body?.action === 'checkout')).toBeUndefined()
+  })
+
   it('totals the basket and starts Checkout with the basket and speed', async () => {
     render(<PosHardwareCard hostId="host-1" canManagePos />)
     await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())

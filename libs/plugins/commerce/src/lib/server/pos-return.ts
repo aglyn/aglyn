@@ -298,7 +298,9 @@ interface TenderResult {
 export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest): Promise<Outcome> {
   if (req.method !== 'POST') return { status: 405, body: { error: 'Method not allowed' } }
   const body = posOpsBody(req)
-  const gate = await authorizePosOps(deps, req, body['hostId'])
+  // Finding a sale to take back and refunding it are both the refund key's
+  // (AGL-4047).
+  const gate = await authorizePosOps(deps, req, body['hostId'], 'posRefund')
   if ('error' in gate) return { status: gate.status, body: { error: gate.error } }
   const staff = gate.staff
   const action = String(body['action'] ?? '')

@@ -181,6 +181,15 @@ describe('the POS devices card', () => {
     expect(screen.getByText(/Only an admin or editor/)).toBeTruthy()
   })
 
+  it('disables setting devices up, with the reason, for someone without the devices key (AGL-4047)', async () => {
+    render(<PosDevicesCard hostId="host-1" canManagePos canSetUpDevices={false} />)
+    const pair = await screen.findByRole('button', { name: 'Pair display to Front counter' })
+    expect((pair as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText(/"Registers and devices" permission/).length).toBeGreaterThan(0)
+    await waitFor(() => expect(screen.getByText('Add card reader')).toBeTruthy())
+    expect((screen.getByRole('button', { name: 'Add card reader' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('disables pairing with a reason on a plan without POS', async () => {
     orgPlan.org = { plan: 'free' }
     render(<PosDevicesCard hostId="host-1" canManagePos />)

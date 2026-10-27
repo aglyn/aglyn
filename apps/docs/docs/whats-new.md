@@ -66,6 +66,11 @@ for the how-to.
   **Permissions** column. Each permission shows its final verdict and whether it
   comes from the role, the custom role or this member, and every change is
   recorded in the activity log.
+- **[Finer point of sale permissions](commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register)** —
+  **Use the point of sale** now splits into six permissions you can set in a custom
+  role or for one member: sell, refunds and returns, discounts, the cash drawer and
+  shifts, registers and devices, and buying hardware. Each follows **Use the point
+  of sale** until you set it, so nobody's access changes until you narrow it.
 - **[Per-site permissions for collaborators](workspace-and-billing/teams-and-roles/overview.md#collaborator-ai-access)** —
   a site's **Users** card opens each collaborator's **Permissions** on that site,
   every per-site permission (AI's two among them) set to **Allow**, **Deny** or the

@@ -40,6 +40,8 @@ import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 const sharp = require('sharp')
 
 let mockManagePos = true
+/** The finer "Registers and devices" key (AGL-4047); undefined follows `managePos`. */
+let mockDevices: boolean | undefined
 let mockOrg: Record<string, any> = {}
 let mockBlocked: 'locked' | 'quarantined' | null = null
 let mockPublicIp: string | null = '93.184.216.34'
@@ -55,7 +57,9 @@ const TOKENS: Record<string, Record<string, unknown>> = {
 }
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: mockManagePos } }),
+  resolveOrgPermissions: async () => ({
+    permissions: { managePos: mockManagePos, ...(mockDevices === undefined ? {} : { posDevices: mockDevices }) },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => {
   const fake = jest.requireActual('../testing/fake-firestore')
@@ -300,6 +304,7 @@ beforeEach(() => {
   refuseConfigurations = false
   externalImage = null
   mockManagePos = true
+  mockDevices = undefined
   mockBlocked = null
   mockPublicIp = '93.184.216.34'
   mockAudit.mockClear()
@@ -686,6 +691,16 @@ describe('the POS devices card’s setting', () => {
     expect((await store({ action: 'status' }, 'viewer')).status).toBe(403)
     mockManagePos = false
     expect((await store({ action: 'status' })).status).toBe(403)
+  })
+
+  it('is read by anyone at the register and changed only with the devices key (AGL-4047)', async () => {
+    mockDevices = false
+    expect((await store({ action: 'status' })).status).toBe(200)
+    const refused = await store({ action: 'save', choice: 'platform' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Registers and devices')
+    expect(stripeCalls).toHaveLength(0)
+    mockDevices = undefined
   })
 
   it('reports the default choice and what it would use', async () => {

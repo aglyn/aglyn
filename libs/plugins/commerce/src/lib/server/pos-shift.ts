@@ -38,6 +38,7 @@ import {
   type PosOpsDeps,
   type PosOpsStaff,
 } from './pos-ops-gate'
+import { holdsPosPermission, posPermissionRefusal } from '../model/plugin-permissions'
 
 /*==========================================
  * SHIFTS AND THE CASH DRAWER (AGL-3609): `POST /api/commerce/pos-shift`.
@@ -135,6 +136,11 @@ export async function handlePosShift(
   const registerId = register.ref.id
   const { cashierId } = await resolvePosCashier(deps, staff, registerId, body['cashierAssertion'])
   const action = String(body['action'] ?? '')
+  // Opening and closing a shift, cash in and out and the shift's reports are
+  // the cash drawer's (AGL-4047); which shift is open is the register's.
+  if (action !== 'current' && !holdsPosPermission(staff.membership.permissions, 'posCashDrawer')) {
+    return { status: 403, body: { error: posPermissionRefusal('posCashDrawer') } }
+  }
   const firestore = deps.firestore()
   const shifts = register.ref.collection('shifts')
 

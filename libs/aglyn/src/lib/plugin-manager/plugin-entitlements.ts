@@ -183,6 +183,12 @@ export interface PluginOrgPermissionDeclaration {
   group?: string
   /** The heading of a group of the plugin's own; absent: the plugin's catalog label. */
   groupLabel?: string
+  /**
+   * A broader key this one is a finer part of (AGL-4047): never granted
+   * without it, and following it where nothing sets this key. See
+   * `PluginPermission.refines`.
+   */
+  refines?: string
 }
 
 /**
@@ -202,6 +208,8 @@ export interface PluginCatalogPermission {
   group: string
   groupLabel: string
   source: 'catalog' | 'tier'
+  /** The broader key this one refines, when it does. */
+  refines?: string
 }
 
 export interface PluginEntitlementRegistration {
@@ -420,6 +428,7 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       group: permission.group ?? permission.pluginId,
       groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
       source: 'catalog',
+      ...(permission.refines ? { refines: permission.refines } : {}),
     })
   }
   for (const permission of listPluginPermissions()) {
@@ -432,6 +441,7 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       group: permission.group ?? permission.pluginId,
       groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
       source: 'tier',
+      ...(permission.refines ? { refines: permission.refines } : {}),
     })
   }
   return [...byPlugin.keys()]

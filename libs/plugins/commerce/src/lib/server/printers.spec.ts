@@ -21,7 +21,12 @@
 import { MemoryFirestore } from '../testing/memory-firestore'
 
 const store = { current: new MemoryFirestore() }
-const gate = { managePos: true, entitled: true }
+const gate = {
+  managePos: true,
+  entitled: true,
+  /** The register's finer keys (AGL-4047); absent follows `managePos`. */
+  finer: {} as Record<string, boolean>,
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -41,7 +46,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: jest.fn(() => gate.entitled),
 }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: jest.fn(async () => ({ permissions: { managePos: gate.managePos } })),
+  resolveOrgPermissions: jest.fn(async () => ({ permissions: { managePos: gate.managePos, ...gate.finer } })),
 }))
 const signing = { configured: true }
 jest.mock('./download', () => ({
@@ -89,6 +94,7 @@ beforeEach(() => {
   signing.configured = true
   gate.managePos = true
   gate.entitled = true
+  gate.finer = {}
   store.current.write(`hosts/${HOST}`, {
     displayName: 'Corner Cafe',
     memberRoles: { manager: 'admin', clerk: 'editor', reader: 'viewer', author: 'author' },
@@ -119,6 +125,22 @@ describe('POST /api/commerce/printers — the gate (AGL-3619)', () => {
     expect((await call(STAR)).status).toBe(403)
     gate.entitled = true
     expect((await call(STAR, 'clerk')).status).toBe(200)
+  })
+
+  it('sets printers up with the devices key, opens the drawer with the drawer key, and reprints with neither (AGL-4047)', async () => {
+    const created = (await call(STAR)).body
+    gate.finer = { posDevices: false }
+    const refused = await call({ ...STAR, deviceId: '00-11-62-AB-CD-00' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Registers and devices')
+    expect((await call({ action: 'test', printerId: created.printerId })).status).toBe(403)
+    expect((await call({ action: 'drawer', printerId: created.printerId })).status).toBe(200)
+    gate.finer = { posCashDrawer: false }
+    const noDrawer = await call({ action: 'drawer', printerId: created.printerId })
+    expect(noDrawer.status).toBe(403)
+    expect(noDrawer.body.error).toContain('Cash drawer and shifts')
+    gate.finer = { posDevices: false, posCashDrawer: false }
+    expect((await call({ action: 'cancel', jobId: 'no-such-job' })).status).not.toBe(403)
   })
 })
 

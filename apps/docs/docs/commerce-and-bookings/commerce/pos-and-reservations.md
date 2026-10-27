@@ -32,6 +32,29 @@ Billing. If you downgrade below your register count, the
 extra registers (newest first) stop taking payments and show **Over plan
 limit** until you remove them or upgrade again — none are deleted.
 
+## Who can do what at the register {#who-can-do-what-at-the-register}
+
+Anyone who is an admin or editor on the site with the **Use the point of sale**
+permission can open the register. Six finer permissions then decide which of its
+jobs are theirs:
+
+| Permission | What it covers |
+| --- | --- |
+| **Sell at the register** | Ringing up sales and taking payment, at the register, the kiosk and the Aglyn POS apps |
+| **Refunds and returns** | Refunding point of sale orders at the register, up to its refund limit, and taking returns and exchanges |
+| **Give discounts at the register** | The register's **Discount %**. A shopper's discount code and the store's own promotions apply without it |
+| **Cash drawer and shifts** | Opening and closing shifts, cash in and out, X and Z reports, and opening the drawer without a sale |
+| **Registers and devices** | Adding, changing and removing card readers, receipt printers and customer displays, and the reader start-up screen |
+| **Buy point of sale hardware** | Placing an order on the **Hardware** card |
+
+Each one follows **Use the point of sale** until you set it, so everyone who could
+use the register keeps exactly what they had. To narrow one, for example a
+cashier who rings sales but does not refund, deny it in a
+[custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions)
+or for one member. A control someone does not hold stays on screen, disabled,
+with the reason. A cashier switched in with a PIN needs **Sell at the register**
+too.
+
 ## The register
 
 Open **`/{site}/pos`** in the console for a touch-first register. Pick which

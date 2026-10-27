@@ -2019,6 +2019,7 @@ data class OrgPermissionDeclaration(
     val key: String,
     val label: String,
     val pluginId: String? = null,
+    val refines: String? = null,
     val roleDefaults: Map<String, Boolean>? = null,
 )
 
@@ -2036,6 +2037,7 @@ data class OrgPermissionEntry(
     val key: String,
     val label: String,
     val pluginId: String? = null,
+    val refines: String? = null,
     val scope: OrgPermissionScope? = null,
 )
 

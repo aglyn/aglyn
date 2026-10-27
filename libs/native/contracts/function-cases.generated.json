@@ -58416,7 +58416,13 @@
             "org.auditLog": true,
             "org.settings": true,
             "outreach.use": true,
-            "plugins.install": true
+            "plugins.install": true,
+            "posBuyHardware": true,
+            "posCashDrawer": true,
+            "posDevices": true,
+            "posDiscount": true,
+            "posRefund": true,
+            "posSell": true
           }
         },
         {
@@ -58442,7 +58448,13 @@
             "org.auditLog": true,
             "org.settings": true,
             "outreach.use": true,
-            "plugins.install": true
+            "plugins.install": true,
+            "posBuyHardware": true,
+            "posCashDrawer": true,
+            "posDevices": true,
+            "posDiscount": true,
+            "posRefund": true,
+            "posSell": true
           }
         },
         {
@@ -58468,7 +58480,13 @@
             "org.auditLog": false,
             "org.settings": false,
             "outreach.use": false,
-            "plugins.install": true
+            "plugins.install": true,
+            "posBuyHardware": true,
+            "posCashDrawer": true,
+            "posDevices": true,
+            "posDiscount": true,
+            "posRefund": true,
+            "posSell": true
           }
         },
         {
@@ -58494,7 +58512,13 @@
             "org.auditLog": false,
             "org.settings": false,
             "outreach.use": false,
-            "plugins.install": false
+            "plugins.install": false,
+            "posBuyHardware": false,
+            "posCashDrawer": false,
+            "posDevices": false,
+            "posDiscount": false,
+            "posRefund": false,
+            "posSell": false
           }
         },
         {
@@ -58520,7 +58544,13 @@
             "org.auditLog": false,
             "org.settings": false,
             "outreach.use": false,
-            "plugins.install": false
+            "plugins.install": false,
+            "posBuyHardware": false,
+            "posCashDrawer": false,
+            "posDevices": false,
+            "posDiscount": false,
+            "posRefund": false,
+            "posSell": false
           }
         },
         {
@@ -58546,7 +58576,13 @@
             "org.auditLog": false,
             "org.settings": false,
             "outreach.use": false,
-            "plugins.install": false
+            "plugins.install": false,
+            "posBuyHardware": false,
+            "posCashDrawer": false,
+            "posDevices": false,
+            "posDiscount": false,
+            "posRefund": false,
+            "posSell": false
           }
         },
         {
@@ -58579,7 +58615,13 @@
             "org.auditLog": false,
             "org.settings": false,
             "outreach.use": false,
-            "plugins.install": true
+            "plugins.install": true,
+            "posBuyHardware": true,
+            "posCashDrawer": true,
+            "posDevices": true,
+            "posDiscount": true,
+            "posRefund": true,
+            "posSell": true
           }
         },
         {
@@ -58614,7 +58656,13 @@
             "org.auditLog": false,
             "org.settings": false,
             "outreach.use": false,
-            "plugins.install": false
+            "plugins.install": false,
+            "posBuyHardware": false,
+            "posCashDrawer": false,
+            "posDevices": false,
+            "posDiscount": false,
+            "posRefund": false,
+            "posSell": false
           }
         },
         {
@@ -58644,7 +58692,13 @@
             "org.auditLog": true,
             "org.settings": true,
             "outreach.use": true,
-            "plugins.install": true
+            "plugins.install": true,
+            "posBuyHardware": true,
+            "posCashDrawer": true,
+            "posDevices": true,
+            "posDiscount": true,
+            "posRefund": true,
+            "posSell": true
           }
         }
       ]

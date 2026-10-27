@@ -1536,6 +1536,32 @@ describe('who may refund (AGL-2372)', () => {
     expect(storedOrder().refundedCents ?? 0).toBe(0)
   })
 
+  it('admits register staff only while they hold the refunds key (AGL-4047)', async () => {
+    // An editor who works the register reaches the register's own refund
+    // rules — here refused as an online order — while the refunds key holds.
+    mockVerifyIdToken.mockResolvedValue({ uid: 'cashier-1' })
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor' } })
+    const cashier = (permissions: Record<string, boolean>) =>
+      mockResolveOrgPermissions.mockResolvedValue({
+        orgId: 'org-1',
+        role: 'editor',
+        isOwner: false,
+        permissions,
+        orgWide: true,
+        hostRole: 'editor',
+      } as any)
+    cashier({ managePos: true })
+    const reached = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(reached.status).toBe(403)
+    expect(reached.body.error).toBe('Refunds of online orders require an admin of the whole workspace')
+    // Refused the refunds key, they are not register staff at all.
+    cashier({ managePos: true, posRefund: false })
+    const refused = await post({}, { 'idempotency-key': 'attempt-b' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toBe('Refunds require a site admin')
+    expect(refundCalls).toHaveLength(0)
+  })
+
   it('still admits an org-wide admin — the control refuses, it does not block', async () => {
     // The other half of every allowlist: proof it did not simply close.
     const result = await post({}, { 'idempotency-key': 'attempt-a' })
