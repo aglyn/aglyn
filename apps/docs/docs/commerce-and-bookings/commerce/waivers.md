@@ -111,11 +111,20 @@ page is shown instead.
 Links and QR codes made before share links moved to your site opened on Aglyn's own
 address. They still work, and send signers on to your site.
 
-### On your site
+### On your site {#on-your-site}
 
-Add the **Sign waiver** element (under **Forms** in the Besigner) to a page. If you
-publish one waiver, it opens straight to the form. If you publish several, signers
-choose one from a list. The element's **Heading** setting is the line above that list.
+Add the **Sign waiver** element (under **Forms** in the Besigner) to a page, then
+choose what it signs in the element's settings:
+
+- **Waiver**: pick one of your waivers from the list, by its title, and the element
+  opens straight to that waiver's form. The list shows your draft and published
+  waivers; a draft takes signatures once you publish it.
+- Leave **Waiver** empty to offer every waiver you publish. If you publish one, it
+  opens straight to the form. If you publish several, signers choose one from a list,
+  and the element's **Heading** setting is the line above that list.
+
+A share link always opens the waiver it was made for, even on a page whose element
+has a different waiver chosen.
 
 ## Sign at the window
 

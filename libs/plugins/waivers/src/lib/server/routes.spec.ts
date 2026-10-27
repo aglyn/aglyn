@@ -278,6 +278,36 @@ describe('writing a waiver', () => {
   })
 })
 
+describe('the waiver picker’s list (the site’s waiverTitles)', () => {
+  const title = (id: string) => db.docs.get(`hosts/${HOST}/waiverTitles/${id}`)
+
+  it('mirrors each waiver’s title and status on every write, and nothing of its words', async () => {
+    const { waiver } = await (await call(templatesRoute, 'POST', { body: { waiver: WAIVER } })).json()
+    expect(title(waiver.id)).toEqual({ title: 'Rider release', status: 'draft', pickable: true, version: 1, updatedAtMs: waiver.updatedAtMs })
+    await call(templatesRoute, 'POST', { body: { waiverId: waiver.id, waiver: { ...WAIVER, title: 'Pit pass' } } })
+    expect(title(waiver.id)).toMatchObject({ title: 'Pit pass', version: 2, pickable: true })
+    await call(templateRoute, 'POST', { body: { waiverId: waiver.id, action: 'publish' } })
+    expect(title(waiver.id)).toMatchObject({ status: 'published', pickable: true })
+    await call(templateRoute, 'POST', { body: { waiverId: waiver.id, action: 'retire' } })
+    expect(title(waiver.id)).toMatchObject({ status: 'retired', pickable: false })
+    expect(JSON.stringify(title(waiver.id))).not.toContain('helmet')
+    // Another site's list is untouched.
+    expect([...db.docs.keys()].some((path) => path.startsWith(`hosts/${OTHER_HOST}/waiverTitles/`))).toBe(false)
+  })
+
+  it('mirrors a waiver written before the list existed the next time the site’s waivers are read, once', async () => {
+    const { waiver } = await (await call(templatesRoute, 'POST', { body: { waiver: WAIVER } })).json()
+    const path = `orgs/${ORG}/waivers/${waiver.id}`
+    const older = { ...(db.docs.get(path) as Record<string, unknown>) }
+    delete older['listedAtMs']
+    db.docs.set(path, older)
+    db.docs.delete(`hosts/${HOST}/waiverTitles/${waiver.id}`)
+    await call(templatesRoute, 'GET', { token: 'tok-clerk' })
+    expect(title(waiver.id)).toMatchObject({ title: 'Rider release', pickable: true })
+    expect(db.docs.get(path)).toMatchObject({ listedAtMs: expect.any(Number) })
+  })
+})
+
 describe('signing before arriving', () => {
   it('serves only a published waiver, and lists the site’s published ones', async () => {
     const draft = await (await call(templatesRoute, 'POST', { body: { waiver: WAIVER } })).json()

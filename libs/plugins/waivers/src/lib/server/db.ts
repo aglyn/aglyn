@@ -19,7 +19,7 @@ import { randomBytes } from 'crypto'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { Firestore } from 'firebase-admin/firestore'
-import { WAIVERS_COLLECTIONS } from '../constants/bundle-common'
+import { WAIVERS_COLLECTIONS, WAIVER_TITLES_SUBCOLLECTION } from '../constants/bundle-common'
 
 /**
  * The Firestore and the private Storage every waivers server module writes
@@ -128,4 +128,7 @@ export const waiversRefs = {
   signatures: (orgId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.signatures),
   signature: (orgId: string, signatureId: string) =>
     org(orgId).collection(WAIVERS_COLLECTIONS.signatures).doc(signatureId),
+  /** The site's mirror of each waiver's title, for the Besigner's picker. */
+  title: (hostId: string, waiverId: string) =>
+    waiversDb().collection('hosts').doc(hostId).collection(WAIVER_TITLES_SUBCOLLECTION).doc(waiverId),
 }
