@@ -18,6 +18,9 @@
 /** The plugin id: `plugins.config.json`, `org.enabledPlugins`, every registry. */
 export const WAIVERS_PLUGIN_ID = 'waivers'
 
+/** The Sign waiver element's component id. Persisted in screen documents; never rename. */
+export const WAIVERS_SIGN_COMPONENT_ID = 'signWaiver'
+
 /**
  * The entitlement every surface stands on (AGL-4042). A waiver is part of
  * selling a visit — a ride pass, a camp spot, a rental — so it rides the key
@@ -91,8 +94,23 @@ export const WAIVERS_CONTACT_SOURCE_DECLARATION = {
 export const WAIVERS_CHECK_IN_SLOT = 'posCheckIn'
 export const WAIVERS_CHECK_IN_WIDGET_ID = 'waivers-check-in-status'
 
-/** The console's public signing page, beneath `/kiosk/waivers`. */
+/**
+ * The console's public signing page, beneath `/kiosk/waivers`: where a share
+ * link pointed before it opened on the store's own site. Kept, so a link or
+ * QR code already handed out still works: it sends the signer on to the
+ * store's site.
+ */
 export const WAIVERS_PUBLIC_PAGE_PATH = '/sign'
+
+/**
+ * The store's own signing page (AGL-4042), at `/{path}` on the store's site
+ * (its custom domain, else its platform address), in the site's own header
+ * and footer: where a waiver's share link and QR code open. `?waiver=` names
+ * the waiver; without it, the site's published waivers are listed. Served by
+ * the waivers page resolver only where the site has no page of its own at
+ * that address.
+ */
+export const WAIVERS_SITE_SIGN_PATH = 'sign-waiver'
 
 /** Every route this plugin serves, under `/api/`. */
 export const WAIVERS_API_ROUTES = {

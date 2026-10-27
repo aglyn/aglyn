@@ -23,6 +23,7 @@ import {
   type WaiverStatus,
   type WaiverTemplate,
 } from '../model/waiver'
+import { waiverSiteOrigin } from '../model/waiver-share'
 import { isDocumentId, newWaiversId, waiversDb, waiversRefs } from './db'
 import { json, refuse, waiversGate } from './gate'
 
@@ -56,6 +57,9 @@ export async function templatesRoute(request: Request): Promise<Response> {
     return json({
       waivers: snapshot.docs.map((doc) => view(doc.id, doc.data())),
       timeZone: staff.timeZone,
+      // Where a share link opens: the store's own site (AGL-4042), or `null`
+      // for a site with no public address, whose link stays the console's.
+      signPageOrigin: waiverSiteOrigin(staff.host),
     })
   }
   if (request.method !== 'POST') return refuse(405, 'Method not allowed')

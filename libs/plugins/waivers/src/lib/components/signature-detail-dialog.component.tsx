@@ -36,7 +36,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState, type ReactNode } from 'react'
 import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
-import { formatDayKey } from '../model/waiver'
+import { WAIVER_DEFAULT_ADULT_AGE, formatDayKey } from '../model/waiver'
 import {
   WAIVER_METHOD_LABELS,
   signatureWindowLabel,
@@ -106,10 +106,16 @@ function SignatureBody(props: { hostId: string; signature: SignatureDetail; time
       {signature.voidedAt ? (
         <Alert severity="warning">{`Voided ${when(signature.voidedAt, timeZone)}: ${signature.voidReason ?? ''}`}</Alert>
       ) : null}
+      {signature.erasure ? (
+        <Alert severity="info">
+          {`The signer asked to be erased on ${when(signature.erasure.requestedAtMs, timeZone)}. This signed waiver is kept as your record of what they agreed to until ${when(signature.retainUntilMs, timeZone)}, then deleted.`}
+        </Alert>
+      ) : null}
       <Stack spacing={1}>
         <Row label="Waiver">{`${signature.waiverTitle}, version ${signature.version}`}</Row>
         <Row label="Covers">{signatureWindowLabel(signature)}</Row>
         <Row label="Method">{WAIVER_METHOD_LABELS[signature.method]}</Row>
+        <Row label="Adult age">{String(signature.adultAge ?? WAIVER_DEFAULT_ADULT_AGE)}</Row>
       </Stack>
       <Divider />
       <Stack spacing={1}>
@@ -132,7 +138,7 @@ function SignatureBody(props: { hostId: string; signature: SignatureDetail; time
         <Typography variant="subtitle2">{'Signature'}</Typography>
         {signature.signature.kind === 'drawn' ? (
           image ? (
-            <Paper variant="outlined" sx={{ p: 1, bgcolor: 'common.white', maxWidth: 420 }}>
+            <Paper variant="outlined" sx={{ p: 1, bgcolor: 'common.white', maxWidth: (theme) => theme.spacing(52) }}>
               <Box component="img" src={image} alt={`Signature of ${signature.signer.name}`} sx={{ display: 'block', width: '100%' }} />
             </Paper>
           ) : (

@@ -17,3 +17,4 @@
 
 export * from './waiver'
 export * from './waiver-signature'
+export * from './waiver-retention'

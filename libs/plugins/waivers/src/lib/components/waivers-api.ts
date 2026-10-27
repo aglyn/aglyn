@@ -20,7 +20,7 @@
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback } from 'react'
-import { WAIVERS_API_ROUTES, WAIVERS_PUBLIC_PAGE_PATH } from '../constants/bundle-common'
+import { WAIVERS_API_ROUTES, WAIVERS_PUBLIC_PAGE_PATH, WAIVERS_SITE_SIGN_PATH } from '../constants/bundle-common'
 
 /**
  * The console half's one way to the routes (AGL-4042): the member's own
@@ -112,8 +112,22 @@ export function saveBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(href), 1000)
 }
 
-/** The share link a signer opens: the console's public signing page for one waiver. */
-export function waiverShareLink(origin: string, hostId: string, waiverId: string): string {
+/**
+ * The share link a signer opens: the store's own signing page for one waiver,
+ * on the store's site (`signPageOrigin`, which the templates route answers).
+ * A site with no public address keeps the console's public signing page,
+ * under `consoleOrigin`.
+ */
+export function waiverShareLink(
+  signPageOrigin: string | null,
+  consoleOrigin: string,
+  hostId: string,
+  waiverId: string,
+): string {
+  if (signPageOrigin) {
+    const params = new URLSearchParams({ waiver: waiverId })
+    return `${signPageOrigin.replace(/\/+$/, '')}/${WAIVERS_SITE_SIGN_PATH}?${params.toString()}`
+  }
   const params = new URLSearchParams({ host: hostId, waiver: waiverId })
-  return `${origin.replace(/\/+$/, '')}/kiosk/waivers${WAIVERS_PUBLIC_PAGE_PATH}?${params.toString()}`
+  return `${consoleOrigin.replace(/\/+$/, '')}/kiosk/waivers${WAIVERS_PUBLIC_PAGE_PATH}?${params.toString()}`
 }

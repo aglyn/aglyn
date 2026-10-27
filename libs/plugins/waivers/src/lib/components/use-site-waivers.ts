@@ -22,19 +22,27 @@ import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
 import type { WaiverTemplate } from '../model/waiver'
 import { useWaiversFetch } from './waivers-api'
 
-/** A site's waivers, read through the console route, with a way to read them again. */
+/**
+ * A site's waivers, read through the console route, with a way to read them
+ * again, and the origin of the store's own site its share links open on
+ * (`null` for a site with no public address).
+ */
 export function useSiteWaivers(hostId: string) {
   const { ready, request } = useWaiversFetch()
   const [waivers, setWaivers] = useState<WaiverTemplate[] | null>(null)
+  const [signPageOrigin, setSignPageOrigin] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   useEffect(() => {
     if (!ready) return
     let live = true
-    void request<{ waivers: WaiverTemplate[] }>(WAIVERS_API_ROUTES.templates, { query: { hostId } })
+    void request<{ waivers: WaiverTemplate[]; signPageOrigin?: string | null }>(WAIVERS_API_ROUTES.templates, {
+      query: { hostId },
+    })
       .then((answer) => {
         if (!live) return
         setWaivers(answer.waivers)
+        setSignPageOrigin(answer.signPageOrigin ?? null)
         setError(null)
       })
       .catch((caught: Error) => {
@@ -45,5 +53,5 @@ export function useSiteWaivers(hostId: string) {
     }
   }, [ready, request, hostId, revision])
   const reload = useCallback(() => setRevision((value) => value + 1), [])
-  return { waivers, error, reload }
+  return { waivers, signPageOrigin, error, reload }
 }

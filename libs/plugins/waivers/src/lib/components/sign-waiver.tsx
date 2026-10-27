@@ -20,11 +20,11 @@ import { mdiFileSign } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useState } from 'react'
-import { WAIVERS_PLUGIN_ID } from '../constants/bundle-common'
+import { WAIVERS_PLUGIN_ID, WAIVERS_SIGN_COMPONENT_ID } from '../constants/bundle-common'
 import { WaiverSignFlow } from './waiver-sign-flow.component'
 
 // Component ids are persisted in screen documents; never rename.
-export const ID: Aglyn.ComponentId = 'signWaiver'
+export const ID: Aglyn.ComponentId = WAIVERS_SIGN_COMPONENT_ID
 
 export interface SignWaiverProps {
   /** Heading over the list of waivers, when the site publishes more than one. */

@@ -362,6 +362,14 @@ Work this list, not the tree.
   **not** exempt them from access. If a transaction of theirs is in there, it
   is disclosable.
 - `contactSuppressions` — kept precisely so we can honour "stop contacting me".
+- `orgs/{orgId}/waiverSignatures` — a waiver a person signed at a store, with its
+  drawn signature or paper photo in private Storage. A person erasure KEEPS it, as
+  the store's record of what they agreed to, for the store's waiver retention
+  period (a Waivers setting, 7 years by default), then the `waivers-retention` job
+  deletes it (AGL-4042). The store is the controller and Aglyn the processor, so on
+  an access request it is the store's to disclose, through **Waivers → Signatures**
+  (search by the address) and its PDF; say plainly that an erasure did not remove it
+  and when it will be deleted, which its record shows.
 
 ## 6. When we are the processor
 
@@ -383,7 +391,9 @@ The requester is a visitor to a customer's site.
    nightly `run-erasures` job executes: the contact on every site, leads, tasks,
    activities, audience memberships and the campaign delivery log are removed;
    orders and bookings are kept as financial records with the person's identity
-   taken off; the address is closed to re-capture the moment it is filed.
+   taken off; signed waivers are kept whole as the store's record of what the
+   person agreed to, for the store's waiver retention period, then deleted; the
+   address is closed to re-capture the moment it is filed.
    Two things it does not reach, which the customer finishes by hand: form
    submissions (the address sits inside the answers, under whatever the form
    called the field — the Inbox deletes them) and a site member's own login

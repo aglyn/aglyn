@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { getPluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
 import {
   labelContactSource,
   pluginContactSource,
@@ -41,5 +42,14 @@ describe('registerWaiversDeclarations', () => {
 
   it('so a contact a signature created reads by its label', () => {
     expect(labelContactSource('waiver')).toBe('Waiver signed')
+  })
+
+  it('declares the settings the eraser and the retention job read: years kept after an erasure request', () => {
+    registerWaiversDeclarations()
+    expect(getPluginConfigSchema(WAIVERS_PLUGIN_ID)).toMatchObject({
+      pluginId: 'waivers',
+      defaults: { retentionYears: 7 },
+      help: { topic: 'waivers', anchor: '#keeping-signed-waivers' },
+    })
   })
 })

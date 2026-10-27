@@ -23,7 +23,7 @@ import {
   waiverPaperPhotoPath,
   waiverSignatureImagePath,
 } from '../constants/bundle-common'
-import { dayKeyIn, isDayKey, validThroughDayKey, type WaiverTemplate } from '../model/waiver'
+import { dayKeyIn, isDayKey, validThroughDayKey, waiverAdultAge, type WaiverTemplate } from '../model/waiver'
 import {
   WAIVER_ESIGN_CONSENT,
   nameSearchTokens,
@@ -212,6 +212,7 @@ export async function recordSignature(
     version: waiver.version,
     signedText,
     signedTextSha256: sha256Hex(signedText),
+    adultAge: waiverAdultAge(waiver),
     signer: input.signer,
     minors: input.minors,
     guardianRelationship: input.guardianRelationship || null,
@@ -335,6 +336,7 @@ export async function recordPaperSignature(
     version: waiver.version,
     signedText,
     signedTextSha256: sha256Hex(signedText),
+    adultAge: waiverAdultAge(waiver),
     signer: checked.input.signer,
     minors,
     guardianRelationship: checked.input.guardianRelationship || null,
