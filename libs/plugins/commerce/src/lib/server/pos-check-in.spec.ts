@@ -62,7 +62,11 @@ function get(query: Record<string, string>, uid: string | null = 'cashier'): Plu
 async function dayList(query: Record<string, string> = {}) {
   const outcome = await handlePosCheckIn(h.deps, get(query))
   if ('csv' in outcome) throw new Error('expected JSON')
-  return outcome.body as { dayKey: string; totals: { expected: number; checkedIn: number }; checkIns: CheckInRow[] }
+  return outcome.body as {
+    dayKey: string
+    totals: { expected: number; checkedIn: number; rainChecks: number }
+    checkIns: CheckInRow[]
+  }
 }
 
 const search = async (text: string) =>
@@ -147,7 +151,7 @@ describe('what is due today', () => {
     const list = await dayList()
     expect(list.dayKey).toBe('2027-01-15')
     // Two adult passes, no spectator, no T-shirt; a family spot admits four.
-    expect(list.totals).toEqual({ expected: 6, checkedIn: 0 })
+    expect(list.totals).toEqual({ expected: 6, checkedIn: 0, rainChecks: 0 })
     const jordan = list.checkIns.filter((row) => row.orderId === 'o1')
     expect(jordan.map((row) => `${row.variantLabel} ${row.unitIndex + 1}/${row.unitCount}`)).toEqual([
       'Adult 1/2',
@@ -318,7 +322,7 @@ describe('checking in', () => {
     })
     expect(again.body['checkedIn']).toEqual([])
     expect((again.body['alreadyCheckedIn'] as CheckInRow[])[0]).toMatchObject({ checkedInByName: 'Cal Cashier' })
-    expect((await dayList()).totals).toEqual({ expected: 2, checkedIn: 1 })
+    expect((await dayList()).totals).toEqual({ expected: 2, checkedIn: 1, rainChecks: 0 })
   })
 
   it('checks several in at once, and refuses junk', async () => {
@@ -395,12 +399,192 @@ describe('the day’s list as a spreadsheet', () => {
     expect(res.headers['Content-Disposition']).toBe('attachment; filename="check-ins-2027-01-15.csv"')
     const lines = res.sent.trim().split('\n')
     expect(lines[0]).toBe(
-      'Day,Name,Email,Phone,Item,Order,Status,Checked in at,Checked in by,Wristband number,Wristband color',
+      'Day,Name,Email,Phone,Item,Order,Status,Checked in at,Checked in by,Wristband number,Wristband color,Rain check',
     )
     expect(lines[1]).toBe(
-      '2027-01-15,Jordan Lee,Jordan@Example.com,(555) 201-7788,Day pass · Adult (1 of 2),#1042,Expected,,,,',
+      '2027-01-15,Jordan Lee,Jordan@Example.com,(555) 201-7788,Day pass · Adult (1 of 2),#1042,Expected,,,,,',
     )
     expect(lines).toHaveLength(3)
+  })
+})
+
+describe('passes bought for a day the buyer chose (pass dates)', () => {
+  beforeEach(() => {
+    h.memory.seed('hosts/shop/products/pass', {
+      ...h.memory.read('hosts/shop/products/pass'),
+      checkIn: { enabled: true, headcount: 1, askUseDate: true },
+    })
+  })
+
+  it('finds a pass bought on another day on the day it is for, and not on the day it was bought', async () => {
+    // Bought two days ago for today: found through the order's use days.
+    order('ahead', {
+      createdAtMs: DAY_START - 2 * 86_400_000,
+      customerName: 'Avery Ahead',
+      useDayKeys: ['2027-01-15'],
+      lineItems: [
+        { productId: 'pass', variantId: 'adult', name: 'Day pass', quantity: 1, unitAmountCents: 4000, useDayKey: '2027-01-15' },
+      ],
+    })
+    // Bought today for tomorrow.
+    order('tomorrow', {
+      customerName: 'Tori Tomorrow',
+      useDayKeys: ['2027-01-16'],
+      lineItems: [
+        { productId: 'pass', variantId: 'adult', name: 'Day pass', quantity: 2, unitAmountCents: 4000, useDayKey: '2027-01-16' },
+      ],
+    })
+    const today = await dayList()
+    expect(today.checkIns.map((row) => row.customerName).sort()).toEqual(['Avery Ahead', 'Jordan Lee', 'Jordan Lee'])
+    expect(h.memory.read('hosts/shop/checkIns/o_tomorrow_0_0')).toBeUndefined()
+    const tomorrow = await dayList({ day: '2027-01-16' })
+    expect(tomorrow.checkIns.map((row) => `${row.id} ${row.dayKey}`)).toEqual([
+      'o_tomorrow_0_0 2027-01-16',
+      'o_tomorrow_0_1 2027-01-16',
+    ])
+    expect((await dayList({ day: '2027-01-13' })).checkIns).toEqual([])
+  })
+})
+
+describe('rain checks', () => {
+  beforeEach(async () => {
+    await dayList()
+  })
+
+  const rainCheck = (body: Record<string, unknown>, uid = 'cashier') => post({ action: 'rain_check', id: 'o_o1_0_0', ...body }, uid)
+
+  it('is gated as checking in is', async () => {
+    expect((await rainCheck({ kind: 'open' }, 'viewer')).status).toBe(403)
+    h.memberships['cashier'] = { ...h.memberships['cashier']!, permissions: { managePos: false } }
+    expect((await rainCheck({ kind: 'open' })).status).toBe(403)
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toMatchObject({ dayKey: '2027-01-15' })
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')['rainCheck']).toBeUndefined()
+  })
+
+  it('leaves an open one waiting, found on any later day and used there', async () => {
+    h.clock.now += 1000
+    const given = await rainCheck({ kind: 'open' })
+    expect(given.status).toBe(200)
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toMatchObject({
+      dayKey: '2027-01-15',
+      rainCheckOpen: true,
+      rainCheck: {
+        kind: 'open',
+        fromDayKey: '2027-01-15',
+        toDayKey: null,
+        claimedDayKey: null,
+        byUid: 'cashier',
+        byName: 'Cal Cashier',
+        atMs: h.clock.now,
+      },
+    })
+    // Not expected today any more; counted apart.
+    expect((await dayList()).totals).toEqual({ expected: 1, checkedIn: 0, rainChecks: 1 })
+    // A retried tap answers what it made.
+    expect((await rainCheck({ kind: 'open' })).status).toBe(200)
+
+    // Three days later, the rider comes back: found by name and by customer.
+    h.clock.now += 3 * 86_400_000
+    const found = await post({ action: 'search', text: 'jordan', day: '2027-01-18' })
+    expect((found.body['customers'] as CheckInCustomer[])[0]).toMatchObject({ name: 'Jordan Lee', unitsDue: 1 })
+    const customer = await post({ action: 'customer', customerKey: 'email:jordan@example.com', day: '2027-01-18' })
+    expect((customer.body['checkIns'] as CheckInRow[]).map((row) => row.id)).toEqual(['o_o1_0_0'])
+    // Not on a day before it was given.
+    const before = await post({ action: 'customer', customerKey: 'email:jordan@example.com', day: '2027-01-14' })
+    expect(before.body['checkIns']).toEqual([])
+
+    // Checked in on the 18th: used then, and on that day's list.
+    const used = await post({ action: 'check_in', checkIns: [{ id: 'o_o1_0_0' }], day: '2027-01-18' })
+    expect(used.status).toBe(200)
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toMatchObject({
+      status: 'checked_in',
+      dayKey: '2027-01-18',
+      rainCheckOpen: false,
+      rainCheck: { kind: 'open', fromDayKey: '2027-01-15', claimedDayKey: '2027-01-18' },
+    })
+    expect((await dayList({ day: '2027-01-18' })).totals).toEqual({ expected: 1, checkedIn: 1, rainChecks: 0 })
+
+    // Undoing that check-in opens the rain check again, on the day it waited on.
+    await post({ action: 'undo', id: 'o_o1_0_0' })
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toMatchObject({
+      status: 'expected',
+      dayKey: '2027-01-15',
+      rainCheckOpen: true,
+      rainCheck: { claimedDayKey: null },
+    })
+  })
+
+  it('moves a pass to a later day, and undo puts it back', async () => {
+    const moved = await rainCheck({ kind: 'date', day: '2027-01-17' })
+    expect(moved.status).toBe(200)
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toMatchObject({
+      dayKey: '2027-01-17',
+      rainCheckOpen: false,
+      rainCheck: { kind: 'date', fromDayKey: '2027-01-15', toDayKey: '2027-01-17' },
+    })
+    // Off today's list (and reconciling today does not bring it back), on the 17th's.
+    later()
+    expect((await dayList()).checkIns.map((row) => row.id)).toEqual(['o_o1_0_1'])
+    expect((await dayList({ day: '2027-01-17' })).checkIns.map((row) => row.id)).toEqual(['o_o1_0_0'])
+    // The same move retried is the same move.
+    expect((await rainCheck({ kind: 'date', day: '2027-01-17' })).status).toBe(200)
+
+    h.clock.now += 1000
+    const undone = await post({ action: 'undo_rain_check', id: 'o_o1_0_0' }, 'owner')
+    expect(undone.status).toBe(200)
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toMatchObject({
+      dayKey: '2027-01-15',
+      rainCheck: null,
+      rainCheckOpen: false,
+      rainCheckUndoneBy: 'owner',
+      rainCheckUndoneAtMs: h.clock.now,
+    })
+    // Undone twice is still undone.
+    expect((await post({ action: 'undo_rain_check', id: 'o_o1_0_0' })).status).toBe(200)
+  })
+
+  it('keeps a moved pass while its order stands, and takes it off when the order is refunded', async () => {
+    await rainCheck({ kind: 'date', day: '2027-01-17' })
+    later()
+    await dayList({ day: '2027-01-17' })
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toBeDefined()
+    h.memory.seed('hosts/shop/orders/o1', {
+      ...h.memory.read('hosts/shop/orders/o1'),
+      status: 'refunded',
+      useDayKeys: ['2027-01-17'],
+    })
+    later()
+    await dayList({ day: '2027-01-17' })
+    expect(h.memory.read('hosts/shop/checkIns/o_o1_0_0')).toBeUndefined()
+  })
+
+  it('refuses a stay, a pass already used, a day that is not later, and one that is gone', async () => {
+    h.memory.seed('hosts/shop/resources/cabin', { name: 'Cabin 3', nightlyRateUsd: 90 })
+    h.memory.seed('hosts/shop/reservations/stay', {
+      resourceId: 'cabin',
+      status: 'confirmed',
+      checkInDayMs: DAY_MS,
+      checkOutDayMs: DAY_MS + 86_400_000,
+      guestName: 'Sam Rivera',
+    })
+    later()
+    await dayList()
+    expect((await post({ action: 'rain_check', id: 'r_stay_2027-01-15_0', kind: 'open' })).status).toBe(400)
+    expect((await rainCheck({ kind: 'date', day: '2027-01-15' })).status).toBe(400)
+    expect((await rainCheck({ kind: 'date', day: '2027-01-12' })).status).toBe(400)
+    expect((await rainCheck({ kind: 'date' })).status).toBe(400)
+    expect((await rainCheck({ kind: 'later' })).status).toBe(400)
+    await post({ action: 'check_in', checkIns: [{ id: 'o_o1_0_0' }] })
+    expect((await rainCheck({ kind: 'open' })).status).toBe(409)
+    expect((await post({ action: 'undo_rain_check', id: 'o_o1_0_0' })).status).toBe(200)
+    expect((await post({ action: 'rain_check', id: 'o_nobody_0_0', kind: 'open' })).status).toBe(404)
+  })
+
+  it('names the rain check in the spreadsheet', async () => {
+    await rainCheck({ kind: 'open' })
+    const outcome = await handlePosCheckIn(h.deps, get({ format: 'csv' }))
+    if (!('csv' in outcome)) throw new Error('expected a spreadsheet')
+    expect(outcome.csv).toContain(',Rain check,,,,,"Rain check from Fri, Jan 15: good on any later day"')
   })
 })
 
@@ -424,5 +608,26 @@ describe('the indexes its queries need', () => {
 
   it('declares checkIns (dayKey, customerKey) for one customer’s day', () => {
     expect(declared({ fieldPath: 'customerKey', order: 'ASCENDING' })).toBe(true)
+  })
+
+  const declaredOpen = (middle: Record<string, string>) =>
+    config.indexes.some(
+      (index) =>
+        index.collectionGroup === 'checkIns' &&
+        index.queryScope === 'COLLECTION' &&
+        JSON.stringify(index.fields) ===
+          JSON.stringify([
+            { fieldPath: 'rainCheckOpen', order: 'ASCENDING' },
+            middle,
+            { fieldPath: 'dayKey', order: 'ASCENDING' },
+          ]),
+    )
+
+  it('declares checkIns (rainCheckOpen, searchTokens CONTAINS, dayKey) for open rain checks in a search', () => {
+    expect(declaredOpen({ fieldPath: 'searchTokens', arrayConfig: 'CONTAINS' })).toBe(true)
+  })
+
+  it('declares checkIns (rainCheckOpen, customerKey, dayKey) for one customer’s open rain checks', () => {
+    expect(declaredOpen({ fieldPath: 'customerKey', order: 'ASCENDING' })).toBe(true)
   })
 })

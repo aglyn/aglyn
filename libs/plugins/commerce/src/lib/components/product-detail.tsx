@@ -61,6 +61,7 @@ import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 import { CheckoutReturnNotice } from './checkout-return-notice'
+import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 
 /**
  * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
@@ -110,6 +111,8 @@ interface DetailVariant {
   soldOut: boolean
   imageUrl?: string
   sku?: string
+  /** The buyer may choose the day they will use it (AGL-4043). */
+  asksUseDate?: true
 }
 
 /** What the page says where a variant with no price yet would show one (AGL-3676). */
@@ -129,7 +132,15 @@ interface Detail {
   subscription?: { interval: 'month' | 'year'; trialDays?: number }
   /** Buyer picks one-time or subscribe at the same price (AGL-545). */
   subscriptionOptional?: boolean
+  /** The store's time zone, when a variant asks for a use day (AGL-4043). */
+  useDayTimeZone?: string
 }
+
+/**
+ * The use-day picker (AGL-4043), in its own chunk: only a product whose
+ * variant asks for a day downloads the date picker.
+ */
+const UseDayPicker = lazy(() => import('./use-day-picker'))
 
 const SAMPLE: Detail = {
   id: 'sample',
@@ -333,6 +344,11 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       initialSelections(seededProduct),
     )
     const [quantity, setQuantity] = useState(1)
+    /**
+     * The day the buyer chose to use a pass (AGL-4043), `YYYY-MM-DD` on the
+     * store's calendar; '' is the day they buy, which is also the default.
+     */
+    const [useDay, setUseDay] = useState('')
     /** A discount or coupon code typed on the product page. */
     const [coupon, setCoupon] = useState('')
     // A thumbnail the shopper picked; null follows the variant's own photo.
@@ -439,6 +455,14 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       ) ?? resolved.variants[0]
     }, [resolved, selections])
 
+    // The day to send with this variant: only when it asks for one and the
+    // buyer chose a day (AGL-4043).
+    const chosenUseDay = variant?.asksUseDate && useDay ? useDay : ''
+    // Today on the store's calendar, the first day the picker offers.
+    const storeTodayKey = resolved?.useDayTimeZone
+      ? zonedDayKey(Date.now(), resolved.useDayTimeZone)
+      : ''
+
     // Add to cart (AGL-293) beside instant buy; badge refresh via event.
     const handleAddToCart = async () => {
       if (!hostId || !resolved || !variant) return
@@ -454,6 +478,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         productId: resolved.id,
         variantId: variant.id,
         quantity,
+        ...(chosenUseDay ? { useDayKey: chosenUseDay } : {}),
         item: buyItem(resolved, variant, quantity),
       })
       if (ok) setAdded(true)
@@ -488,7 +513,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       // key, and the server replays the original full-price session — a quoted
       // number that is not the number charged, which is the whole defect class
       // this path has been cleared of.
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon, fulfillment.signature])
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon, fulfillment.signature, chosenUseDay])
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -511,6 +536,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             productId: resolved.id,
             variantId: variant.id,
             quantity,
+            // The day the buyer will use it (AGL-4043); the server checks it
+            // against the product and the store's calendar.
+            ...(chosenUseDay ? { useDayKey: chosenUseDay } : {}),
             // Billing choice (AGL-545): the server re-validates against
             // the product doc, so this is a request, not an instruction.
             ...(resolved.subscriptionOptional ? { billing } : {}),
@@ -910,6 +938,19 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {'Not on sale yet — check back soon.'}
             </Typography>
+          ) : null}
+          {priced && variant?.asksUseDate && storeTodayKey ? (
+            <Box sx={{ mb: 2 }}>
+              <Suspense fallback={null}>
+                <UseDayPicker
+                  value={useDay}
+                  onChange={setUseDay}
+                  todayKey={storeTodayKey}
+                  label="Day you will use it (optional)"
+                  helperText="Leave it blank to use it the day you buy."
+                />
+              </Suspense>
+            </Box>
           ) : null}
           <Box sx={{ display: priced ? 'flex' : 'none', gap: 1.5, alignItems: 'center', mb: 2 }}>
             <TextField

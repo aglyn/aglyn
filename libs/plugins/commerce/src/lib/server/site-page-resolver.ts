@@ -29,7 +29,8 @@ import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { collectSocialImageFacts } from '@aglyn/tenant-runtime/social-image-facts'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
-import { toPublicProductDetail } from './product'
+import { productAsksUseDateAnywhere, toPublicProductDetail } from './product'
+import { readStoreDay } from './store-day'
 import { readProductReviews } from './reviews'
 
 /**
@@ -150,6 +151,8 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                     product: toPublicProductDetail(
                       productSnapshot.docs[0].id,
                       product,
+                      // The store's calendar, for a pass that asks for a day.
+                      { timeZone: await passDayTimeZone(hostId, hostRes.host, product) },
                     ),
                     // Rating aggregate (AGL-686): needed HERE because
                     // `aggregateRating` belongs nested inside the Product
@@ -452,7 +455,9 @@ async function composeBuiltInProductPage(
           // its Product structured data, as on a template page (AGL-659).
           pageData: {
             commerce: {
-              product: toPublicProductDetail(productId, product),
+              product: toPublicProductDetail(productId, product, {
+                timeZone: await passDayTimeZone(hostId, host, product),
+              }),
               ...(productReviews.aggregate.count ? { reviews: productReviews } : {}),
               // The Shipping & returns fold's return line, only when the
               // store takes returns of this product's kind.
@@ -603,4 +608,19 @@ async function composeReturnRequestPage(hostId: string, host: unknown) {
     console.error('return request page composition failed', error)
     return undefined
   }
+}
+
+/**
+ * The store's time zone for a product page whose product asks for a use day
+ * (AGL-4043), so the seeded page offers the same days the API's does; null
+ * otherwise, without a read.
+ */
+async function passDayTimeZone(
+  hostId: string,
+  host: unknown,
+  product: ReturnType<typeof CommerceModel.liftLegacyProduct>,
+): Promise<string | null> {
+  if (!productAsksUseDateAnywhere(product)) return null
+  const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  return (await readStoreDay(hostRef, { host: (host ?? null) as Record<string, unknown> | null })).timeZone
 }

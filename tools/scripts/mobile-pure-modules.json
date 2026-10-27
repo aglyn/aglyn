@@ -423,7 +423,11 @@
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
-      "why": "The product and variant check-in setting (whether an item needs check-in, people per item) and its normalize/validate rules (AGL-4043), no imports; ProductVariant carries it, so the native contracts read it."
+      "why": "The product and variant check-in setting (whether an item needs check-in, people per item, whether the buyer picks the day) and its normalize/validate rules, with the use-day checks (AGL-4043), no imports; ProductVariant carries it, so the native contracts read it."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-check-in-record.ts",
+      "why": "The check-in record the window route stores and answers (one person due on one day, its wristband and rain check), the route and its limits (AGL-4043); type-only import of OrderChannel. The native register mirrors these shapes, so the record is split from the rules that import web search helpers."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",

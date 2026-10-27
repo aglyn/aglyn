@@ -37,19 +37,23 @@ import {
 } from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 import {
   alreadyCheckedInLabel,
   checkInItemLabel,
+  checkInRainCheckIsOpen,
   checkInTimeLabel,
   CHECK_IN_WRISTBAND_COLORS,
   CHECK_IN_WRISTBAND_MAX,
   describeWristband,
+  rainCheckLabel,
   type CheckInCustomer,
   type CheckInRow,
 } from '../../../model/commerce-check-in'
 import { POS_TOUCH_PX } from '../pos/pos-product-grid.component'
 import { callPosOps, newPosAttemptKey } from './pos-ops-api'
 import { PosCheckInZone } from './pos-check-in-zone.component'
+import { PosRainCheckDialog } from './pos-rain-check-dialog.component'
 
 /** How long typing pauses before the register asks. */
 const SEARCH_DEBOUNCE_MS = 250
@@ -93,6 +97,8 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  /** The pass a rain check is being given on (AGL-4043). */
+  const [rainCheckRow, setRainCheckRow] = useState<CheckInRow | null>(null)
   const latest = useRef(0)
 
   const reset = useCallback(() => {
@@ -188,6 +194,8 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
               : {}),
           }
         }),
+        // The window's day: an open rain check checked in is used on it.
+        ...(day?.dayKey ? { day: day.dayKey } : {}),
         ...(registerId ? { registerId } : {}),
         ...(cashierAssertion ? { cashierAssertion } : {}),
       },
@@ -216,11 +224,31 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
     merge([answer.body.checkIn])
   }
 
+  const undoRainCheck = async (row: CheckInRow) => {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    const answer = await callPosOps<{ checkIn?: CheckInRow }>(user, 'pos-check-in', {
+      hostId,
+      action: 'undo_rain_check',
+      id: row.id,
+      ...(registerId ? { registerId } : {}),
+      ...(cashierAssertion ? { cashierAssertion } : {}),
+    })
+    setBusy(false)
+    if (!answer.ok || !answer.body.checkIn) return setError(answer.body.error ?? 'The rain check could not be undone.')
+    merge([answer.body.checkIn])
+  }
+
   const setDraft = (id: string, patch: Partial<Draft>) =>
     setDrafts((current) => ({ ...current, [id]: { number: '', color: '', ...current[id], ...patch } }))
 
-  const waiting = rows.filter((row) => row.status === 'expected')
   const dayKey = day?.dayKey ?? ''
+  /** A pass a dated rain check moved off the window's day: not to check in today. */
+  const movedAway = (row: CheckInRow) => row.status === 'expected' && row.rainCheck?.kind === 'date' && row.dayKey !== dayKey
+  // "Check in all" leaves rain checks alone: an open one is used one at a time.
+  const waiting = rows.filter((row) => row.status === 'expected' && !movedAway(row) && !checkInRainCheckIsOpen(row))
+  const todayKey = day ? zonedDayKey(Date.now(), day.timeZone) : ''
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -262,7 +290,7 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
                       <Stack spacing={1}>
                         <ListItemText
                           primary={checkInItemLabel(row)}
-                          secondary={
+                          secondary={[
                             row.status === 'checked_in' && day
                               ? [
                                   `Checked in at ${checkInTimeLabel(row.checkedInAtMs, day.timeZone)}` +
@@ -271,13 +299,22 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
                                 ]
                                   .filter(Boolean)
                                   .join(' · ')
-                              : row.orderLabel ?? (row.source === 'reservation' ? 'Stay' : '')
-                          }
+                              : row.orderLabel ?? (row.source === 'reservation' ? 'Stay' : ''),
+                            rainCheckLabel(row),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         />
                         {row.status === 'checked_in' ? (
                           <Box>
                             <Button size="small" onClick={() => void undo(row)} disabled={busy}>
                               {'Undo'}
+                            </Button>
+                          </Box>
+                        ) : movedAway(row) ? (
+                          <Box>
+                            <Button size="small" onClick={() => void undoRainCheck(row)} disabled={busy}>
+                              {'Undo rain check'}
                             </Button>
                           </Box>
                         ) : (
@@ -313,6 +350,17 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
                             >
                               {'Check in'}
                             </Button>
+                            {row.source === 'order' ? (
+                              row.rainCheck ? (
+                                <Button onClick={() => void undoRainCheck(row)} disabled={busy}>
+                                  {'Undo rain check'}
+                                </Button>
+                              ) : (
+                                <Button onClick={() => setRainCheckRow(row)} disabled={busy || !todayKey}>
+                                  {'Rain check'}
+                                </Button>
+                              )
+                            ) : null}
                           </Stack>
                         )}
                       </Stack>
@@ -376,6 +424,18 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
           {notice ? <Alert severity="info">{notice}</Alert> : null}
           {error ? <Alert severity="warning">{error}</Alert> : null}
         </Stack>
+        <PosRainCheckDialog
+          row={rainCheckRow}
+          hostId={hostId}
+          todayKey={todayKey}
+          registerId={registerId}
+          cashierAssertion={cashierAssertion}
+          onClose={() => setRainCheckRow(null)}
+          onDone={(changed) => {
+            setRainCheckRow(null)
+            merge([changed])
+          }}
+        />
       </DialogContent>
       <DialogActions>
         {customer ? (

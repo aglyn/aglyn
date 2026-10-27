@@ -40,6 +40,7 @@ import {
   type CarrierShippingPlan,
 } from './carrier-shipping'
 import { readCartId } from './cart-cookie'
+import { readStoreDay } from './store-day'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
   allocateCentsByWeight,
@@ -257,6 +258,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // 3-D Secure, from the one seam every card payment shares (AGL-3360).
       ...checkoutSessionCardAuthenticationParams('payment'),
     })
+    // The store's today, for the use days lines carry (AGL-4043): a pass
+    // for a day that has passed since it went in the cart is not sold.
+    const storeDay = cart.lines.some((line) => line.useDayKey)
+      ? await readStoreDay(hostRef, { org: (ownerOrg.org ?? null) as Record<string, unknown> | null })
+      : null
     cart.lines.forEach((line, index) => {
       const product = productsById.get(line.productId)
       // Sold in person only (AGL-4060) is not for sale here, whatever the
@@ -279,6 +285,16 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       if (!CommerceModel.variantHasPrice(variant)) {
         throw Object.assign(new Error('unavailable'), {
           visible: `"${product.name}" is not available`,
+        })
+      }
+      const useDayProblem = !line.useDayKey
+        ? null
+        : !CommerceModel.productAsksUseDate(product, variant.id)
+          ? 'It has no day to choose.'
+          : CommerceModel.checkInUseDayProblem(line.useDayKey, storeDay?.todayKey ?? '')
+      if (useDayProblem) {
+        throw Object.assign(new Error('unavailable'), {
+          visible: `"${product.name}": ${useDayProblem} Remove it and add it again with a new day.`,
         })
       }
       // Gift cards are a Business+ entitlement, checked per sale (AGL-470).

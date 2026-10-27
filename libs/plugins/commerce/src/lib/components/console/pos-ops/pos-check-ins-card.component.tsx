@@ -29,14 +29,20 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import type { Dayjs } from 'dayjs'
 import { collection, documentId, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 import {
   checkInItemLabel,
+  checkInRainCheckIsOpen,
+  checkInStatusLabel,
   checkInTimeLabel,
   describeWristband,
   POS_CHECK_IN_ROUTE,
+  rainCheckLabel,
   type CheckInDayTotals,
   type CheckInRow,
 } from '../../../model/commerce-check-in'
+import { callPosOps } from './pos-ops-api'
+import { PosRainCheckDialog } from './pos-rain-check-dialog.component'
 import { escapeHtml } from '../../../utils/escape-html'
 import CommerceStatTile from '../commerce-stat-tile.component'
 import { EntitlementGatedCard } from '../entitlement-gate.component'
@@ -82,7 +88,9 @@ export function posCheckInsDocument(list: DayList): string {
         `<span>${escapeHtml(
           row.status === 'checked_in'
             ? [checkInTimeLabel(row.checkedInAtMs, list.timeZone), describeWristband(row.wristband)].filter(Boolean).join(' ')
-            : '—',
+            : checkInRainCheckIsOpen(row)
+              ? 'Rain check'
+              : '—',
         )}</span></div>`,
     )
     .join('')
@@ -101,6 +109,9 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
   const [day, setDay] = useState<Dayjs | null>(null)
   const [answer, setAnswer] = useState<Answer>({ state: 'idle' })
   const [exporting, setExporting] = useState(false)
+  /** The pass a rain check is being given on (AGL-4043). */
+  const [rainCheckRow, setRainCheckRow] = useState<CheckInRow | null>(null)
+  const [actionError, setActionError] = useState('')
 
   const url = useCallback(
     (format?: 'csv') => {
@@ -133,6 +144,22 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
   }, [load])
 
   const list = answer.state === 'ready' ? answer.list : null
+  const todayKey = list ? zonedDayKey(Date.now(), list.timeZone) : ''
+
+  const undoRainCheck = useCallback(
+    async (row: CheckInRow) => {
+      setActionError('')
+      const done = await callPosOps<{ checkIn?: CheckInRow }>(user, 'pos-check-in', {
+        hostId,
+        action: 'undo_rain_check',
+        id: row.id,
+      })
+      if (!done.ok) return setActionError(done.body.error ?? 'The rain check could not be undone.')
+      await load()
+    },
+    [user, hostId, load],
+  )
+
   const columns = useMemo<GridColDef[]>(
     () => [
       {
@@ -159,12 +186,22 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         field: 'status',
         headerName: 'Status',
         minWidth: 120,
+        valueGetter: (_value: unknown, row: CheckInRow) => checkInStatusLabel(row),
         renderCell: ({ row }: { row: CheckInRow }) =>
           row.status === 'checked_in' ? (
             <Chip size="small" color="success" label="Checked in" />
+          ) : checkInRainCheckIsOpen(row) ? (
+            <Chip size="small" color="info" variant="outlined" label="Rain check" />
           ) : (
             <Chip size="small" variant="outlined" label="Expected" />
           ),
+      },
+      {
+        field: 'rainCheck',
+        headerName: 'Rain check',
+        minWidth: 200,
+        flex: 1,
+        valueGetter: (_value: unknown, row: CheckInRow) => rainCheckLabel(row),
       },
       {
         field: 'checkedInAtMs',
@@ -180,8 +217,29 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         minWidth: 120,
         valueGetter: (_value: unknown, row: CheckInRow) => describeWristband(row.wristband),
       },
+      {
+        // What a pass waiting at the window can still have done to it: a
+        // rain check, or one taken back. Not a value, so nothing to sort.
+        field: 'rainCheckAction',
+        headerName: '',
+        minWidth: 150,
+        sortable: false,
+        filterable: false,
+        hideable: false,
+        disableColumnMenu: true,
+        renderCell: ({ row }: { row: CheckInRow }) =>
+          row.source !== 'order' || row.status !== 'expected' ? null : row.rainCheck ? (
+            <Button size="small" disabled={!canManagePos} onClick={() => void undoRainCheck(row)}>
+              {'Undo rain check'}
+            </Button>
+          ) : (
+            <Button size="small" disabled={!canManagePos || !todayKey} onClick={() => setRainCheckRow(row)}>
+              {'Rain check'}
+            </Button>
+          ),
+      },
     ],
-    [list],
+    [list, canManagePos, todayKey, undoRainCheck],
   )
   const rows = useMemo(() => (list ? list.checkIns.map((row) => ({ ...row, $id: row.id })) : []), [list])
 
@@ -269,7 +327,11 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
               <CommerceStatTile label="Expected" value={String(list.totals.expected)} />
               <CommerceStatTile label="Checked in" value={String(list.totals.checkedIn)} />
               <CommerceStatTile label="Still to come" value={String(list.totals.expected - list.totals.checkedIn)} />
+              {list.totals.rainChecks ? (
+                <CommerceStatTile label="Rain checks" value={String(list.totals.rainChecks)} />
+              ) : null}
             </Stack>
+            {actionError ? <Alert severity="warning">{actionError}</Alert> : null}
             <ListTable
               aria-label="Check-ins on this day"
               rows={rows}
@@ -279,6 +341,16 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
           </>
         ) : null}
       </Stack>
+      <PosRainCheckDialog
+        row={rainCheckRow}
+        hostId={hostId}
+        todayKey={todayKey}
+        onClose={() => setRainCheckRow(null)}
+        onDone={() => {
+          setRainCheckRow(null)
+          void load()
+        }}
+      />
     </CardDisplay>
   )
 }

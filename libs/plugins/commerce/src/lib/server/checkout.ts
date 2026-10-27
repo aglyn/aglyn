@@ -33,6 +33,7 @@ import {
   type CarrierShippingPlan,
 } from './carrier-shipping'
 import { readActiveMemberSession } from './membership'
+import { readStoreDay } from './store-day'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import { taxEngineSessionMetadata } from '../model/commerce-tax-engine'
 import { quoteSaleTaxWithEngine } from './tax-engine-quote'
@@ -94,6 +95,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     1,
     Math.min(99, Math.round(Number(body.quantity ?? 1))),
   )
+  // The day the buyer chose to use a check-in item (AGL-4043); checked below
+  // against the product and the store's calendar.
+  const useDayKey = typeof body.useDayKey === 'string' ? body.useDayKey.trim() : ''
   const couponCode = String(body.couponCode ?? '')
     .trim()
     .toUpperCase()
@@ -196,6 +200,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // Seller resolution rides the owning org (AGL-238): plan gate from
     // the org doc, Stripe account from the owner's marketplace profile.
     const ownerOrg = await getOrgForHost(hostId)
+    // A use day (AGL-4043): only on an item that asks for one, and a day
+    // that has not passed on the store's calendar. Refused before anything
+    // is held, so a wrong day costs the buyer nothing.
+    if (useDayKey) {
+      if (!CommerceModel.productAsksUseDate(lifted, variant.id)) {
+        return res.status(400).json({ error: 'This item has no day to choose.' })
+      }
+      const storeDay = await readStoreDay(hostRef, {
+        org: (ownerOrg?.org ?? null) as Record<string, unknown> | null,
+        host: (hostSnapshot.data() ?? null) as Record<string, unknown> | null,
+      })
+      const problem = CommerceModel.checkInUseDayProblem(useDayKey, storeDay.todayKey)
+      if (problem) return res.status(400).json({ error: problem })
+    }
     const ownerId = ownerOrg?.org?.ownerUid
     if (!ownerId) {
       return res.status(409).json({ error: 'This site cannot sell yet' })
@@ -1097,6 +1115,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[hostId]': hostId,
       'metadata[productId]': productId,
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
+      ...(useDayKey ? { 'metadata[useDayKey]': useDayKey } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
       // The postal code live carrier rates were quoted for (AGL-3612).

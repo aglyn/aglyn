@@ -28,6 +28,12 @@ export interface CartLine {
   /** Absent = the product's default variant. */
   variantId?: string
   quantity: number
+  /**
+   * The day the shopper chose to use a check-in item (AGL-4043),
+   * `YYYY-MM-DD` on the store's calendar. Absent: the day they buy. Two
+   * different days of one pass are two lines.
+   */
+  useDayKey?: string
 }
 
 /** `hosts/{hostId}/carts/{cartId}` doc. */
@@ -42,9 +48,12 @@ export interface HostCart {
 export const CART_MAX_LINES = 50
 export const CART_MAX_QUANTITY = 99
 
-function lineKey(line: Pick<CartLine, 'productId' | 'variantId'>): string {
-  return `${line.productId}:${line.variantId ?? ''}`
+/** One cart line's identity: product, variant and use day. */
+export function cartLineKey(line: Pick<CartLine, 'productId' | 'variantId' | 'useDayKey'>): string {
+  return `${line.productId}:${line.variantId ?? ''}:${line.useDayKey ?? ''}`
 }
+
+const lineKey = cartLineKey
 
 /**
  * A line quantity, coerced to a whole finite number (AGL-2285).
@@ -105,7 +114,7 @@ export function upsertCartLine(
 
 export function removeCartLine(
   cart: Pick<HostCart, 'lines'>,
-  line: Pick<CartLine, 'productId' | 'variantId'>,
+  line: Pick<CartLine, 'productId' | 'variantId' | 'useDayKey'>,
 ): CartLine[] {
   const key = lineKey(line)
   return cart.lines.filter((item) => lineKey(item) !== key)

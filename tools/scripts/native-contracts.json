@@ -634,6 +634,28 @@
         "POS_DAY_REPORT_MAX_DAYS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-check-in-record.ts": {
+      "types": [
+        "HostCheckIn",
+        "CheckInRainCheck",
+        "CheckInWristband",
+        "CheckInStatus",
+        "CheckInCustomer",
+        "CheckInDayTotals"
+      ],
+      "values": [
+        "POS_CHECK_IN_ROUTE",
+        "CHECK_IN_BATCH_MAX",
+        "CHECK_IN_WRISTBAND_MAX",
+        "CHECK_IN_WRISTBAND_COLORS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts": {
+      "values": [
+        "CHECK_IN_MAX_HEADCOUNT",
+        "CHECK_IN_USE_DAY_MAX_AHEAD_DAYS"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-reservations.ts": {
       "values": [
         "PENDING_RESERVATION_HOLD_MS",

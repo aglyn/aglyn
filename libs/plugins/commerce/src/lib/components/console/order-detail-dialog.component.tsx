@@ -855,7 +855,9 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 color={withdrawn ? 'text.secondary' : 'text.primary'}
               >
                 {`${line.quantity}× ${line.name}` +
-                  (line.variantLabel ? ` — ${line.variantLabel}` : '')}
+                  (line.variantLabel ? ` — ${line.variantLabel}` : '') +
+                  // The day the buyer chose to use a pass (AGL-4043).
+                  (line.useDayKey ? ` · for ${CommerceModel.checkInDayLabel(line.useDayKey)}` : '')}
               </Typography>
               {fulfilledByLine[index] ? (
                 <Chip

@@ -30,6 +30,8 @@ export interface AddToCartRequest {
   productId: string
   variantId: string
   quantity: number
+  /** The day the shopper chose to use a check-in item (AGL-4043), `YYYY-MM-DD`. */
+  useDayKey?: string
   /** The GA4 line: product id (never the variant's), name, price, quantity. */
   item: AnalyticsItem
 }
@@ -42,11 +44,11 @@ export interface AddToCartRequest {
  * server took the line; the server prices it, never the caller.
  */
 export async function addToCart(request: AddToCartRequest): Promise<boolean> {
-  const { hostId, siteFetch, productId, variantId, quantity, item } = request
+  const { hostId, siteFetch, productId, variantId, quantity, useDayKey, item } = request
   const response = await siteFetch('/api/commerce/cart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hostId, action: 'add', productId, variantId, quantity }),
+    body: JSON.stringify({ hostId, action: 'add', productId, variantId, quantity, ...(useDayKey ? { useDayKey } : {}) }),
   }).catch(() => null)
   if (!response?.ok) return false
   recordSiteJourneyStep('cart', productId)

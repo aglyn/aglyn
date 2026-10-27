@@ -89,6 +89,8 @@ export interface CartProps {
 interface CartLineView {
   productId: string
   variantId?: string
+  /** The day the shopper chose to use a check-in item (AGL-4043). */
+  useDayKey?: string
   quantity: number
   name: string
   variantLabel?: string
@@ -196,8 +198,7 @@ function CartLines(props: {
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>(
     {},
   )
-  const lineKey = (line: CartLineView) =>
-    `${line.productId}:${line.variantId ?? ''}`
+  const lineKey = (line: CartLineView) => CommerceModel.cartLineKey(line)
   const commitQuantity = (line: CartLineView) => {
     const key = lineKey(line)
     const draft = quantityDrafts[key]
@@ -227,6 +228,7 @@ function CartLines(props: {
       action: 'set',
       productId: line.productId,
       variantId: line.variantId,
+      ...(line.useDayKey ? { useDayKey: line.useDayKey } : {}),
       quantity,
     }).finally(settle)
   }
@@ -248,6 +250,7 @@ function CartLines(props: {
         (cart?.lines ?? []).map((line) => [
           line.productId,
           line.variantId ?? '',
+          line.useDayKey ?? '',
           line.quantity,
         ]),
       ),
@@ -444,7 +447,7 @@ function CartLines(props: {
         const imageUrl = Aglyn.siteRelativeMediaSrc(line.imageUrl, { hostId })
         return (
         <Box
-          key={`${line.productId}:${line.variantId ?? ''}`}
+          key={lineKey(line)}
           sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}
         >
           {imageUrl ? (
@@ -478,6 +481,11 @@ function CartLines(props: {
               {line.name}
               {line.variantLabel ? ` — ${line.variantLabel}` : ''}
             </Typography>
+            {line.useDayKey ? (
+              <Typography variant="caption" color="text.secondary" component="div">
+                {`For ${CommerceModel.checkInDayLabel(line.useDayKey)}`}
+              </Typography>
+            ) : null}
             <Typography variant="caption" color="text.secondary">
               {line.unavailable
                 ? 'No longer available'
@@ -508,6 +516,7 @@ function CartLines(props: {
                 action: 'remove',
                 productId: line.productId,
                 variantId: line.variantId,
+                ...(line.useDayKey ? { useDayKey: line.useDayKey } : {}),
               })
             }
           >
