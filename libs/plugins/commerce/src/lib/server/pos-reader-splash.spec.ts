@@ -32,6 +32,8 @@
  *   image against Stripe's rules, and brings every store up to date.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
@@ -114,7 +116,12 @@ jest.mock('@aglyn/tenant-data-admin/server/id-token-refusal', () => ({
 
 import { posReaderSplashImageProblem, POS_READER_SPLASH_FAMILIES } from '../model/pos-reader-splash'
 import { posReaderSplashAdmin } from './pos-reader-splash-admin'
-import { applyPosReaderSplash, posReaderSplashHandler } from './pos-reader-splash'
+import {
+  applyPosReaderSplash,
+  POS_READER_SPLASH_RETRY_FAILED_AFTER_MS,
+  posReaderSplashHandler,
+  refreshPosReaderSplashes,
+} from './pos-reader-splash'
 import { renderPosReaderSplash } from './pos-reader-splash-render'
 import { ensurePosOfflineCardConfiguration, savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
 
@@ -489,6 +496,101 @@ describe('applying a store’s screen', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
     expect((await applyPosReaderSplash('host-1')).outcome).toBe('skipped')
     expect(stripeOnly()).toHaveLength(0)
+  })
+})
+
+describe('the refresh beat: a logo change reaches the readers with no card opened', () => {
+  const open = { isLocked: async () => false }
+  const uploads = () => stripeOnly().filter((call) => call.host === 'files.stripe.com')
+
+  async function logoApplied() {
+    await seedOrgLogo()
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo1' }
+    fakeDocs.set(configPath, { stripeLocationId: 'tml_ours', splash: { choice: 'logo', updatedAtMs: 1 } })
+    expect((await applyPosReaderSplash('host-1')).outcome).toBe('applied')
+    stripeCalls.length = 0
+    return String(fakeDocs.get(configPath)?.['splashAppliedKey'])
+  }
+
+  it('makes no Stripe call while nothing changed', async () => {
+    await logoApplied()
+    expect(await refreshPosReaderSplashes(open)).toEqual({ applied: 0, unchanged: 1, failed: 0, skipped: 0, more: false })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('sends a new organization logo on the next beat, onto the same configuration, once', async () => {
+    const before = await logoApplied()
+    mockStorage.set('orgs/org-1/media/logo2', { body: await png(600, 300) })
+    fakeDocs.set('orgs/org-1/media/logo2', { contentType: 'image/png', sizeBytes: 2048, contentSha256: 'd'.repeat(64), visibleTo: ['org'] })
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo2' }
+
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 1, failed: 0 })
+    expect(uploads()).toHaveLength(2)
+    expect(configurationWrites().map((call) => call.path)).toEqual(['terminal/configurations/tmc_new1'])
+    expect(stripeOnly().some((call) => call.path.startsWith('terminal/locations'))).toBe(false)
+    expect(fakeDocs.get(configPath)?.['splashAppliedKey']).not.toBe(before)
+
+    stripeCalls.length = 0
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 0, unchanged: 1 })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('sends a logo whose file was replaced in the media library', async () => {
+    await logoApplied()
+    fakeDocs.set('orgs/org-1/media/logo1', { ...fakeDocs.get('orgs/org-1/media/logo1'), contentSha256: 'e'.repeat(64) })
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 1 })
+    expect(uploads()).toHaveLength(2)
+  })
+
+  it('leaves a locked store as it is', async () => {
+    await logoApplied()
+    mockOrg = { ...mockOrg, logoUrl: 'media:org:org-1/logo-gone' }
+    const asked: string[] = []
+    const locked = { isLocked: async (hostId: string) => (asked.push(hostId), true) }
+    expect(await refreshPosReaderSplashes(locked)).toMatchObject({ applied: 0, skipped: 1 })
+    expect(asked).toEqual(['host-1'])
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('waits before retrying a screen that failed, while opening the card retries at once', async () => {
+    await logoApplied()
+    fakeDocs.set('orgs/org-1/media/logo1', { ...fakeDocs.get('orgs/org-1/media/logo1'), contentSha256: 'f'.repeat(64) })
+    mockBlocked = 'quarantined'
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ failed: 1 })
+    const failed = fakeDocs.get(configPath) as Record<string, unknown>
+    expect(typeof failed['splashFailedKey']).toBe('string')
+
+    // Inside the wait the beat leaves it, and does not stamp a new failure.
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ failed: 0, skipped: 1 })
+    expect(fakeDocs.get(configPath)?.['splashFailedAtMs']).toBe(failed['splashFailedAtMs'])
+
+    // The card's own apply is not held back by it.
+    expect((await applyPosReaderSplash('host-1')).outcome).toBe('failed')
+
+    // Once the wait is over the beat tries again, and a fixed logo goes out.
+    mockBlocked = null
+    fakeDocs.set(configPath, {
+      ...fakeDocs.get(configPath),
+      splashFailedAtMs: Date.now() - POS_READER_SPLASH_RETRY_FAILED_AFTER_MS - 1,
+    })
+    expect(await refreshPosReaderSplashes(open)).toMatchObject({ applied: 1 })
+    expect(fakeDocs.get(configPath)?.['splashProblem']).toBeUndefined()
+  })
+
+  it('does nothing in live mode until Terminal live mode is on', async () => {
+    await logoApplied()
+    fakeDocs.set('orgs/org-1/media/logo1', { ...fakeDocs.get('orgs/org-1/media/logo1'), contentSha256: '9'.repeat(64) })
+    process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
+    expect(await refreshPosReaderSplashes(open)).toEqual({ applied: 0, unchanged: 0, failed: 0, skipped: 0, more: false })
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('is scheduled: the commerce server registers the beat at module scope, asking the lock', () => {
+    const server = readFileSync(join(__dirname, '..', 'server.ts'), 'utf8')
+    const block = /registerPluginJob\(\{[\s\S]*?name:\s*'pos-reader-splash-refresh'[\s\S]*?\n\}\)/.exec(server)?.[0] ?? ''
+    expect(block).toContain("lockdown: { scope: 'per-host' }")
+    expect(block).toContain('refreshPosReaderSplashes(gate)')
+    expect(server.indexOf(block)).toBeLessThan(server.indexOf('export function register'))
   })
 })
 

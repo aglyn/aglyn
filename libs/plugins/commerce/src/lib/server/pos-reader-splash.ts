@@ -88,10 +88,15 @@ import { savePosReaderConfiguration } from './pos-terminal'
  *   - when the POS devices card saves a choice, or opens and finds the key
  *     stale (a logo changed since);
  *   - when staff change the default, for every store with a Location
- *     (`pos-reader-splash-admin.ts`).
+ *     (`pos-reader-splash-admin.ts`);
+ *   - on the commerce plugin's `pos-reader-splash-refresh` beat, for every
+ *     store with a Location whose key went stale with nobody opening the
+ *     card: a logo changed on the organization profile or the brand, or the
+ *     logo's file replaced in the media library ({@link refreshPosReaderSplashes}).
  *
- * Never on the payment path: drawing and uploading takes a second or two,
- * and a reader with an older screen still takes the payment.
+ * Never on the payment path, and never on a logo's save: drawing and
+ * uploading takes a second or two, and a reader with an older screen still
+ * takes the payment.
  *
  * ## Test mode first
  *
@@ -463,7 +468,18 @@ export interface PosReaderSplashApplyResult {
  */
 export async function applyPosReaderSplash(
   hostId: string,
-  options: { org?: Record<string, any> | null; platform?: PlatformSplashDoc; force?: boolean } = {},
+  options: {
+    org?: Record<string, any> | null
+    platform?: PlatformSplashDoc
+    force?: boolean
+    /**
+     * Leave a screen that failed to apply alone until this long after the
+     * failure, when it is still the same screen: a background pass must not
+     * draw and upload a logo Stripe keeps refusing on every beat. The card
+     * passes none, so opening it always tries again.
+     */
+    retryFailedAfterMs?: number
+  } = {},
 ): Promise<PosReaderSplashApplyResult> {
   if (!posTerminalAvailable()) return { outcome: 'skipped', plan: null, problem: null }
   const ref = terminalConfigRef(hostId)
@@ -478,6 +494,16 @@ export async function applyPosReaderSplash(
     return { outcome: 'unchanged', plan, problem: plan.problem }
   }
   if (plan.key === applied && !options.force) return { outcome: 'unchanged', plan, problem: plan.problem }
+  const failedAtMs = typeof config['splashFailedAtMs'] === 'number' ? (config['splashFailedAtMs'] as number) : 0
+  if (
+    options.retryFailedAfterMs &&
+    !options.force &&
+    config['splashFailedKey'] === plan.key &&
+    Date.now() - failedAtMs < options.retryFailedAfterMs
+  ) {
+    const problem = typeof config['splashProblem'] === 'string' ? (config['splashProblem'] as string) : plan.problem
+    return { outcome: 'skipped', plan, problem }
+  }
   try {
     const params: Record<string, string> = {}
     if (plan.key === 'none' || !plan.source) {
@@ -505,9 +531,94 @@ export async function applyPosReaderSplash(
     const problem =
       error instanceof PosReaderSplashRenderError ? error.message : 'The start-up screen could not be applied. Try again.'
     if (!(error instanceof PosReaderSplashRenderError)) console.error('[pos-reader-splash]', hostId, error)
-    await ref.set({ splashProblem: problem, splashFailedAtMs: Date.now() }, { merge: true }).catch(() => undefined)
+    await ref
+      .set({ splashProblem: problem, splashFailedAtMs: Date.now(), splashFailedKey: plan.key }, { merge: true })
+      .catch(() => undefined)
     return { outcome: 'failed', plan, problem }
   }
+}
+
+/** How many stores one pass reaches, and how many it works on at once. */
+export const POS_READER_SPLASH_SWEEP_WINDOW = 400
+const POS_READER_SPLASH_SWEEP_CONCURRENCY = 4
+
+export interface PosReaderSplashSweep {
+  applied: number
+  unchanged: number
+  failed: number
+  /** Locked stores, and screens still inside their failure's retry wait. */
+  skipped: number
+  /** More stores have readers than one pass reaches. */
+  more: boolean
+}
+
+/**
+ * Brings every store with a Location up to date with
+ * {@link applyPosReaderSplash}, the call the POS devices card makes: a store
+ * whose screen key has not moved costs reads and no Stripe call, and one
+ * that moved gets exactly one round of uploads. At most
+ * {@link POS_READER_SPLASH_SWEEP_WINDOW} stores a pass.
+ */
+export async function applyPosReaderSplashToStores(
+  options: {
+    platform?: PlatformSplashDoc
+    /** Asked before each store; a locked store is left as it is. */
+    isLocked?: (hostId: string) => Promise<boolean>
+    retryFailedAfterMs?: number
+  } = {},
+): Promise<PosReaderSplashSweep> {
+  const counts: PosReaderSplashSweep = { applied: 0, unchanged: 0, failed: 0, skipped: 0, more: false }
+  const platform = options.platform ?? (await readPlatformSplash())
+  const snapshot = await firestore().collectionGroup('terminal').limit(POS_READER_SPLASH_SWEEP_WINDOW + 1).get()
+  const docs = snapshot.docs as Array<{ id: string; ref: { path: string }; get: (field: string) => unknown }>
+  const hostIds = docs
+    .filter((doc) => doc.id === 'config' && doc.get('stripeLocationId'))
+    .map((doc) => doc.ref.path.split('/')[1])
+    .filter(Boolean)
+  const queue = hostIds.slice(0, POS_READER_SPLASH_SWEEP_WINDOW)
+  await Promise.all(
+    Array.from({ length: POS_READER_SPLASH_SWEEP_CONCURRENCY }, async () => {
+      for (let hostId = queue.shift(); hostId; hostId = queue.shift()) {
+        if (options.isLocked && (await options.isLocked(hostId))) {
+          counts.skipped += 1
+          continue
+        }
+        const org = await ownerOrgOf(hostId)
+        const result = await applyPosReaderSplash(hostId, {
+          org,
+          platform,
+          ...(options.retryFailedAfterMs ? { retryFailedAfterMs: options.retryFailedAfterMs } : {}),
+        })
+        if (result.outcome === 'applied' || result.outcome === 'cleared') counts.applied += 1
+        else if (result.outcome === 'failed') counts.failed += 1
+        else if (result.outcome === 'skipped') counts.skipped += 1
+        else counts.unchanged += 1
+      }
+    }),
+  )
+  return { ...counts, more: docs.length > POS_READER_SPLASH_SWEEP_WINDOW }
+}
+
+/** How long a background pass leaves a screen Stripe refused before trying it again. */
+export const POS_READER_SPLASH_RETRY_FAILED_AFTER_MS = 6 * 60 * 60 * 1000
+
+/**
+ * The `pos-reader-splash-refresh` beat (AGL-4048): a logo changed on the
+ * organization profile or the white-label brand, or the logo's file replaced
+ * in the media library, reaches the store's readers without anybody opening
+ * the POS devices card. The screen's key already moves with each of those,
+ * so the beat only has to ask; nothing waits on it, and a save never waits
+ * on Stripe. Asks the runner's lockdown gate for every store.
+ */
+export async function refreshPosReaderSplashes(gate: {
+  isLocked: (hostId: string) => Promise<boolean>
+}): Promise<PosReaderSplashSweep> {
+  const idle: PosReaderSplashSweep = { applied: 0, unchanged: 0, failed: 0, skipped: 0, more: false }
+  if (!posTerminalAvailable()) return idle
+  return applyPosReaderSplashToStores({
+    isLocked: (hostId) => gate.isLocked(hostId),
+    retryFailedAfterMs: POS_READER_SPLASH_RETRY_FAILED_AFTER_MS,
+  })
 }
 
 /*==========================================

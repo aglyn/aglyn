@@ -107,9 +107,10 @@ A workspace on a white-label plan never shows the Aglyn screen: its readers
 show its own logo unless it picks an image.
 
 Your choice goes to every reader on the site, including ones you add later.
-Readers pick up a change within about ten minutes. If you change your logo,
-open the **POS devices** card again to send the new one. Any admin or editor
-who can use the point of sale can change it.
+Readers pick up a change within about ten minutes. If you change your logo, or
+replace its file in your media library, your readers get the new one within
+about half an hour; open the **POS devices** card to send it right away. Any
+admin or editor who can use the point of sale can change it.
 
 ## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
 

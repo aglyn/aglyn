@@ -27,8 +27,7 @@ import {
   posReaderSplashImageProblem,
 } from '../model/pos-reader-splash'
 import {
-  applyPosReaderSplash,
-  ownerOrgOf,
+  applyPosReaderSplashToStores,
   platformSplashReady,
   platformSplashRef,
   posReaderSplashBucket,
@@ -62,10 +61,6 @@ import { posReaderSplashImageFacts } from './pos-reader-splash-render'
  *=========================================*/
 
 const WRITE_ROLES = ['super']
-
-/** How many stores one `apply` reaches; staff press it again for the rest. */
-const APPLY_WINDOW = 400
-const APPLY_CONCURRENCY = 4
 
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -138,29 +133,13 @@ async function upload(
   }
 }
 
-/** Every store with a Location, its screen brought up to the current default. */
+/**
+ * Every store with a Location, its screen brought up to the current default.
+ * One `apply` reaches `POS_READER_SPLASH_SWEEP_WINDOW` stores; staff
+ * press it again for the rest.
+ */
 async function applyToEveryStore() {
-  const firestore = firebaseAdmin.app().firestore()
-  const platform = await readPlatformSplash()
-  const snapshot = await firestore.collectionGroup('terminal').limit(APPLY_WINDOW + 1).get()
-  const hostIds = (snapshot.docs as Array<{ id: string; ref: { path: string }; get: (field: string) => unknown }>)
-    .filter((doc) => doc.id === 'config' && doc.get('stripeLocationId'))
-    .map((doc) => doc.ref.path.split('/')[1])
-    .filter(Boolean)
-  const counts = { applied: 0, unchanged: 0, failed: 0 }
-  const queue = hostIds.slice(0, APPLY_WINDOW)
-  await Promise.all(
-    Array.from({ length: APPLY_CONCURRENCY }, async () => {
-      for (let hostId = queue.shift(); hostId; hostId = queue.shift()) {
-        const org = await ownerOrgOf(hostId)
-        const result = await applyPosReaderSplash(hostId, { org, platform })
-        if (result.outcome === 'applied' || result.outcome === 'cleared') counts.applied += 1
-        else if (result.outcome === 'failed') counts.failed += 1
-        else counts.unchanged += 1
-      }
-    }),
-  )
-  return { ...counts, more: snapshot.docs.length > APPLY_WINDOW }
+  return applyPosReaderSplashToStores({ platform: await readPlatformSplash() })
 }
 
 async function handler(request: Request): Promise<Response> {
