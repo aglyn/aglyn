@@ -16,7 +16,6 @@
  */
 
 import {
-  canManageOrg,
   CONTACT_ERASURE_REQUESTED_FIELD,
   normalizeContactEmail,
   PERSON_ERASURES_COLLECTION,
@@ -31,8 +30,10 @@ import {
   getOrgForHost,
   logHostActivity,
   logOrgActivity,
+  memberHasOrgPermission,
   orgDataCollectionForHost,
   readLeadForHost,
+  resolveOrgMembership,
   suppressEmailForHostErasure,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -83,13 +84,16 @@ export interface ErasePersonResponse {
  *
  * ## Who may
  *
- * A workspace admin or owner — `canManageOrg` on the caller's org role —
- * and nobody else. Not a site editor with the data permission, who can
- * detach a contact from their own site but has no standing to remove the
- * person from every site in the workspace; and not staff acting alone,
- * because the workspace is the controller of this data and the instruction
- * has to come from it. Staff who are also admins of the workspace pass on
- * that role, as anyone would.
+ * A member who holds "Privacy requests" (`org.privacy`, AGL-4047) over the
+ * whole workspace, and nobody else. The key is on for owners and admins by
+ * default — the two roles this asked for before — and a custom role or an
+ * override can hand it to another org-wide member or take it from an admin.
+ * Not a site editor with the data permission, who can detach a contact from
+ * their own site but has no standing to remove the person from every site in
+ * the workspace; not a site collaborator, granted the key or not, for the
+ * same reason; and not staff acting alone, because the workspace is the
+ * controller of this data and the instruction has to come from it. Staff who
+ * are also admins of the workspace pass on that, as anyone would.
  *
  * ## What it does, and what it does not
  *
@@ -162,14 +166,14 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
     res.status(400).json({ error: 'Name the site the lead lives under' })
     return
   }
-  const refusal = 'Only a workspace admin can erase a person from the workspace'
+  const refusal = 'Your role does not include "Privacy requests" — ask an organization admin'
 
   try {
     let orgId: string
     let actor: { uid: string; email: string | null }
     if (routeScope.level === 'org') {
       const caller = await authorizeOrgCaller(req, routeScope.orgId, {
-        needs: 'manage-org',
+        needs: 'org.privacy',
         refusal,
       })
       if (caller.ok === false) {
@@ -181,7 +185,14 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
     } else {
       const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
       const membership = await resolveOrgPermissions(decoded.uid, { hostId })
-      if (!canManageOrg(membership.role)) {
+      const member = membership.orgId
+        ? ((await resolveOrgMembership(decoded.uid, membership.orgId))?.member ?? null)
+        : null
+      if (
+        !membership.orgWide ||
+        !membership.orgId ||
+        !(await memberHasOrgPermission(membership.orgId, member, 'org.privacy'))
+      ) {
         res.status(403).json({ error: refusal })
         return
       }

@@ -7310,6 +7310,9 @@
       "admin": [
         "org.settings",
         "org.auditLog",
+        "org.apiKeys",
+        "org.privacy",
+        "org.holds",
         "billing.view",
         "billing.manage",
         "members.manage",
@@ -7351,6 +7354,9 @@
       "owner": [
         "org.settings",
         "org.auditLog",
+        "org.apiKeys",
+        "org.privacy",
+        "org.holds",
         "billing.view",
         "billing.manage",
         "members.manage",
@@ -7437,6 +7443,24 @@
         "group": "organization",
         "key": "org.auditLog",
         "label": "Activity & audit log"
+      },
+      {
+        "description": "Create and revoke the workspace’s REST API keys.",
+        "group": "organization",
+        "key": "org.apiKeys",
+        "label": "Manage API keys"
+      },
+      {
+        "description": "Erase a person from every site in the workspace when they ask.",
+        "group": "organization",
+        "key": "org.privacy",
+        "label": "Privacy requests"
+      },
+      {
+        "description": "See what is held, flagged or locked on the workspace, and request a review.",
+        "group": "organization",
+        "key": "org.holds",
+        "label": "Holds and reviews"
       },
       {
         "description": "See the plan, usage meters, and invoices.",

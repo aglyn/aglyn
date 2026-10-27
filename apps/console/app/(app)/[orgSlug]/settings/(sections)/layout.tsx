@@ -17,7 +17,7 @@
 
 'use client'
 
-import { canManageOrg, CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
+import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import {
@@ -52,11 +52,14 @@ export default function SettingsSectionsLayout({
   const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
   const { loaded: permissionsLoaded, can } = useOrgPermissions()
-  const canManage = canManageOrg(currentOrg?.role)
-  // The sections whose routes check `org.settings` (AGL-4047) follow that key,
-  // so a custom role that grants or takes it moves the rail with the server.
-  // API keys, Privacy and Holds stay on the role their routes still ask.
+  // Each section follows the key its route checks (AGL-4047), so a custom
+  // role or an override that grants or takes one moves the rail with the
+  // server: `org.settings` for the workspace's setup, `org.apiKeys`,
+  // `org.privacy` and `org.holds` for theirs. Held while permissions load.
   const managesSettings = permissionsLoaded && can('org.settings')
+  const managesApiKeys = permissionsLoaded && can('org.apiKeys')
+  const filesPrivacyRequests = permissionsLoaded && can('org.privacy')
+  const readsHolds = permissionsLoaded && can('org.holds')
   const isOwner = currentOrg?.role === 'owner'
   const transferHubVisible = useTransferHubVisible()
   /*
@@ -94,7 +97,7 @@ export default function SettingsSectionsLayout({
     section(Route.ORG_SETTINGS_GENERAL, 'General'),
     section(Route.ORG_SETTINGS_PROFILE, 'Profile', managesSettings),
     section(Route.ORG_SETTINGS_PLUGINS, 'Plugins', managesSettings),
-    section(Route.ORG_SETTINGS_API_KEYS, 'API keys', canManage),
+    section(Route.ORG_SETTINGS_API_KEYS, 'API keys', managesApiKeys),
     section(Route.ORG_SETTINGS_BRANDING, 'Branding', managesSettings),
     // Shown to every admin, not only entitled orgs (AGL-1210): the
     // unentitled state explains that SSO comes with Enterprise and
@@ -106,10 +109,11 @@ export default function SettingsSectionsLayout({
     section(Route.ORG_SETTINGS_INTEGRATIONS, 'Integrations', integrations),
     // The workspace's privacy obligations (AGL-2839): exporting the people
     // it holds and erasing one. Outside the CRM, so every plan has them.
-    section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', canManage, DATA),
+    section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', filesPrivacyRequests, DATA),
     // Everything held, flagged or locked on the workspace, and the way to
-    // request a review (AGL-3368). Owners and admins: it is who is told.
-    section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', canManage, DATA),
+    // request a review (AGL-3368). Owners and admins by default: it is who
+    // is told.
+    section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', readsHolds, DATA),
     // Import & export (AGL-3535): offered to whoever may export something
     // (AGL-3554) — `data.manage`, or a resource that lets the person read
     // its records on a plan that moves them; the page offers each button

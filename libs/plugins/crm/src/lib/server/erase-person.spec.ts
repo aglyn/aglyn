@@ -120,6 +120,11 @@ const mockResolveOrgPermissions = jest.fn(async () => ({
   orgWide: true,
   hostRole: 'admin',
 }))
+/**
+ * The caller's own overrides on their member document (AGL-4047): where a
+ * custom role or an override grants or refuses "Privacy requests".
+ */
+let mockMemberPermissions: Record<string, boolean> | undefined
 const mockSuppress = jest.fn(async (input: { hostId: string; email: string }) => {
   docs.set(`hosts/${input.hostId}/suppressions/${KEY}`, { email: null, reason: 'erasure' })
   return { key: KEY, created: true }
@@ -162,6 +167,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...(args as [])),
   getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG } : null),
   suppressEmailForHostErasure: (input: { hostId: string; email: string }) => mockSuppress(input),
+  // The member document the resolver answered from: the same role and reach,
+  // and the caller's own overrides (AGL-4047).
+  resolveOrgMembership: async (uid: string, orgId: string) => {
+    const resolved = (await (mockResolveOrgPermissions as any)(uid, { orgId })) as {
+      role: string | null
+      orgWide: boolean
+    }
+    if (!resolved?.role) return null
+    return {
+      orgId,
+      member: {
+        $id: uid,
+        role: resolved.role,
+        allHosts: resolved.orgWide,
+        ...(resolved.orgWide ? {} : { hostAccess: { [HOST]: 'admin' } }),
+        ...(mockMemberPermissions ? { permissions: mockMemberPermissions } : {}),
+      },
+    }
+  },
+  // The catalog's own resolver, so the role's default and an override decide.
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, permission: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').hasOrgPermission(member, permission, null),
 }))
 
 async function call(
@@ -220,6 +248,7 @@ beforeEach(() => {
   mockLogHostActivity.mockClear()
   mockLogOrgActivity.mockClear()
   mockSuppress.mockClear()
+  mockMemberPermissions = undefined
   mockResolveOrgPermissions.mockClear()
   mockResolveOrgPermissions.mockResolvedValue({
     orgId: ORG,
@@ -242,6 +271,36 @@ describe('the door', () => {
     seed()
     const { status } = await call({ hostId: HOST, contactId: 'c1', email: EMAIL }, { token: null })
     expect(status).toBe(401)
+  })
+
+  it('files for an editor a role grants "Privacy requests", and refuses an admin a role takes it from (AGL-4047)', async () => {
+    seed()
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: ORG,
+      role: 'editor',
+      isOwner: false,
+      permissions: { 'data.manage': true },
+      orgWide: true,
+      hostRole: 'editor',
+    })
+    mockMemberPermissions = { 'org.privacy': true }
+    expect((await call({ hostId: HOST, contactId: 'c1', email: EMAIL })).status).toBe(200)
+    expect(docs.has(`personErasures/${ORG}__${KEY}`)).toBe(true)
+
+    docs.delete(`personErasures/${ORG}__${KEY}`)
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: ORG,
+      role: 'admin',
+      isOwner: true,
+      permissions: { 'data.manage': true },
+      orgWide: true,
+      hostRole: 'admin',
+    })
+    mockMemberPermissions = { 'org.privacy': false }
+    const refused = await call({ hostId: HOST, contactId: 'c1', email: EMAIL })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Privacy requests')
+    expect(docs.has(`personErasures/${ORG}__${KEY}`)).toBe(false)
   })
 
   it('refuses a member who is not a workspace admin, whatever their data permission', async () => {

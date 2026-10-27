@@ -179,6 +179,24 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     description: 'See the organization activity feed.',
   },
   {
+    key: 'org.apiKeys',
+    group: 'organization',
+    label: 'Manage API keys',
+    description: 'Create and revoke the workspace’s REST API keys.',
+  },
+  {
+    key: 'org.privacy',
+    group: 'organization',
+    label: 'Privacy requests',
+    description: 'Erase a person from every site in the workspace when they ask.',
+  },
+  {
+    key: 'org.holds',
+    group: 'organization',
+    label: 'Holds and reviews',
+    description: 'See what is held, flagged or locked on the workspace, and request a review.',
+  },
+  {
     key: 'billing.view',
     group: 'billing',
     label: 'View billing',

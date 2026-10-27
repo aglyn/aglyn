@@ -49,6 +49,9 @@ export type { OrgPermissionGroup, OrgPermissionScope }
 export type CoreOrgPermission =
   | 'org.settings'
   | 'org.auditLog'
+  | 'org.apiKeys'
+  | 'org.privacy'
+  | 'org.holds'
   | 'billing.view'
   | 'billing.manage'
   | 'members.manage'
