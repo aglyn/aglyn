@@ -314,7 +314,9 @@ export — it is the one place you can see what remains.
 
 **Settings → Privacy** is where a workspace answers the people its sites hold: someone
 who asks for the data you keep about them, or asks to be forgotten. The section is shown
-to workspace **owners and admins**, and it is on **every plan**, Free included. These
+to members with the **Privacy requests** permission — workspace **owners and admins** by
+default, and anyone a [custom role](teams-and-roles/custom-roles.md#api-keys-privacy-and-holds)
+grants it — and it is on **every plan**, Free included. These
 are obligations rather than features, so they sit outside the
 [CRM](../content-and-data/crm/overview.md) and do not wait for a plan that includes it.
 

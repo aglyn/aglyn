@@ -107,10 +107,13 @@ A workspace on a white-label plan never shows the Aglyn screen: its readers
 show its own logo unless it picks an image.
 
 Your choice goes to every reader on the site, including ones you add later.
-Readers pick up a change within about ten minutes. If you change your logo, or
-replace its file in your media library, your readers get the new one within
-about half an hour; open the **POS devices** card to send it right away. Any
-admin or editor who can use the point of sale can change it.
+Readers pick up a change within about ten minutes. When you save a new logo on
+your organization profile or your white-label brand, it goes to the readers of
+every store in the workspace straight away, without holding up the save, and
+reaches them within about ten minutes. If you replace the logo's file in your
+media library instead, your readers get it within about half an hour; open the
+**POS devices** card to send it right away. Anyone with the **Registers and
+devices** permission can change the choice.
 
 ## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
 
@@ -156,11 +159,19 @@ You come back to the card, which says the order is in. Orders ship to street
 addresses in the United States; P.O. boxes and military addresses are not
 accepted.
 
-Placing an order needs the **Buy point of sale hardware** permission. Everyone who
-can use the point of sale sees the card and the orders, and **Check out** says why
-it is unavailable to someone without it. Owners, admins and editors hold it with
-the point of sale; to keep ordering to a few people, deny it in a
-[custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions).
+#### Who can buy hardware {#who-can-buy-hardware}
+
+Placing an order needs the **Buy point of sale hardware** permission. Owners,
+admins and editors hold it with the point of sale, and viewers don't. It stands on
+its own:
+
+- To keep ordering to a few people, deny it in a
+  [custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions)
+  or for one member. They still see the card and the orders, and **Check out** says
+  why it is unavailable.
+- To let someone order readers without working the register, such as a
+  bookkeeper, allow it for them. They open **Products → Point of sale** and see the
+  **Hardware** card and the site's orders, and nothing at the register.
 
 **Follow an order**
 
@@ -186,8 +197,8 @@ Set the reader up as in [Setting one up](#card-readers): charge it, connect it t
 Wi-Fi, generate a pairing code on the reader, and add it on the **POS devices**
 card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
 
-**Who can buy:** an admin or editor of the site with the **Use the point of
-sale** permission, on a plan that includes POS.
+**Who can buy:** a member with the **Buy point of sale hardware** permission for
+the site, on a plan that includes POS.
 
 ### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
 

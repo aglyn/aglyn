@@ -328,9 +328,11 @@ for finding and installing new ones, not for administering what you already run:
 ### Organization settings {#organization-settings}
 
 **Organization → Settings** is where you run the workspace itself: its name and
-workspace URL under **General**, then — for owners and admins — **Profile**, **Plugins**,
-**API keys**, **Branding**, **Single sign-on**, **Privacy**, **Holds & reviews** and
-**Import & export**, each a section in the rail on the left. **Integrations** follows
+workspace URL under **General**, then — for owners and admins, or whoever a
+[custom role](../workspace-and-billing/teams-and-roles/custom-roles.md#api-keys-privacy-and-holds)
+grants each one — **Profile**, **Plugins**, **API keys**, **Branding**, **Single sign-on**,
+**Privacy**, **Holds & reviews** and **Import & export**, each a section in the rail on
+the left. **Integrations** follows
 **Single sign-on** once a plugin adds workspace settings there. **Privacy**, **Holds &
 reviews** and **Import & export** are grouped under **Data & compliance**. **Ownership**
 and **Delete**, under **Danger zone**, appear to the workspace owner only.

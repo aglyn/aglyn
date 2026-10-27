@@ -27,25 +27,49 @@ Control what each teammate can do with **roles** — named permission sets — p
    default. The switch beside a group's heading sets every permission in it at once.
 4. Save, then assign it to members from the roster's **Custom role** column.
 
-The permission catalog covers organization settings, the activity log, billing (view
-and manage separately), member management, site creation and deletion, organization
-data, marketplace publishing, plugin installs, the two AI keys, and every permission
-the workspace's plugins add, such as **Use the point of sale** (`managePos`). A
-plugin's permissions are listed while the plugin is on for the workspace. Owners,
-admins and editors hold the point of sale by default and viewers don't, so a custom
-role can hand the register to a viewer or take it from an editor.
+The permission catalog covers organization settings, the activity log, API keys,
+privacy requests, holds and reviews, billing (view and manage separately), member
+management, site creation and deletion, organization data, marketplace publishing,
+plugin installs, the two AI keys, and every permission the workspace's plugins add,
+such as **Use the point of sale** (`managePos`). A plugin's permissions are listed
+while the plugin is on for the workspace. Owners, admins and editors hold the point
+of sale by default and viewers don't, so a custom role can hand the register to a
+viewer or take it from an editor. The permission decides on its own: a member's
+role on the site no longer has to be admin or editor too, so a site viewer you
+grant the register can work it.
 
 ### Point of sale permissions {#point-of-sale-permissions}
 
-**Use the point of sale** (`managePos`) opens the register. Six finer permissions
+**Use the point of sale** (`managePos`) opens the register. Five finer permissions
 split what it covers: **Sell at the register**, **Refunds and returns**, **Give
-discounts at the register**, **Cash drawer and shifts**, **Registers and devices**
-and **Buy point of sale hardware**. Each one follows **Use the point of sale**
-until a role or a member sets it, which is what its **Inherit** says, so a role
-that only turns the point of sale on or off works as it always has. Denying a finer
-permission narrows the register for that role; allowing one never opens the
-register by itself, because each also needs **Use the point of sale**. What each
-covers is in [Who can do what at the register](../../commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register).
+discounts at the register**, **Cash drawer and shifts** and **Registers and
+devices**. Each one follows **Use the point of sale** until a role or a member sets
+it, which is what its **Inherit** says, so a role that only turns the point of sale
+on or off works as it always has. Denying a finer permission narrows the register
+for that role; allowing one never opens the register by itself, because each also
+needs **Use the point of sale**. What each covers is in [Who can do what at the register](../../commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register).
+
+**Buy point of sale hardware** (`posBuyHardware`) follows **Use the point of sale**
+the same way until a role or a member sets it, but it stands on its own: allowing it
+lets a member order card readers from the hardware shop without the register. That
+suits a bookkeeper who orders the store's readers and never rings a sale. Denying it
+keeps a cashier at the register and out of the shop. See
+[Who can buy hardware](../../commerce-and-bookings/commerce/pos-hardware.md#who-can-buy-hardware).
+
+### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
+
+Three settings sections have a permission each. Owners and admins hold all three by
+default, as they always could, and a custom role or a per-member override can hand
+one to another member of the whole workspace, or take it from an admin:
+
+| Permission | What it opens |
+|---|---|
+| **Manage API keys** (`org.apiKeys`) | **Settings → API keys**: create and revoke the workspace's REST API keys |
+| **Privacy requests** (`org.privacy`) | **Settings → Privacy**, and **Erase this person** on a contact or lead: file a privacy erasure |
+| **Holds and reviews** (`org.holds`) | **Settings → Holds & reviews**, and **Request a review** on a held page |
+
+A site collaborator never holds them: each acts on the whole workspace. Notices about
+holds are still emailed to the owners and admins.
 
 ### The AI permissions {#ai-permissions}
 
@@ -75,8 +99,9 @@ The console follows the same permissions as the server. Someone allowed **Manage
 members** can change roles, custom roles and per-member permissions on the Team page,
 whatever their org role, and someone allowed **Organization settings** gets the
 Profile, Plugins, Branding and Single sign-on settings and the General settings form.
-Changing the workspace URL and handing the workspace over stay with the owner, and
-API keys stay with owners and admins.
+The API keys, Privacy and Holds & reviews sections follow their own permissions in
+the same way. Changing the workspace URL and handing the workspace over stay with
+the owner.
 
 There is deliberately no permission for **marketing** surfaces (announcement bars,
 popups, campaigns). Those belong to a **site**, not to the organization, and access to

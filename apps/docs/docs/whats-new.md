@@ -27,6 +27,24 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — permissions decide the register, the hardware shop and three settings
+
+- **[The register follows its permission alone](commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register)** —
+  **Use the point of sale** and its finer permissions decide who works the
+  register, on their own. Owners, admins and editors keep exactly what they had,
+  and a site viewer you grant the register in a custom role or for one member can
+  now ring sales, run a shift and print receipts.
+- **[Buy hardware without the register](commerce-and-bookings/commerce/pos-hardware.md#who-can-buy-hardware)** —
+  **Buy point of sale hardware** can be allowed for someone who doesn't work the
+  register, such as a bookkeeper. They see the **Hardware** card and the site's
+  orders on **Products → Point of sale**, and can check out.
+- **[API keys, privacy requests and holds have permissions](workspace-and-billing/teams-and-roles/custom-roles.md#api-keys-privacy-and-holds)** —
+  **Manage API keys**, **Privacy requests** and **Holds and reviews** decide those
+  settings sections. Owners and admins hold them by default, as before, and a
+  custom role or a per-member override can grant or take each one.
+- **[A saved logo reaches your card readers straight away](commerce-and-bookings/commerce/pos-hardware.md#reader-start-up-screen)** —
+  saving a new logo on your organization profile or white-label brand sends it to
+  every store's readers at once, without waiting for the next refresh.
 ## October 2026 — stays checked in per guest
 
 - **[One check-in per guest](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
