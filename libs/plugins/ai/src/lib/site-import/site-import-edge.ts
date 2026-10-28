@@ -76,7 +76,8 @@ export function siteImportEdgeToken(env?: SiteImportEdgeDeps['env']): string | n
 async function defaultServed(hostname: string): Promise<boolean> {
   // Loaded only once a secret is configured, so a crawl that has none (every
   // spec, every self-hosted deployment without the rule) never opens Firestore.
-  const { isPlatformServedDomain } = await import('@aglyn/tenant-data-admin/server/platform-served-domain')
+  // By relative path: see `site-import-edge-server.ts`.
+  const { isPlatformServedDomain } = await import('./site-import-edge-server')
   return isPlatformServedDomain(hostname)
 }
 
