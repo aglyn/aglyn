@@ -19,11 +19,13 @@ import type {
   PluginPersonErasureReport,
   PluginPersonErasureRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
-import { firebaseAdmin, getPluginConfig } from '@aglyn/tenant-data-admin'
-import { WAIVERS_PLUGIN_ID } from '../constants/bundle-common'
-import { waiverRetainUntilMs, waiverRetentionYears } from '../model/waiver-retention'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { waiverRetentionStamp, waiverRetentionStampMoved, type WaiverRetentionStamp } from '../model/waiver-retention'
 import type { StoredWaiverSignature } from '../model/waiver-signature'
 import { waiversDb, waiversRefs } from './db'
+import { setWaiversRetentionYearsForTests, siteRetentionYears } from './retention'
+
+export { siteRetentionYears }
 
 /*==========================================
  * ERASING A PERSON FROM A WORKSPACE'S WAIVERS (AGL-4042).
@@ -35,7 +37,9 @@ import { waiversDb, waiversRefs } from './db'
  * `retentionYears`), counted from the last day it covers or from the day the
  * youngest minor on it reaches the waiver's adult age, and then deleted by
  * the retention job (`retention-job.ts`) with its drawn signature and paper
- * photo. A signature whose period has already run out is deleted now.
+ * photo, exactly as every other signature is: the erasure neither shortens
+ * nor lengthens it. A signature whose period has already run out is deleted
+ * now.
  *
  * What the erasure still removes here is the link to the person's people
  * record (`contactId`), which the CRM's own eraser deletes: a kept signature
@@ -63,24 +67,17 @@ function defaultBucket(): Bucket | null {
 }
 
 let bucketOverride: (() => Bucket | null) | null = null
-let yearsOverride: ((orgId: string, hostId: string) => Promise<number>) | null = null
 
 /** Test seams: the bucket the files are deleted from, and a site's period. */
 export function setWaiversErasureDepsForTests(
   deps: { bucket?: (() => Bucket | null) | null; retentionYears?: ((orgId: string, hostId: string) => Promise<number>) | null } | null,
 ): void {
   bucketOverride = deps?.bucket ?? null
-  yearsOverride = deps?.retentionYears ?? null
+  setWaiversRetentionYearsForTests(deps?.retentionYears ?? null)
 }
 
 /** The bucket a signature's files live in, or `null` where Storage is not configured. */
 export const waiversBucket = (): Bucket | null => (bucketOverride ?? defaultBucket)()
-
-/** A site's waiver retention period, in years, as its settings resolve. */
-export async function siteRetentionYears(orgId: string, hostId: string): Promise<number> {
-  if (yearsOverride) return yearsOverride(orgId, hostId)
-  return waiverRetentionYears(await getPluginConfig(orgId, WAIVERS_PLUGIN_ID, { hostId }))
-}
 
 /** Deletes one signature's private files: the drawn signature and the paper photo. */
 export async function deleteSignatureFiles(bucket: Bucket | null, orgId: string, signatureId: string): Promise<void> {
@@ -97,15 +94,15 @@ export async function eraseWaiversPerson(request: PluginPersonErasureRequest): P
     if (!years.has(hostId)) years.set(hostId, siteRetentionYears(request.orgId, hostId))
     return years.get(hostId) as Promise<number>
   }
-  const plan: Array<{ ref: { id: string }; keep: boolean; retainUntilMs: number; requestedAtMs: number; changed: boolean }> = []
+  const plan: Array<{ ref: { id: string }; keep: boolean; stamp: WaiverRetentionStamp; requestedAtMs: number; changed: boolean }> = []
   for (const doc of found.docs) {
     const signature = doc.data() as StoredWaiverSignature
-    const retainUntilMs = waiverRetainUntilMs(signature, await yearsFor(String(signature.hostId ?? '')))
-    const keep = retainUntilMs > request.atMs
+    const stamp = waiverRetentionStamp(signature, await yearsFor(String(signature.hostId ?? '')))
+    const keep = stamp.retainUntilMs > request.atMs
     const requestedAtMs = signature.erasure?.requestedAtMs ?? request.atMs
     const changed =
-      !signature.erasure || signature.retainUntilMs !== retainUntilMs || (signature.contactId ?? null) !== null
-    plan.push({ ref: doc.ref, keep, retainUntilMs, requestedAtMs, changed })
+      !signature.erasure || waiverRetentionStampMoved(signature, stamp) || (signature.contactId ?? null) !== null
+    plan.push({ ref: doc.ref, keep, stamp, requestedAtMs, changed })
   }
   const kept = plan.filter((entry) => entry.keep).length
   const report = { signatures: found.size, kept, deleted: plan.length - kept }
@@ -119,7 +116,7 @@ export async function eraseWaiversPerson(request: PluginPersonErasureRequest): P
         if (entry.changed) {
           batch.update(ref, {
             erasure: { requestedAtMs: entry.requestedAtMs },
-            retainUntilMs: entry.retainUntilMs,
+            ...entry.stamp,
             contactId: null,
           })
         }

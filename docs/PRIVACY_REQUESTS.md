@@ -363,10 +363,10 @@ Work this list, not the tree.
   is disclosable.
 - `contactSuppressions` — kept precisely so we can honour "stop contacting me".
 - `orgs/{orgId}/waiverSignatures` — a waiver a person signed at a store, with its
-  drawn signature or paper photo in private Storage. A person erasure KEEPS it, as
-  the store's record of what they agreed to, for the store's waiver retention
-  period (a Waivers setting, 7 years by default), then the `waivers-retention` job
-  deletes it (AGL-4042). The store is the controller and Aglyn the processor, so on
+  drawn signature or paper photo in private Storage. Every signature is kept for
+  the store's waiver retention period (a Waivers setting, 7 years by default), then
+  the `waivers-retention` job deletes it, and a person erasure KEEPS it for that
+  same period, as the store's record of what they agreed to (AGL-4042). The store is the controller and Aglyn the processor, so on
   an access request it is the store's to disclose, through **Waivers → Signatures**
   (search by the address) and its PDF; say plainly that an erasure did not remove it
   and when it will be deleted, which its record shows.

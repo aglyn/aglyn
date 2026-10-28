@@ -37,10 +37,10 @@ let declared = false
  * than the raw word. Loaded in the console's browser and on both servers, so
  * every surface that labels a source has it before it renders.
  *
- * And its settings schema (AGL-428): how many years a signed waiver is kept
- * after its signer asks to be erased. The console's generic settings card
- * draws it at workspace and site scope, and the eraser and the retention job
- * read it through `getPluginConfig`, so both need it registered first.
+ * And its settings schema (AGL-428): how many years every signed waiver is
+ * kept. The console's generic settings card draws it at workspace and site
+ * scope, and signing, the eraser and the retention job read it through
+ * `getPluginConfig`, so each needs it registered first.
  */
 export function registerWaiversDeclarations(): void {
   if (declared) return

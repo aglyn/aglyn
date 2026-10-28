@@ -744,10 +744,56 @@ describe('erasing a person', () => {
   })
 })
 
+describe('every signature is stamped with its retention period (AGL-4042)', () => {
+  const stateOf = (hostId: string) => db.docs.get(`orgs/${ORG}/waiverRetention/${hostId}`)
+
+  it('stamps an online signature, counting from the youngest minor’s adult age, and records the site’s period', async () => {
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+    // The rider born 2014-09-30 comes of age on 2032-09-30; seven years on, kept through 2039-09-30.
+    expect(signatures()[0]).toMatchObject({ retainUntilMs: Date.UTC(2039, 9, 1), retentionYears: 7 })
+    expect(stateOf(HOST)).toMatchObject({ orgId: ORG, hostId: HOST, years: 7, checkedAtMs: NOW, restamp: null })
+    // Nothing about it says it was erased, and the list does not call it kept.
+    expect(signatures()[0].erasure).toBeUndefined()
+    const rows = (await (await call(signaturesRoute, 'GET')).json()).signatures
+    expect(rows[0]).toMatchObject({ retainedUntilMs: null })
+  })
+
+  it('counts from the last covered day for an adult, with the waiver’s own adult age for a minor', async () => {
+    const waiver = await publishedWaiver({ adultAge: 21 })
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver, { minors: [], guardianRelationship: '' }) })
+    await call(publicSignRoute, 'POST', {
+      token: null,
+      body: signing(waiver, { attemptKey: 'attempt-0002', minors: [{ name: 'Sam Lee', dateOfBirth: '2010-03-15' }] }),
+    })
+    const [adult, minor] = [...signatures()].sort((a, b) => a.retainUntilMs - b.retainUntilMs)
+    expect(adult.retainUntilMs).toBe(Date.UTC(2033, 9, 25))
+    // Twenty-one on 2031-03-15, seven years on: kept through 2038-03-15.
+    expect(minor.retainUntilMs).toBe(Date.UTC(2038, 2, 16))
+  })
+
+  it('stamps a paper waiver with the site’s own period', async () => {
+    retentionYears[HOST] = 3
+    const waiver = await publishedWaiver()
+    const body = {
+      attemptKey: 'paper-0003',
+      waiverId: waiver.id,
+      signedOnDayKey: '2026-10-23',
+      signer: { name: 'Riley Park', email: 'riley@example.com', phone: '', dateOfBirth: '1985-01-01' },
+      minors: [],
+      photo: JPEG,
+    }
+    expect((await call(paperRoute, 'POST', { token: 'tok-clerk', body })).status).toBe(201)
+    expect(signatures()[0]).toMatchObject({ retainUntilMs: Date.UTC(2029, 9, 24), retentionYears: 3 })
+    expect(stateOf(HOST)).toMatchObject({ years: 3 })
+  })
+})
+
 describe('the retention job', () => {
+  const HOUR = 60 * 60 * 1000
   const tick = (nowMs: number) => runWaiversRetentionJob({ nowMs, deadlineMs: Date.now() + 60_000 })
 
-  async function keptAfterErasure() {
+  async function twoSigned() {
     const waiver = await publishedWaiver()
     await call(publicSignRoute, 'POST', { token: null, body: signing(waiver, { minors: [], guardianRelationship: '' }) })
     await call(publicSignRoute, 'POST', {
@@ -758,25 +804,114 @@ describe('the retention job', () => {
         minors: [],
       }),
     })
-    await eraseWaiversPerson({ orgId: ORG, email: 'jordan@example.com', key: 'k', atMs: NOW, contactIds: [], dryRun: false })
-    return signatures().find((one) => one.emailLower === 'jordan@example.com')
+    return signatures()
   }
 
-  it('leaves a kept waiver alone until its period runs out, then deletes it and its files', async () => {
-    const kept = await keptAfterErasure()
-    expect(kept.retainUntilMs).toBe(Date.UTC(2033, 9, 25))
-    expect(await tick(kept.retainUntilMs - 1)).toEqual({ due: 0, deleted: 0, extended: 0 })
+  it('deletes every signed waiver, with its files, once its period runs out, erased or not', async () => {
+    const [first] = await twoSigned()
+    await eraseWaiversPerson({ orgId: ORG, email: 'jordan@example.com', key: 'k', atMs: NOW, contactIds: [], dryRun: false })
+    const until = Date.UTC(2033, 9, 25)
+    expect(signatures().map((one) => one.retainUntilMs)).toEqual([until, until])
+    expect(await tick(until - 1)).toMatchObject({ due: 0, deleted: 0, extended: 0 })
     expect(signatures()).toHaveLength(2)
-    expect(await tick(kept.retainUntilMs)).toEqual({ due: 1, deleted: 1, extended: 0 })
-    // Only the erased signer's waiver goes; nobody else's is touched.
-    expect(signatures().map((one) => one.emailLower)).toEqual(['casey@example.com'])
-    expect(files.has(kept.signature.imagePath)).toBe(false)
+    expect(await tick(until)).toMatchObject({ due: 2, deleted: 2, extended: 0 })
+    expect(signatures()).toHaveLength(0)
+    expect(files.has(first.signature.imagePath)).toBe(false)
   })
 
   it('keeps it for the longer period when the store lengthened it since', async () => {
-    const kept = await keptAfterErasure()
+    const [first] = await twoSigned()
     retentionYears[HOST] = 10
-    expect(await tick(kept.retainUntilMs)).toEqual({ due: 1, deleted: 0, extended: 1 })
-    expect(signatures().find((one) => one.id === kept.id)?.retainUntilMs).toBe(Date.UTC(2036, 9, 25))
+    expect(await tick(first.retainUntilMs)).toMatchObject({ sites: 1, restamped: 2, due: 0, deleted: 0 })
+    expect(signatures().map((one) => one.retainUntilMs)).toEqual([Date.UTC(2036, 9, 25), Date.UTC(2036, 9, 25)])
+  })
+
+  it('reads the period again before deleting, even where the site was compared moments ago', async () => {
+    const [first] = await twoSigned()
+    retentionYears[HOST] = 10
+    db.docs.set(`orgs/${ORG}/waiverRetention/${HOST}`, {
+      ...(db.docs.get(`orgs/${ORG}/waiverRetention/${HOST}`) as Record<string, unknown>),
+      checkedAtMs: first.retainUntilMs,
+    })
+    expect(await tick(first.retainUntilMs)).toMatchObject({ sites: 0, due: 2, deleted: 0, extended: 2 })
+    expect(signatures().map((one) => one.retainUntilMs)).toEqual([Date.UTC(2036, 9, 25), Date.UTC(2036, 9, 25)])
+  })
+
+  it('applies a changed period to the signatures already signed, within the hour', async () => {
+    await twoSigned()
+    retentionYears[HOST] = 2
+    // Within the hour of the last comparison, the site is not looked at again.
+    expect(await tick(NOW + HOUR - 1)).toMatchObject({ sites: 0, restamped: 0 })
+    expect(await tick(NOW + HOUR)).toMatchObject({ sites: 1, restamped: 2, due: 0 })
+    expect(signatures()).toEqual([
+      expect.objectContaining({ retainUntilMs: Date.UTC(2028, 9, 25), retentionYears: 2 }),
+      expect.objectContaining({ retainUntilMs: Date.UTC(2028, 9, 25), retentionYears: 2 }),
+    ])
+    expect(db.docs.get(`orgs/${ORG}/waiverRetention/${HOST}`)).toMatchObject({ years: 2, checkedAtMs: NOW + HOUR, restamp: null })
+    // An unchanged period is compared and nothing is written.
+    expect(await tick(NOW + 2 * HOUR)).toMatchObject({ sites: 1, restamped: 0 })
+  })
+
+  it('deletes at once what a shorter period has already run out on', async () => {
+    await twoSigned()
+    retentionYears[HOST] = 1
+    const later = Date.UTC(2028, 0, 1)
+    expect(await tick(later)).toMatchObject({ sites: 1, restamped: 2, due: 2, deleted: 2 })
+    expect(signatures()).toHaveLength(0)
+  })
+
+  it('stamps a changed period on every signature of the site, a page at a time', async () => {
+    db.docs.set(`orgs/${ORG}/waiverRetention/${HOST}`, { orgId: ORG, hostId: HOST, years: 5, checkedAtMs: 0, restamp: null })
+    for (let index = 0; index < 205; index += 1) {
+      db.docs.set(`orgs/${ORG}/waiverSignatures/old-${index}`, {
+        id: `old-${index}`,
+        orgId: ORG,
+        hostId: HOST,
+        signedAtMs: NOW - index,
+        validThroughDayKey: '2026-10-01',
+        minors: [],
+        adultAge: 18,
+      })
+    }
+    expect(await tick(NOW)).toMatchObject({ sites: 1, restamped: 205 })
+    expect(signatures().every((one) => one.retainUntilMs === Date.UTC(2033, 9, 2) && one.retentionYears === 7)).toBe(true)
+    expect(db.docs.get(`orgs/${ORG}/waiverRetention/${HOST}`)).toMatchObject({ years: 7, restamp: null })
+  })
+
+  it('carries on a re-stamp it had to leave half done', async () => {
+    db.docs.set(`orgs/${ORG}/waiverRetention/${HOST}`, {
+      orgId: ORG,
+      hostId: HOST,
+      years: 5,
+      checkedAtMs: 0,
+      restamp: { years: 7, afterId: 'old-1' },
+    })
+    for (let index = 0; index < 3; index += 1) {
+      db.docs.set(`orgs/${ORG}/waiverSignatures/old-${index}`, {
+        id: `old-${index}`,
+        orgId: ORG,
+        hostId: HOST,
+        signedAtMs: NOW - index,
+        validThroughDayKey: '2026-10-01',
+        minors: [],
+        adultAge: 18,
+        // The first two were reached before it stopped; the first carries a
+        // marker of its own, so going back over it would show.
+        ...(index === 0 ? { retainUntilMs: Date.UTC(2099, 0, 1), retentionYears: 7 } : {}),
+        ...(index === 1 ? { retainUntilMs: Date.UTC(2033, 9, 2), retentionYears: 7 } : {}),
+      })
+    }
+    // Only the signature after the one it stopped at is left to stamp.
+    expect(await tick(NOW)).toMatchObject({ sites: 1, restamped: 1 })
+    expect(db.docs.get(`orgs/${ORG}/waiverSignatures/old-0`)).toMatchObject({ retainUntilMs: Date.UTC(2099, 0, 1) })
+    expect(db.docs.get(`orgs/${ORG}/waiverSignatures/old-2`)).toMatchObject({ retainUntilMs: Date.UTC(2033, 9, 2), retentionYears: 7 })
+    expect(db.docs.get(`orgs/${ORG}/waiverRetention/${HOST}`)).toMatchObject({ years: 7, restamp: null })
+  })
+
+  it('leaves another site’s signatures to that site’s period', async () => {
+    await twoSigned()
+    retentionYears[OTHER_HOST] = 1
+    expect(await tick(NOW + HOUR)).toMatchObject({ sites: 1, restamped: 0 })
+    expect(signatures().every((one) => one.retentionYears === 7)).toBe(true)
   })
 })

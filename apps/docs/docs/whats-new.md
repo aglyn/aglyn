@@ -70,6 +70,11 @@ for the how-to.
 
 ## October 2026 — waivers on your own site, your own adult age
 
+- **[Every signed waiver follows your retention period](commerce-and-bookings/commerce/waivers.md#keeping-signed-waivers)** —
+  each signed waiver is kept for the years you set (7 to start), counted from the
+  last day it covers or from the youngest rider coming of age, then deleted with
+  its signature and paper photo. Its record shows **Kept until**, and changing the
+  period applies to waivers already signed within the hour.
 - **[Share links open on your site](commerce-and-bookings/commerce/waivers.md#share-it-before-riders-arrive)** —
   a waiver's link and QR code now open at **/sign-waiver** on your own site, with
   your header and footer, on your custom domain or your `.aglyn.app` address.

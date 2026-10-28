@@ -19,15 +19,17 @@ import {
   WAIVERS_CONFIG_SCHEMA,
   WAIVER_RETENTION_YEARS,
   waiverRetainUntilMs,
+  waiverRetentionStamp,
+  waiverRetentionStampMoved,
   waiverRetentionStartDayKey,
   waiverRetentionYears,
 } from './waiver-retention'
 
 /**
- * How long a signed waiver is kept after its signer asks to be erased
- * (AGL-4042): the store's setting in whole years, counted from the last day
- * the waiver covers, or from the day the youngest minor on it reaches the
- * waiver's adult age, whichever is later.
+ * How long every signed waiver is kept (AGL-4042): the store's setting in
+ * whole years, counted from the last day the waiver covers, or from the day
+ * the youngest minor on it reaches the waiver's adult age, whichever is
+ * later.
  */
 
 describe('the retention setting', () => {
@@ -66,5 +68,19 @@ describe('when a kept signature is deleted', () => {
 
   it('never ends a day early on a leap day', () => {
     expect(waiverRetainUntilMs({ validThroughDayKey: '2028-02-29' }, 1)).toBe(Date.UTC(2029, 2, 2))
+  })
+
+  it('stamps the date with the period it was counted with', () => {
+    const signature = { validThroughDayKey: '2026-10-24', minors: [{ dateOfBirth: '2014-09-30' }], adultAge: 18 }
+    expect(waiverRetentionStamp(signature, 7)).toEqual({ retainUntilMs: Date.UTC(2039, 9, 1), retentionYears: 7 })
+  })
+
+  it('says a stamp moved when it was never stamped, or the period changed', () => {
+    const stamp = waiverRetentionStamp({ validThroughDayKey: '2026-10-24' }, 7)
+    expect(waiverRetentionStampMoved({}, stamp)).toBe(true)
+    // Kept after an erasure request before every signature carried its period.
+    expect(waiverRetentionStampMoved({ retainUntilMs: stamp.retainUntilMs }, stamp)).toBe(true)
+    expect(waiverRetentionStampMoved({ ...stamp }, stamp)).toBe(false)
+    expect(waiverRetentionStampMoved({ ...stamp }, waiverRetentionStamp({ validThroughDayKey: '2026-10-24' }, 3))).toBe(true)
   })
 })

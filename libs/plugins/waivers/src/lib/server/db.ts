@@ -128,6 +128,8 @@ export const waiversRefs = {
   signatures: (orgId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.signatures),
   signature: (orgId: string, signatureId: string) =>
     org(orgId).collection(WAIVERS_COLLECTIONS.signatures).doc(signatureId),
+  /** A site's retention state: the period its signatures are stamped with (AGL-4042). */
+  retention: (orgId: string, hostId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.retention).doc(hostId),
   /** The site's mirror of each waiver's title, for the Besigner's picker. */
   title: (hostId: string, waiverId: string) =>
     waiversDb().collection('hosts').doc(hostId).collection(WAIVER_TITLES_SUBCOLLECTION).doc(waiverId),

@@ -251,34 +251,38 @@ Signatures are stored privately in your workspace. They're never in your media
 library, and only the people with **Collect waivers** or **Manage waivers** can see
 them.
 
-## Keeping signed waivers after an erasure request {#keeping-signed-waivers}
+## How long signed waivers are kept {#keeping-signed-waivers}
 
-A signed waiver is your record of what a rider agreed to. So when you
-[erase a person](../../workspace-and-billing/signing-in-and-sessions.md#erasing-a-person) from your workspace,
-the waivers they signed are kept, not erased:
-
-- each one is kept for your **retention period**, then deleted, with its drawn
-  signature and any photo of a paper page;
-- its link to the person's contact is removed, because the contact is erased;
-- on the **Signatures** card its status reads **Kept until** and the date it will be
-  deleted, and its record says when the person asked.
+A signed waiver is your record of what a rider agreed to. Every one is kept for
+your **retention period**, then deleted, with its drawn signature and any photo of
+a paper page. A signature's record shows **Kept until** and the date it will be
+deleted.
 
 The retention period is counted from the last day the waiver covers. For a waiver
 signed for minors, it's counted from the day the youngest of them reaches the waiver's
-adult age, if that's later. A waiver whose period has already run out is deleted when
-the erasure runs.
+adult age, if that's later.
+
+When you [erase a person](../../workspace-and-billing/signing-in-and-sessions.md#erasing-a-person)
+from your workspace, the waivers they signed are kept for the same period, not
+erased:
+
+- its link to the person's contact is removed, because the contact is erased;
+- on the **Signatures** card its status reads **Kept until** and the date it will be
+  deleted, and its record says when the person asked;
+- a waiver whose period has already run out is deleted when the erasure runs.
 
 To set the period:
 
 1. Go to **Sites → your site → Admin → Plugins** and select **Waivers**.
-2. On the **Waivers settings** card, set **Years to keep a signed waiver after its
-   signer asks to be erased**, from 1 to 30. It starts at 7.
+2. On the **Waivers settings** card, set **Years to keep a signed waiver**, from 1
+   to 30. It starts at 7.
 3. Press **Save site settings**.
 
 To give every site in a workspace the same period, set it on the plugin's workspace
 page under **Plugins**. Each site follows that period unless you change it on the
-site's own page. A longer period also applies to waivers you're already keeping. A
-shorter one applies to erasure requests made after the change.
+site's own page. A change applies to every waiver already signed on the site within
+the hour, as well as to new ones: a longer period keeps them longer, and a shorter
+one deletes those it has already run out on.
 
 :::caution Ask your lawyer
 Aglyn doesn't know how long you need to keep a signed waiver. Ask your own lawyer,

@@ -1998,7 +1998,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   waivers: {
     '#find-a-signature': 'Find a signature',
-    '#keeping-signed-waivers': 'Keeping signed waivers after an erasure request',
+    '#keeping-signed-waivers': 'How long signed waivers are kept',
     '#versions': 'Versions',
     '#write-a-waiver': 'Write a waiver',
     '#your-waivers': 'Your waivers',
