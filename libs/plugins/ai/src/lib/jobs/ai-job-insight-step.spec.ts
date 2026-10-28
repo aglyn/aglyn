@@ -40,6 +40,7 @@ import {
   AI_INSIGHT_NO_READERS_COPY,
   AI_JOB_INSIGHT_SYSTEM,
   aiInsightAdmissionRefusal,
+  aiInsightTools,
   runAiJobInsightStep,
 } from './ai-job-insight-step'
 
@@ -250,7 +251,7 @@ describe('asking', () => {
     // The read call offers what this workspace may read here, and no more:
     // Pro carries `commerceAnalytics`, and both plugins are on.
     const readRequest = mockRunAiRequest.mock.calls[0][0]
-    expect(readRequest.tools.map((tool: { name: string }) => tool.name)).toEqual([AI_INSIGHT_READ_TOOL_NAME])
+    expect(readRequest.toolChoice).toBe(AI_INSIGHT_READ_TOOL_NAME)
     expect(readRequest.messages[0].content).toContain('- commerce.sales — Sales')
     expect(readRequest.messages[0].content).toContain('- traffic.summary — Traffic')
     expect(readRequest.system).toEqual(AI_JOB_INSIGHT_SYSTEM)
@@ -334,6 +335,36 @@ describe('asking', () => {
   })
 })
 
+describe('the cached prefix both calls share (AGL-4076)', () => {
+  it('sends the same tools and system on the read call, the answer call and its re-ask, naming the one each is for', async () => {
+    mockRunAiRequest
+      .mockResolvedValueOnce(called(AI_INSIGHT_READ_TOOL_NAME, { reads: [{ reader: 'traffic.summary', days: 14, params: [] }] }))
+      .mockResolvedValueOnce(
+        called(AI_INSIGHT_ANSWER_TOOL_NAME, { insights: [{ text: 'Traffic doubled to 2,408.', cites: [{ table: 't1', rows: [0] }] }], gap: null }),
+      )
+      .mockResolvedValueOnce(
+        called(AI_INSIGHT_ANSWER_TOOL_NAME, { insights: [{ text: 'Page views rose 14.7%.', cites: [{ table: 't1', rows: [0] }] }], gap: null }),
+      )
+    await run()
+    const [read, answer, reask] = mockRunAiRequest.mock.calls.map((call) => call[0])
+    // Tools render ahead of the system block, so the prefix the read call
+    // wrote is the answer call's only when both send the same tools, in the
+    // same order: the answer call read none of it while each sent its own.
+    expect(read.tools.map((tool: { name: string }) => tool.name)).toEqual([AI_INSIGHT_READ_TOOL_NAME, AI_INSIGHT_ANSWER_TOOL_NAME])
+    for (const request of [answer, reask]) {
+      expect(JSON.stringify([request.tools, request.system])).toBe(JSON.stringify([read.tools, read.system]))
+    }
+    expect([read.toolChoice, answer.toolChoice, reask.toolChoice]).toEqual([
+      AI_INSIGHT_READ_TOOL_NAME,
+      AI_INSIGHT_ANSWER_TOOL_NAME,
+      AI_INSIGHT_ANSWER_TOOL_NAME,
+    ])
+    // And each user turn says which tool its call is for, where a model that cannot be forced chooses for itself.
+    expect(String(read.messages[0].content).endsWith(`Call ${AI_INSIGHT_READ_TOOL_NAME} now.`)).toBe(true)
+    expect(String(answer.messages[0].content).endsWith(`These are all the tables there are. Call ${AI_INSIGHT_ANSWER_TOOL_NAME} now.`)).toBe(true)
+  })
+})
+
 describe('the weekly digest', () => {
   it('tells a site’s question whether the site is live, so traffic is never read as launch status', async () => {
     // A starter site, published a minute ago, with no visits yet.
@@ -370,7 +401,9 @@ describe('the weekly digest', () => {
     )
     const { writes } = await run({ inputs: { surface: 'digest', week: '2026-W38' }, brief: 'Weekly insights for Acme' })
     expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
-    expect(mockRunAiRequest.mock.calls[0][0].tools[0].name).toBe(AI_INSIGHT_ANSWER_TOOL_NAME)
+    expect(mockRunAiRequest.mock.calls[0][0].toolChoice).toBe(AI_INSIGHT_ANSWER_TOOL_NAME)
+    // The digest's one call opens with the same tools a question's two do (AGL-4076).
+    expect(mockRunAiRequest.mock.calls[0][0].tools).toEqual(aiInsightTools())
     const record = writes[0].value as unknown as AiInsightRecord
     expect(record).toMatchObject({ surface: 'digest', week: '2026-W38', days: 7, question: 'Weekly insights for Acme' })
     // A digest reports the week's figures; the site's status is not one of them.

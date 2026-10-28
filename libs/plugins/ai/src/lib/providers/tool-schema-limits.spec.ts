@@ -55,7 +55,7 @@ import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
-import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
+import { aiInsightTools } from '../jobs/ai-job-insight-step'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_CATALOG_TOOL, AI_CATEGORIES_TOOL, AI_PRODUCT_COPY_TOOL } from '../tools/ai-products-tool'
 import { AI_BLOG_POST_TOOL } from '../tools/ai-blog-post-tool'
@@ -187,7 +187,8 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     draft: () => [aiAutomationTool()],
     explain: () => [aiWorkflowExplanationTool()],
   },
-  'jobs/ai-job-insight-step.ts': { read: () => [aiInsightReadTool()], answer: () => [aiInsightAnswerTool()] },
+  // Both calls send both tools (AGL-4076), so the request's totals are the two together.
+  'jobs/ai-job-insight-step.ts': { 'read and answer': () => aiInsightTools() },
   // A/B tests by AI (AGL-2914): the variants tool carries only the fields
   // the target under test has, so a screen's set and an email's differ.
   'jobs/ai-job-experiment-step.ts': {
