@@ -44,7 +44,7 @@ import {
   posHardwareSaleRef,
 } from './pos-hardware'
 import { cancelAndRefundPosHardwareOrder } from './pos-hardware-cancel'
-import { sendPosHardwareEmail } from './pos-hardware-notify'
+import { sendPosHardwareEmail, sendPosHardwareEmailOnce } from './pos-hardware-notify'
 
 /*==========================================
  * `/api/commerce/admin/hardware-orders` (AGL-4038): the staff end of the POS
@@ -62,6 +62,11 @@ import { sendPosHardwareEmail } from './pos-hardware-notify'
  *         refund  an order sold in person (AGL-4038): what is left of it,
  *                 through the register sale's own card refund on the
  *                 selling store's account (`pos-hardware-returns.ts`)
+ *         Each of the three takes `notifyBuyer`, the dialog's "Email the
+ *         buyer" (AGL-4038): true sends the buyer the canceled-and-refunded
+ *         email (online) or the refunded email (in person), once, under the
+ *         same claim a closure sends it under; false sends nothing. Absent
+ *         reads as the dialog's default, true. It is in the audit row.
  *         decline-return  decline a buyer's open return request, with a note
  *         forget-buyer  take the buyer's address and account off an order
  *                 sold in person (AGL-4038), for a privacy request from
@@ -215,6 +220,12 @@ async function handler(request: Request): Promise<Response> {
     }
     const ref = hardwareOrdersRef(orgId).doc(orderId)
     const actor = { actorUid: decoded.uid, actorEmail: decoded.email ? String(decoded.email) : null }
+    // "Email the buyer" (AGL-4038): explicit when sent, the dialog's default when not.
+    const notifyRaw = input['notifyBuyer']
+    if (notifyRaw !== undefined && typeof notifyRaw !== 'boolean') {
+      return json({ error: 'notifyBuyer must be true or false' }, 400)
+    }
+    const notifyBuyer = notifyRaw !== false
 
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
     if (action === 'forget-buyer') return await forgetBuyer(firestore, ref, orgId, orderId, actor)
@@ -222,10 +233,10 @@ async function handler(request: Request): Promise<Response> {
     // Handed over at the sale, an in-person order is never canceled: either
     // button refunds it, its own way.
     if ((action === 'refund' || action === 'cancel') && (await soldInPerson(ref))) {
-      return await inPersonReturn(firestore, orgId, orderId, 'refund', input, actor)
+      return await inPersonReturn(firestore, orgId, orderId, 'refund', input, actor, notifyBuyer)
     }
     if (action === 'cancel' || action === 'refund') {
-      return await refundOrder(firestore, orgId, orderId, action, actor)
+      return await refundOrder(firestore, orgId, orderId, action, actor, notifyBuyer)
     }
     return json({ error: 'Unknown action' }, 400)
   } catch (error) {
@@ -329,6 +340,7 @@ async function inPersonReturn(
   action: 'refund' | 'decline-return',
   input: Record<string, unknown>,
   actor: Actor,
+  notifyBuyer = false,
 ): Promise<Response> {
   const returns = await import('./pos-hardware-returns')
   try {
@@ -341,6 +353,16 @@ async function inPersonReturn(
             actorUid: actor.actorUid,
           })
         : await returns.declinePosHardwareReturn({ orgId, orderId, actorUid: actor.actorUid, note: input['note'] })
+    // The refund just made, told once by its own key, when staff chose to.
+    const made = action === 'refund' ? (outcome.order.refunds ?? []).slice(-1)[0] : undefined
+    const buyerEmail =
+      action !== 'refund'
+        ? undefined
+        : !notifyBuyer
+          ? 'off'
+          : made
+            ? await sendPosHardwareEmailOnce('refunded', orderId, outcome.order, `refunded:${made.key}`)
+            : 'skipped'
     await addAdminAudit(firestore, {
       action: action === 'refund' ? 'pos-hardware-order-refund' : 'pos-hardware-return-decline',
       ...actor,
@@ -352,10 +374,11 @@ async function inPersonReturn(
         status: outcome.order.status,
         refundedCents: outcome.order.refundedCents ?? 0,
         returnRequest: outcome.order.returnRequest?.state ?? null,
+        ...(action === 'refund' ? { notifyBuyer, buyerEmail } : {}),
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
-    return json({ ok: true, order: staffView(orderId, outcome.order) })
+    return json({ ok: true, order: staffView(orderId, outcome.order), ...(buyerEmail ? { buyerEmail } : {}) })
   } catch (error) {
     if (error instanceof returns.PosHardwareReturnRefusal) throw new Refusal(error.message, error.status)
     throw error
@@ -400,6 +423,7 @@ async function refundOrder(
   orderId: string,
   action: 'cancel' | 'refund',
   actor: Actor,
+  notifyBuyer: boolean,
 ): Promise<Response> {
   const finalStatus = action === 'cancel' ? 'canceled' : 'refunded'
   // The one cancel-and-refund path (`pos-hardware-cancel.ts`), which a
@@ -409,8 +433,12 @@ async function refundOrder(
   switch (result.outcome) {
     case 'missing':
       throw new Refusal('No such order', 404)
-    case 'already':
-      return json({ ok: true, order: staffView(orderId, result.order) })
+    case 'already': {
+      // Pressed again — after a closure, or after an email that failed: the
+      // buyer is told now if they never were, and never twice.
+      const buyerEmail = notifyBuyer ? await sendPosHardwareEmailOnce('canceled', orderId, result.order) : 'off'
+      return json({ ok: true, order: staffView(orderId, result.order), buyerEmail })
+    }
     case 'not-refundable':
       throw new Refusal(
         'This order has shipped, so it can no longer be canceled or refunded here. Arrange a return with Stripe instead.',
@@ -421,6 +449,9 @@ async function refundOrder(
     case 'refused':
       return json({ error: result.message }, 502)
   }
+  // Canceled or refunded, it will not ship: the one canceled-and-refunded
+  // email, once, under the claim a closure sends it under (AGL-4038).
+  const buyerEmail = notifyBuyer ? await sendPosHardwareEmailOnce('canceled', orderId, result.order) : 'off'
   await addAdminAudit(firestore, {
     action: `pos-hardware-order-${action}`,
     ...actor,
@@ -428,10 +459,16 @@ async function refundOrder(
     target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
     orgId,
     before: { status: result.before.status },
-    after: { status: finalStatus, refundId: result.order.refundId, refundedCents: result.order.refundedCents },
+    after: {
+      status: finalStatus,
+      refundId: result.order.refundId,
+      refundedCents: result.order.refundedCents,
+      notifyBuyer,
+      buyerEmail,
+    },
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
-  return json({ ok: true, order: staffView(orderId, result.order) })
+  return json({ ok: true, order: staffView(orderId, result.order), buyerEmail })
 }
 
 export { handler as posHardwareAdminOrders }

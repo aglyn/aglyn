@@ -81,8 +81,9 @@ const TENANT_ROOTS = [
 const PLATFORM_SENDERS: Record<string, string> = {
   [join('libs', 'plugins', 'commerce', 'src', 'lib', 'server', 'pos-hardware-notify.ts')]:
     'A card reader order from the POS hardware shop (AGL-4038): received, ' +
-    'shipped, delivered, and canceled and refunded when the workspace or ' +
-    "the buyer's account closes before it ships. The SELLER is Aglyn and the " +
+    'shipped, delivered, and canceled and refunded when staff cancel it or ' +
+    "the workspace or the buyer's account closes before it ships, and a " +
+    'reader bought in person refunded by staff. The SELLER is Aglyn and the ' +
     "recipient is Aglyn's " +
     "customer, the workspace member who bought it — never a site's visitor " +
     'or contact — so the mail is platform mail, metered as platform. The ' +

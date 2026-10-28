@@ -1250,7 +1250,7 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
     await placeOrder('paid')
     await orgEraser({ orgId: 'org-1', dryRun: false })
     const merge = await posHardwareEmailMerge(ORDER_ID, order(), { site: 'Corner Cafe', org: 'Acme' })
-    expect(merge['order.cancelReason']).toBe('the Acme workspace was deleted')
+    expect(merge['order.cancelReason']).toBe('We canceled your order because the Acme workspace was deleted.')
     expect(merge['order.refunded']).toBe('$231.20')
     const sent = mockSendEmail.mock.calls[0][0] as { subject: string; text: string }
     expect(sent.subject).toBe('Your card reader order HW-012345 was canceled and refunded')
@@ -1262,6 +1262,89 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
       expect([part, words.includes(part)]).toEqual([part, true])
     }
     const account = await posHardwareEmailMerge(ORDER_ID, { ...order(), cancelReason: 'account-closed' }, { site: 'Corner Cafe', org: 'Acme' })
-    expect(account['order.cancelReason']).toBe('the account that placed it was closed')
+    expect(account['order.cancelReason']).toBe('We canceled your order because the account that placed it was closed.')
+    const byStaff = await posHardwareEmailMerge(ORDER_ID, { ...order(), cancelReason: 'staff' }, { site: 'Corner Cafe', org: 'Acme' })
+    expect(byStaff['order.cancelReason']).toBe('Our team canceled your order.')
+  })
+
+  /*========================================
+   * EMAIL THE BUYER (AGL-4038): a staff cancel or refund of an online order
+   * sends the same canceled-and-refunded email the closure sends, when staff
+   * leave "Email the buyer" on, and nothing when they turn it off — once,
+   * between the staff page and a closure, under one claim on the order.
+   *========================================*/
+  const cancel = (body: Record<string, unknown>) =>
+    staff('staff-super', { method: 'POST', body: { action: 'cancel', orgId: 'org-1', orderId: ORDER_ID, ...body } })
+
+  it('a staff cancel emails the buyer the canceled-and-refunded email when asked, and audits the choice', async () => {
+    await placeOrder('paid')
+    const answer = await cancel({ notifyBuyer: true })
+    expect(answer.status).toBe(200)
+    expect(answer.body.buyerEmail).toBe('sent')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockSendEmail.mock.calls[0][0]).toMatchObject({ to: 'buyer@example.com', context: POS_HARDWARE_EMAIL_KEYS.canceled })
+    expect(order()).toMatchObject({ status: 'canceled', cancelReason: 'staff', buyerEmails: { canceled: { state: 'sent' } } })
+    expect(audits()).toEqual([
+      expect.objectContaining({
+        action: 'pos-hardware-order-cancel',
+        actorUid: 'staff-1',
+        after: expect.objectContaining({ status: 'canceled', notifyBuyer: true, buyerEmail: 'sent' }),
+      }),
+    ])
+    // Pressed again, it is already canceled and the buyer already told.
+    const again = await cancel({ notifyBuyer: true })
+    expect(again.body.buyerEmail).toBe('already')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('a staff refund before it ships sends the same email, and nothing when staff turn it off', async () => {
+    await placeOrder('ordered')
+    const off = await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'refund', orgId: 'org-1', orderId: ORDER_ID, notifyBuyer: false },
+    })
+    expect(off.status).toBe(200)
+    expect(off.body.buyerEmail).toBe('off')
+    expect(order()).toMatchObject({ status: 'refunded' })
+    expect(order().buyerEmails).toBeUndefined()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(audits()[0]).toMatchObject({ after: expect.objectContaining({ notifyBuyer: false, buyerEmail: 'off' }) })
+  })
+
+  it('reads a missing choice as the dialog’s default, and refuses one that is not true or false', async () => {
+    await placeOrder('paid')
+    expect((await cancel({ notifyBuyer: 'yes' })).status).toBe(400)
+    expect(refundPosts()).toHaveLength(0)
+    const answer = await cancel({})
+    expect(answer.body.buyerEmail).toBe('sent')
+  })
+
+  it('never emails twice: a staff cancel, then the workspace deleted', async () => {
+    await placeOrder('paid')
+    await cancel({ notifyBuyer: true })
+    // The order is canceled already, so the closure has nothing to cancel
+    // and nobody to tell again.
+    await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('never emails twice: the workspace deleted, then a staff press', async () => {
+    await placeOrder('paid')
+    await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(order().buyerEmails?.['canceled']?.state).toBe('sent')
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('already')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends an email that failed on the next press, once', async () => {
+    await placeOrder('paid')
+    mockSendEmail.mockResolvedValueOnce({ sent: false })
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('failed')
+    expect(order().buyerEmails?.['canceled']?.state).toBe('failed')
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('sent')
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('already')
+    expect(mockSendEmail).toHaveBeenCalledTimes(2)
+    expect(refundPosts()).toHaveLength(1)
   })
 })

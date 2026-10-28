@@ -30,7 +30,7 @@ import { cancelAndRefundPosHardwareOrder } from './pos-hardware-cancel'
 import {
   raisePosHardwareCanceledAfterOrderingAlert,
   raisePosHardwareRefundFailedAlert,
-  sendPosHardwareEmail,
+  sendPosHardwareEmailOnce,
 } from './pos-hardware-notify'
 
 /*==========================================
@@ -42,7 +42,8 @@ import {
  * Stripe account, through the staff page's own path and its idempotency
  * (`pos-hardware-cancel.ts`). Then:
  *
- *   - the buyer gets the "canceled and refunded" email;
+ *   - the buyer gets the "canceled and refunded" email, once: the same claim
+ *     the staff page sends it under (`sendPosHardwareEmailOnce`);
  *   - staff get an alert when the order was already placed with Stripe
  *     (`ordered`), because Stripe will still ship it unless someone cancels
  *     it there, and another when Stripe refuses the refund;
@@ -119,7 +120,9 @@ export async function closeUnshippedPosHardwareOrder(
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     }).catch((error: unknown) => console.error('[pos-hardware] closure audit failed', orderId, error))
-    await sendPosHardwareEmail('canceled', orderId, result.order)
+    // Once between this and the staff page: a staff cancel that already
+    // told the buyer is not told again (AGL-4038).
+    await sendPosHardwareEmailOnce('canceled', orderId, result.order)
     if (result.before.status === 'ordered') {
       await raisePosHardwareCanceledAfterOrderingAlert(orderId, result.order, reason)
     }

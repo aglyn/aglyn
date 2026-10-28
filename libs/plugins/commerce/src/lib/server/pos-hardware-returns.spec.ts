@@ -40,6 +40,23 @@ let mockRefundAnswer: { ok: true; refundId: string } | { ok: false; status: numb
   refundId: 're_1',
 }
 
+const mockSendEmail = jest.fn<Promise<{ sent: boolean }>, [Record<string, unknown>]>(async () => ({ sent: true }))
+
+jest.mock('@aglyn/tenant-data-admin/server/email-suppression', () => ({
+  filterSuppressedEmails: async (addresses: string[]) => addresses,
+}))
+jest.mock('@aglyn/tenant-data-admin/server/render-system-email', () => ({
+  orgSystemEmailBrand: async () => ({ merge: {}, options: {}, fromName: '' }),
+  renderSystemEmailContent: async (key: string, merge: Record<string, string>, _brand: unknown, fallback: { subject: string }) => ({
+    subject: fallback.subject,
+    html: `<p>${key}</p>`,
+    text: JSON.stringify(merge),
+  }),
+}))
+jest.mock('@aglyn/shared-util-email', () => ({
+  ...jest.requireActual('@aglyn/shared-util-email/pos-hardware-emails'),
+  sendEmail: (message: Record<string, unknown>) => mockSendEmail(message),
+}))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => ({ permissions: { managePos: true } }),
 }))
@@ -71,6 +88,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     emailUnverifiedResponse: () => Response.json({ error: 'Verify' }, { status: 403 }),
     isImpersonationSession: () => false,
+    hostDisplayName: (data: Record<string, unknown> | undefined, hostId: string) => String(data?.['name'] ?? hostId),
+    meterPlatformEmail: async () => undefined,
   }
 })
 jest.mock('@aglyn/tenant-data-admin/server/host-console-link', () => ({
@@ -178,6 +197,7 @@ async function staff(init: { method?: string; query?: string; body?: unknown } =
 
 beforeEach(() => {
   resetFakeFirestore()
+  mockSendEmail.mockClear()
   mockAlerts.length = 0
   mockRefunds.length = 0
   mockRefundAnswer = { ok: true, refundId: 're_1' }
@@ -274,6 +294,40 @@ describe('a refund from the staff page', () => {
     expect((await staff({ method: 'POST', body: { action: 'refund', orgId: 'org-pat', orderId: ID } })).status).toBe(502)
     expect(fakeDocs.get('hosts/host-seller/orders/order-1')?.['refundedCents']).toBe(0)
     expect(hardware().status).toBe('delivered')
+  })
+})
+
+/*==========================================
+ * EMAIL THE BUYER (AGL-4038): a staff refund of a reader sold in person
+ * sends the curated refund email when staff leave "Email the buyer" on,
+ * once per refund, and nothing when they turn it off.
+ *=========================================*/
+describe('emailing the buyer about a refund from the staff page', () => {
+  it('sends the refund email, once, to the buyer the order names, when asked', async () => {
+    seed()
+    const answer = await staff({ method: 'POST', body: { action: 'refund', orgId: 'org-pat', orderId: ID, notifyBuyer: true } })
+    expect(answer.status).toBe(200)
+    expect(answer.body.buyerEmail).toBe('sent')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    const sent = mockSendEmail.mock.calls[0][0] as { to: string; context: string; subject: string; text: string }
+    expect(sent).toMatchObject({ to: 'pat@example.com', context: 'pos-hardware-order-refunded' })
+    expect(sent.subject).toBe('Your refund for card reader order HW-AAAAAA')
+    expect(JSON.parse(sent.text)).toMatchObject({ 'order.refundedNow': '$649.56', 'order.refunded': '$649.56' })
+    const key = `refunded:${hardware().refunds?.[0]?.key}`
+    expect(hardware().buyerEmails?.[key]?.state).toBe('sent')
+    // Refunded in full already: a second press refunds nothing and tells nobody again.
+    await staff({ method: 'POST', body: { action: 'refund', orgId: 'org-pat', orderId: ID, notifyBuyer: true } })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends nothing when staff turn it off', async () => {
+    seed()
+    const answer = await staff({ method: 'POST', body: { action: 'cancel', orgId: 'org-pat', orderId: ID, notifyBuyer: false } })
+    expect(answer.status).toBe(200)
+    expect(answer.body.buyerEmail).toBe('off')
+    expect(hardware()).toMatchObject({ status: 'refunded' })
+    expect(hardware().buyerEmails).toBeUndefined()
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 })
 

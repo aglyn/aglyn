@@ -1175,8 +1175,12 @@ deployment on **Products → Point of sale** (the **Hardware** card). The sale i
 the operator's: Checkout runs on the platform Stripe account with no connected
 account, and a staff member places each paid order in the Stripe Dashboard's
 Terminal hardware shop, shipping to the merchant, then records Stripe's order id
-and the tracking on **Staff → Hardware orders**. Set these on the **console
-only**. The shop stays hidden until it is switched on, at least one reader has a
+and the tracking on **Staff → Hardware orders**. Canceling or refunding an order
+there asks whether to **Email the buyer** (on unless you turn it off): the buyer
+then gets the same canceled-and-refunded email a workspace or account closure
+sends, once whichever sends it first, and a reader sold in person gets the refund
+email with what came back. The choice is in the action's audit row. Set these on
+the **console only**. The shop stays hidden until it is switched on, at least one reader has a
 price, a shipping figure is set, and card readers are available (a test key, or
 `STRIPE_TERMINAL_LIVE_ENABLED`).
 

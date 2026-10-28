@@ -32,10 +32,14 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
+  FormControlLabel,
+  FormHelperText,
   Link,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -145,6 +149,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const [form, setForm] = useState({ stripeHardwareOrderId: '', carrier: '', number: '', url: '' })
   /** The note for declining a return request, while its dialog is open. */
   const [declineNote, setDeclineNote] = useState<string | null>(null)
+  /**
+   * The cancel or refund being confirmed, and whether to email the buyer
+   * about it (AGL-4038): on unless staff turn it off.
+   */
+  const [returning, setReturning] = useState<{ action: 'cancel' | 'refund'; notifyBuyer: boolean } | null>(null)
   const gate = resolveStaffRoleGate(staffRole, WRITE_ROLES)
   const uid = user?.uid ?? ''
 
@@ -184,14 +193,14 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
 
   const act = async (
     body: Omit<Parameters<typeof staffHardwareOrderAction>[1], 'orgId' | 'orderId'>,
-    done: string,
+    done: string | ((answer: Awaited<ReturnType<typeof staffHardwareOrderAction>>) => string),
   ) => {
     if (!user || !open) return
     setBusy(true)
     try {
-      const { order } = await staffHardwareOrderAction(user, { ...body, orgId: open.orgId, orderId: open.id })
-      setOpen(order)
-      enqueueSnackbar(done, { variant: 'success', persist: false })
+      const answer = await staffHardwareOrderAction(user, { ...body, orgId: open.orgId, orderId: open.id })
+      setOpen(answer.order)
+      enqueueSnackbar(typeof done === 'string' ? done : done(answer), { variant: 'success', persist: false })
       await load(page, cursors[page] ?? null)
     } catch (caught) {
       enqueueSnackbar(
@@ -241,21 +250,27 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     setDeclineNote(null)
   }
 
-  const returnMoney = async (action: 'cancel' | 'refund') => {
-    if (!open) return
-    const sameSale = open.source === 'in_person'
-    const confirmed = await confirm({
-      title: action === 'cancel' ? 'Cancel and refund this order?' : 'Refund this order?',
-      description: sameSale
-        ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under Stripe's hardware terms the buyer sends the reader back at their cost.`
-        : `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. ` +
-          'Cancel the order in the Stripe Dashboard too if it was already placed there.',
-      confirmationText: action === 'cancel' ? 'Cancel and refund' : 'Refund',
-      confirmationButtonProps: { color: 'error' },
-    })
-      .then(() => true)
-      .catch(() => false)
-    if (confirmed) await act({ action }, action === 'cancel' ? 'Canceled and refunded' : 'Refunded')
+  /** Opens the confirm for a cancel or a refund, emailing the buyer by default. */
+  const returnMoney = (action: 'cancel' | 'refund') => {
+    if (open) setReturning({ action, notifyBuyer: true })
+  }
+
+  const confirmReturn = async () => {
+    if (!open || !returning) return
+    const { action, notifyBuyer } = returning
+    const verb = action === 'cancel' && open.source !== 'in_person' ? 'Canceled and refunded' : 'Refunded'
+    await act({ action, notifyBuyer }, ({ buyerEmail }) =>
+      buyerEmail === 'sent'
+        ? `${verb}. The buyer was emailed.`
+        : buyerEmail === 'already'
+          ? `${verb}. The buyer had already been emailed.`
+          : buyerEmail === 'skipped'
+            ? `${verb}. The buyer has no address to email.`
+            : buyerEmail === 'failed'
+              ? `${verb}. The email to the buyer did not send; press again to retry it.`
+              : `${verb}. The buyer was not emailed.`,
+    )
+    setReturning(null)
   }
 
   const columns = useMemo<GridColDef[]>(
@@ -568,6 +583,53 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           ) : null}
+        </DialogActions>
+      </Dialog>
+
+      {/*
+        CANCEL OR REFUND, CONFIRMED (AGL-4038): what goes back and where, and
+        whether to email the buyer — on by default, off sends nothing. The
+        email is the same one a workspace or account closure sends, and the
+        buyer gets it once whichever sends it first.
+      */}
+      <Dialog open={returning !== null} onClose={() => setReturning(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {returning?.action === 'cancel' && open?.source !== 'in_person' ? 'Cancel and refund this order?' : 'Refund this order?'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <DialogContentText>
+              {open?.source === 'in_person'
+                ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under Stripe's hardware terms the buyer sends the reader back at their cost.`
+                : open
+                  ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
+                  : ''}
+            </DialogContentText>
+            <Stack>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={returning?.notifyBuyer ?? true}
+                    onChange={(event) =>
+                      setReturning((current) => (current ? { ...current, notifyBuyer: event.target.checked } : current))
+                    }
+                  />
+                }
+                label="Email the buyer"
+              />
+              <FormHelperText>
+                {open?.source === 'in_person'
+                  ? 'Sends the buyer the refund email with what came back to their card.'
+                  : 'Sends the buyer the canceled-and-refunded email. They get it once, even if their workspace or account later closes.'}
+              </FormHelperText>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReturning(null)}>{'Keep the order'}</Button>
+          <Button color="error" disabled={busy} onClick={() => void confirmReturn()}>
+            {returning?.action === 'cancel' && open?.source !== 'in_person' ? 'Cancel and refund' : 'Refund'}
+          </Button>
         </DialogActions>
       </Dialog>
 
