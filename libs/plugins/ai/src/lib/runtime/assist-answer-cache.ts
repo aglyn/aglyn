@@ -105,6 +105,8 @@ export interface AssistAnswerCacheInputs {
   model: string
   /** The product name the assistant answers under (white-label aware). */
   productName: string
+  /** The workspace's plan by name (AGL-4075), which every answer is told. */
+  plan?: string
 }
 
 /**
@@ -152,6 +154,9 @@ export function assistAnswerCacheKey(inputs: AssistAnswerCacheInputs): string {
     String(inputs.route ?? ''),
     String(inputs.model ?? ''),
     String(inputs.productName ?? ''),
+    // The plan's name rides every prompt since AGL-4075, so "what plan am I
+    // on" must not be answered from before an upgrade.
+    String(inputs.plan ?? ''),
   ]
   return createHash('sha256')
     .update(parts.join(CACHE_KEY_DELIMITER))

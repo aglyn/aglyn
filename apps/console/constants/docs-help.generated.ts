@@ -1091,7 +1091,7 @@ export const DOCS_HELP_ANCHORS = {
   menusAndNavigation: ['#dropdown-menu', '#mega-menu', '#drawer--menu-button', '#the-mobile-nav-preset', '#the-dropdown-panel-preset', '#interactions-for-menus', '#responsive-visibility', '#related'],
   migrationPatterns: ['#renamed-a-screen', '#consolidated-pages', '#moved-a-site-into-aglyn', '#avoiding-loops', '#related'],
   modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#page-fields', '#edit-records', '#tips', '#related'],
-  multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
+  multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#text-direction', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
   newsletterSignUpBand: ['#why-not-the-newsletter-signup-block', '#1-create-the-saved-form', '#2-add-an-input-and-a-button', '#3-style-the-form-with-the-styles-panel', '#4-make-it-a-sign-up-form', '#5-create-the-live-audience', '#6-build-the-band-as-a-reusable-component', '#7-place-the-band-on-your-pages', '#8-check-it-on-the-live-site', '#troubleshooting', '#related'],

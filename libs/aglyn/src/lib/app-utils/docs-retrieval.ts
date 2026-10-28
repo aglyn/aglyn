@@ -171,6 +171,37 @@ export function docsDocumentFrequency(): {
   return { frequency: documentFrequency, sections: DOCS_SECTION_INDEX.length }
 }
 
+/** A letter of any script but Latin: Arabic, Hebrew, Cyrillic, CJK, Devanagari… */
+const NON_LATIN_LETTER = /[^\P{L}\p{Script=Latin}]/u
+
+/**
+ * Whether a question has to be put into English before the docs can be
+ * searched for it (AGL-4075).
+ *
+ * The docs are written in English and the search matches words, so a
+ * question in another language matches nothing by its own words: 17 of 50
+ * chat turns in one fortnight were not in English, and none of them was
+ * grounded in the docs at all. True for a question with a letter outside the
+ * Latin script; for a Latin-script question fewer than half of whose words
+ * appear anywhere in the docs ("¿Cómo conecto mi dominio?"); and for one
+ * with a word the docs never use and none of English's small words ("how",
+ * "do", "my", "the"), which is how a question in French or Portuguese reads
+ * when it shares half its words with English ("Comment publier mon site ?").
+ * An English question about the product uses the docs' own words, so it is
+ * searched as it was asked. A question with no words has nothing to look up.
+ */
+export function docsLookupNeedsEnglish(question: string): boolean {
+  const text = String(question ?? '')
+  if (NON_LATIN_LETTER.test(text)) return true
+  const tokens = tokenize(text)
+  if (!tokens.length) return false
+  const { frequency } = docsDocumentFrequency()
+  const unknown = tokens.filter((token) => !frequency.has(token)).length
+  if (unknown * 2 > tokens.length) return true
+  const words = text.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []
+  return unknown > 0 && !words.some((word) => STOP_WORDS.has(word))
+}
+
 /**
  * Public docs-site origin for deep links the assistant hands the user.
  *

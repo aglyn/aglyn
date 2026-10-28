@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLAN_LABELS, resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   ASSIST_EDIT_ACTION_ID,
   ASSIST_EDIT_DOCUMENT_KINDS,
@@ -911,15 +911,18 @@ export function sanitiseId(value: string): string {
  *
  * The plan is the one the workspace resolves to, as the console's badges name
  * it (AGL-3034): a canceled subscription's stored plan grants nothing, and a
- * staff comp grants a plan the stored field may not name.
+ * staff comp grants a plan the stored field may not name. By its LABEL
+ * (AGL-4075), "Pro" rather than `pro`, because the model repeats what it is
+ * told and the person reads the badge's word.
  */
 export function safeOrgFacts(org: Record<string, unknown>): {
   name: string
   plan: string
 } {
+  const plan = resolveEffectivePlan(org as never)
   return {
     name: String(org?.['name'] ?? '').slice(0, 120),
-    plan: resolveEffectivePlan(org as never).slice(0, 40),
+    plan: (PLAN_LABELS[plan] ?? plan).slice(0, 40),
   }
 }
 
@@ -993,22 +996,23 @@ export function viewScreenBlock(
  * The per-REQUEST facts. Everything here varies by workspace or by page, so
  * it sits after the last cache breakpoint where it invalidates nothing.
  *
- * Only `safeOrgFacts`' two allowlisted fields and the three sanitised client
- * strings ever reach this — see the module header.
+ * Only `safeOrgFacts`' allowlisted name and the three sanitised client
+ * strings ever reach this — see the module header. The plan is not here:
+ * since AGL-4075 every workspace, Free included, is told its plan in the
+ * workspace block (`assistWorkspaceBlock`), so this block would only say it
+ * twice.
  */
 export function viewFactsBlock(facts: {
   route: string
   hostId: string
   orgSlug: string
   name: string
-  plan: string
 }): string {
   const lines: string[] = ['Where the user is right now:']
   lines.push(`- Console page path: ${facts.route}`)
   if (facts.orgSlug) lines.push(`- Workspace URL slug: ${facts.orgSlug}`)
   if (facts.hostId) lines.push(`- Selected site (host) id: ${facts.hostId}`)
   if (facts.name) lines.push(`- Workspace name: ${facts.name}`)
-  if (facts.plan) lines.push(`- Workspace plan: ${facts.plan}`)
   return lines.join('\n')
 }
 

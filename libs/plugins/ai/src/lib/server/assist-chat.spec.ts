@@ -43,6 +43,8 @@ export {}
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 let mockAutoId = 0
+/** Every collection query the route ran (AGL-4075): where, how many, which fields. */
+const mockQueries: Array<{ prefix: string; limit: number | null; fields: string[] | null }> = []
 let mockFlagOn = true
 /** The permission verdict (AGL-2927), recorded with the arguments it was asked. */
 let mockAiPermitted = true
@@ -89,8 +91,61 @@ function mockMakeFirestore() {
       mockDocs.set(path, applyData(mockDocs.get(path), data, true))
     },
   })
+  // A query over the documents directly in a collection (AGL-4075): `where`
+  // with `==` or `in`, `orderBy`, `limit` and `select`, which is what the
+  // open-jobs read asks; every query is recorded for the tests to read.
+  const makeQuery = (
+    prefix: string,
+    filters: Array<(data: Record<string, unknown>) => boolean>,
+    order: { field: string; desc: boolean } | null,
+    cap: number | null,
+    fields: string[] | null,
+  ) => ({
+    where: (field: string, op: string, value: unknown) =>
+      makeQuery(
+        prefix,
+        [
+          ...filters,
+          (data) =>
+            op === 'in' ? (value as unknown[]).includes(data[field]) : data[field] === value,
+        ],
+        order,
+        cap,
+        fields,
+      ),
+    orderBy: (field: string, direction = 'asc') =>
+      makeQuery(prefix, filters, { field, desc: direction === 'desc' }, cap, fields),
+    limit: (count: number) => makeQuery(prefix, filters, order, count, fields),
+    select: (...names: string[]) => makeQuery(prefix, filters, order, cap, names),
+    get: async () => {
+      mockQueries.push({ prefix, limit: cap, fields })
+      const depth = prefix.split('/').length + 1
+      let rows = [...mockDocs.entries()]
+        .filter(([path]) => path.startsWith(`${prefix}/`) && path.split('/').length === depth)
+        .filter(([, data]) => filters.every((keep) => keep(data)))
+      if (order) {
+        const at = (data: Record<string, unknown>) => Number(new Date(data[order.field] as string))
+        rows.sort(([, a], [, b]) => (order.desc ? at(b) - at(a) : at(a) - at(b)))
+      }
+      if (cap !== null) rows = rows.slice(0, cap)
+      return {
+        docs: rows.map(([path, data]) => ({
+          id: path.split('/').pop(),
+          data: () =>
+            fields
+              ? Object.fromEntries(
+                  Object.entries(data).filter(([key]) =>
+                    fields.some((name) => name === key || name.startsWith(`${key}.`)),
+                  ),
+                )
+              : data,
+        })),
+      }
+    },
+  })
   const makeCollection = (prefix: string) => ({
     doc: (id?: string) => makeDoc(`${prefix}/${id ?? `auto-${++mockAutoId}`}`),
+    ...makeQuery(prefix, [], null, null, null),
   })
   return {
     collection: (name: string) => makeCollection(name),
@@ -401,6 +456,7 @@ async function readEvents(response: Response): Promise<Record<string, unknown>[]
 beforeEach(() => {
   mockDocs = new Map()
   mockAutoId = 0
+  mockQueries.length = 0
   mockFlagOn = true
   mockAiPermitted = true
   mockAiPermissionAsks.length = 0
@@ -1541,7 +1597,7 @@ describe('the green path', () => {
     }
   })
 
-  it('caches stable-to-volatile across five blocks, breakpoints after the first two', async () => {
+  it('caches stable-to-volatile across six blocks, breakpoints after the first two', async () => {
     // Caching is a prefix match, so breakpoint 2 covers blocks 1+2. The
     // split between block 2 (route-derived) and block 3 (tenant facts) is
     // what makes the cached prefix shareable across workspaces instead of
@@ -1555,7 +1611,7 @@ describe('the green path', () => {
     const system = request.system as Array<{ text: string; cache_control?: unknown }>
     expect(request.stream).toBe(true)
     expect(request.model).toBe('claude-sonnet-5-5')
-    expect(system).toHaveLength(5)
+    expect(system).toHaveLength(6)
     expect(system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].text).toContain('This console page: Pages')
@@ -1567,13 +1623,16 @@ describe('the green path', () => {
     // Block 3 is the brand, first thing after the last breakpoint (AGL-2352).
     expect(system[2].cache_control).toBeUndefined()
     expect(system[2].text).toContain('called Aglyn')
-    // Block 4 is where the tenant facts live.
+    // Block 4 is the workspace (AGL-4075): its plan and its open AI jobs.
     expect(system[3].cache_control).toBeUndefined()
-    expect(system[3].text).toContain('Where the user is right now')
-    expect(system[3].text).toContain('Pros')
-    // Block 5 is retrieval, last and uncached.
+    expect(system[3].text).toContain('This workspace is on the Pro plan.')
+    // Block 5 is where the tenant facts live.
     expect(system[4].cache_control).toBeUndefined()
-    expect(system[4].text).toContain('<doc url=')
+    expect(system[4].text).toContain('Where the user is right now')
+    expect(system[4].text).toContain('Pros')
+    // Block 6 is retrieval, last and uncached.
+    expect(system[5].cache_control).toBeUndefined()
+    expect(system[5].text).toContain('<doc url=')
   })
 
   it('a white-label org is told ITS product name, and no cached block carries it', async () => {
@@ -1695,7 +1754,9 @@ describe('the green path', () => {
     // Claude Sonnet 5.5 turns thinking off only as between_tools (AGL-3660).
     expect(request.thinking).toEqual({ type: 'between_tools' })
     expect(request.output_config).toEqual({ effort: 'low' })
-    expect(request.max_tokens).toBe(1024)
+    // 2,048 since AGL-4075: a non-Latin script spends two to four times the
+    // tokens per character, and 5 of 17 non-English answers stopped at 1,024.
+    expect(request.max_tokens).toBe(2048)
   })
 
   it('GUARD: a proposal is inert — it never reaches the answer text, and nothing writes', async () => {
@@ -2200,5 +2261,213 @@ describe('the green path', () => {
     const events = await readEvents(await POST(post(QUESTION_BODY(FREE_ORG))))
     expect(events.find((event) => event.type === 'error')?.error).toBe(copy)
     expect(JSON.stringify(events)).not.toContain(error.message)
+  })
+})
+
+/**
+ * ASSIST ANSWERS HONESTLY (AGL-4075). What the model is told about the
+ * workspace it is asked in, what it may claim, and how a question in another
+ * language finds the English docs.
+ */
+describe('honest answers: the plan, the open jobs, the language, the limits', () => {
+  /** Every system block of the chat request, joined. */
+  const systemOf = (call = 0): string =>
+    (JSON.parse(String(mockFetch.mock.calls[call][1].body)).system as Array<{ text: string }>)
+      .map((block) => block.text)
+      .join('\n')
+
+  /** An open job in the Free workspace, by whoever started it. */
+  function seedJob(id: string, data: Record<string, unknown>): void {
+    mockDocs.set(`orgs/${FREE_ORG}/aiJobs/${id}`, {
+      orgId: FREE_ORG,
+      hostId: 'host-1',
+      createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      updatedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      steps: [
+        { name: 'plan', status: 'done' },
+        { name: 'generate', status: 'pending' },
+      ],
+      ...data,
+    })
+  }
+
+  it('tells every workspace its plan by name, Free included', async () => {
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(systemOf()).toContain('This workspace is on the Free plan.')
+
+    mockFetch.mockReset()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(PRO_ORG)))).text()
+    const paid = systemOf()
+    // The name the console's badges use, never the stored id.
+    expect(paid).toContain('This workspace is on the Pro plan.')
+    expect(paid).not.toMatch(/plan: pro\b/)
+  })
+
+  it('lists the open AI jobs with where to confirm, and never a teammate’s brief', async () => {
+    seedOrgs()
+    seedJob('job-mine', {
+      kind: 'page',
+      status: 'needs_review',
+      review: { reason: 'plan' },
+      createdBy: 'user-1',
+      brief: 'An about page for the team',
+    })
+    seedJob('job-theirs', {
+      kind: 'build',
+      status: 'running',
+      createdBy: 'user-2',
+      brief: 'TEAMMATE PRIVATE BRIEF',
+      hostId: 'host-2',
+    })
+    seedJob('job-done', { kind: 'page', status: 'done', createdBy: 'user-1', brief: 'FINISHED LONG AGO' })
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    const system = systemOf()
+    expect(system).toContain('Open AI jobs in this workspace, newest first.')
+    expect(system).toContain(
+      "- The user's page job \"An about page for the team\" on this site, updated 2 hours ago: " +
+        'Plan ready: nothing is built until the user chooses Confirm plan on it. ' +
+        'Its page: /acme/hosts/host-1/ai-jobs/job-mine',
+    )
+    expect(system).toContain("- A teammate's build job on another site, updated 2 hours ago: Building.")
+    expect(system).not.toContain('TEAMMATE PRIVATE BRIEF')
+    // Only open jobs: a finished one is not the question's business.
+    expect(system).not.toContain('FINISHED LONG AGO')
+    // One bounded read, over a fixed list of fields.
+    const read = mockQueries.filter((query) => query.prefix === `orgs/${FREE_ORG}/aiJobs`)
+    expect(read).toHaveLength(1)
+    expect(read[0].limit).toBe(6)
+    expect(read[0].fields).toEqual(expect.arrayContaining(['kind', 'status', 'review.reason']))
+    // Per workspace and per moment, so after every breakpoint.
+    const blocks = JSON.parse(String(mockFetch.mock.calls[0][1].body)).system as Array<{
+      text: string
+      cache_control?: unknown
+    }>
+    const jobsAt = blocks.findIndex((block) => block.text.includes('Open AI jobs'))
+    const lastBreakpoint = blocks.reduce((last, block, index) => (block.cache_control ? index : last), -1)
+    expect(jobsAt).toBeGreaterThan(lastBreakpoint)
+  })
+
+  it('says no job is open when none is', async () => {
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(systemOf()).toContain('No AI jobs are open in this workspace.')
+  })
+
+  it('never serves or keeps a cached answer while a job is open: the answer may be about it', async () => {
+    seedOrgs()
+    seedJob('job-mine', { kind: 'page', status: 'needs_review', review: { reason: 'plan' }, createdBy: 'user-1' })
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    armUpstream()
+    const second = await POST(post(QUESTION_BODY(FREE_ORG)))
+    await second.text()
+    expect(second.headers.get('X-Assist-Served-By')).toBeNull()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('keys a cached answer on the plan, so a plan change is never answered from the old one', async () => {
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(PRO_ORG)))).text()
+    mockDocs.set(`orgs/${PRO_ORG}`, { name: 'Pros', plan: 'business', billingStatus: 'active' })
+    armUpstream()
+    const after = await POST(post(QUESTION_BODY(PRO_ORG)))
+    await after.text()
+    expect(after.headers.get('X-Assist-Served-By')).toBeNull()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(systemOf(1)).toContain('This workspace is on the Business plan.')
+  })
+
+  it('states the standing limits in the cached prefix: text only, no RTL, no invented features, the asker’s language', async () => {
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    const prefix = String(request.system[0].text)
+    expect(request.system[0].cache_control).toEqual({ type: 'ephemeral' })
+    expect(prefix).toContain('Answer in the language the user wrote in.')
+    expect(prefix).toContain('This chat takes text only.')
+    expect(prefix).toMatch(/Media page/)
+    expect(prefix).toMatch(/Right-to-left .* not supported yet/)
+    expect(prefix).toMatch(/A feature exists only when the documentation sections or the console page description/)
+  })
+
+  it('looks a question in another language up in English, and answers it in that language', async () => {
+    seedOrgs()
+    armUpstream()
+    // The English lookup: a short completion, before the answer's stream.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        content: [{ type: 'text', text: 'publish a page' }],
+        usage: { input_tokens: 120, output_tokens: 8 },
+        stop_reason: 'end_turn',
+      }),
+    })
+    const question = 'كيف أنشر صفحتي على الموقع؟'
+    const response = await POST(post({ ...QUESTION_BODY(FREE_ORG), question }))
+    const events = await readEvents(response)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    const lookup = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    expect(lookup.stream).toBeFalsy()
+    expect(lookup.max_tokens).toBeLessThanOrEqual(100)
+    expect(lookup.messages).toEqual([{ role: 'user', content: question }])
+    expect(String(lookup.system[0].text)).toMatch(/English search query/)
+    // The answer is asked in the user's own words, grounded in English docs.
+    const answer = JSON.parse(String(mockFetch.mock.calls[1][1].body))
+    expect(answer.stream).toBe(true)
+    expect(answer.messages[answer.messages.length - 1]).toEqual({ role: 'user', content: question })
+    expect(systemOf(1)).toContain('<doc url=')
+    // Both calls are the turn's, metered together.
+    const done = events.find((event) => event.type === 'done') as { exchangeId: string; docs: unknown[] }
+    expect(done.docs.length).toBeGreaterThan(0)
+    expect(mockDocs.get(`orgs/${FREE_ORG}/assistSignals/${done.exchangeId}`)).toMatchObject({
+      inputTokens: 1020,
+      outputTokens: 50,
+    })
+  })
+
+  it('answers from the words alone when the English lookup fails', async () => {
+    seedOrgs()
+    armUpstream()
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 529, json: async () => ({ error: { type: 'overloaded_error' } }) })
+    const response = await POST(post({ ...QUESTION_BODY(FREE_ORG), question: 'كيف أنشر صفحتي على الموقع؟' }))
+    expect(response.status).toBe(200)
+    const events = await readEvents(response)
+    expect(events.some((event) => event.type === 'done')).toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['the plan', 'What plan is my workspace on?', 'This workspace is on the Free plan.'],
+    ['an AI job', 'Where is my about page? Is it built yet?', 'Confirm plan'],
+  ])('answers a question about %s from the workspace, never from a docs quote', async (_label, question, told) => {
+    seedOrgs()
+    seedJob('job-mine', {
+      kind: 'page',
+      status: 'needs_review',
+      review: { reason: 'plan' },
+      createdBy: 'user-1',
+      brief: 'An about page for the team',
+    })
+    armUpstream()
+    const response = await POST(post({ ...QUESTION_BODY(FREE_ORG), question }))
+    await response.text()
+    expect(response.headers.get('X-Assist-Served-By')).toBeNull()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(systemOf()).toContain(told)
+  })
+
+  it('never looks an English question up twice', async () => {
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 })
