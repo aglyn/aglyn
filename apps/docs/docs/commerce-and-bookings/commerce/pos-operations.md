@@ -189,6 +189,17 @@ in stays checked in. Checking in per guest uses the stay's guest count, which
 guests enter when they book with the Reservation widget and staff enter on a
 walk-in. A stay with no count gets one check-in.
 
+**When a stay's guests change.** If a family turns up with one more or one
+fewer, choose **Guests** on the stay's row in **Today's check-ins** or in the
+register's **Check in** window (or on the stay in the **Reservations** card)
+and save the new count. When the stay is checked in per guest, today's list
+follows at once, and so does any later day already on the list: an added guest
+gets their own check-in, and a guest who is no longer coming is taken off only
+if they haven't been checked in. Someone already checked in always stays. If
+the new count is lower than how many are already checked in, it is refused and
+says how many are in; undo a check-in first if that is what you meant. Days
+before today stay as they were.
+
 **Commerce → Orders → Today's check-ins** lists everyone due on a day with
 what they are checked in for, the time, who checked them in, the wristband
 and any rain check, with expected, checked-in and still-to-come counts, and a
