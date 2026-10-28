@@ -2937,7 +2937,20 @@ allow read, write: if false;
 
 
 
+
 match /posHardwareSales/{orderId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+match /posCellularReaders/{recordId} {
+allow read, write: if false;
+}
+match /posCellularCharges/{chargeId} {
 allow read, write: if false;
 }
 

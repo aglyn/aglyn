@@ -249,6 +249,7 @@ has a sweep in `eraseOrg` or is a defect.
 | `publisherHandles` | yes (AGL-1970), by the marketplace's **required** org eraser (AGL-3080) | handle reservations **and every rename tombstone** |
 | `publisherProfiles` | yes (AGL-1970) — deleted, or reduced to a content-free tombstone — by the same eraser | handle, display name, `stripeAccountId`, `publisherAgreement` |
 | `outreachMailboxCredentials`, `outreachLinks` | yes (AGL-2974/AGL-3297), by `orgId`, as collections the Outreach plugin DECLARES (`orgKeyedCollections`, AGL-3080) and `eraseOrg` sweeps in every process | a rep's sealed mailbox grant; a sequence email's link targets |
+| `posCellularReaders`, `posCellularCharges` | yes (AGL-4038), by `orgId`, as collections commerce DECLARES (`orgKeyedCollections`); commerce's org eraser first turns 4G off at Stripe for each store that had it | each S710's 4G periods (site, Stripe reader and serial, configuration) and each month's 4G charge (readers, amount, outcome, Stripe invoice id); no person |
 
 The marketplace's eraser is REQUIRED (`"requiredOrgEraser": true` in
 `plugins.config.json`): an erasure refuses to start while it is not registered,

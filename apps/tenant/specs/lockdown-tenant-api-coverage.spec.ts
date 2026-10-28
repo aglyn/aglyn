@@ -758,7 +758,7 @@ describe('AGL-2495 · every background job that writes for a host asks the lock'
     // plausible and would pass every assertion below.
     expect(JOB_SITES.length).toBeGreaterThanOrEqual(7)
     expect(new Set(JOB_SITES.map((job) => job.file)).size).toBeGreaterThan(1)
-    // And it must find the file that holds EIGHT of them as eight, not one —
+    // And it must find the file that holds NINE of them as nine, not one —
     // the per-file/per-registration confusion the first pass shipped.
     expect(
       JOB_SITES.filter(
@@ -769,6 +769,7 @@ describe('AGL-2495 · every background job that writes for a host asks the lock'
       'back-in-stock-alerts',
       'offline-card-unsynced',
       'payment-method-domains',
+      'pos-cellular-billing',
       'pos-reader-splash-refresh',
       'review-request-emails',
       'stock-decrement-reconciliation',

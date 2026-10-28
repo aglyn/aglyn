@@ -20,6 +20,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { authorizePosStaff, posRequestBody, type PosStaff } from './pos-auth'
 import { revokePosDisplays } from './pos-display'
 import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
+import { parsePosCellularConfig, posCellularView } from '../model/pos-cellular'
 import { posStripe, posStripeErrorMessage, posStripeTestMode, posTerminalAvailable } from './pos-stripe'
 import {
   ensurePosTerminalLocation,
@@ -60,6 +61,12 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
         return await removeReader(staff, body, res)
       case 'remove-register':
         return await removeRegister(staff, body, res)
+      case 'cellular': {
+        // 4G for the store's S710s (AGL-4038): set up like the readers, so
+        // "Registers and devices" on the store.
+        const answer = await (await import('./pos-cellular')).setPosStoreCellular(staff, body)
+        return res.status(answer.status).json(answer.body)
+      }
       default:
         return res.status(400).json({ error: 'Unknown action' })
     }
@@ -100,6 +107,14 @@ async function listReaders(staff: PosStaff, refresh: boolean) {
     available,
     testMode: posStripeTestMode(),
     locationReady: Boolean(config.get('stripeLocationId')),
+    // 4G for the store's S710s (AGL-4038), only where it is offered and the
+    // store has one; absent otherwise, so the card shows nothing of it.
+    ...(available
+      ? (() => {
+          const cellular = posCellularView(parsePosCellularConfig(process.env), config.data(), readers)
+          return cellular ? { cellular } : {}
+        })()
+      : {}),
     readers: readers.map((reader: PosTerminalReader & { id: string }) => ({
       id: reader.id,
       label: reader.label,
@@ -235,6 +250,7 @@ export async function registerPosTerminalReader(input: {
   }
   const id = String(created.body.id)
   await readersRef(input.hostId).doc(id).set(reader)
+  await syncCellular(input.hostId, input.orgId)
   if (reader.serialNumber && parsePosHardwareInPersonConfig(process.env)) {
     try {
       await (await import('./pos-hardware-readers')).matchRegisteredPosHardwareReader({
@@ -295,7 +311,21 @@ async function removeReader(
     return res.status(502).json({ error: posStripeErrorMessage(removed.body, 'The reader could not be removed.') })
   }
   await readersRef(staff.hostId).doc(reader.id).delete()
+  await syncCellular(staff.hostId, staff.orgId)
   return res.status(200).json({ ok: true })
+}
+
+/**
+ * A reader added to or removed from a store with 4G (AGL-4038) starts or
+ * stops counting toward its monthly charge. Never fails the reader's own
+ * change; the next turn-on, turn-off or reader change heals a miss.
+ */
+async function syncCellular(hostId: string, orgId: string): Promise<void> {
+  try {
+    await (await import('./pos-cellular')).syncPosCellularReaders({ hostId, orgId })
+  } catch (error) {
+    console.error('[pos-readers] the 4G record was not updated', hostId, error)
+  }
 }
 
 /**

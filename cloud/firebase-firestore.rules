@@ -2934,10 +2934,23 @@ service cloud.firestore {
     //
     // Same retention rule as `platformRevenue` and `storefrontTaxCollected`
     // above: these are the platform's sales-tax and accounting records,
-    // kept after the workspace is erased (GDPR Art. 17(3)(b)) with nothing
-    // about the buyer in them. They are org-keyed by FIELD, and they must
-    // NEVER be added to an org-keyed deletion pass.
+    // kept after the workspace is erased (GDPR Art. 17(3)(b)), holding of
+    // the buyer only their name and address (the reseller records Stripe's
+    // Terminal Reseller Terms ask for). They are org-keyed by FIELD, and
+    // they must NEVER be added to an org-keyed deletion pass.
     match /posHardwareSales/{orderId} {
+      allow read, write: if false;
+    }
+
+    // 4G for Stripe Reader S710s (AGL-4038): each reader's 4G months and
+    // each workspace's monthly 4G charge, written only by the commerce
+    // plugin's card readers route and billing job on the Admin SDK. Deny ALL
+    // client access: the POS devices card reads 4G through the route. Both
+    // are org-keyed and erased with the workspace (plugins.config.json).
+    match /posCellularReaders/{recordId} {
+      allow read, write: if false;
+    }
+    match /posCellularCharges/{chargeId} {
       allow read, write: if false;
     }
 

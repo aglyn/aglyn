@@ -1242,6 +1242,26 @@ store's sales are folded in.
 Paid orders arrive on the platform webhook as `checkout.session.completed`, which
 the endpoint already subscribes to; there is no new endpoint.
 
+### 4G for card readers {#pos-cellular}
+
+Stripe sells cellular service for the Stripe Reader S710 as a monthly
+subscription per reader, billed to the Stripe account the reader is registered
+to, which is your platform account. With these set, a store's **POS devices**
+card offers **Turn on 4G** wherever the store has an S710: it turns cellular on
+for every S710 at that store, on the store's reader configuration, and each
+workspace is charged once a month, in arrears, for each S710 that had 4G in the
+month just ended. The charge is Stripe's price plus what collecting it costs
+you, with no markup, on an invoice to the workspace's card. Set them on the
+**console and tenant** (the charge runs as a background job). Unset, nothing
+about 4G shows anywhere.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `POS_CELLULAR_MONTHLY_COST_CENTS` | Optional | Runtime, console and tenant | What Stripe charges you for one reader's cellular service a month, in whole cents. Unset, or not a whole number, keeps 4G hidden. |
+| `POS_CELLULAR_BILLING_COST_BPS` | Optional | Runtime, console and tenant | The card processing percentage on the monthly charge, in basis points. Unset is the platform's card rate. |
+| `POS_CELLULAR_BILLING_COST_FIXED_CENTS` | Optional | Runtime, console and tenant | The card processing fixed fee on the monthly charge, in cents. Unset is the platform's. |
+| `STRIPE_PRODUCT_POS_CELLULAR` | Optional | Runtime, console and tenant | The Stripe product the monthly charge is billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. Unset keeps 4G hidden. |
+
 ---
 
 ## Mobile apps and push {#mobile}

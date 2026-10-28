@@ -299,6 +299,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each one-click DNS request a site sent to its DNS provider through Domain Connect (AGL-3963): the domain and host, the provider and template, the member who started it and their email, its status, and when it was applied, resolved and expires. The document id is a SHA-256 of the state token the provider echoes back, a lookup key and not the token, which is never stored.',
   },
   {
+    collection: 'posCellularReaders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each Stripe Reader S710 a store turned 4G on for (AGL-4038): the site, the Stripe reader and its serial number, the Terminal configuration, and when it had 4G. The organization’s own record of what it is charged for; it names no person.',
+  },
+  {
+    collection: 'posCellularCharges',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each month’s 4G charge for the organization’s card readers (AGL-4038): the month, how many readers, the amount, the outcome and the Stripe invoice id. The organization’s own billing record; it names no person.',
+  },
+  {
     collection: 'fulfillmentNetworkConnections',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1243,6 +1257,8 @@ export async function exportOrgData(
     'deliveryAppOrders',
     'domainRegistrations',
     'domainConnectSessions',
+    'posCellularReaders',
+    'posCellularCharges',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

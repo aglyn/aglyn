@@ -485,6 +485,18 @@
         }
       },
       "requiredPersonEraser": true,
+      "orgKeyedCollections": [
+        {
+          "$comment": "Each Stripe Reader S710's 4G months, which the monthly 4G charge counts (AGL-4038). No person on it. Top level and closed to every client, so org erasure removes them by orgId, after the org eraser has turned 4G off at Stripe.",
+          "name": "posCellularReaders",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Each workspace's monthly 4G charge and its invoice id (AGL-4038). The invoice itself is the billing record in Stripe. Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "posCellularCharges",
+          "orgField": "orgId"
+        }
+      ],
       "modules": {
         "site": "site"
       },

@@ -197,4 +197,63 @@ describe('the POS devices card', () => {
     expect((pair as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/Point of Sale is not on your plan/)).toBeTruthy()
   })
+
+  describe('4G for the store’s S710s (AGL-4038)', () => {
+    const withCellular = (enabled: boolean) => {
+      readersAnswer = {
+        ...readersAnswer,
+        locationReady: true,
+        // Figures for the spec only.
+        cellular: { readerMonthlyCents: 1_061, enabled, readers: 2 },
+      }
+    }
+
+    it('is absent where the route offers no 4G', async () => {
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      await waitFor(() => expect(screen.getByText('Counter reader')).toBeTruthy())
+      expect(screen.queryByText('4G (cellular)')).toBeNull()
+    })
+
+    it('says it is for every S710 at the store and charged for each, and turns on only with the agreement', async () => {
+      withCellular(false)
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Turn on 4G' }))
+      expect(screen.getByText(/Every Stripe Reader S710 at this store gets Stripe's 4G service/)).toBeTruthy()
+      expect(screen.getByText(/Each S710 is charged \$10\.61 a month/)).toBeTruthy()
+      const confirm = screen.getAllByRole('button', { name: 'Turn on 4G' }).pop() as HTMLButtonElement
+      expect(confirm.disabled).toBe(true)
+      fireEvent.click(screen.getByRole('checkbox'))
+      fireEvent.click(confirm)
+      await waitFor(() =>
+        expect(calls.find((call) => call.body?.action === 'cellular')?.body).toEqual({
+          action: 'cellular',
+          hostId: 'host-1',
+          enabled: true,
+          consent: true,
+        }),
+      )
+    })
+
+    it('turns off where it is on', async () => {
+      withCellular(true)
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      expect(await screen.findByText(/On for every Stripe Reader S710 at this store/)).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Turn off 4G' }))
+      fireEvent.click(screen.getAllByRole('button', { name: 'Turn off 4G' }).pop() as HTMLButtonElement)
+      await waitFor(() =>
+        expect(calls.find((call) => call.body?.action === 'cellular')?.body).toEqual({
+          action: 'cellular',
+          hostId: 'host-1',
+          enabled: false,
+        }),
+      )
+    })
+
+    it('is not offered to someone without the devices key', async () => {
+      withCellular(false)
+      render(<PosDevicesCard hostId="host-1" canManagePos canSetUpDevices={false} />)
+      const button = (await screen.findByRole('button', { name: 'Turn on 4G' })) as HTMLButtonElement
+      expect(button.disabled).toBe(true)
+    })
+  })
 })

@@ -2436,6 +2436,16 @@ export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] =
  */
 export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] = [
   {
+    "pluginId": "commerce",
+    "name": "posCellularReaders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "commerce",
+    "name": "posCellularCharges",
+    "orgField": "orgId"
+  },
+  {
     "pluginId": "outreach",
     "name": "outreachMailboxCredentials",
     "orgField": "orgId"
