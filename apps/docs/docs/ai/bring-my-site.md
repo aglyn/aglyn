@@ -109,21 +109,50 @@ top. You can still start the first wave.
 ## Waves {#waves}
 
 - **The first wave** brings in your main pages: home, then the pages in your menu,
-  then your other top-level pages. It also builds your new site's header and footer,
-  with the menu linking those pages.
+  then your other top-level pages. Before any page, it gives your new site your current
+  site's look: your colors, read from your home page, on one of Aglyn's built-in themes,
+  with type in the same style as yours. If you already chose a theme for the new site, it
+  is kept. The first wave also builds your header and footer: your logo, your name, or both,
+  as your current site's header shows them, your menu linking your pages, and the address,
+  phone, email and profiles your current header and footer show. Your home page's title and
+  description become your new site's search listing, unless you already changed it.
 - **Each later wave** brings in up to 10 pages of one collection, for example
   **Blog, 1 of 3**.
 - **Never past your plan.** Your main pages are kept first. If your site has more pages
   than your plan allows, the last pages of your collections are the ones left out, each
   listed with **Past your plan's page count**. **See plans** opens Billing.
 
+Your words are never rewritten. Each page is built one of two ways, and the wave's row for
+the page says which:
+
+- **Copied as it is**: a page of a collection, such as a blog post or a policy, and any
+  long page. Every heading, paragraph, list and link comes in, in order, laid out in your
+  new site's theme.
+- **Arranged by Aglyn AI**: your main pages. Aglyn AI chooses how each section is laid
+  out, such as its columns and background, and every line keeps the words your page has.
+
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
-shows its cost before you start it. A page costs about 27 AI credits, the same as any page
-Aglyn AI writes, and the header and footer cost about 29. Credits are used as each page is
-written. A page that fails on our side gives its credits back.
+shows its cost before you start it, and how many of its pages are arranged and how many are
+copied. A page copied as it is costs far less than a page Aglyn AI arranges. Credits are used
+as each page is brought in. A page that fails on our side gives its credits back.
+
+**Start every remaining wave** starts every wave that is left, one after another, with no
+review between them. It shows the cost of all of them before you choose it. You review the
+last wave when it is in, and **Cancel** still stops the import after the page it is on.
 
 While a wave runs, its page lists each page as it comes in. You can leave the page.
 You are told when the wave is in.
+
+### Your site's preview {#your-sites-preview}
+
+A site you bring in starts in [preview](../building-sites/site-protection/make-your-site-private.md#keep-it-to-your-team-with-preview):
+only you and your team can see it, and visitors see **Coming soon**. When a wave is in, its
+pages are on your new site for your team, home at your site's address, so you can open the
+site and look through it as visitors will. When you are ready, switch **Preview** off and
+your site is public to everyone.
+
+If you switched **Start in preview** off when you created the site, each wave's pages stay
+drafts instead, and nothing is published until you publish it.
 
 ## Review a wave {#review-a-wave}
 
@@ -144,8 +173,13 @@ pages** opens the site's Pages list. When you are ready for more, choose the nex
 
 ## Photos {#photos}
 
-A page's photos are copied into your new site's media library and placed on that page
-first. The same photo is stored only once, however many pages show it.
+A page's photos are copied into your new site's media library and placed on that page:
+on a page copied as it is, each one where your page shows it. The same photo is stored only
+once, however many pages show it.
+
+Your logo is copied once, for your header. If it is a drawing (an SVG file), it is saved as
+a picture. Your home page's share image, the one shown when your site is linked, becomes
+your new site's share image unless you already chose one.
 
 ## What is never brought in {#never-brought-in}
 

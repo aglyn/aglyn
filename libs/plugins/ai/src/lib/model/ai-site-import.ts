@@ -201,6 +201,8 @@ export interface AiSiteImportPhoto {
   width?: number
   height?: number
   alt?: string
+  /** The address on the old site it was read from, where a page that is copied places it (AGL-4084). */
+  from?: string
 }
 
 /** What a wave's read found on one page, for its model answer. Never on the wire. */
@@ -310,8 +312,63 @@ export interface AiSiteImportState {
    * Off unless the person chose it.
    */
   autoContinue?: boolean
+  /**
+   * The wave "Start every remaining wave" was chosen at (AGL-4084): the one
+   * start the person made, which the day's limit counts; the waves it starts
+   * after it are the same start.
+   */
+  autoContinueFrom?: number | null
   /** What the read found of the site as a whole; a stopping verdict plans nothing. */
   verdict?: AiSiteImportReadVerdict | null
+  /** What the home page says of the site as a whole (AGL-4084): its look, its header and footer, its listing. */
+  home?: AiSiteImportHome | null
+  /** The look pass, once it ran in the first wave (AGL-4084). */
+  look?: AiSiteImportLook | null
+}
+
+/**
+ * What the home page says of the site as a whole (AGL-4084), kept from the
+ * read: the site's listing in its own words, its header's brand as the
+ * source draws it, and the words its header and footer carry. Untrusted
+ * data from the owner's site, fenced wherever a prompt reads it.
+ */
+export interface AiSiteImportHome {
+  url: string
+  title: string
+  description: string
+  ogImage: string | null
+  siteName: string
+  brand: {
+    kind: 'logo-only' | 'logo-and-name' | 'name-only'
+    /** The name as the header prints it, where it prints one. */
+    text: string
+    logo: { url: string; alt: string; type: 'svg' | 'raster' | null } | null
+  }
+  facts: {
+    /** The header's and footer's lines, as written, in order. */
+    lines: string[]
+    emails: string[]
+    phones: string[]
+    social: string[]
+    address: string
+  }
+}
+
+/** What the look pass did (AGL-4084): no model is asked. */
+export interface AiSiteImportLook {
+  at: string
+  /** The theme: drawn from the source (`applied`), the owner's kept (`kept`), or the source's look could not be read. */
+  theme: 'applied' | 'kept' | 'unread'
+  /** The source's colors it was drawn from, the strongest first. */
+  colors: string[]
+  /** The source's logo, as the library holds it, for the header's brand. */
+  logo: AiSiteImportPhoto | null
+  /** Whether the site's listing was taken from the home page's own words. */
+  seo: boolean
+  /** The look's seed, which every page of the import is drawn with. */
+  seed: number | null
+  /** The look's header arrangement, band rhythm and motion, which the header, the footer and every page are drawn in. */
+  style?: { headerAlign?: string; rhythm?: string; motion?: string } | null
 }
 
 /*------------------------------------------

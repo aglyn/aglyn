@@ -2540,33 +2540,84 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    the next pass (`read`) reads them before anything is built. A page's name
    is its own part of its browser title ("About | Rosie's Bakery" is
    "About"), the home page "Home".
-3. **The header and footer**, in the first wave: the layout step's own pass on
-   a derived `layout` job in the layout language, linking the wave's pages.
-4. **Each page**: its photos first (no model), through `pluginMediaIngest()
+3. **The look** (no model, AGL-4084), before anything of the first wave is
+   built (`jobs/ai-site-import-look.ts`): the owner's home page is read once
+   more as AglynBot, with the crawl's `headersFor` edge headers, and its first
+   stylesheets; the inspiration signals (`aiSiteInspirationSignals`, AGL-3975)
+   pin the look, the brand being the source's strongest color drawn SOLID
+   (`aiSiteImportBrandColors`: a translucent tint is not counted), and the look
+   is drawn and saved as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`,
+   which keeps a theme the owner chose). The header's logo
+   (`siteImportHeaderBrand`) is brought into the library once by its import
+   key, an SVG drawn as a PNG 192 px tall (`rasterizeAiLogoSvg`, on Vercel the
+   images function's `logo-raster` op). The home page's `<title>`,
+   `description` and `og:image` become the site's listing only where it is
+   still the seeded one (`aiSiteImportListingUpdates`, `aiSiteListingSeeded`).
+   The result is `siteImport.look`; its seed and style ride every unit
+   (`siteKind`, `siteStyle`).
+4. **The header and footer**, in the first wave: the layout step's own pass on
+   a derived `layout` job in the layout language, linking the wave's pages in
+   the menu's order. Its brand is the source's (`siteBrand`: the logo alone,
+   the logo and the name, or the name, drawn by `ai-layout-frame.ts`); its
+   prompt shows the source's own header and footer lines and description
+   (`siteFacts`), FENCED under `UNTRUSTED_TEXT_RULE`, in place of the brief,
+   and its contact check admits what they state. `businessName` is the
+   person's name for the site unless the source's differs from it only by
+   case or punctuation.
+5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
-   once per site (an ingest that cannot answer stores nothing); then the page
-   step's own passes on a derived `page` job: one screen at the page's new
-   one-segment address, its sections from the old page's headings, its photos
-   in `pagePhotos` (placed before owner and stock photos), its text in
-   `importedPage`, which the page prompt shows only FENCED
-   (`aiLayoutImportedPageLines`) under `UNTRUSTED_TEXT_RULE`, a static system
-   block of its own (`aiJobPageLanguageInstructions`). The old page's text
-   counts as given facts, so its phone and address are not "invented".
-5. **Close the wave**: the job parks again, reason `wave`, with the wave's
-   pages as drafts to review, until the next wave is started. The last wave
-   ends the job.
+   once per site (an ingest that cannot answer stores nothing), each kept with
+   the address it was read from (`from`); then the page step's own passes on a
+   derived `page` job, NEVER REWRITTEN (AGL-4084,
+   `jobs/ai-site-import-document.ts`). The job carries `importedSections`: the
+   read's blocks, the photos and where the site's own links go. The plan's
+   sections are the source's (its opening, then one at each h2). How the page
+   is built is decided by code (`aiSiteImportBuildOf`):
+   - **copied** (a collection's page, any page past `AI_SITE_IMPORT_PROSE_WORDS`
+     words): `aiCompileImportedDocument` lays every line out in source order,
+     bands alternating plain and soft, with NO model; only the listing pass
+     spends;
+   - **arranged** (the main pages, Home always): one answer on the page tier
+     through `submit_arrangement` (`AI_LAYOUT_ARRANGE_TOOL`, which has no field
+     for a word), told the numbered lines fenced (`aiLayoutArrangePrompt`). The
+     compiler substitutes each line as written; a block naming a line already
+     placed is dropped, a line of another section is not taken, and every line
+     the answer left out is added at the end of its section.
+   Both are checked as the owner's own words (`ownWords` on the doctrine
+   context): rule 8 asks no dataset of their lists, rule 14's copy checks do
+   not judge them, and the page budget is `AI_OWN_WORDS_PAGE_BUDGET`. A
+   paragraph longer than a text element holds is split between sentences. The
+   words on the stored draft are counted into the page's `brought`.
+6. **Close the wave**: its pages go live INTO THE PREVIEW
+   (`jobs/ai-site-import-publish.ts`, `aiPublishImportedWave` on
+   `aiPublishGuidedSite`) when the site is in preview (`host.preview`,
+   AGL-4086): Home takes `/` in the first wave, later waves join what is live
+   (`retry`), links to a page not in come out, and `site_published` is not
+   sent (the switch sends it). A site not in preview keeps the drafts. The job
+   then parks again, reason `wave`, until the next wave is started, or, with
+   `siteImport.autoContinue` (the resume door's `startAll`,
+   `aiSiteImportStartAllUpdate`), goes straight on to it; only the wave the
+   person started counts against the day's limit (`autoContinueFrom`). The
+   last wave ends the job.
+- **Home first.** The read's verdict (`aiSiteImportReadVerdict`) is passed to
+  the inventory; a read that could not see the home page parks with reason
+  `blocked` or `unreadable`, the verdict's sentence, no ledger and no quote,
+  and the resume door (Check again) reads again.
 
 - **Settled by item.** `import` is one of `aiJobSettlesByItem`'s kinds: a page
   that fails on our side gives back its own spend (`refundBuildCredits`), its
   row says why, and the wave goes on. The machine keeps `siteImport` on the job
   from the outcome in the pass's own write; the summary carries it without any
   page text (`aiSiteImportWire`).
-- **Priced as an AI page.** `AI_MEASURED_IMPORT_CREDITS`: a page is the paid
-  table's page (27 / 47), the header its layout; each wave is quoted before it
-  starts (`aiSiteImportWaveCreditRange`), its ceiling two passes a page.
-- **Nothing is published.** Every output is a draft; the job writes no
-  `sitePublish`, and the site created for it is created empty.
+- **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
+  arranged page at `arranged`, a copied page at `copied` (its listing pass), the
+  header its layout; each wave is quoted before it starts
+  (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
+  the live check measures them.
+- **Published only into a preview.** A wave's pages go live only on a site in
+  preview, where the public sees the notice; `sitePublish` carries what went
+  live. On a site not in preview every output stays a draft.
 - **Trust & Safety.** Every import files one `abuseReports` row
   (`site-import/site-import-review.ts`, `source: 'site-import'`, category
   `impersonation`, severity `normal`, the outbound screen's shape), rewritten

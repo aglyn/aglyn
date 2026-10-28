@@ -122,6 +122,7 @@ import {
   aiRunLayoutPage,
   type AiLayoutStartPage,
 } from './ai-job-page-language'
+import { aiSiteImportDocumentOf } from './ai-site-import-document'
 import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
   aiCreationUnit,
@@ -718,6 +719,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // component of (AGL-3660). Without it, a Pro store's Shop page passed
       // its check and was refused at the last pass (live run, 2026-10-09).
       ...(language ? { codeBuilt: true, repeatsCompiled: true } : {}),
+      // A page brought in word for word is its owner's own words (AGL-4084), checked as such.
+      ...(language && aiSiteImportDocumentOf(job.inputs) ? { ownWords: true } : {}),
     }
     // And a post's card in a section listing the blog links its post and shows
     // its cover by the tokens the page fills per post (AGL-3676), as its check admitted.

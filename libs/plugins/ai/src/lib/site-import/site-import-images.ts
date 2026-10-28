@@ -166,6 +166,7 @@ export async function bringInSiteImportPhotos(
           ...(held.width ? { width: held.width } : {}),
           ...(held.height ? { height: held.height } : {}),
           ...(held.alt || image.alt ? { alt: held.alt || image.alt } : {}),
+          from: image.url,
         })
         continue
       }
@@ -204,6 +205,8 @@ export async function bringInSiteImportPhotos(
         ...(stored.width ? { width: stored.width } : {}),
         ...(stored.height ? { height: stored.height } : {}),
         ...(image.alt ? { alt: image.alt.slice(0, 250) } : {}),
+        // Where it sat on the old page, so a page copied as it is places it there (AGL-4084).
+        from: image.url,
       })
     } catch (error) {
       console.warn('[site-import] a photo could not be brought in', { hostId: input.hostId, error })

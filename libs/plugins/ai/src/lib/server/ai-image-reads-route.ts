@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { AI_IMAGE_READS_SIGNATURE, verifyAiImageReadsRequest } from '../jobs/ai-image-reads'
+import { AI_IMAGE_READS_SIGNATURE, AI_LOGO_RASTER_MAX_BYTES, rasterizeAiLogoSvg, verifyAiImageReadsRequest } from '../jobs/ai-image-reads'
 import { aiMediaAssetLocation } from '../jobs/ai-media-asset'
 import { readAiProductImageAt } from '../jobs/ai-product-image'
 import { readAiThemeLogoColorsAt } from '../jobs/ai-theme-brand-inputs'
@@ -31,6 +31,8 @@ import { readAiThemeLogoColorsAt } from '../jobs/ai-theme-brand-inputs'
  *                                               it, or why it was not read
  *   {op: 'logo-colors', ref, hostId, orgId}     `{colors}`: the site logo's
  *                                               dominant colors, or null
+ *   {op: 'logo-raster', svg, height}            `{png}`: a site import's SVG
+ *                                               logo drawn as a PNG (AGL-4084)
  *
  * The asset is located again here from its reference, the site and the org,
  * under the rule the step used (`aiMediaAssetLocation`): one that is not the
@@ -62,6 +64,19 @@ export async function aiImageReadsRoute(request: Request): Promise<Response> {
   }
   if (!body || typeof body !== 'object') return json({ error: 'Bad request' }, 400)
   const op = body['op']
+  // A site import's SVG logo, drawn as a PNG (AGL-4084): the drawing is in the body, nothing is fetched.
+  if (op === 'logo-raster') {
+    const svg = typeof body['svg'] === 'string' ? Buffer.from(body['svg'], 'base64') : null
+    const height = Number(body['height'])
+    if (!svg || svg.byteLength > AI_LOGO_RASTER_MAX_BYTES || !Number.isFinite(height)) return json({ error: 'Bad request' }, 400)
+    try {
+      const png = await rasterizeAiLogoSvg(new Uint8Array(svg), height)
+      return json({ png: png ? Buffer.from(png).toString('base64') : null })
+    } catch (error) {
+      console.error('[ai-image-reads]', op, { error })
+      return json({ error: 'The logo could not be drawn.' }, 500)
+    }
+  }
   if (op !== 'product-photo' && op !== 'logo-colors') return json({ error: 'Unknown op' }, 400)
   const hostId = String(body['hostId'] ?? '')
   const orgId = String(body['orgId'] ?? '')

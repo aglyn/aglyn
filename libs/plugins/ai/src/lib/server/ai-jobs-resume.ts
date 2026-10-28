@@ -22,6 +22,7 @@ import { randomUUID } from 'crypto'
 import { aiJobAdmissionRefusal, aiJobSiteRefusal, type AiJobAdmissionRefusal } from '../jobs/ai-job-admission'
 import {
   AI_JOB_INLINE_BUDGET_MS,
+  AI_JOBS_COLLECTION,
   aiJobNextStepMinimumMs,
   aiJobSummary,
   getAiJob,
@@ -206,6 +207,15 @@ export async function POST(
       return Response.json({ error: 'The AI job could not be resumed' }, { status: 500 })
     }
     if (refusal) return refused(refusal)
+  }
+  // "Start every remaining wave" (AGL-4084): an import waiting for its next
+  // wave starts every one left, with no review between them.
+  const startAll =
+    payload?.['startAll'] === true && existing.kind === 'import'
+      ? (await import('../jobs/ai-job-import-step')).aiSiteImportStartAllUpdate(existing)
+      : null
+  if (startAll) {
+    await gate.firestore.collection('orgs').doc(gate.orgId).collection(AI_JOBS_COLLECTION).doc(jobId).update(startAll)
   }
   const now = new Date()
   const confirmation = aiCreditsConfirmation(confirmedCredits, gate.uid, now)

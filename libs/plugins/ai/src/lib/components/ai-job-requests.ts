@@ -64,6 +64,8 @@ export interface AiJobResumeOptions {
   reduce?: 'first-page'
   /** The answers a job waiting in `needs_input` asks for (AGL-3978), by `aiJobInputKey`. */
   input?: Record<string, string>
+  /** "Start every remaining wave" (AGL-4084): an import starts its next wave and every one after it. */
+  startAll?: boolean
 }
 
 /**
@@ -91,6 +93,7 @@ export async function resumeAiJobRequest(
           ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
           ...(options.reduce ? { reduce: options.reduce } : {}),
           ...(options.input ? { input: options.input } : {}),
+          ...(options.startAll ? { startAll: true } : {}),
         }),
       },
     )
