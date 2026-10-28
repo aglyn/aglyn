@@ -292,7 +292,7 @@ export function PaymentMethodsCard(props: PaymentMethodsCardProps) {
             </Typography>
             {canEdit ? null : (
               <Alert severity="info">
-                {'Only a site admin can change which payment methods your store offers.'}
+                {'Changing which payment methods your store offers takes the "Manage payment methods" permission — ask an organization admin.'}
               </Alert>
             )}
             {/* What every "Connect Stripe first" chip below waits on, and where

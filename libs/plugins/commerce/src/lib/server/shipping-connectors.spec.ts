@@ -274,7 +274,7 @@ describe('the ShippingEasy card through the same door (AGL-3633)', () => {
 
     const editor = await post('editor', { connector: 'shippingeasy', action: 'sync' })
     expect(editor.status).toBe(403)
-    expect(editor.body.error).toMatch(/ShippingEasy/)
+    expect(editor.body.error).toBe('Your role does not include "Connect shipping apps" — ask an organization admin')
     const author = await post('author', { connector: 'shippingeasy', action: 'disconnect' })
     expect(author.status).toBe(403)
   })
@@ -288,5 +288,42 @@ describe('the ShippingEasy card through the same door (AGL-3633)', () => {
   it('refuses a site whose plan has no commerce', async () => {
     mockEntitled = false
     expect((await post('admin', { connector: 'shippingeasy', action: 'disconnect' })).status).toBe(403)
+  })
+})
+
+describe('who reads and manages a connection (AGL-4047)', () => {
+  // "Connect shipping apps" is every change; "Manage orders" or it is the
+  // status. With no stamp, each answers as the site role did: Admin and
+  // Editor read the status, Admin alone changes. The site's stamp decides.
+  const stamped = (memberPermissions: Record<string, Record<string, boolean>>) =>
+    docs.set(`hosts/${HOST}`, { ...docs.get(`hosts/${HOST}`), memberPermissions })
+
+  it('keeps today’s roles where no stamp names the keys', async () => {
+    expect((await status('admin')).status).toBe(200)
+    expect((await status('editor')).status).toBe(200)
+    expect((await status('author')).status).toBe(403)
+    expect((await post('editor', { action: 'connect' })).status).toBe(403)
+  })
+
+  it('lets an editor the stamp grants "Connect shipping apps" connect', async () => {
+    stamped({ editor: { 'commerce.shippingConnections': true } })
+    expect((await post('editor', { action: 'connect' })).status).toBe(200)
+  })
+
+  it('refuses an admin the stamp refuses it, in the permission’s words, and still shows them the status', async () => {
+    stamped({ admin: { 'commerce.shippingConnections': false } })
+    const refused = await post('admin', { action: 'connect' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toBe('Your role does not include "Connect shipping apps" — ask an organization admin')
+    expect(connection()).toBeUndefined()
+    expect((await status('admin')).status).toBe(200)
+  })
+
+  it('shows the status to an author granted "Manage orders", and not to an editor refused both', async () => {
+    stamped({ author: { 'commerce.orders': true }, editor: { 'commerce.orders': false } })
+    expect((await status('author')).status).toBe(200)
+    const editor = await status('editor')
+    expect(editor.status).toBe(403)
+    expect(editor.body.error).toBe('Your role does not include "Manage orders" — ask an organization admin')
   })
 })
