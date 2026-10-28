@@ -262,8 +262,27 @@ Then:
   one with the same address. Once you create your workspace, the reader is in it.
   There is nothing to accept.
 
-The reader then waits on **Products → Point of sale**, in a **Card readers to set
-up** card, which says what it still needs:
+The order is in your purchase history on the **Hardware** card, under **Your
+orders**, even before buying online is open for your workspace.
+
+**Returning one.** Returns follow the hardware terms of sale, and the return
+shipping is yours to pay. There are three ways:
+
+- Bring it to Aglyn's register at a later event. The refund goes back the way
+  you paid.
+- On the **Hardware** card, under **Your orders**, select **Request a return** on
+  the order and say why. Aglyn's team arranges the return with you, then refunds
+  it to the card you paid with, or tells you why it can't. The order shows
+  **Return requested**, then **Returned** or **Return declined**.
+- Aglyn's team can also refund it to the card you paid with at any time.
+
+A reader paid for in cash is refunded at Aglyn's register.
+
+#### Card readers to set up {#card-readers-to-set-up}
+
+A reader bought in person waits on **Products → Point of sale**, in a **Card
+readers to set up** card, until you set it up on a store. The card says what it
+still needs:
 
 1. **A plan that includes the point of sale.** A reader takes payments at the
    register, so the card asks you to add it first, with a link to the plans.
@@ -280,22 +299,6 @@ Staff can also add the reader to your store for you at the event, by its pairing
 code, while you are there. If your store has no address for card readers yet,
 they can enter it with you, and it is saved to your store as if you had added it
 on the **POS devices** card; a store that already has one keeps it.
-
-The order is in your purchase history on the **Hardware** card, under **Your
-orders**, even before buying online is open for your workspace.
-
-**Returning one.** Returns follow the hardware terms of sale, and the return
-shipping is yours to pay. There are three ways:
-
-- Bring it to Aglyn's register at a later event. The refund goes back the way
-  you paid.
-- On the **Hardware** card, under **Your orders**, select **Request a return** on
-  the order and say why. Aglyn's team arranges the return with you, then refunds
-  it to the card you paid with, or tells you why it can't. The order shows
-  **Return requested**, then **Returned** or **Return declined**.
-- Aglyn's team can also refund it to the card you paid with at any time.
-
-A reader paid for in cash is refunded at Aglyn's register.
 
 ### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
 
