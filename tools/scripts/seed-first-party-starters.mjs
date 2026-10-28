@@ -39,6 +39,10 @@
 // the seed writes with the Admin SDK and so passes no publish door, and these
 // checks are what keep it to the same terms.
 //
+// Every page and the layout pass the starter rule the publish door holds a
+// publisher's pages to (`sanitizeSiteStarterNodes`), so a seeded listing
+// stores what a published one would; a page that would lose a node is refused.
+//
 // Re-runnable: listing ids are fixed, every write is a merge-set, and a run
 // with nothing to change writes nothing. A changed default site or kind is a
 // new version of the listings it reaches. No Firebase Auth user, nothing
@@ -48,10 +52,8 @@ import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import {
-  FIRST_PARTY_STARTER_MODULE_PATHS,
   FIRST_PARTY_STARTER_SEED_SOURCE,
   buildFirstPartyStarterPlan,
-  hasStarterLinksModule,
   loadFirstPartyStarterSources,
   reconcileFirstPartyStarter,
 } from './lib/first-party-starters.mjs'
@@ -122,12 +124,6 @@ const firestore = getFirestore()
 const target = emulator ? `the emulator at ${emulator}` : `project ${projectId}`
 
 // ── The plan ───────────────────────────────────────────────────────────────
-if (!hasStarterLinksModule()) {
-  fail(
-    `${FIRST_PARTY_STARTER_MODULE_PATHS.links} is not in this checkout. It rewrites the layout's links to Home ` +
-      'for a starter and lands with the starter publish door; merge origin/main and run again.',
-  )
-}
 const sources = await loadFirstPartyStarterSources()
 let plan
 try {

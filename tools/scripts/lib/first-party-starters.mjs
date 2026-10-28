@@ -37,6 +37,9 @@
  * The content comes from the TypeScript that owns it, loaded through `jiti`
  * (`workspace-module.mjs`), so a change to the default site reaches these
  * listings on the next run as a new version, and never by copying it here.
+ * Its pages and layout pass through `sanitizeSiteStarterNodes`, the rule the
+ * starter publish door holds every publisher's pages to, so a seeded starter
+ * stores what a published one would.
  *
  * ## Who owns which field
  *
@@ -49,10 +52,8 @@
  * takedown; `--verify` reports where they differ from the plan.
  */
 
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import { listingQueryFieldsPatch } from './listing-query-fields.mjs'
-import { WORKSPACE_ROOT, importWorkspaceModule } from './workspace-module.mjs'
+import { importWorkspaceModule } from './workspace-module.mjs'
 
 /** The marker on every listing this seed writes, so a run never takes over a listing it did not write. */
 export const FIRST_PARTY_STARTER_SEED_SOURCE = 'first-party-starters'
@@ -102,6 +103,8 @@ export const FIRST_PARTY_STARTER_MODULE_PATHS = Object.freeze({
   defaultSite: 'libs/aglyn/src/lib/app-utils/default-site.ts',
   siteStarter: 'libs/aglyn/src/lib/app-utils/site-starter.ts',
   links: 'libs/aglyn/src/lib/app-utils/site-starter-links.ts',
+  starterNodes: 'libs/aglyn/src/lib/app-utils/site-starter-nodes.ts',
+  canvas: 'libs/aglyn/src/lib/foundation/constants/canvas.ts',
   fontPairings: 'libs/aglyn/src/lib/app-utils/site-font-pairings.ts',
   kinds: 'libs/plugins/ai/src/lib/model/ai-site-kinds.ts',
   look: 'libs/plugins/ai/src/lib/model/ai-site-look.ts',
@@ -126,11 +129,13 @@ export function firstPartyStarterListingId(kind, mode = 'base') {
  */
 export async function loadFirstPartyStarterSources(importModule = importWorkspaceModule) {
   const paths = FIRST_PARTY_STARTER_MODULE_PATHS
-  const [defaultSite, siteStarter, links, fontPairings, kinds, look, presets, agreement] = await Promise.all(
+  const [defaultSite, siteStarter, links, starterNodes, canvas, fontPairings, kinds, look, presets, agreement] = await Promise.all(
     [
       paths.defaultSite,
       paths.siteStarter,
       paths.links,
+      paths.starterNodes,
+      paths.canvas,
       paths.fontPairings,
       paths.kinds,
       paths.look,
@@ -144,6 +149,9 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
   if (typeof links.starterLinksBySlug !== 'function') {
     throw new Error(`${paths.links} does not export starterLinksBySlug`)
   }
+  if (typeof starterNodes.sanitizeSiteStarterNodes !== 'function') {
+    throw new Error(`${paths.starterNodes} does not export sanitizeSiteStarterNodes`)
+  }
   return {
     core: {
       buildDefaultHomeScreen: defaultSite.buildDefaultHomeScreen,
@@ -152,6 +160,9 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
       siteStarterFacetFields: siteStarter.siteStarterFacetFields,
       siteStarterRefusal: siteStarter.siteStarterRefusal,
       starterLinksBySlug: links.starterLinksBySlug,
+      sanitizeSiteStarterNodes: starterNodes.sanitizeSiteStarterNodes,
+      layoutSlotId: starterNodes.SITE_STARTER_LAYOUT_SLOT_ID,
+      canvasRootId: canvas.CANVAS_ROOT_ELEMENT_ID,
       aiSiteColors: look.aiSiteColors,
       aiSiteSeed: look.aiSiteSeed,
     },
@@ -164,11 +175,6 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
       isCurrent: agreement.hasCurrentPublisherAgreement,
     },
   }
-}
-
-/** Whether the module the published layout's links are rewritten by is in this checkout. */
-export function hasStarterLinksModule() {
-  return existsSync(join(WORKSPACE_ROOT, FIRST_PARTY_STARTER_MODULE_PATHS.links))
 }
 
 /** A value as Firestore stores it: no `undefined`, plain arrays and maps. */
@@ -191,17 +197,21 @@ function propsHolding(nodes, needle) {
  * search title and description in words that suit any site, and the layout's
  * links to Home by slug.
  *
- * The nodes are the default site's exactly, NOT run through the marketplace's
- * portable-definition sanitizer: it refuses components the default site is
- * built from (`muiGrid`, `muiCard`, `div`, `icon`, the accordion, the theme
- * switcher) and strips `sx` and interactions, so a sanitized copy would not be
- * the site a new site starts as. They are the platform's own, not a
- * publisher's, and `siteStarterRefusal` still decides that they start a site.
+ * Both pass through `sanitizeSiteStarterNodes` in the order the publish door
+ * runs it (the starter rule, then the links by slug), so they are stored as a
+ * published starter's are. The starter site must come through it whole: a
+ * refusal, a node dropped or a layout without its content slot fails the
+ * plan, because the listing would no longer be the site a new site starts as.
  */
 function starterSitePages(core) {
   const home = core.buildDefaultHomeScreen(SITE_NAME_TOKEN)
   const layout = core.buildDefaultSiteLayout(HOME_LINK_PLACEHOLDER)
-  const nodes = core.starterLinksBySlug(layout.nodes, { [HOME_LINK_PLACEHOLDER]: home.slug })
+  const page = starterNodesWhole(core, "The starter site's Home page", home.nodes, {})
+  const chrome = starterNodesWhole(core, "The starter site's layout", layout.nodes, { layout: true })
+  if (!Object.values(chrome).some((node) => node?.componentId === core.layoutSlotId)) {
+    throw new Error("The starter site's layout has no content slot after the starter rule")
+  }
+  const nodes = core.starterLinksBySlug(chrome, { [HOME_LINK_PLACEHOLDER]: home.slug })
   const unlinked = propsHolding(nodes, HOME_LINK_PLACEHOLDER)
   if (unlinked.length) {
     throw new Error(`starterLinksBySlug left the layout linking to Home by id (${unlinked.join(', ')})`)
@@ -214,11 +224,26 @@ function starterSitePages(core) {
         // The token is for text on the page; whether a page's SEO fields
         // fill it in is not established, so they say nothing site-specific.
         seo: { title: home.displayName, description: core.defaultHomeDescription('') },
-        nodes: home.nodes,
+        nodes: page,
       },
     ],
     layout: { displayName: layout.displayName, description: layout.description, nodes },
   }
+}
+
+/**
+ * A page's or layout's nodes through the starter rule, rooted where the
+ * publish door roots them, with every node kept; throws otherwise.
+ */
+function starterNodesWhole(core, what, nodes, options) {
+  const rootId = nodes?.[core.canvasRootId]
+    ? core.canvasRootId
+    : (Object.keys(nodes ?? {}).find((id) => !nodes[id]?.parentId) ?? '')
+  const sanitized = core.sanitizeSiteStarterNodes({ rootId, nodes }, options)
+  if (sanitized.ok === false) throw new Error(`${what}: ${sanitized.error}`)
+  const dropped = Object.keys(nodes).filter((id) => !(id in sanitized.nodes))
+  if (dropped.length) throw new Error(`${what}: the starter rule dropped ${dropped.join(', ')}`)
+  return sanitized.nodes
 }
 
 /** The midpoint of a kind's first hue range, or `null` when it spans the whole wheel (any hue suits it). */
