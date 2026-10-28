@@ -97,6 +97,7 @@ import {
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { posOrderRefundStripeId } from './pos-order-refund-ids'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -624,7 +625,7 @@ async function recordExternalRefund(
             .collection('registers')
             .doc(registerRefund.registerId)
             .collection(POS_ORDER_REFUNDS_COLLECTION)
-            .doc(`stripe-${String(charge?.id ?? orderRef.id)}-${stripeRefundedCents}`),
+            .doc(posOrderRefundStripeId(String(charge?.id ?? orderRef.id), stripeRefundedCents)),
           registerRefund,
         )
       }

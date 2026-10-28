@@ -119,6 +119,11 @@ function chargesRef() {
   return firestore().collection(POS_CELLULAR_CHARGES_COLLECTION)
 }
 
+/** A workspace's charge for one month, `{orgId}_{month}`: one per pair, so a rerun finds it. */
+function posCellularChargeId(orgId: string, month: string): string {
+  return `${orgId}_${month}`
+}
+
 /** The reader records that may count for a month: on now, or turned off since it began. */
 async function recordsForMonth(startMs: number): Promise<Array<{ id: string; record: PosCellularReaderRecord }>> {
   const [on, off] = await Promise.all([
@@ -198,7 +203,7 @@ async function claimMonth(
   amountCents: number,
   now: number,
 ): Promise<{ attempts: number } | null> {
-  const ref = chargesRef().doc(`${orgId}_${month}`)
+  const ref = chargesRef().doc(posCellularChargeId(orgId, month))
   return firestore().runTransaction(async (transaction: any) => {
     const snapshot = await transaction.get(ref)
     const existing = snapshot.exists ? (snapshot.data() as PosCellularCharge) : null
@@ -231,7 +236,7 @@ async function settleMonth(
   now: number,
 ): Promise<void> {
   await chargesRef()
-    .doc(`${orgId}_${month}`)
+    .doc(posCellularChargeId(orgId, month))
     .set({ ...patch, updatedAtMs: now }, { merge: true })
 }
 
@@ -280,10 +285,10 @@ export async function runPosCellularBilling(
     const amountCents = posCellularChargeCents(readers, config)
     const claim = await claimMonth(orgId, month, readers, amountCents, now)
     if (!claim) continue
-    const stored = (await chargesRef().doc(`${orgId}_${month}`).get()).data() as PosCellularCharge
+    const stored = (await chargesRef().doc(posCellularChargeId(orgId, month)).get()).data() as PosCellularCharge
     const raise = (reason: string) =>
       alert(COMMERCE_POS_CELLULAR_CHARGE_FAILED, {
-        dedupeKey: `${orgId}_${month}`,
+        dedupeKey: posCellularChargeId(orgId, month),
         orgId,
         context: {
           orgId,

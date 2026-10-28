@@ -33,6 +33,7 @@ import { posRegisterRefundAuthority } from './pos-refund-authority'
 import { holdsPosPermission } from '../model/plugin-permissions'
 import { posOrderRefundRecord, POS_ORDER_REFUNDS_COLLECTION } from '../model/commerce-pos-day-report'
 import type { PosTenderSource } from '../model/commerce-pos-ops'
+import { posOrderRefundDialogId } from './pos-order-refund-ids'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -633,7 +634,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           .collection(POS_ORDER_REFUNDS_COLLECTION)
           // One record per Stripe refund; a keyed retry replays at the claim
           // above and never reaches here.
-          .doc(refund.refundId || `${orderId}-${claim?.stripeKey ?? registerRefund.atMs}`)
+          .doc(refund.refundId || posOrderRefundDialogId(orderId, claim?.stripeKey ?? registerRefund.atMs))
       : null
     await firestore.runTransaction(async (transaction) => {
       const fresh = CommerceModel.liftLegacyOrder(

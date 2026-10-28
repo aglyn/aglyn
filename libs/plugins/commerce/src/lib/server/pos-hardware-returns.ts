@@ -35,6 +35,7 @@ import { COMMERCE_POS_HARDWARE_RETURN_REQUESTED } from '../constants/operator-al
 import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
 import { posStripe } from './pos-stripe'
 import { createStripeRefund } from './stripe-refund'
+import { posOrderRefundHardwareId } from './pos-order-refund-ids'
 
 /*==========================================
  * RETURNING A CARD READER SOLD IN PERSON (AGL-4038).
@@ -287,7 +288,7 @@ export async function refundInPersonPosHardwareOrder(input: {
           .collection('registers')
           .doc(registerRefund.registerId)
           .collection(POS_ORDER_REFUNDS_COLLECTION)
-          .doc(refund.refundId || `${registerOrderId}-hw-${attempt}`),
+          .doc(refund.refundId || posOrderRefundHardwareId(registerOrderId, attempt)),
         registerRefund,
       )
     }

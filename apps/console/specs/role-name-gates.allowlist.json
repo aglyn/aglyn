@@ -138,7 +138,7 @@
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": {
-      "count": 3,
+      "count": 4,
       "kind": "not-a-gate",
       "note": "A list of job-title words for photo search, not membership roles."
     },
