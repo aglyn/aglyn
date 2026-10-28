@@ -709,7 +709,7 @@ describe('the storefront’s tax return source', () => {
     expect(answer.undatedRows).toBe(1)
   })
 
-  it('answers commerce as two sections, the storefront and the hardware shop, each from its own records (AGL-4038)', async () => {
+  it('answers commerce as three sections, the storefront, the hardware shop and the own stores, each from its own records (AGL-4038)', async () => {
     mockDocs.set('storefrontTaxCollected/cs_q3', { ...AGLYN_LIABLE_ROW, id: undefined })
     mockDocs.set('posHardwareSales/hw_q3', {
       orderId: 'hw_q3',
@@ -724,7 +724,7 @@ describe('the storefront’s tax return source', () => {
     })
     const answered = await commerceTaxReturnSource.read(REQUEST)
     const sections = Array.isArray(answered) ? answered : [answered]
-    expect(sections.map((section) => section.id)).toEqual(['storefront', 'posHardware'])
+    expect(sections.map((section) => section.id)).toEqual(['storefront', 'posHardware', 'ownStores'])
     // The storefront never reads a hardware record, and the other way round.
     expect(sections[0].rows).toHaveLength(1)
     expect(sections[1].rows).toHaveLength(1)

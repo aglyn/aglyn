@@ -1216,8 +1216,13 @@ At that store's register, anyone who may sell there:
 attach**, buyers' return requests under **Return requested**, and refunds an
 in-person sale to the card it was paid with, from the store's own account. A
 sale paid in cash is refunded as a return at the store's register. On the staff
-sales tax return, each in-person sale counts once, in the card reader hardware
-section.
+sales tax return, each in-person sale counts once, in its store's register sales.
+
+`POS_HARDWARE_SELLER_ORG_ID` also names **your own stores** for the staff sales tax
+return, whether or not readers sell in person: everything sold from any site of that
+workspace, card readers, apparel or anything else, is your own sale and is folded into
+the return's filing figures, with a breakdown by store and state. Leave it unset and no
+store's sales are folded in.
 
 Paid orders arrive on the platform webhook as `checkout.session.completed`, which
 the endpoint already subscribes to; there is no new endpoint.

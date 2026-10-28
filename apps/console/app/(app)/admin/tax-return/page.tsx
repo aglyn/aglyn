@@ -109,6 +109,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffTaxFindingsCard from '../../../../components/staff-tax-findings-card.component'
 import StaffTaxablePurchasesCard from '../../../../components/staff-taxable-purchases-card.component'
+import StaffTaxOwnSalesBreakdownCard from '../../../../components/staff-tax-own-sales-breakdown-card.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -830,6 +831,14 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : null}
             </CardDisplay>
+
+            {/*
+              WHAT THE FIGURES ARE MADE OF (AGL-4038): the invoices and the
+              operator's own sales outside them — the card reader shop, its
+              own stores — by source and state, beside the figures they add
+              up to.
+            */}
+            <StaffTaxOwnSalesBreakdownCard payload={payload} />
 
             {/*
               ITEM 3, which no query here can answer. Only where the form is

@@ -30,6 +30,9 @@ import {
   PLUGIN_TAX_RETURN_SOURCES,
   readTaxReturnSources,
   registerTaxReturnSource,
+  taxReturnOperatorSalesIn,
+  taxReturnOperatorSalesRows,
+  type TaxReturnOperatorFigures,
   type TaxReturnSourceAnswer,
   type TaxReturnSourceRequest,
 } from './plugin-tax-return-sources'
@@ -207,5 +210,107 @@ describe('the tax return sources', () => {
 
   it('refuses to register something that cannot read', () => {
     expect(() => registerTaxReturnSource({} as never, { pluginId: 'shop' })).toThrow(/read/)
+  })
+})
+
+/**
+ * THE OPERATOR'S OWN SALES FOLD INTO THE FILING FIGURES (AGL-4038): a source
+ * states them by part and jurisdiction, and the platform adds them up. Each
+ * part is counted once on the return, and a figure that is not a whole
+ * number never reaches a form item.
+ */
+describe("the operator's own sales a source states", () => {
+  beforeEach(() => {
+    resetPluginServicesForTests()
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  const figures = (over: Partial<TaxReturnOperatorFigures> = {}): TaxReturnOperatorFigures => ({
+    transactionCount: 1,
+    totalSalesCents: 10000,
+    taxableSalesCents: 10000,
+    taxCollectedCents: 825,
+    refundCount: 0,
+    refundedSalesCents: 0,
+    refundedTaxCents: 0,
+    ...over,
+  })
+
+  it('sums every part in one jurisdiction, and lists every part and jurisdiction', async () => {
+    registerTaxReturnSource(
+      {
+        read: async () => [
+          answer({
+            id: 'shop',
+            operatorSales: [
+              { id: 'online', label: 'Shop (online)', byJurisdiction: { 'US-TX': figures(), 'US-CA': figures() } },
+            ],
+          }),
+          answer({
+            id: 'store',
+            operatorSales: [
+              {
+                id: 'store',
+                label: 'Own store',
+                byJurisdiction: { 'US-TX': figures({ totalSalesCents: 2500, taxableSalesCents: 0, taxCollectedCents: 0 }) },
+              },
+            ],
+          }),
+        ],
+      },
+      { pluginId: 'shop' },
+    )
+    const sections = await readTaxReturnSources(REQUEST, ['shop'])
+    expect(taxReturnOperatorSalesIn(sections, 'US-TX')).toEqual(
+      figures({ transactionCount: 2, totalSalesCents: 12500, taxableSalesCents: 10000, taxCollectedCents: 825 }),
+    )
+    expect(taxReturnOperatorSalesRows(sections).map((row) => [row.partId, row.jurisdiction])).toEqual([
+      ['online', 'US-TX'],
+      ['online', 'US-CA'],
+      ['store', 'US-TX'],
+    ])
+  })
+
+  it('reads a refused source as no own sales, which the refusal itself blocks', () => {
+    expect(
+      taxReturnOperatorSalesIn([{ outcome: 'refused', pluginId: 'shop', id: 'shop', reason: 'x' }], 'US-TX'),
+    ).toEqual(figures({ transactionCount: 0, totalSalesCents: 0, taxableSalesCents: 0, taxCollectedCents: 0 }))
+  })
+
+  it('refuses a plugin whose own sales carry a figure that is not a whole number', async () => {
+    registerTaxReturnSource(
+      {
+        read: async () =>
+          answer({
+            operatorSales: [{ id: 'online', label: 'Shop', byJurisdiction: { 'US-TX': figures({ totalSalesCents: 10.5 }) } }],
+          }),
+      },
+      { pluginId: 'shop' },
+    )
+    const sections = await readTaxReturnSources(REQUEST, ['shop'])
+    expect(sections).toEqual([
+      { outcome: 'refused', pluginId: 'shop', id: 'shop', reason: expect.stringContaining('whole number') },
+    ])
+  })
+
+  it('refuses a plugin whose own sales have no label', async () => {
+    registerTaxReturnSource(
+      { read: async () => answer({ operatorSales: [{ id: 'online', label: '', byJurisdiction: {} }] }) },
+      { pluginId: 'shop' },
+    )
+    const [section] = await readTaxReturnSources(REQUEST, ['shop'])
+    expect(section).toMatchObject({ outcome: 'refused', reason: expect.stringContaining('no id or label') })
+  })
+
+  it('refuses a second source stating a part already on the return, so nothing folds in twice', async () => {
+    const part = { id: 'online', label: 'Shop', byJurisdiction: { 'US-TX': figures() } }
+    registerTaxReturnSource({ read: async () => answer({ id: 'first', operatorSales: [part] }) }, { pluginId: 'shop' })
+    registerTaxReturnSource({ read: async () => answer({ id: 'second', operatorSales: [part] }) }, { pluginId: 'resale' })
+    const sections = await readTaxReturnSources(REQUEST, ['shop', 'resale'])
+    expect(sections.map((section) => section.outcome)).toEqual(['answered', 'refused'])
+    expect(taxReturnOperatorSalesIn(sections, 'US-TX').totalSalesCents).toBe(10000)
   })
 })

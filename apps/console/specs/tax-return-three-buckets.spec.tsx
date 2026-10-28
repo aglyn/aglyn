@@ -308,12 +308,33 @@ describe('facilitated sales by buyer state reach the screen (AGL-1956)', () => {
     expect(states()).toEqual(['US-OK', 'US-CA', 'US-TX'])
   })
 
-  it('draws the platform’s own card reader sales as their own card, with what to add (AGL-4038)', async () => {
+  it('folds the platform’s own card reader sales into Items 1–2, with the breakdown beside them (AGL-4038)', async () => {
     const text = await rendered()
     expect(text).toContain('Card reader hardware — Aglyn’s own sales')
-    // $425.00 is only in the hardware section.
-    expect(text).toContain('$425.00')
-    expect(text).toMatch(/none of this is in the Webfile figures above/i)
+    // $1000.00 of invoices and $425.00 of card readers, in one Item 1.
+    expect(text).toContain('1425.00')
+    expect(text).toMatch(/Includes \$425\.00 of receipts from Aglyn’s own sales outside its invoices \(Card reader shop \(online\)\)/)
+    expect(text).toContain('Items 1–2 by source and state')
+    expect(text).toContain('Card reader shop (online)')
+    expect(text).toMatch(/folded into Items 1–3/i)
+    // Nothing is left to add by hand.
+    expect(text).not.toMatch(/Item 1 \(add\)/)
+  })
+
+  it('sorts the breakdown beside the figures by any column (AGL-3680)', async () => {
+    await rendered()
+    // The table drawn under the card's introduction: the first one after it.
+    let next = screen.getByText(/^The filing figures add/).nextElementSibling
+    while (next && !(next.tagName === 'TABLE' || next.querySelector('table'))) next = next.nextElementSibling
+    const card = (next?.tagName === 'TABLE' ? next : next?.querySelector('table')) as HTMLElement
+    const sources = () =>
+      within(card)
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.querySelector('td')?.textContent ?? '')
+    expect(sources()[0]).toMatch(/^Aglyn invoices/)
+    fireEvent.click(within(card).getByText('Total sales'))
+    expect(sources()[0]).toMatch(/^Card reader shop \(online\)/)
   })
 
   it('relabels the platformRevenue table so it stops claiming to be the nexus list', async () => {

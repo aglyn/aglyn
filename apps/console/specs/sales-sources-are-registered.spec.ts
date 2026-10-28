@@ -215,6 +215,7 @@ describe('the facilitated-sales sources, after this app’s loader has run', () 
     expect(payload.sources?.map((entry) => [entry.pluginId, entry.id, entry.outcome])).toEqual([
       ['commerce', 'storefront', 'answered'],
       ['commerce', 'posHardware', 'answered'],
+      ['commerce', 'ownStores', 'answered'],
       ['marketplace', 'marketplace', 'answered'],
     ])
     expect(taxReturnAttention(payload).clean).toBe(true)
@@ -321,10 +322,10 @@ describe('the facilitated-sales sources, after this app’s loader has run', () 
 
   /**
    * AGL-4038. The platform's OWN card reader sales: their own section, never
-   * in the operator's invoice figures and never in the storefront's, with the
-   * lines to add stated beside Items 1–3.
+   * in the operator's invoice summary or the storefront's, and folded into
+   * Items 1–2 by the platform exactly once.
    */
-  it('serves the hardware shop’s sales as their own section, counted nowhere else', async () => {
+  it('serves the hardware shop’s sales as their own section, and folds them into Items 1–2 once', async () => {
     seedInvoice()
     mockDocs.set('posHardwareSales/hw_q3', {
       orderId: 'hw_q3',
@@ -355,15 +356,18 @@ describe('the facilitated-sales sources, after this app’s loader has run', () 
       taxableSalesCents: 23_120,
       taxCollectedCents: 1_907,
     })
+    // …and folded into Items 1–2 once (AGL-4038): the invoice's $100.00 and
+    // $80.00 base, plus the reader's $231.20 sale and base.
     const lines = Object.fromEntries(taxReturnFilingLines(payload).map((line) => [line.label, line.dollars]))
-    expect(lines['Total Texas sales']).toBe('100.00')
-    expect(lines['Texas card reader hardware sales (NOT in Item 1 above)']).toBe('231.20')
-    expect(lines['Texas card reader hardware taxable sales (NOT in Item 2 above)']).toBe('231.20')
-    expect(
-      taxReturnAttention(payload).items.find((item) => item.id === 'posHardwareSalesNotInFigures'),
-    ).toMatchObject({ severity: 'review', count: 23_120 })
+    expect(lines['Total Texas sales']).toBe('331.20')
+    expect(lines['Taxable sales']).toBe('311.20')
+    expect(lines['Tax collected (reconciliation)']).toBe('25.67')
+    expect(lines['Texas transactions']).toBe('2')
+    expect(Object.keys(lines).some((label) => label.includes('NOT in Item 1'))).toBe(false)
+    expect(taxReturnAttention(payload).items.map((item) => item.id)).not.toContain('posHardwareSalesNotInFigures')
     const csv = taxReturnCsv(payload)
-    expect(csv).toContain('Item 1 (add),Texas card reader hardware sales (NOT in Item 1 above),231.20,')
+    expect(csv).toContain('Items 1–2 by source and jurisdiction')
+    expect(csv).toContain('Card reader shop (online),US-TX,yes,1,231.20,231.20,19.07,0,0.00,0.00')
     expect(csv).toContain('hw_q3,')
   })
 

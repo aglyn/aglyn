@@ -45,6 +45,19 @@
  * list is all or nothing: an empty list or one malformed section refuses the
  * plugin, so a half-answered plugin never reads as a complete one.
  *
+ * ## THE OPERATOR'S OWN SALES FOLD INTO THE FILING FIGURES (AGL-4038)
+ *
+ * The filing figures sum the operator's own invoices. A plugin may also hold
+ * sales the operator made AS THE SELLER — goods sold from the operator's own
+ * store, hardware sold to workspaces — and those are as much the operator's
+ * receipts as an invoice is. A source states them as
+ * {@link TaxReturnOperatorSalesPart}s, by jurisdiction and under a label for
+ * each kind, and the platform ADDS them to the filing figures and prints a
+ * breakdown beside them by part and jurisdiction, so the sum can be checked.
+ * A facilitated sale — somebody else's money — never goes there: it stays on
+ * the source's own card. A source counts each sale under ONE part only, and
+ * a part id is unique on the return, so nothing is folded in twice.
+ *
  * ## ⛔ AN UNREAD SOURCE REFUSES, IT NEVER READS AS ZERO
  *
  * Decided before anything else, because this is a legal filing. A source
@@ -205,6 +218,67 @@ export interface TaxReturnExportBlock {
   rows: string[][]
 }
 
+/**
+ * The operator's own sales of one kind in one jurisdiction, for one period.
+ * Integer cents. Sales are placed in the period they were paid; refunds in
+ * the period they were made, stated beside the sales and never netted.
+ */
+export interface TaxReturnOperatorFigures {
+  /** Sales paid in the period. */
+  transactionCount: number
+  /** Receipts excluding the tax itself. */
+  totalSalesCents: number
+  /** The base the tax was charged on. */
+  taxableSalesCents: number
+  taxCollectedCents: number
+  /** Refunds made in the period, whenever the sale was paid. */
+  refundCount: number
+  /** Refunded receipts excluding the tax. */
+  refundedSalesCents: number
+  refundedTaxCents: number
+}
+
+/**
+ * One kind of the operator's own sales a source holds, which the platform
+ * folds into the filing figures (see the module note).
+ */
+export interface TaxReturnOperatorSalesPart {
+  /** Stable, and unique on the return. */
+  id: string
+  /** How the breakdown beside the filing figures names it. */
+  label: string
+  /**
+   * By the jurisdiction keys the platform's own figures use (`US-TX`, `GB`,
+   * `unknown` for a sale with no region). Every jurisdiction is listed in the
+   * breakdown; only the filing jurisdiction's figures are added to the form.
+   */
+  byJurisdiction: Record<string, TaxReturnOperatorFigures>
+}
+
+/** The figure fields of {@link TaxReturnOperatorFigures}, in print order. */
+export const TAX_RETURN_OPERATOR_FIGURE_FIELDS = [
+  'transactionCount',
+  'totalSalesCents',
+  'taxableSalesCents',
+  'taxCollectedCents',
+  'refundCount',
+  'refundedSalesCents',
+  'refundedTaxCents',
+] as const satisfies ReadonlyArray<keyof TaxReturnOperatorFigures>
+
+/** A jurisdiction with nothing in it. */
+export function emptyTaxReturnOperatorFigures(): TaxReturnOperatorFigures {
+  return {
+    transactionCount: 0,
+    totalSalesCents: 0,
+    taxableSalesCents: 0,
+    taxCollectedCents: 0,
+    refundCount: 0,
+    refundedSalesCents: 0,
+    refundedTaxCents: 0,
+  }
+}
+
 /** What a source answers for one period. */
 export interface TaxReturnSourceAnswer {
   /** Stable key for the source's findings and its card, unique on the return. */
@@ -225,6 +299,12 @@ export interface TaxReturnSourceAnswer {
   findings: TaxReturnFinding[]
   /** Lines beneath the filing figures, for the request's `filing.form`. */
   filingLines: TaxReturnFilingLine[]
+  /**
+   * The operator's OWN sales this section holds, which the platform adds to
+   * the filing figures (see the module note). Absent or empty for a section
+   * of facilitated sales only.
+   */
+  operatorSales?: TaxReturnOperatorSalesPart[]
   tables: TaxReturnSectionTable[]
   figures: TaxReturnSectionFigure[]
   exports: TaxReturnExportBlock[]
@@ -315,7 +395,75 @@ function malformed(answer: TaxReturnSourceAnswer): string | null {
       !isCount(finding.count),
   )
   if (badFinding) return 'a finding with no id, severity or count'
+  if (answer.operatorSales !== undefined) {
+    if (!Array.isArray(answer.operatorSales)) return 'no list of its own sales'
+    for (const part of answer.operatorSales) {
+      if (!isText(part?.id) || !isText(part?.label)) return 'own sales with no id or label'
+      if (!part.byJurisdiction || typeof part.byJurisdiction !== 'object' || Array.isArray(part.byJurisdiction)) {
+        return 'own sales with no jurisdictions'
+      }
+      for (const figures of Object.values(part.byJurisdiction)) {
+        // Whole cents and counts only: a fraction or a NaN folded into a
+        // form item is a figure nobody can file.
+        const bad = TAX_RETURN_OPERATOR_FIGURE_FIELDS.some(
+          (field) => !isCount(figures?.[field]) || !Number.isInteger(figures[field]),
+        )
+        if (bad) return 'own sales with a figure that is not a whole number'
+      }
+    }
+  }
   return null
+}
+
+/**
+ * The operator's own sales every answered section states, as the platform
+ * folds them: one row per part and jurisdiction, in the sections' order.
+ */
+export interface TaxReturnOperatorSalesRow extends TaxReturnOperatorFigures {
+  pluginId: string
+  partId: string
+  label: string
+  jurisdiction: string
+}
+
+export function taxReturnOperatorSalesRows(
+  sections: readonly TaxReturnSection[] | null | undefined,
+): TaxReturnOperatorSalesRow[] {
+  const rows: TaxReturnOperatorSalesRow[] = []
+  for (const section of sections ?? []) {
+    if (section?.outcome !== 'answered') continue
+    for (const part of section.operatorSales ?? []) {
+      for (const [jurisdiction, figures] of Object.entries(part.byJurisdiction ?? {})) {
+        rows.push({
+          pluginId: section.pluginId,
+          partId: part.id,
+          label: part.label,
+          jurisdiction,
+          ...emptyTaxReturnOperatorFigures(),
+          ...Object.fromEntries(
+            TAX_RETURN_OPERATOR_FIGURE_FIELDS.map((field) => [field, Number(figures?.[field] ?? 0) || 0]),
+          ),
+        })
+      }
+    }
+  }
+  return rows
+}
+
+/**
+ * The operator's own sales in ONE jurisdiction, summed over every part —
+ * what the platform adds to its own figures for that jurisdiction.
+ */
+export function taxReturnOperatorSalesIn(
+  sections: readonly TaxReturnSection[] | null | undefined,
+  jurisdiction: string,
+): TaxReturnOperatorFigures {
+  const total = emptyTaxReturnOperatorFigures()
+  for (const row of taxReturnOperatorSalesRows(sections)) {
+    if (row.jurisdiction !== jurisdiction) continue
+    for (const field of TAX_RETURN_OPERATOR_FIGURE_FIELDS) total[field] += row[field]
+  }
+  return total
 }
 
 /**
@@ -402,19 +550,37 @@ export async function readTaxReturnSources(
   // under the same key, and a finding that names the wrong source's rows is
   // worse than none. The later one is refused, visibly.
   const seen = new Set<string>()
+  // The same for the operator's own sales: a part id answered twice would be
+  // folded into the filing figures twice.
+  const seenParts = new Set<string>()
   return answers.map((section) => {
     if (section.outcome !== 'answered') return section
-    if (!seen.has(section.id)) {
-      seen.add(section.id)
-      return section
+    if (seen.has(section.id)) {
+      return {
+        outcome: 'refused',
+        pluginId: section.pluginId,
+        id: section.pluginId,
+        reason:
+          `The “${section.pluginId}” plugin answered as “${section.id}”, which ` +
+          'another source already is.',
+      }
     }
-    return {
-      outcome: 'refused',
-      pluginId: section.pluginId,
-      id: section.pluginId,
-      reason:
-        `The “${section.pluginId}” plugin answered as “${section.id}”, which ` +
-        'another source already is.',
+    const partIds = (section.operatorSales ?? []).map((part) => part.id)
+    const repeated = partIds.find(
+      (partId, index) => seenParts.has(partId) || partIds.indexOf(partId) !== index,
+    )
+    if (repeated) {
+      return {
+        outcome: 'refused',
+        pluginId: section.pluginId,
+        id: section.pluginId,
+        reason:
+          `The “${section.pluginId}” plugin stated its own sales as “${repeated}”, ` +
+          'which is already on the return.',
+      }
     }
+    seen.add(section.id)
+    for (const partId of partIds) seenParts.add(partId)
+    return section
   })
 }

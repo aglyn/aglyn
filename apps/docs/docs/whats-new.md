@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — Aglyn's own sales fold into the staff tax return
+
+- **[Aglyn's own sales fold into Items 1–2](staff-console/sales-tax-return.md#what-the-figures-are-made-of)**
+  *(Aglyn staff only)* — on the staff **Sales tax return**, card readers sold from the hardware shop and
+  everything sold from Aglyn's own stores, in person or online, are added to Items 1
+  and 2 automatically, each sale once. **Items 1–2 by source and state** beside the
+  figures shows what they are made of, and **Aglyn's own stores** lists every store's
+  sales. There are no lines left to add by hand.
+
 ## October 2026 — waivers matched by name and date of birth
 
 - **[A rider matched by name and date of birth](commerce-and-bookings/commerce/waivers.md#how-a-rider-is-matched)** —

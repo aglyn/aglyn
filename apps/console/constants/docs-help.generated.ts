@@ -1124,7 +1124,7 @@ export const DOCS_HELP_ANCHORS = {
   rewardsAndReferrals: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
-  salesTaxReturn: ['#tax-return-page', '#choosing-the-period', '#rows-that-need-attention', '#which-rows', '#rows-that-are-excluded-rather-than-flagged', '#where-this-deployment-files', '#tax-filing-precedence', '#tax-filing-secrecy', '#the-figures', '#period-bounds', '#taxable-purchases', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#plugin-sales', '#hardware-sales', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
+  salesTaxReturn: ['#tax-return-page', '#choosing-the-period', '#rows-that-need-attention', '#which-rows', '#rows-that-are-excluded-rather-than-flagged', '#where-this-deployment-files', '#tax-filing-precedence', '#tax-filing-secrecy', '#the-figures', '#what-the-figures-are-made-of', '#period-bounds', '#taxable-purchases', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#plugin-sales', '#hardware-sales', '#aglyns-own-stores', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#what-a-reviewer-checks', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
   screens: ['#screens--routing', '#slug', '#the-pages-list', '#page-detail', '#basic-details-card', '#name-and-description-card', '#used-by', '#raw-json', '#page-groups', '#what-a-move-does-to-a-url', '#what-counts-against-your-screen-allowance', '#duplicate-a-screen', '#error--maintenance-screens', '#related'],
@@ -1801,6 +1801,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#tax-return-page': 'The tax return page',
     '#taxable-purchases': 'Taxable purchases',
     '#the-figures': 'The figures',
+    '#what-the-figures-are-made-of': 'What the figures are made of',
     '#where-this-deployment-files': 'Where this deployment files',
   },
   sandboxSecurity: {
