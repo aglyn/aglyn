@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -113,9 +115,10 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // purpose — an author edits content and does not mint payment links — and
     // which the old denylist would have admitted. That is the allowlist form
     // earning its keep on a union that changed under it.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not permitted' })
+    // "Manage orders" (`commerce.orders`, AGL-4047), whose preset is the site's Admin
+    // and Editor this asked for, read as the rules would read it.
+    if (!holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
     }
     const productSnapshot = await hostRef
       .collection('products')

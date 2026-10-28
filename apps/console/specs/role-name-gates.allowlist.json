@@ -177,26 +177,6 @@
       "count": 1,
       "kind": "pending"
     },
-    "libs/plugins/commerce/src/lib/server/cancel-order.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/draft-order.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/fulfill-order.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/gift-cards.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/local-fulfillment-status.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/membership-admin-password.ts": {
       "count": 1,
       "kind": "pending"
@@ -205,20 +185,8 @@
       "count": 1,
       "kind": "pending"
     },
-    "libs/plugins/commerce/src/lib/server/order-print.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/order-receipt-send.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
       "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/orders-shipping-prepare.ts": {
-      "count": 1,
       "kind": "pending"
     },
     "libs/plugins/commerce/src/lib/server/payment-methods.ts": {
@@ -243,15 +211,7 @@
       "count": 3,
       "kind": "pending"
     },
-    "libs/plugins/commerce/src/lib/server/returns.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/shipping-connectors.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/transfer/tracking.server.ts": {
       "count": 1,
       "kind": "pending"
     },
