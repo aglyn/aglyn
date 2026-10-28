@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   SITE_STARTER_ARTIFACT_TYPE,
@@ -28,17 +29,25 @@ import {
 } from '@aglyn/aglyn/app-utils/site-starter'
 import { starterLinksBySlug } from '@aglyn/aglyn/app-utils/site-starter-links'
 import {
+  SITE_STARTER_BRAND_KEYS,
+  siteStarterPresetId,
+  siteStarterTheme,
+} from '@aglyn/aglyn/app-utils/site-starter-theme'
+import {
   sanitizeSiteStarterNodes,
   SITE_STARTER_LAYOUT_SLOT_ID,
 } from '@aglyn/aglyn/app-utils/site-starter-nodes'
 import {
+  contrastRatio,
   hostThemeSource,
   parseColor,
   resolveSiteTheme,
   themeArtifactContent,
   validateThemeForPublish,
   type ThemeHostDocument,
+  type ThemeValidation,
 } from '@aglyn/aglyn/app-utils/site-theme'
+import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import {
   CANVAS_ROOT_ELEMENT_ID,
   checkEntitlement,
@@ -57,8 +66,12 @@ import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 
-/** The accents a built-in starter theme's brand may name. */
-const BRAND_KEYS = ['primary', 'secondary', 'tertiary'] as const
+/**
+ * The least a brand's primary may contrast with its page, the bar the AI
+ * site start holds its own looks to: the color links and text buttons are
+ * drawn in has to be readable where they sit.
+ */
+const BRAND_ON_PAGE_MIN_CONTRAST = 3
 
 /** The most an AI starter's answers may hold, as JSON. */
 const MAX_ANSWERS_BYTES = 16 * 1024
@@ -98,8 +111,8 @@ function builtinTheme(raw: Record<string, unknown>): BuiltinTheme | string {
     if (!isRecord(colors)) return `The ${scheme} brand colors must be a set of colors`
     const out: Record<string, string> = {}
     for (const [key, value] of Object.entries(colors)) {
-      if (!(BRAND_KEYS as readonly string[]).includes(key)) {
-        return `A brand color can be ${BRAND_KEYS.join(', ')}; "${key}" is not one`
+      if (!(SITE_STARTER_BRAND_KEYS as readonly string[]).includes(key)) {
+        return `A brand color can be ${SITE_STARTER_BRAND_KEYS.join(', ')}; "${key}" is not one`
       }
       if (typeof value !== 'string' || !parseColor(value)) {
         return `The ${scheme} ${key} color "${String(value)}" is not a color`
@@ -109,6 +122,46 @@ function builtinTheme(raw: Record<string, unknown>): BuiltinTheme | string {
     brand[scheme] = out
   }
   return { kind: 'builtin', base, brand, fonts }
+}
+
+/**
+ * A built-in starter theme checked as the sites created from it will wear it
+ * (AGL-4049): the base this deployment has registered for it — the theme
+ * every new site is born with for `starter`, or a base it has none for, as
+ * the create path falls back — with the brand and fonts over it, through
+ * `siteStarterTheme`, the same composition the create path writes. Then the
+ * publish check every theme passes, and the brand's own: a primary the
+ * starter names must read on its page in both schemes.
+ */
+function builtinThemeValidation(builtin: BuiltinTheme): ThemeValidation {
+  const preset =
+    builtin.base === 'starter'
+      ? null
+      : (listServerThemePresets().find((entry) => entry?.id === siteStarterPresetId(builtin.base)) ?? null)
+  const base = preset ? themeArtifactContent(preset.theme) : DEFAULT_SITE_THEME
+  const composed = themeArtifactContent(siteStarterTheme(builtin, base))
+  const validation = validateThemeForPublish(composed)
+  const errors = [...validation.errors]
+  for (const scheme of ['light', 'dark'] as const) {
+    const inherited = scheme === 'dark' && !builtin.brand.dark
+    const named = (inherited ? builtin.brand.light : builtin.brand[scheme])?.['primary']
+    if (!named) continue
+    const colors = composed.colorSchemes?.[scheme]
+    const page = colors?.background?.default
+    const ratio = contrastRatio(colors?.primary?.main, page)
+    if (ratio === null || ratio >= BRAND_ON_PAGE_MIN_CONTRAST) continue
+    // A dark page needs a lighter color, a light one a darker color.
+    const pageIsDark = (contrastRatio(page, '#ffffff') ?? 0) > (contrastRatio(page, '#000000') ?? 0)
+    errors.push({
+      path: `colorSchemes.${scheme}.primary.main`,
+      message:
+        `The ${scheme} primary color ${named} is ${ratio.toFixed(1)}:1 against ` +
+        `the ${scheme} page background, below ${BRAND_ON_PAGE_MIN_CONTRAST}:1, so links and ` +
+        `buttons drawn in it are hard to read. Choose a ${pageIsDark ? 'lighter' : 'darker'} ` +
+        `primary${inherited ? ', or give the dark scheme its own brand colors' : ''}.`,
+    })
+  }
+  return { ok: !errors.length, errors, warnings: validation.warnings }
 }
 
 /**
@@ -346,6 +399,16 @@ export const publishStarterHandler: PluginApiHandler = async (req, res) => {
     } else {
       const builtin = builtinTheme(themeIn)
       if (typeof builtin === 'string') return res.status(422).json({ error: builtin })
+      // Refused where the publisher can pick another color, not found on
+      // every site created from it.
+      const validation = builtinThemeValidation(builtin)
+      if (!validation.ok) {
+        return res.status(422).json({
+          error: validation.errors[0]?.message ?? 'This theme is not publishable',
+          errors: validation.errors,
+          warnings: validation.warnings,
+        })
+      }
       theme = builtin
     }
 
