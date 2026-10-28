@@ -44,6 +44,8 @@ import {
   projectHostMemberRoles,
   projectMemberScopeTokens,
   resolveCollaboratorHostPermissions,
+  narrowPermissionsToSite,
+  siteNarrowingFor,
   scopeTokensForHost,
   type AglynOrganization,
   type AglynOrgBilling,
@@ -1058,12 +1060,17 @@ export async function memberHasPermissionOnHost(
   permission: OrgPermission,
 ): Promise<boolean> {
   if (!member) return false
+  const site = typeof hostId === 'string' ? hostId.trim() : ''
   if (isOrgWideMember(member)) {
-    return verdictFor(permission, await resolveMemberOrgPermissions(orgId, member), () =>
-      resolveMemberOrgPermissions(orgId, member),
+    // On a site that narrows them (AGL-4047), the keys such a site narrows
+    // are decided for it; everywhere else this is the workspace's verdict.
+    const narrowing = siteNarrowingFor(member, site)
+    return verdictFor(
+      permission,
+      narrowPermissionsToSite(await resolveMemberOrgPermissions(orgId, member), narrowing),
+      async () => narrowPermissionsToSite(await resolveMemberOrgPermissions(orgId, member), narrowing),
     )
   }
-  const site = typeof hostId === 'string' ? hostId.trim() : ''
   return resolveCollaboratorHostPermissions(member, site)?.[permission] ?? false
 }
 

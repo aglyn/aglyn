@@ -26,6 +26,8 @@ import {
   resolveCollaboratorHostPermissions,
   resolveMemberHostPermissions,
   runPluginEventHandlers,
+  siteNarrowedPermissionKeys,
+  siteNarrowingFor,
   type AglynOrgCustomRole,
   type AglynOrgMember,
 } from '@aglyn/aglyn/server'
@@ -59,8 +61,11 @@ import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
  * site admin, or an org member who manages people, on a site whose
  * organization is not locked. A member who reaches the whole workspace is
  * decided by the org catalog, so their row is refused here and set on their
- * Team page; nobody but staff changes their own toggles, and nobody but staff
- * and the owner grants a key they do not hold on this site.
+ * Team page, except on a site that narrows them (AGL-4047): an editor of the
+ * workspace given Viewer or Author access here, whose register and waivers
+ * keys this site decides, and whose row here sets exactly those. Nobody but
+ * staff changes their own toggles, and nobody but staff and the owner grants
+ * a key they do not hold on this site.
  *
  * Recorded like every collaborator change: a sentence per key in the site's
  * feed, one `org.permissions.changed` per key that moved, and one
@@ -120,9 +125,45 @@ async function handler(request: Request): Promise<Response> {
     const member = { $id: uid, ...memberSnapshot.data() } as AglynOrgMember
     const orgWide = isOrgWideMember(member)
     const role = hostRoleFor(member, hostId)
+    // A workspace-wide member this site narrows (AGL-4047): set here, for
+    // the keys such a site narrows, and nothing else.
+    const narrowing = siteNarrowingFor(member, hostId)
+    /** A member's custom role, or null: one read, and none without a `roleId`. */
+    const customRoleOf = async (roleId: string | undefined): Promise<AglynOrgCustomRole | null> => {
+      if (!roleId) return null
+      const roleSnapshot = await firestore.collection('orgs').doc(orgId).collection('roles').doc(roleId).get()
+      return roleSnapshot.exists ? (roleSnapshot.data() as AglynOrgCustomRole) : null
+    }
 
     if (method === 'GET') {
       const stored = member.hostPermissions?.[hostId] ?? {}
+      if (narrowing) {
+        const keys = siteNarrowedPermissionKeys()
+        const customRole = await customRoleOf(member.roleId)
+        const verdicts = resolveMemberHostPermissions({ member, customRole, hostId })
+        // Inherit: what the narrower access leaves them here, the site's own
+        // verdicts set aside.
+        const inherited = resolveMemberHostPermissions({
+          member: { ...member, hostPermissions: { ...member.hostPermissions, [hostId]: {} } },
+          customRole,
+          hostId,
+        })
+        const pick = (map: Record<string, boolean>) => Object.fromEntries(keys.map((key) => [key, map[key] === true]))
+        return Response.json(
+          {
+            orgWide,
+            narrowed: true,
+            role,
+            keys,
+            stored: Object.fromEntries(
+              keys.filter((key) => typeof stored[key] === 'boolean').map((key) => [key, stored[key]]),
+            ),
+            defaults: pick(inherited),
+            effective: pick(verdicts),
+          },
+          { status: 200 },
+        )
+      }
       const keys = hostPermissionKeys()
       return Response.json(
         {
@@ -141,16 +182,17 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    if (orgWide) {
+    if (orgWide && !narrowing) {
       return Response.json(
         { error: "This member works across the workspace; set their permissions on the Team page" },
         { status: 409 },
       )
     }
     if (!role) return Response.json({ error: 'This member has no access to this site' }, { status: 409 })
-    let parsed = parsePermissionOverrides(body?.permissions, hostPermissionKeys())
+    const allowedKeys = () => (narrowing ? siteNarrowedPermissionKeys() : hostPermissionKeys())
+    let parsed = parsePermissionOverrides(body?.permissions, allowedKeys())
     if (parsed.error && (await runPluginDeclarationsRepair().catch(() => false))) {
-      parsed = parsePermissionOverrides(body?.permissions, hostPermissionKeys())
+      parsed = parsePermissionOverrides(body?.permissions, allowedKeys())
     }
     if (parsed.error || !parsed.changes) return Response.json({ error: parsed.error }, { status: 400 })
 
@@ -159,15 +201,14 @@ async function handler(request: Request): Promise<Response> {
     const actorMember = actorMemberSnapshot.exists
       ? ({ $id: decoded.uid, ...actorMemberSnapshot.data() } as AglynOrgMember)
       : null
-    let actorCustomRole: AglynOrgCustomRole | null = null
-    if (actorMember?.roleId) {
-      const roleSnapshot = await firestore
-        .collection('orgs')
-        .doc(orgId)
-        .collection('roles')
-        .doc(actorMember.roleId)
-        .get()
-      actorCustomRole = roleSnapshot.exists ? (roleSnapshot.data() as AglynOrgCustomRole) : null
+    const actorCustomRole = await customRoleOf(actorMember?.roleId)
+    // The keys a site narrows, as the server decides them for the actor on
+    // this site (AGL-4047): a site admin who works only here holds the
+    // register by their site role, which the per-site map does not carry.
+    const actorSiteKeys: Record<string, boolean> = {}
+    for (const key of siteNarrowedPermissionKeys()) {
+      const value = (actorPermissions.permissions as Record<string, unknown> | undefined)?.[key]
+      if (typeof value === 'boolean') actorSiteKeys[key] = value
     }
     const refusal = overrideWriteRefusal({
       targetUid: uid,
@@ -175,7 +216,10 @@ async function handler(request: Request): Promise<Response> {
       actorUid: decoded.uid,
       isStaff,
       actorIsOwner: org?.['ownerUid'] === decoded.uid,
-      actorGranted: resolveMemberHostPermissions({ member: actorMember, customRole: actorCustomRole, hostId }),
+      actorGranted: {
+        ...resolveMemberHostPermissions({ member: actorMember, customRole: actorCustomRole, hostId }),
+        ...actorSiteKeys,
+      },
       changes: parsed.changes,
       labelOf: orgPermissionLabel,
     })

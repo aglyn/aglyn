@@ -59,6 +59,12 @@ export interface SitePermissionsMember {
 /** What `GET /api/hosts/members/permissions` answers. */
 interface SitePermissionsState {
   orgWide: boolean
+  /**
+   * A workspace-wide member this site narrows (AGL-4047): their narrower
+   * access here takes the site's register and waivers, and this dialog
+   * gives them back, or keeps them refused, for this site.
+   */
+  narrowed?: boolean
   role: string | null
   keys: string[]
   stored: Record<string, boolean>
@@ -77,7 +83,9 @@ const SITE_ROLE_WORDS: Record<string, string> = {
  * declared per site — the AI keys among them — each Allow / Deny / Inherit,
  * where Inherit is their site access's default. Read and saved through
  * `/api/hosts/members/permissions`, the door the collaborators card already
- * holds; a member who reaches the whole workspace is set on the Team page.
+ * holds; a member who reaches the whole workspace is set on the Team page,
+ * except for the keys a site narrows on a site where their access is
+ * narrower than their workspace role, which are set here.
  */
 export function SitePermissionsDialog(props: {
   hostId: string
@@ -151,6 +159,8 @@ export function SitePermissionsDialog(props: {
   )
   const changes = overrideChangesBetween(state?.stored, draft)
   const dirty = Object.keys(changes).length > 0
+  // Set here: a collaborator, or a workspace-wide member this site narrows.
+  const setHere = Boolean(state && (!state.orgWide || state.narrowed))
 
   const handleSave = async () => {
     if (!dirty || busy || !memberId) return
@@ -190,7 +200,7 @@ export function SitePermissionsDialog(props: {
           <Alert severity="warning">{failed}</Alert>
         ) : !state ? (
           <LinearProgress aria-label="Loading permissions" />
-        ) : state.orgWide ? (
+        ) : !setHere ? (
           <Alert severity="info">
             {'This member works across the whole workspace, so their permissions are set on the '}
             <AppLink href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="primary">
@@ -203,20 +213,33 @@ export function SitePermissionsDialog(props: {
             {'No permission is set per site yet.'}
           </Typography>
         ) : (
-          <PermissionChoiceList
-            sections={sections}
-            search={definitions.length > 6 ? search : undefined}
-            onSearchChange={definitions.length > 6 ? setSearch : undefined}
-            disabled={busy}
-            onChange={(keys, choice) => setDraft((current) => withPermissionChoice(current, keys, choice))}
-          />
+          <>
+            {state.narrowed ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {`This member works across the whole workspace with ${roleWord} access to this site, ` +
+                  'which narrows these permissions here. Allow one to give it back on this site; ' +
+                  'everything else is set on the '}
+                <AppLink href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="primary">
+                  {'Team page'}
+                </AppLink>
+                {'.'}
+              </Typography>
+            ) : null}
+            <PermissionChoiceList
+              sections={sections}
+              search={definitions.length > 6 ? search : undefined}
+              onSearchChange={definitions.length > 6 ? setSearch : undefined}
+              disabled={busy}
+              onChange={(keys, choice) => setDraft((current) => withPermissionChoice(current, keys, choice))}
+            />
+          </>
         )}
       </DialogContent>
       <DialogActions>
         <Button color="inherit" onClick={onClose}>
           {dirty ? 'Cancel' : 'Close'}
         </Button>
-        {canManage && state && !state.orgWide ? (
+        {canManage && setHere ? (
           <Button variant="contained" disabled={!dirty || busy} onClick={() => void handleSave()}>
             {busy ? 'Saving…' : 'Save permissions'}
           </Button>

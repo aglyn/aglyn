@@ -56,6 +56,23 @@ suits a bookkeeper who orders the store's readers and never rings a sale. Denyin
 keeps a cashier at the register and out of the shop. See
 [Who can buy hardware](../../commerce-and-bookings/commerce/pos-hardware.md#who-can-buy-hardware).
 
+### A site's access narrows its register and waivers {#site-access-narrows}
+
+The register and waivers belong to a site. When an editor who works across the
+whole workspace is given **Viewer** or **Author** access to one site, that site also
+takes **Use the point of sale**, its five finer permissions, **Manage waivers** and
+**Collect waivers** from them there. On every other site they keep what their role,
+custom role and overrides give them, and members whose access matches their
+workspace role everywhere (owners and admins always do) see no change.
+
+To give one back on that site only, open the site's **Users** card and choose
+**Permissions** beside them. The dialog lists just these permissions, each **Allow**,
+**Deny** or **Inherit** (what their narrower access leaves, which is none of them).
+Allowing **Sell at the register** opens the register to sell and nothing else;
+allowing **Use the point of sale** gives back the whole register, as far as their
+workspace role and custom role allow it. Everything else about them is still set
+on their Team page.
+
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
 Three settings sections have a permission each. Owners and admins hold all three by
@@ -142,7 +159,9 @@ Every change is recorded in the organization's activity log, one row per permiss
 naming who changed it and what it became. Members who work on named sites (not the
 whole workspace) get their permissions from their site access instead; set those per
 site on the site's **Users** card — see
-[AI access for collaborators](overview.md#collaborator-ai-access).
+[AI access for collaborators](overview.md#collaborator-ai-access). A site that gives a
+workspace editor narrower access sets their register and waivers there, on the same
+card — see [A site's access narrows its register and waivers](#site-access-narrows).
 
 ## Tips
 

@@ -42,6 +42,14 @@ export type PosPermission = PosRegisterPermission | 'posBuyHardware'
 /** The tier defaults `managePos` has, which every finer key mirrors. */
 const POS_TIER_DEFAULTS = { admin: true, editor: true, viewer: false } as const
 
+/*
+ * The register is a site's own (AGL-4047): `managePos` and its five finer
+ * keys are `narrowsPerSite`, so an editor of the whole workspace given Viewer
+ * or Author access to one site does not work that site's register unless the
+ * site grants it to them. `posBuyHardware` is not: the hardware shop spends
+ * the workspace's money, and its verdict is the workspace's on every site.
+ */
+
 /**
  * Commerce's plugin-declared permissions (AGL-435) — the reference
  * adopter. Pure data: the client barrel and /server entry both register
@@ -56,6 +64,7 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
       'Open the point of sale. Each point of sale permission below follows this one unless a role or member sets it.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
+    narrowsPerSite: true,
   },
   {
     key: 'posSell',
@@ -64,6 +73,7 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
     description: 'Ring up sales and take payment at the register, the kiosk and the point of sale apps.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
+    narrowsPerSite: true,
     refines: 'managePos',
   },
   {
@@ -73,6 +83,7 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
     description: 'Refund point of sale orders at the register, up to its refund limit, and take returns and exchanges.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
+    narrowsPerSite: true,
     refines: 'managePos',
   },
   {
@@ -83,6 +94,7 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
       'Take a discount off a sale at the register. A shopper’s discount code and the store’s own promotions apply without it.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
+    narrowsPerSite: true,
     refines: 'managePos',
   },
   {
@@ -92,6 +104,7 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
     description: 'Open and close shifts, record cash in and out, print shift reports and open the drawer without a sale.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
+    narrowsPerSite: true,
     refines: 'managePos',
   },
   {
@@ -101,6 +114,7 @@ export const COMMERCE_PERMISSIONS: readonly PluginPermission[] = [
     description: 'Add, change and remove card readers, receipt printers and customer displays, and set the reader screen.',
     defaults: { ...POS_TIER_DEFAULTS },
     groupLabel: 'Commerce',
+    narrowsPerSite: true,
     refines: 'managePos',
   },
   {

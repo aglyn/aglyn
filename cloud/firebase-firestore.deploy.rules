@@ -3082,11 +3082,41 @@ return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 function hostOrgMemberStamps(hostId, permission) {
-let orgId = get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', '');
+let host = get(/databases/$(database)/documents/hosts/$(hostId)).data;
+let orgId = host.get('orgId', '');
+let onSite = host.get('memberPermissions', {}).get(request.auth.uid, {});
 let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
-return member.get('resolvedPermissions', member.get('permissions', {}))
+return onSite.get(permission, null) is bool
+? onSite.get(permission, false) == true
+: !hostNarrowsMember(hostId, member) &&
+member.get('resolvedPermissions', member.get('permissions', {}))
 .get(permission, false) == true;
+}
+
+
+
+
+
+
+
+function hostNarrowsMember(hostId, member) {
+return member.get('allHosts', false) == true &&
+member.get('role', '') == 'editor' &&
+member.get('hostAccess', {}).get(hostId, '') in ['author', 'viewer'];
 }
 
 

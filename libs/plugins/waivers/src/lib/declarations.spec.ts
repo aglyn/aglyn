@@ -20,7 +20,10 @@ import {
   labelContactSource,
   pluginContactSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
-import { WAIVERS_CONTACT_SOURCE, WAIVERS_PLUGIN_ID } from './constants/bundle-common'
+import { narrowPermissionsToSite, siteNarrowingFor } from '@aglyn/aglyn/app-utils/host-permissions'
+import { resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
+import { WAIVERS_CONTACT_SOURCE, WAIVERS_PERMISSIONS, WAIVERS_PLUGIN_ID } from './constants/bundle-common'
+import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
 import { registerWaiversDeclarations } from './declarations'
 
 /**
@@ -51,5 +54,38 @@ describe('registerWaiversDeclarations', () => {
       defaults: { retentionYears: 7 },
       help: { topic: 'waivers', anchor: '#keeping-signed-waivers' },
     })
+  })
+})
+
+/**
+ * Waivers are a site's own (AGL-4047): an editor of the whole workspace
+ * given Viewer access to one site neither takes nor manages that site's
+ * waivers, unless the site grants it, and keeps both on every other site.
+ */
+describe('a site narrows its waivers (AGL-4047)', () => {
+  const narrowed = { role: 'editor' as const, allHosts: true, hostAccess: { 'site-a': 'viewer' as const } }
+  const onSite = (member: typeof narrowed & { hostPermissions?: Record<string, Record<string, boolean>> }, hostId: string) =>
+    narrowPermissionsToSite(resolveOrgPermissions(member, null), siteNarrowingFor(member, hostId))
+
+  it('declares both keys narrowed per site', () => {
+    registerWaiversDeclarations()
+    expect(WAIVERS_PERMISSION_DECLARATIONS.every((entry) => entry.narrowsPerSite === true)).toBe(true)
+  })
+
+  it('takes neither on the narrowed site, both on another', () => {
+    registerWaiversDeclarations()
+    const here = onSite(narrowed, 'site-a')
+    expect(here[WAIVERS_PERMISSIONS.collect]).toBe(false)
+    expect(here[WAIVERS_PERMISSIONS.manage]).toBe(false)
+    const there = onSite(narrowed, 'site-b')
+    expect(there[WAIVERS_PERMISSIONS.collect]).toBe(true)
+    expect(there[WAIVERS_PERMISSIONS.manage]).toBe(true)
+  })
+
+  it('a site that grants collecting back lets them take signatures there, and not manage', () => {
+    registerWaiversDeclarations()
+    const here = onSite({ ...narrowed, hostPermissions: { 'site-a': { [WAIVERS_PERMISSIONS.collect]: true } } }, 'site-a')
+    expect(here[WAIVERS_PERMISSIONS.collect]).toBe(true)
+    expect(here[WAIVERS_PERMISSIONS.manage]).toBe(false)
   })
 })

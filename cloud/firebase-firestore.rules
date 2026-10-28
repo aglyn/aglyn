@@ -3067,26 +3067,56 @@ service cloud.firestore {
       return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
     /**
-     * Was this permission written down as granted for this member, by the
-     * workspace that owns the site (AGL-4047)?
+     * Was this permission written down as granted for this member ON THIS
+     * SITE, by the workspace that owns it (AGL-4047)?
      *
      * The site's twin of the org rules' `memberStamps`, for a key the host
      * role cannot carry: the plugin keys a custom role or an override can
-     * hand to a site viewer, which the POS routes now decide on alone. The
-     * same default chain — the member's `resolvedPermissions` stamp, else
-     * their own overrides, else `false` — so it grants nothing to a member
-     * the projection has not reached. Callers conjoin it with
-     * `isHostMember`, which is what scopes a stamp written for the whole
-     * workspace to a site the member can reach.
+     * hand to a site viewer, which the POS routes now decide on alone.
+     *
+     * The site's own stamp first: `memberPermissions[uid]` on the host is
+     * the server's verdict for this member on this site, and for a member
+     * who works across the workspace it carries the keys a site narrows,
+     * decided for this site. An editor of the workspace given Viewer or
+     * Author access here does not hold the register here unless the site
+     * grants it, and only this stamp knows whether it did.
+     *
+     * Where the site's stamp does not carry the key (a collaborator, whose
+     * keys come from their site role and their own overrides, or a site the
+     * projection has not reached since), the same default chain as before —
+     * the member's `resolvedPermissions` stamp, else their own overrides,
+     * else `false` — except for a member this site narrows, who is refused:
+     * their workspace stamp is the verdict the narrowing takes back, and a
+     * site that granted them anything was projected when it did. So it
+     * grants nothing to a member the projection has not reached. Callers
+     * conjoin it with `isHostMember`, which is what scopes a stamp written
+     * for the whole workspace to a site the member can reach.
      *
      * Two document reads: the host (`hostMemberRole` already paid for it,
      * and identical get()s are billed once) and the member.
      */
     function hostOrgMemberStamps(hostId, permission) {
-      let orgId = get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', '');
+      let host = get(/databases/$(database)/documents/hosts/$(hostId)).data;
+      let orgId = host.get('orgId', '');
+      let onSite = host.get('memberPermissions', {}).get(request.auth.uid, {});
       let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
-      return member.get('resolvedPermissions', member.get('permissions', {}))
-        .get(permission, false) == true;
+      return onSite.get(permission, null) is bool
+        ? onSite.get(permission, false) == true
+        : !hostNarrowsMember(hostId, member) &&
+          member.get('resolvedPermissions', member.get('permissions', {}))
+            .get(permission, false) == true;
+    }
+    /**
+     * Does this site narrow this member (AGL-4047)? An editor of the whole
+     * workspace given Viewer or Author access to it. Owners and admins are
+     * admins of every site, and a viewer has nothing narrower, so the editor
+     * is the only role a site narrows: `siteNarrowingFor` in the platform
+     * core, kept in step with this.
+     */
+    function hostNarrowsMember(hostId, member) {
+      return member.get('allHosts', false) == true &&
+        member.get('role', '') == 'editor' &&
+        member.get('hostAccess', {}).get(hostId, '') in ['author', 'viewer'];
     }
     /**
      * May this member read a REGISTER sale on this site (AGL-4047)? A member

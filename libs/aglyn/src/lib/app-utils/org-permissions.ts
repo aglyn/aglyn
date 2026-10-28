@@ -111,6 +111,12 @@ export interface OrgPermissionDefinition {
    * holds; a key that refines does not also follow.
    */
   follows?: OrgPermission
+  /**
+   * Decided on each site for a member who works across the workspace too
+   * (AGL-4047): `narrowPermissionsToSite` narrows it where their access to
+   * one site is narrower than their workspace role. Only a plugin's key.
+   */
+  narrowsPerSite?: boolean
 }
 
 /**
@@ -275,6 +281,7 @@ function syncCatalog(): void {
       ...(declared.hostRoleDefaults ? { hostRoleDefaults: declared.hostRoleDefaults } : {}),
       ...(declared.refines ? { refines: declared.refines } : {}),
       ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
+      ...(declared.narrowsPerSite ? { narrowsPerSite: true } : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {

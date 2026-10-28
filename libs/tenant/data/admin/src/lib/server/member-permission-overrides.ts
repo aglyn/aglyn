@@ -26,7 +26,9 @@
  *   key, layered over the org role and the custom role by
  *   `resolveOrgPermissions`;
  * - `hostPermissions[hostId][key]` for a key a site collaborator holds per
- *   site, layered over their host role by `resolveCollaboratorHostPermissions`.
+ *   site, layered over their host role by `resolveCollaboratorHostPermissions`,
+ *   and for a key a site narrows, for a workspace-wide member that site
+ *   narrows (AGL-4047, `narrowPermissionsToSite`).
  *
  * Catalog keys are dotted (`billing.view`), so every write addresses the
  * field through a `FieldPath` — a dotted string would be read as nesting.
@@ -38,8 +40,11 @@
 
 import {
   hostPermissionKeys,
+  narrowPermissionsToSite,
   ORG_PERMISSION_KEYS,
   resolveCollaboratorHostPermissions,
+  siteNarrowedPermissionKeys,
+  siteNarrowingFor,
   type AglynOrgMember,
 } from '@aglyn/aglyn/server'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
@@ -107,9 +112,13 @@ export async function setMemberPermissionOverrides(options: {
 }
 
 /**
- * Sets or clears a collaborator's per-site toggles on one site. Only the
- * keys a plugin declared per-site (`hostPermissionKeys`) are stored; the
- * member must reach the site.
+ * Sets or clears a member's per-site toggles on one site. For a site
+ * collaborator, only the keys a plugin declared per-site
+ * (`hostPermissionKeys`) are stored. For a member who works across the
+ * workspace, only on a site that narrows them and only the keys such a site
+ * narrows (`siteNarrowedPermissionKeys`, AGL-4047): the site's way to give
+ * back, or keep refused, what their narrower access there took. The member
+ * must reach the site.
  */
 export async function setHostPermissionOverrides(options: {
   orgId: string
@@ -118,24 +127,37 @@ export async function setHostPermissionOverrides(options: {
   changes: PermissionOverrideWrite
 }): Promise<PermissionOverridesResult> {
   const { orgId, uid, hostId, changes } = options
-  const siteKeys = new Set(hostPermissionKeys())
-  for (const key of Object.keys(changes)) {
-    if (!siteKeys.has(key)) throw new Error(`"${key}" is not a per-site permission`)
-  }
   const ref = memberRef(orgId, uid)
   const snapshot = await ref.get()
   if (!snapshot.exists) throw new Error('member not found')
   const stored = { $id: uid, ...snapshot.data() } as AglynOrgMember
-  const before = resolveCollaboratorHostPermissions(stored, hostId)
+  const narrowed = siteNarrowingFor(stored, hostId) !== null
+  const siteKeys = new Set(narrowed ? siteNarrowedPermissionKeys() : hostPermissionKeys())
+  for (const key of Object.keys(changes)) {
+    if (!siteKeys.has(key)) throw new Error(`"${key}" is not a per-site permission`)
+  }
+  // A narrowed member's verdict on this site, every per-site key and every
+  // key the site narrows, from the same resolver the rules projection uses.
+  const narrowedVerdicts = async (member: AglynOrgMember): Promise<Record<string, boolean>> => {
+    const granted = narrowPermissionsToSite(
+      await resolveMemberOrgPermissions(orgId, member),
+      siteNarrowingFor(member, hostId),
+    )
+    return Object.fromEntries(
+      [...hostPermissionKeys(), ...siteNarrowedPermissionKeys()].map((key) => [key, granted[key] === true]),
+    )
+  }
+  const before = narrowed ? await narrowedVerdicts(stored) : resolveCollaboratorHostPermissions(stored, hostId)
   if (!before) throw new Error('member has no access to this site')
   await updateFields(ref, ['hostPermissions', hostId], changes)
   await syncOrgAuthProjections(orgId, hostId)
   const member = { $id: uid, ...(await ref.get()).data() } as AglynOrgMember
   return {
     before,
-    after:
-      resolveCollaboratorHostPermissions(member, hostId) ??
-      Object.fromEntries([...siteKeys].map((key) => [key, false])),
+    after: narrowed
+      ? await narrowedVerdicts(member)
+      : (resolveCollaboratorHostPermissions(member, hostId) ??
+        Object.fromEntries([...siteKeys].map((key) => [key, false]))),
     member,
   }
 }

@@ -237,8 +237,10 @@ export interface AglynOrgMember extends AglynDocument {
    * Per-site permission overrides for a COLLABORATOR (AGL-2927), keyed by
    * the host the grant is for. Absent keys resolve by the host role's
    * default, so a document written before this field existed reads the same
-   * as one written after it. Org-wide members are never consulted here:
-   * their org role, custom role and `permissions` map decide.
+   * as one written after it. Org-wide members are consulted here only on a
+   * site where their access is narrower than their workspace role, and only
+   * for the keys such a site narrows (AGL-4047, `narrowPermissionsToSite`);
+   * everywhere else their org role, custom role and `permissions` map decide.
    */
   hostPermissions?: Record<HostUid, Partial<Record<HostPermissionKey, boolean>>>
   /**
