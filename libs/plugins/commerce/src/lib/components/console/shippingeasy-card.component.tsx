@@ -216,8 +216,8 @@ export function ShippingEasyCard(props: ShippingEasyCardProps) {
             {
               'Labeling in ShippingEasy? Connect it with the API key, API secret and store API key from your ' +
               'ShippingEasy account: each order is sent there as it is paid, and each label you buy there ' +
-              'marks the order shipped here and emails your customer the tracking link. Only a site admin ' +
-              'can connect it.'
+              'marks the order shipped here and emails your customer the tracking link. Connecting it takes ' +
+              'the "Connect shipping apps" permission.'
             }
           </Typography>
         ) : (

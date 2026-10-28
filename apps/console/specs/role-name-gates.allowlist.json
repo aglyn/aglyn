@@ -145,20 +145,8 @@
       "count": 1,
       "kind": "pending"
     },
-    "libs/plugins/commerce/src/lib/server/membership-admin-password.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/membership-admin-remove.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
       "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/payment-methods.ts": {
-      "count": 3,
       "kind": "pending"
     },
     "libs/plugins/commerce/src/lib/server/pos-hardware-admin.ts": {
@@ -177,10 +165,6 @@
     },
     "libs/plugins/commerce/src/lib/server/refund.ts": {
       "count": 3,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/shipping-connectors.ts": {
-      "count": 1,
       "kind": "pending"
     },
     "libs/plugins/crm/src/lib/components/settings-section.tsx": {

@@ -25,7 +25,8 @@
  * removal the browser made would strand it. The route deletes the profile and
  * the credential document in ONE batch — asserted as one commit, because two
  * sequential deletes could land the first and fail the second — and admits
- * exactly the roles the rules let delete a profile before it.
+ * exactly whom the rules let delete a profile: "Edit site content", whose
+ * preset is the roles that did before (AGL-4047).
  *
  * `node`, like the admin password spec: a server handler with no DOM.
  */
@@ -166,6 +167,21 @@ describe('membershipAdminRemoveHandler (AGL-3308)', () => {
     mockHostFields['memberRoles'] = { [CALLER]: 'admin' }
     mockHostExists = false
     expect((await remove()).status).toBe(403)
+    expect(mockCommits).toHaveLength(0)
+  })
+
+  it('asks "Edit site content", so the site’s stamp decides either way (AGL-4047)', async () => {
+    mockHostFields['memberRoles'] = { [CALLER]: 'viewer' }
+    mockHostFields['memberPermissions'] = { [CALLER]: { 'site.edit': true } }
+    expect((await remove()).status).toBe(200)
+    mockCommits.length = 0
+    mockHostFields['memberRoles'] = { [CALLER]: 'editor' }
+    mockHostFields['memberPermissions'] = { [CALLER]: { 'site.edit': false } }
+    const refused = await remove()
+    expect(refused.status).toBe(403)
+    expect(refused.body).toEqual({
+      error: 'Your role does not include "Edit site content" — ask an organization admin',
+    })
     expect(mockCommits).toHaveLength(0)
   })
 

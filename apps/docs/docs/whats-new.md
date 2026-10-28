@@ -65,6 +65,14 @@ for the how-to.
   Everyone keeps what their role gave them, and a custom role or a per-member override
   can grant or deny any of them.
 
+## October 2026 — payment methods and shipping apps are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  changing a store's payment methods and connecting its shipping apps now each have a
+  permission, **Manage payment methods** and **Connect shipping apps**. A site's admins
+  keep them, anyone with **Manage orders** still sees both cards, and a custom role or a
+  per-member override can grant or deny either one.
+
 ## October 2026 — editing together follows Edit site content
 
 - **[Edit site content decides who edits a site](workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions)** —

@@ -136,10 +136,12 @@ only, set them for that site in its **Users** card: choose **Permissions** besid
 |---|---|---|---|---|---|
 | **Manage orders** (`commerce.orders`) | Fulfill, cancel and print orders, resend receipts, build draft orders, take returns, and record shipments from a file | Yes | Yes | No | No |
 | **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
+| **Manage payment methods** (`commerce.paymentMethods`) | Turn the store's payment methods on and off (anyone with **Manage orders** sees them) | Yes | No | No | No |
+| **Connect shipping apps** (`commerce.shippingConnections`) | Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials (anyone with **Manage orders** sees whether they're connected) | Yes | No | No | No |
 
-Like the site permissions, both start from the member's role on the site, so nobody's
+Like the site permissions, each starts from the member's role on the site, so nobody's
 access changed when they became permissions, and a custom role, a per-member override
-or the site's **Permissions** dialog can grant or deny either one.
+or the site's **Permissions** dialog can grant or deny any of them.
 
 ### Reservation permissions {#reservation-permissions}
 

@@ -7363,6 +7363,8 @@
         "commerce.walkIns",
         "commerce.orders",
         "commerce.giftCards",
+        "commerce.paymentMethods",
+        "commerce.shippingConnections",
         "managePos",
         "posSell",
         "posRefund",
@@ -7431,6 +7433,8 @@
         "commerce.walkIns",
         "commerce.orders",
         "commerce.giftCards",
+        "commerce.paymentMethods",
+        "commerce.shippingConnections",
         "managePos",
         "posSell",
         "posRefund",
@@ -7681,6 +7685,20 @@
         "group": "commerce",
         "key": "commerce.giftCards",
         "label": "Issue gift cards",
+        "scope": "site"
+      },
+      {
+        "description": "Turn the store’s payment methods on and off. Anyone with \"Manage orders\" sees them. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.paymentMethods",
+        "label": "Manage payment methods",
+        "scope": "site"
+      },
+      {
+        "description": "Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials. Anyone with \"Manage orders\" sees whether they are connected. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.shippingConnections",
+        "label": "Connect shipping apps",
         "scope": "site"
       },
       {

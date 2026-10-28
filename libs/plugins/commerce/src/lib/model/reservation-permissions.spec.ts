@@ -43,6 +43,8 @@ import {
   ORDERS_SITE_ROLE_PRESET,
   RESERVATION_SITE_ROLE_PRESET,
   reservationPermissionLabel,
+  STORE_SETTINGS_SITE_ROLE_PRESET,
+  type CommerceSitePermission,
   reservationPermissionRefusal,
 } from './plugin-permissions'
 
@@ -80,6 +82,8 @@ describe('the reservation keys (AGL-4047)', () => {
       ...KEYS,
       'commerce.orders',
       'commerce.giftCards',
+      'commerce.paymentMethods',
+      'commerce.shippingConnections',
     ])
     for (const key of KEYS) {
       const definition = ORG_PERMISSIONS.find((entry) => entry.key === key)
@@ -159,3 +163,40 @@ describe('the order and gift card keys (AGL-4047)', () => {
   })
 })
 
+describe('the payment method and shipping app keys (AGL-4047)', () => {
+  const SETTINGS_KEYS = ['commerce.paymentMethods', 'commerce.shippingConnections'] as const
+
+  it('keep the site Admin who alone changed them as their preset', () => {
+    expect(STORE_SETTINGS_SITE_ROLE_PRESET).toEqual({ admin: true, editor: false, author: false, viewer: false })
+    for (const key of SETTINGS_KEYS) {
+      const entry = COMMERCE_SITE_PERMISSIONS.find((candidate) => candidate.key === key)
+      expect(entry).toMatchObject({ presetFromSiteRole: true, hostRoleDefaults: STORE_SETTINGS_SITE_ROLE_PRESET })
+      expect(entry?.roleDefaults).toEqual({ owner: true, admin: true, editor: false, viewer: false })
+    }
+  })
+
+  it.each(HOST_ROLES)('a site %s holds them exactly when the routes let them change things', (role) => {
+    const collaborator: Partial<AglynOrgMember> = { role: 'viewer', allHosts: false, hostAccess: { [SITE]: role } }
+    for (const key of SETTINGS_KEYS) {
+      expect(resolveSiteRolePresetPermissions(collaborator, SITE)[key]).toBe(role === 'admin')
+      expect(holdsCommerceSiteKey({ memberRoles: { u: role } }, 'u', key)).toBe(role === 'admin')
+    }
+  })
+
+  it.each(['owner', 'admin', 'editor', 'viewer'] as const)('a workspace %s holds them as before', (role) => {
+    const member: Partial<AglynOrgMember> = { role, allHosts: true }
+    for (const key of SETTINGS_KEYS) {
+      expect(resolveSiteRolePresetPermissions(member, SITE)[key]).toBe(role === 'owner' || role === 'admin')
+      expect(resolveOrgPermissions(member, null)[key]).toBe(role === 'owner' || role === 'admin')
+    }
+  })
+
+  it('reading either card stays the Admin and Editor’s: "Manage orders" or the key', () => {
+    for (const role of HOST_ROLES) {
+      const host = { memberRoles: { u: role } }
+      const reads = (key: CommerceSitePermission) =>
+        holdsCommerceSiteKey(host, 'u', key) || holdsCommerceSiteKey(host, 'u', 'commerce.orders')
+      for (const key of SETTINGS_KEYS) expect([role, reads(key)]).toEqual([role, role === 'admin' || role === 'editor'])
+    }
+  })
+})

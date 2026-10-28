@@ -305,6 +305,27 @@ describe('membershipAdminPasswordHandler', () => {
     expect(mockCredentialSets).toHaveLength(0)
   })
 
+  it('asks "Manage site settings", so the site’s stamp decides either way (AGL-4047)', async () => {
+    const reset = async () => {
+      const { res, result } = makeResponse()
+      await membershipAdminPasswordHandler(
+        makeRequest({ hostId: HOST_ID, memberId: MEMBER_ID, action: 'sendPasswordReset' }),
+        res,
+      )
+      return result
+    }
+    mockHostFields['memberRoles'] = { [ADMIN_UID]: 'editor' }
+    mockHostFields['memberPermissions'] = { [ADMIN_UID]: { 'site.manage': true } }
+    expect((await reset()).status).toBe(200)
+    mockHostFields['memberRoles'] = { [ADMIN_UID]: 'admin' }
+    mockHostFields['memberPermissions'] = { [ADMIN_UID]: { 'site.manage': false } }
+    const refused = await reset()
+    expect(refused.status).toBe(403)
+    expect(refused.body).toEqual({
+      error: 'Your role does not include "Manage site settings" — ask an organization admin',
+    })
+  })
+
   it('accepts an org manager who is not on the site roster', async () => {
     mockHostFields['memberRoles'] = {}
     mockManageMembers = true
