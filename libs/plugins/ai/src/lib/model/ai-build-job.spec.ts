@@ -37,11 +37,13 @@ import {
   aiPlanUndeclaredRefs,
   parseAiBuildPlan,
   withBuildItems,
+  AI_BUILD_PLAN_LIMITS,
   AI_BUILD_PLAN_TOOL,
   type AiBuildItem,
   type AiBuildPlan,
   type AiBuildPlanScreen,
 } from './ai-build-plan'
+import { aiJobPlanLines } from './ai-job-plan-lines'
 import type { AiJobItemLedger } from './ai-jobs.types'
 
 /**
@@ -435,6 +437,62 @@ describe('items in the plan model', () => {
     expect(tool.inputSchema['required']).toContain('items')
     expect(JSON.stringify(tool)).toBe(JSON.stringify(withBuildItems(AI_BUILD_PLAN_TOOL)))
     expect(AI_BUILD_PLAN_TOOL.inputSchema['required']).not.toContain('items')
+  })
+})
+
+// AGL-4087: what a build's brief asks for that its plan does not build is said, never dropped quietly.
+describe('what a build leaves out', () => {
+  const HELPER = {
+    asked: 'Review helper page',
+    why: 'The site cannot write a review draft from a customer’s choices or copy it for them.',
+  }
+  const answer = (leftOut: unknown) => ({ ...canonical(), items: [], leftOut })
+
+  it('is asked of a build’s tool alone, a closed object of what was asked and why', () => {
+    const tool = withBuildItems(AI_BUILD_PLAN_TOOL)
+    expect(tool.inputSchema['required']).toContain('leftOut')
+    const schema = (tool.inputSchema['properties'] as Record<string, { items: Record<string, unknown> }>)['leftOut']
+    expect(schema.items['additionalProperties']).toBe(false)
+    expect(schema.items['required']).toEqual(['asked', 'why'])
+    expect(AI_BUILD_PLAN_TOOL.inputSchema['properties']).not.toHaveProperty('leftOut')
+  })
+
+  it('keeps each entry, and carries no list when nothing is left out', () => {
+    expect(parseAiBuildPlan(answer([HELPER]))).toMatchObject({ ok: true, plan: { leftOut: [HELPER] } })
+    const none = parseAiBuildPlan(answer([]))
+    expect(none.ok && 'leftOut' in none.plan).toBe(false)
+    const absent = parseAiBuildPlan({ ...canonical(), items: [] })
+    expect(absent.ok && 'leftOut' in absent.plan).toBe(false)
+  })
+
+  it('cuts a list past its limit and drops an entry that names nothing, instead of refusing the plan', () => {
+    const many = Array.from({ length: AI_BUILD_PLAN_LIMITS.leftOut + 2 }, (_, index) => ({ asked: `Page ${index}`, why: '' }))
+    const parsed = parseAiBuildPlan(answer([{ asked: ' ', why: 'Nothing.' }, ...many]))
+    expect(parsed.ok && parsed.plan.leftOut?.map((entry) => entry.asked)).toEqual(
+      many.slice(0, AI_BUILD_PLAN_LIMITS.leftOut - 1).map((entry) => entry.asked),
+    )
+    expect(parsed.ok && parsed.repairs).toContain(`leftOut listed ${many.length + 1}; kept the first ${AI_BUILD_PLAN_LIMITS.leftOut}`)
+    expect(parseAiBuildPlan(answer('Review helper page'))).toEqual({ ok: false, error: 'leftOut is not a list' })
+  })
+
+  it('is the last thing the plan card lists, read before Confirm', () => {
+    const parsed = parseAiBuildPlan(answer([HELPER, { asked: 'A members area', why: '' }]))
+    if (!parsed.ok) throw new Error('the plan did not read')
+    const lines = aiJobPlanLines({
+      ...parsed.plan,
+      status: 'proposed',
+      labels: {},
+      proposedAt: null,
+      confirmedAt: null,
+      confirmedBy: null,
+    })
+    expect(lines.slice(-2)).toEqual([
+      {
+        key: 'left-out-0',
+        text: 'Leaves out Review helper page — The site cannot write a review draft from a customer’s choices or copy it for them.',
+      },
+      { key: 'left-out-1', text: 'Leaves out A members area' },
+    ])
   })
 })
 

@@ -1293,6 +1293,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'bucket or buyer state, read under the return’s own row cap.',
   ],
   [
+    'apps/console/components/staff-tax-own-sales-breakdown-card.component.tsx',
+    'The tax return’s "Items 1–2 by source and state" card (AGL-4038): one ' +
+      'row per kind of the operator’s own sales and jurisdiction, so it is ' +
+      'bounded by the sales sources and the states sold into, read under the ' +
+      'return’s own row cap, not by how many orders there were.',
+  ],
+  [
     'apps/console/components/server-config-card.component.tsx',
     'One row per declared configuration knob — a fixed set the server ships.',
   ],
@@ -2099,7 +2106,9 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // newest 50; the staff list of every workspace's orders pages.
     // 85 with the workspace's Domains page and one domain's DNS records
     // (AGL-4040): a workspace holds at most 25 names, and a zone is read whole.
-    expect(NOT_A_LIST).toHaveLength(85)
+    // 86 with the tax return's own-sales breakdown (AGL-4038): a row per kind
+    // of the operator's own sales and jurisdiction, under the return's row cap.
+    expect(NOT_A_LIST).toHaveLength(86)
   })
 })
 

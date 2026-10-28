@@ -27,6 +27,20 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — 4G for card readers: who turns it on, and unpaid months
+
+- **[Turning on 4G needs Manage billing](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  4G for your Stripe Reader S710s is charged to your workspace, so turning it on
+  now also needs the workspace's **Manage billing** permission. Turning it off
+  still needs only **Registers and devices**.
+- **[An unpaid 4G charge turns 4G off](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  if a month's 4G charge is still unpaid after a grace period, 4G is turned off
+  for your stores and everyone who manages billing gets an email. Pay it on the
+  **Billing** page, then turn 4G on again.
+- **[A deleted workspace's last month](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  when a deleted workspace is removed for good partway through a month, that
+  month's 4G is charged then, and 4G is turned off.
+
 ## October 2026 — five more workspace permissions
 
 - **[Workspace permissions](workspace-and-billing/teams-and-roles/custom-roles.md#workspace-permissions)** —
