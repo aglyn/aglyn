@@ -451,8 +451,11 @@ describe('every host field a client can write is classified', () => {
    * to the rule arrives here without anyone remembering to.
    */
   const adminTier = (() => {
-    const at = rules.indexOf("(hostMemberRole(hostId) == 'admin' ||")
-    const list = rules.slice(at, rules.indexOf(']', at))
+    // The tier asks "Manage site settings" since AGL-4047, whose preset is
+    // the site Admin it named before; the fields follow in the `hasAny` list.
+    const at = rules.indexOf("(hostSiteRoleKey(hostId, 'site.manage', ['admin']) ||")
+    const start = rules.indexOf('hasAny([', at)
+    const list = at < 0 || start < 0 ? '' : rules.slice(start, rules.indexOf(']', start))
     return [...list.matchAll(/'([A-Za-z]+)'/g)]
       .map((match) => match[1])
       .filter((field) => field !== 'admin')
