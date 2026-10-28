@@ -37,6 +37,11 @@ for the how-to.
 
 ## October 2026 — permissions decide the register, the hardware shop and three settings
 
+- **[A site's access narrows its register and waivers](workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows)** —
+  an editor of the whole workspace you give **Viewer** or **Author** access to one
+  site no longer works that site's register or its waivers, and keeps both
+  everywhere else. **Permissions** beside them on the site's **Users** card gives
+  either back for that site alone.
 - **[The register follows its permission alone](commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register)** —
   **Use the point of sale** and its finer permissions decide who works the
   register, on their own. Owners, admins and editors keep exactly what they had,

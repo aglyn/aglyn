@@ -56,6 +56,14 @@ or for one member. A control someone does not hold stays on screen, disabled,
 with the reason. A cashier switched in with a PIN needs **Sell at the register**
 too.
 
+The register belongs to its site. An editor who works across the whole workspace
+but has **Viewer** or **Author** access to one site doesn't work that site's
+register, while keeping it on every other site. To let them sell there anyway,
+choose **Permissions** beside them on that site's **Users** card and allow **Sell at
+the register** (or **Use the point of sale** for the whole register) — see
+[A site's access narrows its register and waivers](../../workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows).
+**Buy point of sale hardware** is the workspace's, so it doesn't change.
+
 **Buy point of sale hardware** follows **Use the point of sale** the same way, and
 also stands on its own, so someone can order readers without working the register.
 See [Who can buy hardware](pos-hardware.md#who-can-buy-hardware).

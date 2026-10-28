@@ -31,6 +31,13 @@
  *     read neither;
  *   - nobody gains a write.
  *
+ * And a site that narrows a member (AGL-4047): an editor of the whole
+ * workspace given Viewer access to this site does not read its register
+ * sales unless the site's own stamp (`memberPermissions`) grants the sell
+ * key, while reading the other site's as an editor. Where the site's stamp
+ * does carry the key, it decides for everyone; where it does not, a narrowed
+ * member is refused even though their workspace stamp says yes.
+ *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-pos-register.spec.mjs
  */
@@ -50,6 +57,10 @@ const VIEWER_OVERRIDE = 'uid-reg-viewer-override'
 const VIEWER_REFUSED = 'uid-reg-viewer-refused'
 const ELSEWHERE = 'uid-reg-elsewhere'
 const OUTSIDER = 'uid-reg-outsider'
+const NARROWED = 'uid-reg-narrowed'
+const NARROWED_STAMPED = 'uid-reg-narrowed-stamped'
+const NARROWED_GRANTED = 'uid-reg-narrowed-granted'
+const SITE_REFUSED = 'uid-reg-site-refused'
 const POS_ORDER = 'order-pos-1'
 const ONLINE_ORDER = 'order-online-1'
 
@@ -110,6 +121,24 @@ await env.withSecurityRulesDisabled(async (context) => {
     hostAccess: { [OTHER_HOST]: 'viewer' },
     resolvedPermissions: SELLS,
   })
+  // Editors of the whole workspace, each given Viewer access to HOST: the
+  // workspace stamp says they sell, and the site narrows that.
+  for (const uid of [NARROWED, NARROWED_STAMPED, NARROWED_GRANTED]) {
+    await setDoc(doc(db, 'orgs', ORG, 'members', uid), {
+      role: 'editor',
+      allHosts: true,
+      hostAccess: { [HOST]: 'viewer' },
+      resolvedPermissions: SELLS,
+      ...(uid === NARROWED_GRANTED ? { hostPermissions: { [HOST]: { posSell: true } } } : {}),
+    })
+  }
+  // A workspace viewer whose workspace stamp sells, and whose site stamp,
+  // which decides where it carries the key, does not.
+  await setDoc(doc(db, 'orgs', ORG, 'members', SITE_REFUSED), {
+    role: 'viewer',
+    allHosts: true,
+    resolvedPermissions: SELLS,
+  })
   await setDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER), {
     role: 'owner',
     allHosts: true,
@@ -124,9 +153,24 @@ await env.withSecurityRulesDisabled(async (context) => {
       [VIEWER_SELLS]: 'viewer',
       [VIEWER_OVERRIDE]: 'viewer',
       [VIEWER_REFUSED]: 'viewer',
+      [NARROWED]: 'viewer',
+      [NARROWED_STAMPED]: 'viewer',
+      [NARROWED_GRANTED]: 'viewer',
+      [SITE_REFUSED]: 'viewer',
+    },
+    // The site's own verdicts, as the projection stamps them: NARROWED is
+    // not stamped yet, the other two are, and a site grant of the sell key
+    // brings the register with it.
+    memberPermissions: {
+      [NARROWED_STAMPED]: { managePos: false, posSell: false },
+      [NARROWED_GRANTED]: { managePos: true, posSell: true },
+      [SITE_REFUSED]: { managePos: false, posSell: false },
     },
   })
-  await setDoc(doc(db, 'hosts', OTHER_HOST), { orgId: ORG, memberRoles: { [ADMIN]: 'admin', [ELSEWHERE]: 'viewer' } })
+  await setDoc(doc(db, 'hosts', OTHER_HOST), {
+    orgId: ORG,
+    memberRoles: { [ADMIN]: 'admin', [ELSEWHERE]: 'viewer', [NARROWED]: 'editor' },
+  })
   await setDoc(doc(db, 'hosts', HOST, 'orders', POS_ORDER), {
     status: 'paid',
     channel: 'pos',
@@ -138,6 +182,12 @@ await env.withSecurityRulesDisabled(async (context) => {
     channel: 'online',
     email: 'shopper@example.com',
     totals: { totalCents: 1200 },
+  })
+  await setDoc(doc(db, 'hosts', OTHER_HOST, 'orders', POS_ORDER), {
+    status: 'paid',
+    channel: 'pos',
+    registerId: 'front',
+    totals: { totalCents: 700 },
   })
 })
 
@@ -183,12 +233,48 @@ for (const [who, db] of [
   await check(`${who} cannot read an online order`, () => assertFails(getDoc(order(db(), ONLINE_ORDER))))
 }
 
+for (const [who, uid] of [
+  ['a workspace editor narrowed to Viewer here, not yet stamped', NARROWED],
+  ['a workspace editor narrowed to Viewer here, stamped without the register', NARROWED_STAMPED],
+  ['a workspace viewer the site stamp refuses the register', SITE_REFUSED],
+]) {
+  await check(`${who} cannot read a register sale here`, () => assertFails(getDoc(order(as(uid), POS_ORDER))))
+}
+await check('a narrowed editor cannot read an online order here', () =>
+  assertFails(getDoc(order(as(NARROWED), ONLINE_ORDER))),
+)
+await check('a narrowed editor still reads a register sale on the site it edits', () =>
+  assertSucceeds(getDoc(doc(as(NARROWED), 'hosts', OTHER_HOST, 'orders', POS_ORDER))),
+)
+await check('a narrowed editor the site grants the sell key reads a register sale here', () =>
+  assertSucceeds(getDoc(order(as(NARROWED_GRANTED), POS_ORDER))),
+)
+await check('a narrowed editor the site grants the sell key cannot read an online order here', () =>
+  assertFails(getDoc(order(as(NARROWED_GRANTED), ONLINE_ORDER))),
+)
+await check('a narrowed editor the site grants the sell key cannot change a register sale', () =>
+  assertFails(updateDoc(order(as(NARROWED_GRANTED), POS_ORDER), { status: 'refunded' })),
+)
+
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
+  await deleteDoc(doc(db, 'hosts', OTHER_HOST, 'orders', POS_ORDER))
   for (const id of [POS_ORDER, ONLINE_ORDER]) await deleteDoc(doc(db, 'hosts', HOST, 'orders', id))
   await deleteDoc(doc(db, 'hosts', HOST))
   await deleteDoc(doc(db, 'hosts', OTHER_HOST))
-  for (const uid of [ADMIN, EDITOR, VIEWER, VIEWER_SELLS, VIEWER_OVERRIDE, VIEWER_REFUSED, ELSEWHERE]) {
+  for (const uid of [
+    ADMIN,
+    EDITOR,
+    VIEWER,
+    VIEWER_SELLS,
+    VIEWER_OVERRIDE,
+    VIEWER_REFUSED,
+    ELSEWHERE,
+    NARROWED,
+    NARROWED_STAMPED,
+    NARROWED_GRANTED,
+    SITE_REFUSED,
+  ]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }
   await deleteDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER))

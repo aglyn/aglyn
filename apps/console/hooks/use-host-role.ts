@@ -21,8 +21,10 @@ import {
   hostRoleFor,
   isOrgWideMember,
   resolveCollaboratorHostPermissions,
+  siteNarrowingFor,
   type AglynOrgMember,
   type HostAccessRole,
+  type SiteNarrowing,
 } from '@aglyn/aglyn'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
@@ -53,6 +55,14 @@ export interface HostRoleState {
    * must not be answered from a host role.
    */
   hostPermissions: Record<string, boolean> | null
+  /**
+   * How this site narrows an ORG-WIDE member (AGL-4047): an editor of the
+   * workspace with Viewer or Author access here, whose register and waivers
+   * keys this site decides (`narrowPermissionsToSite`). Null until read, on a
+   * failed read, for a collaborator, and for a member the site does not
+   * narrow, so a caller may apply it unconditionally.
+   */
+  narrowing?: SiteNarrowing | null
 }
 
 /**
@@ -100,6 +110,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
     loaded: false,
     orgWide: false,
     hostPermissions: null,
+    narrowing: null,
   })
 
   useEffect(() => {
@@ -128,6 +139,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
           hostPermissions: orgWide
             ? null
             : resolveCollaboratorHostPermissions(member, hostId as never),
+          narrowing: siteNarrowingFor(member, hostId as never),
         })
       } catch {
         // Fail closed on the display gate: `loaded` stays true so the caller
@@ -140,6 +152,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
             loaded: true,
             orgWide: false,
             hostPermissions: null,
+            narrowing: null,
           })
       }
     })()

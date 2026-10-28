@@ -23,7 +23,9 @@ import { WAIVERS_PERMISSIONS, WAIVERS_PLUGIN_ID } from './bundle-common'
  * and registered from the console and the servers alike. Both are on for a
  * site's admins and editors and off for viewers by default; a custom role
  * turns either off, so the window's staff can take signatures without
- * rewriting the waiver.
+ * rewriting the waiver. Both are a site's own (`narrowsPerSite`, AGL-4047):
+ * an editor of the whole workspace given Viewer or Author access to one site
+ * holds neither there unless the site grants it.
  */
 export const WAIVERS_PERMISSION_DECLARATIONS: readonly PluginPermission[] = [
   {
@@ -33,6 +35,7 @@ export const WAIVERS_PERMISSION_DECLARATIONS: readonly PluginPermission[] = [
     description: 'Write, publish and retire waivers, and void a signature.',
     defaults: { admin: true, editor: true, viewer: false },
     groupLabel: 'Waivers',
+    narrowsPerSite: true,
   },
   {
     key: WAIVERS_PERMISSIONS.collect,
@@ -41,5 +44,6 @@ export const WAIVERS_PERMISSION_DECLARATIONS: readonly PluginPermission[] = [
     description: 'See who signed, take signatures at the window and record paper waivers.',
     defaults: { admin: true, editor: true, viewer: false },
     groupLabel: 'Waivers',
+    narrowsPerSite: true,
   },
 ]

@@ -35,6 +35,11 @@ The permission decides, not the role: someone at the window whose role is viewer
 collect waivers once they are allowed **Collect waivers**, and an admin a custom role
 denies it can't. Viewers can't see signatures otherwise, because they hold people's
 dates of birth and their children's names.
+
+Both belong to the site. An editor who works across the whole workspace but has
+**Viewer** or **Author** access to one site holds neither there, unless that site's
+**Users** card allows it for them — see
+[A site's access narrows its register and waivers](../../workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows).
 :::
 
 ## Your waivers {#your-waivers}

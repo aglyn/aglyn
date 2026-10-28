@@ -194,6 +194,11 @@ export interface PluginOrgPermissionDeclaration {
    * needing it (AGL-4047). See `PluginPermission.follows`.
    */
   follows?: string
+  /**
+   * Narrowed on a site where a workspace-wide member's access is narrower
+   * than their workspace role (AGL-4047). See `PluginPermission.narrowsPerSite`.
+   */
+  narrowsPerSite?: boolean
 }
 
 /**
@@ -217,6 +222,8 @@ export interface PluginCatalogPermission {
   refines?: string
   /** The key this one follows without needing it, when it does. */
   follows?: string
+  /** Narrowed on a site where a workspace-wide member's access is narrower (AGL-4047). */
+  narrowsPerSite?: boolean
 }
 
 export interface PluginEntitlementRegistration {
@@ -437,6 +444,7 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       source: 'catalog',
       ...(permission.refines ? { refines: permission.refines } : {}),
       ...(permission.follows ? { follows: permission.follows } : {}),
+      ...(permission.narrowsPerSite ? { narrowsPerSite: true } : {}),
     })
   }
   for (const permission of listPluginPermissions()) {
@@ -451,6 +459,7 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       source: 'tier',
       ...(permission.refines ? { refines: permission.refines } : {}),
       ...(permission.follows ? { follows: permission.follows } : {}),
+      ...(permission.narrowsPerSite ? { narrowsPerSite: true } : {}),
     })
   }
   return [...byPlugin.keys()]

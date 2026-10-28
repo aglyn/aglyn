@@ -59,6 +59,17 @@ export interface PluginPermission {
    * key's. Ignored on a key that also `refines`.
    */
   follows?: string
+  /**
+   * Decided on each site for a member who works across the whole workspace,
+   * too (AGL-4047). Where their access to one site is narrower than their
+   * workspace role (an editor given Viewer or Author access there), the key
+   * on that site is what the narrower access holds by default, never more
+   * than the workspace grants, unless the site grants it to them. A key a
+   * site's own work needs, such as working its register, says so; a key
+   * about the workspace as a whole does not. Members with no narrower access
+   * anywhere are untouched.
+   */
+  narrowsPerSite?: boolean
 }
 
 /**

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { pluginOrgPermissionKeys } from '@aglyn/aglyn'
+import { narrowPermissionsToSite, pluginOrgPermissionKeys } from '@aglyn/aglyn'
 import { useMemo } from 'react'
 import useHostRole from './use-host-role'
 import useOrgPermissions from './use-org-permissions'
@@ -45,7 +45,9 @@ const HELD: PermissionsOnHost = { loaded: false, granted: {} }
  *
  * An org-wide member is decided by the org catalog: `useOrgPermissions`
  * already resolves every declared key with the custom role and the
- * overrides applied, and the answer is the same on every site. A site
+ * overrides applied, and the answer is the same on every site, except on a
+ * site that narrows them (AGL-4047), where the keys such a site narrows are
+ * decided for it, as the server decides them. A site
  * collaborator is decided on the site in view, by the host role they hold
  * there refined by the per-site toggles on their member document — which is
  * what `useHostRole` reads, for the site whose id is passed.
@@ -73,7 +75,10 @@ export function usePermissionsOnHost(hostId?: string | null): PermissionsOnHost 
     if (!onCollaboratorAxis) {
       answer = {
         loaded: true,
-        granted: Object.fromEntries(keys.map((key) => [key, org.can(key) === true])),
+        granted: narrowPermissionsToSite(
+          Object.fromEntries(keys.map((key) => [key, org.can(key) === true])),
+          hostId && host.loaded ? host.narrowing : null,
+        ),
       }
     } else if (host.loaded) {
       answer = {

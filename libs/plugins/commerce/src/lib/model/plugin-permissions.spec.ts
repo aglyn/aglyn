@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { narrowPermissionsToSite, siteNarrowingFor } from '@aglyn/aglyn/app-utils/host-permissions'
 import { resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
 import { resolveRolePermissions } from '@aglyn/aglyn/app-utils/org-roles'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
@@ -126,5 +127,60 @@ describe('the register’s finer keys (AGL-4047)', () => {
     expect(posPermissionRefusal('posBuyHardware')).toBe(
       'Your role does not include "Buy point of sale hardware" — ask an organization admin',
     )
+  })
+})
+
+/**
+ * The register is a site's own (AGL-4047): an editor of the whole workspace
+ * given Viewer access to one site does not work that site's register, unless
+ * the site grants it, and keeps it on every other site. The hardware shop is
+ * the workspace's, so the narrowing leaves it alone.
+ */
+describe('a site narrows its register (AGL-4047)', () => {
+  const narrowed = { role: 'editor' as const, allHosts: true, hostAccess: { 'site-a': 'viewer' as const } }
+  const onSite = (member: typeof narrowed & { hostPermissions?: Record<string, Record<string, boolean>> }, hostId: string) =>
+    narrowPermissionsToSite(resolveOrgPermissions(member, null), siteNarrowingFor(member, hostId))
+
+  it('marks the register keys, and not the hardware shop, as narrowed per site', () => {
+    const narrowedKeys = COMMERCE_PERMISSIONS.filter((entry) => entry.narrowsPerSite).map((entry) => entry.key)
+    expect(narrowedKeys).toEqual(['managePos', ...REGISTER])
+  })
+
+  it('no register on the narrowed site, the whole register on another', () => {
+    const here = onSite(narrowed, 'site-a')
+    expect(here['managePos']).toBe(false)
+    for (const key of REGISTER) expect(holdsPosPermission(here, key)).toBe(false)
+    const there = onSite(narrowed, 'site-b')
+    expect(there['managePos']).toBe(true)
+    for (const key of REGISTER) expect(holdsPosPermission(there, key)).toBe(true)
+  })
+
+  it('keeps the hardware shop on the narrowed site', () => {
+    const here = onSite(narrowed, 'site-a')
+    expect(holdsPosPermission(here, 'posBuyHardware')).toBe(true)
+    expect(mayVisitPosHardwareShop(here)).toBe(true)
+  })
+
+  it('a site that grants selling back opens the register to sell, and nothing else', () => {
+    const here = onSite({ ...narrowed, hostPermissions: { 'site-a': { posSell: true } } }, 'site-a')
+    expect(here['managePos']).toBe(true)
+    expect(holdsPosPermission(here, 'posSell')).toBe(true)
+    for (const key of REGISTER.filter((key) => key !== 'posSell')) {
+      expect(holdsPosPermission(here, key)).toBe(false)
+    }
+  })
+
+  it('members no site narrows keep exactly the register they had', () => {
+    for (const member of [
+      { role: 'owner' as const, hostAccess: { 'site-a': 'viewer' as const } },
+      { role: 'admin' as const, allHosts: true },
+      { role: 'editor' as const, allHosts: true },
+      { role: 'editor' as const, allHosts: true, hostAccess: { 'site-a': 'editor' as const } },
+      { role: 'viewer' as const, allHosts: true, permissions: { managePos: true } },
+    ]) {
+      expect(narrowPermissionsToSite(resolveOrgPermissions(member, null), siteNarrowingFor(member, 'site-a'))).toEqual(
+        resolveOrgPermissions(member, null),
+      )
+    }
   })
 })

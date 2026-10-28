@@ -23,6 +23,7 @@
 
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 
 /** Stored documents by path. */
 const docs = new Map<string, Record<string, any>>()
@@ -89,6 +90,16 @@ beforeAll(() => {
       },
     ],
   })
+  // A key a site narrows (AGL-4047).
+  registerPluginPermissions([
+    {
+      key: 'desk.collect',
+      pluginId: 'acme-desk',
+      label: 'Collect forms',
+      defaults: { admin: true, editor: true, viewer: false },
+      narrowsPerSite: true,
+    },
+  ])
 })
 
 beforeEach(() => {
@@ -159,6 +170,35 @@ describe('setHostPermissionOverrides (AGL-4047)', () => {
     await expect(
       setHostPermissionOverrides({ orgId: 'org-1', uid: 'm1', hostId: 'host-z', changes: { 'reviews.reply': true } }),
     ).rejects.toThrow(/no access/)
+    expect(mockUpdates).toHaveLength(0)
+  })
+
+  it('sets a key the site narrows for a workspace editor that site narrows (AGL-4047)', async () => {
+    docs.set(MEMBER, { role: 'editor', allHosts: true, hostAccess: { 'host-a': 'viewer' } })
+    const granted = await setHostPermissionOverrides({
+      orgId: 'org-1',
+      uid: 'm1',
+      hostId: 'host-a',
+      changes: { 'desk.collect': true },
+    })
+    expect(granted.before['desk.collect']).toBe(false)
+    expect(granted.after['desk.collect']).toBe(true)
+    // The per-site keys ride along at the workspace verdict, so a plugin
+    // keeping a display copy of them does not read a refusal.
+    expect(granted.after['reviews.reply']).toBe(true)
+    expect(docs.get(MEMBER)?.['hostPermissions']).toEqual({ 'host-a': { 'desk.collect': true } })
+    expect(mockSync).toHaveBeenCalledWith('org-1', 'host-a')
+  })
+
+  it('refuses, for a narrowed member, a key the site does not narrow; and the narrowed keys to anyone else (AGL-4047)', async () => {
+    docs.set(MEMBER, { role: 'editor', allHosts: true, hostAccess: { 'host-a': 'viewer' } })
+    await expect(
+      setHostPermissionOverrides({ orgId: 'org-1', uid: 'm1', hostId: 'host-a', changes: { 'reviews.reply': true } }),
+    ).rejects.toThrow(/not a per-site permission/)
+    docs.set(MEMBER, { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'viewer' } })
+    await expect(
+      setHostPermissionOverrides({ orgId: 'org-1', uid: 'm1', hostId: 'host-a', changes: { 'desk.collect': true } }),
+    ).rejects.toThrow(/not a per-site permission/)
     expect(mockUpdates).toHaveLength(0)
   })
 })

@@ -27,7 +27,9 @@ import {
   listPluginPermissionKeys,
   ORG_ROLE_TIER,
   ORG_PERMISSION_REFINEMENTS,
+  narrowPermissionsToSite,
   refinePermissionMap,
+  siteNarrowingFor,
   tierPermissionsOf,
 } from '@aglyn/aglyn/server'
 import {
@@ -239,6 +241,14 @@ export async function resolveOrgPermissions(
       membership.orgId,
       membership.member,
     )
+    // A site that narrows this member (AGL-4047): an editor of the whole
+    // workspace given Viewer or Author access to the site in context loses
+    // that site's register and waivers there, unless the site grants them.
+    // Null for every other member and with no site named, which leaves the
+    // map exactly as the workspace resolves it.
+    const narrowing = context.hostId
+      ? siteNarrowingFor(membership.member, context.hostId)
+      : null
     return {
       orgId: membership.orgId,
       role,
@@ -246,7 +256,7 @@ export async function resolveOrgPermissions(
       // Refined LAST (AGL-4047): the catalog resolved each refining key with
       // every layer, and the override spread below lays stored values back,
       // so the pass only holds each such key to the key it refines.
-      permissions: refinePermissionMap({
+      permissions: narrowPermissionsToSite(refinePermissionMap({
         ...resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
         ...toLegacyPermissions(granular, role),
         // The plugin keys as the ONE catalog resolved them (AGL-4047): the
@@ -261,7 +271,7 @@ export async function resolveOrgPermissions(
         ...pluginPermissionOverrides(
           membership.member.permissions as Record<string, boolean>,
         ),
-      }, ORG_PERMISSION_REFINEMENTS),
+      }, ORG_PERMISSION_REFINEMENTS), narrowing),
       orgWide: true,
       hostRole: hostRole ?? ORG_ROLE_PERMISSION_BASE[role],
     }
