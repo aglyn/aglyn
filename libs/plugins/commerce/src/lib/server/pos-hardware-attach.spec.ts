@@ -22,10 +22,10 @@
  * platform's own store (AGL-4038), through the real route with Firestore and
  * the sign-in pools faked:
  *
- * - a lookup by exact email shows the address in full; by a person's or a
- *   workspace's name, the address masked; a name search reads workspace
- *   rosters only, and never a store's own contacts on an email list; each is
- *   rate-limited and written to the audit log;
+ * - a lookup by exact email, a person's name or a workspace's name shows
+ *   the whole address (masked in the audit log only); a name search reads
+ *   workspace rosters only, and never a store's own contacts on an email
+ *   list; each is rate-limited and written to the audit log;
  * - attaching checks the account, the workspace and the store, moves a
  *   recorded sale into the buyer's workspace (or rides an open sale until it
  *   is paid), invites a buyer with no account once, and can be undone until a
@@ -267,26 +267,26 @@ describe('finding the buyer', () => {
     })
   })
 
-  it("by name: rosters only, the name must match, and the address is masked", async () => {
+  it("by name: rosters only, the name must match, and the whole address is shown", async () => {
     const result = await sale({ action: 'find', query: 'pat' })
     expect(result.body.kind).toBe('name')
-    expect(result.body.people.map((person: any) => [person.uid, person.email])).toEqual([['uid-pat', 'p***@example.com']])
+    expect(result.body.people.map((person: any) => [person.uid, person.email])).toEqual([['uid-pat', 'pat@example.com']])
     // Neither the list contact named Pat Lee, nor Jordan, whose address starts "pat".
     expect(JSON.stringify(result.body)).not.toMatch(/contact-1|uid-jordan|patio/)
   })
 
-  it("by a workspace's name: the workspace, its stores and its owner, masked", async () => {
+  it("by a workspace's name: the workspace, its stores and its owner, address in full", async () => {
     const result = await sale({ action: 'find', query: 'acme build' })
     expect(result.body.workspaces).toEqual([
       expect.objectContaining({
         orgId: 'org-pat',
         name: 'Acme Builders',
-        owner: { uid: 'uid-pat', name: 'Pat Lee', email: 'p***@example.com' },
+        owner: { uid: 'uid-pat', name: 'Pat Lee', email: 'pat@example.com' },
       }),
     ])
   })
 
-  it('is written to the audit log every time, with an address masked, and rate-limited', async () => {
+  it('is written to the audit log every time, the address masked there only, and rate-limited', async () => {
     await sale({ action: 'find', query: 'pat@example.com' })
     await sale({ action: 'find', query: 'acme' })
     expect(mockAudits.map((entry) => [entry.action, entry.actorUid, entry.after.kind, entry.after.query])).toEqual([
@@ -331,8 +331,8 @@ describe('attaching the buyer', () => {
     const result = await sale({ action: 'attach', orderId: id, buyer: { uid: 'uid-pat', orgId: 'org-pat' } })
     expect(result.status).toBe(200)
     expect(result.body.outcome).toBe('attached')
-    // The account's address is masked to the register user who attached it.
-    expect(result.body.order).toMatchObject({ id, attached: true, contactEmail: 'p***@example.com' })
+    // The account's whole address, as the lookup showed it.
+    expect(result.body.order).toMatchObject({ id, attached: true, contactEmail: 'pat@example.com' })
     expect(fakeDocs.has(`orgs/org-seller/hardwareOrders/${id}`)).toBe(false)
     expect(fakeDocs.get(`orgs/org-pat/hardwareOrders/${id}`)).toMatchObject({ orgId: 'org-pat', hostId: '' })
     expect(fakeDocs.get(`posHardwareSales/${id}`)?.['orgId']).toBe('org-pat')

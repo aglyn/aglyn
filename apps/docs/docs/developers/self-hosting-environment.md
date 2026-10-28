@@ -1207,12 +1207,16 @@ At that store's register, anyone who may sell there:
 - on a sale with a reader, selects **Attach buyer** and finds the buyer by their
   exact email address, their name or their workspace's name, then picks the
   workspace and, if they know it, the store. Each lookup is rate-limited and
-  written to the staff audit log, and shows only a name, a masked address and
-  each workspace's stores. Someone with no account is invited by email and gets
-  the reader in the workspace they create;
+  written to the staff audit log (the typed address masked there), and shows
+  only a name, the whole email address and each workspace's stores. Someone
+  with no account is invited by email and gets the reader in the workspace they
+  create;
 - may scan or type each reader's serial number, so the order is set up by itself
   when the buyer adds the reader, or add the reader to the buyer's store there
-  and then with its pairing code;
+  and then with its pairing code. A store with no card reader address yet takes
+  its address there too, with the buyer; it is saved as the store's reader
+  address, exactly as the store's **POS devices** card saves it, and a store
+  that already has one keeps it;
 - finds every reader sold at the kiosk, while the register was offline or to
   someone not yet attached under **To attach**.
 

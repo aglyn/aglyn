@@ -27,6 +27,17 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — card readers bought at an event
+
+- **[Your store's address at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —
+  when you buy a card reader from Aglyn at an event and your store has no address
+  for card readers yet, Aglyn's staff can enter it with you and add the reader to
+  your store there and then. It is saved to your store just as the **POS devices**
+  card saves it, and a store that already has an address keeps it. You can still
+  add it yourself later instead.
+- **The Hardware card** no longer notes that Stripe may stop selling the BBPOS
+  WisePOS E.
+
 ## October 2026 — narrowing per site is a permission setting
 
 - **[Follow the site role, or keep the permission](workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows)** —

@@ -231,21 +231,19 @@ describe('the catalog (AGL-4038)', () => {
   it('carries no price: every figure comes from the environment', () => {
     for (const sku of POS_HARDWARE_SKUS) {
       expect(Object.keys(sku).sort()).toEqual(
-        ['displayName', 'id', 'kind', 'stripeProductName', 'use', ...(sku.mayBeDiscontinued ? ['mayBeDiscontinued'] : [])].sort(),
+        ['displayName', 'id', 'kind', 'stripeProductName', 'use'].sort(),
       )
     }
   })
 
-  it('marks the WisePOS E, and only it, as one Stripe may stop selling', () => {
-    expect(POS_HARDWARE_SKUS.filter((sku) => sku.mayBeDiscontinued).map((sku) => sku.id)).toEqual(['bbpos-wisepos-e'])
+  it('offers the WisePOS E like any other reader, with no note about Stripe stopping its sale', () => {
     const config = parsePosHardwareConfig({
       ...ENV,
       [POS_HARDWARE_ENV.prices]: JSON.stringify({ 'bbpos-wisepos-e': 24_900, 'stripe-reader-t600': 32_900 }),
     }) as PosHardwareConfig
-    expect(posHardwareOffers(config).map((offer) => [offer.sku, offer.mayBeDiscontinued])).toEqual([
-      ['stripe-reader-t600', false],
-      ['bbpos-wisepos-e', true],
-    ])
+    const offers = posHardwareOffers(config)
+    expect(offers.map((offer) => offer.sku)).toEqual(['stripe-reader-t600', 'bbpos-wisepos-e'])
+    for (const offer of offers) expect(Object.keys(offer).sort()).toEqual(['kind', 'name', 'sku', 'unitCents', 'use'])
   })
 })
 

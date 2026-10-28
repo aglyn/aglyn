@@ -91,8 +91,8 @@ import PosHardwareCard from './pos-hardware-card.component'
 const OPEN_CATALOG = {
   available: true,
   offers: [
-    { sku: 'stripe-reader-s710', kind: 'reader', name: 'Stripe Reader S710', use: 'Handheld with its own 4G connection', unitCents: 13_000, mayBeDiscontinued: false },
-    { sku: 'stripe-reader-m2', kind: 'reader', name: 'Stripe Reader M2', use: 'Pairs by Bluetooth', unitCents: 7_670, mayBeDiscontinued: false },
+    { sku: 'stripe-reader-s710', kind: 'reader', name: 'Stripe Reader S710', use: 'Handheld with its own 4G connection', unitCents: 13_000 },
+    { sku: 'stripe-reader-m2', kind: 'reader', name: 'Stripe Reader M2', use: 'Pairs by Bluetooth', unitCents: 7_670 },
   ],
   shipping: [
     { method: 'standard', label: 'Standard shipping', cents: 1_000 },
@@ -183,21 +183,6 @@ describe('the Hardware card', () => {
     expect(screen.getByText('No hardware orders yet.')).toBeTruthy()
     expect(screen.getByText('Calculated at checkout')).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Check out' }) as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('notes a reader Stripe may stop selling, and only that one', async () => {
-    catalogAnswer = {
-      ...OPEN_CATALOG,
-      offers: [
-        ...OPEN_CATALOG.offers,
-        { sku: 'bbpos-wisepos-e', kind: 'reader', name: 'BBPOS WisePOS E', use: 'Countertop reader on Wi-Fi', unitCents: 32_370, mayBeDiscontinued: true },
-      ],
-    }
-    render(<PosHardwareCard hostId="host-1" canManagePos />)
-    await waitFor(() => expect(screen.getByText('BBPOS WisePOS E')).toBeTruthy())
-    expect(screen.getAllByText('Stripe may stop selling this reader.')).toHaveLength(1)
-    const wisepos = screen.getByText('BBPOS WisePOS E').parentElement as HTMLElement
-    expect(within(wisepos).getByText('Stripe may stop selling this reader.')).toBeTruthy()
   })
 
   it('shows the shop with Check out disabled and the reason to someone without the buy key (AGL-4047)', async () => {

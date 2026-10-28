@@ -142,8 +142,7 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 | The Stripe Reader Hub | Connects an S700, S710 or T600 to Ethernet and power |
 | A case for the S700/S710, and spare cables and chargers | Protect a handheld reader, or replace a lost cable or charger |
 
-The card shows only what is available to order, with its price. Stripe may stop
-selling the BBPOS WisePOS E, and the card says so beside it.
+The card shows only what is available to order, with its price.
 
 **Place an order**
 
@@ -206,8 +205,8 @@ At an event, Aglyn may sell you a reader in person. You pay at Aglyn's register,
 take the reader with you, and the order joins your workspace:
 
 - **If you have an account**, Aglyn's staff look you up by your email address,
-  your name or your workspace's name, and attach the reader to the workspace you
-  choose, and to a store when you pick one.
+  your name or your workspace's name, check your email address with you, and
+  attach the reader to the workspace you choose, and to a store when you pick one.
 - **If you don't have an account yet**, you get an email inviting you to create
   one with the same address. Once you create your workspace, the reader is in it.
   There is nothing to accept.
@@ -227,7 +226,9 @@ If Aglyn's staff took the reader's serial number when you bought it, the order
 moves to **Set up** by itself as soon as you add the reader. Otherwise, or for a
 Stripe Reader M2 you pair by Bluetooth, select **Mark set up** when it is done.
 Staff can also add the reader to your store for you at the event, by its pairing
-code, while you are there.
+code, while you are there. If your store has no address for card readers yet,
+they can enter it with you, and it is saved to your store as if you had added it
+on the **POS devices** card; a store that already has one keeps it.
 
 The order is in your purchase history on the **Hardware** card, under **Your
 orders**, even before buying online is open for your workspace.

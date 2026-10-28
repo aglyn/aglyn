@@ -113,13 +113,6 @@ export interface PosHardwareSku {
   displayName: string
   /** One line on what it is for. */
   use: string
-  /**
-   * Set when Stripe may stop selling the item. The shop still sells it while
-   * its price is configured, and the Hardware card says so beside it, so a
-   * merchant choosing between readers is not surprised later. Remove the
-   * item's price once Stripe stops selling it, as for any other item.
-   */
-  mayBeDiscontinued?: boolean
 }
 
 /**
@@ -155,7 +148,6 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     stripeProductName: 'BBPOS WisePOS E',
     displayName: 'BBPOS WisePOS E',
     use: 'Countertop reader on Wi-Fi',
-    mayBeDiscontinued: true,
   },
   {
     id: 'stripe-reader-m2',
@@ -421,8 +413,6 @@ export interface PosHardwareOffer {
   name: string
   use: string
   unitCents: number
-  /** Stripe may stop selling it ({@link PosHardwareSku.mayBeDiscontinued}). */
-  mayBeDiscontinued: boolean
 }
 
 /** The items on offer, readers first, in catalog order. */
@@ -437,7 +427,6 @@ export function posHardwareOffers(config: PosHardwareConfig): PosHardwareOffer[]
         name: sku.displayName,
         use: sku.use,
         unitCents: posHardwareUnitCents(cost, config.markupBps),
-        mayBeDiscontinued: sku.mayBeDiscontinued === true,
       },
     ]
   })
