@@ -113,6 +113,17 @@ access there. A custom role or a per-member override can then grant or deny any 
 them, and it applies on every site the member can reach. For someone added to one site
 only, set them for that site in its **Users** card: choose **Permissions** beside them.
 
+### Order permissions {#order-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Manage orders** (`commerce.orders`) | Fulfill, cancel and print orders, resend receipts, build draft orders, take returns, and record shipments from a file | Yes | Yes | No | No |
+| **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
+
+Like the site permissions, both start from the member's role on the site, so nobody's
+access changed when they became permissions, and a custom role, a per-member override
+or the site's **Permissions** dialog can grant or deny either one.
+
 ### Reservation permissions {#reservation-permissions}
 
 Two permissions decide who may work a site's stays:

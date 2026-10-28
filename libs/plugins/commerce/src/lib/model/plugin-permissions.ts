@@ -190,6 +190,9 @@ export function posPermissionRefusal(permission: PosPermission): string {
 /** The reservation keys. */
 export type ReservationPermission = 'commerce.reservations' | 'commerce.walkIns'
 
+/** Commerce's keys whose preset is the site role (AGL-4047). */
+export type CommerceSitePermission = ReservationPermission | 'commerce.orders' | 'commerce.giftCards'
+
 /** Who held reservations on a site before they were keys: Admin, Editor and Author. */
 export const RESERVATION_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
   admin: true,
@@ -200,6 +203,17 @@ export const RESERVATION_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boole
 
 /** The same, per workspace role: the answer with no site named. */
 const RESERVATION_ORG_ROLE_PRESET = { owner: true, admin: true, editor: true, viewer: false } as const
+
+/**
+ * Who worked a site's orders and gift cards before they were keys: the site's
+ * Admin and Editor (an Author edits the catalog and never touched an order).
+ */
+export const ORDERS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
+  admin: true,
+  editor: true,
+  author: false,
+  viewer: false,
+}
 
 /**
  * The reservation keys as commerce declares them into the org permission
@@ -229,7 +243,34 @@ export const COMMERCE_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[
     presetFromSiteRole: true,
     follows: 'commerce.reservations',
   },
+  {
+    key: 'commerce.orders',
+    label: 'Manage orders',
+    description:
+      'Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.giftCards',
+    label: 'Issue gift cards',
+    description: 'Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
 ]
+
+/** The refusal a door answers when a commerce site key is not held: names the permission. */
+export function commerceSitePermissionRefusal(key: CommerceSitePermission): string {
+  const label = COMMERCE_SITE_PERMISSIONS.find((entry) => entry.key === key)?.label ?? key
+  return `Your role does not include "${label}" — ask an organization admin`
+}
 
 /** One reservation key's label, for a refusal. */
 export function reservationPermissionLabel(permission: ReservationPermission): string {
@@ -238,5 +279,5 @@ export function reservationPermissionLabel(permission: ReservationPermission): s
 
 /** The refusal a reservation route answers when its key is not held; names the permission, never a role. */
 export function reservationPermissionRefusal(permission: ReservationPermission): string {
-  return `Your role does not include "${reservationPermissionLabel(permission)}" — ask an organization admin`
+  return commerceSitePermissionRefusal(permission)
 }

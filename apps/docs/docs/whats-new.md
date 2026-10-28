@@ -27,6 +27,13 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — orders and gift cards are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  working a store's orders and issuing gift cards now each have a permission,
+  **Manage orders** and **Issue gift cards**. A site's admins and editors keep them,
+  and a custom role or a per-member override can grant or deny either one.
+
 ## October 2026 — the site roles are permissions you can adjust
 
 - **[Site permissions](workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions)** —
