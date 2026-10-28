@@ -25,9 +25,15 @@ import { outreachStoppedEntry } from '../engine/enrollment-activity'
 import type { OutreachEnrollmentEvent } from '../engine/enrollment-state'
 import { isOutreachGatewayBlock, outreachGatewayBlockDetail } from '../engine/gateway-block'
 import { mergeOutreachInboundMessages, outreachInboundMessagesOf } from '../engine/manual-reply'
+import {
+  matchOutreachPossibleReply,
+  outreachPossibleReplyNote,
+  outreachPossibleReplyTitle,
+} from '../engine/possible-reply'
 import { effectiveOutreachWindow, postponeOutreachForAutoReply } from '../engine/schedule'
 import {
   decideOutreachThread,
+  outreachAutoReplyEvidence,
   type OutreachMessageClassification,
   type OutreachThreadDecision,
 } from '../engine/thread-classification'
@@ -108,6 +114,12 @@ import { outreachUnsubscribeMailbox } from './unsubscribe-link'
  * unsubscribe address; and messages from the people this mailbox is
  * writing to, in a thread of their own.
  *
+ * Then what is left of the new mail is read for POSSIBLE replies (AGL-4088,
+ * `engine/possible-reply`): a person writing to another of the
+ * organization's mailboxes, or a colleague at their company writing. Those
+ * stop nothing; each files the task "Possible reply from …" for a person to
+ * read.
+ *
  * Every write it makes is idempotent — the do-not-contact list keeps its
  * first entry, a topic opt-out keeps its first moment, a timeline entry is
  * filed once per message — and the messages it handled are marked AFTER
@@ -138,6 +150,10 @@ const MAILBOX_SYNC_WINDOW_REFRESH_MS = 60 * 60_000
 const ENROLLMENT_HANDLED_MAX = 100
 /** Addresses in one `from:` search. */
 const FROM_CHUNK = 15
+/** Messages one mailbox's run reads for a possible reply (AGL-4088). */
+const POSSIBLE_REPLY_READS = 60
+/** The headers a possible reply is judged by: who, what, and whether a machine sent it. */
+const POSSIBLE_REPLY_HEADERS = ['From', 'Subject', 'Auto-Submitted', 'X-Autoreply', 'X-Autorespond', 'Precedence']
 
 type Firestore = FirebaseFirestore.Firestore
 
@@ -154,6 +170,8 @@ export interface OutreachSyncReport {
   deliveries: number
   postponed: number
   paused: number
+  /** Messages filed as a possible reply for a person to read (AGL-4088). */
+  possibleReplies: number
 }
 
 interface SyncContext {
@@ -186,6 +204,7 @@ export async function runOutreachSyncJob(
     deliveries: 0,
     postponed: 0,
     paused: 0,
+    possibleReplies: 0,
   }
   const all = await firestore.collectionGroup(OUTREACH_COLLECTIONS.mailboxes).get()
   const byOrg = new Map<string, OutreachMailbox[]>()
@@ -200,10 +219,14 @@ export async function runOutreachSyncJob(
     const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
     const org = (orgSnapshot.exists ? orgSnapshot.data() : null) as Record<string, unknown> | null
     if (!org || (await deps.orgRefusal(orgId, org))) continue
+    // Every enrollment the organization is still watching, read once per
+    // run and only when a mailbox has mail left to match (AGL-4088).
+    let orgWatched: Promise<OutreachEnrollment[]> | null = null
+    const watchedInOrg = () => (orgWatched ??= readWatchedEnrollments(firestore, orgId, context.nowMs))
     for (const mailbox of mailboxes) {
       if (deps.now() >= context.deadlineMs) break
       try {
-        await syncMailbox(deps, firestore, { orgId, mailbox, report, nowMs: context.nowMs })
+        await syncMailbox(deps, firestore, { orgId, mailbox, report, nowMs: context.nowMs, watchedInOrg })
         report.mailboxes += 1
       } catch (error) {
         // One mailbox's failure is its own; the next mailbox is read. A grant
@@ -239,7 +262,13 @@ async function search(client: OutreachMailClient, criteria: OutreachMailSearch):
 async function syncMailbox(
   deps: OutreachRuntimeDeps,
   firestore: Firestore,
-  input: { orgId: string; mailbox: OutreachMailbox; report: OutreachSyncReport; nowMs: number },
+  input: {
+    orgId: string
+    mailbox: OutreachMailbox
+    report: OutreachSyncReport
+    nowMs: number
+    watchedInOrg: () => Promise<OutreachEnrollment[]>
+  },
 ): Promise<void> {
   const { orgId, mailbox, report, nowMs } = input
   const opened = await deps.openMailbox(mailbox.id)
@@ -363,6 +392,49 @@ async function syncMailbox(
     }
   }
 
+  // 4b. What is left of the new mail, read for a possible reply (AGL-4088):
+  //     the person writing to another of our mailboxes, or a colleague.
+  const leftover = inbound.filter(fresh).slice(0, POSSIBLE_REPLY_READS)
+  if (leftover.length) {
+    const enrollments = await input.watchedInOrg()
+    for (const stub of leftover) {
+      if (!fresh(stub)) continue
+      const metadata = await context.client.getMessage(stub.id, { metadataHeaders: POSSIBLE_REPLY_HEADERS })
+      const headers = Object.fromEntries(metadata.headers.map((entry) => [entry.name, entry.value]))
+      const header = (name: string) => outreachHeader({ headers }, name)
+      const fromHeader = header('From')
+      const sender = normalizeContactEmail(emailAddressOf(fromHeader))
+      const subject = header('Subject')
+      markHandled(stub.id)
+      if (!sender || context.selfAddresses.includes(sender)) continue
+      if (outreachAutoReplyEvidence({ headers, subject })) continue
+      const match = matchOutreachPossibleReply(sender, { mailboxId: mailbox.id, enrollments })
+      if (!match) continue
+      const enrolled = match.enrollment
+      try {
+        await fileOutreachTask(deps, {
+          orgId,
+          hostId: enrolled.hostId,
+          link: outreachEnrollmentLink(enrolled),
+          dedupeKey: `possible-reply:${stub.id}`,
+          title: outreachPossibleReplyTitle(fromHeader.replace(/<[^>]*>/, '').replace(/"/g, '').trim(), sender),
+          notes: outreachPossibleReplyNote({
+            reason: match.reason,
+            enrolledName: enrolled.contactName || enrolled.email,
+            receivedBy: mailbox.sendAs || mailbox.email,
+            excerpt: [subject && `Subject: ${subject}`, metadata.snippet].filter(Boolean).join('\n'),
+          }),
+          kind: 'email',
+          dueAtMs: nowMs,
+          assigneeUid: mailbox.connectedByUid,
+        })
+        report.possibleReplies += 1
+      } catch (error) {
+        console.error('[outreach] the possible-reply task could not be filed', error)
+      }
+    }
+  }
+
   // 5. What went through: a day of silence after a send is a delivery
   //    (AGL-3326), judged on the enrollments as this run left them.
   try {
@@ -392,6 +464,16 @@ async function syncMailbox(
       },
     })
   }
+}
+
+/** Every enrollment of an organization written to within the watch window. */
+async function readWatchedEnrollments(firestore: Firestore, orgId: string, nowMs: number): Promise<OutreachEnrollment[]> {
+  const snapshot = await outreachOrgCollection(firestore, orgId, 'enrollments')
+    .where('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS)
+    .get()
+  return snapshot.docs
+    .map((doc) => readStoredOutreachEnrollment(doc.id, doc.data()))
+    .filter((enrollment): enrollment is OutreachEnrollment => enrollment !== null)
 }
 
 /** The sequence an enrollment runs through, read once per run. */
