@@ -20,6 +20,13 @@ final class HostStatusTests: XCTestCase {
     XCTAssertEqual(HostStatus.describe(nil, now: now).label, "Draft")
   }
 
+  func testPreviewIsNotLive() {
+    let status = HostStatus.describe(["screens": ["a": 1], "preview": true], now: now)
+    XCTAssertEqual(status.kind, .preview)
+    XCTAssertEqual(status.label, "In preview")
+    XCTAssertEqual(HostStatus.describe(["screens": ["a": 1], "preview": true, "maintenance": true], now: now).kind, .maintenance)
+  }
+
   func testMaintenanceBeatsPublished() {
     XCTAssertEqual(HostStatus.describe(["screens": ["a": 1], "maintenance": true], now: now).kind, .maintenance)
   }

@@ -1,11 +1,11 @@
 package com.aglyn.core
 
 /** Whether a site is serving its pages, as the console's Sites list reports it. */
-enum class HostStatusKind { LIVE, DRAFT, MAINTENANCE, SUSPENDED }
+enum class HostStatusKind { LIVE, DRAFT, PREVIEW, MAINTENANCE, SUSPENDED }
 
 data class HostStatus(
   val kind: HostStatusKind,
-  /** `Live`, `Draft`, `Maintenance`, `Suspended`. */
+  /** `Live`, `Draft`, `In preview`, `Maintenance`, `Suspended`. */
   val label: String,
   /** Why, in one sentence. */
   val detail: String,
@@ -30,6 +30,10 @@ data class HostStatus(
       }
       if (host?.get("maintenance") == true) {
         return HostStatus(HostStatusKind.MAINTENANCE, "Maintenance", "Every path serves the maintenance page.", published)
+      }
+      // A site in preview (AGL-4086) is not live to its visitors whatever it has published.
+      if (host?.get("preview") == true) {
+        return HostStatus(HostStatusKind.PREVIEW, "In preview", "Only your team can see this site. Visitors see the 503 page or \"Coming soon\".", published)
       }
       if (published > 0) {
         return HostStatus(HostStatusKind.LIVE, "Live", "$published published page${if (published == 1) "" else "s"}.", published)

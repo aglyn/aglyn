@@ -10,6 +10,7 @@ func hostStatusTone(_ kind: HostStatus.Kind) -> AglynTone {
   switch kind {
   case .live: .success
   case .draft: .neutral
+  case .preview: .neutral
   case .maintenance: .warning
   case .suspended: .error
   }
