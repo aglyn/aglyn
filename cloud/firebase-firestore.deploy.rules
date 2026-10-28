@@ -5260,7 +5260,13 @@ allow update: if isStaff() ||
 'displayName', 'deletedAt', 'visibility',
 
 'description', 'readme', 'homepageUrl', 'repositoryUrl',
-'license', 'workspaceLockedAt']));
+'license', 'workspaceLockedAt',
+
+
+
+
+'official', 'starterKind', 'starterBase', 'starterFonts',
+'starterPages', 'starterMode', 'sourceStarterHostId']));
 allow delete: if isStaff() || listingManager();
 
 

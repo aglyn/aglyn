@@ -6169,6 +6169,14 @@ describe('pre-release hardening guards', () => {
       { takenDown: false },
       // A locked publisher cannot put itself back in browse (AGL-3365).
       { workspaceLockedAt: null },
+      // A site starter's picker order, facets and source key (AGL-4049).
+      { official: true },
+      { starterKind: 'restaurant' },
+      { starterBase: 'bootstrap' },
+      { starterFonts: 'oswald' },
+      { starterPages: 1 },
+      { starterMode: 'ai' },
+      { sourceStarterHostId: 'another-site' },
     ]) {
       await assertFails(
         updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),

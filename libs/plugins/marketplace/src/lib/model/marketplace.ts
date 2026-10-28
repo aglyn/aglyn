@@ -203,6 +203,30 @@ export interface MarketplaceListing {
   sourceComponentId?: string
   /** Source site for a `template` listing. */
   sourceHostId?: string
+  /**
+   * Source site for a `siteStarter` listing (AGL-4049): the one-listing-per-
+   * source key `publish-starter` looks up. Its own field, never `sourceHostId`:
+   * the template, layout and theme doors write that one and key on it with a
+   * `limit(1)`, so a shared key would cross a site's starter with its template.
+   */
+  sourceStarterHostId?: string
+  /**
+   * The platform published it (AGL-4049). Server-owned and ordering only: the
+   * starter picker lists these first. No door, price or checkout branches on
+   * it; the seed and staff write it, a publish never does.
+   */
+  official?: boolean
+  /**
+   * A site starter's facets (AGL-4049), stamped from its payload by
+   * `siteStarterFacetFields` so a starter search can match them. Server-owned:
+   * they describe the stored version, so a client rewrite would list a
+   * starter under a kind, theme or page count it does not create.
+   */
+  starterKind?: string | null
+  starterBase?: string | null
+  starterFonts?: string | null
+  starterPages?: number
+  starterMode?: 'base' | 'ai'
   /** Incremented by the install API; frozen from client writes. */
   installCount?: number
   /**

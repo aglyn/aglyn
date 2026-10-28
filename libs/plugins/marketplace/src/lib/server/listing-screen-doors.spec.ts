@@ -47,6 +47,7 @@ describe('every publish door screens its submission (AGL-3365)', () => {
       'publish-email-template.ts',
       'publish-layout.ts',
       'publish-plugin.ts',
+      'publish-starter.ts',
       'publish-template.ts',
       'publish-theme.ts',
       'publish.ts',

@@ -51,6 +51,22 @@ describe('site starter source (AGL-4049)', () => {
     expect(resolveSiteStarterSource()).toBe(first)
   })
 
+  it('takes a source that counts installs, and one that does not', async () => {
+    const counted: string[] = []
+    const counting: PluginSiteStarterSource = {
+      ...source(),
+      installed: async (choice, _viewer, site) => {
+        counted.push(`${choice.listingId}:${site.hostId}`)
+      },
+    }
+    registerPluginSiteStarterSource(counting, { pluginId: 'starters' })
+    await resolveSiteStarterSource()?.installed?.({ listingId: 'l1' }, { orgId: 'o1', uid: 'u1' }, { hostId: 'h1' })
+    expect(counted).toEqual(['l1:h1'])
+
+    registerPluginSiteStarterSource(source(), { pluginId: 'starters' })
+    expect(resolveSiteStarterSource()?.installed).toBeUndefined()
+  })
+
   it('lets the same plugin register again, replacing itself', () => {
     registerPluginSiteStarterSource(source(), { pluginId: 'starters' })
     const again = source()

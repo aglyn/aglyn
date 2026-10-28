@@ -48,7 +48,7 @@ function* sourceFiles(dir: string): Generator<string> {
 
 /** Every publish route `publishPreconditionRefusal` gates. */
 const PUBLISH_ROUTE =
-  /['"`]\/api\/marketplace\/publish(?:-(?:plugin|template|theme|layout|email-template|email-starter|dataset-schema))?['"`?]/
+  /['"`]\/api\/marketplace\/publish(?:-(?:plugin|template|theme|layout|email-template|email-starter|dataset-schema|starter))?['"`?]/
 
 describe('marketplace publishing from the console (AGL-3407)', () => {
   it('goes through the publish zone, never a request of its own', () => {
@@ -66,6 +66,8 @@ describe('marketplace publishing from the console (AGL-3407)', () => {
     expect(
       PUBLISH_ROUTE.test("'/api/marketplace/publish-template',"),
     ).toBe(true)
+    // A whole site as a site starter (AGL-4049).
+    expect(PUBLISH_ROUTE.test("'/api/marketplace/publish-starter',")).toBe(true)
     // Installing is not publishing, and no agreement gates it.
     expect(PUBLISH_ROUTE.test("'/api/marketplace/install-template',")).toBe(false)
   })
