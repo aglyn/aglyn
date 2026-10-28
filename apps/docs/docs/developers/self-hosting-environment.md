@@ -1211,6 +1211,15 @@ else it sells; none of the shop's figures above are needed.
 
 At that store's register, anyone who may sell there:
 
+- has the buyer accept the terms of sale before they pay (your published Terms,
+  Sections 4.26–4.32, summed up with a link): **Show on display** puts them on the
+  register's customer display, and **Accept on this tablet** shows them on the
+  register for the buyer to accept. Each acceptance is recorded on the sale and its
+  hardware order with the Terms version, the time, the screen, the register user and
+  the device's address and browser. Every receipt of the sale prints which terms it
+  is made under, and **Print the booth sign** opens a sign saying the same, for when
+  no screen can be used;
+
 - on a sale with a reader, selects **Attach buyer** and finds the buyer by their
   exact email address, their name or their workspace's name, then picks the
   workspace and, if they know it, the store. Each lookup is rate-limited and

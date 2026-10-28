@@ -34,6 +34,13 @@ for the how-to.
   rider takes to read it, until you select **Close display** beside the customer or
   the rider is done. Once closed, the display can't sign under it again.
 
+## October 2026 — accept the terms of sale for a reader bought in person
+
+- **[The terms of sale, accepted at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —
+  when you buy a card reader from Aglyn in person, you accept its terms of sale on
+  the register's customer display or the tablet the staff hand you, before you pay.
+  Every receipt for it says which terms the sale is made under.
+
 ## October 2026 — return a card reader order shipped to you
 
 - **[Request a return of an order shipped to you](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —

@@ -16,6 +16,7 @@
  */
 
 import { apportionCents, type HostOrder } from './commerce-orders'
+import { withPosHardwareReceiptNotice } from './pos-hardware-terms'
 import { orderPayments } from './commerce-pos'
 import type { PrintReport } from './commerce-printers'
 import { receiptDataFromOrder } from './commerce-receipt'
@@ -916,7 +917,11 @@ export function buildPosReceipt(input: {
     tenders: gift ? [] : (data.tenders ?? []),
     changeCents: money(data.changeCents),
     refundedCents: money(data.refundedCents),
-    ...(input.store.footer ? { footer: input.store.footer } : {}),
+    // A sale of card reader hardware prints the terms it is sold under
+    // (AGL-4038, Terms 4.28), after the store's own footer.
+    ...(withPosHardwareReceiptNotice(input.store.footer, order as Record<string, unknown>)
+      ? { footer: withPosHardwareReceiptNotice(input.store.footer, order as Record<string, unknown>) }
+      : {}),
     ...(input.store.returnPolicy ? { returnPolicy: input.store.returnPolicy } : {}),
     gift,
   }

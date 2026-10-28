@@ -169,6 +169,7 @@ export async function recordInPersonPosHardwareSale(
       text(payments.find((payment) => payment.checkoutSessionId)?.checkoutSessionId) ?? text(order.checkoutSessionId),
     receiptEmail: text(order.customerEmail)?.toLowerCase() ?? null,
     buyer: order.hardwareBuyer,
+    termsAcceptance: order.hardwareTermsAcceptance,
     serials: (Array.isArray(order.hardwareSerials) ? order.hardwareSerials : [])
       .map(normalizePosHardwareSerial)
       .filter(Boolean),

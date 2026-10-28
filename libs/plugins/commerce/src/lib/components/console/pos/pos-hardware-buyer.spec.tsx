@@ -37,6 +37,11 @@ jest.mock('./pos-hardware-sale-api', () => ({
   posHardwareFindBuyer: (...args: unknown[]) => mockFind(...args),
   posHardwareAttach: (...args: unknown[]) => mockAttach(...args),
   posHardwareToAttach: (...args: unknown[]) => mockToAttach(...args),
+  // The terms of sale (AGL-4038): `pos-hardware-sale-terms.spec.tsx` covers them.
+  posHardwareTermsStatus: async () => ({ acceptance: null }),
+  posHardwareTerms: async () => ({ version: 'v20', sections: '4.26–4.32', url: 'https://example.com/legal/terms', summary: [] }),
+  posHardwareTermsOnDisplay: async () => ({ ok: true }),
+  posHardwareAcceptTerms: async () => ({ ok: true, acceptance: { method: 'tablet', atMs: 1 } }),
 }))
 
 import PosHardwareBuyer from './pos-hardware-buyer.component'

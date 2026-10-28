@@ -38,6 +38,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react'
 import { formatPosHardwareCents } from '../../../model/pos-hardware'
 import { PosHardwareRequestError } from './pos-hardware-api'
+import { PosHardwareSaleTerms } from './pos-hardware-sale-terms.component'
 import {
   posHardwareAttach,
   posHardwareFindBuyer,
@@ -542,6 +543,10 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
         >
           {attachedHere?.message ?? 'This sale has a card reader. Attach it to the buyer’s workspace.'}
         </Alert>
+      ) : null}
+      {saleOrderId ? (
+        // The terms of sale, accepted before paying (AGL-4038, Terms 4.28).
+        <PosHardwareSaleTerms user={user} hostId={hostId} saleOrderId={saleOrderId} notify={notify} />
       ) : null}
       {saleOrderId ? (
         <SaleReaders

@@ -37,6 +37,7 @@
  *=========================================*/
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import type { PosHardwareTermsAcceptance } from './pos-hardware-terms'
 
 /** The register's currency, and so the shop's: US dollars. */
 export const POS_HARDWARE_CURRENCY = 'usd'
@@ -865,6 +866,12 @@ export interface PosHardwareOrder {
   paidTo?: PosHardwarePaidTo
   /** Whose an in-person order is, or that staff have still to say. */
   attachment?: PosHardwareAttachment
+  /**
+   * How the buyer of an in-person order agreed to the terms of sale
+   * (AGL-4038): copied from the register sale, or the receipt-and-sign
+   * notice when they did not accept electronically.
+   */
+  termsAcceptance?: PosHardwareTermsAcceptance
   /** Each reader of an in-person order, with its serial when one was taken. */
   units?: PosHardwareUnit[]
   /** The units' serial numbers, for finding the order when a reader is registered. */

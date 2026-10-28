@@ -54,6 +54,12 @@ const LOOKUP_WINDOW_MS = 10 * 60 * 1000
  *   serials  the serial numbers of the sale's readers, scanned or typed at
  *            the sale, so the order sets itself up when the buyer registers
  *            them (`pos-hardware-readers.ts`).
+ *   terms    the terms of sale the buyer accepts before paying (Terms
+ *            4.26–4.32 in short, with the link), and `terms-status` whether
+ *            they have, for the register waiting on its display.
+ *   accept-terms  the buyer accepted on the register tablet handed to them;
+ *            `terms-on-display` notes who is putting them on the customer
+ *            display, before the register shows them there (`pos-hardware-terms.ts`).
  *   register-at-booth  register a reader to the buyer's chosen store by the
  *            code it shows, while they are there, with the store's address
  *            when it has no reader Location yet (`address`; refused with
@@ -117,6 +123,38 @@ export const posHardwareSaleHandler: PluginApiHandler = async (req, res) => {
           ],
         })
         return res.status(200).json(found)
+      }
+      case 'terms':
+      case 'terms-status':
+      case 'terms-on-display':
+      case 'accept-terms': {
+        const terms = await import('./pos-hardware-terms')
+        const registerOrderId = String(body['registerOrderId'] ?? '')
+        try {
+          if (action === 'terms') return res.status(200).json(terms.posHardwareTermsView())
+          if (action === 'terms-status') {
+            return res.status(200).json(await terms.posHardwareTermsStatus(config, registerOrderId))
+          }
+          if (action === 'terms-on-display') {
+            await terms.requestPosHardwareTermsOnDisplay({ config, registerOrderId, uid: staff.uid })
+            return res.status(200).json({ ok: true })
+          }
+          const device = terms.posHardwareTermsDevice(req.headers as Record<string, unknown>)
+          const acceptance = await terms.recordPosHardwareTermsAcceptance({
+            config,
+            registerOrderId,
+            method: 'tablet',
+            staffUid: staff.uid,
+            ...device,
+          })
+          await audit(staff, 'pos-hardware-terms-accepted', { method: acceptance.method, version: acceptance.version, registerOrderId }, null)
+          return res.status(200).json({ ok: true, acceptance })
+        } catch (error) {
+          if (error instanceof terms.PosHardwareTermsRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
       }
       case 'serials':
       case 'register-at-booth': {
