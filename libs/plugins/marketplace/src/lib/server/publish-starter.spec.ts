@@ -457,12 +457,12 @@ describe('what a starter publish refuses (AGL-4049)', () => {
     expect(res.statusCode).toBe(401)
   })
 
-  it('refuses a role that may not publish, and a site role that is neither admin nor editor', async () => {
+  it('refuses a role that may not publish, and a member without "Publish site content" on the site', async () => {
     state.canPublish = false
     await refused({}, 403, 'Your organization role does not allow publishing to the marketplace')
     state.canPublish = true
     state.docs.set('hosts/h1', { ...state.docs.get('hosts/h1'), memberRoles: { u1: 'viewer' } })
-    await refused({}, 403, 'Not a site admin or editor')
+    await refused({}, 403, 'Your role does not include "Publish site content" — ask an organization admin')
   })
 
   it('refuses without a current publisher agreement, and a priced starter without payouts', async () => {

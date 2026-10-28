@@ -192,7 +192,9 @@ export function planSiteStarterTheme(input: {
   listing: { listingId: string; version: string | number; displayName: string }
   newId: () => string
 }): SiteStarterThemePlan {
-  const { theme, presets, listing, newId } = input
+  // `source`, not `listing`: this is the starter's id/version/name, not the
+  // listing document the listing write-deny guard partitions (AGL-1361).
+  const { theme, presets, listing: source, newId } = input
   const plan = (action: ThemeLibraryAction) => {
     const planned = planThemeLibraryAction({ host: {}, entries: {}, newId, action })
     return planned.ok === false ? null : planned
@@ -201,12 +203,12 @@ export function planSiteStarterTheme(input: {
   if (theme?.kind === 'full' && isRecord(theme.theme)) {
     const planned = plan({
       action: 'install',
-      listingId: listing.listingId,
-      name: `${listing.displayName} theme`,
+      listingId: source.listingId,
+      name: `${source.displayName} theme`,
       theme: themeArtifactContent(theme.theme),
       installedFrom: {
-        listingId: listing.listingId,
-        version: listing.version,
+        listingId: source.listingId,
+        version: source.version,
         artifactType: 'siteStarter',
       },
     })

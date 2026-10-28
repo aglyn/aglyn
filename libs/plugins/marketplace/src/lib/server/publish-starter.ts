@@ -55,6 +55,7 @@ import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
 import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 
 /** The accents a built-in starter theme's brand may name. */
 const BRAND_KEYS = ['primary', 'secondary', 'tertiary'] as const
@@ -194,9 +195,11 @@ export const publishStarterHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // Publishing the site as a starter publishes its content: "Publish site
+    // content" (`site.publish`, AGL-4047), whose preset is the site's admin
+    // and editor, read as the rules read it.
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
+      return res.status(403).json({ error: siteKeyRefusal('site.publish') })
     }
 
     // Plan gate rides the owning org's doc (AGL-238).
