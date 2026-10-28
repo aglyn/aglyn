@@ -27,6 +27,13 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — a waiver stays on the customer display until you close it
+
+- **[No timer on the customer display](commerce-and-bookings/commerce/waivers.md#on-the-customer-display)** —
+  a waiver you put on the customer display at check-in stays there however long the
+  rider takes to read it, until you select **Close display** beside the customer or
+  the rider is done. Once closed, the display can't sign under it again.
+
 ## October 2026 — card readers bought at an event
 
 - **[Your store's address at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —

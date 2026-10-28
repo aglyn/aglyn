@@ -158,10 +158,12 @@ module.exports = withAglyn({
     // to tracing, for the reason SHARP_NATIVE_LIBRARIES is: a file the trace
     // misses is a route that fails only once deployed.
     //
-    // Plugin routes draw images too (AGL-4048): commerce renders a card
-    // reader's start-up screen with `sharp`, loaded only on that route's
-    // first call, so the plugin route needs libvips beside the WASM.
-    '/api/[...pluginApi]': [...FONT_INSTALLER_WASM, ...SHARP_NATIVE_LIBRARIES],
+    // NOT libvips (AGL-4048): a plugin route that draws with `sharp` (a card
+    // reader's start-up screen) is served by the plugins' image function
+    // below, so the plugin dispatcher's cold start does not carry 17 MB for
+    // it. Every other door asks that function.
+    '/api/[...pluginApi]': FONT_INSTALLER_WASM,
+    '/api/plugin-images/[...pluginApi]': SHARP_NATIVE_LIBRARIES,
     '/api/health': SHARP_NATIVE_LIBRARIES,
     '/api/media/upload': SHARP_NATIVE_LIBRARIES,
     '/api/media/replace': SHARP_NATIVE_LIBRARIES,

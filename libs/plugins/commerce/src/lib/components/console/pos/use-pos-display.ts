@@ -125,6 +125,18 @@ export function usePosDisplay(
           return false
         }
       },
+      // Staff closed the plugin's screen (AGL-4042): the display shows the
+      // register's own screen again, unless the register already moved on.
+      close: async (pluginId) => {
+        const signedIn = userRef.current
+        if (!signedIn) return false
+        try {
+          await posDisplayCall(signedIn, { action: 'close-screen', hostId, registerId, pluginId })
+          return true
+        } catch {
+          return false
+        }
+      },
     })
   }, [connected, uid, hostId, registerId])
 

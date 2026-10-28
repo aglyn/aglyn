@@ -16,7 +16,10 @@
  */
 
 import {
+  isPluginImagesRoute,
+  isPluginMachineRoute,
   listPluginApiRoutes,
+  PLUGIN_IMAGES_API_PREFIX,
   registerPluginApiRoute,
   resolvePluginApiRoute,
   unregisterPluginApiRoute,
@@ -43,5 +46,18 @@ describe('plugin API registry', () => {
     registerPluginApiRoute('campaigns/send', second)
     expect(resolvePluginApiRoute('campaigns/send')).toBe(second)
     expect(resolvePluginApiRoute('nope/missing')).toBeUndefined()
+  })
+
+  it('answers a route that draws images only when it is also a machine’s door (AGL-4048)', () => {
+    registerPluginApiRoute('acme/draw', jest.fn(), { machine: true, images: true })
+    // Served by a function with no member gates, so a member's door never is.
+    registerPluginApiRoute('acme/member-draw', jest.fn(), { images: true })
+    registerPluginApiRoute('acme/sweep', jest.fn(), { machine: true })
+    expect(isPluginImagesRoute('acme/draw')).toBe(true)
+    expect(isPluginMachineRoute('acme/draw')).toBe(true)
+    expect(isPluginImagesRoute('acme/member-draw')).toBe(false)
+    expect(isPluginImagesRoute('acme/sweep')).toBe(false)
+    expect(isPluginImagesRoute('nope/missing')).toBe(false)
+    expect(PLUGIN_IMAGES_API_PREFIX).toBe('plugin-images')
   })
 })

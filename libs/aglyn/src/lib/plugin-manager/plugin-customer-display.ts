@@ -43,6 +43,12 @@
  * parameters are capped and plain, because they ride the display's state and
  * its address bar; they must never carry a customer's details.
  *
+ * A screen has no timer here (AGL-4042): it stays until the register shows
+ * something else, the plugin takes it off ({@link CustomerDisplayHost.close}),
+ * or its page sends the display back. Anything a screen's page was handed
+ * that must stop working is the plugin's to revoke, on its own server, when
+ * the screen closes.
+ *
  * Client-only, React-free, and reached by its own subpath, never the barrel:
  * a published page has no use for it.
  */
@@ -56,9 +62,6 @@ export interface CustomerDisplayScreen {
   /** Short plain values the page reads from its query string. Never a customer's details. */
   params: Record<string, string>
 }
-
-/** How long a screen a register put on its display stays worth opening. */
-export const CUSTOMER_DISPLAY_SCREEN_TTL_MS = 30 * 60 * 1000
 
 /** The query key a screen's page reads the display's own address from. */
 export const CUSTOMER_DISPLAY_RETURN_PARAM = 'return'
@@ -125,6 +128,15 @@ export function customerDisplayReturnPath(search: string): string | null {
 export interface CustomerDisplayHost {
   /** Puts a plugin's screen on the display; `false` when it could not. */
   show(screen: CustomerDisplayScreen): Promise<boolean>
+  /**
+   * Takes this plugin's screen off the display, when it is the one the
+   * register last put there, so the display shows the register's own screen
+   * again; `false` when it could not. A screen of another plugin, or one the
+   * register already replaced, is left alone (and answers `true`: this
+   * plugin's screen is not showing). A display already on the plugin's page
+   * goes back when that page learns, from its own server, that it closed.
+   */
+  close?(pluginId: string): Promise<boolean>
 }
 
 interface HostRegistry {

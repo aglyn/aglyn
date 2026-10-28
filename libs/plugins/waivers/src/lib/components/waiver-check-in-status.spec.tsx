@@ -123,12 +123,26 @@ describe('the waiver at check-in', () => {
     expect(screen.queryByRole('button', { name: 'Find by name' })).toBeNull()
   })
 
-  it('offers the customer display only while the register has one, and puts the signing on it (AGL-4042)', async () => {
-    request.mockImplementation(async (route: string) =>
-      route === 'waivers/display-grant'
-        ? { grant: 'grant-1', expiresAtMs: 1 }
-        : { signed: false, coveredNames: [], label: 'Waiver needed' },
+  const GRANT_ID = 'a'.repeat(32)
+  /** Every request, answered as the waivers routes would; the grant is open until closed. */
+  function routes(options: { open?: () => boolean } = {}) {
+    request.mockImplementation(async (route: string, init?: { body?: Record<string, unknown> }) => {
+      if (route !== 'waivers/display-grant') return { signed: false, coveredNames: [], label: 'Waiver needed' }
+      if (init?.body?.['action'] === 'state') return { open: options.open ? options.open() : true }
+      if (init?.body?.['action'] === 'close') return { closed: true }
+      return { grant: 'grant-1', grantId: GRANT_ID }
+    })
+  }
+  const grantCalls = (action: string) =>
+    request.mock.calls.filter(
+      ([route, init]) => route === 'waivers/display-grant' && (init?.body?.action ?? 'open') === action,
     )
+
+  beforeEach(() => window.sessionStorage.clear())
+  afterEach(() => jest.useRealTimers())
+
+  it('offers the customer display only while the register has one, and puts the signing on it (AGL-4042)', async () => {
+    routes()
     await settled(PROPS)
     expect(screen.queryByRole('button', { name: 'Customer display' })).toBeNull()
     const show = jest.fn(async () => true)
@@ -143,15 +157,68 @@ describe('the waiver at check-in', () => {
     expect(request).toHaveBeenCalledWith('waivers/display-grant', { body: { hostId: 'host-1' } })
     // A grant and the site, never the customer's name or email.
     expect(show).toHaveBeenCalledWith({ pluginId: 'waivers', path: '/display-sign', params: { host: 'host-1', grant: 'grant-1' } })
-    expect(screen.getByRole('button', { name: 'On the customer display' })).toBeTruthy()
+    expect(screen.getByText('On the customer display')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close display' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Customer display' })).toBeNull()
+    // The display leaving the page does not close the grant: staff still can.
     await act(async () => withdraw())
-    expect(screen.queryByRole('button', { name: /customer display/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Close display' })).toBeTruthy()
   })
 
-  it('says so when the display does not answer', async () => {
-    request.mockImplementation(async (route: string) =>
-      route === 'waivers/display-grant' ? { grant: 'grant-1' } : { signed: false, coveredNames: [], label: 'Waiver needed' },
-    )
+  it('stays on the display until staff close it: Close display revokes the grant and takes the screen off (AGL-4042)', async () => {
+    routes()
+    const close = jest.fn(async () => true)
+    const withdraw = registerCustomerDisplayHost({ show: async () => true, close })
+    await settled(PROPS)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Customer display' }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Close display' }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    expect(grantCalls('close').map(([, init]) => init.body)).toEqual([
+      { hostId: 'host-1', action: 'close', grantId: GRANT_ID },
+    ])
+    expect(close).toHaveBeenCalledWith('waivers')
+    expect(screen.queryByRole('button', { name: 'Close display' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Customer display' })).toBeTruthy()
+    withdraw()
+  })
+
+  it('lets go once the display closes the grant itself, and remembers an open one across a reload', async () => {
+    jest.useFakeTimers()
+    let open = true
+    routes({ open: () => open })
+    const withdraw = registerCustomerDisplayHost({ show: async () => true })
+    await act(async () => {
+      render(<WaiverCheckInStatus {...PROPS} />)
+      await jest.advanceTimersByTimeAsync(10)
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Customer display' }))
+      await jest.advanceTimersByTimeAsync(10)
+    })
+    // Forty minutes later it is still open, and still asked about.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(40 * 60 * 1000)
+    })
+    expect(screen.getByRole('button', { name: 'Close display' })).toBeTruthy()
+    expect(grantCalls('state').length).toBeGreaterThan(100)
+    // A reload of the register still offers Close display for it.
+    expect(window.sessionStorage.getItem('aglyn.waivers.displayGrant:host-1:jordan@example.com')).toBe(GRANT_ID)
+    open = false
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5_000)
+    })
+    expect(screen.queryByRole('button', { name: 'Close display' })).toBeNull()
+    expect(window.sessionStorage.getItem('aglyn.waivers.displayGrant:host-1:jordan@example.com')).toBeNull()
+    withdraw()
+  })
+
+  it('says so when the display does not answer, and leaves no grant open', async () => {
+    routes()
     const withdraw = registerCustomerDisplayHost({ show: async () => false })
     await settled(PROPS)
     await act(async () => {
@@ -159,6 +226,8 @@ describe('the waiver at check-in', () => {
       await new Promise((resolve) => setTimeout(resolve, 10))
     })
     expect(screen.getByText(/customer display didn’t answer/)).toBeTruthy()
+    expect(grantCalls('close')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Close display' })).toBeNull()
     withdraw()
   })
 })

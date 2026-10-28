@@ -133,7 +133,7 @@ export interface PlatformSplashDoc {
 
 const firestore = () => firebaseAdmin.app().firestore()
 
-function terminalConfigRef(hostId: string) {
+export function terminalConfigRef(hostId: string) {
   return firestore().collection('hosts').doc(hostId).collection('terminal').doc('config')
 }
 
@@ -304,7 +304,7 @@ export function workspaceLogoValue(org: Record<string, any> | null, whiteLabel: 
   return brand || cleanString(org?.['logoUrl']) || null
 }
 
-type SplashSource =
+export type SplashSource =
   | { mode: 'platform'; doc: PlatformSplashDoc }
   | { mode: 'logo' | 'artwork'; located: LocatedSource }
 
@@ -453,6 +453,48 @@ async function uploadSplashFile(
   return String(body.id)
 }
 
+/**
+ * Draws each reader family's screen from the plan's source and uploads it to
+ * Stripe: the image work, which needs `sharp`. Runs in the images function
+ * on Vercel (`pos-reader-splash-images-route.ts`), and in any process off it.
+ */
+export async function drawAndUploadPosReaderSplash(
+  hostId: string,
+  source: SplashSource,
+): Promise<Record<PosReaderSplashFamilyId, string>> {
+  const screens = await drawScreens(source)
+  const fileIds = {} as Record<PosReaderSplashFamilyId, string>
+  for (const family of POS_READER_SPLASH_FAMILIES) {
+    fileIds[family.id] = await uploadSplashFile(hostId, family, screens[family.id])
+  }
+  return fileIds
+}
+
+/**
+ * Each family's Stripe file for the plan (AGL-4048): drawn here where this
+ * process can draw, else by the images function, which draws the plan with
+ * the same key. A refusal meant for the store comes back as its own problem.
+ */
+async function posReaderSplashFileIds(
+  hostId: string,
+  key: string,
+  source: SplashSource,
+): Promise<Record<PosReaderSplashFamilyId, string>> {
+  const images = await import('./pos-reader-splash-images')
+  const origin = images.posReaderSplashImagesOrigin()
+  if (!origin) return drawAndUploadPosReaderSplash(hostId, source)
+  try {
+    const answer = await images.requestPosReaderSplashImages<{ fileIds: Record<PosReaderSplashFamilyId, string> }>(
+      origin,
+      { op: 'draw', hostId, key },
+    )
+    return answer.fileIds
+  } catch (error) {
+    if (error instanceof images.PosReaderSplashImagesRefusal) throw new PosReaderSplashRenderError(error.message)
+    throw error
+  }
+}
+
 /** The org that owns the site, with its id on it (`planPosReaderSplash` reads it). */
 export async function ownerOrgOf(hostId: string): Promise<Record<string, any> | null> {
   const owner = await getOrgForHost(hostId).catch(() => null)
@@ -516,10 +558,9 @@ export async function applyPosReaderSplash(
       // An empty value unsets the device's screen on this configuration.
       for (const deviceType of POS_READER_SPLASH_DEVICE_TYPES) params[deviceType] = ''
     } else {
-      const screens = await drawScreens(plan.source)
+      const fileIds = await posReaderSplashFileIds(hostId, plan.key, plan.source)
       for (const family of POS_READER_SPLASH_FAMILIES) {
-        const fileId = await uploadSplashFile(hostId, family, screens[family.id])
-        for (const deviceType of family.deviceTypes) params[`${deviceType}[splashscreen]`] = fileId
+        for (const deviceType of family.deviceTypes) params[`${deviceType}[splashscreen]`] = fileIds[family.id]
       }
     }
     const saved = await savePosReaderConfiguration(hostId, params, `splash:${digest(plan.key).slice(0, 24)}`)

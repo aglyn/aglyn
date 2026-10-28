@@ -551,13 +551,6 @@ export interface PosDisplayScreen {
   params: Record<string, string>
 }
 
-/**
- * A `screen` state older than this reads as idle: core's
- * `CUSTOMER_DISPLAY_SCREEN_TTL_MS`, the life of whatever the screen's page
- * was handed, so a display paired later never opens a stale one.
- */
-export const POS_DISPLAY_SCREEN_MS = 30 * 60 * 1000
-
 /** Most lines a display state carries; a longer basket shows its newest. */
 export const POS_DISPLAY_MAX_LINES = 60
 
@@ -736,9 +729,6 @@ export function posDisplayPublicState(
   if (!state) return { mode: 'idle', updatedAtMs: nowMs, answered: false }
   const { response, ...rest } = state
   if (rest.mode === 'thanks' && nowMs - rest.updatedAtMs > POS_DISPLAY_THANKS_MS) {
-    return { mode: 'idle', updatedAtMs: rest.updatedAtMs, answered: false }
-  }
-  if (rest.mode === 'screen' && nowMs - rest.updatedAtMs > POS_DISPLAY_SCREEN_MS) {
     return { mode: 'idle', updatedAtMs: rest.updatedAtMs, answered: false }
   }
   return {
