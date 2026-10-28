@@ -116,10 +116,11 @@ function useCustomerDisplay() {
 /**
  * A customer's waiver at check-in (AGL-4042): "Waiver signed", "Signed for
  * 2 of 3 riders" or "Waiver needed", matched by email first and, when the
- * email matches nothing, by name and date of birth together. Check-in knows
- * no date of birth, so a rider with no email match reads "Waiver not
- * matched — check by name", and Find by name asks for one and opens the
- * signatures search on the name. Sign waiver opens the signing
+ * email matches nothing, by name and date of birth together: the birth date
+ * the site's CRM record of the customer keeps, when the register names them
+ * by their contact (AGL-4042). A rider with no email match and no birth date
+ * on file reads "Waiver not matched — check by name", and Find by name asks
+ * for one and opens the signatures search on the name. Sign waiver opens the signing
  * form on this device, as at the window. When the register has a customer
  * display connected, Customer display puts the signing on it instead,
  * through core's customer display seam. It stays there until it is closed,
@@ -168,7 +169,10 @@ export function WaiverCheckInStatus(props: PosCheckInZoneProps) {
       query: {
         hostId,
         dayKey,
-        ...(email ? { email } : contactId ? { contactId } : {}),
+        ...(email ? { email } : {}),
+        // The CRM contact too (AGL-4042): with no email match, the route
+        // matches by the name and birth date the site keeps on it.
+        ...(contactId ? { contactId } : {}),
         // Matched by name only together with a date of birth; without one,
         // the route answers "not matched" with the name to search by.
         ...(name ? { name } : {}),

@@ -193,6 +193,11 @@ their waiver. Capital letters and extra spaces in the name don't matter; the spe
 and the date of birth must be the same. A name on its own is never a match, because
 two riders can share one.
 
+When the customer is one of your [contacts](../../content-and-data/crm/contact-record.md)
+and their record on this site has a **Birthdate**, that birth date is used, with
+their name, so you don't have to ask. A birth date another of your sites keeps is
+never used.
+
 When a customer shows **Waiver not matched — check by name**, select **Find by name**.
 Ask the rider their date of birth, enter it beside their name and select **Check**:
 it says whether a signed waiver covers them today. Below it, the signatures search
