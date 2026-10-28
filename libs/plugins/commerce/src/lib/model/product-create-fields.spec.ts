@@ -33,8 +33,12 @@ import { pluginHostResource } from '@aglyn/aglyn/plugin-manager/plugin-host-reso
  */
 const product = pluginHostResource('product')
 
-/** Fields a create never takes from the client: the route stamps them. */
-const STAMPED = ['deletedAt']
+/**
+ * Fields a create never takes from the client: the route stamps them, or a
+ * server writer does (`sample`, the AI guided start's mark, AGL-4065, which
+ * the merchant's own save clears).
+ */
+const STAMPED = ['deletedAt', 'sample']
 
 /** Every field `HostProduct` declares, read from its interface in `commerce.ts`. */
 function hostProductFields(): string[] {
