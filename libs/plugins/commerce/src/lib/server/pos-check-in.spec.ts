@@ -630,10 +630,10 @@ describe('stays checked in per stay or per guest', () => {
     const set = await post({ action: 'stay_mode', mode: 'stay' })
     expect(set).toMatchObject({ status: 200, body: { stayCheckIn: 'stay', dayKey: '2027-01-15' } })
     expect(h.memory.read('hosts/shop/settings/checkIn')).toMatchObject({ stays: 'stay', updatedBy: 'cashier' })
-    // Seen at once: the waiting guests go, the one checked in stays.
+    // Seen at once: the waiting guests go, the one checked in stays, and is
+    // the stay's one check-in (`stayCheckInPlan`), so nobody waits beside it.
     expect(await stays()).toEqual([
       'r_couple_2027-01-15_0 expected',
-      'r_family_2027-01-15_0 expected',
       'r_family_2027-01-15_1 checked_in',
     ])
     await post({ action: 'stay_mode', mode: 'guest' })

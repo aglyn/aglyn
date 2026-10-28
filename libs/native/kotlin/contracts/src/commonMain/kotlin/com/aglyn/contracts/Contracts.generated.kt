@@ -3969,6 +3969,7 @@ internal data class ContractValuesPart7(
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
     @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
+    @SerialName("RESERVATION_GUESTS_ROUTE") val reservationGuestsRoute: String,
     @SerialName("RESERVED_SCREEN_ROUTE_SEGMENTS") val reservedScreenRouteSegments: List<String>,
     @SerialName("RETURN_REASON_LABELS") val returnReasonLabels: Map<String, String>,
     @SerialName("RETURN_REASONS") val returnReasons: List<ReturnReason>,
@@ -4012,11 +4013,11 @@ internal data class ContractValuesPart7(
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
     @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
-    @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PHONE_AGLYN") val themePhoneAglyn: ThemeColorsPair,
     @SerialName("THEME_PHONE_BOLD_ACCENT") val themePhoneBoldAccent: String,
@@ -4339,6 +4340,7 @@ class ContractValues internal constructor(
     val reminderWindowStartHours: Long get() = part7.reminderWindowStartHours
     val replyBodyMax: Long get() = part7.replyBodyMax
     val replySubjectMax: Long get() = part7.replySubjectMax
+    val reservationGuestsRoute: String get() = part7.reservationGuestsRoute
     val reservedScreenRouteSegments: List<String> get() = part7.reservedScreenRouteSegments
     val returnReasonLabels: Map<String, String> get() = part7.returnReasonLabels
     val returnReasons: List<ReturnReason> get() = part7.returnReasons
@@ -4382,7 +4384,7 @@ class ContractValues internal constructor(
     val themeDarkRailSeeds: Map<String, String> get() = part7.themeDarkRailSeeds
     val themeDensities: List<ThemeDensity> get() = part7.themeDensities
     val themeFigmaBase: ThemeColorsPair get() = part7.themeFigmaBase
-    val themeNonTextContrast: Long get() = part7.themeNonTextContrast
+    val themeNonTextContrast: Long get() = part8.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part8.themePalettes
     val themePhoneAglyn: ThemeColorsPair get() = part8.themePhoneAglyn
     val themePhoneBoldAccent: String get() = part8.themePhoneBoldAccent

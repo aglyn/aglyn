@@ -28,7 +28,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import type { Dayjs } from 'dayjs'
 import { collection, documentId, limit, orderBy, query } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 import {
   checkInItemLabel,
@@ -62,6 +62,9 @@ export interface PosCheckInsCardProps {
   /** The viewer may work the register: what the route's gate asks. */
   canManagePos?: boolean
 }
+
+/** A stay's guest count (AGL-4043), loaded the first time it opens. */
+const ReservationGuestsDialog = lazy(() => import('../reservation-guests-dialog.component'))
 
 const HEADER = "Today's check-ins"
 const HELP = pluginDocsHelp('posOperations', { anchor: '#check-in-at-the-window' })
@@ -122,6 +125,8 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
   /** The pass a rain check is being given on (AGL-4043). */
   const [rainCheckRow, setRainCheckRow] = useState<CheckInRow | null>(null)
   const [actionError, setActionError] = useState('')
+  /** The stay whose guests are being changed (AGL-4043). */
+  const [guestsFor, setGuestsFor] = useState<string | null>(null)
 
   const url = useCallback(
     (format?: 'csv') => {
@@ -248,7 +253,8 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
       },
       {
         // What a pass waiting at the window can still have done to it: a
-        // rain check, or one taken back. Not a value, so nothing to sort.
+        // rain check, or one taken back; and a stay's guest count (AGL-4043).
+        // Not a value, so nothing to sort.
         field: 'rainCheckAction',
         headerName: '',
         minWidth: 150,
@@ -257,7 +263,11 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         hideable: false,
         disableColumnMenu: true,
         renderCell: ({ row }: { row: CheckInRow }) =>
-          row.source !== 'order' || row.status !== 'expected' ? null : row.rainCheck ? (
+          row.source === 'reservation' && row.reservationId ? (
+            <Button size="small" disabled={!canManagePos} onClick={() => setGuestsFor(row.reservationId)}>
+              {'Guests'}
+            </Button>
+          ) : row.source !== 'order' || row.status !== 'expected' ? null : row.rainCheck ? (
             <Button size="small" disabled={!canManagePos} onClick={() => void undoRainCheck(row)}>
               {'Undo rain check'}
             </Button>
@@ -405,6 +415,19 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
           void load()
         }}
       />
+      {guestsFor ? (
+        <Suspense fallback={null}>
+          <ReservationGuestsDialog
+            reservationId={guestsFor}
+            hostId={hostId}
+            onClose={() => setGuestsFor(null)}
+            onDone={() => {
+              setGuestsFor(null)
+              void load()
+            }}
+          />
+        </Suspense>
+      ) : null}
     </CardDisplay>
   )
 }

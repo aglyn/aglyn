@@ -49,6 +49,15 @@ jest.mock('../entitlement-gate.component', () => ({
 jest.mock('./pos-shift-report.component', () => ({
   printPosDocument: (...args: unknown[]) => mockPrint(...args),
 }))
+// The guests dialog has its own spec; here it only answers as the route did.
+jest.mock('../reservation-guests-dialog.component', () => ({
+  __esModule: true,
+  default: (props: { reservationId: string; onDone: (answer: unknown) => void }) => (
+    <button onClick={() => props.onDone({ guests: 4, added: 1, removed: 0, unchanged: false })}>
+      {`Save guests of ${props.reservationId}`}
+    </button>
+  ),
+}))
 
 import { PosCheckInsCard } from './pos-check-ins-card.component'
 
@@ -164,6 +173,22 @@ describe("today's check-ins", () => {
     )
     const posted = mockFetch.mock.calls.find((call) => (call[2] as RequestInit).method === 'POST')!
     expect(JSON.parse(String((posted[2] as RequestInit).body))).toEqual({ hostId: 'shop', action: 'stay_mode', mode: 'guest' })
+  })
+
+  it('changes a stay’s guests from its row, then reads the day again (AGL-4043)', async () => {
+    const list = {
+      ...LIST,
+      checkIns: [LIST.checkIns[0], row('r_family_2027-01-15_0', { source: 'reservation', reservationId: 'family', orderLabel: null, itemName: 'Cabin 3' })],
+    }
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => list })
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    await screen.findByText('Blue #214')
+    // A pass has no guest count; only the stay's row offers one.
+    expect(screen.getAllByRole('button', { name: 'Guests' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Guests' }))
+    fireEvent.click(await screen.findByText('Save guests of family'))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Save guests of family')).toBeNull()
   })
 
   it('draws nothing for a store with no register', () => {

@@ -40,6 +40,8 @@ import {
   type CheckInWristband,
   type DueCheckIn,
   type HostCheckIn,
+  STAY_CHECK_IN_SETTINGS_DOC,
+  storedStayCheckIns,
 } from '../model/commerce-check-in'
 import { posDayReportRange } from '../model/commerce-pos-day-report'
 import type { HostOrder } from '../model/commerce-orders'
@@ -153,8 +155,8 @@ export async function readCheckInDay(
   return { ok: true, dayKey: range.from, startMs: range.startMs, endMs: range.endMs, timeZone }
 }
 
-/** Where the store's stay check-in control lives (AGL-4043). */
-export const STAY_CHECK_IN_SETTINGS_DOC = 'checkIn'
+// Where the store's stay check-in control lives, beside the rules that read it.
+export { STAY_CHECK_IN_SETTINGS_DOC }
 
 /** The store's control for how stays are checked in; each resource's own setting when unset. */
 export async function readStayCheckInMode(hostRef: FirebaseFirestore.DocumentReference): Promise<StayCheckInMode> {
@@ -334,6 +336,9 @@ export async function reconcileCheckInDay(
       if (entry.dayKey === day.dayKey) due.set(id, entry)
     }
   }
+  // Each stay's check-ins already stored on the day: a guest checked in keeps
+  // their place when the stay's count comes down (`stayCheckInPlan`).
+  const storedByStay = storedStayCheckIns(existingSnapshot.docs.slice(0, CHECK_IN_DAY_CEILING))
   for (const doc of stays) {
     readStays.add(doc.id)
     const resourceId = String(doc.get('resourceId') ?? '')
@@ -344,6 +349,7 @@ export async function reconcileCheckInDay(
       dayKey: day.dayKey,
       // A resource gone since the stay was booked is checked in once per stay.
       perGuest: perGuestResources.has(resourceId) || (stayMode === 'guest' && !resourceNames.has(resourceId)),
+      existing: storedByStay.get(doc.id) ?? [],
     })) {
       owed.add(id)
       due.set(id, entry)

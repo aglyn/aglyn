@@ -36,7 +36,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 import {
   alreadyCheckedInLabel,
@@ -54,6 +54,9 @@ import { POS_TOUCH_PX } from '../pos/pos-product-grid.component'
 import { callPosOps, newPosAttemptKey } from './pos-ops-api'
 import { PosCheckInZone } from './pos-check-in-zone.component'
 import { PosRainCheckDialog } from './pos-rain-check-dialog.component'
+
+/** A stay's guest count (AGL-4043), loaded the first time it opens. */
+const ReservationGuestsDialog = lazy(() => import('../reservation-guests-dialog.component'))
 
 /** How long typing pauses before the register asks. */
 const SEARCH_DEBOUNCE_MS = 250
@@ -99,6 +102,8 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
   const [notice, setNotice] = useState('')
   /** The pass a rain check is being given on (AGL-4043). */
   const [rainCheckRow, setRainCheckRow] = useState<CheckInRow | null>(null)
+  /** The stay whose guests are being changed (AGL-4043). */
+  const [guestsFor, setGuestsFor] = useState<string | null>(null)
   const latest = useRef(0)
 
   const reset = useCallback(() => {
@@ -310,6 +315,11 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
                             <Button size="small" onClick={() => void undo(row)} disabled={busy}>
                               {'Undo'}
                             </Button>
+                            {row.source === 'reservation' && row.reservationId ? (
+                              <Button size="small" onClick={() => setGuestsFor(row.reservationId)} disabled={busy}>
+                                {'Guests'}
+                              </Button>
+                            ) : null}
                           </Box>
                         ) : movedAway(row) ? (
                           <Box>
@@ -350,6 +360,11 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
                             >
                               {'Check in'}
                             </Button>
+                            {row.source === 'reservation' && row.reservationId ? (
+                              <Button onClick={() => setGuestsFor(row.reservationId)} disabled={busy}>
+                                {'Guests'}
+                              </Button>
+                            ) : null}
                             {row.source === 'order' ? (
                               row.rainCheck ? (
                                 <Button onClick={() => void undoRainCheck(row)} disabled={busy}>
@@ -436,6 +451,20 @@ export function PosCheckInDialog(props: PosCheckInDialogProps) {
             merge([changed])
           }}
         />
+        {guestsFor ? (
+          <Suspense fallback={null}>
+            <ReservationGuestsDialog
+              reservationId={guestsFor}
+              hostId={hostId}
+              onClose={() => setGuestsFor(null)}
+              onDone={() => {
+                setGuestsFor(null)
+                // The stay's check-ins may have changed: read the customer again.
+                if (customer) void openCustomer({ customerKey: customer.customerKey })
+              }}
+            />
+          </Suspense>
+        ) : null}
       </DialogContent>
       <DialogActions>
         {customer ? (

@@ -115,6 +115,9 @@ export interface HostReservation {
    * guest at a time asks it.
    */
   guests?: number
+  /** When staff last changed {@link guests} after booking, and who (AGL-4043). */
+  guestsChangedAtMs?: number
+  guestsChangedBy?: string
   nights?: number
   totalCents?: number
   depositCents?: number
@@ -481,6 +484,9 @@ export function fewestUnitsLeft(
 
 /** The most guests one stay may name when its resource says nothing of how many it sleeps. */
 export const MAX_RESERVATION_GUESTS = 50
+
+/** Where staff change a stay's guest count after it is booked (AGL-4043): `{ hostId, reservationId, guests }`. */
+export const RESERVATION_GUESTS_ROUTE = '/api/commerce/reservations/guests'
 
 /**
  * The most guests a stay on this resource may name: what one unit sleeps
