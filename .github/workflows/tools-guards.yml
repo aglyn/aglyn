@@ -331,6 +331,14 @@ jobs:
       # fixtures the library's recount is.
       - run: npm run test:site-form-stats-recount
 
+      # AGL-4049. The plan of the platform's own site starter listings, built
+      # from the real default site, kinds and theme presets: their ids, which
+      # fields a run may rewrite and which only staff change, a re-run that
+      # writes nothing, and a payload that cannot start a site failing the
+      # run. Then the browsability restatement those listings are shelved by,
+      # which must review a submitted starter as the library does.
+      - run: npm run test:first-party-starters
+
       # AGL-1734. The demo org has to be several visibly different businesses:
       # the 30-minute demo spends its largest block switching between sites in
       # one org, and a switcher showing one bakery three times argues the

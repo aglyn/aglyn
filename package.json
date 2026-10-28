@@ -138,6 +138,7 @@
     "test:sso-attestation": "node --test tools/scripts/lib/sso-domain-attestation.test.mjs",
     "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
     "test:index-drift": "node --test tools/scripts/lib/index-drift.test.mjs",
+    "test:first-party-starters": "node --test tools/scripts/lib/first-party-starters.test.mjs && node tools/scripts/backfill-marketplace-listing-search.mjs --self-test",
     "test:functions-drift": "node --test tools/scripts/lib/functions-drift.test.mjs",
     "test:promotion-deploys": "node --test tools/scripts/lib/promotion-deploys.test.mjs",
     "test:upload-cors-drift": "node --test tools/scripts/lib/upload-cors-drift.test.mjs",
