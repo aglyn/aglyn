@@ -572,6 +572,8 @@
               "modifierGroups",
               "posQuickKey",
               "sellOnline",
+              "offerOnKiosk",
+              "hardwareSku",
               "checkIn",
               "shipping",
               "createdAtMs",

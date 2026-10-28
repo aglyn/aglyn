@@ -102,6 +102,11 @@ export interface ProductVariant {
    * product's own setting; absent follows the product.
    */
   checkIn?: ProductCheckIn
+  /**
+   * Whether the self-service kiosk offers this variant (AGL-4038), within the
+   * product's own choice: `false` leaves it out; absent follows the product.
+   */
+  offerOnKiosk?: boolean
 }
 
 /** A product's packed size and customs facts (AGL-3612). */
@@ -334,6 +339,22 @@ export interface HostProduct {
    * {@link productSellsOnline}, never as a truthy field.
    */
   sellOnline?: boolean
+  /**
+   * Whether the self-service kiosk offers the product (AGL-4038): `false`
+   * leaves it off the kiosk's grid and refuses it in a kiosk's cart, while
+   * the register, the POS apps and the site sell it as before. Absent reads
+   * as `true`, so every product stored before the choice is offered as it
+   * was; read it through `productOfferedOnKiosk` (`commerce-kiosk-offer.ts`). A variant's own
+   * `offerOnKiosk` narrows it further.
+   */
+  offerOnKiosk?: boolean
+  /**
+   * The point of sale hardware item this product IS (AGL-4038), by its id in
+   * the hardware catalog (`POS_HARDWARE_SKUS`): a sale of it on the
+   * platform's own store becomes a hardware order for the buyer's workspace.
+   * Read only on that store; on any other store it means nothing.
+   */
+  hardwareSku?: string
   /**
    * A pass, a camping spot, parking: each item sold is somebody to check in
    * at the window on the day it was bought, `headcount` people per item

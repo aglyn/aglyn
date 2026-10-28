@@ -361,6 +361,12 @@ total with tax, and pay — or send the order to the counter. It belongs to
 one register, and its orders are register sales: the same prices, tax,
 automatic promotions and stock as a sale you ring up.
 
+The kiosk offers your active products except subscription-only products, gift
+cards and digital downloads, which need more than a counter can hand over.
+You choose the rest: turn off **Offer on the kiosk** on a product, or clear
+one of its variants, to keep it off the kiosk (see
+[Offer on the kiosk](catalog.md#offer-on-the-kiosk)).
+
 To pair one:
 
 1. Tap **Pair display** on the register, or beside the register under

@@ -29,6 +29,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import * as CommerceModel from '../model'
+import { productOfferedOnKiosk } from '../model/commerce-kiosk-offer'
 import { posRegisterSettings, type PosRegisterSettings } from '../plugin-config'
 import { posKioskSettings, type PosKioskSettings } from '../pos-kiosk-config'
 import { verifyMemberPassword } from './membership'
@@ -256,10 +257,21 @@ async function context(gate: KioskGate): Promise<Outcome> {
  */
 export function posKioskSellable(product: CommerceModel.HostProduct): boolean {
   if (product.status !== 'active') return false
+  // The merchant's own choice of what the kiosk offers (AGL-4038), for any
+  // product: "Offer on the kiosk" in the product editor.
+  if (!productOfferedOnKiosk(product)) return false
   if (product.subscription && !product.subscriptionOptional) return false
   if (product.giftCard) return false
   if (product.type === 'digital') return false
-  return (product.variants ?? []).some((variant) => CommerceModel.variantHasPrice(variant))
+  return (product.variants ?? []).some((variant) => posKioskVariantOffered(product, variant))
+}
+
+/** A variant the kiosk may sell: priced, and offered by the merchant's choice (AGL-4038). */
+export function posKioskVariantOffered(
+  product: CommerceModel.HostProduct,
+  variant: CommerceModel.ProductVariant,
+): boolean {
+  return CommerceModel.variantHasPrice(variant) && productOfferedOnKiosk(product, variant.id)
 }
 
 /** A product as the kiosk may show it: names, prices and choices, nothing else. */
@@ -278,7 +290,7 @@ export function posKioskProduct(
     categoryIds: (product.categoryIds ?? []).slice(0, 20),
     options: (product.options ?? []).map((option) => ({ name: option.name, values: [...option.values] })),
     variants: (product.variants ?? [])
-      .filter((variant) => CommerceModel.variantHasPrice(variant))
+      .filter((variant) => posKioskVariantOffered(product, variant))
       .map((variant) => ({
         id: variant.id,
         options: { ...(variant.options ?? {}) },
@@ -426,7 +438,7 @@ async function checkout(
     const variant = line.variantId
       ? product.variants.find((candidate) => candidate.id === line.variantId)
       : product.variants[0]
-    if (!variant || !CommerceModel.variantHasPrice(variant)) {
+    if (!variant || !posKioskVariantOffered(product, variant)) {
       return refuse(409, `${product.name} is no longer available. Remove it and try again.`)
     }
     const wanted = cart.lines
