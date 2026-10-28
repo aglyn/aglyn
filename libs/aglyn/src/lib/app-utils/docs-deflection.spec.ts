@@ -566,6 +566,18 @@ describe('the gates, each forced on its own', () => {
     expect(verdict.refusal).toBe('diagnostic')
   })
 
+  it('a question about the workspace’s own balance escalates even when docs match (AGL-4087)', () => {
+    // The CRM reports page matches every word of it; only the workspace knows
+    // how many contacts it has left.
+    const verdict = verdictFor('how many contacts do I have left this month')
+    expect(verdict.answered).toBe(false)
+    expect(verdict.refusal).toBe('own-state')
+    expect(verdictFor('how much bandwidth have we used so far').refusal).toBe('own-state')
+    // CONTROL: the same words asked about the product, not the balance, are a
+    // docs question, and this gate leaves them to retrieval.
+    expect(verdictFor('how many contacts can I import at once').refusal).not.toBe('own-state')
+  })
+
   it('too little question is not enough to be confident about', () => {
     expect(verdictFor('how do I do that').refusal).toBe('too-short')
     // Two tokens clear the LENGTH gate and are then stopped by the evidence
