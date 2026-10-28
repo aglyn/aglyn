@@ -45,7 +45,7 @@ const user = { uid: 'cashier-1' } as never
 const PERSON = {
   uid: 'uid-pat',
   name: 'Pat Lee',
-  email: 'p***@example.com',
+  email: 'pat@example.com',
   workspaces: [
     {
       orgId: 'org-pat',
@@ -78,7 +78,8 @@ describe('the card reader buyer step', () => {
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Email, name or workspace'), { target: { value: 'pat' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Search' }))
-    const store = await within(dialog).findByLabelText(/Pat Lee \(p\*\*\*@example\.com\) · Acme Builders · Main Street/)
+    // The whole address, so it can be read back to the buyer.
+    const store = await within(dialog).findByLabelText(/Pat Lee \(pat@example\.com\) · Acme Builders · Main Street/)
     expect(within(dialog).getAllByText(/No point of sale plan yet/).length).toBeGreaterThan(0)
     expect(within(dialog).getByText(/No card reader location on this store yet/)).toBeTruthy()
     fireEvent.click(store)
@@ -91,13 +92,63 @@ describe('the card reader buyer step', () => {
     })
     await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringMatching(/as soon as the sale is paid/), 'success'))
     expect(await screen.findByRole('button', { name: 'Change' })).toBeTruthy()
-    // With their store chosen, the reader can be registered to it here.
-    mockBooth.mockResolvedValue({ ok: true, readerId: 'tmr_1', order: {} })
+    // With their store chosen, the reader can be registered to it here; the
+    // store has no card reader location, so its address is asked for first.
+    mockBooth.mockResolvedValue({ ok: true, readerId: 'tmr_1', storeAddressSaved: true, order: {} })
+    fireEvent.change(screen.getByLabelText('Code on the reader'), { target: { value: 'abc-123' } })
+    expect(screen.getByText(/Their store has no address for card readers yet/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Register' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText(/Street/), { target: { value: '100 Main St' } })
+    fireEvent.change(screen.getByLabelText(/City/), { target: { value: 'Austin' } })
+    fireEvent.change(screen.getByLabelText(/State/), { target: { value: 'TX' } })
+    fireEvent.change(screen.getByLabelText(/Postal code/), { target: { value: '78701' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Register' }))
+    await waitFor(() =>
+      expect(mockBooth.mock.calls[0][2]).toEqual({
+        hostId: 'host-seller',
+        registerOrderId: 'order-1',
+        registrationCode: 'abc-123',
+        address: { line1: '100 Main St', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+      }),
+    )
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringMatching(/address saved/), 'success'))
+    // Saved once: the store has its location now.
+    await waitFor(() => expect(screen.queryByText(/Their store has no address for card readers yet/)).toBeNull())
+  })
+
+  it('registers to a store that has its location without asking for an address, and asks when the route says so', async () => {
+    mockStatus.mockResolvedValue({ seller: true, items: [] })
+    mockFind.mockResolvedValue({
+      kind: 'email',
+      people: [
+        {
+          ...PERSON,
+          workspaces: [{ ...PERSON.workspaces[0], posPlan: true, stores: [{ hostId: 'host-pat-1', name: 'Main Street', hasLocation: true }] }],
+        },
+      ],
+      workspaces: [],
+      noAccount: false,
+    })
+    mockAttach.mockResolvedValue({ outcome: 'attached', order: {} })
+    const notify = jest.fn()
+    render(<PosHardwareBuyer user={user} hostId="host-seller" saleOrderId="order-1" notify={notify} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Attach buyer' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Email, name or workspace'), { target: { value: 'pat@example.com' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Search' }))
+    fireEvent.click(await within(dialog).findByLabelText(/Acme Builders · Main Street/))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Attach' }))
+    await screen.findByRole('button', { name: 'Change' })
+    expect(screen.queryByText(/Their store has no address for card readers yet/)).toBeNull()
+    const { PosHardwareRequestError } = jest.requireActual('./pos-hardware-api')
+    mockBooth.mockRejectedValueOnce(new PosHardwareRequestError('Their store has no address for card readers yet.', 409, 'needs-address'))
     fireEvent.change(screen.getByLabelText('Code on the reader'), { target: { value: 'abc-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Register' }))
     await waitFor(() =>
       expect(mockBooth.mock.calls[0][2]).toEqual({ hostId: 'host-seller', registerOrderId: 'order-1', registrationCode: 'abc-123' }),
     )
+    // The route knows the store better than the lookup did: the address is asked for now.
+    expect(await screen.findByText(/Enter it with the buyer to register the reader now/)).toBeTruthy()
   })
 
   it("takes the readers' serial numbers on the sale", async () => {

@@ -45,6 +45,7 @@ const mockOwners: Record<string, string> = {
 }
 let mockSerial = 'STRE710-001'
 const mockStripe: Array<{ method: string; path: string; params?: Record<string, unknown> }> = []
+const mockAudits: Array<Record<string, any>> = []
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => ({ permissions: { managePos: true } }),
@@ -77,13 +78,23 @@ jest.mock('@aglyn/tenant-data-admin/server/host-console-link', () => ({
   hostConsoleUrl: async (hostId: string, link: string) => `https://console.example.com/ws/hosts/${hostId}${link.replace(`/${hostId}`, '')}`,
 }))
 jest.mock('@aglyn/tenant-data-admin/server/admin-audit', () => ({ maskEmailAddress: () => '***' }))
-jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({ addAdminAudit: async () => ({ id: 'audit' }) }))
+jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({
+  addAdminAudit: async (_firestore: unknown, entry: Record<string, any>) => {
+    mockAudits.push(entry)
+    return { id: 'audit' }
+  },
+}))
+// A new Location applies the store's start-up screen; not this spec's subject.
+jest.mock('./pos-reader-splash', () => ({ applyPosReaderSplash: async () => undefined }))
 jest.mock('./pos-stripe', () => ({
   posTerminalAvailable: () => true,
   posStripeTestMode: () => false,
   posStripeErrorMessage: (_body: unknown, fallback: string) => fallback,
   posStripe: async (method: string, path: string, options?: { params?: Record<string, unknown> }) => {
     mockStripe.push({ method, path, ...(options?.params ? { params: options.params } : {}) })
+    if (path === 'terminal/locations') {
+      return { ok: true, status: 200, body: { id: 'tml_new', livemode: true } }
+    }
     if (path === 'terminal/readers') {
       return {
         ok: true,
@@ -191,6 +202,7 @@ function seedOrder(id: string, orgId: string, fields: Record<string, unknown> = 
 beforeEach(() => {
   resetFakeFirestore()
   mockStripe.length = 0
+  mockAudits.length = 0
   mockSerial = 'STRE710-001'
   mockPlans['org-pat'] = 'business'
   process.env[POS_HARDWARE_ENV.inPersonEnabled] = 'true'
@@ -306,10 +318,86 @@ describe('registering at the booth', () => {
       hardwareBuyer: { uid: 'uid-pat', orgId: 'org-pat', hostId: 'host-pat-2', email: null, attachedBy: 'c', attachedAtMs: 1 },
     })
     await recordInPersonPosHardwareSale('host-seller', 'paid-6')
-    expect((await sale({ action: 'register-at-booth', registerOrderId: 'paid-6', registrationCode: 'abc' })).body.error).toMatch(/no address for card readers/)
+    const noAddress = await sale({ action: 'register-at-booth', registerOrderId: 'paid-6', registrationCode: 'abc' })
+    expect(noAddress.status).toBe(409)
+    expect(noAddress.body).toEqual({ error: expect.stringMatching(/no address for card readers/), reason: 'needs-address' })
     mockPlans['org-pat'] = 'free'
     expect((await sale({ action: 'register-at-booth', registerOrderId: 'paid-6', registrationCode: 'abc' })).body.error).toMatch(/plan with the point of sale/)
     expect(mockStripe).toHaveLength(0)
+  })
+
+  /** A sale attached to Pat's pop-up store, which has no card reader location yet. */
+  async function popUpSale(id: string) {
+    paidSale(id, {
+      lineItems: [{ productId: 'reader', name: 'Stripe Reader S710', quantity: 1, unitAmountCents: 30_000 }],
+      hardwareBuyer: { uid: 'uid-pat', orgId: 'org-pat', hostId: 'host-pat-2', email: null, attachedBy: 'c', attachedAtMs: 1 },
+    })
+    await recordInPersonPosHardwareSale('host-seller', id)
+  }
+  const ADDRESS = { line1: ' 100 Main St ', city: 'Austin', state: 'TX', postalCode: '78701', country: 'us' }
+
+  it("takes the store's address at the booth: makes its location where the POS devices card would, registers, audits", async () => {
+    await popUpSale('paid-7')
+    const result = await sale({ action: 'register-at-booth', registerOrderId: 'paid-7', registrationCode: 'abc-126', address: ADDRESS })
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ ok: true, storeAddressSaved: true })
+    // The store's Location, from the address as typed, trimmed and in capitals.
+    expect(mockStripe.find((entry) => entry.path === 'terminal/locations')?.params).toMatchObject({
+      'address[line1]': '100 Main St',
+      'address[city]': 'Austin',
+      'address[state]': 'TX',
+      'address[postal_code]': '78701',
+      'address[country]': 'US',
+      'metadata[hostId]': 'host-pat-2',
+      'metadata[orgId]': 'org-pat',
+    })
+    // Recorded on the store's terminal settings, exactly as the POS devices card's registration records it.
+    expect(fakeDocs.get('hosts/host-pat-2/terminal/config')).toMatchObject({ stripeLocationId: 'tml_new' })
+    expect(mockStripe.find((entry) => entry.path === 'terminal/readers')?.params).toMatchObject({ location: 'tml_new' })
+    const audit = mockAudits.find((entry) => entry.action === 'pos-hardware-register-at-booth')
+    expect(audit?.after).toMatchObject({
+      hostId: 'host-pat-2',
+      storeAddressEntered: { city: 'Austin', state: 'TX', country: 'US' },
+    })
+    // The street stays with the store.
+    expect(JSON.stringify(audit)).not.toMatch(/Main St/)
+  })
+
+  it('refuses an address that is missing a field, before anything is made', async () => {
+    await popUpSale('paid-8')
+    const result = await sale({
+      action: 'register-at-booth',
+      registerOrderId: 'paid-8',
+      registrationCode: 'abc',
+      address: { ...ADDRESS, city: ' ' },
+    })
+    expect(result.status).toBe(400)
+    expect(result.body).toEqual({ error: expect.stringMatching(/street, city, postal code and country/), reason: 'needs-address' })
+    const badCountry = await sale({
+      action: 'register-at-booth',
+      registerOrderId: 'paid-8',
+      registrationCode: 'abc',
+      address: { ...ADDRESS, country: '1' },
+    })
+    expect(badCountry.status).toBe(400)
+    expect(mockStripe).toHaveLength(0)
+    expect(fakeDocs.has('hosts/host-pat-2/terminal/config')).toBe(false)
+  })
+
+  it("never overwrites a store's existing address: one sent for a store with a location is not used", async () => {
+    paidSale('paid-9', {
+      lineItems: [{ productId: 'reader', name: 'Stripe Reader S710', quantity: 1, unitAmountCents: 30_000 }],
+      hardwareBuyer: { uid: 'uid-pat', orgId: 'org-pat', hostId: 'host-pat-1', email: null, attachedBy: 'c', attachedAtMs: 1 },
+    })
+    await recordInPersonPosHardwareSale('host-seller', 'paid-9')
+    const result = await sale({ action: 'register-at-booth', registerOrderId: 'paid-9', registrationCode: 'abc-127', address: ADDRESS })
+    expect(result.status).toBe(200)
+    expect(result.body.storeAddressSaved).toBe(false)
+    expect(mockStripe.some((entry) => entry.path === 'terminal/locations')).toBe(false)
+    expect(fakeDocs.get('hosts/host-pat-1/terminal/config')).toEqual({ stripeLocationId: 'tml_pat' })
+    expect(mockAudits.find((entry) => entry.action === 'pos-hardware-register-at-booth')?.after).not.toHaveProperty(
+      'storeAddressEntered',
+    )
   })
 })
 
