@@ -15,12 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  doc,
-  runTransaction,
-  setDoc,
-  type Firestore,
-} from 'firebase/firestore'
+import { doc, runTransaction, setDoc, type Firestore } from 'firebase/firestore'
 import {
   authorizedFetch,
   type MaybeTokenSource,
@@ -182,26 +177,109 @@ export async function claimPendingSignUpWorkspace(
   firestore: Firestore,
   account: SignUpWorkspaceAccount,
 ): Promise<PendingSignUpWorkspace | null> {
-  if (!firestore || !account?.uid) return null
+  return (await claimSignUpWorkspace(firestore, account)).pending
+}
+
+/**
+ * When the last reader claimed the right to provision (AGL-4079).
+ *
+ * Kept beside the held name rather than inside it, because the held name is
+ * cleared by its claim and a backstop-only account never had one.
+ */
+const CLAIMED_FIELD = 'signUpWorkspaceClaimedAtMs'
+
+/**
+ * How long a claim keeps every other reader from provisioning.
+ *
+ * A create is seconds; ten minutes covers a slow one with room to spare, and
+ * a claim that never became a workspace leaves the chooser's own create
+ * dialog, so the cost of a stale claim is one click, not a lost account.
+ */
+export const SIGN_UP_WORKSPACE_CLAIM_MS = 10 * 60 * 1000
+
+/** What a provisioning reader may do (AGL-4079). */
+export interface SignUpWorkspaceClaim {
+  /** The held name, when this reader took it and it passed its checks. */
+  pending: PendingSignUpWorkspace | null
+  /**
+   * Another reader claimed provisioning moments ago. This one creates
+   * nothing — not even the backstop's personal workspace.
+   */
+  claimedElsewhere: boolean
+}
+
+/**
+ * Take the held name AND the right to provision, exactly once.
+ *
+ * The held name alone was claim-once, but the reader that found it gone fell
+ * through to the AGL-4021 backstop and created a second, derived workspace:
+ * two console tabs reaching their first verified session in the same second
+ * left a phone sign-up with its typed workspace and a derived one 1.1 s apart
+ * (AGL-4079). So the same transaction stamps when provisioning was claimed,
+ * and a reader that finds a fresh stamp stands down.
+ *
+ * `backstop` says whether this reader would provision with nothing held. Only
+ * then does an empty claim stamp, so a returning account with no workspace
+ * (and no reason to be given one) never writes.
+ */
+export async function claimSignUpWorkspace(
+  firestore: Firestore,
+  account: SignUpWorkspaceAccount,
+  { backstop = false }: { backstop?: boolean } = {},
+): Promise<SignUpWorkspaceClaim> {
+  const none: SignUpWorkspaceClaim = { pending: null, claimedElsewhere: false }
+  if (!firestore || !account?.uid) return none
   let stored: Partial<StoredPendingSignUpWorkspace> | null
   try {
     const reference = doc(firestore, 'users', account.uid)
-    stored = await runTransaction(firestore, async (transaction) => {
+    const taken = await runTransaction(firestore, async (transaction) => {
       const snapshot = await transaction.get(reference)
-      const held = (snapshot.data()?.[FIELD] ??
+      const data = snapshot.data()
+      const held = (data?.[FIELD] ??
         null) as Partial<StoredPendingSignUpWorkspace> | null
-      if (!held) return null
+      const nowMs = Date.now()
+      if (!held) {
+        const claimedAtMs = Number(data?.[CLAIMED_FIELD] ?? 0)
+        if (claimedAtMs && nowMs - claimedAtMs < SIGN_UP_WORKSPACE_CLAIM_MS) {
+          return { held: null, claimedElsewhere: true }
+        }
+        if (backstop) {
+          transaction.set(
+            reference,
+            { [CLAIMED_FIELD]: nowMs },
+            { merge: true },
+          )
+        }
+        return { held: null, claimedElsewhere: false }
+      }
       // Explicit null, never `undefined` — Firestore rejects the latter.
-      transaction.set(reference, { [FIELD]: null }, { merge: true })
-      return held
+      transaction.set(
+        reference,
+        { [FIELD]: null, [CLAIMED_FIELD]: nowMs },
+        { merge: true },
+      )
+      return { held, claimedElsewhere: false }
     })
+    if (taken.claimedElsewhere) return { pending: null, claimedElsewhere: true }
+    stored = taken.held
   } catch (error) {
     // A denied, offline or contended read is not worth a broken landing — the
     // person reaches the workspace chooser, which is where sign-up landed
     // everyone before AGL-1115 and still offers workspace creation.
     console.error('sign-up workspace claim failed', error)
-    return null
+    return none
   }
+  return {
+    pending: judgePendingSignUpWorkspace(stored, account),
+    claimedElsewhere: false,
+  }
+}
+
+/** The held record's window and provider binding; see the module note. */
+function judgePendingSignUpWorkspace(
+  stored: Partial<StoredPendingSignUpWorkspace> | null,
+  account: SignUpWorkspaceAccount,
+): PendingSignUpWorkspace | null {
   if (!stored || typeof stored.name !== 'string' || !stored.name) return null
   const createdAtMs = Number(stored.createdAtMs ?? 0)
   if (!createdAtMs || Date.now() - createdAtMs > MAX_AGE_MS) return null

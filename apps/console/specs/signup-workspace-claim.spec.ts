@@ -55,11 +55,13 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 
 import {
   claimPendingSignUpWorkspace,
+  claimSignUpWorkspace,
   createSignUpWorkspace,
   needsBackstopWorkspace,
   personalWorkspaceName,
   rememberPendingSignUpWorkspace,
   SIGN_UP_WORKSPACE_BACKSTOP_MS,
+  SIGN_UP_WORKSPACE_CLAIM_MS,
 } from '../utils/signup-workspace'
 
 /** The account document, as the transaction would find it. */
@@ -81,8 +83,14 @@ const runRealTransaction = async (_firestore: unknown, callback: any) =>
     },
   })
 
-const passwordAccount = { uid: 'u-1', providerData: [{ providerId: 'password' }] }
-const googleAccount = { uid: 'u-1', providerData: [{ providerId: 'google.com' }] }
+const passwordAccount = {
+  uid: 'u-1',
+  providerData: [{ providerId: 'password' }],
+}
+const googleAccount = {
+  uid: 'u-1',
+  providerData: [{ providerId: 'google.com' }],
+}
 
 /** The `pendingSignUpWorkspace` values written to `users/{uid}`, in order. */
 const holdWrites = () =>
@@ -145,7 +153,9 @@ describe('AGL-2590 · claiming the held name', () => {
 
   it('returns the typed name — someone who typed "Acme Inc" gets Acme Inc', async () => {
     hold()
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).toEqual({
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).toEqual({
       name: 'Acme Inc',
       nameWasTyped: true,
     })
@@ -153,11 +163,14 @@ describe('AGL-2590 · claiming the held name', () => {
 
   it('claims ONCE — a second reader finds nothing', async () => {
     hold()
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).not
-      .toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).not.toBeNull()
     // The tab that signed up polls for verification while the tab that clicked
     // the link lands; without this both would create the same workspace.
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).toBeNull()
   })
 
   it('clears with an explicit null, never undefined', async () => {
@@ -175,7 +188,9 @@ describe('AGL-2590 · claiming the held name', () => {
     // provider gone — and this record is all that survived. Honouring it would
     // put the attacker's name on the victim's workspace address.
     hold()
-    expect(await claimPendingSignUpWorkspace({} as any, googleAccount)).toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, googleAccount),
+    ).toBeNull()
     // Consumed all the same: a record that has been judged must not be judged
     // again on every future sign-in.
     expect(stored?.['pendingSignUpWorkspace']).toBeNull()
@@ -183,17 +198,23 @@ describe('AGL-2590 · claiming the held name', () => {
 
   it('refuses a record that names no provider at all', async () => {
     hold({ provider: undefined })
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).toBeNull()
   })
 
   it('refuses a record older than the verification window', async () => {
     hold({ createdAtMs: Date.now() - 8 * 24 * 60 * 60 * 1000 })
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).toBeNull()
   })
 
   it('answers null when there is nothing held', async () => {
     stored = {}
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).toBeNull()
   })
 
   it('answers null rather than throwing when the read is refused', async () => {
@@ -201,7 +222,61 @@ describe('AGL-2590 · claiming the held name', () => {
     // which is where sign-up landed everyone before AGL-1115 and still offers
     // workspace creation.
     mockRunTransaction.mockRejectedValueOnce(new Error('unavailable'))
-    expect(await claimPendingSignUpWorkspace({} as any, passwordAccount)).toBeNull()
+    expect(
+      await claimPendingSignUpWorkspace({} as any, passwordAccount),
+    ).toBeNull()
+  })
+})
+
+describe('AGL-4079 · one provisioning reader per account', () => {
+  it('the reader that takes the held name stands every other reader down, backstop included', async () => {
+    stored = {
+      pendingSignUpWorkspace: {
+        name: 'Acme Inc',
+        nameWasTyped: true,
+        provider: 'password',
+        createdAtMs: Date.now(),
+      },
+    }
+    expect(
+      await claimSignUpWorkspace({} as any, passwordAccount, {
+        backstop: true,
+      }),
+    ).toEqual({
+      pending: { name: 'Acme Inc', nameWasTyped: true },
+      claimedElsewhere: false,
+    })
+    // The second tab used to fall into the backstop and create a derived second workspace.
+    expect(
+      await claimSignUpWorkspace({} as any, passwordAccount, {
+        backstop: true,
+      }),
+    ).toEqual({ pending: null, claimedElsewhere: true })
+  })
+
+  it('two backstop-only readers make one workspace, not two', async () => {
+    stored = {}
+    expect(
+      await claimSignUpWorkspace({} as any, googleAccount, { backstop: true }),
+    ).toEqual({ pending: null, claimedElsewhere: false })
+    expect(
+      await claimSignUpWorkspace({} as any, googleAccount, { backstop: true }),
+    ).toEqual({ pending: null, claimedElsewhere: true })
+  })
+
+  it('a reader with nothing to provision writes nothing', async () => {
+    stored = {}
+    await claimSignUpWorkspace({} as any, googleAccount)
+    expect(stored).toEqual({})
+  })
+
+  it('a claim older than the window no longer stands anyone down', async () => {
+    stored = {
+      signUpWorkspaceClaimedAtMs: Date.now() - SIGN_UP_WORKSPACE_CLAIM_MS - 1,
+    }
+    expect(
+      await claimSignUpWorkspace({} as any, googleAccount, { backstop: true }),
+    ).toEqual({ pending: null, claimedElsewhere: false })
   })
 })
 
@@ -307,7 +382,10 @@ describe('the zero-workspace backstop (AGL-4021)', () => {
 
   it('leaves an older account with no workspaces alone: it left them', () => {
     expect(
-      needsBackstopWorkspace(account(SIGN_UP_WORKSPACE_BACKSTOP_MS + 60_000), now),
+      needsBackstopWorkspace(
+        account(SIGN_UP_WORKSPACE_BACKSTOP_MS + 60_000),
+        now,
+      ),
     ).toBe(false)
   })
 
@@ -318,11 +396,14 @@ describe('the zero-workspace backstop (AGL-4021)', () => {
   })
 
   it('names the workspace as the sign-up door would have', () => {
-    expect(personalWorkspaceName({ displayName: ' Ashik Ali ', email: 'a@x.io' })).toBe(
-      'Ashik Ali',
-    )
-    expect(personalWorkspaceName({ displayName: null, email: 'sanduc396@gmail.com' })).toBe(
-      'sanduc396',
-    )
+    expect(
+      personalWorkspaceName({ displayName: ' Ashik Ali ', email: 'a@x.io' }),
+    ).toBe('Ashik Ali')
+    expect(
+      personalWorkspaceName({
+        displayName: null,
+        email: 'sanduc396@gmail.com',
+      }),
+    ).toBe('sanduc396')
   })
 })
