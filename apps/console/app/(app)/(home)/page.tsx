@@ -74,7 +74,7 @@ import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
 import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import {
-  claimPendingSignUpWorkspace,
+  claimSignUpWorkspace,
   createSignUpWorkspace,
   needsBackstopWorkspace,
   personalWorkspaceName,
@@ -95,7 +95,6 @@ import {
   WORKSPACE_FILTER_OPTIONS,
   type WorkspaceRow,
 } from '../../../utils/workspace-list'
-
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */
 const PROVISION_HOLD_KEY = 'home:provision-sign-up-workspace'
@@ -436,16 +435,20 @@ function OrgJump() {
      */
     holdSignUpLanding(PROVISION_HOLD_KEY, PROVISION_HOLD_MAX_MS)
     void (async () => {
-      const pending = await claimPendingSignUpWorkspace(firestore, user)
       // No held name: the backstop (AGL-4021). A door that should have made
       // the workspace died on the way, so a young verified account with no
       // workspace and no invite gets the personal one that door would have
-      // created, instead of an empty chooser.
+      // created, instead of an empty chooser — unless another tab claimed
+      // provisioning moments ago and is creating it now (AGL-4079).
+      const backstop = invites.length === 0 && needsBackstopWorkspace(user)
+      const { pending, claimedElsewhere } = await claimSignUpWorkspace(
+        firestore,
+        user,
+        { backstop },
+      )
       const name =
         pending?.name ??
-        (invites.length === 0 && needsBackstopWorkspace(user)
-          ? personalWorkspaceName(user)
-          : '')
+        (backstop && !claimedElsewhere ? personalWorkspaceName(user) : '')
       if (!name) {
         releaseSignUpLanding(PROVISION_HOLD_KEY)
         if (active) setProvisionSettled(true)
@@ -507,7 +510,11 @@ function OrgJump() {
    * someone an empty state and replacing it with their workspace.
    */
   const provisioning =
-    Boolean(uid) && !loading && confirmed && orgs.length === 0 && !provisionSettled
+    Boolean(uid) &&
+    !loading &&
+    confirmed &&
+    orgs.length === 0 &&
+    !provisionSettled
 
   // Single-org members never see a picker — go straight to their sites.
   //
@@ -638,14 +645,18 @@ function OrgJump() {
                   </Typography>
                 </Box>
                 <OrgInvitesBanner />
-                {startSiteError ? <Alert severity="error">{startSiteError}</Alert> : null}
+                {startSiteError ? (
+                  <Alert severity="error">{startSiteError}</Alert>
+                ) : null}
                 <Button
                   variant="text"
                   sx={{ alignSelf: 'flex-start' }}
                   disabled={startingSite}
                   onClick={() => void startFirstSite()}
                 >
-                  {startingSite ? 'Setting up your workspace…' : 'Create my own site instead'}
+                  {startingSite
+                    ? 'Setting up your workspace…'
+                    : 'Create my own site instead'}
                 </Button>
               </Stack>
             ) : (
@@ -661,14 +672,19 @@ function OrgJump() {
                     'separate setup needed.'
                   }
                   action={
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                    <Stack
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={1.5}
+                    >
                       <Button
                         variant="contained"
                         color="primary"
                         disabled={startingSite}
                         onClick={() => void startFirstSite()}
                       >
-                        {startingSite ? 'Setting up your workspace…' : 'Create site'}
+                        {startingSite
+                          ? 'Setting up your workspace…'
+                          : 'Create site'}
                       </Button>
                       <Button
                         variant="text"
@@ -785,7 +801,9 @@ function OrgJump() {
                               }}
                             >
                               <MdiIcon
-                                path={org.pinned ? mdiPin.path : mdiPinOutline.path}
+                                path={
+                                  org.pinned ? mdiPin.path : mdiPinOutline.path
+                                }
                               />
                             </IconButton>
                           </Tooltip>
