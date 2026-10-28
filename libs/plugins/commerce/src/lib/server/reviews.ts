@@ -105,7 +105,13 @@ export interface PublicStoreReview {
   createdAtMs: number
   /** The reviewed product, when it is still on sale. */
   productName?: string
+  /** Its page, when it is sold online; a product sold in person only has none. */
   productSlug?: string
+  /**
+   * The product is sold in person only and the store shows its reviews
+   * (AGL-4060): the band marks it "Sold in store" and links nowhere.
+   */
+  soldInStore?: true
 }
 
 /** The most reviews the store-wide list returns. */
@@ -122,6 +128,30 @@ export function reviewerShortName(name: string): string {
   return last ? `${first} ${last[0].toUpperCase()}.` : first
 }
 
+/** The most products a store may keep its in-store reviews off the site for, read at once. */
+export const HIDDEN_REVIEW_PRODUCTS_MAX = 500
+/** How many pages of the newest reviews the band reads to fill itself past hidden ones. */
+const STORE_REVIEWS_PAGES = 4
+/** Firestore's ceiling on the values of one `in` filter. */
+const IN_FILTER_MAX = 30
+
+/**
+ * The products sold in person only whose reviews the store keeps off the site
+ * (AGL-4060, `inStoreReviews: 'hide'`). Two equalities, which Firestore
+ * serves from its automatic single-field indexes.
+ */
+export async function readHiddenReviewProductIds(
+  hostRef: FirebaseFirestore.DocumentReference,
+): Promise<Set<string>> {
+  const snapshot = await hostRef
+    .collection('products')
+    .where('sellOnline', '==', false)
+    .where('inStoreReviews', '==', 'hide')
+    .limit(HIDDEN_REVIEW_PRODUCTS_MAX)
+    .get()
+  return new Set(snapshot.docs.map((doc) => doc.id))
+}
+
 /**
  * The store's latest APPROVED reviews across every product, newest first, with
  * the aggregate over all of them — the store-wide reviews band a storefront
@@ -129,10 +159,16 @@ export function reviewerShortName(name: string): string {
  * page, and nothing here is ever sample text (a published page shows real
  * reviews or none).
  *
+ * A product sold in person only (AGL-4060) shows its reviews here by default,
+ * named, marked `soldInStore` and never linked, since it has no page; one
+ * whose store chose to hide them (`inStoreReviews: 'hide'`) is in neither the
+ * list nor the aggregate.
+ *
  * The list is `status == approved` ordered by `createdAtMs desc`, served by
  * the COLLECTION composite `reviews (status ASC, createdAtMs DESC)` that the
- * moderation queue already declares; the aggregate is a count and an average
- * over the same equality, which the automatic single-field index serves.
+ * moderation queue already declares, read a page at a time past hidden ones;
+ * the aggregate is a count and a sum over the same equality, less the hidden
+ * products' (`productId in …`, at most 30 at a time).
  */
 export async function readStoreReviews(
   hostId: string,
@@ -142,13 +178,31 @@ export async function readStoreReviews(
   const hostRef = firestore.collection('hosts').doc(hostId)
   const approved = hostRef.collection('reviews').where('status', '==', 'approved')
   const max = Math.min(STORE_REVIEWS_MAX, Math.max(1, Math.floor(Number(limit)) || STORE_REVIEWS_DEFAULT))
-  const [listSnapshot, aggregateSnapshot] = await Promise.all([
-    approved.orderBy('createdAtMs', 'desc').limit(max).get(),
-    approved
-      .aggregate({ count: AggregateField.count(), average: AggregateField.average('rating') })
-      .get(),
+  const hidden = await readHiddenReviewProductIds(hostRef)
+  const hiddenIds = [...hidden]
+  const tally = { count: AggregateField.count(), sum: AggregateField.sum('rating') }
+  const aggregates = Promise.all([
+    approved.aggregate(tally).get(),
+    ...Array.from({ length: Math.ceil(hiddenIds.length / IN_FILTER_MAX) }, (_, chunk) =>
+      approved
+        .where('productId', 'in', hiddenIds.slice(chunk * IN_FILTER_MAX, (chunk + 1) * IN_FILTER_MAX))
+        .aggregate(tally)
+        .get(),
+    ),
   ])
-  const rows = listSnapshot.docs.map((docSnapshot) => ({
+
+  // The newest approved reviews, a page at a time, past any the store hides.
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  let after: FirebaseFirestore.QueryDocumentSnapshot | null = null
+  for (let page = 0; page < STORE_REVIEWS_PAGES && docs.length < max; page += 1) {
+    let query = approved.orderBy('createdAtMs', 'desc')
+    if (after) query = query.startAfter(after)
+    const snapshot = await query.limit(max).get()
+    docs.push(...snapshot.docs.filter((doc) => !hidden.has(String(doc.get('productId') ?? ''))))
+    if (snapshot.docs.length < max || !hidden.size) break
+    after = snapshot.docs[snapshot.docs.length - 1]
+  }
+  const rows = docs.slice(0, max).map((docSnapshot) => ({
     id: docSnapshot.id,
     productId: String(docSnapshot.get('productId') ?? ''),
     rating: Number(docSnapshot.get('rating') ?? 0),
@@ -157,32 +211,50 @@ export async function readStoreReviews(
     verified: Boolean(docSnapshot.get('verified')),
     createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
   }))
-  // The reviewed products' names, in one batched read of at most `max` docs.
+  // The reviewed products, in one batched read of at most `max` docs.
   const productIds = [...new Set(rows.map((row) => row.productId).filter(Boolean))]
-  const products = new Map<string, { name: string; slug: string }>()
+  const products = new Map<string, { name: string; slug: string | null; online: CommerceModel.ProductReviewsOnline }>()
   if (productIds.length) {
     const snapshots = await firestore.getAll(
       ...productIds.map((id) => hostRef.collection('products').doc(id)),
     )
     for (const snapshot of snapshots) {
       const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null
-      // A product sold in person only (AGL-4060) is named and linked nowhere
-      // online, as a draft is not.
-      if (!CommerceModel.productListedOnline(data)) continue
-      products.set(snapshot.id, { name: String(data['name'] ?? ''), slug: String(data['slug'] ?? '') })
+      const online = CommerceModel.productReviewsOnline(data)
+      // A draft or a deleted product is named nowhere, as before.
+      if (!online) continue
+      products.set(snapshot.id, {
+        name: String(data['name'] ?? ''),
+        // Sold in person only: no page to link to.
+        slug: online === 'listed' ? String(data['slug'] ?? '') : null,
+        online,
+      })
     }
   }
-  const reviews = rows.map(({ productId, ...row }) => {
-    const product = products.get(productId)
-    return {
-      ...row,
-      ...(product?.name ? { productName: product.name } : {}),
-      ...(product?.slug ? { productSlug: product.slug } : {}),
-    }
-  })
-  const data = aggregateSnapshot.data() as { count?: number; average?: number | null }
-  const count = Number(data.count ?? 0)
-  const average = count ? Number(data.average ?? 0) : 0
+  const reviews = rows
+    // A product hidden since the list was read is still never shown.
+    .filter((row) => products.get(row.productId)?.online !== 'hidden')
+    .map(({ productId, ...row }) => {
+      const product = products.get(productId)
+      return {
+        ...row,
+        ...(product?.name ? { productName: product.name } : {}),
+        ...(product?.slug ? { productSlug: product.slug } : {}),
+        ...(product?.online === 'sold-in-store' ? { soldInStore: true as const } : {}),
+      }
+    })
+  const [all, ...hiddenTallies] = await aggregates
+  const counted = (snapshot: { data: () => unknown }) => {
+    const data = snapshot.data() as { count?: number; sum?: number | null }
+    return { count: Number(data.count ?? 0), sum: Number(data.sum ?? 0) }
+  }
+  const total = counted(all)
+  for (const tallied of hiddenTallies.map(counted)) {
+    total.count -= tallied.count
+    total.sum -= tallied.sum
+  }
+  const count = Math.max(0, total.count)
+  const average = count ? total.sum / count : 0
   return { reviews, aggregate: { count, average: Math.round(average * 10) / 10 } }
 }
 
@@ -389,7 +461,22 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
     if (req.query.mode === 'eligibility') {
       return await eligibilityHandler(req, res, hostId, productId)
     }
-    const { reviews, aggregate } = await readProductReviews(hostId, productId)
+    // A product sold in person only whose store hides its reviews from the
+    // site (AGL-4060) answers none, here as on every other online surface.
+    const product = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+      .collection('products')
+      .doc(productId)
+      .get()
+    const hiddenOnline =
+      CommerceModel.productReviewsOnline(product?.exists ? (product.data() as Record<string, unknown>) : null) ===
+      'hidden'
+    const { reviews, aggregate } = hiddenOnline
+      ? { reviews: [], aggregate: { count: 0, average: 0 } }
+      : await readProductReviews(hostId, productId)
     res.setHeader(
       'Cache-Control',
       'public, s-maxage=120, stale-while-revalidate=300',

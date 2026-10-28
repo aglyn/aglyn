@@ -1920,6 +1920,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <ProductRegisterFields
               posQuickKey={Boolean(current.posQuickKey)}
               sellOnline={CommerceModel.productSellsOnline(current)}
+              inStoreReviews={current.inStoreReviews}
               modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
               update={update}
             />
@@ -1940,7 +1941,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             </EntitlementUpsell>
             {/* A product already set to in person only (AGL-4060) can always be put back online. */}
             {!CommerceModel.productSellsOnline(current) ? (
-              <ProductSellOnlineField sellOnline={false} update={update} />
+              <ProductSellOnlineField sellOnline={false} inStoreReviews={current.inStoreReviews} update={update} />
             ) : null}
           </>
         ) : null}

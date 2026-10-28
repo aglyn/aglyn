@@ -262,6 +262,23 @@ describe('store-wide reviews', () => {
     expect(screen.queryByText('Write a review')).toBeNull()
   })
 
+  it('marks a review of a product sold in person only "Sold in store", and links it nowhere (AGL-4060)', async () => {
+    answer({
+      reviews: [
+        { id: 'r1', rating: 4, body: 'Great hat.', authorName: 'Pat L.', verified: true, createdAtMs: 3, productName: 'Trucker Hat', soldInStore: true },
+        { id: 'r2', rating: 5, body: 'Smells wonderful.', authorName: 'Jane D.', verified: false, createdAtMs: 2, productName: 'Candle Gift Set', productSlug: 'candle-gift-set' },
+      ],
+      aggregate: { count: 2, average: 4.5 },
+    })
+    render(<ProductReviews scope="store" heading="Loved by customers" />)
+    expect(await screen.findByText('Great hat.')).toBeTruthy()
+    expect(screen.getByText('Sold in store')).toBeTruthy()
+    expect(screen.getByText('Trucker Hat').closest('a')).toBeNull()
+    // A product sold online keeps its link, and no label.
+    expect(screen.getByText('Candle Gift Set').closest('a')?.getAttribute('href')).toBe('/products/candle-gift-set')
+    expect(screen.getAllByText('Sold in store')).toHaveLength(1)
+  })
+
   it('shows the editor a hint, never sample reviews', () => {
     mockSite.hostId = ''
     render(<ProductReviews scope="store" />)

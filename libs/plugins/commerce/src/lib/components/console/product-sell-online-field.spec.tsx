@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
 
 /*
@@ -48,5 +48,47 @@ describe('the Sell online switch', () => {
     render(<ProductRegisterFields posQuickKey={false} sellOnline modifierGroups={[]} update={jest.fn()} />)
     expect(screen.getByRole('switch', { name: 'Quick key at the register' })).toBeTruthy()
     expect((screen.getByRole('switch', { name: 'Sell online' }) as HTMLInputElement).checked).toBe(true)
+  })
+})
+
+/*
+ * "Reviews on your site" (AGL-4060): only for a product sold in person only,
+ * shown marked "Sold in store" by default, and hidden when the store chooses.
+ */
+describe('the Reviews on your site choice', () => {
+  it('is not offered while the product sells online, whose reviews are on its own page', () => {
+    render(<ProductSellOnlineField sellOnline update={jest.fn()} />)
+    expect(screen.queryByLabelText('Reviews on your site')).toBeNull()
+  })
+
+  it('shows them, marked Sold in store, by default', () => {
+    render(<ProductSellOnlineField sellOnline={false} update={jest.fn()} />)
+    const choice = screen.getByRole('combobox', { name: 'Reviews on your site' })
+    expect(choice.textContent).toBe('Show, marked Sold in store')
+    expect(screen.getByText(/marked “Sold in store”, with no link to a product page/)).toBeTruthy()
+  })
+
+  it('writes `inStoreReviews: hide` when the store keeps them off the site, and says what that means', () => {
+    const update = jest.fn()
+    const { rerender } = render(<ProductSellOnlineField sellOnline={false} update={update} />)
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Reviews on your site' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Hide'))
+    expect(update).toHaveBeenCalledWith({ inStoreReviews: 'hide' })
+    rerender(<ProductSellOnlineField sellOnline={false} inStoreReviews="hide" update={update} />)
+    expect(screen.getByRole('combobox', { name: 'Reviews on your site' }).textContent).toBe('Hide')
+    expect(screen.getByText(/appear nowhere on your site/)).toBeTruthy()
+  })
+
+  it('reaches the register settings with the product’s own choice', () => {
+    render(
+      <ProductRegisterFields
+        posQuickKey={false}
+        sellOnline={false}
+        inStoreReviews="hide"
+        modifierGroups={[]}
+        update={jest.fn()}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: 'Reviews on your site' }).textContent).toBe('Hide')
   })
 })
