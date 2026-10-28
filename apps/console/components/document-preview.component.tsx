@@ -985,23 +985,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   // empty document throughout, which is indistinguishable from a tab that
   // will never load. The bounded read above means this state is temporary
   // even when Firestore never answers.
-  if (!root) {
-    return (
-      <Stack
-        sx={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-          gap: 2,
-        }}
-      >
-        <CircularProgress />
-        <Typography color="text.secondary">
-          {`Preparing the ${KIND_LABEL[kind ?? 'screen']} preview…`}
-        </Typography>
-      </Stack>
-    )
-  }
+  if (!root) return <DocumentPreviewPreparing kind={kind} />
 
   return (
     <SiteSchemeThemesContext.Provider value={schemeThemes}>
@@ -1172,6 +1156,31 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
 }
 
 const ObservedDocumentPreviewSurface = observer(DocumentPreviewSurface)
+
+/**
+ * What a preview shows until it can draw (AGL-1261): a spinner and the kind
+ * it is preparing. Exported so a route that reads before it mounts the
+ * preview, as the staff preview reads the site's plugins, says the same
+ * instead of painting nothing (AGL-4089).
+ */
+export function DocumentPreviewPreparing({ kind }: { kind?: PreviewKind | null }) {
+  return (
+    <Stack
+      role="status"
+      sx={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        gap: 2,
+      }}
+    >
+      <CircularProgress />
+      <Typography color="text.secondary">
+        {`Preparing the ${KIND_LABEL[kind ?? 'screen']} preview…`}
+      </Typography>
+    </Stack>
+  )
+}
 
 /**
  * Preview, with the site's placed images and films answering from their DAM
