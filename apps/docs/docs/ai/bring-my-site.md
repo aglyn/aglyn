@@ -156,7 +156,8 @@ drafts instead, and nothing is published until you publish it.
 
 ## Review a wave {#review-a-wave}
 
-When a wave is in, its page says so, for example **Main pages is in**, and shows:
+When a wave is in, its page says so, for example **Main pages is in your site's preview**,
+and shows:
 
 - every page of the wave, with **Open draft**, its old and new address, and **Old page** to
   compare it with the page on your current site;
@@ -165,11 +166,22 @@ When a wave is in, its page says so, for example **Main pages is in**, and shows
 - a page that could not be brought in, with the reason;
 - how many AI credits the wave used.
 
-Every page is a **draft**: nothing is published until you publish it. **Open your draft
-pages** opens the site's Pages list. When you are ready for more, choose the next wave's
-**Start** button. Nothing starts the next wave except you.
+If your site started in [preview](../building-sites/site-protection/make-your-site-private.md#keep-it-to-your-team-with-preview),
+each wave's pages are published into the preview as the wave comes in. You, your team and
+Aglyn support can open the site and see them at their addresses, home at your site's
+address. Visitors still see **Coming soon**. To make the site public, switch **Preview** off
+in **Admin → Error pages**, or choose **Make it public** on the banner that says your site is
+in preview.
 
-**Cancel** stops the import. The pages already brought in stay as drafts.
+If your site is not in preview, every page is a **draft**: nothing is published until you
+publish it.
+
+**Open your draft pages** opens the site's Pages list. When you are ready for more, choose
+the next wave's **Start** button. Nothing starts the next wave except you, unless you chose
+**Start every remaining wave**.
+
+**Cancel** stops the import. The pages already brought in stay where they are: in the
+preview, or as drafts.
 
 ## Photos {#photos}
 
