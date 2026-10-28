@@ -331,9 +331,10 @@ describe('the customer display state (AGL-3608)', () => {
     expect(sanitizePosDisplayState({ mode: 'screen', screen }, 1, { screen: checker }).mode).toBe('idle')
   })
 
-  it('reads a screen left on the display past its life as idle', () => {
+  it('keeps a screen on the display until staff close it: no timer (AGL-4042)', () => {
     const state = { mode: 'screen' as const, updatedAtMs: 0, promptId: 's1', screen: { pluginId: 'a', path: '/b', params: {} } }
     expect(posDisplayPublicState(state, 60_000).mode).toBe('screen')
-    expect(posDisplayPublicState(state, 31 * 60 * 1000).mode).toBe('idle')
+    expect(posDisplayPublicState(state, 31 * 60 * 1000).mode).toBe('screen')
+    expect(posDisplayPublicState(state, 24 * 60 * 60 * 1000).mode).toBe('screen')
   })
 })

@@ -185,13 +185,16 @@ facing the rider opens the waiver for them to sign. You keep the register's scre
 It works the same way as [at the window](#sign-at-the-window): the record notes who
 put the waiver on the display, and the rider's email is optional.
 
-- The button reads **On the customer display** while the rider signs, and the status
+- The customer shows **On the customer display** while the rider signs, and the status
   updates when they're done.
+- The waiver stays on the display until it is closed, however long the rider takes:
+  there is no timer. Select **Close display** beside the customer to close it
+  yourself; the display goes back to your store's screen within a few seconds and
+  can't sign under it again.
 - When the rider selects **Done** or **Cancel**, the display goes back to your store's
-  screen. It also goes back by itself a minute after a signing, or after five minutes
-  nobody touches it.
-- The display can sign waivers for 30 minutes after you select **Customer display**.
-  After that it asks you to show the waiver again.
+  screen and closes it too. It also goes back by itself a minute after a signing.
+- **Close display** is still offered after the register's page reloads, on the same
+  device.
 
 ## Minors
 

@@ -639,8 +639,9 @@ export function registerCommerceConsoleApi(): void {
     (await import('./server/pos-hardware-sale')).posHardwareSaleHandler(req, res),
   )
   // A store's card reader start-up screen (AGL-4048): the POS devices card's
-  // setting, gated like a sale, and the staff page's platform default. Both
-  // draw images, so each loads with its first call.
+  // setting, gated like a sale, and the staff page's platform default. Each
+  // loads with its first call; the drawing they ask for is the images
+  // route's, below.
   registerPluginApiRoute('commerce/pos-reader-splash', async (req, res) =>
     (await import('./server/pos-reader-splash')).posReaderSplashHandler(req, res),
   )
@@ -648,6 +649,19 @@ export function registerCommerceConsoleApi(): void {
     web: async (request) =>
       (await import('./server/pos-reader-splash-admin')).posReaderSplashAdmin(request),
   })
+  // The image work behind both (AGL-4048): drawing a screen and reading an
+  // uploaded one take `sharp`, whose native library only the console's
+  // plugins' image function ships (`/api/plugin-images/…`), so the plugin
+  // API's function does not carry it. Called by our own servers, signed; a
+  // machine's door.
+  registerPluginApiRoute(
+    'commerce/pos-reader-splash-images',
+    {
+      web: async (request) =>
+        (await import('./server/pos-reader-splash-images-route')).posReaderSplashImagesRoute(request),
+    },
+    { machine: true, images: true },
+  )
   registerPluginApiRoute('commerce/admin/hardware-orders', {
     web: async (request) =>
       (await import('./server/pos-hardware-admin')).posHardwareAdminOrders(request),

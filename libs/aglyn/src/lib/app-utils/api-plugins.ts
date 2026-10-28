@@ -223,6 +223,20 @@ export interface PluginApiRouteOptions {
    * not read it.
    */
   ownVisitorGates?: boolean
+  /**
+   * The route draws images with the platform's image library (`sharp`),
+   * whose native library is too large to ship with every plugin door
+   * (AGL-4048). The console serves it from a function of its own,
+   * `/api/{PLUGIN_IMAGES_API_PREFIX}/{path}`, the only one that ships that
+   * library, and its plugin dispatcher answers 404 for it, so it never runs
+   * where it cannot draw.
+   *
+   * Honored only beside {@link machine}: that function runs none of the
+   * dispatcher's member gates, so its route is a machine's door that
+   * verifies its own caller (our own servers, signed), and a plugin's door
+   * that draws for a member asks it rather than drawing itself.
+   */
+  images?: boolean
 }
 
 /** Leading/trailing slashes stripped so '/events/list' and 'events/list' key alike. */
@@ -405,6 +419,23 @@ export function isPluginRecipientLinkRoute(path: string): boolean {
 export function isPluginMachineRoute(path: string): boolean {
   const matched = matchRegisteredApiKey(path)
   return matched ? apiRouteOptions.get(matched.key)?.machine === true : false
+}
+
+/**
+ * Where the console serves the plugin routes that draw images
+ * ({@link PluginApiRouteOptions.images}): `/api/plugin-images/{path}`.
+ */
+export const PLUGIN_IMAGES_API_PREFIX = 'plugin-images'
+
+/**
+ * Whether a request path resolves to a route registered to draw images: an
+ * {@link PluginApiRouteOptions.images} machine's door (AGL-4048), which only
+ * the console's images function serves.
+ */
+export function isPluginImagesRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  const options = matched ? apiRouteOptions.get(matched.key) : undefined
+  return options?.images === true && options.machine === true
 }
 
 /**

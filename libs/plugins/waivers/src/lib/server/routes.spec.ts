@@ -22,7 +22,7 @@ import { createHash } from 'crypto'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
 import { setWaiverDisplaySecretForTests } from './display-grant'
-import { displayGrantRoute, signOnDisplayRoute } from './display-routes'
+import { displayGrantRoute, displayGrantStateRoute, signOnDisplayRoute } from './display-routes'
 import { setWaiversEmailSenderForTests, type WaiverEmail } from './emails'
 import { setWaiversGateDepsForTests } from './gate'
 import { eraseWaiversPerson, setWaiversErasureDepsForTests } from './person-eraser'
@@ -433,6 +433,14 @@ describe('signing on the register’s customer display', () => {
     const response = await call(displayGrantRoute, 'POST', { token, host })
     return { status: response.status, body: await response.json() }
   }
+  async function staff(action: 'state' | 'close', grantId: string, token = 'tok-clerk', host = HOST) {
+    const response = await call(displayGrantRoute, 'POST', { token, host, body: { action, grantId } })
+    return { status: response.status, body: await response.json() }
+  }
+  async function displayState(body: Record<string, unknown>) {
+    const response = await call(displayGrantStateRoute, 'POST', { token: null, body })
+    return { status: response.status, body: await response.json() }
+  }
 
   it('grants it only to a member who may take signatures', async () => {
     expect((await grantFor('tok-viewer')).status).toBe(403)
@@ -440,7 +448,10 @@ describe('signing on the register’s customer display', () => {
     expect((await grantFor(null as never)).status).toBe(401)
     const granted = await grantFor('tok-window')
     expect(granted.status).toBe(201)
-    expect(granted.body).toMatchObject({ grant: expect.stringMatching(/^aglyn-waiver-display-v1\./), expiresAtMs: NOW + 30 * 60 * 1000 })
+    expect(granted.body).toEqual({
+      grant: expect.stringMatching(/^aglyn-waiver-display-v2\./),
+      grantId: expect.stringMatching(/^[a-f0-9]{32}$/),
+    })
   })
 
   it('signs with the grant and no session, naming the staff member who put it on the display', async () => {
@@ -459,7 +470,42 @@ describe('signing on the register’s customer display', () => {
     })
   })
 
-  it('refuses no grant, a forged one, another site’s, an expired one, and stores nothing', async () => {
+  it('lasts until staff close it: no timer, then nothing signs under it (AGL-4042)', async () => {
+    const waiver = await publishedWaiver()
+    const { body } = await grantFor()
+    // Hours later, still open, still signs.
+    setWaiversClockForTests(() => NOW + 6 * 60 * 60 * 1000)
+    expect((await staff('state', body.grantId)).body).toEqual({ open: true })
+    expect((await displayState({ grant: body.grant, hostId: HOST })).body).toEqual({ open: true })
+    const late = await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })
+    expect(late.status).toBe(201)
+    // A member who may not take signatures can neither ask nor close.
+    expect((await staff('close', body.grantId, 'tok-viewer')).status).toBe(403)
+    expect((await staff('close', body.grantId)).body).toEqual({ closed: true })
+    expect((await staff('state', body.grantId)).body).toEqual({ open: false })
+    expect((await displayState({ grant: body.grant, hostId: HOST })).body).toEqual({ open: false })
+    const refused = await call(signOnDisplayRoute, 'POST', {
+      token: null,
+      body: { ...signing(waiver, { attemptKey: 'after-close-1' }), grant: body.grant },
+    })
+    expect(refused.status).toBe(401)
+    expect((await refused.json()).error).toMatch(/closed this screen/)
+    expect(signatures()).toHaveLength(1)
+  })
+
+  it('closes as the display goes back, by the grant it holds, and for its own site only', async () => {
+    const { body } = await grantFor()
+    // Another site named, or a forged grant: nothing closes.
+    expect((await displayState({ grant: body.grant, hostId: OTHER_HOST, close: true })).body).toEqual({ open: false })
+    expect((await displayState({ grant: `${body.grant}x`, hostId: HOST, close: true })).body).toEqual({ open: false })
+    expect((await staff('state', body.grantId)).body).toEqual({ open: true })
+    // A grant of this site is not another site's staff's to close.
+    expect((await staff('close', body.grantId, 'tok-clerk', OTHER_HOST)).body).toEqual({ closed: false })
+    expect((await displayState({ grant: body.grant, hostId: HOST, close: true })).body).toEqual({ open: false })
+    expect((await staff('state', body.grantId)).body).toEqual({ open: false })
+  })
+
+  it('refuses no grant, a forged one, another site’s, and stores nothing', async () => {
     const waiver = await publishedWaiver()
     const { body } = await grantFor()
     const attempts: Array<Record<string, unknown>> = [
@@ -470,10 +516,8 @@ describe('signing on the register’s customer display', () => {
     for (const attempt of attempts) {
       const refused = await call(signOnDisplayRoute, 'POST', { token: null, body: attempt })
       expect(refused.status).toBe(401)
-      expect((await refused.json()).error).toMatch(/expired/)
+      expect((await refused.json()).error).toMatch(/closed this screen/)
     }
-    setWaiversClockForTests(() => NOW + 31 * 60 * 1000)
-    expect((await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })).status).toBe(401)
     expect(signatures()).toHaveLength(0)
   })
 

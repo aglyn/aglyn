@@ -426,6 +426,13 @@ which is drawn from the first when left empty). In the Stripe Dashboard, leave
 your platform account's **default** Terminal configuration without a splash
 screen: a Location without its own screen inherits it, so it would also show on
 white-label workspaces' readers.
+
+The screens are drawn with `sharp`. On Vercel only the console's
+`/api/plugin-images/…` function ships its native library, so
+the console's other functions and the tenant's scheduled jobs ask that function to
+draw, at `NEXT_PUBLIC_CONSOLE_URL`, signed with `TOKEN_SIGNING_SECRET`; set both on
+both projects. Anywhere else (one server holding every route) the screens are
+drawn where they are asked for, and nothing more is needed.
 :::
 
 #### Which events to subscribe {#stripe-webhook-events}

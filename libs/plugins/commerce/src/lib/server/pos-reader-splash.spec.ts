@@ -157,6 +157,13 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { registerCommerceServerDeclarations } from '../declarations.server'
 import { renderPosReaderSplash } from './pos-reader-splash-render'
+import {
+  posReaderSplashImagesOrigin,
+  setPosReaderSplashImagesSecretForTests,
+  signPosReaderSplashImagesRequest,
+  verifyPosReaderSplashImagesRequest,
+} from './pos-reader-splash-images'
+import { posReaderSplashImagesRoute } from './pos-reader-splash-images-route'
 import { ensurePosOfflineCardConfiguration, savePosReaderConfiguration, syncPosReaderTipping } from './pos-terminal'
 
 interface StripeCall {
@@ -176,9 +183,18 @@ let onConfigurationCreate: (() => void) | null = null
 let refuseConfigurations = false
 let externalImage: Buffer | null = null
 
+/** Every request to the images function, as it arrived (AGL-4048). */
+const imagesCalls: Array<{ url: string; headers: Record<string, string>; body: Record<string, unknown> }> = []
+
 const fetchMock = jest.fn(async (url: any, init: any) => {
   const target = new URL(String(url))
   const headers = (init?.headers ?? {}) as Record<string, string>
+  // The images function, on its own origin: served by its real handler.
+  if (target.host === 'images.example.com') {
+    imagesCalls.push({ url: String(url), headers, body: JSON.parse(String(init?.body ?? '{}')) })
+    const { posReaderSplashImagesRoute } = await import('./pos-reader-splash-images-route')
+    return posReaderSplashImagesRoute(new Request(String(url), { method: init?.method, headers, body: init?.body }))
+  }
   if (target.host !== 'api.stripe.com' && target.host !== 'files.stripe.com') {
     stripeCalls.push({ method: 'GET', host: target.host, path: target.pathname, key: null, params: new URLSearchParams() })
     if (!externalImage) return { ok: false, status: 404, headers: new Headers(), arrayBuffer: async () => new ArrayBuffer(0) }
@@ -928,5 +944,100 @@ describe('the staff default', () => {
     expect(mockStorage.size).toBe(0)
     expect((await staff('POST', { action: 'apply' })).body).toMatchObject({ applied: 2 })
     expect(fakeDocs.get('hosts/host-2/terminal/config')?.['splashAppliedKey']).toBe('none')
+  })
+})
+
+/*
+ * The image work has its own function on Vercel (AGL-4048): only it ships
+ * `sharp`'s native library, so every other function asks it over HTTP,
+ * signed, and it draws the plan with the same key.
+ */
+describe('the start-up screen’s images function', () => {
+  const ENV = ['VERCEL', 'NEXT_PUBLIC_CONSOLE_URL'] as const
+  beforeEach(() => {
+    imagesCalls.length = 0
+    setPosReaderSplashImagesSecretForTests(() => 'images-secret')
+  })
+  afterEach(() => {
+    for (const key of ENV) delete process.env[key]
+    setPosReaderSplashImagesSecretForTests(null)
+  })
+  const onVercel = () => {
+    process.env.VERCEL = '1'
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://images.example.com/'
+  }
+  const images = (body: Record<string, unknown>, header?: string) =>
+    posReaderSplashImagesRoute(
+      new Request('https://images.example.com/api/plugin-images/commerce/pos-reader-splash-images', {
+        method: 'POST',
+        headers: header === undefined ? {} : { 'x-aglyn-images-signature': header },
+        body: JSON.stringify(body),
+      }),
+    )
+
+  it('is asked for only on Vercel, at the console’s address; anywhere else the work is done in place', () => {
+    expect(posReaderSplashImagesOrigin()).toBeNull()
+    onVercel()
+    expect(posReaderSplashImagesOrigin()).toBe('https://images.example.com')
+  })
+
+  it('draws and uploads the screen for a door on Vercel, which then sets it exactly as before', async () => {
+    onVercel()
+    await seedPlatformDefault()
+    const result = await applyPosReaderSplash('host-1')
+    expect(result.outcome).toBe('applied')
+    expect(imagesCalls).toHaveLength(1)
+    expect(imagesCalls[0].url).toBe('https://images.example.com/api/plugin-images/commerce/pos-reader-splash-images')
+    expect(imagesCalls[0].body).toEqual({ op: 'draw', hostId: 'host-1', key: result.plan?.key })
+    expect(imagesCalls[0].headers['x-aglyn-images-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/)
+    expect(stripeOnly().filter((call) => call.host === 'files.stripe.com')).toHaveLength(2)
+    const [create] = configurationWrites()
+    expect(create.params.get('stripe_s700[splashscreen]')).toBe('file_1')
+    expect(create.params.get('bbpos_wisepos_e[splashscreen]')).toBe('file_2')
+    expect(fakeDocs.get(configPath)).toMatchObject({ splashAppliedKey: result.plan?.key })
+  })
+
+  it('reads an uploaded staff screen there too', async () => {
+    onVercel()
+    const good = await png(1080, 1920)
+    const saved = await staff('POST', { action: 'upload', family: 'portrait-large', dataBase64: good.toString('base64') })
+    expect(saved.status).toBe(200)
+    expect(imagesCalls.map((call) => call.body['op'])).toEqual(['facts'])
+    const wrong = await staff('POST', { action: 'upload', family: 'portrait-large', dataBase64: (await png(720, 1280)).toString('base64') })
+    expect(wrong.body.error).toMatch(/this image is 720 × 1280/)
+  })
+
+  it('refuses an unsigned, a forged, a stale, a re-aimed and a foreign request, and draws nothing', async () => {
+    await seedPlatformDefault()
+    const body = { op: 'draw', hostId: 'host-1', key: 'platform:x' }
+    expect((await images(body)).status).toBe(401)
+    expect((await images(body, `t=${Date.now()},v1=${'0'.repeat(64)}`)).status).toBe(401)
+    const raw = JSON.stringify(body)
+    expect((await images(body, signPosReaderSplashImagesRequest(raw, Date.now() - 6 * 60 * 1000))).status).toBe(401)
+    expect((await images({ ...body, hostId: 'host-2' }, signPosReaderSplashImagesRequest(raw))).status).toBe(401)
+    const ours = signPosReaderSplashImagesRequest(raw)
+    expect(verifyPosReaderSplashImagesRequest(ours, raw)).toBe(true)
+    // Signed under another deploy's secret.
+    setPosReaderSplashImagesSecretForTests(() => 'another-secret')
+    expect(verifyPosReaderSplashImagesRequest(ours, raw)).toBe(false)
+    setPosReaderSplashImagesSecretForTests(() => {
+      throw new Error('TOKEN_SIGNING_SECRET is not configured')
+    })
+    expect(verifyPosReaderSplashImagesRequest(`t=${Date.now()},v1=${'0'.repeat(64)}`, raw)).toBe(false)
+    expect(stripeOnly()).toHaveLength(0)
+  })
+
+  it('draws only the screen the caller decided on: a plan that moved is 409, and the store hears it', async () => {
+    await seedPlatformDefault()
+    const raw = JSON.stringify({ op: 'draw', hostId: 'host-1', key: 'platform:old' })
+    const moved = await posReaderSplashImagesRoute(
+      new Request('https://images.example.com/api/plugin-images/commerce/pos-reader-splash-images', {
+        method: 'POST',
+        headers: { 'x-aglyn-images-signature': signPosReaderSplashImagesRequest(raw) },
+        body: raw,
+      }),
+    )
+    expect(moved.status).toBe(409)
+    expect(stripeOnly()).toHaveLength(0)
   })
 })

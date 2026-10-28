@@ -445,6 +445,17 @@ async function staffAction(
       await writePosDisplayState(hostId, registerId, state)
       return res.status(200).json({ ok: true, promptId: state.promptId ?? null })
     }
+    case 'close-screen': {
+      // A plugin takes its own screen off the display (AGL-4042, core's
+      // `CustomerDisplayHost.close`): only while that plugin's screen is
+      // the one showing, so it never clears a sale the register moved on to.
+      const pluginId = String(body['pluginId'] ?? '')
+      const snapshot = await stateRef(hostId, registerId).get()
+      const current = snapshot.exists ? (snapshot.data() as CommerceModel.PosDisplayState) : null
+      const showing = current?.mode === 'screen' && current.screen?.pluginId === pluginId
+      if (showing) await writePosDisplayState(hostId, registerId, { mode: 'idle', updatedAtMs: Date.now() })
+      return res.status(200).json({ ok: true, closed: showing })
+    }
     case 'state': {
       const snapshot = await stateRef(hostId, registerId).get()
       const state = snapshot.exists ? (snapshot.data() as CommerceModel.PosDisplayState) : null
