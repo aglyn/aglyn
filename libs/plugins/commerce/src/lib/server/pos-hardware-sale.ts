@@ -16,10 +16,17 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { maskEmailAddress } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { POS_HARDWARE_SKUS, type PosHardwareOrder } from '../model/pos-hardware'
 import type { PosPermission } from '../model/plugin-permissions'
-import { authorizePosStaff, posRequestBody } from './pos-auth'
+import { authorizePosStaff, posIdempotencyKey, posRequestBody, type PosStaff } from './pos-auth'
 import { isPosHardwareSellerStore, posHardwareInPersonConfig, posHardwareOrderNumber } from './pos-hardware'
+
+/** How many lookups one register user makes in ten minutes. */
+export const BUYER_LOOKUPS_PER_WINDOW = 30
+const LOOKUP_WINDOW_MS = 10 * 60 * 1000
 
 /*==========================================
  * `POST /api/commerce/pos-hardware-sale` (AGL-4038): selling a card reader in
@@ -33,6 +40,16 @@ import { isPosHardwareSellerStore, posHardwareInPersonConfig, posHardwareOrderNu
  *            they are yet (a kiosk or offline sale, a buyer with no account
  *            or no workspace yet), newest first. Records any paid sale still
  *            waiting to be recorded first (`sweepInPersonPosHardwareSales`).
+ *   find     look the buyer up across the platform by exact email, a
+ *            person's name or a workspace's name (`pos-hardware-buyer-lookup.ts`):
+ *            the least that picks the right person. Rate-limited per register
+ *            user and written to the platform's audit log, every time.
+ *   attach   say whose a sale is — by the register sale or the To attach
+ *            entry — as an account and workspace (and store), an account
+ *            with no workspace yet, or the address of someone with no
+ *            account, who is invited to sign up (`pos-hardware-attach.ts`).
+ *            Idempotency-Key required; audited.
+ *   detach   put an attached sale back on the To attach list. Audited.
  *
  * `status` is asked of whoever works the register; everything else needs
  * "Sell at the register" (`posSell`) on the seller store, since it is part
@@ -71,6 +88,71 @@ export const posHardwareSaleHandler: PluginApiHandler = async (req, res) => {
         const pending = await inPerson.pendingInPersonPosHardwareOrders(config)
         return res.status(200).json({ orders: pending.map(({ id, order }) => toAttachView(id, order)) })
       }
+      case 'find': {
+        const query = String(body['query'] ?? '').trim().slice(0, 120)
+        if (query.length < 2) return res.status(400).json({ error: 'Type at least two letters, or an email address.' })
+        const rate = await consumeRateLimit(`pos-hardware-lookup:${staff.uid}`, {
+          limit: BUYER_LOOKUPS_PER_WINDOW,
+          windowMs: LOOKUP_WINDOW_MS,
+        })
+        if (!rate.allowed) return res.status(429).json({ error: 'Too many lookups. Try again in a few minutes.' })
+        const found = await (await import('./pos-hardware-buyer-lookup')).findHardwareBuyers(query)
+        await audit(staff, 'pos-hardware-buyer-lookup', {
+          // An address is kept masked; a name as typed.
+          query: found.kind === 'email' ? maskEmailAddress(query) : query,
+          kind: found.kind,
+          matched: [
+            ...found.people.map((person) => person.uid),
+            ...found.workspaces.map((workspace) => `org:${workspace.orgId}`),
+          ],
+        })
+        return res.status(200).json(found)
+      }
+      case 'attach':
+      case 'detach': {
+        if (!posIdempotencyKey(req)) return res.status(400).json({ error: 'Missing Idempotency-Key' })
+        const attach = await import('./pos-hardware-attach')
+        try {
+          if (action === 'detach') {
+            const orderId = String(body['orderId'] ?? '')
+            const { order } = await attach.detachPosHardwareSale({ config, orderId })
+            await audit(staff, 'pos-hardware-sale-detach', { orderId }, orderId)
+            return res.status(200).json({ ok: true, order: toAttachView(orderId, order) })
+          }
+          const buyer = await attach.checkHardwareBuyer((body['buyer'] ?? {}) as Record<string, unknown>)
+          const outcome = await attach.attachPosHardwareSale({
+            config,
+            buyer,
+            attachedBy: staff.uid,
+            registerOrderId: typeof body['registerOrderId'] === 'string' ? body['registerOrderId'] : null,
+            orderId: typeof body['orderId'] === 'string' ? body['orderId'] : null,
+          })
+          const target = outcome.outcome === 'waiting' ? null : outcome.orderId
+          await audit(
+            staff,
+            'pos-hardware-sale-attach',
+            {
+              outcome: outcome.outcome,
+              uid: buyer.uid,
+              orgId: buyer.orgId,
+              hostId: buyer.hostId,
+              email: buyer.uid ? null : maskEmailAddress(buyer.email),
+              ...(outcome.outcome === 'waiting' ? { registerOrderId: outcome.registerOrderId } : {}),
+            },
+            target,
+          )
+          return res.status(200).json(
+            outcome.outcome === 'waiting'
+              ? { outcome: 'waiting' }
+              : { outcome: outcome.outcome, order: toAttachView(outcome.orderId, outcome.order) },
+          )
+        } catch (error) {
+          if (error instanceof attach.PosHardwareAttachRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
+      }
       default:
         return res.status(400).json({ error: 'Unknown action' })
     }
@@ -96,7 +178,14 @@ export function toAttachView(id: string, order: PosHardwareOrder) {
     lines: (order.lines ?? []).map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })),
     totalCents: order.totalCents ?? 0,
     createdAtMs: order.createdAtMs ?? 0,
-    contactEmail: order.contactEmail ?? null,
+    // An account's address is masked, as the lookup showed it; a receipt
+    // address or one typed for a buyer with no account is the register's own.
+    contactEmail: order.attachment?.uid
+      ? order.contactEmail
+        ? maskEmailAddress(order.contactEmail)
+        : null
+      : (order.contactEmail ?? null),
+    attached: order.attachment?.state === 'attached',
     /** A buyer with an account and no workspace yet. */
     awaitingWorkspace: Boolean(order.attachment?.uid),
     /** A buyer with no account yet, invited to sign up. */
@@ -105,3 +194,27 @@ export function toAttachView(id: string, order: PosHardwareOrder) {
 }
 
 export type ToAttachView = ReturnType<typeof toAttachView>
+
+/**
+ * One row of the platform's audit log for a lookup or an attachment: who on
+ * the selling store did it, and what — never the buyer's full address.
+ */
+async function audit(
+  staff: PosStaff,
+  action: string,
+  after: Record<string, unknown>,
+  orderId: string | null = null,
+): Promise<void> {
+  const firestore = firebaseAdmin.app().firestore()
+  await addAdminAudit(firestore, {
+    action,
+    actorUid: staff.uid,
+    actorEmail: null,
+    scope: 'posHardwareSale',
+    target: orderId ? `posHardwareSales/${orderId}` : `hosts/${staff.hostId}`,
+    orgId: staff.orgId,
+    before: null,
+    after,
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
+}

@@ -118,7 +118,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 import { posHardwareHandler, posHardwareOrderId } from './pos-hardware'
 import { posHardwareBillingWebhookHandler } from './pos-hardware-webhook'
 import { posHardwareAdminOrders } from './pos-hardware-admin'
-import { posHardwareEmailMerge } from './pos-hardware-notify'
+import { posHardwareEmailMerge, posHardwareInviteMerge } from './pos-hardware-notify'
 import { createPosHardwareUserEraser } from './pos-hardware-user-eraser'
 import { createPosHardwareOrgEraser } from './pos-hardware-closure'
 import { fakeFirestore } from '../testing/fake-firestore'
@@ -784,11 +784,15 @@ describe('the emails', () => {
       tracking: { carrier: 'ups', number: '1Z', url: 'https://www.ups.com/track?tracknum=1Z' },
     } as unknown as PosHardwareOrder
     const merge = await posHardwareEmailMerge(ORDER_ID, order, { site: 'Corner Cafe', org: 'Acme' })
+    // The sign-up invitation (AGL-4038) is filled by its own sender.
+    const invite = posHardwareInviteMerge(ORDER_ID, order)
     for (const template of posHardwareSystemEmailTemplates('https://console.example.com')) {
+      const filled = template.key === POS_HARDWARE_EMAIL_KEYS.invited ? invite : merge
       for (const token of template.mergeTokens) {
-        expect([template.key, token.name, merge[token.name] !== undefined]).toEqual([template.key, token.name, true])
+        expect([template.key, token.name, filled[token.name] !== undefined]).toEqual([template.key, token.name, true])
       }
     }
+    expect(invite['order.signUpUrl']).toMatch(/\/signup$/)
     expect(merge['order.total']).toBe('$140.00')
     expect(merge['order.carrier']).toBe('UPS')
     expect(merge['order.shipTo']).toBe('Jordan Lee\n12 Main St\nSpringfield, IL 62701')

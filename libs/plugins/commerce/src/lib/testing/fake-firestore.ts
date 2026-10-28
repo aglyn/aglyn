@@ -129,6 +129,10 @@ export function docRef(path: string): any {
       fakeDocs.delete(path)
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
+    /** The collection it is in, as a collection-group answer walks up. */
+    get parent() {
+      return collectionRef(path.split('/').slice(0, -1).join('/'))
+    },
   }
 }
 
@@ -164,6 +168,12 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
   return {
     ...query,
     path,
+    id: path.split('/').pop() as string,
+    /** The document it is under; null for a top-level collection. */
+    get parent() {
+      const segments = path.split('/')
+      return segments.length > 1 ? docRef(segments.slice(0, -1).join('/')) : null
+    },
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
     add: async (value: Record<string, any>) => {
       const ref = docRef(`${path}/auto-${++autoId}`)
@@ -201,7 +211,9 @@ function collectionGroupRef(name: string, shape: GroupShape = { filters: [] }): 
         .filter((key) =>
           shape.filters.every(([field, value, op]) => {
             const stored = fieldAt(fakeDocs.get(key), field)
-            return op === 'array-contains' ? Array.isArray(stored) && stored.includes(value) : stored === value
+            if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
+            if (op === 'in') return Array.isArray(value) && value.includes(stored)
+            return stored === value
           }),
         )
       if (shape.order) {

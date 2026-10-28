@@ -48,3 +48,76 @@ export function posHardwareSaleStatus(user: User, hostId: string): Promise<PosHa
   statusByHost.set(hostId, asked)
   return asked
 }
+
+/** A sale on the To attach list, as `pending` and `attach` answer it. */
+export interface ToAttachRow {
+  id: string
+  number: string
+  registerOrderId: string | null
+  registerNumber: number | null
+  kiosk: boolean
+  offline: boolean
+  lines: Array<{ sku: PosHardwareSkuId; name: string; quantity: number }>
+  totalCents: number
+  createdAtMs: number
+  contactEmail: string | null
+  attached: boolean
+  awaitingWorkspace: boolean
+  invited: boolean
+}
+
+export interface BuyerStore {
+  hostId: string
+  name: string
+  hasLocation: boolean
+}
+
+export interface BuyerWorkspace {
+  orgId: string
+  name: string
+  posPlan: boolean
+  stores: BuyerStore[]
+}
+
+export interface BuyerPerson {
+  uid: string
+  name: string
+  email: string
+  workspaces: BuyerWorkspace[]
+}
+
+export interface BuyerFindResult {
+  kind: 'email' | 'name'
+  people: BuyerPerson[]
+  workspaces: Array<BuyerWorkspace & { owner: Omit<BuyerPerson, 'workspaces'> | null }>
+  noAccount: boolean
+}
+
+/** Who the register says the buyer is. */
+export type BuyerChoice = { uid: string; orgId?: string; hostId?: string } | { email: string }
+
+export function posHardwareToAttach(user: User, hostId: string) {
+  return sendPosHardwareRequest<{ orders: ToAttachRow[] }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'pending', hostId },
+  })
+}
+
+export function posHardwareFindBuyer(user: User, hostId: string, query: string) {
+  return sendPosHardwareRequest<BuyerFindResult>(user, SALE, {
+    method: 'POST',
+    body: { action: 'find', hostId, query },
+  })
+}
+
+export function posHardwareAttach(
+  user: User,
+  attemptKey: string,
+  body: { hostId: string; buyer: BuyerChoice; registerOrderId?: string; orderId?: string },
+) {
+  return sendPosHardwareRequest<{ outcome: 'waiting' } | { outcome: 'attached' | 'pending'; order: ToAttachRow }>(
+    user,
+    SALE,
+    { method: 'POST', body: { ...body, action: 'attach' }, attemptKey },
+  )
+}

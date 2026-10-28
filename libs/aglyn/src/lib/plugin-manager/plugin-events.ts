@@ -210,6 +210,19 @@ export interface PluginEventPayloads {
     actor: PluginEventActor
     changed: ReadonlyArray<'logo' | 'logoDark' | 'brandLogo' | 'brandLogoDark'>
   }
+  /**
+   * A workspace was created for its owner, by either door that creates one
+   * (the new-workspace page, or an account's first site). Raised once the
+   * workspace exists and its welcome is sent, so a plugin holding something
+   * for that person until they had a workspace — a purchase made before they
+   * signed up — hands it over now. `emailVerified` says whether the owner's
+   * address is proven; a plugin that matches by address waits for it.
+   */
+  'org.created': {
+    orgId: string
+    owner: { uid: string; email: string | null; emailVerified: boolean }
+    via: 'workspace-page' | 'first-site'
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

@@ -32,6 +32,7 @@ import {
   POS_HARDWARE_SHIP_COUNTRIES,
   POS_HARDWARE_SHIPPING_LABELS,
   posHardwareOffers,
+  posHardwareOrderSource,
   posHardwareSku,
   pricePosHardwareCart,
   type PosHardwareConfig,
@@ -152,6 +153,11 @@ export function merchantHardwareOrderView(id: string, order: PosHardwareOrder) {
     tracking: order.tracking ?? null,
     createdAtMs: order.createdAtMs ?? 0,
     updatedAtMs: order.updatedAtMs ?? order.createdAtMs ?? 0,
+    // Bought in person (AGL-4038): handed over at the sale, no parcel.
+    source: posHardwareOrderSource(order),
+    discountCents: order.discountCents ?? 0,
+    /** Readers still to set up, for an in-person order that took serials. */
+    readersToSetUp: (order.units ?? []).filter((unit) => !unit.readerId).length,
   }
 }
 
@@ -205,16 +211,23 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
           shipCountries: POS_HARDWARE_SHIP_COUNTRIES,
         })
       case 'orders': {
-        const snapshot = await hardwareOrdersRef(staff.orgId)
-          .where('hostId', '==', staff.hostId)
-          .orderBy('createdAtMs', 'desc')
-          .limit(50)
-          .get()
-        return res.status(200).json({
-          orders: snapshot.docs.map((doc: any) =>
-            merchantHardwareOrderView(String(doc.id), doc.data() as PosHardwareOrder),
-          ),
-        })
+        // This site's orders, and the readers bought in person for the
+        // workspace that wait for a store to be chosen at setup (AGL-4038).
+        // A sale on the selling workspace's own To attach list is never one.
+        const [site, workspace] = await Promise.all([
+          hardwareOrdersRef(staff.orgId).where('hostId', '==', staff.hostId).orderBy('createdAtMs', 'desc').limit(50).get(),
+          hardwareOrdersRef(staff.orgId)
+            .where('hostId', '==', '')
+            .where('attachment.state', '==', 'attached')
+            .orderBy('createdAtMs', 'desc')
+            .limit(50)
+            .get(),
+        ])
+        const orders = [...site.docs, ...workspace.docs]
+          .map((doc: any) => merchantHardwareOrderView(String(doc.id), doc.data() as PosHardwareOrder))
+          .sort((a, b) => b.createdAtMs - a.createdAtMs)
+          .slice(0, 50)
+        return res.status(200).json({ orders })
       }
       case 'checkout': {
         if (!config) return res.status(404).json({ error: 'The hardware shop is not available.' })

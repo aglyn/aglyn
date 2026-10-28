@@ -21,6 +21,7 @@ import {
   normalizeOrgLockdown,
 } from '@aglyn/aglyn/app-utils/lockdown'
 import { POS_HARDWARE_EMAIL_KEYS, sendEmail } from '@aglyn/shared-util-email'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   firebaseAdmin,
   hostDisplayName,
@@ -96,6 +97,7 @@ const FALLBACK: Record<PosHardwareEmailKind, (number: string) => string> = {
   shipped: (number) => `Your card reader order ${number} has shipped`,
   delivered: (number) => `Your card reader order ${number} was delivered`,
   canceled: (number) => `Your card reader order ${number} was canceled and refunded`,
+  invited: (number) => `Your card reader order ${number} is waiting for your account`,
 }
 
 /** The fallback a workspace with no name gets in a sentence. */
@@ -181,6 +183,49 @@ export async function sendPosHardwareEmail(
     if (result.sent) await meterPlatformEmail(1)
   } catch (error) {
     console.error('[pos-hardware] email failed', kind, orderId, error)
+  }
+}
+
+/**
+ * The invitation to sign up (AGL-4038), for someone who bought a card reader
+ * in person at the platform's own store with no account yet: create the
+ * account with this address and the order joins their workspace on its own.
+ * Sent in the selling workspace's brand, which is the platform's. Never
+ * throws; the caller has already claimed the send.
+ */
+/** The invitation's merge values. Exported for the render spec. */
+export function posHardwareInviteMerge(orderId: string, order: PosHardwareOrder): Record<string, string> {
+  return {
+    'order.number': posHardwareOrderNumber(orderId),
+    'order.items': itemsText(order),
+    'order.total': formatPosHardwareCents(order.totalCents ?? 0),
+    'order.signUpUrl': `${platformConsoleOrigin()}/signup`,
+  }
+}
+
+export async function sendPosHardwareInvite(orderId: string, order: PosHardwareOrder): Promise<void> {
+  try {
+    const to = String(order.attachment?.email ?? '').trim()
+    if (!to) return
+    const [recipient] = await filterSuppressedEmails([to])
+    if (!recipient) return
+    const merge = posHardwareInviteMerge(orderId, order)
+    const signUpUrl = merge['order.signUpUrl']
+    const subject = FALLBACK.invited(merge['order.number'])
+    const brand = await orgSystemEmailBrand(order.posSale?.orgId ?? order.orgId)
+    const content = await renderSystemEmailContent(POS_HARDWARE_EMAIL_KEYS.invited, merge, brand, {
+      subject,
+      text: `${subject}\n\n${merge['order.items']}\n\nCreate your account with this email address: ${signUpUrl}`,
+    })
+    const result = await sendEmail({
+      to: recipient,
+      ...content,
+      ...(brand.fromName ? { fromName: brand.fromName } : {}),
+      context: POS_HARDWARE_EMAIL_KEYS.invited,
+    })
+    if (result.sent) await meterPlatformEmail(1)
+  } catch (error) {
+    console.error('[pos-hardware] invitation failed', orderId, error)
   }
 }
 

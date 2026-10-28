@@ -85,7 +85,9 @@ const PLATFORM_SENDERS: Record<string, string> = {
     "the buyer's account closes before it ships. The SELLER is Aglyn and the " +
     "recipient is Aglyn's " +
     "customer, the workspace member who bought it — never a site's visitor " +
-    'or contact — so the mail is platform mail, metered as platform.',
+    'or contact — so the mail is platform mail, metered as platform. The ' +
+    'sign-up invitation goes to someone who bought a reader from Aglyn in ' +
+    'person with no account yet: again Aglyn writing to its own buyer.',
   [join('apps', 'tenant', 'app', 'api', '_legal-intake', 'acknowledge.ts')]:
     'DMCA and abuse acknowledgements. The recipient is the REPORTER in ' +
     "Aglyn's own legal process, not the site's customer, and the mail is " +

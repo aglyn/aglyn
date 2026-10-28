@@ -361,6 +361,7 @@ async function handler(request: Request): Promise<Response> {
           uid: decoded.uid,
           email: actorEmail,
           displayName: resolveIdpDisplayName(decoded) || null,
+          emailVerified: decoded.email_verified === true,
         },
         origin: headers.origin ?? `https://${headers.host}`,
         via: 'first-site',
