@@ -180,6 +180,15 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // routes ask "Book walk-ins and change guests" through their gate.
   'commerce.reservations': ["'commerce.reservations'"],
   'commerce.walkIns': ["'commerce.walkIns'"],
+  // The core's site keys (AGL-4047), whose preset is the site role: the
+  // rules' `canWriteHostContent`, `canPublishHostContent` and
+  // `canReadHostSensitive` ask the first three through `hostSiteRoleKey`,
+  // and the site-admin writes (plugins, allow-lists, plugin settings, site
+  // delete) ask the fourth.
+  'site.edit': ["'site.edit'"],
+  'site.publish': ["'site.publish'"],
+  'site.sensitive': ["'site.sensitive'"],
+  'site.manage': ["'site.manage'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -222,7 +231,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(17)
+    expect(CATALOG.length).toBe(21)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

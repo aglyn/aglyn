@@ -55,7 +55,8 @@ import {
   siteRolePresetPermissionKeys,
 } from './host-permissions'
 import { ORG_PERMISSION_KEYS, ORG_PERMISSIONS, resolveOrgPermissions, type AglynOrgCustomRole } from './org-permissions'
-import { canWriteHost, hostRoleFor, projectHostMemberRoles } from './organizations'
+import { CORE_SITE_ROLE_PRESETS } from './org-role-grants'
+import { canPublishHost, canWriteHost, hostRoleFor, projectHostMemberRoles } from './organizations'
 
 const A = 'host-a'
 const B = 'host-b'
@@ -194,9 +195,27 @@ beforeAll(() => {
 const today = (member: Partial<AglynOrgMember>, site: string | undefined): boolean =>
   site ? canWriteHost(member, site) : false
 
+/**
+ * Every key whose preset is the site role, and the gate it replaced (AGL-4047):
+ * the core's four (the rules' `canWriteHostContent`, `canPublishHostContent`,
+ * `canReadHostSensitive` and the site-admin checks) and the invented pair.
+ */
+const GATES: Record<string, (member: Partial<AglynOrgMember>, site: string) => boolean> = {
+  'site.edit': (member, site) => canWriteHost(member, site),
+  'site.publish': (member, site) => canPublishHost(member, site),
+  'site.sensitive': (member, site) => ['admin', 'editor'].includes(hostRoleFor(member, site) ?? ''),
+  'site.manage': (member, site) => hostRoleFor(member, site) === 'admin',
+  'stays.manage': (member, site) => canWriteHost(member, site),
+  'stays.walkIn': (member, site) => canWriteHost(member, site),
+}
+const GATE_KEYS = Object.keys(GATES)
+const gateAnswers = (member: Partial<AglynOrgMember>, site: string | undefined) =>
+  Object.fromEntries(GATE_KEYS.map((key) => [key, site ? GATES[key](member, site) : false]))
+const pick = (map: Record<string, boolean>) => Object.fromEntries(GATE_KEYS.map((key) => [key, map[key]]))
+
 describe('the catalog', () => {
-  it('lists the new keys as site-role presets, after the older keys, and nothing else as one', () => {
-    expect(siteRolePresetPermissionKeys()).toEqual(['stays.manage', 'stays.walkIn'])
+  it('lists the new keys as site-role presets, after the older keys, beside the core’s site keys', () => {
+    expect(siteRolePresetPermissionKeys()).toEqual([...Object.keys(CORE_SITE_ROLE_PRESETS), 'stays.manage', 'stays.walkIn'])
     expect([...ORG_PERMISSION_KEYS].filter((key) => !CATALOG_BEFORE.includes(key))).toEqual(['stays.manage', 'stays.walkIn'])
     expect(isSiteRolePresetPermission('stays.manage')).toBe(true)
     expect(isSiteRolePresetPermission('assist.use')).toBe(false)
@@ -215,10 +234,11 @@ describe('the catalog', () => {
 describe.each(FIXTURES)('%s', (_name, member) => {
   const customRole = roleOf(member)
 
-  it.each(SITES.map((site) => [site ?? 'no site']))('on %s, the new keys answer what the role gate answered', (label) => {
+  it.each(SITES.map((site) => [site ?? 'no site']))('on %s, every site-role preset key answers what its role gate answered', (label) => {
     const site = label === 'no site' ? undefined : label
     const resolved = resolveSiteRolePresetPermissions(member, site, customRole)
-    expect(resolved).toEqual({ 'stays.manage': today(member, site), 'stays.walkIn': today(member, site) })
+    expect(Object.keys(resolved).sort()).toEqual([...GATE_KEYS].sort())
+    expect(pick(resolved)).toEqual(gateAnswers(member, site))
   })
 
   it.each([A, B])('on %s, the projected stamp, its fallback and the full resolver agree with the role gate', (site) => {
@@ -229,10 +249,12 @@ describe.each(FIXTURES)('%s', (_name, member) => {
       memberPermissions: projectHostMemberPermissions(members, site, customRoles),
     }
     const unstamped = { memberRoles: host.memberRoles }
-    for (const key of ['stays.manage', 'stays.walkIn']) {
-      expect(hostStampedSitePermission(host, member.$id, key, CONTENT_WRITE)).toBe(today(member, site))
-      expect(hostStampedSitePermission(unstamped, member.$id, key, CONTENT_WRITE)).toBe(today(member, site))
-      expect(resolveMemberHostPermissions({ member, customRole, hostId: site })[key]).toBe(today(member, site))
+    for (const key of GATE_KEYS) {
+      const preset = key.startsWith('site.') ? CORE_SITE_ROLE_PRESETS[key] : CONTENT_WRITE
+      const expected = GATES[key](member, site)
+      expect(hostStampedSitePermission(host, member.$id, key, preset)).toBe(expected)
+      expect(hostStampedSitePermission(unstamped, member.$id, key, preset)).toBe(expected)
+      expect(resolveMemberHostPermissions({ member, customRole, hostId: site })[key]).toBe(expected)
     }
     // The stamp carries the keys for everyone who reaches the site, and for no one else.
     expect(Object.keys(host.memberPermissions[member.$id] ?? {}).includes('stays.manage')).toBe(
@@ -240,12 +262,15 @@ describe.each(FIXTURES)('%s', (_name, member) => {
     )
   })
 
-  it('with no site named, the workspace verdict is the workspace role’s preset', () => {
+  it('with no site named, the workspace verdict is the workspace role’s own site role preset', () => {
     const org = resolveOrgPermissions(member, customRole)
     const role = member.role as string
-    const expected = role === 'owner' || role === 'admin' || role === 'editor'
-    expect(org['stays.manage']).toBe(expected)
-    expect(org['stays.walkIn']).toBe(expected)
+    const siteRole = role === 'owner' || role === 'admin' ? 'admin' : role === 'editor' || role === 'viewer' ? role : null
+    for (const key of GATE_KEYS) {
+      const preset = key.startsWith('site.') ? CORE_SITE_ROLE_PRESETS[key] : CONTENT_WRITE
+      // A custom role or an override that names the key decides; these fixtures name only older keys.
+      expect(org[key]).toBe(siteRole ? preset[siteRole] === true : false)
+    }
   })
 
   it.each(SITES.map((site) => [site ?? 'no site']))('on %s, every older key resolves as it did before', (label) => {
@@ -261,20 +286,20 @@ describe('the new keys can be granted and refused like any other (AGL-4047)', ()
   it('a custom role grants a workspace viewer walk-ins on every site they reach, without the broad key', () => {
     const role: AglynOrgCustomRole = { name: 'Front desk', permissions: { 'stays.walkIn': true } }
     const member = { ...viewer, roleId: 'front-desk' }
-    expect(resolveSiteRolePresetPermissions(member, A, role)).toEqual({ 'stays.manage': false, 'stays.walkIn': true })
+    expect(resolveSiteRolePresetPermissions(member, A, role)).toMatchObject({ 'stays.manage': false, 'stays.walkIn': true })
     // A collaborator's custom role is a seat fact, not a grant.
     const collaborator = { $id: 'u-c', role: 'viewer' as const, allHosts: false, hostAccess: { [A]: 'viewer' as const }, roleId: 'front-desk' }
-    expect(resolveSiteRolePresetPermissions(collaborator, A, role)).toEqual({ 'stays.manage': false, 'stays.walkIn': false })
+    expect(resolveSiteRolePresetPermissions(collaborator, A, role)).toMatchObject({ 'stays.manage': false, 'stays.walkIn': false })
   })
 
   it('refusing the broad key takes the one that follows it, unless that one is set', () => {
-    expect(resolveSiteRolePresetPermissions({ ...editor, permissions: { 'stays.manage': false } }, A)).toEqual({
+    expect(resolveSiteRolePresetPermissions({ ...editor, permissions: { 'stays.manage': false } }, A)).toMatchObject({
       'stays.manage': false,
       'stays.walkIn': false,
     })
     expect(
       resolveSiteRolePresetPermissions({ ...editor, permissions: { 'stays.manage': false, 'stays.walkIn': true } }, A),
-    ).toEqual({ 'stays.manage': false, 'stays.walkIn': true })
+    ).toMatchObject({ 'stays.manage': false, 'stays.walkIn': true })
   })
 
   it('the member’s own permissions win over their custom role, and the site’s toggle over both', () => {
@@ -295,22 +320,23 @@ describe('the new keys can be granted and refused like any other (AGL-4047)', ()
       hostPermissions: { [A]: { 'stays.manage': false } },
     }
     const expected = { 'stays.manage': false, 'stays.walkIn': false }
-    expect(resolveSiteRolePresetPermissions(collaborator, A)).toEqual(expected)
+    expect(resolveSiteRolePresetPermissions(collaborator, A)).toMatchObject(expected)
     expect(resolveCollaboratorHostPermissions(collaborator, A)).toMatchObject(expected)
     expect(resolveMemberHostPermissions({ member: collaborator, hostId: A })).toMatchObject(expected)
   })
 
   it('nobody holds them on a site they cannot reach, whatever a layer says', () => {
     const member = { $id: 'u-c', role: 'viewer' as const, allHosts: false, hostAccess: { [A]: 'editor' as const }, permissions: { 'stays.manage': true } }
-    expect(resolveSiteRolePresetPermissions(member, B)).toEqual({ 'stays.manage': false, 'stays.walkIn': false })
+    expect(resolveSiteRolePresetPermissions(member, B)).toMatchObject({ 'stays.manage': false, 'stays.walkIn': false })
   })
 
   it('applySiteRolePresets leaves a map alone with no site named', () => {
     const granted = { 'stays.manage': true, 'till.open': true }
     expect(applySiteRolePresets(granted, { role: 'viewer', allHosts: true }, undefined)).toBe(granted)
-    expect(applySiteRolePresets(granted, { role: 'viewer', allHosts: true }, A)).toEqual({
+    expect(applySiteRolePresets(granted, { role: 'viewer', allHosts: true }, A)).toMatchObject({
       'stays.manage': false,
       'stays.walkIn': false,
+      'site.edit': false,
       'till.open': true,
     })
   })

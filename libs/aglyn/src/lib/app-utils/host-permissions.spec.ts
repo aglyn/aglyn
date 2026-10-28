@@ -81,14 +81,22 @@ beforeEach(() => {
 
 afterAll(() => resetPluginEntitlementsForTests())
 
+/** The core's site keys (AGL-4047) as each site role holds them: their preset. */
+const SITE_KEYS_FOR = {
+  admin: { 'site.edit': true, 'site.publish': true, 'site.sensitive': true, 'site.manage': true },
+  editor: { 'site.edit': true, 'site.publish': true, 'site.sensitive': true, 'site.manage': false },
+  author: { 'site.edit': true, 'site.publish': false, 'site.sensitive': false, 'site.manage': false },
+  none: { 'site.edit': false, 'site.publish': false, 'site.sensitive': false, 'site.manage': false },
+}
+
 describe('the org catalog carries the keys plugins declare', () => {
   it('lists them after the core keys, in plugin order, with their owner', () => {
     const keys = [...ORG_PERMISSION_KEYS]
-    // The thirteen core keys first (AGL-4047 added three).
-    expect(keys.slice(0, 13)).not.toContain('reviews.reply')
+    // The seventeen core keys first (AGL-4047 added three, then the four site keys).
+    expect(keys.slice(0, 17)).not.toContain('reviews.reply')
     // Neither plugin is first-party, so they order by id.
-    expect(keys.slice(13)).toEqual(['bookings.refund', 'reviews.reply', 'reviews.export'])
-    expect(pluginOrgPermissionKeys()).toEqual(keys.slice(13))
+    expect(keys.slice(17)).toEqual(['bookings.refund', 'reviews.reply', 'reviews.export'])
+    expect(pluginOrgPermissionKeys()).toEqual(keys.slice(17))
     expect(ORG_PERMISSIONS.find((entry) => entry.key === 'reviews.reply')).toMatchObject({
       label: 'Reply to reviews',
       pluginId: 'acme-reviews',
@@ -125,9 +133,10 @@ describe('the org catalog carries the keys plugins declare', () => {
 
   it('a key never outlives its registration', () => {
     resetPluginEntitlementsForTests()
-    expect(ORG_PERMISSION_KEYS).toHaveLength(13)
+    expect(ORG_PERMISSION_KEYS).toHaveLength(17)
     expect(DEFAULT_ROLE_PERMISSIONS.editor['reviews.reply']).toBeUndefined()
-    expect(hostPermissionKeys()).toEqual([])
+    // The core's site keys stay (AGL-4047); a plugin's go with it.
+    expect(hostPermissionKeys()).toEqual(['site.edit', 'site.publish', 'site.sensitive', 'site.manage'])
   })
 
   it('refuses a key another plugin declared, and one the core catalog owns', () => {
@@ -167,12 +176,17 @@ describe('a collaborator holds a declared key per site', () => {
     }) as Partial<AglynOrgMember>
 
   it('only the keys declared with host-role defaults are per-site keys', () => {
-    expect(hostPermissionKeys()).toEqual(['reviews.reply'])
-    expect(hostRolePermissionDefaults('author')).toEqual({ 'reviews.reply': false })
+    // The core's site keys are per-site keys too (AGL-4047), ahead of the plugins'.
+    expect(hostPermissionKeys()).toEqual(['site.edit', 'site.publish', 'site.sensitive', 'site.manage', 'reviews.reply'])
+    expect(hostRolePermissionDefaults('author')).toEqual({
+      ...SITE_KEYS_FOR.author,
+      'reviews.reply': false,
+    })
   })
 
   it('the host role decides, a toggle refines, and org layers do not apply', () => {
     expect(resolveCollaboratorHostPermissions(collaborator(), HOST)).toEqual({
+      ...SITE_KEYS_FOR.editor,
       'reviews.reply': true,
     })
     expect(
@@ -180,17 +194,18 @@ describe('a collaborator holds a declared key per site', () => {
         collaborator({ hostPermissions: { [HOST]: { 'reviews.reply': false } } }),
         HOST,
       ),
-    ).toEqual({ 'reviews.reply': false })
+    ).toEqual({ ...SITE_KEYS_FOR.editor, 'reviews.reply': false })
     expect(
       resolveMemberHostPermissions({
         member: collaborator({ hostAccess: { [HOST]: 'author' }, permissions: { 'reviews.reply': true } }),
         hostId: HOST,
       }),
-    ).toEqual({ 'reviews.reply': false })
+    ).toEqual({ ...SITE_KEYS_FOR.author, 'reviews.reply': false })
   })
 
   it('no site named, or a site out of reach, is nothing', () => {
     expect(resolveMemberHostPermissions({ member: collaborator() })).toEqual({
+      ...SITE_KEYS_FOR.none,
       'reviews.reply': false,
     })
     expect(resolveCollaboratorHostPermissions(collaborator(), 'host-2')).toBeNull()
@@ -203,8 +218,8 @@ describe('a collaborator holds a declared key per site', () => {
       { $id: 'elsewhere', ...collaborator({ hostAccess: { 'host-2': 'editor' } }) },
     ] as Array<Partial<AglynOrgMember> & { $id: string }>
     expect(projectHostMemberPermissions(members, HOST, new Map())).toEqual({
-      owner: { 'reviews.reply': true },
-      client: { 'reviews.reply': false },
+      owner: { ...SITE_KEYS_FOR.admin, 'reviews.reply': true },
+      client: { ...SITE_KEYS_FOR.author, 'reviews.reply': false },
     })
   })
 })

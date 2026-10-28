@@ -146,6 +146,14 @@
       "count": 2,
       "kind": "pending"
     },
+    "apps/console/components/content/content-scope.context.tsx": {
+      "count": 1,
+      "kind": "pending"
+    },
+    "apps/console/components/delete-site-card.component.tsx": {
+      "count": 1,
+      "kind": "pending"
+    },
     "apps/console/components/member-permissions-editor.component.tsx": {
       "count": 1,
       "kind": "not-a-gate",
@@ -165,10 +173,6 @@
       "count": 1,
       "kind": "exception",
       "note": "Only the owner loads the list of people to transfer the workspace to."
-    },
-    "apps/console/hooks/use-host-role.ts": {
-      "count": 1,
-      "kind": "pending"
     },
     "apps/console/hooks/use-org-hosts.ts": {
       "count": 1,
@@ -200,7 +204,7 @@
       "note": "The health probe picks a member of its own test site."
     },
     "cloud/firebase-firestore.deploy.rules": {
-      "count": 145,
+      "count": 79,
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-job-duplicate-step.ts": {
@@ -340,7 +344,7 @@
       "kind": "pending"
     },
     "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
-      "count": 1,
+      "count": 2,
       "kind": "pending"
     },
     "libs/plugins/commerce/src/lib/server/orders-shipping-prepare.ts": {

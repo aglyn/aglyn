@@ -3771,6 +3771,7 @@ internal data class ContractValuesPart2(
     @SerialName("CONTACT_LIST_DECLARATION") val contactListDeclaration: ListQueryDeclaration,
     @SerialName("CONTENT_SCHEMA_TYPE_DEFAULT") val contentSchemaTypeDefault: ContentSchemaType,
     @SerialName("CONTENT_SCHEMA_TYPE_OPTIONS") val contentSchemaTypeOptions: List<ContentSchemaTypeOptionsItem>,
+    @SerialName("CORE_SITE_ROLE_PRESETS") val coreSiteRolePresets: Map<String, Map<String, Boolean>>,
     @SerialName("CRM_ACTIVITIES_PER_RECORD_CEILING") val crmActivitiesPerRecordCeiling: Long,
     @SerialName("CRM_ACTIVITY_DIRECTION_LABELS") val crmActivityDirectionLabels: Map<String, String>,
     @SerialName("CRM_ACTIVITY_KIND_LABELS") val crmActivityKindLabels: Map<String, String>,
@@ -3807,11 +3808,11 @@ internal data class ContractValuesPart2(
     @SerialName("EVENT_LOCATION_MAX_LENGTH") val eventLocationMaxLength: Long,
     @SerialName("EVENT_ORGANIZER_MAX_LENGTH") val eventOrganizerMaxLength: Long,
     @SerialName("EVENT_TITLE_MAX_LENGTH") val eventTitleMaxLength: Long,
-    @SerialName("EXPERIMENT_LIST_QUERY") val experimentListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart3(
+    @SerialName("EXPERIMENT_LIST_QUERY") val experimentListQuery: ListQueryDeclaration,
     @SerialName("FEW_UNITS_LEFT") val fewUnitsLeft: Long,
     @SerialName("FIRST_PARTY_PLUGINS") val firstPartyPlugins: List<FirstPartyPlugin>,
     @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
@@ -3859,11 +3860,11 @@ internal data class ContractValuesPart3(
     @SerialName("MAX_LABEL_COPIES") val maxLabelCopies: Long,
     @SerialName("MAX_RESERVATION_GUESTS") val maxReservationGuests: Long,
     @SerialName("MAX_RESOURCE_UNITS") val maxResourceUnits: Long,
-    @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
     @SerialName("MEDIA_ALT_OPTIONS") val mediaAltOptions: List<ListFilterOption>,
     @SerialName("MEDIA_DISJUNCTION_LIMIT") val mediaDisjunctionLimit: Long,
     @SerialName("MEDIA_FILTER_HEADERS") val mediaFilterHeaders: Map<String, String>,
@@ -3911,11 +3912,11 @@ internal data class ContractValuesPart4(
     @SerialName("ONE_BOX_ROWS_DEFAULT") val oneBoxRowsDefault: Long,
     @SerialName("ONE_BOX_ROWS_MAX") val oneBoxRowsMax: Long,
     @SerialName("ONE_BOX_SCREENS_GROUP") val oneBoxScreensGroup: String,
-    @SerialName("ONE_BOX_SEARCH_PATH") val oneBoxSearchPath: String,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("ONE_BOX_SEARCH_PATH") val oneBoxSearchPath: String,
     @SerialName("ONE_BOX_WORKSPACES_GROUP") val oneBoxWorkspacesGroup: String,
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
@@ -3963,11 +3964,11 @@ internal data class ContractValuesPart5(
     @SerialName("PLAN_CARD_METER_UNITS") val planCardMeterUnits: Map<String, String>,
     @SerialName("PLAN_CARD_METERS") val planCardMeters: List<String>,
     @SerialName("PLAN_CARD_SCREEN_CONTEXTS") val planCardScreenContexts: Map<String, String>,
-    @SerialName("PLAN_CARD_WARNING_SHARE") val planCardWarningShare: Double,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("PLAN_CARD_WARNING_SHARE") val planCardWarningShare: Double,
     @SerialName("PLATFORM_BRAND_NAME") val platformBrandName: String,
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
     @SerialName("POS_CHECK_IN_ROUTE") val posCheckInRoute: String,
@@ -4015,11 +4016,11 @@ internal data class ContractValuesPart6(
     @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
     @SerialName("RECENTS_FIELD") val recentsField: String,
     @SerialName("RECENTS_MAX") val recentsMax: Long,
-    @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
@@ -4067,11 +4068,11 @@ internal data class ContractValuesPart7(
     @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
-    @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PHONE_AGLYN") val themePhoneAglyn: ThemeColorsPair,
@@ -4162,6 +4163,7 @@ class ContractValues internal constructor(
     val contactListDeclaration: ListQueryDeclaration get() = part2.contactListDeclaration
     val contentSchemaTypeDefault: ContentSchemaType get() = part2.contentSchemaTypeDefault
     val contentSchemaTypeOptions: List<ContentSchemaTypeOptionsItem> get() = part2.contentSchemaTypeOptions
+    val coreSiteRolePresets: Map<String, Map<String, Boolean>> get() = part2.coreSiteRolePresets
     val crmActivitiesPerRecordCeiling: Long get() = part2.crmActivitiesPerRecordCeiling
     val crmActivityDirectionLabels: Map<String, String> get() = part2.crmActivityDirectionLabels
     val crmActivityKindLabels: Map<String, String> get() = part2.crmActivityKindLabels
@@ -4198,7 +4200,7 @@ class ContractValues internal constructor(
     val eventLocationMaxLength: Long get() = part2.eventLocationMaxLength
     val eventOrganizerMaxLength: Long get() = part2.eventOrganizerMaxLength
     val eventTitleMaxLength: Long get() = part2.eventTitleMaxLength
-    val experimentListQuery: ListQueryDeclaration get() = part2.experimentListQuery
+    val experimentListQuery: ListQueryDeclaration get() = part3.experimentListQuery
     val fewUnitsLeft: Long get() = part3.fewUnitsLeft
     val firstPartyPlugins: List<FirstPartyPlugin> get() = part3.firstPartyPlugins
     val formInUse: ListQueryFilter get() = part3.formInUse
@@ -4246,7 +4248,7 @@ class ContractValues internal constructor(
     val maxLabelCopies: Long get() = part3.maxLabelCopies
     val maxReservationGuests: Long get() = part3.maxReservationGuests
     val maxResourceUnits: Long get() = part3.maxResourceUnits
-    val mediaAltMaxLength: Long get() = part3.mediaAltMaxLength
+    val mediaAltMaxLength: Long get() = part4.mediaAltMaxLength
     val mediaAltOptions: List<ListFilterOption> get() = part4.mediaAltOptions
     val mediaDisjunctionLimit: Long get() = part4.mediaDisjunctionLimit
     val mediaFilterHeaders: Map<String, String> get() = part4.mediaFilterHeaders
@@ -4294,7 +4296,7 @@ class ContractValues internal constructor(
     val oneBoxRowsDefault: Long get() = part4.oneBoxRowsDefault
     val oneBoxRowsMax: Long get() = part4.oneBoxRowsMax
     val oneBoxScreensGroup: String get() = part4.oneBoxScreensGroup
-    val oneBoxSearchPath: String get() = part4.oneBoxSearchPath
+    val oneBoxSearchPath: String get() = part5.oneBoxSearchPath
     val oneBoxWorkspacesGroup: String get() = part5.oneBoxWorkspacesGroup
     val openDisputeClause: ListFilterClause get() = part5.openDisputeClause
     val orderChannelLabels: Map<String, String> get() = part5.orderChannelLabels
@@ -4342,7 +4344,7 @@ class ContractValues internal constructor(
     val planCardMeterUnits: Map<String, String> get() = part5.planCardMeterUnits
     val planCardMeters: List<String> get() = part5.planCardMeters
     val planCardScreenContexts: Map<String, String> get() = part5.planCardScreenContexts
-    val planCardWarningShare: Double get() = part5.planCardWarningShare
+    val planCardWarningShare: Double get() = part6.planCardWarningShare
     val platformBrandName: String get() = part6.platformBrandName
     val posCashEventLabels: Map<String, String> get() = part6.posCashEventLabels
     val posCheckInRoute: String get() = part6.posCheckInRoute
@@ -4390,7 +4392,7 @@ class ContractValues internal constructor(
     val recentOrgsMax: Long get() = part6.recentOrgsMax
     val recentsField: String get() = part6.recentsField
     val recentsMax: Long get() = part6.recentsMax
-    val refundBlockedByDispute: String get() = part6.refundBlockedByDispute
+    val refundBlockedByDispute: String get() = part7.refundBlockedByDispute
     val reminderWindowEndHours: Long get() = part7.reminderWindowEndHours
     val reminderWindowStartHours: Long get() = part7.reminderWindowStartHours
     val replyBodyMax: Long get() = part7.replyBodyMax
@@ -4438,7 +4440,7 @@ class ContractValues internal constructor(
     val themeConsoleFields: List<String> get() = part7.themeConsoleFields
     val themeDarkRailSeeds: Map<String, String> get() = part7.themeDarkRailSeeds
     val themeDensities: List<ThemeDensity> get() = part7.themeDensities
-    val themeFigmaBase: ThemeColorsPair get() = part7.themeFigmaBase
+    val themeFigmaBase: ThemeColorsPair get() = part8.themeFigmaBase
     val themeNonTextContrast: Long get() = part8.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part8.themePalettes
     val themePhoneAglyn: ThemeColorsPair get() = part8.themePhoneAglyn

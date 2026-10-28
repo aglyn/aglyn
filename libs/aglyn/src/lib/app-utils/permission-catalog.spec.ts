@@ -251,6 +251,10 @@ describe('one permission catalog (AGL-4047)', () => {
     expect(sections.find((section) => section.group.id === 'sites')?.permissions.map((d) => d.key)).toEqual([
       'hosts.create',
       'hosts.delete',
+      'site.edit',
+      'site.publish',
+      'site.sensitive',
+      'site.manage',
     ])
     const onlyBilling = groupOrgPermissions(ORG_PERMISSIONS.filter((d) => d.group === 'billing'))
     expect(onlyBilling.map((section) => section.group.id)).toEqual(['billing'])

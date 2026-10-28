@@ -103,6 +103,13 @@ as they like. Someone with a publishing role reviews the draft and publishes it.
 This is enforced in the database itself, not just hidden in the console — an Author
 cannot publish through any route into Aglyn.
 
+Each site role is a starting point for four permissions: **Edit site content**,
+**Publish site content**, **See orders and webhooks** and **Manage site settings**. The
+table above is what each role holds by default, and a custom role, a member's own
+permissions or the site's **Permissions** dialog can grant or deny any of them, such as
+letting one trusted Author publish. See
+[Site permissions](custom-roles.md#site-permissions).
+
 #### A site's collaborators {#site-collaborators}
 
 A site's collaborators are listed in the **Users** card on that site's **Users** page,
