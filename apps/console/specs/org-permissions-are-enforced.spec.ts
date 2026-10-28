@@ -234,6 +234,13 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // "Publish a site's items to the marketplace", beside the workspace keys.
   'marketplace.siteInstall': ["'marketplace.siteInstall'"],
   'marketplace.sitePublish': ["'marketplace.sitePublish'"],
+  // Workflows and Domains (AGL-4047): `automations/manage`, the org
+  // automations import and the pause door's managers ask "Manage org
+  // automations", the pause door "Pause org automations on a site", and the
+  // domains gate's workspace arm "Manage the workspace's domains".
+  'workflows.orgAutomations': ["'workflows.orgAutomations'"],
+  'workflows.sitePause': ["'workflows.sitePause'"],
+  'domains.manage': ["'domains.manage'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -276,7 +283,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(40)
+    expect(CATALOG.length).toBe(43)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

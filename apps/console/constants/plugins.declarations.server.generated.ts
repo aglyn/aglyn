@@ -82,6 +82,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.console-server')).registerFunnelsConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
+    ;(await import('@aglyn/plugins-domains/declarations')).registerDomainsDeclarations()
     ;(await import('@aglyn/plugins-domains/declarations.console-server')).registerDomainsConsoleServerDeclarations()
   })()
   return done

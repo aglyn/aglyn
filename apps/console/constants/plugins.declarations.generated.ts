@@ -27,6 +27,7 @@ export function registerPluginDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-waivers/declarations')).registerWaiversDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations')).registerFunnelsDeclarations()
     ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
+    ;(await import('@aglyn/plugins-domains/declarations')).registerDomainsDeclarations()
   })()
   return done
 }

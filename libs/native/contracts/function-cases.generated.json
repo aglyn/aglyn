@@ -58419,6 +58419,7 @@
             "commerce.walkIns": true,
             "commerce.webhooks": true,
             "data.manage": true,
+            "domains.manage": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
@@ -58451,7 +58452,9 @@
             "site.edit": true,
             "site.manage": true,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58480,6 +58483,7 @@
             "commerce.walkIns": true,
             "commerce.webhooks": true,
             "data.manage": true,
+            "domains.manage": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
@@ -58512,7 +58516,9 @@
             "site.edit": true,
             "site.manage": true,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58541,6 +58547,7 @@
             "commerce.walkIns": true,
             "commerce.webhooks": false,
             "data.manage": true,
+            "domains.manage": false,
             "funnels.manage": true,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58573,7 +58580,9 @@
             "site.edit": true,
             "site.manage": false,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58602,6 +58611,7 @@
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58634,7 +58644,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58663,6 +58675,7 @@
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58695,7 +58708,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58724,6 +58739,7 @@
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58756,7 +58772,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58792,6 +58810,7 @@
             "commerce.walkIns": true,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
@@ -58824,7 +58843,9 @@
             "site.edit": true,
             "site.manage": false,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58862,6 +58883,7 @@
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58894,7 +58916,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58927,6 +58951,7 @@
             "commerce.walkIns": true,
             "commerce.webhooks": true,
             "data.manage": true,
+            "domains.manage": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
@@ -58959,7 +58984,9 @@
             "site.edit": true,
             "site.manage": true,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         }
       ]

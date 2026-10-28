@@ -55,6 +55,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-funnels/declarations')).registerFunnelsDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
     ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
+    ;(await import('@aglyn/plugins-domains/declarations')).registerDomainsDeclarations()
   })()
   return done
 }

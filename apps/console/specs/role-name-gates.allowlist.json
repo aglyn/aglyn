@@ -192,10 +192,6 @@
       "kind": "not-a-gate",
       "note": "Picks who a domain email goes to."
     },
-    "libs/plugins/domains/src/lib/server/gates.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/email/src/lib/components/sending-sender-drawer.tsx": {
       "count": 1,
       "kind": "not-a-gate",
@@ -225,14 +221,6 @@
       "count": 1,
       "kind": "not-a-gate",
       "note": "Picks who a publisher review email goes to."
-    },
-    "libs/plugins/workflows/src/lib/server/org-automations-routes.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/workflows/src/lib/transfer/org-automations-package.server.ts": {
-      "count": 1,
-      "kind": "pending"
     },
     "libs/tenant/data/admin/src/lib/server/notifications.ts": {
       "count": 2,

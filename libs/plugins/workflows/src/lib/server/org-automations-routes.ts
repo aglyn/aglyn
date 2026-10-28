@@ -40,6 +40,7 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { hostIdsFromScope, visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import {
@@ -61,11 +62,17 @@ import {
   getOrgDoc,
   logHostActivity,
   logOrgActivity,
+  memberHasOrgPermission,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  WORKFLOWS_SITE_PAUSE_PRESET,
+  workflowsPermissionRefusal,
+  type WorkflowsPermission,
+} from '../model/workflows-permissions'
 import {
   ORG_AUTOMATION_ACTIVITY_TARGET,
   ORG_AUTOMATION_API_ROUTES,
@@ -89,11 +96,6 @@ export const ORG_AUTOMATION_MANAGE_ACTIONS = [
 
 type ManageAction = (typeof ORG_AUTOMATION_MANAGE_ACTIONS)[number]
 
-/** The org roles that may write the organization's automations. */
-const ORG_MANAGE_ROLES = ['owner', 'admin', 'editor'] as const
-
-/** The site roles that may pause an org automation on their own site. */
-const SITE_PAUSE_ROLES = ['admin', 'editor'] as const
 
 /** What the doors reach outside this module; specs hand in their own. */
 export interface OrgAutomationRouteDeps {
@@ -105,6 +107,8 @@ export interface OrgAutomationRouteDeps {
   ): Promise<{ orgId: string; member: Partial<AglynOrgMember> } | null>
   getOrgDoc(orgId: string): Promise<Record<string, unknown> | null>
   resolveOrgIdForHost(hostId: string): Promise<string | null>
+  /** Whether a member holds a workspace key with no site named (AGL-4047): `memberHasOrgPermission`. */
+  holdsOrgKey(orgId: string, member: Partial<AglynOrgMember>, key: WorkflowsPermission): Promise<boolean>
   logOrgActivity(
     orgId: string,
     actor: { uid: string; email?: string | null },
@@ -133,6 +137,7 @@ function defaultDeps(): OrgAutomationRouteDeps {
     getOrgDoc: async (orgId) =>
       ((await getOrgDoc(orgId)) as Record<string, unknown> | null) ?? null,
     resolveOrgIdForHost,
+    holdsOrgKey: (orgId, member, key) => memberHasOrgPermission(orgId, member, key as never),
     logOrgActivity: (orgId, actor, action, target) =>
       logOrgActivity(orgId, actor, action, target),
     logHostActivity: (hostId, actor, action, target) =>
@@ -331,14 +336,15 @@ export function createOrgAutomationsManageHandler(
       if (!caller) return res.status(401).json({ error: 'Unauthenticated' })
       const membership = await deps.resolveOrgMembership(caller.uid, orgId)
       const member = membership?.member
+      // "Manage org automations" (AGL-4047), for members of the whole
+      // workspace: its default is the owner, admins and editors this asked
+      // for before, then their custom role and their own permissions.
       if (
         !member ||
         !isOrgWideMember(member) ||
-        !(ORG_MANAGE_ROLES as readonly string[]).includes(String(member.role ?? ''))
+        !(await deps.holdsOrgKey(orgId, member, 'workflows.orgAutomations'))
       ) {
-        return res
-          .status(403)
-          .json({ error: 'Not an organization owner, admin or editor' })
+        return res.status(403).json({ error: workflowsPermissionRefusal('workflows.orgAutomations') })
       }
       /*
        * A request naming no site reaches here past only the release gate —
@@ -489,20 +495,20 @@ export function createOrgAutomationPauseHandler(
        * editor, asked of the membership itself so a projection that has not
        * caught up cannot refuse the organization's own managers.
        */
-      const siteRole = String((host.get('memberRoles') ?? {})[caller.uid] ?? '')
-      let allowed = (SITE_PAUSE_ROLES as readonly string[]).includes(siteRole)
+      // "Pause org automations on a site" (AGL-4047): the site's stamp, else
+      // the preset of the member's site role, the Admin and Editor this asked
+      // for; or "Manage org automations" for a member of the whole workspace.
+      let allowed = holdsStampedSiteKey(host, caller.uid, 'workflows.sitePause', WORKFLOWS_SITE_PAUSE_PRESET)
       if (!allowed) {
         const membership = await deps.resolveOrgMembership(caller.uid, orgId)
         const member = membership?.member
         allowed =
           Boolean(member) &&
           isOrgWideMember(member) &&
-          (ORG_MANAGE_ROLES as readonly string[]).includes(String(member?.role ?? ''))
+          (await deps.holdsOrgKey(orgId, member as Partial<AglynOrgMember>, 'workflows.orgAutomations'))
       }
       if (!allowed) {
-        return res
-          .status(403)
-          .json({ error: 'Not an admin or editor of this site' })
+        return res.status(403).json({ error: workflowsPermissionRefusal('workflows.sitePause') })
       }
 
       const name = await firestore.runTransaction(async (transaction) => {
