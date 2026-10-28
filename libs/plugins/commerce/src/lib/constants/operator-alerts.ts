@@ -273,6 +273,28 @@ export const COMMERCE_POS_CELLULAR_TURN_OFF_FAILED: OperatorAlertDefinition = {
   defaultEnabled: true,
 }
 
+/**
+ * A workspace's monthly 4G charge stayed unpaid past the grace period
+ * (AGL-4038), so 4G was turned off at Stripe for every one of its stores and
+ * the members who manage its billing were emailed. Paying does not turn it
+ * back on; the merchant does, once it is paid.
+ */
+export const COMMERCE_POS_CELLULAR_TURNED_OFF_UNPAID: OperatorAlertDefinition = {
+  type: 'commerce.posCellularTurnedOffUnpaid',
+  pluginId: BUNDLE_ID,
+  label: '4G turned off for an unpaid charge',
+  description:
+    'A workspace’s monthly 4G charge for its Stripe Reader S710s was still unpaid after the grace period, so 4G was turned off for its stores and the people who manage its billing were emailed. Follow up if the workspace asks; it turns 4G on again itself once the invoice is paid.',
+  tier: 'should',
+  category: 'payments',
+  title: '4G turned off for workspace {{orgId}}: {{month}} unpaid ({{amount}})',
+  body:
+    'Workspace {{orgId}} left its 4G charge of {{amount}} for {{month}} unpaid for {{graceDays}} days, so 4G was turned off at Stripe for its stores and the people who manage its billing were emailed. The invoice stays open on its Billing page.',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
@@ -286,4 +308,5 @@ export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_POS_HARDWARE_RETURN_REQUESTED,
   COMMERCE_POS_CELLULAR_CHARGE_FAILED,
   COMMERCE_POS_CELLULAR_TURN_OFF_FAILED,
+  COMMERCE_POS_CELLULAR_TURNED_OFF_UNPAID,
 ]

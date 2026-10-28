@@ -16,14 +16,18 @@
  */
 
 import { firebaseAdmin, readOrgBilling } from '@aglyn/tenant-data-admin'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   closePosCellularPeriod,
   isPosCellularDeviceType,
   openPosCellularPeriod,
   parsePosCellularConfig,
   posCellularReaderId,
+  posCellularMonthLabel,
   posCellularReaderMonthlyCents,
+  POS_CELLULAR_CHARGES_COLLECTION,
   POS_CELLULAR_READERS_COLLECTION,
+  type PosCellularCharge,
   type PosCellularReaderRecord,
 } from '../model/pos-cellular'
 import type { PosStaff } from './pos-auth'
@@ -47,8 +51,95 @@ import { savePosReaderConfiguration } from './pos-terminal'
  *
  * Turning it on needs the workspace to be billable (a Stripe customer, so a
  * card on file) and the person's agreement to the monthly charge, which the
- * store's terminal settings record with the price they agreed to.
+ * store's terminal settings record with the price they agreed to. It is
+ * charged to the workspace, so turning it ON also takes the workspace's
+ * "Manage billing" key (`billing.manage`) beside the card's "Registers and
+ * devices"; turning it off takes only the card's key. While a month's charge
+ * is unpaid past its grace period (`pos-cellular-billing.ts`), it cannot be
+ * turned on again: paying it, then turning it on, is the way back.
  *=========================================*/
+
+/** The workspace key turning 4G on takes, beside "Registers and devices". */
+export const POS_CELLULAR_BILLING_PERMISSION = 'billing.manage'
+
+/** What a member without it is told, naming the permission. */
+export const POS_CELLULAR_BILLING_REFUSAL =
+  'Your role does not include "Manage billing" — ask an organization admin. 4G is charged to the workspace.'
+
+/** Whether the member may turn 4G on for a store: the workspace's "Manage billing", resolved for that store. */
+export async function mayTurnOnPosCellular(uid: string, hostId: string): Promise<boolean> {
+  const resolved = await resolveOrgPermissions(uid, { hostId }).catch(() => null)
+  return resolved?.permissions?.[POS_CELLULAR_BILLING_PERMISSION] === true
+}
+
+/**
+ * A charge's invoice as Stripe has it now: its status and what it collected,
+ * or null when Stripe could not be asked (which is never read as "unpaid
+ * long enough to act on" nor as "paid").
+ */
+export async function posCellularInvoiceStatus(
+  invoiceId: string,
+): Promise<{ status: string; amountPaidCents: number } | null> {
+  if (!/^in_[A-Za-z0-9]+$/.test(invoiceId)) return null
+  const answer = await posStripe('GET', `invoices/${invoiceId}`).catch(() => null)
+  if (!answer?.ok) return null
+  const body = answer.body as { status?: unknown; amount_paid?: unknown }
+  const status = String(body.status ?? '')
+  return status ? { status, amountPaidCents: Math.max(0, Math.round(Number(body.amount_paid) || 0)) } : null
+}
+
+/**
+ * The month whose unpaid charge turned 4G off for the workspace and is STILL
+ * unpaid, or null. Asks Stripe about each, so one paid since is settled as
+ * paid here, and its stores' notices cleared, rather than waiting for the
+ * next daily run.
+ */
+export async function unpaidPosCellularSuspension(
+  orgId: string,
+  now: number,
+  invoiceStatus: (invoiceId: string) => Promise<{ status: string; amountPaidCents: number } | null> = posCellularInvoiceStatus,
+): Promise<{ month: string } | null> {
+  const snapshot = await firestore()
+    .collection(POS_CELLULAR_CHARGES_COLLECTION)
+    .where('orgId', '==', orgId)
+    .where('state', '==', 'suspended')
+    .limit(24)
+    .get()
+  for (const doc of snapshot.docs as unknown as Array<{ id: string; data: () => PosCellularCharge }>) {
+    const charge = doc.data()
+    const invoice = charge.invoiceId ? await invoiceStatus(charge.invoiceId) : null
+    if (invoice?.status === 'paid' || invoice?.status === 'void') {
+      await settleSuspendedPosCellularCharge(String(doc.id), charge, invoice.status === 'paid' ? 'paid' : 'voided', invoice.amountPaidCents, now)
+      continue
+    }
+    return { month: charge.month }
+  }
+  return null
+}
+
+/**
+ * A suspended month that was paid (or voided by staff): settled, and the
+ * notice on each store it turned 4G off for taken down. 4G stays off until
+ * the merchant turns it on again.
+ */
+export async function settleSuspendedPosCellularCharge(
+  chargeId: string,
+  charge: PosCellularCharge,
+  state: 'paid' | 'voided',
+  paidCents: number,
+  now: number,
+): Promise<void> {
+  await firestore()
+    .collection(POS_CELLULAR_CHARGES_COLLECTION)
+    .doc(chargeId)
+    .set({ state, ...(state === 'paid' ? { paidCents } : {}), updatedAtMs: now }, { merge: true })
+  for (const hostId of charge.suspendedHostIds ?? []) {
+    const ref = terminalConfigRef(hostId)
+    const terminal = await ref.get()
+    const notice = terminal.exists ? (terminal.get('cellularSuspended') as { month?: unknown } | null) : null
+    if (notice?.month === charge.month) await ref.set({ cellularSuspended: null }, { merge: true })
+  }
+}
 
 function firestore() {
   return firebaseAdmin.app().firestore()
@@ -162,6 +253,10 @@ export async function setPosStoreCellular(
     return { status: 409, body: { error: 'Add a card reader to this store first.', code: 'no-location' } }
   }
   if (enable) {
+    // Charged to the workspace: its billing key, as well as the card's own.
+    if (!(await mayTurnOnPosCellular(staff.uid, staff.hostId))) {
+      return { status: 403, body: { error: POS_CELLULAR_BILLING_REFUSAL, code: 'billing-permission' } }
+    }
     if (body['consent'] !== true) {
       return {
         status: 400,
@@ -185,6 +280,17 @@ export async function setPosStoreCellular(
         body: {
           error: 'Add a payment method in Billing first: 4G is charged to this workspace each month.',
           code: 'no-billing',
+        },
+      }
+    }
+    // Turned off for an unpaid month: paid first, then on again.
+    const unpaid = await unpaidPosCellularSuspension(staff.orgId, Date.now())
+    if (unpaid) {
+      return {
+        status: 409,
+        body: {
+          error: `4G was turned off because the 4G charge for ${posCellularMonthLabel(unpaid.month)} wasn't paid. Pay it on the Billing page, then turn 4G on again.`,
+          code: 'cellular-unpaid',
         },
       }
     }
@@ -216,6 +322,8 @@ export async function setPosStoreCellular(
         cellularChangedBy: staff.uid,
         // What they agreed to, and when: the price per reader at the time.
         ...(enable ? { cellularConsent: { atMs: now, uid: staff.uid, readerMonthlyCents: posCellularReaderMonthlyCents(config) } } : {}),
+        // On again: the notice of an unpaid month that turned it off is done.
+        ...(enable ? { cellularSuspended: null } : {}),
       },
       { merge: true },
     )

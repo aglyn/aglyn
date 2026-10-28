@@ -87,6 +87,33 @@ only register a reader to the Stripe account that ordered it.
   check that it is on and connected, cancel the payment, and take it again
   — or use **Card (QR)** or **Type card** for that sale.
 
+### 4G for the Stripe Reader S710 {#reader-4g}
+
+Where it's available, the **POS devices** card of a store with a Stripe
+Reader S710 shows **4G (cellular)**. Select **Turn on 4G** to give every
+S710 at that store Stripe's cellular service, which it uses whenever Wi-Fi
+and Ethernet aren't available. The card shows the monthly price for each
+reader, and you agree to it before 4G turns on.
+
+- **Who can turn it on.** 4G is charged to your workspace, so turning it on
+  needs both **Registers and devices** and the workspace's **Manage billing**
+  permission. Turning it off needs only **Registers and devices**. If your
+  role is missing **Manage billing**, the card tells you so.
+- **How it's charged.** At the start of each month, your workspace's card is
+  charged for each S710 that had 4G at any time in the month before.
+  Turning 4G off stops the charge from the next month.
+- **If a charge isn't paid.** It stays open on your workspace's **Billing**
+  page. If it's still unpaid after a grace period (two weeks unless your
+  platform sets a different one), 4G is turned off for all of your
+  workspace's stores, and everyone who manages billing gets an email. Your
+  readers keep working on Wi-Fi or Ethernet. To get 4G back, pay the open
+  invoice on the **Billing** page, then select **Turn on 4G** again for each
+  store. It doesn't come back on by itself.
+- **If you delete the workspace.** When the workspace is removed for good,
+  after the waiting period, 4G is turned off. The month it's removed in is
+  charged then, for each S710 that had 4G during that month, along with the
+  month before if that one hasn't been charged yet.
+
 
 ### Reader start-up screen {#reader-start-up-screen}
 

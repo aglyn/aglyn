@@ -1264,11 +1264,23 @@ you, with no markup, on an invoice to the workspace's card. Set them on the
 **console and tenant** (the charge runs as a background job). Unset, nothing
 about 4G shows anywhere.
 
+Turning 4G on takes the workspace's **Manage billing** permission as well as
+**Registers and devices**; turning it off takes only **Registers and devices**.
+A charge that doesn't collect stays open on the workspace's Billing page and
+raises an operator alert. If it is still unpaid after the grace period, 4G is
+turned off at Stripe for all of the workspace's stores, the members who manage
+its billing are emailed, and another operator alert is raised. Paying doesn't
+turn 4G back on: the merchant turns it on again once the charge is paid. When
+a workspace is erased, its erasure charges the month it is erased in (and the
+month before, if the monthly run has not charged it yet) before any data is
+deleted, then turns 4G off.
+
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `POS_CELLULAR_MONTHLY_COST_CENTS` | Optional | Runtime, console and tenant | What Stripe charges you for one reader's cellular service a month, in whole cents. Unset, or not a whole number, keeps 4G hidden. |
 | `POS_CELLULAR_BILLING_COST_BPS` | Optional | Runtime, console and tenant | The card processing percentage on the monthly charge, in basis points. Unset is the platform's card rate. |
 | `POS_CELLULAR_BILLING_COST_FIXED_CENTS` | Optional | Runtime, console and tenant | The card processing fixed fee on the monthly charge, in cents. Unset is the platform's. |
+| `POS_CELLULAR_GRACE_DAYS` | Optional | Runtime, console and tenant | How many days a month's 4G charge can stay unpaid before 4G is turned off for the workspace's stores, as a whole number from 1 to 90. Unset is 14. Any other value keeps 4G hidden. |
 | `STRIPE_PRODUCT_POS_CELLULAR` | Optional | Runtime, console and tenant | The Stripe product the monthly charge is billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. Unset keeps 4G hidden. |
 
 ---

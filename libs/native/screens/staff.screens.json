@@ -9384,6 +9384,13 @@
             "description": "Sent to someone who bought a card reader in person from the platform with no account yet, inviting them to sign up with the same address so the order shows up in their workspace on its own.",
             "deliveredBy": "resend",
             "editable": true
+          },
+          {
+            "key": "pos-cellular-turned-off-unpaid",
+            "name": "4G turned off: charge unpaid",
+            "description": "Sent to the people who manage a workspace’s billing when its monthly charge for 4G on Stripe Reader S710s is still unpaid after the grace period, and 4G has been turned off for its stores.",
+            "deliveredBy": "resend",
+            "editable": true
           }
         ],
         "tokens": {
@@ -16130,6 +16137,63 @@
               "name": "order.signUpUrl",
               "description": "Where to create an account with this address",
               "sample": "https://app.aglyn.com/signup"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-cellular-turned-off-unpaid": [
+            {
+              "name": "org.name",
+              "description": "The workspace whose 4G was turned off",
+              "sample": "Test Org"
+            },
+            {
+              "name": "cellular.month",
+              "description": "The month whose 4G charge went unpaid",
+              "sample": "October 2026"
+            },
+            {
+              "name": "cellular.amount",
+              "description": "What that month’s 4G charge came to",
+              "sample": "$21.65"
+            },
+            {
+              "name": "cellular.readers",
+              "description": "How many Stripe Reader S710s that month’s charge was for",
+              "sample": "2 Stripe Reader S710s"
+            },
+            {
+              "name": "cellular.openedOn",
+              "description": "The day the charge did not go through",
+              "sample": "November 2, 2026"
+            },
+            {
+              "name": "cellular.turnedOffOn",
+              "description": "The day 4G was turned off",
+              "sample": "November 16, 2026"
+            },
+            {
+              "name": "cellular.stores",
+              "description": "The stores 4G was turned off for, one per line",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "cellular.billingUrl",
+              "description": "The workspace’s Billing page, where the open invoice is paid",
+              "sample": "https://app.aglyn.com/test-org/billing"
             },
             {
               "name": "brand.productName",
