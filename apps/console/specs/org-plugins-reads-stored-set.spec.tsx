@@ -80,6 +80,12 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: mockOrg, ready: true }),
 }))
+// The switchboard gates on the key its route checks (AGL-4047), read through
+// the permissions hook: this reader holds it, as the owner role does.
+jest.mock('../hooks/use-org-permissions', () => {
+  const value = { loaded: true, can: () => true, permissions: {}, granted: {} }
+  return { __esModule: true, default: () => value, useOrgPermissions: () => value }
+})
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: { role: 'owner', $id: ORG_ID } }),
   useOrgSlug: () => 'acme',
