@@ -781,6 +781,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
+    '#bought-from-us-in-person': 'At an event, Aglyn may sell you a reader in person.',
     '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
     '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
     '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',

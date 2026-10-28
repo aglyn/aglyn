@@ -905,6 +905,7 @@ data class HostOrder(
     val hardwareBuyer: OrderHardwareBuyer? = null,
     val hardwareOrderId: String? = null,
     val hardwareSalePending: Boolean? = null,
+    val hardwareSerials: List<String>? = null,
     val invoiceId: String? = null,
     val kioskDeviceId: String? = null,
     val kioskQueuedAtMs: Double? = null,

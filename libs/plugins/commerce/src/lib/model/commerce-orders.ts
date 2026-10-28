@@ -508,6 +508,11 @@ export interface HostOrder {
   /** Whose the sale's hardware is, as the register attached them (AGL-4038). */
   hardwareBuyer?: OrderHardwareBuyer
   /**
+   * The serial numbers of the readers the sale sold, scanned or typed at the
+   * sale before its hardware order was recorded (AGL-4038), in reader order.
+   */
+  hardwareSerials?: string[]
+  /**
    * Set while a kiosk order waits in its register's queue for a cashier to
    * take payment ("Pay at counter"), and when it joined.
    */

@@ -19,6 +19,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import {
   isPosHardwareSkuId,
+  normalizePosHardwareSerial,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
   type PosHardwareTaxRegion,
@@ -168,6 +169,9 @@ export async function recordInPersonPosHardwareSale(
       text(payments.find((payment) => payment.checkoutSessionId)?.checkoutSessionId) ?? text(order.checkoutSessionId),
     receiptEmail: text(order.customerEmail)?.toLowerCase() ?? null,
     buyer: order.hardwareBuyer,
+    serials: (Array.isArray(order.hardwareSerials) ? order.hardwareSerials : [])
+      .map(normalizePosHardwareSerial)
+      .filter(Boolean),
     taxRegion: tax.region,
     ratePct: tax.ratePct,
     stripeAccountId,

@@ -62,6 +62,10 @@ export interface ToAttachRow {
   createdAtMs: number
   contactEmail: string | null
   attached: boolean
+  storeChosen: boolean
+  readers: number
+  serialsTaken: number
+  readersSetUp: number
   awaitingWorkspace: boolean
   invited: boolean
 }
@@ -120,4 +124,28 @@ export function posHardwareAttach(
     SALE,
     { method: 'POST', body: { ...body, action: 'attach' }, attemptKey },
   )
+}
+
+/** Saves the serial numbers of a sale's readers, taken at the sale. */
+export function posHardwareSerials(
+  user: User,
+  body: { hostId: string; serials: string[]; registerOrderId?: string; orderId?: string },
+) {
+  return sendPosHardwareRequest<{ ok: true; serials: string[]; recorded: boolean }>(user, SALE, {
+    method: 'POST',
+    body: { ...body, action: 'serials' },
+  })
+}
+
+/** Registers a reader to the buyer's chosen store, by its code, at the booth. */
+export function posHardwareRegisterAtBooth(
+  user: User,
+  attemptKey: string,
+  body: { hostId: string; registrationCode: string; registerOrderId?: string; orderId?: string },
+) {
+  return sendPosHardwareRequest<{ ok: true; readerId: string; order: ToAttachRow }>(user, SALE, {
+    method: 'POST',
+    body: { ...body, action: 'register-at-booth' },
+    attemptKey,
+  })
 }

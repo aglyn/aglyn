@@ -28,7 +28,11 @@ const mockStatus = jest.fn()
 const mockFind = jest.fn()
 const mockAttach = jest.fn()
 const mockToAttach = jest.fn()
+const mockSerials = jest.fn()
+const mockBooth = jest.fn()
 jest.mock('./pos-hardware-sale-api', () => ({
+  posHardwareSerials: (...args: unknown[]) => mockSerials(...args),
+  posHardwareRegisterAtBooth: (...args: unknown[]) => mockBooth(...args),
   posHardwareSaleStatus: (...args: unknown[]) => mockStatus(...args),
   posHardwareFindBuyer: (...args: unknown[]) => mockFind(...args),
   posHardwareAttach: (...args: unknown[]) => mockAttach(...args),
@@ -54,7 +58,7 @@ const PERSON = {
 
 describe('the card reader buyer step', () => {
   beforeEach(() => {
-    for (const mock of [mockStatus, mockFind, mockAttach, mockToAttach]) mock.mockReset()
+    for (const mock of [mockStatus, mockFind, mockAttach, mockToAttach, mockSerials, mockBooth]) mock.mockReset()
   })
 
   it('draws nothing on a store that is not the seller', async () => {
@@ -87,6 +91,28 @@ describe('the card reader buyer step', () => {
     })
     await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringMatching(/as soon as the sale is paid/), 'success'))
     expect(await screen.findByRole('button', { name: 'Change' })).toBeTruthy()
+    // With their store chosen, the reader can be registered to it here.
+    mockBooth.mockResolvedValue({ ok: true, readerId: 'tmr_1', order: {} })
+    fireEvent.change(screen.getByLabelText('Code on the reader'), { target: { value: 'abc-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Register' }))
+    await waitFor(() =>
+      expect(mockBooth.mock.calls[0][2]).toEqual({ hostId: 'host-seller', registerOrderId: 'order-1', registrationCode: 'abc-123' }),
+    )
+  })
+
+  it("takes the readers' serial numbers on the sale", async () => {
+    mockStatus.mockResolvedValue({ seller: true, items: [] })
+    mockSerials.mockResolvedValue({ ok: true, serials: ['A-1', 'A-2'], recorded: false })
+    const notify = jest.fn()
+    render(<PosHardwareBuyer user={user} hostId="host-seller" saleOrderId="order-1" notify={notify} />)
+    fireEvent.change(await screen.findByLabelText('Reader serial numbers'), { target: { value: 'a-1, a-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(mockSerials).toHaveBeenCalledWith(user, { hostId: 'host-seller', registerOrderId: 'order-1', serials: ['a-1', 'a-2'] }),
+    )
+    // No store chosen yet: no registration here.
+    expect(screen.queryByLabelText('Code on the reader')).toBeNull()
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Serial numbers saved', 'success'))
   })
 
   it('offers to invite an address with no account', async () => {
