@@ -1038,6 +1038,7 @@ data class HostProduct(
     val posQuickKey: Boolean? = null,
     val priceUsd: Double? = null,
     val relatedProductIds: List<String>? = null,
+    val sample: Boolean? = null,
     val sellOnline: Boolean? = null,
     val seo: HostProductSeo? = null,
     val shipping: ProductShippingFacts? = null,
@@ -2572,6 +2573,7 @@ data class PosDisplayState(
     val receipt: PosDisplayStateReceipt? = null,
     val response: PosDisplayResponse? = null,
     val screen: PosDisplayScreen? = null,
+    val screenShownBy: String? = null,
     val tip: PosDisplayStateTip? = null,
     val updatedAtMs: Double,
 )

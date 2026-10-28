@@ -209,18 +209,17 @@ If the register has a [customer display](pos-and-reservations.md#customer-displa
 still needs a waiver also shows **Customer display**. Select it, and the display
 facing the rider opens the waiver for them to sign. You keep the register's screen.
 It works the same way as [at the window](#sign-at-the-window): the record notes who
-put the waiver on the display, and the rider's email is optional.
+sent the waiver to the display, and the rider's email is optional.
 
-- The customer shows **On the customer display** while the rider signs, and the status
-  updates when they're done.
-- The waiver stays on the display until it is closed, however long the rider takes:
-  there is no timer. Select **Close display** beside the customer to close it
-  yourself; the display goes back to your store's screen within a few seconds and
-  can't sign under it again.
-- When the rider selects **Done** or **Cancel**, the display goes back to your store's
-  screen and closes it too. It also goes back by itself a minute after a signing.
-- **Close display** is still offered after the register's page reloads, on the same
-  device.
+- The display is paired to your store, and that pairing is what lets the rider sign
+  there. There's nothing to open or close.
+- The waiver stays on the display until the rider signs, however long they take:
+  there is no timer. If you show something else on the display, like a sale's
+  basket or another rider's waiver, the display switches to it within a few seconds.
+- The customer shows **Sent to the customer display**. Select **Check again** to see
+  the status once the rider is done.
+- After signing, the display says thank you and offers **Next signer** for another
+  rider and **Done**. It goes back to your store's screen by itself a few seconds later.
 
 ## Minors
 

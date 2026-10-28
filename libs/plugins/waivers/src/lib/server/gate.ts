@@ -81,6 +81,12 @@ export interface WaiversGateDeps {
   verifyIdToken(token: string): Promise<Record<string, unknown> & { uid: string }>
   permissions(uid: string, hostId: string): Promise<Record<string, boolean | undefined>>
   orgForHost(hostId: string): Promise<{ orgId: string; org: Record<string, unknown> | null } | null>
+  /**
+   * A member's name for a signature's audit, when no session of theirs is on
+   * the request (AGL-4042: the staff member who put a waiver on the paired
+   * customer display): their display name, else their email, else `null`.
+   */
+  memberName(uid: string): Promise<string | null>
 }
 
 const defaultDeps: WaiversGateDeps = {
@@ -92,6 +98,10 @@ const defaultDeps: WaiversGateDeps = {
     const found = await getOrgForHost(hostId)
     return found ? { orgId: found.orgId, org: (found.org as Record<string, unknown>) ?? null } : null
   },
+  memberName: async (uid) => {
+    const user = await firebaseAdmin.app().auth().getUser(uid).catch(() => null)
+    return user?.displayName || user?.email || null
+  },
 }
 
 let depsOverride: Partial<WaiversGateDeps> | null = null
@@ -102,6 +112,21 @@ export function setWaiversGateDepsForTests(deps: Partial<WaiversGateDeps> | null
 }
 
 const deps = (): WaiversGateDeps => ({ ...defaultDeps, ...(depsOverride ?? {}) })
+
+/** Whether a member holds any of these keys on a site, with no session of theirs on the request. */
+export async function memberHolds(
+  uid: string,
+  hostId: string,
+  keys: readonly WaiversPermission[],
+): Promise<boolean> {
+  const permissions = await deps().permissions(uid, hostId)
+  return keys.some((key) => permissions[key] === true)
+}
+
+/** A member's name for a signature's audit, or `null` (see {@link WaiversGateDeps.memberName}). */
+export function memberName(uid: string): Promise<string | null> {
+  return deps().memberName(uid).catch(() => null)
+}
 
 /** A JSON body, or `{}`. */
 export async function readJsonBody(request: Request): Promise<Record<string, unknown>> {

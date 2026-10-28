@@ -24,6 +24,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import PosDisplayPage, { posDisplayNavigation } from './pos-display-page.component'
+import { customerDisplayCredential } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { POS_DISPLAY_TOKEN_KEY } from './pos-display/pos-display-api'
 
 const TOKEN = 't'.repeat(43)
@@ -118,6 +119,8 @@ describe('the customer display (AGL-3608)', () => {
     expect(await screen.findByText('Thanks for stopping by')).toBeTruthy()
     expect(screen.getByText('Corner Cafe')).toBeTruthy()
     expect(window.localStorage.getItem(POS_DISPLAY_TOKEN_KEY)).toBe(TOKEN)
+    // Core keeps it too, for another plugin's screen on this display (AGL-4042).
+    expect(customerDisplayCredential()).toBe(TOKEN)
     expect(posts('pair').at(-1)?.body).toMatchObject({ action: 'pair', code: '123456' })
     // The pairing call carries no token; every poll after it carries the new one.
     expect(posts('pair').every((call) => call.token === null)).toBe(true)
@@ -294,6 +297,14 @@ describe('the customer display (AGL-3608)', () => {
     render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
     expect(await screen.findByLabelText('Pairing code')).toBeTruthy()
     expect(window.localStorage.getItem(POS_DISPLAY_TOKEN_KEY)).toBeNull()
+    expect(customerDisplayCredential()).toBeNull()
+  })
+
+  it('hands a display paired before core kept the credential over to core on load (AGL-4042)', async () => {
+    paired({ mode: 'idle' })
+    expect(customerDisplayCredential()).toBeNull()
+    render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
+    await waitFor(() => expect(customerDisplayCredential()).toBe(TOKEN))
   })
 
   it('unpairs from the tucked-away control after a confirmation', async () => {

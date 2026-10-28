@@ -16,10 +16,12 @@
  */
 
 import {
+  customerDisplayCredential,
   customerDisplayHost,
   customerDisplayReturnPath,
   customerDisplayScreenHref,
   registerCustomerDisplayHost,
+  rememberCustomerDisplayCredential,
   sanitizeCustomerDisplayScreen,
   subscribeCustomerDisplayHost,
 } from './plugin-customer-display'
@@ -31,7 +33,7 @@ import {
  * offers while it has a display. Names no plugin: the fixtures are invented.
  */
 
-const SCREEN = { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g.1', host: 'host-1' } }
+const SCREEN = { pluginId: 'acme-forms', path: '/display-fill', params: { form: 'f1', host: 'host-1' } }
 
 describe('a screen a register may store', () => {
   it('keeps a declared-shape plugin page and its short plain parameters', () => {
@@ -64,7 +66,7 @@ describe('where the display opens it, and where it comes back', () => {
     const href = customerDisplayScreenHref(SCREEN, '/kiosk/acme-pos/display') as string
     const url = new URL(href, 'https://console.example.com')
     expect(url.pathname).toBe('/kiosk/acme-forms/display-fill')
-    expect(Object.fromEntries(url.searchParams)).toEqual({ grant: 'g.1', host: 'host-1', return: '/kiosk/acme-pos/display' })
+    expect(Object.fromEntries(url.searchParams)).toEqual({ form: 'f1', host: 'host-1', return: '/kiosk/acme-pos/display' })
     expect(customerDisplayReturnPath(url.search)).toBe('/kiosk/acme-pos/display')
   })
 
@@ -98,5 +100,40 @@ describe('the display host the register’s page offers', () => {
     stop()
     registerCustomerDisplayHost(first)()
     expect(heard).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('the display’s credential, for a screen’s page (AGL-4042)', () => {
+  const store = new Map<string, string>()
+  beforeAll(() => {
+    ;(globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string): void => {
+          store.set(key, value)
+        },
+        removeItem: (key: string): void => {
+          store.delete(key)
+        },
+      },
+    }
+  })
+  afterAll(() => {
+    delete (globalThis as { window?: unknown }).window
+  })
+
+  it('is kept by the display’s page, read by a screen’s page, and forgotten when unpaired', () => {
+    expect(customerDisplayCredential()).toBeNull()
+    rememberCustomerDisplayCredential('aBcD-ef_0123456789xyzXYZ0123456789abcdEFGHI')
+    expect(customerDisplayCredential()).toBe('aBcD-ef_0123456789xyzXYZ0123456789abcdEFGHI')
+    rememberCustomerDisplayCredential(null)
+    expect(customerDisplayCredential()).toBeNull()
+  })
+
+  it('keeps nothing out of shape', () => {
+    rememberCustomerDisplayCredential('short')
+    expect(customerDisplayCredential()).toBeNull()
+    rememberCustomerDisplayCredential('has spaces and <tags> in it, far too odd')
+    expect(customerDisplayCredential()).toBeNull()
   })
 })

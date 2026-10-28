@@ -17,7 +17,10 @@
 'use client'
 
 import type { ConsolePublicPageProps } from '@aglyn/aglyn'
-import { customerDisplayScreenHref } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
+import {
+  customerDisplayScreenHref,
+  rememberCustomerDisplayCredential,
+} from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -114,7 +117,11 @@ export default function PosDisplayPage(_props: ConsolePublicPageProps) {
   const brandingAtRef = useRef(0)
 
   useEffect(() => {
-    setToken(readStoredToken())
+    const stored = readStoredToken()
+    // A display paired before core kept the credential (AGL-4042) hands it
+    // over here, so another plugin's screen on it works without pairing again.
+    rememberCustomerDisplayCredential(stored)
+    setToken(stored)
   }, [])
 
   const unpaired = useCallback(() => {

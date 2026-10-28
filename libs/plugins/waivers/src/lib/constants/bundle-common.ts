@@ -52,13 +52,6 @@ export const WAIVERS_COLLECTIONS = {
    * compared it with the store's setting. Server-only, like the signatures.
    */
   retention: 'waiverRetention',
-  /**
-   * One document per OPEN customer display grant, at
-   * `orgs/{orgId}/waiverDisplayGrants/{grantId}` (AGL-4042): the site, the
-   * staff member who opened it and when. Deleted when the grant closes, so
-   * a display signs only while its grant's document is there. Server-only.
-   */
-  displayGrants: 'waiverDisplayGrants',
 } as const
 
 /**
@@ -148,8 +141,11 @@ export const WAIVERS_SITE_SIGN_PATH = 'sign-waiver'
 /**
  * The console's public page a register's paired customer display opens to
  * sign at the window (AGL-4042), beneath `/kiosk/waivers`, through core's
- * customer display seam. It needs no staff session: it carries a grant the
- * console minted for the staff member who asked, and signs with it.
+ * customer display seam, with the site as its one parameter (`host`). It
+ * needs no staff session: the display it runs on is paired to the store,
+ * and that pairing, checked through core's display verifier, is what lets
+ * it sign. It stays until the rider signs or the register shows something
+ * else; nothing on it runs out.
  */
 export const WAIVERS_DISPLAY_PAGE_PATH = '/display-sign'
 
@@ -174,14 +170,11 @@ export const WAIVERS_API_ROUTES = {
   /** Console: one person's waiver status for a day. */
   status: 'waivers/status',
   /**
-   * Console: a grant for signing on the register's customer display (POST
-   * `{hostId}`), whether one is still open (`action: 'state'`), or close it
-   * (`action: 'close'`), by its `grantId`.
+   * Console, no session: whether the paired display (by its credential) is
+   * still showing this site's waiver, so the page follows the register.
    */
-  displayGrant: 'waivers/display-grant',
-  /** Console, no session: whether the display's grant is still open, or close it (`close: true`). */
-  displayGrantState: 'waivers/display-grant-state',
-  /** Console, no session: sign on the customer display with that grant. */
+  displayScreen: 'waivers/display-screen',
+  /** Console, no session: sign on the paired customer display, by its credential. */
   signOnDisplay: 'waivers/sign-on-display',
   /** Public: a site's published waivers, or one of them to sign. */
   publicWaiver: 'waivers/public',

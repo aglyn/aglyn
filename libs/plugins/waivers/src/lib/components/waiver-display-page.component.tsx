@@ -18,7 +18,10 @@
 'use client'
 
 import type { ConsolePublicPageProps } from '@aglyn/aglyn'
-import { customerDisplayReturnPath } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
+import {
+  customerDisplayCredential,
+  customerDisplayReturnPath,
+} from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { Alert, Box, Button, Container, Stack } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
@@ -26,10 +29,14 @@ import type { SigningResult } from './signing-form.component'
 import { WaiverSignFlow } from './waiver-sign-flow.component'
 import { publicWaiversRequest } from './waivers-api'
 
-/** How long after a signing the display goes back, if nobody taps Done or Next signer. */
-export const WAIVER_DISPLAY_DONE_MS = 60 * 1000
-/** How often the display asks whether staff closed its screen. */
-export const WAIVER_DISPLAY_CHECK_MS = 5_000
+/**
+ * How long the thank-you shows after a signing before the display goes back
+ * to the register's screen, if nobody taps Done or Next signer. It runs only
+ * once the rider has signed: an unsigned waiver never leaves on its own.
+ */
+export const WAIVER_DISPLAY_THANKS_MS = 10_000
+/** How often the page asks whether the register still shows this waiver, to follow it. */
+export const WAIVER_DISPLAY_FOLLOW_MS = 3_000
 
 /** Leaves for the display's own screen; an object so a spec can watch it. */
 export const waiverDisplayNavigation = {
@@ -38,10 +45,10 @@ export const waiverDisplayNavigation = {
   },
 }
 
-function DoneActions(props: { reset: () => void; back: () => void }) {
+function ThanksActions(props: { reset: () => void; back: () => void }) {
   const { back } = props
   useEffect(() => {
-    const timer = window.setTimeout(back, WAIVER_DISPLAY_DONE_MS)
+    const timer = window.setTimeout(back, WAIVER_DISPLAY_THANKS_MS)
     return () => window.clearTimeout(timer)
   }, [back])
   return (
@@ -56,97 +63,86 @@ function DoneActions(props: { reset: () => void; back: () => void }) {
 
 /**
  * Signing on a register's customer display (AGL-4042), at
- * `/kiosk/waivers/display-sign`: the page core's customer display seam opens
- * when staff choose **Customer display** beside a customer at check-in. The
- * rider reads and signs as at the window; the signing carries the grant the
- * console minted for that staff member, so the record names them.
+ * `/kiosk/waivers/display-sign?host=…`: the page core's customer display
+ * seam opens when staff choose **Customer display** beside a customer at
+ * check-in. The rider reads and signs as at the window.
  *
- * It stays until it is closed, with no timer while the rider reads: staff
- * close it from the check-in (the page asks every few seconds and goes back),
- * or **Done**, **Cancel**, or a minute after a signing sends the display
- * back to the register's screen it came from, closing the grant as it goes.
+ * The paired display is the authorization: the page sends the display's own
+ * credential (core keeps it on the display) with the signing, and the server
+ * checks, through core's display verifier, that this display is paired to
+ * the store and still shows its waiver. The record names the staff member
+ * who sent it.
+ *
+ * It stays until the rider signs, however long that takes: nothing on it
+ * runs out, and there is nothing to close. It follows the register, so once
+ * staff show something else on the display, the display goes back to the
+ * register's screen. After a signing it says thank you, offers **Next
+ * signer** and **Done**, and goes back on its own a few seconds later.
  */
 export function WaiverDisplayPage(_props: ConsolePublicPageProps) {
-  const [params, setParams] = useState<{ hostId: string; grant: string; returnTo: string | null } | null>(null)
+  const [params, setParams] = useState<{ hostId: string; display: string | null; returnTo: string | null } | null>(
+    null,
+  )
   useEffect(() => {
     const search = window.location.search
-    const query = new URLSearchParams(search)
-    setParams({ hostId: query.get('host') ?? '', grant: query.get('grant') ?? '', returnTo: customerDisplayReturnPath(search) })
+    setParams({
+      hostId: new URLSearchParams(search).get('host') ?? '',
+      display: customerDisplayCredential(),
+      returnTo: customerDisplayReturnPath(search),
+    })
   }, [])
   const returnTo = params?.returnTo ?? null
   const hostId = params?.hostId ?? ''
-  const grant = params?.grant ?? ''
-  const [closed, setClosed] = useState(false)
-  const leave = useCallback(() => {
+  const display = params?.display ?? ''
+  const back = useCallback(() => {
     if (returnTo) waiverDisplayNavigation.leave(returnTo)
   }, [returnTo])
-  // Going back closes the grant, so nothing signs under it again; the
-  // display leaves whether or not the close was heard (staff can close it too).
-  const back = useCallback(() => {
-    if (!grant || !hostId) return leave()
-    void publicWaiversRequest(WAIVERS_API_ROUTES.displayGrantState, { body: { grant, hostId, close: true } })
-      .catch(() => undefined)
-      .finally(leave)
-  }, [grant, hostId, leave])
 
-  // Staff closed it from the check-in: say so and go back.
+  // Follows the register: once it shows something else on this display, go
+  // back to it. A missed answer is asked again, never a reason to leave.
   useEffect(() => {
-    if (!grant || !hostId) return undefined
+    if (!hostId || !display || !returnTo) return undefined
     let live = true
-    const check = async () => {
-      try {
-        const answer = await publicWaiversRequest<{ open: boolean }>(WAIVERS_API_ROUTES.displayGrantState, {
-          body: { grant, hostId },
+    const timer = window.setInterval(() => {
+      void publicWaiversRequest<{ showing: boolean }>(WAIVERS_API_ROUTES.displayScreen, { body: { hostId, display } })
+        .then((answer) => {
+          if (live && answer.showing === false) back()
         })
-        if (live && !answer.open) {
-          setClosed(true)
-          leave()
-        }
-      } catch {
-        // A missed check is asked again on the next tick.
-      }
-    }
-    const timer = window.setInterval(() => void check(), WAIVER_DISPLAY_CHECK_MS)
+        .catch(() => undefined)
+    }, WAIVER_DISPLAY_FOLLOW_MS)
     return () => {
       live = false
       window.clearInterval(timer)
     }
-  }, [grant, hostId, leave])
+  }, [hostId, display, returnTo, back])
 
   const submit = useCallback(
     (payload: Record<string, unknown>) =>
       publicWaiversRequest<SigningResult>(WAIVERS_API_ROUTES.signOnDisplay, {
-        body: { ...payload, hostId: params?.hostId ?? '', grant: params?.grant ?? '' },
+        body: { ...payload, hostId, display },
       }),
-    [params],
+    [hostId, display],
   )
 
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default', py: { xs: 2, sm: 4 } }}>
       <Container maxWidth="sm">
-        {params === null ? null : !params.hostId || !params.grant || closed ? (
+        {params === null ? null : !hostId || !display ? (
           <Stack spacing={2}>
-            <Alert severity="info">{'Staff closed this screen. Ask them to show the waiver again.'}</Alert>
+            <Alert severity="info">{'This screen isn’t paired with the store’s register. Ask staff for help.'}</Alert>
             {returnTo ? (
               <div>
-                <Button onClick={leave}>{'Back'}</Button>
+                <Button onClick={back}>{'Back'}</Button>
               </div>
             ) : null}
           </Stack>
         ) : (
-          <Stack spacing={2}>
-            {returnTo ? (
-              <div>
-                <Button onClick={back}>{'Cancel'}</Button>
-              </div>
-            ) : null}
-            <WaiverSignFlow
-              hostId={params.hostId}
-              mode="at_window"
-              submit={submit}
-              doneActions={(reset) => <DoneActions reset={reset} back={back} />}
-            />
-          </Stack>
+          <WaiverSignFlow
+            hostId={hostId}
+            mode="at_window"
+            submit={submit}
+            doneActions={(reset) => <ThanksActions reset={reset} back={back} />}
+          />
         )}
       </Container>
     </Box>

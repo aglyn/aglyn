@@ -33,21 +33,32 @@
  *    there is one, hands it a {@link CustomerDisplayScreen}.
  * 2. A **screen** is one of the asking plugin's own public console pages
  *    (`ConsolePublicPage`, served at `/kiosk/{pluginId}{path}` with no staff
- *    session), with a few short parameters — typically a grant the plugin's
- *    own server minted and will check. The display opens it, and the page
- *    sends the display back to where it came from
+ *    session), with a few short parameters. The display opens it, and the
+ *    page sends the display back to where it came from
  *    ({@link customerDisplayReturnPath}) when the customer is done.
+ *
+ * THE PAIRED DISPLAY IS THE AUTHORIZATION (AGL-4042). A screen's page has no
+ * staff session, and needs none: the display it runs on was paired to one
+ * store by staff, and that pairing is what it shows. The display's page hands
+ * its credential to core ({@link rememberCustomerDisplayCredential}); a
+ * screen's page reads it ({@link customerDisplayCredential}) and sends it to
+ * its own plugin's server, which asks core who the display is
+ * (`plugin-customer-display-verifier`): the store it is paired to, the screen
+ * it is showing now, and who put that screen there. Nothing is minted per
+ * screen, nothing is opened or closed, and nothing names the plugin on the
+ * other side.
  *
  * The display opens only a page the plugin DECLARED public: the console's
  * public route refuses any other before a byte of the plugin loads. The
  * parameters are capped and plain, because they ride the display's state and
- * its address bar; they must never carry a customer's details.
+ * its address bar; they must never carry a customer's details, and never the
+ * display's credential.
  *
- * A screen has no timer here (AGL-4042): it stays until the register shows
- * something else, the plugin takes it off ({@link CustomerDisplayHost.close}),
- * or its page sends the display back. Anything a screen's page was handed
- * that must stop working is the plugin's to revoke, on its own server, when
- * the screen closes.
+ * A screen has no timer (AGL-4042): it stays, however long the customer
+ * takes, until the register shows something else on the display, the plugin
+ * takes it off ({@link CustomerDisplayHost.close}), or its page sends the
+ * display back once the customer is done. A screen's page follows the
+ * register by asking its server whether its screen is still the one showing.
  *
  * Client-only, React-free, and reached by its own subpath, never the barrel:
  * a published page has no use for it.
@@ -134,7 +145,7 @@ export interface CustomerDisplayHost {
    * again; `false` when it could not. A screen of another plugin, or one the
    * register already replaced, is left alone (and answers `true`: this
    * plugin's screen is not showing). A display already on the plugin's page
-   * goes back when that page learns, from its own server, that it closed.
+   * goes back when that page sees its screen is no longer the one showing.
    */
   close?(pluginId: string): Promise<boolean>
 }
@@ -182,5 +193,46 @@ export function subscribeCustomerDisplayHost(listener: () => void): () => void {
   registry.listeners.add(listener)
   return () => {
     registry.listeners.delete(listener)
+  }
+}
+
+/**
+ * Where the display's credential is kept on the display itself: the
+ * browser's own storage for the console's public pages, which the display's
+ * page and every screen's page share.
+ */
+export const CUSTOMER_DISPLAY_CREDENTIAL_KEY = 'aglyn.customerDisplay.credential'
+
+const CREDENTIAL = /^[A-Za-z0-9_.~-]{16,512}$/
+
+/**
+ * Called by the page that RUNS a paired display (AGL-4042): keeps the
+ * credential its pairing gave it where a screen's page can read it, or
+ * forgets it (`null`) when the display is unpaired. Best effort: a browser
+ * that refuses storage keeps nothing, and a screen's page then signs nothing.
+ */
+export function rememberCustomerDisplayCredential(credential: string | null): void {
+  try {
+    if (credential && CREDENTIAL.test(credential)) {
+      window.localStorage.setItem(CUSTOMER_DISPLAY_CREDENTIAL_KEY, credential)
+    } else {
+      window.localStorage.removeItem(CUSTOMER_DISPLAY_CREDENTIAL_KEY)
+    }
+  } catch {
+    // No storage: nothing to keep, and nothing kept.
+  }
+}
+
+/**
+ * The credential of the paired display this page is running on, for a
+ * screen's page to send to its own plugin's server, which asks core's
+ * verifier who the display is; `null` on a device that is not one.
+ */
+export function customerDisplayCredential(): string | null {
+  try {
+    const value = window.localStorage.getItem(CUSTOMER_DISPLAY_CREDENTIAL_KEY)
+    return value && CREDENTIAL.test(value) ? value : null
+  } catch {
+    return null
   }
 }

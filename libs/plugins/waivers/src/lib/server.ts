@@ -89,12 +89,11 @@ export function registerWaiversConsoleApi(): void {
     [WAIVERS_API_ROUTES.signAtWindow, lazy('signatures', (routes) => routes.signAtWindowRoute)],
     [WAIVERS_API_ROUTES.paper, lazy('signatures', (routes) => routes.paperRoute)],
     [WAIVERS_API_ROUTES.status, lazy('signatures', (routes) => routes.statusRoute)],
-    // The register's customer display (AGL-4042): a grant staff open and
-    // close, and the display's signing with it and asking whether it is
-    // still open. Console only, where the display's page is.
-    [WAIVERS_API_ROUTES.displayGrant, lazy('display', (routes) => routes.displayGrantRoute)],
+    // The register's paired customer display (AGL-4042): signing on it,
+    // and whether it still shows this site's waiver, both by the display's
+    // own credential. Console only, where the display's page is.
     [WAIVERS_API_ROUTES.signOnDisplay, lazy('display', (routes) => routes.signOnDisplayRoute)],
-    [WAIVERS_API_ROUTES.displayGrantState, lazy('display', (routes) => routes.displayGrantStateRoute)],
+    [WAIVERS_API_ROUTES.displayScreen, lazy('display', (routes) => routes.displayScreenRoute)],
   ]
   for (const [path, handler] of routes) registerPluginApiRoute(path, { web: (request) => handler(request) })
 }

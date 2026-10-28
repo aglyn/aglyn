@@ -29,6 +29,12 @@ jest.mock('./server/pos-hardware-attach', () => ({
   claimPosHardwareForNewWorkspace: (...args: unknown[]) => mockClaim(...(args as [])),
 }))
 
+const mockVerify = jest.fn(async () => ({ hostId: 'host-1', orgId: 'org-1', screen: null, shownBy: null }))
+jest.mock('./server/pos-display', () => ({
+  verifyPosCustomerDisplay: (...args: unknown[]) => mockVerify(...(args as [])),
+}))
+
+import { verifyCustomerDisplay } from '@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier'
 import {
   listPluginEventHandlers,
   resetPluginEventHandlersForTests,
@@ -76,5 +82,14 @@ describe('org.created claims card readers bought in person (AGL-4038)', () => {
       ownerEmail: 'new@example.com',
       emailVerified: true,
     })
+  })
+})
+
+describe('core’s customer display verifier (AGL-4042)', () => {
+  it('is commerce’s paired-display check, loaded with the first screen that asks', async () => {
+    registerCommerceConsoleServerDeclarations()
+    const credential = 'display-token-0123456789abcdefghijklmnop'
+    expect(await verifyCustomerDisplay(credential)).toEqual({ hostId: 'host-1', orgId: 'org-1', screen: null, shownBy: null })
+    expect(mockVerify).toHaveBeenCalledWith(credential)
   })
 })
