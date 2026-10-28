@@ -25,6 +25,11 @@ jest.mock('./waivers-api', () => {
   const actual = jest.requireActual('./waivers-api')
   return { ...actual, useWaiversFetch: () => ({ ready: true, request, download: jest.fn() }) }
 })
+// The name check has its own spec; here it only shows what it was opened on.
+jest.mock('./waiver-name-check-dialog.component', () => ({
+  __esModule: true,
+  default: (props: { name: string; dayKey: string }) => <div>{`Finding ${props.name} on ${props.dayKey}`}</div>,
+}))
 
 /**
  * A customer's waiver at the register's check-in (AGL-4042), in commerce's
@@ -57,7 +62,7 @@ describe('the waiver at check-in', () => {
     request.mockResolvedValue({ signed: true, coveredNames: ['Jordan Lee'], label: 'Waiver signed' })
     await settled({ ...PROPS, unitsDue: 1 })
     expect(request).toHaveBeenCalledWith('waivers/status', {
-      query: { hostId: 'host-1', dayKey: '2026-10-24', email: 'jordan@example.com' },
+      query: { hostId: 'host-1', dayKey: '2026-10-24', email: 'jordan@example.com', name: 'Jordan Lee' },
     })
     expect(screen.getByText('Waiver signed')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sign waiver' })).toBeNull()
@@ -87,10 +92,35 @@ describe('the waiver at check-in', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('says a customer with no email and no contact has no waiver on file', async () => {
-    await settled({ ...PROPS, email: null, contactId: null })
+  it('says a customer with no email, no contact and no name has no waiver on file', async () => {
+    await settled({ ...PROPS, email: null, contactId: null, name: null })
     expect(request).not.toHaveBeenCalled()
     expect(screen.getByText('Waiver not on file')).toBeTruthy()
+  })
+
+  it('says a rider with no email match is not matched, and finds them by name (AGL-4042)', async () => {
+    request.mockResolvedValue({
+      signed: false,
+      coveredNames: [],
+      matched: false,
+      searchName: 'Pat Lee',
+      label: 'Waiver not matched — check by name',
+    })
+    await settled({ ...PROPS, email: null, contactId: null, name: 'Pat Lee' })
+    // By name alone, which the route answers without guessing.
+    expect(request.mock.calls[0][1].query).toEqual({ hostId: 'host-1', dayKey: '2026-10-24', name: 'Pat Lee', people: '3' })
+    expect(screen.getByText('Waiver not matched — check by name')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Find by name' }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    expect(screen.getByText('Finding Pat Lee on 2026-10-24')).toBeTruthy()
+  })
+
+  it('offers no name search once a signature is matched', async () => {
+    request.mockResolvedValue({ signed: false, coveredNames: [], matched: true, searchName: null, label: 'Waiver needed' })
+    await settled(PROPS)
+    expect(screen.queryByRole('button', { name: 'Find by name' })).toBeNull()
   })
 
   it('offers the customer display only while the register has one, and puts the signing on it (AGL-4042)', async () => {

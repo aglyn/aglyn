@@ -28,6 +28,7 @@ import { setWaiversGateDepsForTests } from './gate'
 import { eraseWaiversPerson, setWaiversErasureDepsForTests } from './person-eraser'
 import { publicSignRoute, publicWaiverRoute } from './public-routes'
 import { runWaiversRetentionJob } from './retention-job'
+import { backfillWaiverNameDobKeys } from './name-dob-backfill'
 import { setWaiversClockForTests } from './sign'
 import {
   paperRoute,
@@ -598,6 +599,157 @@ describe('voiding and status', () => {
     const answer = await (await call(statusRoute, 'GET', { query: { contactId: 'contact-1' } })).json()
     expect(answer.signed).toBe(true)
     expect((await call(statusRoute, 'GET', {})).status).toBe(400)
+  })
+})
+
+describe('matching a rider at check-in: email, else name and date of birth (AGL-4042)', () => {
+  const status = async (query: Record<string, string>) =>
+    (await (await call(statusRoute, 'GET', { token: 'tok-clerk', query: { dayKey: '2026-10-24', ...query } })).json()) as {
+      signed: boolean
+      matched: boolean
+      matchedBy: string | null
+      searchName: string | null
+      coveredNames: string[]
+      label: string
+    }
+
+  beforeEach(async () => {
+    // Jordan Lee (born 1990-04-02) signs for themself and for Pat Lee (born 2014-09-30).
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+  })
+
+  it('stamps a key for the signer and each minor when it is signed', () => {
+    expect(signatures()[0].nameDobKeys).toEqual(['jordan lee|1990-04-02', 'pat lee|2014-09-30'])
+  })
+
+  it('matches by email first', async () => {
+    expect(await status({ email: 'jordan@example.com', name: 'Someone Else', dateOfBirth: '1970-01-01' })).toMatchObject({
+      signed: true,
+      matched: true,
+      matchedBy: 'email',
+      label: 'Waiver signed',
+    })
+  })
+
+  it('matches an adult by name and date of birth when the email matches nothing, whatever the case and spacing', async () => {
+    expect(await status({ email: 'other@example.com', name: '  JORDAN   lee ', dateOfBirth: '1990-04-02' })).toMatchObject({
+      signed: true,
+      matched: true,
+      matchedBy: 'nameDob',
+      label: 'Waiver signed',
+    })
+  })
+
+  it('matches a minor a guardian listed, by their own name and date of birth', async () => {
+    expect(await status({ name: 'Pat Lee', dateOfBirth: '2014-09-30' })).toMatchObject({
+      signed: true,
+      matched: true,
+      matchedBy: 'nameDob',
+      coveredNames: ['Jordan Lee', 'Pat Lee'],
+    })
+  })
+
+  it('never matches on a name alone', async () => {
+    // No date of birth: not matched, with the name to search by, and no guess.
+    expect(await status({ name: 'Pat Lee' })).toEqual({
+      dayKey: '2026-10-24',
+      signed: false,
+      coveredNames: [],
+      signatureId: null,
+      matched: false,
+      matchedBy: null,
+      searchName: 'Pat Lee',
+      label: 'Waiver not matched — check by name',
+    })
+    // The right name on another birth date, or the right birth date on another name.
+    expect(await status({ name: 'Pat Lee', dateOfBirth: '2014-09-29' })).toMatchObject({ signed: false, matched: false, label: 'Waiver needed' })
+    expect(await status({ name: 'Sam Lee', dateOfBirth: '2014-09-30' })).toMatchObject({ signed: false, matched: false, label: 'Waiver needed' })
+    // An email that matches nothing, and no birth date: still not a guess.
+    expect(await status({ email: 'other@example.com', name: 'Jordan Lee' })).toMatchObject({
+      signed: false,
+      matched: false,
+      label: 'Waiver not matched — check by name',
+    })
+  })
+
+  it('keeps refusing a lookup with nothing to match by', async () => {
+    expect((await call(statusRoute, 'GET', { token: 'tok-clerk', query: { name: '   ' } })).status).toBe(400)
+  })
+
+  it('stamps keys on a paper waiver too', async () => {
+    const waiver = await publishedWaiver()
+    await call(paperRoute, 'POST', {
+      token: 'tok-clerk',
+      body: {
+        attemptKey: 'paper-0009',
+        waiverId: waiver.id,
+        signedOnDayKey: '2026-10-24',
+        signer: { name: 'Riley Park', email: '', phone: '', dateOfBirth: '1985-01-01' },
+        minors: [{ name: 'Casey Park', dateOfBirth: '2016-02-03' }],
+        guardianRelationship: 'Parent',
+        photo: JPEG,
+      },
+    })
+    const paper = signatures().find((one) => one.method === 'paper')
+    expect(paper?.nameDobKeys).toEqual(['riley park|1985-01-01', 'casey park|2016-02-03'])
+    expect(await status({ name: 'Casey Park', dateOfBirth: '2016-02-03' })).toMatchObject({ signed: true, matchedBy: 'nameDob' })
+  })
+})
+
+describe('the name and birth date backfill (AGL-4042)', () => {
+  beforeEach(async () => {
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+    await call(publicSignRoute, 'POST', {
+      token: null,
+      body: signing(waiver, {
+        attemptKey: 'attempt-0077',
+        signer: { name: 'Riley Park', email: 'riley@example.com', phone: '', dateOfBirth: '1985-01-01' },
+        minors: [],
+      }),
+    })
+    // Both as signatures taken before the keys existed.
+    for (const [path, data] of db.docs) {
+      if (path.startsWith(`orgs/${ORG}/waiverSignatures/`)) {
+        const rest = { ...(data as Record<string, unknown>) }
+        delete rest['nameDobKeys']
+        db.docs.set(path, rest)
+      }
+    }
+  })
+
+  it('counts and writes nothing on a dry run', async () => {
+    const before = JSON.stringify([...db.docs.entries()])
+    expect(await backfillWaiverNameDobKeys(db as never, { commit: false })).toEqual({
+      read: 2,
+      current: 0,
+      toStamp: 2,
+      stamped: 0,
+      skipped: 0,
+    })
+    expect(JSON.stringify([...db.docs.entries()])).toBe(before)
+  })
+
+  it('stamps only the keys when committed, and finds nothing left on a re-run', async () => {
+    const before = signatures().map((one) => ({ ...one }))
+    expect(await backfillWaiverNameDobKeys(db as never, { orgId: ORG, commit: true, pageSize: 1 })).toMatchObject({
+      read: 2,
+      toStamp: 2,
+      stamped: 2,
+    })
+    const after = signatures()
+    expect(after.map((one) => one.nameDobKeys).sort()).toEqual([
+      ['jordan lee|1990-04-02', 'pat lee|2014-09-30'],
+      ['riley park|1985-01-01'],
+    ])
+    // Nothing else on a signature moved.
+    for (const one of after) {
+      const rest = { ...(one as Record<string, unknown>) }
+      delete rest['nameDobKeys']
+      expect(before).toContainEqual(rest)
+    }
+    expect(await backfillWaiverNameDobKeys(db as never, { commit: false })).toMatchObject({ current: 2, toStamp: 0 })
   })
 })
 

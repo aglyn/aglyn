@@ -34,7 +34,7 @@ import {
   subscribeCustomerDisplayHost,
 } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { useTheme } from '@mui/material/styles'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { WAIVERS_API_ROUTES, WAIVERS_DISPLAY_PAGE_PATH, WAIVERS_PLUGIN_ID } from '../constants/bundle-common'
 import { WaiverSignFlow } from './waiver-sign-flow.component'
 import { useWaiversFetch, WaiversRequestError } from './waivers-api'
@@ -63,7 +63,18 @@ interface StatusAnswer {
   signed: boolean
   coveredNames: string[]
   label: string
+  /**
+   * Whether a signature was matched to the rider at all (AGL-4042): by
+   * email, else by name and date of birth. `false` with a `searchName` is
+   * "not matched": no email match and no date of birth to match the name
+   * with, so staff look by name rather than the screen guessing.
+   */
+  matched?: boolean
+  searchName?: string | null
 }
+
+/** Finding a rider's waiver by name and date of birth, loaded when it is opened. */
+const WaiverNameCheckDialog = lazy(() => import('./waiver-name-check-dialog.component'))
 
 type State = { state: 'loading' } | { state: 'hidden' } | { state: 'ready'; status: StatusAnswer | null }
 
@@ -78,7 +89,11 @@ function useCustomerDisplay() {
 
 /**
  * A customer's waiver at check-in (AGL-4042): "Waiver signed", "Signed for
- * 2 of 3 riders" or "Waiver needed", with Sign waiver opening the signing
+ * 2 of 3 riders" or "Waiver needed", matched by email first and, when the
+ * email matches nothing, by name and date of birth together. Check-in knows
+ * no date of birth, so a rider with no email match reads "Waiver not
+ * matched — check by name", and Find by name asks for one and opens the
+ * signatures search on the name. Sign waiver opens the signing
  * form on this device, as at the window. When the register has a customer
  * display connected, Customer display puts the signing on it instead,
  * through core's customer display seam, and the status is read again until
@@ -99,10 +114,12 @@ export function WaiverCheckInStatus(props: PosCheckInZoneProps) {
   const display = useCustomerDisplay()
   const [onDisplay, setOnDisplay] = useState<{ untilMs: number } | null>(null)
   const [displayError, setDisplayError] = useState<string | null>(null)
+  const [findingByName, setFindingByName] = useState(false)
+  const name = props.name?.trim() || ''
 
   useEffect(() => {
     if (!ready) return
-    if (!email && !contactId) {
+    if (!email && !contactId && !name) {
       setState({ state: 'ready', status: null })
       return
     }
@@ -111,7 +128,10 @@ export function WaiverCheckInStatus(props: PosCheckInZoneProps) {
       query: {
         hostId,
         dayKey,
-        ...(email ? { email } : { contactId: contactId ?? undefined }),
+        ...(email ? { email } : contactId ? { contactId } : {}),
+        // Matched by name only together with a date of birth; without one,
+        // the route answers "not matched" with the name to search by.
+        ...(name ? { name } : {}),
         ...(unitsDue && unitsDue > 1 ? { people: String(unitsDue) } : {}),
       },
     })
@@ -128,7 +148,7 @@ export function WaiverCheckInStatus(props: PosCheckInZoneProps) {
     return () => {
       live = false
     }
-  }, [ready, request, hostId, email, contactId, dayKey, unitsDue, revision])
+  }, [ready, request, hostId, email, contactId, name, dayKey, unitsDue, revision])
 
   const close = useCallback(() => {
     setSigning(false)
@@ -171,9 +191,15 @@ export function WaiverCheckInStatus(props: PosCheckInZoneProps) {
   const status = state.status
   const label = status ? status.label : 'Waiver not on file'
   const color = status?.signed && label === 'Waiver signed' ? 'success' : 'warning'
+  const notMatched = status?.matched === false && Boolean(status.searchName)
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
       <Chip size="small" color={color} variant={color === 'success' ? 'filled' : 'outlined'} label={label} />
+      {notMatched ? (
+        <Button size="small" onClick={() => setFindingByName(true)}>
+          {'Find by name'}
+        </Button>
+      ) : null}
       {!status?.signed || label !== 'Waiver signed' ? (
         <Button size="small" onClick={() => setSigning(true)}>
           {compact ? 'Sign' : 'Sign waiver'}
@@ -188,6 +214,20 @@ export function WaiverCheckInStatus(props: PosCheckInZoneProps) {
         <Alert severity="warning" onClose={() => setDisplayError(null)}>
           {displayError}
         </Alert>
+      ) : null}
+      {findingByName && status?.searchName ? (
+        <Suspense fallback={null}>
+          <WaiverNameCheckDialog
+            open
+            hostId={hostId}
+            dayKey={dayKey}
+            name={status.searchName}
+            onClose={() => {
+              setFindingByName(false)
+              setRevision((value) => value + 1)
+            }}
+          />
+        </Suspense>
       ) : null}
       <Dialog open={signing} onClose={close} fullWidth maxWidth="sm" fullScreen={narrow}>
         <DialogTitle>{'Sign a waiver'}</DialogTitle>

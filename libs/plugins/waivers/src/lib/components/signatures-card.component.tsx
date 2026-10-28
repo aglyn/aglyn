@@ -42,6 +42,8 @@ export interface SignaturesCardProps {
   waivers: WaiverTemplate[]
   canManage: boolean
   canCollect: boolean
+  /** A search to open on, like a rider's name from check-in (AGL-4042). */
+  initialQuery?: string
 }
 
 const when = (ms: number) =>
@@ -56,8 +58,8 @@ const when = (ms: number) =>
 export function SignaturesCard(props: SignaturesCardProps) {
   const { hostId, canCollect, canManage } = props
   const { ready, request, download } = useWaiversFetch()
-  const [text, setText] = useState('')
-  const [query, setQuery] = useState('')
+  const [text, setText] = useState(props.initialQuery ?? '')
+  const [query, setQuery] = useState((props.initialQuery ?? '').trim())
   const [day, setDay] = useState<Dayjs | null>(null)
   const [waiverId, setWaiverId] = useState('')
   const [rows, setRows] = useState<WaiverSignatureRow[] | null>(null)
