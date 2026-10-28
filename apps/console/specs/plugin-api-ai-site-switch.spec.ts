@@ -199,6 +199,16 @@ const WORKSPACE_DOORS = [
   'ai/site-import/crawl',
 ]
 
+/**
+ * Machines' doors the dispatcher never serves: a job step's image reads
+ * (AGL-4048) run only in the console's plugins' image function, called by our
+ * own servers, signed, for a step whose job was admitted already. A member's
+ * request never reaches one, so no site's switch is asked there; the beat and
+ * the weekly digest are registered by their path constants, which this sweep
+ * does not read.
+ */
+const MACHINE_DOORS = ['ai/image-reads']
+
 const HANDLERS = { GET, POST, PATCH, DELETE }
 
 /** A concrete request path for a registered pattern. */
@@ -257,6 +267,7 @@ describe('every AI door is classified by how it carries its site', () => {
       ...HANDLER_GATED_DOORS,
       ...JOB_DOORS,
       ...WORKSPACE_DOORS,
+      ...MACHINE_DOORS,
     ]
     expect(new Set(classified).size).toBe(classified.length)
     expect([...classified].sort()).toEqual([...new Set(REGISTERED)].sort())
