@@ -902,6 +902,9 @@ data class HostOrder(
     val feeCents: Double? = null,
     val fulfillmentMethod: OrderFulfillmentMethod? = null,
     val fulfillments: List<OrderFulfillment>? = null,
+    val hardwareBuyer: OrderHardwareBuyer? = null,
+    val hardwareOrderId: String? = null,
+    val hardwareSalePending: Boolean? = null,
     val invoiceId: String? = null,
     val kioskDeviceId: String? = null,
     val kioskQueuedAtMs: Double? = null,
@@ -1876,6 +1879,16 @@ enum class OrderFulfillmentStatus(val raw: String) {
 
 internal object OrderFulfillmentStatusSerializer :
     RawEnumSerializer<OrderFulfillmentStatus>("com.aglyn.contracts.OrderFulfillmentStatus", OrderFulfillmentStatus.entries, OrderFulfillmentStatus.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderHardwareBuyer(
+    val attachedAtMs: Double,
+    val attachedBy: String,
+    val email: String? = null,
+    val hostId: String? = null,
+    val orgId: String? = null,
+    val uid: String? = null,
+)
 
 @Serializable
 data class OrderLineItem(

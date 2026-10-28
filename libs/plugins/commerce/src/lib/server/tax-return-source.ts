@@ -78,6 +78,18 @@ import {
   type StorefrontTaxSummary,
 } from '../model/storefront-tax-summary'
 import { readPosHardwareTaxReturn } from './pos-hardware-tax-return-source'
+import { POS_HARDWARE_SALES_COLLECTION } from '../model/pos-hardware'
+import {
+  posHardwareStorefrontParts,
+  storefrontRowsWithoutInPersonHardware,
+} from '../model/pos-hardware-tax-summary'
+
+/**
+ * How far either side of the period an in-person hardware record is read,
+ * to meet the storefront row its register sale filed: the two are written
+ * seconds apart, so a week is more than enough for either edge.
+ */
+const IN_PERSON_ROW_MARGIN_MS = 7 * 24 * 60 * 60 * 1000
 
 /** One row of the storefront listing, as the working papers carry it. */
 export interface StorefrontTaxRow {
@@ -610,21 +622,34 @@ export const commerceTaxReturnSource: TaxReturnSource = {
 export async function readStorefrontTaxReturn(
   request: TaxReturnSourceRequest,
 ): Promise<TaxReturnSourceAnswer> {
-  const collection = firebaseAdmin.app().firestore().collection('storefrontTaxCollected')
-  const [inPeriod, undated] = await Promise.all([
+  const firestore = firebaseAdmin.app().firestore()
+  const collection = firestore.collection('storefrontTaxCollected')
+  const [inPeriod, undated, inPerson] = await Promise.all([
     collection
       .where('paidAt', '>=', request.start)
       .where('paidAt', '<', request.end)
       .limit(request.rowCap + 1)
       .get(),
     collection.where('paidAt', '==', null).count().get(),
+    // The platform's own in-person hardware sales around the period
+    // (AGL-4038): the hardware section counts them, so their part of the
+    // register sale's storefront row comes out here (`posHardwareSales`
+    // `source, paidAtMs`).
+    firestore
+      .collection(POS_HARDWARE_SALES_COLLECTION)
+      .where('source', '==', 'in_person')
+      .where('paidAtMs', '>=', request.start.getTime() - IN_PERSON_ROW_MARGIN_MS)
+      .where('paidAtMs', '<', request.end.getTime() + IN_PERSON_ROW_MARGIN_MS)
+      .limit(request.rowCap)
+      .get(),
   ])
-  const rows: StorefrontTaxReturnRowInput[] = inPeriod.docs
-    .slice(0, request.rowCap)
-    .map((doc) => ({
+  const rows: StorefrontTaxReturnRowInput[] = storefrontRowsWithoutInPersonHardware(
+    inPeriod.docs.slice(0, request.rowCap).map((doc) => ({
       id: doc.id,
       ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
-    }))
+    })),
+    posHardwareStorefrontParts(inPerson.docs.map((doc) => doc.data())),
+  )
   return storefrontTaxReturnAnswer(
     {
       rows,

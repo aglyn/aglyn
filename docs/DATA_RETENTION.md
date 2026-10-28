@@ -304,6 +304,22 @@ from the redacted order in the same transaction. It needs the
 the eraser falls back to the workspaces the person belonged to and reports
 `formerWorkspacesReached: false`.
 
+**A card reader sold in person waits on the seller's list until it is
+attached (AGL-4038).** A reader the platform sells at its own store's register
+becomes a `hardwareOrders` document too. Attached at the sale, it is written
+straight into the buyer's workspace and follows the two rules above. Otherwise
+(a kiosk or offline sale, a buyer with no account or no workspace yet) it is
+written into the SELLING workspace's own `hardwareOrders` with
+`attachment.state: 'pending'`, holding at most the receipt address the register
+took, or the address or account a register user gave, until it is attached and
+moved to the buyer's workspace. A pending order that names an account
+(`createdBy`) is redacted by that person's erasure like any other; one that
+names only an address is found by staff on the To attach list and cleared with
+**Remove buyer's details** (the staff route's `forget-buyer`, the same patch an
+erasure applies) on a privacy request (see `PRIVACY_REQUESTS.md`). Its
+`posHardwareSales` record names the selling store's register sale and where
+the money went (`source`, `posOrderId`, `paidTo`), never the buyer.
+
 **Support threads are erased by the org and redacted by the person (AGL-1971),
 and the asymmetry is deliberate.** `eraseOrg` `recursiveDelete`s each
 `supportTickets` row so the `messages` subtree goes with it — `deleteDocsByOrgId`

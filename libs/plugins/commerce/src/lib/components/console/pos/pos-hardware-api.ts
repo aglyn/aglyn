@@ -17,12 +17,17 @@
 
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type {
+  PosHardwareAttachment,
   PosHardwareLine,
   PosHardwareOffer,
   PosHardwareOrderShippingMethod,
+  PosHardwareOrderSource,
   PosHardwareOrderStatus,
+  PosHardwarePaidTo,
+  PosHardwareRegisterSale,
   PosHardwareShippingMethod,
   PosHardwareTracking,
+  PosHardwareUnit,
 } from '../../../model/pos-hardware'
 
 /*
@@ -149,13 +154,24 @@ export interface StaffHardwareOrderRow extends Omit<PosHardwareOrderRow, 'shippi
   stripeHardwareOrderId: string | null
   livemode: boolean
   refundPending: boolean
+  /** Sold in person at the platform's own store (AGL-4038), and what that sale says. */
+  source: PosHardwareOrderSource
+  discountCents: number
+  posSale: PosHardwareRegisterSale | null
+  paidTo: PosHardwarePaidTo | null
+  attachment: PosHardwareAttachment | null
+  units: PosHardwareUnit[]
 }
 
 const STAFF = '/api/commerce/admin/hardware-orders'
 
-export function staffHardwareOrders(user: User, status: PosHardwareOrderStatus | '', after: string | null = null) {
+/** The staff list's filter: one status, every order, or the in-person sales still to attach. */
+export type StaffHardwareFilter = PosHardwareOrderStatus | '' | 'to-attach'
+
+export function staffHardwareOrders(user: User, filter: StaffHardwareFilter, after: string | null = null) {
   const params = new URLSearchParams()
-  if (status) params.set('status', status)
+  if (filter === 'to-attach') params.set('attach', 'pending')
+  else if (filter) params.set('status', filter)
   if (after) params.set('after', after)
   const search = params.toString()
   return sendPosHardwareRequest<{ orders: StaffHardwareOrderRow[]; next: string | null; pageSize: number; canWrite: boolean }>(
@@ -168,7 +184,7 @@ export function staffHardwareOrders(user: User, status: PosHardwareOrderStatus |
 export function staffHardwareOrderAction(
   user: User,
   body: {
-    action: 'update' | 'cancel' | 'refund'
+    action: 'update' | 'cancel' | 'refund' | 'forget-buyer'
     orgId: string
     orderId: string
     stripeHardwareOrderId?: string | null

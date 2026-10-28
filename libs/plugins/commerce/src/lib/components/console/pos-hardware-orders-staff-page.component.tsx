@@ -55,6 +55,7 @@ import {
   PosHardwareRequestError,
   staffHardwareOrderAction,
   staffHardwareOrders,
+  type StaffHardwareFilter,
   type StaffHardwareOrderRow,
 } from './pos/pos-hardware-api'
 
@@ -73,6 +74,27 @@ function Guarded(props: { reason?: string; children: ReactElement<{ disabled?: b
 }
 
 const when = (ms: number) => (ms ? new Date(ms).toLocaleString() : '—')
+
+/** How a register sale was paid, as staff read it (AGL-4038). */
+const TENDER_LABELS: Record<string, string> = {
+  cash: 'cash',
+  card_present: 'card on a reader',
+  card_keyed: 'typed card',
+  card_link: 'payment link',
+  gift_card: 'gift card',
+  folio: 'room charge',
+  credit: 'store credit',
+}
+
+/** Whose an in-person order is, in a line (AGL-4038). */
+function attachedTo(order: StaffHardwareOrderRow): string {
+  const attachment = order.attachment
+  if (!attachment) return '—'
+  if (attachment.state === 'attached') return `Workspace ${attachment.orgId ?? order.orgId}`
+  if (attachment.uid) return 'To attach: has an account, no workspace yet'
+  if (attachment.email) return `To attach: invited ${attachment.email}`
+  return 'To attach'
+}
 
 function shipTo(order: StaffHardwareOrderRow): string {
   const address = order.shipping?.address
@@ -107,7 +129,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [status, setStatus] = useState<PosHardwareOrderStatus | ''>('paid')
+  const [status, setStatus] = useState<StaffHardwareFilter>('paid')
   const [orders, setOrders] = useState<StaffHardwareOrderRow[] | null>(null)
   // The cursor that opens each page: `cursors[page]` is the `after` its
   // request carries, so Previous re-reads a page rather than keeping every
@@ -196,6 +218,20 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     )
   }
 
+  const forgetBuyer = async () => {
+    if (!open) return
+    const confirmed = await confirm({
+      title: "Remove the buyer's details?",
+      description:
+        'The address and account are taken off this order for good. The order, its amounts and where it was taxed stay.',
+      confirmationText: 'Remove',
+      confirmationButtonProps: { color: 'error' },
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (confirmed) await act({ action: 'forget-buyer' }, "Buyer's details removed")
+  }
+
   const returnMoney = async (action: 'cancel' | 'refund') => {
     if (!open) return
     const confirmed = await confirm({
@@ -214,6 +250,13 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const columns = useMemo<GridColDef[]>(
     () => [
       { field: 'number', headerName: 'Order', minWidth: 110 },
+      {
+        field: 'source',
+        headerName: 'Sold',
+        minWidth: 110,
+        valueGetter: (_value: unknown, row: StaffHardwareOrderRow) =>
+          row.source === 'in_person' ? (row.attachment?.state === 'pending' ? 'In person · to attach' : 'In person') : 'Online',
+      },
       {
         field: 'createdAtMs',
         headerName: 'Placed',
@@ -288,6 +331,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     [staffPaths],
   )
 
+  const inPerson = open?.source === 'in_person'
   const next = open ? nextPosHardwareStatus(open.status) : null
   const closed = open ? open.status === 'canceled' || open.status === 'refunded' : true
   const refundable = open ? posHardwareRefundable(open.status) && !open.refundPending : false
@@ -305,9 +349,10 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
             size="small"
             label="Status"
             value={status}
-            onChange={(event) => setStatus(event.target.value as PosHardwareOrderStatus | '')}
+            onChange={(event) => setStatus(event.target.value as StaffHardwareFilter)}
           >
             <MenuItem value="">{'All'}</MenuItem>
+            <MenuItem value="to-attach">{'Sold in person, to attach'}</MenuItem>
             {POS_HARDWARE_ORDER_STATUSES.map((value) => (
               <MenuItem key={value} value={value}>
                 {POS_HARDWARE_STAFF_STATUS_LABELS[value]}
@@ -323,7 +368,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         {error ? <Alert severity="error">{error}</Alert> : null}
         {orders && orders.length === 0 && !error ? (
           <Typography variant="body2" color="text.secondary">
-            {status ? `No orders are ${POS_HARDWARE_STAFF_STATUS_LABELS[status].toLowerCase()}.` : 'No hardware orders yet.'}
+            {status === 'to-attach'
+              ? 'Every card reader sold in person is attached to a workspace.'
+              : status
+                ? `No orders are ${POS_HARDWARE_STAFF_STATUS_LABELS[status].toLowerCase()}.`
+                : 'No hardware orders yet.'}
           </Typography>
         ) : (
           <ListTable
@@ -349,58 +398,101 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         <DialogTitle>{open ? `Hardware order ${open.number}` : ''}</DialogTitle>
         {open ? (
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Stack spacing={0.5} sx={{ mt: 1 }}>
-              <Typography variant="subtitle2">{'Order in the Stripe hardware shop'}</Typography>
-              {open.lines.map((line) => (
-                <Typography key={line.sku} variant="body2">
-                  {`${line.quantity} × ${posHardwareSku(line.sku)?.stripeProductName ?? line.name}`}
+            {inPerson ? (
+              <Stack spacing={0.5} sx={{ mt: 1 }}>
+                <Typography variant="subtitle2">{'Sold in person'}</Typography>
+                {open.lines.map((line) => (
+                  <Typography key={line.sku} variant="body2">
+                    {`${line.quantity} × ${line.name}`}
+                  </Typography>
+                ))}
+                <Typography variant="body2" color="text.secondary">
+                  {[
+                    open.posSale?.number ? `Register sale #${open.posSale.number}` : 'Register sale',
+                    open.posSale?.kiosk ? 'at the kiosk' : null,
+                    open.posSale?.offline ? 'rung offline' : null,
+                    `paid ${formatPosHardwareCents(open.totalCents)}`,
+                    open.paidTo?.tenders.length
+                      ? `by ${open.paidTo.tenders.map((tender) => TENDER_LABELS[tender] ?? tender).join(' and ')}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Typography>
-              ))}
-              <Typography variant="body2" color="text.secondary">
-                {`${open.shipping?.label ?? 'Shipping'} · paid ${formatPosHardwareCents(open.totalCents)}`}
-              </Typography>
-            </Stack>
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">{'Ship to'}</Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                {shipTo(open)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {[open.shipping?.phone, open.contactEmail].filter(Boolean).join(' · ')}
-              </Typography>
-            </Stack>
-            <TextField
-              label="Stripe hardware order id"
-              value={form.stripeHardwareOrderId}
-              disabled={closed}
-              onChange={(event) => setForm({ ...form, stripeHardwareOrderId: event.target.value })}
-            />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                label="Carrier"
-                value={form.carrier}
-                disabled={closed}
-                onChange={(event) => setForm({ ...form, carrier: event.target.value })}
-              />
-              <TextField
-                label="Tracking number"
-                value={form.number}
-                disabled={closed}
-                onChange={(event) => setForm({ ...form, number: event.target.value })}
-                sx={{ flex: 1 }}
-              />
-            </Stack>
-            <TextField
-              label="Tracking link (optional)"
-              helperText="Built from the carrier when left empty"
-              value={form.url}
-              disabled={closed}
-              onChange={(event) => setForm({ ...form, url: event.target.value })}
-            />
+                <Typography variant="body2" color="text.secondary">
+                  {`Into the store's own account${open.paidTo?.stripeAccountId ? ` (${open.paidTo.stripeAccountId})` : ''}, not the platform's.`}
+                </Typography>
+                <Typography variant="body2">{attachedTo(open)}</Typography>
+                {open.contactEmail ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {open.contactEmail}
+                  </Typography>
+                ) : null}
+              </Stack>
+            ) : null}
+            {inPerson ? null : (
+              <>
+                <Stack spacing={0.5} sx={{ mt: 1 }}>
+                  <Typography variant="subtitle2">{'Order in the Stripe hardware shop'}</Typography>
+                  {open.lines.map((line) => (
+                    <Typography key={line.sku} variant="body2">
+                      {`${line.quantity} × ${posHardwareSku(line.sku)?.stripeProductName ?? line.name}`}
+                    </Typography>
+                  ))}
+                  <Typography variant="body2" color="text.secondary">
+                    {`${open.shipping?.label ?? 'Shipping'} · paid ${formatPosHardwareCents(open.totalCents)}`}
+                  </Typography>
+                </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle2">{'Ship to'}</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                    {shipTo(open)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {[open.shipping?.phone, open.contactEmail].filter(Boolean).join(' · ')}
+                  </Typography>
+                </Stack>
+                <TextField
+                  label="Stripe hardware order id"
+                  value={form.stripeHardwareOrderId}
+                  disabled={closed}
+                  onChange={(event) => setForm({ ...form, stripeHardwareOrderId: event.target.value })}
+                />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField
+                    label="Carrier"
+                    value={form.carrier}
+                    disabled={closed}
+                    onChange={(event) => setForm({ ...form, carrier: event.target.value })}
+                  />
+                  <TextField
+                    label="Tracking number"
+                    value={form.number}
+                    disabled={closed}
+                    onChange={(event) => setForm({ ...form, number: event.target.value })}
+                    sx={{ flex: 1 }}
+                  />
+                </Stack>
+                <TextField
+                  label="Tracking link (optional)"
+                  helperText="Built from the carrier when left empty"
+                  value={form.url}
+                  disabled={closed}
+                  onChange={(event) => setForm({ ...form, url: event.target.value })}
+                />
+              </>
+            )}
             {open.refundPending ? <Alert severity="warning">{'A refund is in progress.'}</Alert> : null}
           </DialogContent>
         ) : null}
         <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
+          {inPerson && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
+            <Guarded reason={writeReason}>
+              <Button color="error" disabled={busy} onClick={() => void forgetBuyer()}>
+                {"Remove buyer's details"}
+              </Button>
+            </Guarded>
+          ) : null}
           <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
             <Button color="error" disabled={busy} onClick={() => void returnMoney('cancel')}>
               {'Cancel and refund'}

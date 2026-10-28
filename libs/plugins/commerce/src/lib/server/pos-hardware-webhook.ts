@@ -173,6 +173,11 @@ async function withTaxBreakdown(session: any): Promise<any> {
 /**
  * Writes the order once, with its retained sale record. `created` is false
  * when a delivery already did, so the caller tells people only the first time.
+ *
+ * Once means once by the ID, wherever the order now is: the sale record is
+ * top-level and keyed by the order id, and is written with every order, so
+ * an in-person order that has since moved to the buyer's workspace
+ * (AGL-4038) is found by it and never recorded a second time where it began.
  */
 export async function recordPosHardwareOrder(
   orderId: string,
@@ -184,8 +189,8 @@ export async function recordPosHardwareOrder(
     .app()
     .firestore()
     .runTransaction(async (transaction: any) => {
-      const existing = await transaction.get(ref)
-      if (existing.exists) return { created: false }
+      const [existing, sale] = await Promise.all([transaction.get(ref), transaction.get(saleRef)])
+      if (existing.exists || sale.exists) return { created: false }
       transaction.create(ref, order)
       transaction.set(saleRef, posHardwareSaleRecord(orderId, order))
       return { created: true }

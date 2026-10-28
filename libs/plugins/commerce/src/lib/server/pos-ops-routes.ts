@@ -20,6 +20,8 @@ import { posCheckInHandler, registerPosSaleCheckIns } from './pos-check-in'
 import { posCustomerHandler } from './pos-customer'
 import { posDayReportHandler } from './pos-day-report'
 import { registerPosSalePrinting } from './pos-print'
+import { onPosSaleCompleted } from './pos-sale'
+import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
 import { posReturnHandler } from './pos-return'
 import { posShiftHandler } from './pos-shift'
 import { posStaffPinHandler } from './pos-staff-pin'
@@ -47,4 +49,28 @@ export function registerPosOpsRoutes(): void {
   // A completed sale's receipt and drawer kick on the register's cloud
   // printers (AGL-3619), through the sale-completed seam every path fires.
   registerPosSalePrinting()
+  // A card reader sold at the platform's own store's register becomes a
+  // hardware order for the buyer's workspace (AGL-4038).
+  registerPosSaleHardware()
+}
+
+let hardwareSubscribed = false
+
+/**
+ * Records the hardware order of a completed sale on the platform's own
+ * store. Every other store's sale is answered from the environment alone,
+ * without loading the recorder. Never throws into a sale; a sale this misses
+ * stays marked and the To attach list's sweep records it.
+ */
+function registerPosSaleHardware(): void {
+  if (hardwareSubscribed) return
+  hardwareSubscribed = true
+  onPosSaleCompleted(async (event) => {
+    if (parsePosHardwareInPersonConfig(process.env)?.sellerHostId !== event.hostId) return
+    try {
+      await (await import('./pos-hardware-in-person')).recordCompletedSaleHardware(event)
+    } catch (error) {
+      console.error('[pos-hardware-in-person] recorder not loaded', event.orderId, error)
+    }
+  })
 }

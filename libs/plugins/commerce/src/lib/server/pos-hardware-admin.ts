@@ -29,13 +29,20 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_STATUS_STAMP,
+  posHardwareBuyerErasedPatch,
+  posHardwareOrderSource,
   posHardwareSaleRecord,
   type PosHardwareOrder,
   type PosHardwareOrderStatus,
   type PosHardwareTracking,
 } from '../model/pos-hardware'
 import { fulfillmentTrackingUrl } from '../model/tracking-url'
-import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
+import {
+  hardwareOrdersRef,
+  posHardwareInPersonConfig,
+  posHardwareOrderNumber,
+  posHardwareSaleRef,
+} from './pos-hardware'
 import { cancelAndRefundPosHardwareOrder } from './pos-hardware-cancel'
 import { sendPosHardwareEmail } from './pos-hardware-notify'
 
@@ -43,12 +50,18 @@ import { sendPosHardwareEmail } from './pos-hardware-notify'
  * `/api/commerce/admin/hardware-orders` (AGL-4038): the staff end of the POS
  * hardware shop, for the Hardware orders staff page.
  *
- *   GET   every workspace's orders, newest first, optionally one status
+ *   GET   every workspace's orders, newest first, optionally one status,
+ *         or `?attach=pending`: the in-person sales nobody has said whose
+ *         they are yet (AGL-4038), after recording any paid sale on the
+ *         seller store still waiting to be recorded
  *   POST  update  record Stripe's order id and the tracking, or move the
  *                 order one step on (Ordered → Shipped → Delivered →
  *                 Registered); Shipped needs a tracking number
  *         cancel  cancel and refund in full, before it ships
  *         refund  refund in full, before it ships
+ *         forget-buyer  take the buyer's address and account off an order
+ *                 sold in person (AGL-4038), for a privacy request from
+ *                 someone who never made an account
  *
  * Staff only. Reading is open to every staff role; every write is `super` or
  * `billing`, because each one changes what a customer is told or returns
@@ -88,6 +101,14 @@ function staffView(id: string, order: PosHardwareOrder) {
     refundPending: Boolean((order as { refundRequestedAtMs?: number }).refundRequestedAtMs),
     createdAtMs: order.createdAtMs ?? 0,
     updatedAtMs: order.updatedAtMs ?? 0,
+    // Sold in person at the platform's own store (AGL-4038): where, how it
+    // was paid and into which account, and whose it is.
+    source: posHardwareOrderSource(order),
+    discountCents: order.discountCents ?? 0,
+    posSale: order.posSale ?? null,
+    paidTo: order.paidTo ?? null,
+    attachment: order.attachment ?? null,
+    units: order.units ?? [],
   }
 }
 
@@ -136,8 +157,15 @@ async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET') {
       const requested = String(query?.['status'] ?? '')
+      const attach = String(query?.['attach'] ?? '')
+      if (attach && attach !== 'pending') return json({ error: 'Unknown filter' }, 400)
       let ordersQuery: any = firestore.collectionGroup(POS_HARDWARE_ORDERS_COLLECTION)
-      if (requested) {
+      if (attach === 'pending') {
+        // A sale whose recording was missed is recorded before the list is read.
+        const config = posHardwareInPersonConfig()
+        if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
+        ordersQuery = ordersQuery.where('attachment.state', '==', 'pending')
+      } else if (requested) {
         if (!isPosHardwareOrderStatus(requested)) return json({ error: 'Unknown status' }, 400)
         ordersQuery = ordersQuery.where('status', '==', requested)
       }
@@ -176,6 +204,7 @@ async function handler(request: Request): Promise<Response> {
     const actor = { actorUid: decoded.uid, actorEmail: decoded.email ? String(decoded.email) : null }
 
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
+    if (action === 'forget-buyer') return await forgetBuyer(firestore, ref, orgId, orderId, actor)
     if (action === 'cancel' || action === 'refund') {
       return await refundOrder(firestore, orgId, orderId, action, actor)
     }
@@ -261,6 +290,38 @@ async function updateOrder(
   if (outcome.reached === 'shipped') await sendPosHardwareEmail('shipped', orderId, outcome.after)
   if (outcome.reached === 'delivered') await sendPosHardwareEmail('delivered', orderId, outcome.after)
   return json({ ok: true, order: staffView(orderId, outcome.after) })
+}
+
+/**
+ * Takes the buyer off an order sold in person (AGL-4038): the same patch an
+ * account erasure applies, for a buyer an erasure cannot reach because they
+ * have no account. The order, its amounts and the store's tax region stay.
+ */
+async function forgetBuyer(firestore: any, ref: any, orgId: string, orderId: string, actor: Actor): Promise<Response> {
+  const after = await firestore.runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) throw new Refusal('No such order', 404)
+    const before = snapshot.data() as PosHardwareOrder
+    if (posHardwareOrderSource(before) !== 'in_person') {
+      throw new Refusal('Only an order sold in person has a buyer to remove here.', 409)
+    }
+    const patch = posHardwareBuyerErasedPatch(before, Date.now())
+    const next = { ...before, ...patch } as PosHardwareOrder
+    transaction.update(ref, patch)
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, next))
+    return next
+  })
+  await addAdminAudit(firestore, {
+    action: 'pos-hardware-order-forget-buyer',
+    ...actor,
+    scope: 'posHardwareOrder',
+    target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+    orgId,
+    before: null,
+    after: { buyerErasedAtMs: after.buyerErasedAtMs ?? null },
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
+  return json({ ok: true, order: staffView(orderId, after) })
 }
 
 async function refundOrder(

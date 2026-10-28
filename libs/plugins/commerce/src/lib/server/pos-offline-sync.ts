@@ -55,6 +55,7 @@ import {
   type PosOpsStaff,
 } from './pos-ops-gate'
 import { posOfflineCardChargeRef, reportPosOfflineCardWrongAccount } from './pos-offline-card-reconcile'
+import { posHardwareSaleFields } from './pos-hardware-sale-fields'
 import { posOfflineCardOrderMoney, type PosOfflineCardSettled } from './pos-offline-card-order'
 import { notifyPosSaleCompleted } from './pos-sale'
 import { POS_CURRENCY, posCardApplicationFeeCents, posTerminalAvailable } from './pos-stripe'
@@ -944,6 +945,9 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
         ...(customer.kind && customer.id ? { customerRecord: { kind: customer.kind, id: customer.id } } : {}),
         ...(sale.discountPct > 0 ? { discountPct: sale.discountPct, discountBy: cashierId } : {}),
         ...(sale.locationId ? { locationId: sale.locationId } : {}),
+        // A card reader sold offline on the platform's own store (AGL-4038):
+        // recorded once synced, with nobody attached, for the To attach list.
+        ...posHardwareSaleFields({ hostId: staff.hostId, orgId: staff.orgId, lineItems, products }),
         lineItems,
         totals,
         taxMode: 'decision' in context.tax

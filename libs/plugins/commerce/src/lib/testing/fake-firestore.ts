@@ -132,6 +132,11 @@ export function docRef(path: string): any {
   }
 }
 
+/** A field by its dotted path (`attachment.state`), as Firestore reads one. */
+function fieldAt(data: Record<string, any> | undefined, field: string): any {
+  return field.split('.').reduce((value: any, key) => (value == null ? undefined : value[key]), data)
+}
+
 function collectionRef(path: string, filters: Array<[string, string, any]> = []): any {
   const children = () =>
     [...fakeDocs.keys()].filter(
@@ -146,7 +151,7 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
       const docs = children()
         .filter((key) =>
           filters.every(([field, op, value]) => {
-            const stored = fakeDocs.get(key)?.[field]
+            const stored = fieldAt(fakeDocs.get(key), field)
             if (op === '==') return stored === value
             if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
             return false
@@ -170,12 +175,12 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
 
 /**
  * Every document in a collection named `name` at any depth, filtered by
- * equality (AGL-4038). `orderBy` sorts on one field, ties broken by path as
+ * equality or `array-contains`, on dotted paths too (AGL-4038). `orderBy` sorts on one field, ties broken by path as
  * Firestore does, `startAfter` takes a document snapshot, and `limit` caps
  * the answer, so a cursor-paged staff list can be specced.
  */
 interface GroupShape {
-  filters: Array<[string, any]>
+  filters: Array<[string, any, string?]>
   order?: { field: string; desc: boolean }
   after?: string
   cap?: number
@@ -183,7 +188,7 @@ interface GroupShape {
 function collectionGroupRef(name: string, shape: GroupShape = { filters: [] }): any {
   const next = (patch: Partial<GroupShape>) => collectionGroupRef(name, { ...shape, ...patch })
   return {
-    where: (field: string, _op: string, value: any) => next({ filters: [...shape.filters, [field, value]] }),
+    where: (field: string, op: string, value: any) => next({ filters: [...shape.filters, [field, value, op]] }),
     orderBy: (field: string, direction?: string) => next({ order: { field, desc: direction === 'desc' } }),
     startAfter: (snapshot: { ref: { path: string } }) => next({ after: snapshot.ref.path }),
     limit: (cap: number) => next({ cap }),
@@ -193,7 +198,12 @@ function collectionGroupRef(name: string, shape: GroupShape = { filters: [] }): 
           const parts = key.split('/')
           return parts.length >= 2 && parts.length % 2 === 0 && parts[parts.length - 2] === name
         })
-        .filter((key) => shape.filters.every(([field, value]) => fakeDocs.get(key)?.[field] === value))
+        .filter((key) =>
+          shape.filters.every(([field, value, op]) => {
+            const stored = fieldAt(fakeDocs.get(key), field)
+            return op === 'array-contains' ? Array.isArray(stored) && stored.includes(value) : stored === value
+          }),
+        )
       if (shape.order) {
         const { field, desc } = shape.order
         const sign = desc ? -1 : 1
