@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   SCREEN_KIND_TEMPLATE,
   checkEntitlement,
   hostCollectionKind,
-  hostRoleCanPublish,
   pluginRequestFromWeb,
   type PluginWebApiHandler,
 } from '@aglyn/aglyn/server'
@@ -126,9 +126,9 @@ export const recordPagesHandler: PluginWebApiHandler = async (request) => {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
     const host = hostSnapshot.data() as Record<string, unknown>
-    if (!staff && !hostRoleCanPublish((host['memberRoles'] as Record<string, unknown>)?.[decoded.uid])) {
+    if (!staff && !holdsSiteKey(host, decoded.uid, 'site.publish')) {
       return Response.json(
-        { error: 'Record templates are published routes — this needs the publisher role on the site' },
+        { error: siteKeyRefusal('site.publish') },
         { status: 403 },
       )
     }

@@ -36,8 +36,11 @@ import { canWriteHost, HOST_CONTENT_WRITE_ROLES } from '@aglyn/aglyn/app-utils/o
 import type { AglynOrgMember, HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { registerCommerceDeclarations } from '../declarations'
 import { WALK_IN_PERMISSION } from '../server/reservation-walk-in'
+import { holdsCommerceSiteKey } from '../server/commerce-site-keys'
 import {
+  commerceSitePermissionRefusal,
   COMMERCE_SITE_PERMISSIONS,
+  ORDERS_SITE_ROLE_PRESET,
   RESERVATION_SITE_ROLE_PRESET,
   reservationPermissionLabel,
   reservationPermissionRefusal,
@@ -53,7 +56,7 @@ beforeAll(() => registerCommerceDeclarations())
 
 describe('the reservation keys (AGL-4047)', () => {
   it('keep the content-write roles as their site preset, and the workspace roles that reach them', () => {
-    for (const entry of COMMERCE_SITE_PERMISSIONS) {
+    for (const entry of COMMERCE_SITE_PERMISSIONS.filter((candidate) => (KEYS as readonly string[]).includes(candidate.key))) {
       expect(entry.presetFromSiteRole).toBe(true)
       for (const role of HOST_ROLES) {
         expect(entry.hostRoleDefaults?.[role]).toBe(HOST_CONTENT_WRITE_ROLES.includes(role))
@@ -73,7 +76,11 @@ describe('the reservation keys (AGL-4047)', () => {
 
   it('register into the one catalog, filed under Commerce, as site-role presets', () => {
     // After the core's site keys (AGL-4047).
-    expect(siteRolePresetPermissionKeys().filter((key) => key.startsWith('commerce.'))).toEqual([...KEYS])
+    expect(siteRolePresetPermissionKeys().filter((key) => key.startsWith('commerce.'))).toEqual([
+      ...KEYS,
+      'commerce.orders',
+      'commerce.giftCards',
+    ])
     for (const key of KEYS) {
       const definition = ORG_PERMISSIONS.find((entry) => entry.key === key)
       expect(definition).toMatchObject({ pluginId: 'commerce', group: 'commerce', scope: 'site', presetFromSiteRole: true })
@@ -116,3 +123,39 @@ describe('the reservation keys (AGL-4047)', () => {
     }
   })
 })
+
+describe('the order and gift card keys (AGL-4047)', () => {
+  const ORDER_KEYS = ['commerce.orders', 'commerce.giftCards'] as const
+
+  it('keep the site Admin and Editor who worked orders as their preset, never an Author', () => {
+    expect(ORDERS_SITE_ROLE_PRESET).toEqual({ admin: true, editor: true, author: false, viewer: false })
+    for (const key of ORDER_KEYS) {
+      const entry = COMMERCE_SITE_PERMISSIONS.find((candidate) => candidate.key === key)
+      expect(entry).toMatchObject({ presetFromSiteRole: true, hostRoleDefaults: ORDERS_SITE_ROLE_PRESET })
+      expect(entry?.roleDefaults).toEqual({ owner: true, admin: true, editor: true, viewer: false })
+    }
+  })
+
+  it.each(HOST_ROLES)('a site %s holds them exactly when the order routes let them in', (role) => {
+    const collaborator: Partial<AglynOrgMember> = { role: 'viewer', allHosts: false, hostAccess: { [SITE]: role } }
+    const before = role === 'admin' || role === 'editor'
+    for (const key of ORDER_KEYS) {
+      expect(resolveSiteRolePresetPermissions(collaborator, SITE)[key]).toBe(before)
+      expect(holdsCommerceSiteKey({ memberRoles: { u: role } }, 'u', key)).toBe(before)
+    }
+  })
+
+  it('the routes read the site’s stamp first', () => {
+    const host = { memberRoles: { u: 'author', v: 'editor' }, memberPermissions: { u: { 'commerce.orders': true }, v: { 'commerce.giftCards': false } } }
+    expect(holdsCommerceSiteKey(host, 'u', 'commerce.orders')).toBe(true)
+    expect(holdsCommerceSiteKey(host, 'v', 'commerce.giftCards')).toBe(false)
+    expect(holdsCommerceSiteKey(host, 'v', 'commerce.orders')).toBe(true)
+  })
+
+  it('refuse in the permission’s words', () => {
+    expect(commerceSitePermissionRefusal('commerce.orders')).toBe(
+      'Your role does not include "Manage orders" — ask an organization admin',
+    )
+  })
+})
+

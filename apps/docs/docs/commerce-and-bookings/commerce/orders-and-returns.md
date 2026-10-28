@@ -69,8 +69,10 @@ page is unlisted, so search engines leave it out; to design your own, make a pag
 `/order-return` and place the **Return request** block on it. The buyer chooses how many of each item to send back and a reason for each — **Arrived
 damaged**, **Wrong item**, **Not as described**, **Size or fit**, **No longer needed**
 or **Other** — and can add a note. Only items that have shipped can be returned, and
-never more than were bought or are already coming back. You and the site's managers
-are told by email and in the console's notifications.
+never more than were bought or are already coming back. The workspace owner is sent
+the **Return requested** email, and the site's admins and editors get a **New order**
+notification in the console, each as their own notification settings say. See
+[Who on your side is told](order-notifications.md#who-is-told).
 
 Under **Checkout** → **Returns**:
 
@@ -142,8 +144,8 @@ event** posts a `webhook.test` event now.
 ### When an endpoint is down
 
 An endpoint has 8 seconds to answer each event. One that doesn't is sent the event
-again, on a schedule that lasts about a day, and the site's managers are told if the
-last try fails.
+again, on a schedule that lasts about a day, and the site's admins and editors are
+notified in the console if the last try fails.
 
 Whoever builds your endpoint needs [Order webhooks for developers](../../developers/order-webhooks.md):
 what each event carries and how to check that it came from your store.

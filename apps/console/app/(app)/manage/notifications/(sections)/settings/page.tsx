@@ -224,7 +224,7 @@ const ManageNotificationSettings: NextPageWithLayout<
     const workspaces = (orgs ?? []).map((org) => ({
       kind: 'org' as const,
       id: org.$id,
-      label: org.name ?? org.slug ?? org.$id,
+      label: org.orgName ?? org.slug ?? org.$id,
     }))
     const sites = (hosts ?? []).map((host) => ({
       kind: 'host' as const,
@@ -653,7 +653,7 @@ const ManageNotificationSettings: NextPageWithLayout<
                       />
                     }
                     label={
-                      (orgs ?? []).find((org) => org.$id === orgId)?.name ??
+                      (orgs ?? []).find((org) => org.$id === orgId)?.orgName ??
                       'A workspace you left'
                     }
                     slotProps={{ typography: { variant: 'caption' } }}

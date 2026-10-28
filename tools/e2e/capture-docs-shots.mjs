@@ -46,7 +46,7 @@
 // shot failed, captured files are still kept).
 
 import { scryptSync, randomBytes } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
@@ -1055,6 +1055,51 @@ async function seedGuideFixtures() {
     },
   )
 
+  // ── WhatsApp button guide ───────────────────────────────────────────────
+  // One Button set up exactly as the guide says, with its own fields only:
+  // a wa.me address in External URL, New tab, and the WhatsApp Start icon.
+  // The number is a fictional 555-01xx one. The icon's path is stored beside
+  // its id, as the Besigner's icon picker writes it (AGL-1212), read out of
+  // the catalog file rather than copied here.
+  const whatsappIconPath = JSON.parse(
+    readFileSync(
+      join(repoRoot, 'libs/shared/data/mdi/generated/6.5.95/icons/mdi-whatsapp.ts'),
+      'utf8',
+    ).match(/"path": ("[^"]+")/)[1],
+  )
+  await putScreen(
+    'seed-guide-whatsapp',
+    { displayName: 'Contact us', slug: 'contact-us' },
+    {
+      '_@_': { $id: '_@_', componentId: 'root', nodes: ['wa-heading', 'wa-button'] },
+      'wa-heading': {
+        $id: 'wa-heading',
+        componentId: 'muiTypography',
+        pluginId: 'mui',
+        parentId: '_@_',
+        props: { children: 'Questions? Message us', variant: 'h3', component: 'h1' },
+        // Room above the selected Button for its element chip.
+        sx: { pt: 6, pb: 4, px: 3 },
+      },
+      'wa-button': {
+        $id: 'wa-button',
+        componentId: 'muiButton',
+        pluginId: 'mui',
+        parentId: '_@_',
+        props: {
+          children: 'Chat on WhatsApp',
+          variant: 'contained',
+          color: 'success',
+          href: 'https://wa.me/15555550123',
+          target: '_blank',
+          startIconId: 'whatsapp',
+          startIconPath: whatsappIconPath,
+        },
+        sx: { mx: 3 },
+      },
+    },
+  )
+
   console.log(`seeded ${written} guide fixture docs`)
 }
 
@@ -1253,6 +1298,7 @@ for (const path of [
   `/${HOST_BASE}/screens/seed-guide-nav/versions/seed-guide-nav-v1/besigner`,
   `/${HOST_BASE}/forms/seed-guide-newsletter-form`,
   `/${HOST_BASE}/components/seed-guide-newsletter-band/versions/seed-guide-newsletter-band-v1/besigner`,
+  `/${HOST_BASE}/screens/seed-guide-whatsapp/versions/seed-guide-whatsapp-v1/besigner`,
 ]) {
   await fetch(`${CONSOLE_BASE}${path}`).catch(() => undefined)
 }
@@ -1887,6 +1933,24 @@ await shot({
     // Down to the Relationship card's Marketing email row: the opt-in the
     // sign-up recorded.
     { scroll: 'text=Marketing email', settleMs: 1200 },
+  ],
+})
+
+// ── WhatsApp button guide — the Button's own fields ────────────────────────
+
+await shot({
+  out: 'whatsapp-button-attributes.png',
+  base: CONSOLE_BASE,
+  path: `/${HOST_BASE}/screens/seed-guide-whatsapp/versions/seed-guide-whatsapp-v1/besigner`,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    { click: 'text=Document', optional: true, settleMs: 1000 },
+    // Visible only: the Elements tab keeps a hidden "Button" entry.
+    { click: 'text=/^Button$/ >> visible=true', settleMs: 1500 },
+    { click: 'role=tab[name="Attributes"]', optional: true, waitFor: 'External URL' },
+    // Open link in, centered: External URL above it, Start icon below.
+    { scroll: 'text=Where this opens.', optional: true, settleMs: 1000 },
   ],
 })
 

@@ -16,7 +16,7 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { ACCOUNTS_PLUGIN_ID } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { HostScreenVisibility } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
@@ -114,7 +114,7 @@ export async function aiSiteStorePagesRefusal(
   )
   if (refused) return refused.error
   const host = await firestore.collection('hosts').doc(job.hostId).get()
-  return hostRoleCanWrite((host.get('memberRoles') ?? {})[job.createdBy]) ? null : 'Editing requires the editor role'
+  return holdsSiteKey(host, job.createdBy, 'site.edit') ? null : siteKeyRefusal('site.edit')
 }
 
 export interface AiSiteStorePagesRunnerDeps {

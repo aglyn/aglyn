@@ -16,8 +16,8 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
-import { hostRoleCanPublish, hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
@@ -539,15 +539,16 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
     const [snapshot, org] = await Promise.all([hostRef(hostId).get(), deps.loadOrg(hostId)])
     const host = (snapshot.exists ? snapshot.data() : null) ?? {}
     const declared = redirectDeclaration()
-    const role = ctx.actorUid ? ((host['memberRoles'] ?? {}) as Record<string, unknown>)[ctx.actorUid] : undefined
     // The route's question, on the route's axis: a kind that is live the
-    // moment it exists needs the publishing role, never just the write role.
-    const roleOk = declared.requiresPublishRole ? hostRoleCanPublish(role) : hostRoleCanWrite(role)
+    // moment it exists needs "Publish site content", never just "Edit site
+    // content" (AGL-4047).
+    const roleKey = declared.requiresPublishRole ? 'site.publish' : 'site.edit'
+    const roleOk = Boolean(ctx.actorUid) && holdsSiteKey(host, ctx.actorUid as string, roleKey)
     // A plan-less workspace resolves as the free plan, which has no redirects.
     const billing = org ?? {}
     let refusal: string | null = null
     if (!snapshot.exists) refusal = 'This site no longer exists.'
-    else if (!roleOk) refusal = 'Importing redirects needs a publishing role on this site — ask an editor or admin'
+    else if (!roleOk) refusal = siteKeyRefusal(roleKey)
     else if (declared.entitlement && !checkEntitlement(billing, declared.entitlement)) {
       refusal = 'URL redirects are not included in this workspace’s plan — see Billing'
     }
@@ -1009,9 +1010,8 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
       const site = await readSite(ctx)
       // Undo writes rules too, so it needs the same role; a lapsed plan does
       // not stop it, since a rule the plan no longer covers is not served.
-      const role = ctx.actorUid ? ((site.host['memberRoles'] ?? {}) as Record<string, unknown>)[ctx.actorUid] : undefined
-      if (!hostRoleCanPublish(role)) {
-        throw new Error('Undoing a redirect import needs a publishing role on this site — ask an editor or admin')
+      if (!ctx.actorUid || !holdsSiteKey(site.host, ctx.actorUid, 'site.publish')) {
+        throw new Error(siteKeyRefusal('site.publish'))
       }
       const approvalField = site.declared.externalDestination?.approvedByField ?? REDIRECT_FIELD.approvedBy
       const done: TransferUndoStep[] = []

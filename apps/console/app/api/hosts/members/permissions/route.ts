@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   hostPermissionKeys,
   hostRoleFor,
@@ -102,10 +103,14 @@ async function handler(request: Request): Promise<Response> {
     const firestore = app.firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const host = (await hostRef.get()).data()
-    const memberRole = (host?.['memberRoles'] ?? {})[decoded.uid]
+    // "Manage site settings" here (`site.manage`, AGL-4047), or the
+    // workspace's "Manage members", or staff.
     const actorPermissions = await resolveOrgPermissions(decoded.uid, { hostId })
-    if (!host || (memberRole !== 'admin' && !actorPermissions.permissions.manageMembers && !isStaff)) {
-      return Response.json({ error: 'Not a site admin' }, { status: 403 })
+    if (
+      !host ||
+      (!holdsSiteKey(host, decoded.uid, 'site.manage') && !actorPermissions.permissions.manageMembers && !isStaff)
+    ) {
+      return Response.json({ error: siteKeyRefusal('site.manage') }, { status: 403 })
     }
     const resolved = await getOrgForHost(hostId)
     if (!resolved) {

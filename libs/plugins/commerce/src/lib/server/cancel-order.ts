@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { notifyOrderBuyer } from './order-notifications'
@@ -131,9 +133,10 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
     // `editor` — narrowing to admin here would take the cancel button away
     // from editors who have always had it, and widening it past what the rules
     // allow would make this endpoint the way around them.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not permitted' })
+    // "Manage orders" (`commerce.orders`, AGL-4047), whose preset is the site's Admin
+    // and Editor this asked for, read as the rules would read it.
+    if (!holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
     }
     const orderRef = hostRef.collection('orders').doc(orderId)
 

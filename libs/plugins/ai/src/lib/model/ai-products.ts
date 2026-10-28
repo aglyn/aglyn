@@ -381,6 +381,54 @@ export interface AiCatalogProposal {
   notes: string[]
 }
 
+// ── A product a shopper would buy (AGL-4065) ────────────────────────────
+
+/**
+ * The re-ask a catalog whose names are kinds of product is answered with
+ * (AGL-4065). The 2026-10-25 Berm & Bolt Moto Parts start listed "Riding Gear
+ * Item", "OEM ATV Parts Order" and "Aftermarket Dirt Bike Part" at suggested
+ * prices, from a brief that named kinds of part and no product.
+ */
+export const AI_CATALOG_NAME_REASK =
+  'Name real products a shopper would buy, never a category with “Item” or “Order” after it; where the brief names kinds of product and no product, name each one a plain item of one of those kinds, never a brand or a model the brief does not name.'
+
+/** The code a catalog's kind-for-a-name is refused under. */
+export const AI_CATALOG_NAME_CODE = 'catalog-name-kind'
+
+/** A name's last word that names a kind of thing, or a transaction, never one thing a shopper buys. */
+const KIND_HEAD =
+  /\b(?:items?|orders?|products?|parts?|things?|options?|selections?|assortments?|stuff|goods|merchandise|gear|accessor(?:y|ies)|suppl(?:y|ies)|equipment|essentials?|requests?|inquir(?:y|ies))$/i
+
+/** Makes a product name carries only where the brief names them: vehicles, apparel and electronics most of all. */
+const BRANDS =
+  /\b(?:porsche|ferrari|lamborghini|bmw|mercedes|audi|volkswagen|toyota|honda|yamaha|kawasaki|suzuki|ktm|ducati|harley(?:-davidson)?|husqvarna|gasgas|polaris|can-am|tesla|ford|chevrolet|chevy|dodge|jeep|nissan|subaru|mazda|nike|adidas|reebok|samsung|iphone|playstation|xbox|nintendo|starbucks|coca-cola|pepsi)\b/i
+
+/** A model number: letters and figures run together, as "CRF450R" or "KX250". */
+const MODEL_CODE = /\b(?=[A-Z0-9-]*\d)(?=[A-Z0-9-]*[A-Z])[A-Z0-9][A-Z0-9-]{3,}\b/
+
+/** The make a text names that the brief does not (AGL-4065), or `null`: a sample row or a product names none. Pure. */
+export function aiTextNamesBrand(text: string, brief: string): string | null {
+  const brand = BRANDS.exec(text)?.[0]
+  return brand && !brief.toLowerCase().includes(brand.toLowerCase()) ? brand : null
+}
+
+/**
+ * Why a proposed product's name is not one a shopper would buy (AGL-4065), or
+ * `null`: a kind of product with a word like "Item", "Order" or "Part" after
+ * it, or a make or a model number the brief does not name. "Dirt Bike Tire"
+ * and "Motocross helmet" are products; "Riding Gear Item" is a kind. Pure.
+ */
+export function aiCatalogNameProblem(name: string, brief: string): string | null {
+  const plain = name.replace(/\s+/g, ' ').trim()
+  if (!plain) return null
+  const words = brief.toLowerCase()
+  if (KIND_HEAD.test(plain.replace(/[^\p{L}\p{N}]+$/u, ''))) return `“${plain}” names a kind of product, not one a shopper buys`
+  if (aiTextNamesBrand(plain, brief)) return `“${plain}” names a make the brief does not`
+  const model = MODEL_CODE.exec(plain)?.[0]
+  if (model && !words.includes(model.toLowerCase())) return `“${plain}” names a model the brief does not`
+  return null
+}
+
 export type AiDiscountKind = 'percent' | 'fixed' | 'free_shipping'
 
 export interface AiProposedDiscount {

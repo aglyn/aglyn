@@ -16,10 +16,11 @@
  */
 
 import { supportedTimeZones } from '@aglyn/aglyn/app-utils/collection-entry-date'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
@@ -100,7 +101,8 @@ export const AI_SETTINGS_KIND = 'settings' as const
 export const AI_JOB_SETTINGS_STEP_MINIMUM_MS = 5_000
 
 export const AI_SETTINGS_NO_SITE_COPY = 'Open the site whose settings should change.'
-export const AI_SETTINGS_ROLE_COPY = 'Changing the site’s settings needs the admin, editor or author role on this site.'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AI_SETTINGS_ROLE_COPY = `Changing the site’s settings needs the "${orgPermissionLabel('site.edit')}" permission on this site — ask an organization admin.`
 export const AI_SETTINGS_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_SETTINGS_NOTHING_COPY = 'The request named no site setting this could change.'
 
@@ -538,8 +540,7 @@ export async function writeAiSiteSettings(
   return firestore.runTransaction(async (tx): Promise<AiSettingsWrite> => {
     const host = await tx.get(hostRef)
     if (!host.exists) return { ok: false, error: 'Unknown site' }
-    const roles = (host.get('memberRoles') ?? {}) as Record<string, unknown>
-    if (!hostRoleCanWrite(roles[input.uid])) return { ok: false, error: AI_SETTINGS_ROLE_COPY }
+    if (!holdsSiteKey(host, input.uid, 'site.edit')) return { ok: false, error: AI_SETTINGS_ROLE_COPY }
     const data = (host.data() ?? {}) as Record<string, unknown>
     const { changes, problems } = aiSettingsChanges(data, input.request, input.media)
     const changed = changes.filter((change) => !sameValue(getPath(data, change.path), change.value))
@@ -570,8 +571,7 @@ export async function aiSettingsAccessRefusal(
   deps: { lockdown?: typeof getLockdownVerdict } = {},
 ): Promise<string | null> {
   if (!input.host.exists) return 'Unknown site'
-  const roles = (input.host.get('memberRoles') ?? {}) as Record<string, unknown>
-  if (!hostRoleCanWrite(roles[input.uid])) return AI_SETTINGS_ROLE_COPY
+  if (!holdsSiteKey(input.host, input.uid, 'site.edit')) return AI_SETTINGS_ROLE_COPY
   const locked = await (deps.lockdown ?? getLockdownVerdict)({
     staff: false,
     uid: input.uid,

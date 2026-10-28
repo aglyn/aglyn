@@ -17,10 +17,12 @@
 
 import {
   type AglynOrgMember,
-  hostRoleCanWrite,
   hostRoleFor,
   isOrgWideMember,
+  holdsSiteKey,
   pluginRequestFromWeb,
+  resolveOrgPermissions,
+  resolveSiteRolePresetPermissions,
 } from '@aglyn/aglyn/server'
 import { deadDocumentPaths } from '../../_lib/presence-reaper'
 import {
@@ -113,7 +115,7 @@ async function handler(request: Request): Promise<Response> {
     // "no reach" while `isOrgWideMember` reads it as org-wide — which is the
     // reading that does not lock a real member out of their own workspace.
     // Asking both is what keeps this a security fix rather than an outage.
-    const memberData = (membership.data() ?? {}) as Partial<AglynOrgMember>
+    const memberData = (membership.data() ?? {}) as Partial<AglynOrgMember> & { roleId?: string }
     const orgWide = isOrgWideMember(memberData)
     const rosterHostRole = hostRoleFor(memberData, hostId)
     const hostRole = ((host.get('memberRoles') ?? {}) as Record<string, string>)[
@@ -148,34 +150,29 @@ async function handler(request: Request): Promise<Response> {
     // that can open the editor can be seen in it, viewers included.
     //
     // Live co-editing (AGL-677) is not that. It lets one person mutate the
-    // document another person is looking at, so it needs the same gate the
-    // media routes use for a write — host `memberRoles` admin/editor, or an
-    // org roster role above viewer — and it is scoped to the ONE host proven
-    // here, not to the whole org. A viewer gets presence and no `coeditHost`
-    // claim at all, so the RTDB rules refuse their writes outright rather
-    // than relying on the client to keep them read-only.
-    const orgRole = memberData.role
-    // `author` (AGL-2334) is a content role, so it belongs on this list.
-    // The co-edit claim is what lets the besigner mutate the version document
-    // at all — refusing it would have shipped a role that can edit content in
-    // the security rules and cannot open the editor that does the editing.
-    // The publish gate is in the rules, on the publish FIELDS; it is not this
-    // claim's job, and narrowing here would break the half of the role that
-    // has to work.
-    //
-    // The org-roster arm is bound to `orgWide` (AGL-1881). It used to read
-    // `orgRole === 'editor'` on its own, and a site collaborator can hold
-    // `role:'editor'` with `allHosts:false` — expressible straight from
-    // `/api/orgs/members` — so a member scoped to site A was minted
-    // `coeditHost` for site B and could mutate a live editing session on a
-    // site whose `memberRoles` does not list them. The comment above this
-    // block already claimed the claim "is scoped to the ONE host proven
-    // here"; nothing in the roster arm proved anything about that host.
+    // document another person is looking at, so it asks "Edit site content"
+    // (`site.edit`, AGL-4047) on the ONE host proven here, resolved fresh from
+    // the membership: the member's role on this site as its preset (`author`
+    // included, AGL-2334: a content role that could not open the editor would
+    // be no content role), then their custom role, their own permissions and
+    // the site's toggle. A workspace editor given Viewer access to this site
+    // is refused unless the site grants them the key, and a collaborator
+    // scoped to other sites reaches nothing here (AGL-1881). A member without
+    // it gets presence and no `coeditHost` claim at all, so the RTDB rules
+    // refuse their writes outright rather than relying on the client.
+    const customRole = memberData.roleId
+      ? ((await firestore.collection('orgs').doc(orgId).collection('roles').doc(memberData.roleId).get()).data() ??
+        null)
+      : null
+    // Beside it, the two arms that keep everyone who co-edited before in the
+    // editor, both on the key: the site's own stamp (a grant the host's
+    // `memberRoles` carries), and, for a workspace member the site role
+    // cannot place (the legacy pre-`allHosts` row above), their workspace
+    // verdict for the key.
     const canEdit =
-      hostRoleCanWrite(hostRole) ||
-      hostRoleCanWrite(rosterHostRole) ||
-      (orgWide &&
-        (orgRole === 'owner' || orgRole === 'admin' || orgRole === 'editor'))
+      holdsSiteKey(host, decoded.uid, 'site.edit') ||
+      resolveSiteRolePresetPermissions(memberData, hostId, customRole)['site.edit'] === true ||
+      (orgWide && !rosterHostRole && resolveOrgPermissions(memberData, customRole)['site.edit'] === true)
 
     // Mint in the caller's OWN pool (AGL-1962). A uid is unique only WITHIN
     // a pool, and `signInWithCustomToken` CREATES the account when the uid is

@@ -375,17 +375,6 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
-  // AGL-3975: optional fields on the guided start's Style step. The Start
-  // with AI guide documents them in their own section, which discloses the
-  // rollout in its first sentence until the flag is on.
-  release_ai_site_inspiration: [
-    {
-      path: 'docs/ai/start-with-ai.md',
-      disclosure: [/\*\*Sites you like\*\* \(rolling out, not yet available\) is an optional block/],
-      checkNoPriceClaim: true,
-    },
-  ],
-
   // AGL-3976. The flag closes "Bring my site": the ownership and crawl doors
   // (AGL-3974), the import job's admission and each of its waves, and the
   // choice card on Create site. The one page about it is ABOUT the feature,

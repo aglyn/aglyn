@@ -437,3 +437,53 @@ describe('items in the plan model', () => {
     expect(AI_BUILD_PLAN_TOOL.inputSchema['required']).not.toContain('items')
   })
 })
+
+// AGL-4077: one theme change a plan, proposed for the owner to apply in Setup → Theme.
+describe('a theme change in a build', () => {
+  const THEMED: AiBuildOps = new Map([...OPS, ['theme', capability('theme', { noun: 'theme change', maxPerPlan: 1, freeAllowed: false })]])
+  const warmer = (overrides: Partial<AiBuildItem> = {}) =>
+    item(1, { op: 'theme', name: 'Warmer look', why: 'The request asks for a warmer look.', args: {}, ...overrides })
+  const themeChange = { kind: 'theme-change' as const, name: 'Warmer look', why: 'The request asks for a warmer look.', duplicateOf: null, fields: ['palette.primary.main'] }
+
+  it('is a unit built by the theme operation, as an item or as the plan’s theme-change creation', () => {
+    const asItem = { ...canonical(), items: [item(0, {}), warmer()] }
+    expect(aiBuildUnits(asItem).map((unit) => [unit.slot, unit.op])).toContainEqual(['i1', 'theme'])
+    const asCreation = { ...canonical(), create: [...canonical().create, themeChange] }
+    const units = aiBuildUnits(asCreation)
+    expect(units.map((unit) => [unit.slot, unit.op, unit.deps])).toContainEqual(['c1', 'theme', []])
+    expect(units.find((unit) => unit.slot === 'c1')?.creation?.kind).toBe('theme-change')
+  })
+
+  it('admits one on a paid plan, whichever list the plan put it in, instead of refusing it', () => {
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), items: [item(0, {}), warmer()] }, { ops: THEMED })).toBeNull()
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), create: [...canonical().create, themeChange] }, { ops: THEMED })).toBeNull()
+    // A console reading a kept plan has no operations to judge it against.
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), create: [...canonical().create, themeChange] })).toBeNull()
+  })
+
+  it('refuses it on a Free workspace, and where the site has no theme operation, saying so', () => {
+    const two = { ...canonical(), screens: canonical().screens.slice(0, 2) }
+    const free = new Map([...THEMED].filter(([op]) => op !== 'theme'))
+    expect(aiBuildPlanShapeRefusal({ ...two, items: [item(0, {}), warmer()] }, { freeTaste: true, ops: free })).toBe(
+      'A Free workspace cannot have a theme change made (“Warmer look”). Take it out of items.',
+    )
+    expect(aiBuildPlanShapeRefusal({ ...two, create: [...two.create, themeChange] }, { freeTaste: true, ops: free })).toBe(
+      'A Free workspace cannot have a theme change made (“Warmer look”). Take it out of create.',
+    )
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), create: [...canonical().create, themeChange] }, { ops: OPS })).toBe(
+      'Nothing on this site can make “Warmer look” (theme change). Take it out of create.',
+    )
+  })
+
+  it('holds a plan to one theme change, counting both lists', () => {
+    const both = { ...canonical(), create: [...canonical().create, themeChange], items: [item(0, {}), warmer({ name: 'Bolder look' })] }
+    expect(aiBuildPlanShapeRefusal(both, { ops: THEMED })).toBe('This plan makes 2 of “theme change”, and one build makes at most 1.')
+  })
+
+  it('is estimated at one pass', () => {
+    const plan = { ...canonical(), items: [item(0, {}), warmer()] }
+    expect(aiBuildCreditEstimate(plan, { ops: THEMED, slots: new Set(['i1']) })).toBe(50)
+    const created = { ...canonical(), create: [...canonical().create, themeChange] }
+    expect(aiBuildCreditEstimate(created, { ops: THEMED, slots: new Set(['c1']) })).toBe(50)
+  })
+})

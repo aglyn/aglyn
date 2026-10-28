@@ -68,6 +68,21 @@ export interface HostDatasetRecord {
   values?: Record<string, unknown>
   /** Row position in the editor and in repeated output. */
   order?: number
+  /**
+   * A sample a site start seeded for the owner to replace (AGL-4065): the
+   * brief gave no entries for the list. Beside the values, so no page reads
+   * it; saving the record in Data makes it the owner's.
+   */
+  sample?: boolean
+}
+
+/** What Data says beside a sample record (AGL-4065). */
+export const DATASET_SAMPLE_RECORD_NOTE =
+  'A sample row made because your site’s brief gave none. Replace it with your own: saving your changes makes it yours.'
+
+/** Whether a record is a sample to replace (AGL-4065). */
+export function isSampleDatasetRecord(record: Pick<HostDatasetRecord, 'sample'> | null | undefined): boolean {
+  return record?.sample === true
 }
 
 /**

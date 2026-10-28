@@ -85,10 +85,17 @@ One message can ask for any mix of:
   [Pickup & local delivery](../commerce-and-bookings/commerce/pickup-and-local-delivery.md#ask-aglyn-ai)
   and [Tax settings](../commerce-and-bookings/commerce/overview.md#tax-settings). Store
   setup needs the admin or editor role on the site.
+- **a theme change**: new colors, fonts or corners for the whole site, such as *give it a
+  warmer look*. One build proposes one. It is a proposal, the same one the
+  [Theme assistant](./theme-assist.md) makes: your theme does not change until you apply it.
+  Open it from the job in **Setup → Theme**, where it is listed with the site's recent
+  proposals, and choose **Put in the editor** to review it and save. Theme changes need a
+  paid plan. On the Free plan, change the theme in **Setup → Theme** yourself, or ask the
+  Theme assistant there.
 
 One build holds up to 16 things and 8 pages. On the Free plan it holds 2 pages, and some
-parts, such as templates, campaigns, automations, products and edits to existing pages,
-need a paid plan. The card says when your request goes past a limit; ask for the rest in a
+parts, such as templates, campaigns, automations, products, edits to existing pages and
+theme changes, need a paid plan. The card says when your request goes past a limit; ask for the rest in a
 second message.
 
 ## The plan card {#the-plan-card}
@@ -149,6 +156,9 @@ page that places them.
   prices and rates you state.
 - **Names are your own.** A new variable or function never takes a name the site already
   uses.
+- **Photos fit your business.** A page's pictures are searched for with words from the
+  page and from the site's [business profile](./business-profile.md): what the business
+  does, its name and who it is for.
 - **Settings are saved live.** A change to the site's settings has no draft: like a save in
   Settings, it reaches your live site as soon as that part is built. Making the site
   Spanish sets its language; it does not translate the pages. A value that cannot be used,
@@ -167,6 +177,22 @@ next part.
 
 To change something it made, ask in the chat, such as *make the about page shorter*.
 Assist opens that draft and proposes the change there.
+
+## What a build can't do yet {#what-it-cannot-do}
+
+Assist says so when you ask for one of these, and plans the rest:
+
+- **Choose the photos on a page.** A build picks each picture itself. To use one of your
+  own, add it to the site's [media library](../content-and-data/media/overview.md) and place
+  it on the page in the Besigner with **Browse media**.
+- **Translate pages.** Making the site Spanish sets its language; the pages keep their
+  words. See [Multilingual](../building-sites/multilingual/overview.md).
+- **Lay a site out right to left.** Pages are laid out left to right, also in a right-to-left
+  language such as Arabic or Hebrew.
+- **Take files in the chat.** Assist reads text only, so it cannot receive a file, an image
+  or a screenshot. Upload it to the site's
+  [media library](../content-and-data/media/overview.md) instead. A build can then use an
+  image there as the site's logo, favicon or social image.
 
 ## When a build makes your site a store {#a-store}
 

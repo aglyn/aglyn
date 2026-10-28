@@ -252,21 +252,51 @@ export const AI_ICON_LIBRARY = {
   },
 } as const satisfies Record<string, AiIconLibraryEntry>
 
+/**
+ * Icons the compiler draws from what an item says (AGL-4065) — the languages
+ * a business works in, a race, a sponsor or a partner, a price or an
+ * estimate — that the language's schema does not list for the model: a word
+ * added to the schema is a word in every cached page and frame prompt, and
+ * these are the compiler's to pick (`aiStorefrontItemIcons`). A stored id of
+ * one is read back like any other (`aiIconOfId`).
+ */
+export const AI_ICON_DRAWN = {
+  translate: {
+    id: 'translate',
+    path: 'M12.87,15.07L10.33,12.56L10.36,12.53C12.1,10.59 13.34,8.36 14.07,6H17V4H10V2H8V4H1V6H12.17C11.5,7.92 10.44,9.75 9,11.35C8.07,10.32 7.3,9.19 6.69,8H4.69C5.42,9.63 6.42,11.17 7.67,12.56L2.58,17.58L4,19L9,14L12.11,17.11L12.87,15.07M18.5,10H16.5L12,22H14L15.12,19H19.87L21,22H23L18.5,10M15.88,17L17.5,12.67L19.12,17H15.88Z',
+  },
+  flag: {
+    id: 'flag-checkered',
+    path: 'M14.4,6H20V16H13L12.6,14H7V21H5V4H14L14.4,6M14,14H16V12H18V10H16V8H14V10L13,8V6H11V8H9V6H7V8H9V10H7V12H9V10H11V12H13V10L14,12V14M11,10V8H13V10H11M14,10H16V12H14V10Z',
+  },
+  handshake: {
+    id: 'handshake-outline',
+    path: 'M21.71 8.71C22.96 7.46 22.39 6 21.71 5.29L18.71 2.29C17.45 1.04 16 1.61 15.29 2.29L13.59 4H11C9.1 4 8 5 7.44 6.15L3 10.59V14.59L2.29 15.29C1.04 16.55 1.61 18 2.29 18.71L5.29 21.71C5.83 22.25 6.41 22.45 6.96 22.45C7.67 22.45 8.32 22.1 8.71 21.71L11.41 19H15C16.7 19 17.56 17.94 17.87 16.9C19 16.6 19.62 15.74 19.87 14.9C21.42 14.5 22 13.03 22 12V9H21.41L21.71 8.71M20 12C20 12.45 19.81 13 19 13L18 13L18 14C18 14.45 17.81 15 17 15L16 15L16 16C16 16.45 15.81 17 15 17H10.59L7.31 20.28C7 20.57 6.82 20.4 6.71 20.29L3.72 17.31C3.43 17 3.6 16.82 3.71 16.71L5 15.41V11.41L7 9.41V11C7 12.21 7.8 14 10 14S13 12.21 13 11H20V12M20.29 7.29L18.59 9H11V11C11 11.45 10.81 12 10 12S9 11.45 9 11V8C9 7.54 9.17 6 11 6H14.41L16.69 3.72C17 3.43 17.18 3.6 17.29 3.71L20.28 6.69C20.57 7 20.4 7.18 20.29 7.29Z',
+  },
+  receipt: {
+    id: 'receipt',
+    path: 'M3,22L4.5,20.5L6,22L7.5,20.5L9,22L10.5,20.5L12,22L13.5,20.5L15,22L16.5,20.5L18,22L19.5,20.5L21,22V2L19.5,3.5L18,2L16.5,3.5L15,2L13.5,3.5L12,2L10.5,3.5L9,2L7.5,3.5L6,2L4.5,3.5L3,2M18,9H6V7H18M18,13H6V11H18M18,17H6V15H18V17Z',
+  },
+} as const satisfies Record<string, AiIconLibraryEntry>
+
 /** A word the layout language may name an icon by. */
 export type AiIconWord = keyof typeof AI_ICON_LIBRARY
 
 /** Every icon word, in the order the schema lists them. */
 export const AI_ICON_WORDS = Object.keys(AI_ICON_LIBRARY) as AiIconWord[]
 
+/** Every icon the platform's code draws: the schema's words and the compiler's own. */
+const ALL_ICONS: Readonly<Record<string, AiIconLibraryEntry>> = { ...AI_ICON_LIBRARY, ...AI_ICON_DRAWN }
+
 const BY_ID: ReadonlyMap<string, AiIconLibraryEntry> = new Map(
-  Object.values(AI_ICON_LIBRARY).map((entry) => [entry.id, entry]),
+  Object.values(ALL_ICONS).map((entry) => [entry.id, entry]),
 )
 
-/** The library entry an icon word names; `null` for any other value. */
+/** The library entry an icon word names, the schema's or the compiler's own; `null` for any other value. */
 export function aiIconOfWord(word: unknown): AiIconLibraryEntry | null {
   return typeof word === 'string' &&
-    Object.prototype.hasOwnProperty.call(AI_ICON_LIBRARY, word)
-    ? AI_ICON_LIBRARY[word as AiIconWord]
+    Object.prototype.hasOwnProperty.call(ALL_ICONS, word)
+    ? (ALL_ICONS[word] as AiIconLibraryEntry)
     : null
 }
 

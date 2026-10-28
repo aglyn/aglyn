@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   encodeStoredNodes,
-  hostRoleCanPublish,
   isHostPluginEnabled,
   pluginRequestFromWeb,
   type PluginWebApiHandler,
@@ -130,10 +130,9 @@ export const formPromoteHandler: PluginWebApiHandler = async (request) => {
     // the version-create route next door uses: creating a draft version
     // changes nothing a visitor sees, and moving the pointer is the act that
     // does.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!hostRoleCanPublish(memberRole)) {
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
       return Response.json(
-        { error: 'Publishing requires the editor or admin role' },
+        { error: siteKeyRefusal('site.publish') },
         { status: 403 },
       )
     }

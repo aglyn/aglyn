@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { PluginApiHandler, PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
@@ -770,8 +772,10 @@ export const returnsHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostSnapshot = await hostRefFor(firestore, hostId).get()
     if (!hostSnapshot.exists) return res.status(404).json({ error: 'Unknown site' })
-    const role = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (role !== 'admin' && role !== 'editor') return res.status(403).json({ error: 'Not permitted' })
+    // "Manage orders" (`commerce.orders`, AGL-4047).
+    if (!holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
+    }
 
     if (action === 'create') {
       const orderId = String(body.orderId ?? '')

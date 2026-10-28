@@ -260,6 +260,7 @@ export const DOCS_HELP_EXCERPTS = {
   waivers: 'Write your waiver once. Riders sign it on their phones before they arrive, on a tablet at the window or on paper, parents sign for minors, and every signer gets a signed PDF.',
   webhooks: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
   weglot: 'Translate your published site in the visitor\'s browser with your own Weglot account, and what that does and does not do for search.',
+  whatsappButton: 'Put a button on your site that opens a WhatsApp chat with your business, set up with the Button\'s own fields and no code.',
   whiteLabel: 'Replace the Aglyn brand across the console, your published sites, and transactional email — product name, logo, colors, support URL, and email from-name.',
   workflows: 'Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.',
   yourFirstApiCall: 'Create an API key in the console, make your first request, read the response, handle the four errors you will actually hit, and page through a whole dataset.',

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { countLiveDocuments, isLiveDocument } from '@aglyn/aglyn/app-utils/live-document-count'
 import type {
   PluginDraftCheck,
@@ -80,7 +80,8 @@ import {
 type Firestore = FirebaseFirestore.Firestore
 
 /** The resources route's refusal for a member who may not write the site. */
-export const LOGIC_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const LOGIC_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 
 /** The resources route's refusal at the plan's allowance. */
 export function logicDraftLimitRefusal(noun: 'variable' | 'function', limit: number): string {
@@ -108,8 +109,7 @@ export interface LogicDraftWriterDeps {
 }
 
 function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: LOGIC_DRAFT_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: LOGIC_DRAFT_ROLE_REFUSAL }
 }
 
 function createLogicDraftWriter<T extends { name: string }>(

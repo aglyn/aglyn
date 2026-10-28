@@ -437,10 +437,12 @@ describe('what a storefront’s parts are called and drawn with', () => {
     expect(aiStorefrontSays('signup', 'Why soy, why small batch')).toBe(false)
   })
 
-  it('picks an icon a reason’s words suggest, and never the same twice', () => {
+  it('picks an icon a reason’s words suggest, never the same twice, and one neutral icon where its words name none', () => {
     const known = () => true
     expect(aiStorefrontItemIcons(items(['Free shipping', ''], ['Easy returns', ''], ['Gift wrapping', '']), known)).toEqual(['truck', 'recycle', 'gift'])
-    expect(new Set(aiStorefrontItemIcons(items(['A', ''], ['B', ''], ['C', '']), known)).size).toBe(3)
+    // A row of reasons whose words name nothing shows one neutral icon, not a
+    // star, a heart and a sparkle in turn (AGL-4065).
+    expect(aiStorefrontItemIcons(items(['A', ''], ['B', ''], ['C', '']), known)).toEqual(['check', 'check', 'check'])
   })
 
   it('offers the reviews and the sign-up to code only, by the ids and props the commerce plugin persists', () => {

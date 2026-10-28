@@ -485,7 +485,8 @@ A **Button**'s **Type** decides what it does inside a Form: **Submit** sends the
 the Form's built-in button steps aside, so the one you designed is the only one),
 **Reset** clears it, and **Button** does nothing on its own, for buttons that run an
 [interaction](interactions-and-custom-html.md). A Button that links to a page or URL
-ignores its Type.
+ignores its Type. For a button that opens a WhatsApp chat, see
+[Add a WhatsApp button](whatsapp-button.md).
 
 The calculator elements belong to no built-in feature. They come from **Calculators**, a
 plugin you install from the marketplace, and appear under **Input** once it is installed:

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
   registerPluginResourceDraftWriter,
@@ -99,7 +99,8 @@ export const PRODUCT_DRAFT_SEO_TITLE_MAX = 120
 export const PRODUCT_DRAFT_SEO_DESCRIPTION_MAX = 320
 
 /** The resources route's refusal for a member who may not write the site. */
-export const PRODUCT_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const PRODUCT_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 /** The resources route's refusal for a plan without the feature. */
 export const PRODUCT_DRAFT_PLAN_REFUSAL = 'This feature is not included in your plan — see Billing'
 
@@ -144,6 +145,13 @@ export interface ProductDraftContent {
    * merchant to replace with their own.
    */
   mediaUrls?: string[]
+  /**
+   * A SAMPLE for the merchant to replace (AGL-4065): a guided start whose
+   * brief named kinds of product and no product writes its first products
+   * as samples of those kinds. Stored as `sample: true`, which Products
+   * shows and the storefront never reads; the merchant's save clears it.
+   */
+  sample?: boolean
 }
 
 /** The most photos a draft is written with. */
@@ -181,6 +189,8 @@ export interface ProductDraftRead {
   /** Listed before it has a price (`ProductDraftContent.comingSoon`). */
   comingSoon: boolean
   mediaUrls: string[]
+  /** A sample to replace (`ProductDraftContent.sample`, AGL-4065); absent where it is not one. */
+  sample?: true
 }
 
 export type ProductDraftContentRead =
@@ -278,6 +288,8 @@ export function readProductDraftContent(
   if (rawComingSoon !== undefined && typeof rawComingSoon !== 'boolean') {
     problems.push('Coming soon is true or false')
   }
+  const rawSample = content['sample']
+  if (rawSample !== undefined && typeof rawSample !== 'boolean') problems.push('Sample is true or false')
   const mediaUrls = strings('Photos', content['mediaUrls'], problems)
   if (mediaUrls.length > PRODUCT_DRAFT_MEDIA_MAX) {
     problems.push(`A product is written with at most ${PRODUCT_DRAFT_MEDIA_MAX} photos`)
@@ -302,6 +314,7 @@ export function readProductDraftContent(
       categoryIds,
       comingSoon: rawComingSoon === true,
       mediaUrls,
+      ...(rawSample === true ? { sample: true as const } : {}),
     },
   }
 }
@@ -330,6 +343,8 @@ export function productDraftDocument(
     ...(read.comingSoon ? { status: 'active' as const } : {}),
     ...(read.mediaUrls.length ? { mediaUrls: read.mediaUrls } : {}),
     ...(read.categoryIds.length ? { categoryIds: read.categoryIds } : {}),
+    // A sample for the merchant to replace (AGL-4065): Products marks it.
+    ...(read.sample ? { sample: true } : {}),
   }
 }
 
@@ -370,8 +385,7 @@ function recordOf(product: FirebaseFirestore.DocumentSnapshot): PluginDraftRecor
 }
 
 export function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: PRODUCT_DRAFT_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: PRODUCT_DRAFT_ROLE_REFUSAL }
 }
 
 export function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {

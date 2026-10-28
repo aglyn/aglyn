@@ -259,3 +259,45 @@ describe('the token names the host it was minted for', () => {
     expect(mintedClaims()['presenceHost']).toBe(MINE)
   })
 })
+
+/**
+ * "Edit site content" decides co-editing, per site (AGL-4047): the owner's
+ * call was that the permission decides. A workspace editor given Viewer
+ * access to a site no longer co-edits there unless that site grants them the
+ * key; given Author access, they hold it, as an author does.
+ */
+describe('a site’s "Edit site content" decides co-editing (AGL-4047)', () => {
+  const NARROWED = { role: 'editor', allHosts: true, hostAccess: { [THEIRS]: 'viewer' } }
+
+  it('a workspace editor narrowed to Viewer here gets presence and no co-edit claim', async () => {
+    arrange(NARROWED, { [UID]: 'viewer' })
+    const response = await POST(request(THEIRS))
+    expect(response.status).toBe(200)
+    expect(mintedClaims()).not.toHaveProperty('coeditHost')
+  })
+
+  it('…unless the site grants them the key, on their member document', async () => {
+    arrange({ ...NARROWED, hostPermissions: { [THEIRS]: { 'site.edit': true } } }, { [UID]: 'viewer' })
+    const response = await POST(request(THEIRS))
+    expect(response.status).toBe(200)
+    expect(mintedClaims()['coeditHost']).toBe(THEIRS)
+  })
+
+  it('…or in the site’s stamp', async () => {
+    arrange(NARROWED, { [UID]: 'viewer' })
+    mockHostGet.mockResolvedValue(
+      snapshot({ orgId: ORG, memberRoles: { [UID]: 'viewer' }, memberPermissions: { [UID]: { 'site.edit': true } } }),
+    )
+    const response = await POST(request(THEIRS))
+    expect(response.status).toBe(200)
+    expect(mintedClaims()['coeditHost']).toBe(THEIRS)
+  })
+
+  it('a workspace editor narrowed to Author here still co-edits', async () => {
+    arrange({ ...NARROWED, hostAccess: { [THEIRS]: 'author' } }, { [UID]: 'author' })
+    const response = await POST(request(THEIRS))
+    expect(response.status).toBe(200)
+    expect(mintedClaims()['coeditHost']).toBe(THEIRS)
+  })
+})
+

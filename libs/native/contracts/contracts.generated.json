@@ -7355,6 +7355,8 @@
         "ai.generate",
         "commerce.reservations",
         "commerce.walkIns",
+        "commerce.orders",
+        "commerce.giftCards",
         "managePos",
         "posSell",
         "posRefund",
@@ -7378,6 +7380,8 @@
         "ai.generate",
         "commerce.reservations",
         "commerce.walkIns",
+        "commerce.orders",
+        "commerce.giftCards",
         "managePos",
         "posSell",
         "posRefund",
@@ -7410,6 +7414,8 @@
         "ai.generate",
         "commerce.reservations",
         "commerce.walkIns",
+        "commerce.orders",
+        "commerce.giftCards",
         "managePos",
         "posSell",
         "posRefund",
@@ -7557,7 +7563,7 @@
         "scope": "site"
       },
       {
-        "description": "Turn a site’s plugins on and off, and change their settings and its security allow-lists.",
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
@@ -7608,6 +7614,20 @@
         "group": "commerce",
         "key": "commerce.walkIns",
         "label": "Book walk-ins and change guests",
+        "scope": "site"
+      },
+      {
+        "description": "Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.orders",
+        "label": "Manage orders",
+        "scope": "site"
+      },
+      {
+        "description": "Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.giftCards",
+        "label": "Issue gift cards",
         "scope": "site"
       },
       {

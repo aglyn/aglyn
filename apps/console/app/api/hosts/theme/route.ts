@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { ThemeLibraryAction } from '@aglyn/aglyn/app-utils/theme-library'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
@@ -27,7 +28,7 @@ import {
   themeOverridePatch,
 } from '@aglyn/aglyn/app-utils/site-theme'
 import { readThemeSelection } from '@aglyn/aglyn/app-utils/theme-library'
-import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import {
   emailUnverifiedResponse,
@@ -160,9 +161,9 @@ async function editorAction(
     return Response.json({ error: 'Unknown site' }, { status: 404 })
   }
   const staff = decoded.staff === true
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (!staff && !hostRoleCanWrite(memberRole)) {
-    return Response.json({ error: 'Editing the theme requires the editor role' }, { status: 403 })
+  // "Edit site content" (`site.edit`, AGL-4047): the theme editor's values.
+  if (!staff && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
+    return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
   }
   const host = hostSnapshot.data() as Record<string, any>
   if (action === 'values') {
@@ -288,9 +289,11 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
     const staff = decoded['staff'] === true
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!staff && memberRole !== 'admin' && memberRole !== 'editor') {
-      return Response.json({ error: 'Not a site admin or editor' }, { status: 403 })
+    // "Publish site content" (`site.publish`, AGL-4047): a theme from the
+    // library is live the moment it is chosen, which is why this asked the
+    // publishing roles (Admin, Editor) before.
+    if (!staff && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
+      return Response.json({ error: siteKeyRefusal('site.publish') }, { status: 403 })
     }
     const locked = await lockdownRefusal({
       request,

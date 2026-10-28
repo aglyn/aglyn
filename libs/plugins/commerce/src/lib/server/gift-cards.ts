@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -86,9 +88,10 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
     // added tomorrow is now refused until someone decides otherwise, rather
     // than admitted by silence. Absent stays refused: `undefined` is not in
     // the set, which matters with `strictNullChecks` off.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not permitted' })
+    // "Issue gift cards" (`commerce.giftCards`, AGL-4047), whose preset is the site's Admin
+    // and Editor this asked for, read as the rules would read it.
+    if (!holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.giftCards')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.giftCards') })
     }
     const owner = await getOrgForHost(hostId).catch(() => null)
     if (!Aglyn.checkEntitlement(owner?.org as never, 'giftCards')) {

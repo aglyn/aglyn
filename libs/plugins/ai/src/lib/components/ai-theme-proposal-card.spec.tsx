@@ -240,3 +240,31 @@ describe('a proposal, before and after', () => {
     expect(proposeDraft).not.toHaveBeenCalled()
   })
 })
+
+// AGL-4077: a build from the chat that planned a theme change leaves its proposal here to apply.
+describe('a build’s theme change', () => {
+  it('is listed with the site’s recent proposals and put in the editor like any other', async () => {
+    const build = themeJob({
+      id: 'build-1',
+      kind: 'build',
+      status: 'running',
+      brief: 'Add an about page, and give it a warmer look.',
+      outputs: [{ resource: 'screen', id: 'page-1', hostId: 'host-1', label: 'About' }, ...themeJob().outputs],
+    })
+    mockFetch.mockResolvedValue(
+      json({ jobs: [build, themeJob({ id: 'build-2', kind: 'build', brief: 'Two new pages.', outputs: [{ resource: 'screen', id: 'page-2', hostId: 'host-1', label: 'Team' }] })] }),
+    )
+    renderCard()
+    expect(await screen.findByText('Add an about page, and give it a warmer look.')).toBeTruthy()
+    // A build with no theme change has no proposal to offer.
+    expect(screen.queryByText('Two new pages.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }))
+    expect(screen.getByText('Warmer accents.')).toBeTruthy()
+    // The build goes on building its pages; the card follows only its own theme jobs.
+    expect(screen.queryByLabelText('Working on a proposal')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Put in the editor' }))
+    expect(proposeDraft).toHaveBeenCalledTimes(1)
+    expect(proposeDraft.mock.calls[0][1]).toBe('build-1')
+    expect(readThemeColor(proposeDraft.mock.calls[0][0], 'light', 'primary')).toBe('#c2410c')
+  })
+})

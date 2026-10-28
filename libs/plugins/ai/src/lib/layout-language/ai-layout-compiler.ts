@@ -224,6 +224,15 @@ export interface PageScope {
   splitAt: number
   /** Sections whose only items were quotes, left out (AGL-3676). */
   quotesOnly: number[]
+  /**
+   * The band each section was drawn in, by plan index: what the next one's
+   * rhythm reads (AGL-4065). A frame, which draws no page sections, keeps none.
+   */
+  drawnBands?: AiLayoutBand[]
+  /** How many sections in a row, up to this one, showed no picture (AGL-4065). */
+  bare?: number
+  /** Sections the design set beside a photo because they were the third without one (AGL-4065). */
+  rhythm?: number
 }
 
 /** Everything one section's compile shares. */
@@ -322,6 +331,9 @@ export function aiCompileLayoutPage(
     features: 0,
     splitAt: -2,
     quotesOnly: [],
+    drawnBands: [],
+    bare: 0,
+    rhythm: 0,
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
@@ -362,14 +374,58 @@ function pageIconOf(sections: readonly AiLayoutSection[]): AiIconLibraryEntry {
 
 // ── A section ─────────────────────────────────────────────────────────────
 
+/** The listings whose element shows each record's picture: products, posts and events (AGL-4065). */
+const PICTURED_LISTINGS: ReadonlySet<AiLayoutListing['kind']> = new Set(['products', 'posts', 'events'])
+
+/**
+ * A section drawn, and what the next one reads of it (AGL-4065): the band it
+ * was drawn in, and whether it showed a picture — its own, a stand-in, a
+ * record's photo or a listing that shows its records' pictures.
+ */
 function compileSection(
   page: PageScope,
   raw: AiLayoutSection,
   index: number,
 ): string {
+  const scope = sectionScope(page, raw, index)
+  const id = drawSection(page, raw, index, scope)
+  page.drawnBands ??= []
+  page.drawnBands[index] = scope.band
+  const listed = aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
+  const pictured = (!!listed && PICTURED_LISTINGS.has(listed.listing.kind)) || holdsPicture(page.tree, id)
+  page.bare = pictured ? 0 : (page.bare ?? 0) + 1
+  return id
+}
+
+/** Whether a compiled part holds an Image anywhere under it. */
+function holdsPicture(tree: AiLayoutTreeBuilder, id: string): boolean {
+  const node = tree.nodes[id]
+  if (!node) return false
+  return node.componentId === 'image' || (node.nodes ?? []).some((child) => holdsPicture(tree, child))
+}
+
+/**
+ * The band a section is drawn in where the site's design keeps a rhythm
+ * (AGL-4065): on a `plain` rhythm one ground, every soft band plain; on an
+ * `alternate` rhythm the model's bands, except a plain or soft band that
+ * would meet the same band above it, which takes the other. Brand and dark
+ * bands, and the first section's, are the model's.
+ */
+function rhythmBand(page: PageScope, index: number, band: AiLayoutBand): AiLayoutBand {
+  if (!page.design || index === 0 || (band !== 'plain' && band !== 'soft')) return band
+  if (page.design.choices.bandRhythm === 'plain') return 'plain'
+  const above = page.drawnBands?.[index - 1]
+  if (above !== band) return band
+  return band === 'plain' ? 'soft' : 'plain'
+}
+
+function sectionScope(page: PageScope, raw: AiLayoutSection, index: number): SectionScope {
   const at = `sections[${index}]`
-  const band = settleBand(page, raw.band ?? 'plain', at)
-  const scope: SectionScope = {
+  const asked = raw.band ?? 'plain'
+  const ruled = rhythmBand(page, index, asked)
+  if (ruled !== asked) page.settled.push({ at: `${at}.band`, what: `drawn ${ruled}: the page's ${page.design?.choices.bandRhythm} band rhythm` })
+  const band = settleBand(page, ruled, at)
+  return {
     page,
     index,
     at,
@@ -389,6 +445,15 @@ function compileSection(
       ...raw.blocks.filter((block) => block.kind === 'heading' || block.kind === 'eyebrow').map((block) => block.text ?? ''),
     ].join(' '),
   }
+}
+
+function drawSection(
+  page: PageScope,
+  raw: AiLayoutSection,
+  index: number,
+  scope: SectionScope,
+): string {
+  const { at, band } = scope
   // A quote is a gap the owner fills, and a published page shows no gap (AGL-3660).
   const blocks = placePlanned(scope, raw).filter((block) => {
     if (block.kind !== 'quotes') return true
@@ -407,8 +472,11 @@ function compileSection(
   // through the element that keeps them, around the words the design gave it (AGL-3676).
   const listed = aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
   if (listed) return listingSection(scope, blocks, listed)
-  // The site's design draws the sections it has an arrangement for (AGL-3660).
+  // The site's design draws the sections it has an arrangement for (AGL-3660),
+  // the third band in a row with no picture beside one (AGL-4065).
   if (page.design) {
+    const beside = rhythmSection(scope, raw, blocks)
+    if (beside) return beside
     const designed = designSection(scope, raw, blocks)
     if (designed) return designed
   }
@@ -2528,6 +2596,95 @@ function feature(scope: SectionScope, words: readonly AiLayoutBlock[]): string {
   return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
 }
 
+/** The most sections a page sets beside a photo for being the third in a row with none (AGL-4065). */
+const AI_LAYOUT_RHYTHM_MOST = 2
+
+/** What the compiler notes of a section it set beside a photo for the page's rhythm (AGL-4065). */
+export const AI_LAYOUT_RHYTHM_NOTE = 'drawn beside a photo: third text-only band'
+
+/**
+ * NO THREE TEXT-ONLY BANDS IN A ROW (AGL-4065). The booth-kit trades homes
+ * of 2026-10-25 stacked their middles as bands of words with no picture —
+ * Holeshot Moto Repair's numbered steps, its repair list and its reasons to
+ * trust the shop, one under another. On a page drawn with a design, whose
+ * stand-in pictures the stock library fills, a section that would be the
+ * third in a row to show no picture is set beside one instead: its words
+ * and its items in one half, a photo of its heading's subject in the other,
+ * the side turning as the design's own photo-led sections turn. At most
+ * twice a page, and only where the page has a picture left.
+ *
+ * A section of words or of one group of cards or lines qualifies. Steps,
+ * questions and figures read best as text and stay so; a section with a
+ * picture, a form, a component or a row of columns of its own is drawn as
+ * designed; a group the design draws as pictures, articles or a menu
+ * already is one; and the page's closing call to action is the design's to
+ * draw (`coverClose`). `null` leaves the section to the design.
+ */
+function rhythmSection(scope: SectionScope, raw: AiLayoutSection, blocks: readonly AiLayoutBlock[]): string | null {
+  const { page, index } = scope
+  const design = page.design
+  if (!design || index === 0 || (page.bare ?? 0) < 2 || (page.rhythm ?? 0) >= AI_LAYOUT_RHYTHM_MOST || picturesLeft(page) < 1) return null
+  if (raw.cols && raw.cols.length >= 2) return null
+  const words = blocks.filter((block) => WORD_KINDS.has(block.kind))
+  const groups = blocks.filter((block) => !WORD_KINDS.has(block.kind))
+  if (groups.length > 1 || !words.some((block) => speaksHeading(scope, block))) return null
+  const group = groups[0]
+  if (group && ((group.kind !== 'cards' && group.kind !== 'list') || group.to || (group.items?.length ?? 0) > 6)) return null
+  if (group?.kind === 'cards' && group.style !== 'quiet' && aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '') !== design.choices.group) return null
+  const last = index === page.plan.sections.length - 1
+  if (last && words.some((block) => block.kind === 'button')) return null
+  if (!group) {
+    // A section of words the design already sets beside a photo needs no rule.
+    if (!words.some((block) => block.kind === 'text' || block.kind === 'lede') || (design.choices.features && page.features < 2)) return null
+    page.rhythm = (page.rhythm ?? 0) + 1
+    page.settled.push({ at: scope.at, what: AI_LAYOUT_RHYTHM_NOTE })
+    return feature(scope, words)
+  }
+  page.rhythm = (page.rhythm ?? 0) + 1
+  page.settled.push({ at: scope.at, what: AI_LAYOUT_RHYTHM_NOTE })
+  return featureGroup(scope, words, group)
+}
+
+/**
+ * A section's words and its one group beside a picture of its subject
+ * (AGL-4065): the words over the items in the wider half, the photo at 4:3
+ * in the other, on the side the design's photo-led sections turn to next.
+ */
+function featureGroup(scope: SectionScope, words: readonly AiLayoutBlock[], group: AiLayoutBlock): string {
+  const { page } = scope
+  const design = page.design as NonNullable<PageScope['design']>
+  const left = design.choices.featureLeft !== (page.features % 2 === 1)
+  page.features += 1
+  scope.centered = false
+  // The heading and its words open the half, the group under them, any button last.
+  const flow = compileFlow(scope, [...words.filter((block) => block.kind !== 'button'), group, ...words.filter((block) => block.kind === 'button')], 'half') as string
+  const photo = designPicture(scope, { alt: standInAlt(scope), given: false }, { aspectRatio: '4 / 3', borderRadius: 2 })
+  const row = designRow(
+    scope,
+    left
+      ? [
+          { id: photo, size: 'xs:12 md:5' },
+          { id: flow, size: 'xs:12 md:7' },
+        ]
+      : [
+          { id: flow, size: 'xs:12 md:7' },
+          { id: photo, size: 'xs:12 md:5' },
+        ],
+    '8',
+  )
+  const container = page.tree.add('muiContainer', { maxWidth: 'lg' }, { py: { ...SECTION_PADDING } }, [row], 'container')
+  return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
+}
+
+/**
+ * The variant a designed group's item title takes (AGL-4065): the heading
+ * style it names, or — where the site's seed sets its titles as labels — the
+ * theme's own overline, spaced capitals over the item's words.
+ */
+function itemTitleVariant(scope: SectionScope, heading: string): string {
+  return scope.page.design?.choices.headingCase === 'caps' ? 'overline' : heading
+}
+
 /** A heading beside its items: the words in a narrow column, the items ruled in the wide one. */
 function splitSection(
   scope: SectionScope,
@@ -2601,7 +2758,7 @@ function timeline(scope: SectionScope, items: readonly AiLayoutItem[]): string {
           null,
           [
             item.title.trim()
-              ? tree.add('muiTypography', { children: aiLayoutWords(item.title, 'itemTitle', facts, scope.page.options.language), variant: 'h5', component: itemElement(scope) }, null, null, 'title')
+              ? tree.add('muiTypography', { children: aiLayoutWords(item.title, 'itemTitle', facts, scope.page.options.language), variant: itemTitleVariant(scope, 'h5'), component: itemElement(scope) }, null, null, 'title')
               : null,
             item.text.trim()
               ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts, scope.page.options.language), variant: 'body1' }, muted(scope), null, 'text')
@@ -2641,12 +2798,12 @@ function designedGroup(
     const perRow = across(items.length, room, 'cards')
     if (perRow <= 1) {
       // Stacked, the rules run between the items.
-      const ids = items.map((item) => tree.add('muiStack', { spacing: '1' }, null, [title(item), words(item)], 'ruled'))
+      const ids = items.map((item) => tree.add('muiStack', { spacing: '1' }, null, [title(item, itemTitleVariant(scope, 'h5')), words(item)], 'ruled'))
       return ruledList(scope, noted(scope, ids), 'ruledItems')
     }
     // Side by side, each column opens under a rule in the text's own color.
     const ids = items.map((item) =>
-      tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiStack', { spacing: '1' }, { pt: 2.5 }, [title(item), words(item)], 'ruledWords')], 'ruled'),
+      tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiStack', { spacing: '1' }, { pt: 2.5 }, [title(item, itemTitleVariant(scope, 'h5')), words(item)], 'ruledWords')], 'ruled'),
     )
     return layOut(scope, noted(scope, ids), perRow, '5', 'ruledItems')
   }
@@ -2988,14 +3145,18 @@ export const AI_LAYOUT_SHOP_ALL = AI_LAYOUT_LABELS_EN.shopAll
  * A storefront's reasons to buy as open columns, each led by an icon over its
  * title and words (AGL-3676): the icon the design named for it, else one its
  * words suggest (shipping a truck, returns the arrows, small batch the hand),
- * never the same twice in a row. One style key an element, so a row repeats
- * no multi-key inline style (rule 16).
+ * else one neutral icon along the row; a row of places ("Areas we serve")
+ * shows the place marker for every place (AGL-4065). One style key an
+ * element, so a row repeats no multi-key inline style (rule 16).
  */
 function iconColumns(scope: SectionScope, items: readonly AiLayoutItem[], room: Room): string {
   const { page } = scope
   const tree = page.tree
   const facts = page.targets.facts
-  const iconWords = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word))
+  const iconWords = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word), {
+    section: scope.words ?? '',
+    ...(page.design ? { kind: page.design.input.kind } : {}),
+  })
   const perRow = across(items.length, room, 'cards')
   const textAlign = scope.centered ? { align: 'center' } : {}
   page.settled.push({ at: scope.at, what: `${items.length} items drawn as icon columns` })
@@ -3010,7 +3171,7 @@ function iconColumns(scope: SectionScope, items: readonly AiLayoutItem[], room: 
         item.title.trim()
           ? tree.add(
               'muiTypography',
-              { children: aiLayoutWords(item.title, 'itemTitle', facts, scope.page.options.language), variant: 'h6', component: itemElement(scope), ...textAlign },
+              { children: aiLayoutWords(item.title, 'itemTitle', facts, scope.page.options.language), variant: itemTitleVariant(scope, 'h6'), component: itemElement(scope), ...textAlign },
               null,
               null,
               'title',

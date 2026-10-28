@@ -137,11 +137,24 @@ function withoutDanglingTail(line: string, language?: string): string {
  * line that fits is returned clean, with any dangling tail taken off.
  */
 function fitText(value: unknown, place: AiLayoutTextPlace, language?: string): string {
+  if (place === 'eyebrow') return aiLayoutFitEyebrow(value, language)
   const text = aiLayoutArticles(aiLayoutCleanText(value), language)
   const limit = AI_LAYOUT_TEXT_LIMITS[place]
   if (text.length <= limit) return withoutDanglingTail(text, language)
+  return boundaryCut(text, limit, language) ?? spaceCut(text, limit, language)
+}
+
+/** The least of a line's room a cut may leave: 40% of it. */
+const leastOf = (limit: number) => Math.floor(limit * 0.4)
+
+/**
+ * A line too long for its room ended at the last sentence's end that leaves
+ * at least 40% of the room, else at the last clause boundary that does;
+ * `null` where it has neither.
+ */
+function boundaryCut(text: string, limit: number, language?: string): string | null {
   const room = text.slice(0, limit + 1)
-  const half = Math.floor(limit * 0.4)
+  const half = leastOf(limit)
   const lastMatch = (pattern: RegExp): number => {
     let at = -1
     for (const match of room.matchAll(pattern)) {
@@ -154,11 +167,246 @@ function fitText(value: unknown, place: AiLayoutTextPlace, language?: string): s
   if (sentence > 0) return withoutDanglingTail(room.slice(0, sentence), language)
   const clause = lastMatch(CLAUSE_END)
   if (clause > 0) return withoutDanglingTail(room.slice(0, clause), language)
+  return null
+}
+
+/** A line too long for its room ended at its last whole word, else at the room's edge. */
+function spaceCut(text: string, limit: number, language?: string): string {
+  const room = text.slice(0, limit + 1)
   const space = room.lastIndexOf(' ', limit)
-  return withoutDanglingTail(
-    space > half ? room.slice(0, space) : room.slice(0, limit),
-    language,
-  )
+  return withoutDanglingTail(space > leastOf(limit) ? room.slice(0, space) : room.slice(0, limit), language)
+}
+
+// ── An eyebrow, fitted whole (AGL-4065) ────────────────────────────────────
+
+/**
+ * What joins the parts of an eyebrow, in each language the compiler writes
+ * (`ai-layout-labels.ts`): the conjunctions a coordinated part ends on, and
+ * the prepositions a part opens after. A language with no row is cut, never
+ * re-phrased.
+ */
+const EYEBROW_JOINS: Readonly<Record<string, Joins>> = {
+  en: { and: ['and', '&'], at: ['in', 'for', 'of', 'at', 'to', 'with', 'from', 'by', 'on', 'near', 'around', 'across', 'serving'], place: ['in', 'for'] },
+  es: { and: ['y', 'e', '&'], at: ['en', 'para', 'de', 'del', 'con', 'desde', 'cerca'], place: ['en', 'para'] },
+  pt: { and: ['e', '&'], at: ['em', 'para', 'de', 'do', 'da', 'com', 'perto'], place: ['em', 'para'] },
+  fr: { and: ['et', '&'], at: ['à', 'en', 'pour', 'de', 'du', 'avec', 'près'], place: ['à', 'en', 'pour'] },
+  it: { and: ['e', 'ed', '&'], at: ['a', 'in', 'per', 'di', 'da', 'con', 'vicino'], place: ['a', 'in', 'per'] },
+  de: { and: ['und', '&'], at: ['in', 'für', 'von', 'aus', 'mit', 'bei'], place: ['in', 'für'] },
+}
+
+/** A language's joining words: `and` ends a coordinated part, `at` opens one, `place` opens where a business is or whom it serves. */
+interface Joins {
+  and: readonly string[]
+  at: readonly string[]
+  place: readonly string[]
+}
+
+/** Words an English eyebrow cut back to a word may not end on, beside rule 14's dangling words. */
+const EYEBROW_TAIL_EN: ReadonlySet<string> = new Set([
+  'in', 'of', 'for', 'and', 'or', 'nor', 'but', 'at', 'to', 'the', 'a', 'an', 'with', 'from', 'by', 'on', 'near', 'around', 'across',
+  'about', 'into', 'over', 'through', 'throughout', 'between', 'within', 'via', 'out', 'serving', 'your', 'our', 'their', 'my', '&',
+])
+
+function joinsOf(language?: string | null): Joins | null {
+  if (!aiLayoutSpeaksOtherThanEnglish(language)) return EYEBROW_JOINS['en'] as Joins
+  return EYEBROW_JOINS[String(language).toLowerCase().split(/[-_]/)[0] ?? ''] ?? null
+}
+
+/** A word's letters in any script: a capital opens a name. */
+const NAME_WORD = /^\p{Lu}[\p{L}\p{M}'’.-]*$/u
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Where each of `keep` stands in a line, whole words only, earliest first. */
+function keptSpans(text: string, keep: readonly string[]): Array<{ start: number; end: number }> {
+  const spans: Array<{ start: number; end: number }> = []
+  for (const word of keep) {
+    const trimmed = word.trim()
+    if (!trimmed) continue
+    for (const match of text.matchAll(new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(trimmed)}(?![\\p{L}\\p{N}])`, 'giu'))) {
+      spans.push({ start: match.index ?? 0, end: (match.index ?? 0) + match[0].length })
+    }
+  }
+  return spans.sort((one, two) => one.start - two.start || two.end - one.end)
+}
+
+/** Whether a line still holds the words a span of the original named. */
+function stillHolds(line: string, words: string): boolean {
+  return keptSpans(line, [words]).length > 0
+}
+
+/**
+ * The lines an eyebrow becomes with ONE coordinated part taken out, each
+ * still holding every word to keep: "Lawn care and landscaping in New
+ * Braunfels" without "Lawn care and"; "San Marcos motorcycle and dirt bike
+ * repair" without "motorcycle and"; a list without its first element. A part
+ * is the one to three words between the last boundary before a conjunction
+ * or a comma — the line's start, a word to keep, a preposition, a comma or
+ * another conjunction — and it.
+ */
+function withoutAPart(text: string, kept: ReadonlyArray<{ start: number; end: number }>, language?: string | null): string[] {
+  const joins = joinsOf(language)
+  if (!joins) return []
+  const tokens = [...text.matchAll(/[^\s]+/g)].map((match) => ({ word: match[0], start: match.index ?? 0, end: (match.index ?? 0) + match[0].length }))
+  const bare = (word: string) => word.toLowerCase().replace(/[,;:]+$/, '')
+  const insideKept = (start: number, end: number) => kept.some((span) => start < span.end && end > span.start)
+  const out: string[] = []
+  for (let at = 0; at < tokens.length; at += 1) {
+    const token = tokens[at] as (typeof tokens)[number]
+    const conjunction = joins.and.includes(bare(token.word))
+    const comma = /,$/.test(token.word) && !insideKept(token.start, token.end - 1)
+    if (!conjunction && !comma) continue
+    // The part ends with the conjunction, or is the word the comma closes.
+    const last = conjunction ? at - 1 : at
+    if (last < 0) continue
+    let first = last
+    while (first > 0) {
+      const before = tokens[first - 1] as (typeof tokens)[number]
+      if (/[,;:]$/.test(before.word) || joins.and.includes(bare(before.word)) || joins.at.includes(bare(before.word)) || insideKept(before.start, before.end)) break
+      first -= 1
+    }
+    if (last < first || last - first > 2) continue
+    const start = (tokens[first] as (typeof tokens)[number]).start
+    const end = token.end
+    if (insideKept(start, end)) continue
+    // Inside the line, a conjunction's part goes only where what follows it
+    // shares a head with it ("motorcycle and dirt bike repair"): two words
+    // or more to the next boundary, never "big and small".
+    if (conjunction && start > 0) {
+      let right = 0
+      for (let next = at + 1; next < tokens.length; next += 1) {
+        const word = tokens[next] as (typeof tokens)[number]
+        if (joins.and.includes(bare(word.word)) || joins.at.includes(bare(word.word)) || insideKept(word.start, word.end)) break
+        right += 1
+        if (/[,;:]$/.test(word.word)) break
+      }
+      if (right < 2) continue
+    }
+    const line = `${text.slice(0, start)}${text.slice(end).replace(/^\s+/, '')}`.replace(/\s+/g, ' ').trim()
+    if (!line || line === text) continue
+    out.push(start === 0 ? line.charAt(0).toLocaleUpperCase() + line.slice(1) : line)
+  }
+  return out
+}
+
+/**
+ * An eyebrow read from after a leading clause, up to "in", "for" or a comma:
+ * "Weekly mowing and seasonal cleanups for homeowners in New Braunfels" read
+ * from "homeowners". Every such start, longest first.
+ */
+function fromAPreposition(text: string, language?: string | null): string[] {
+  const joins = joinsOf(language)
+  if (!joins) return []
+  const words = text.split(' ')
+  const out: string[] = []
+  words.forEach((word, at) => {
+    if (!joins.place.includes(word.toLowerCase()) && !/[,;:]$/.test(word)) return
+    const rest = words.slice(at + 1).join(' ').trim()
+    if (rest) out.push(rest.charAt(0).toLocaleUpperCase() + rest.slice(1))
+  })
+  return out
+}
+
+/**
+ * A line cut back to a whole word that is not inside a name — a capital
+ * before and after the cut — and, in English, not on a word that joins, a
+ * word at a time, never under 40% of the room; else the line's plain cut.
+ */
+function wordCut(text: string, limit: number, language?: string | null): string {
+  const words = text.slice(0, limit + 1).split(' ')
+  // The word the room cuts through is never kept.
+  if (text.length > limit) words.pop()
+  const next = text.split(' ')
+  const english = !aiLayoutSpeaksOtherThanEnglish(language)
+  for (let count = words.length; count > 0; count -= 1) {
+    const line = next.slice(0, count).join(' ')
+    if (line.length < leastOf(limit)) break
+    const before = (next[count - 1] ?? '').replace(/[,;:]+$/, '')
+    const after = (next[count] ?? '').replace(/[,;:.!?]+$/, '')
+    if (NAME_WORD.test(before) && NAME_WORD.test(after) && !/[,;:]$/.test(next[count - 1] ?? '')) continue
+    if (english && EYEBROW_TAIL_EN.has(before.toLowerCase())) continue
+    const fitted = withoutDanglingTail(line, language ?? undefined)
+    if (fitted && fitted.length <= limit) return fitted
+  }
+  return spaceCut(text, limit, language ?? undefined)
+}
+
+/**
+ * An eyebrow fitted to its 40 characters whole (AGL-4065): a label over a
+ * hero says what and where, and the 2026-10-25 booth-kit heroes printed
+ * "Lawn care and landscaping in New" and "San Marcos motorcycle and dirt
+ * bike" — the town cut in half, the head noun lost.
+ *
+ * An eyebrow that holds one of the site's own names (`keep`: its town, its
+ * service area, its own name, `aiLayoutPlaceWords`) is, over its room, the
+ * first of these that fits and still holds the first such name it held:
+ *
+ *  1. the line without one coordinated part — its first ("Lawn care and
+ *     landscaping in New Braunfels" → "Landscaping in New Braunfels"), or
+ *     one inside it that shares its head with the next ("San Marcos
+ *     motorcycle and dirt bike repair" → "San Marcos dirt bike repair") —
+ *     the longest that keeps every name;
+ *  2. the line ended at its last sentence or clause boundary;
+ *  3. the line cut back to a whole word (below);
+ *  4. the line read from after a leading clause, up to "in", "for" or a
+ *     comma ("Homeowners in New Braunfels");
+ *  5. else the cut of step 3, whatever it holds.
+ *
+ * One that holds none is ended at its last sentence or clause boundary, as
+ * any line is, else cut back to a whole word that is neither inside a name
+ * (a capital on both sides of the cut: "New | Braunfels") nor, in English,
+ * a word that joins ("…in", "…and", "…for"). A line that fits is returned as
+ * `aiLayoutFitText` returns one. The words are always the model's,
+ * re-capitalized only after a cut at the front.
+ */
+export function aiLayoutFitEyebrow(value: unknown, language?: string | null, keep: readonly string[] = []): string {
+  const text = aiLayoutArticles(aiLayoutCleanText(value), language ?? undefined)
+  const limit = AI_LAYOUT_TEXT_LIMITS.eyebrow
+  if (text.length <= limit) return withoutDanglingTail(text, language ?? undefined)
+  const kept = keptSpans(text, keep)
+  const boundary = boundaryCut(text, limit, language ?? undefined)
+  const cut = () => wordCut(text, limit, language)
+  if (!kept.length) return boundary ?? cut()
+  const firstKept = text.slice((kept[0] as { start: number }).start, (kept[0] as { end: number }).end)
+  const holds = (line: string | null): line is string => !!line && line.length <= limit && !!aiLayoutCleanText(line) && stillHolds(line, firstKept)
+  const keepsAll = (line: string) => kept.every((span) => stillHolds(line, text.slice(span.start, span.end)))
+  const parts = withoutAPart(text, kept, language)
+    .map((line) => withoutDanglingTail(line, language ?? undefined))
+    .filter((line) => holds(line) && keepsAll(line))
+  const longest = parts.reduce<string | null>((best, line) => (best === null || line.length > best.length ? line : best), null)
+  if (longest) return longest
+  if (holds(boundary)) return boundary
+  const words = cut()
+  if (holds(words)) return words
+  const after = fromAPreposition(text, language)
+    .map((line) => withoutDanglingTail(line, language ?? undefined))
+    .find((line) => holds(line))
+  return after ?? words
+}
+
+/** A line of the job's words that is a name: one to four words, each opening on a capital, no digits. */
+const NAME_LINE = /^(?:\p{Lu}[\p{L}\p{M}'’.-]*)(?:\s+\p{Lu}[\p{L}\p{M}'’.-]*){0,3}$/u
+
+let placeWordsCache: { facts: string; words: string[] } | null = null
+
+/**
+ * The names among the words a job was given (AGL-4065): each line, or each
+ * part of a line between commas, that is a name of one to four capitalized
+ * words — the city ("New Braunfels"), each town of its service area, its
+ * region ("TX"), its own name — which an eyebrow is fitted around, never
+ * through.
+ */
+export function aiLayoutPlaceWords(facts: string): string[] {
+  if (placeWordsCache?.facts === facts) return placeWordsCache.words
+  const words = [
+    ...new Set(
+      facts
+        .split(/\n|[,;·|]/)
+        .map((part) => part.trim().replace(/[.:]+$/, ''))
+        .filter((part) => part.length >= 2 && !/\d/.test(part) && NAME_LINE.test(part)),
+    ),
+  ]
+  placeWordsCache = { facts, words }
+  return words
 }
 
 /** A phone number as people write one: seven or more digits with the usual separators. */
@@ -206,11 +454,13 @@ export function aiLayoutWords(
   facts: string,
   language?: string,
 ): string {
-  return aiLayoutFitText(
-    aiLayoutGuardContacts(aiLayoutCleanText(value), facts),
-    place,
-    language,
-  )
+  const guarded = aiLayoutGuardContacts(aiLayoutCleanText(value), facts)
+  // An eyebrow is fitted around the site's own names (AGL-4065).
+  if (place === 'eyebrow') {
+    const text = aiLayoutFitEyebrow(guarded, language, aiLayoutPlaceWords(facts))
+    return aiLayoutIsFiller(text) ? '' : text
+  }
+  return aiLayoutFitText(guarded, place, language)
 }
 
 /**

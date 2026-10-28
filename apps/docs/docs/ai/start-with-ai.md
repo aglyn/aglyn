@@ -117,7 +117,7 @@ to the style.
 
 ### Sites you like {#sites-you-like}
 
-**Sites you like** (rolling out, not yet available) is an optional block under the style
+**Sites you like** is an optional block under the style
 cards. Type the address of a website whose look you like, such as `https://example.com`,
 in **Site 1**. A paid plan can name up to three sites. On the Free plan, **Site 2** and
 **Site 3** are shown but cannot be used, with the reason and an **Upgrade** link.
@@ -212,7 +212,13 @@ builds, in this order:
    phone and email you gave. A list a page shows, such as your packages or your
    questions and answers, is kept as a [dataset](../content-and-data/datasets/overview.md)
    on plans that include datasets. It is shared with this site only, so you edit it on the
-   **Data** page, and it is deleted with the site if you delete the site.
+   **Data** page, and it is deleted with the site if you delete the site. When your
+   answers give no entries for a list, such as a race schedule with no dates, the list
+   starts with **sample rows** that look complete, so the page does too. A dated list's
+   samples fall on weekends over the coming season, and a list of past results gets past
+   dates, so the two never show the same rows. On the **Data** page each sample row is
+   marked **Sample**; replace it with your own, and every page that lists it follows.
+   Saving a sample row makes it yours. Visitors never see the word "sample".
 6. **A welcome email draft**, if you asked for one.
 7. **Publishing**: see [Published, and found by search engines](#published-and-indexable).
 
@@ -348,6 +354,17 @@ a suggested price for what it is, so it can be bought; review or change it, and 
 photo, in **Products**. A product without a price shows **Price coming soon** on the store, with no
 **Add to cart**, until you give it one. See [Product copy and catalogs with
 AI](./products-with-ai.md).
+
+When you describe what you sell as kinds of product, such as *"OEM and aftermarket parts,
+tires, riding gear"*, and name no product, the first products are **samples**: a plain
+item of each kind, such as *Knobby dirt bike tire*, at a suggested price. **Products**
+marks each one **Sample**, and its editor asks you to replace it with your own product.
+Saving your changes to a sample makes it yours. Your store shows them as ordinary products,
+never with the word "sample". When you name the products you sell, those are the ones
+made, as before.
+
+The home page's **Newsletter sign-up** band is the store's own email sign-up field, which
+adds subscribers to your contacts. Your contact form stays on the contact page.
 
 It also gets the pages every store needs, ready to use and published with the rest of the
 site. They do not count toward the pages you asked for:

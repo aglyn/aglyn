@@ -113,7 +113,7 @@ describe('GUARD: page context never carries another org’s data or a secret', (
       parentOrgId: 'org-someone-else',
     }
     const facts = safeOrgFacts(org)
-    expect(facts).toEqual({ name: 'Acme', plan: 'pro' })
+    expect(facts).toEqual({ name: 'Acme', plan: 'Pro' })
 
     const block =
       viewScreenBlock(describeView('/acme/billing')) +
@@ -130,8 +130,9 @@ describe('GUARD: page context never carries another org’s data or a secret', (
   })
 
   it('safeOrgFacts names the plan the workspace resolves to, not the stored field (AGL-3034)', () => {
+    // By the badge's word, not the stored id (AGL-4075).
     const canceled = { name: 'Acme', plan: 'pro', billingStatus: 'canceled' }
-    expect(safeOrgFacts(canceled).plan).toBe('free')
+    expect(safeOrgFacts(canceled).plan).toBe('Free')
 
     const comped = {
       ...canceled,
@@ -139,11 +140,11 @@ describe('GUARD: page context never carries another org’s data or a secret', (
         planComp: { plan: 'business', note: 'STAFF-NOTE-SECRET', grantedBy: 'staff-uid-SECRET' },
       },
     }
-    expect(safeOrgFacts(comped)).toEqual({ name: 'Acme', plan: 'business' })
+    expect(safeOrgFacts(comped)).toEqual({ name: 'Acme', plan: 'Business' })
     expect(Object.values(safeOrgFacts(comped)).join(' ')).not.toContain('SECRET')
 
     // A live subscription decides the plan, whatever comp waits behind it.
-    expect(safeOrgFacts({ ...comped, billingStatus: 'active' }).plan).toBe('pro')
+    expect(safeOrgFacts({ ...comped, billingStatus: 'active' }).plan).toBe('Pro')
   })
 
   it('FORCED RED: spreading the org doc instead of allowlisting leaks it', () => {
@@ -172,7 +173,7 @@ describe('GUARD: page context never carries another org’s data or a secret', (
 
     const block =
       viewScreenBlock(describeView(hostile)) +
-      viewFactsBlock({ route: cleaned, hostId: '', orgSlug: 'acme', name: '', plan: '' })
+      viewFactsBlock({ route: cleaned, hostId: '', orgSlug: 'acme', name: '' })
     expect(block).not.toContain(ASSIST_ACTION_FENCE)
     expect(block.split('\n').some((line) => line.startsWith('Ignore previous'))).toBe(
       false,
@@ -520,7 +521,7 @@ describe('the view blocks', () => {
   it('names the screen, both disclosure layers, and the action ids', () => {
     const block =
       viewScreenBlock(describeView('/acme/billing')) +
-      viewFactsBlock({ route: '/acme/billing', hostId: '', orgSlug: 'acme', name: 'Acme', plan: 'pro' })
+      viewFactsBlock({ route: '/acme/billing', hostId: '', orgSlug: 'acme', name: 'Acme' })
     expect(block).toContain('Billing & plans')
     expect(block).toContain('What the user can do here:')
     expect(block).toContain('Under the hood')
@@ -576,7 +577,6 @@ describe('the view blocks', () => {
         hostId: 'host123',
         orgSlug: 'acme',
         name: 'Acme',
-        plan: 'pro',
       })
     expect(folded).toContain('Acme')
     expect(viewScreenBlock(view)).not.toContain('Acme')
@@ -588,11 +588,11 @@ describe('the view blocks', () => {
       hostId: 'host123',
       orgSlug: 'acme',
       name: 'Acme',
-      plan: 'pro',
     })
     expect(facts).toContain('/acme/hosts/host123/screens')
     expect(facts).toContain('Acme')
-    expect(facts).toContain('pro')
+    // The plan is the workspace block's, for every plan (AGL-4075).
+    expect(facts).not.toContain('plan')
   })
 })
 
