@@ -353,6 +353,20 @@ describe('the dataset writer', () => {
     expect(rows[0]).toHaveProperty('filterValues')
   })
 
+  it('marks each record the caller says is a sample, beside its values, and no other (AGL-4065)', async () => {
+    const written = await writer.write(request({ content: { ...MENU, samples: [true, false, true] } }))
+    expect(written.ok).toBe(true)
+    const rows = records()
+    expect(rows.map((row) => row['sample'] === true)).toEqual([true, false, true])
+    // The flag sits beside the values, so no page that repeats them reads it.
+    for (const row of rows) expect(row.values).not.toHaveProperty('sample')
+    expect(readDatasetDraftContent({ name: 'Menu', ...MENU, samples: ['yes'] })).toEqual({
+      ok: false,
+      problems: ['Samples are a list of true or false, one a record'],
+    })
+    expect(readDatasetDraftContent({ name: 'Menu', ...MENU, samples: [true, true, true, true] }).ok).toBe(false)
+  })
+
   it('shares the dataset with this site alone whatever the org’s Default sharing says (AGL-4003)', async () => {
     // A drafted dataset is the site's own content, so deleting the site erases
     // it; shared with every site, 53 outlived their sites in one workspace.

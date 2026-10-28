@@ -540,8 +540,12 @@ export function aiLayoutRecordsPlacements(
     name: string
     /** Its records, by name, as {@link groups} files them. */
     records?: readonly string[]
-    /** What its records are filed under: the field, by id, and each record's value, by position. */
-    groups?: { field: string; values: readonly string[] } | null
+    /**
+     * What its records are filed under: the field, by id, each record's
+     * value, by position, and the values its sections list where they were
+     * planned for them (AGL-4065).
+     */
+    groups?: { field: string; values: readonly string[]; expected?: readonly string[] } | null
   },
   screens: readonly AiLayoutListingScreen[],
 ): AiLayoutListingPlacement[] {
@@ -610,12 +614,19 @@ export function aiLayoutSectionGroup(sectionName: string, values: readonly strin
 export function aiLayoutGroupedPlacements(
   placements: readonly AiLayoutListingPlacement[],
   screen: Pick<AiLayoutListingScreen, 'sections'>,
-  dataset: { records?: readonly string[]; groups?: { field: string; values: readonly string[] } | null },
+  dataset: {
+    records?: readonly string[]
+    groups?: { field: string; values: readonly string[]; expected?: readonly string[] } | null
+  },
 ): AiLayoutListingPlacement[] {
   const groups = dataset.groups
   if (placements.length < 2 || !groups || !FIELD_ID.test(groups.field)) return [...placements]
+  // The values the sections were planned to list come first (AGL-4065): an
+  // empty list's sections are filtered too, so the owner's first rows land
+  // in the right one.
+  const values = [...(groups.expected ?? []), ...groups.values]
   return placements.map((placement) => {
-    const value = aiLayoutSectionGroup(screen.sections[placement.section]?.name ?? '', groups.values)
+    const value = aiLayoutSectionGroup(screen.sections[placement.section]?.name ?? '', values)
     if (!value) return placement
     const records = (dataset.records ?? []).filter((_name, index) => (groups.values[index] ?? '').trim().toLowerCase() === value.toLowerCase())
     return { ...placement, filter: { field: groups.field, value, records } }

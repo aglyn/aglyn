@@ -36,7 +36,9 @@ import { AI_DATASET_SAID_NAME, detectOffVoiceCopy, type AiDoctrineViolation } fr
  * no price the brief does not state, and the storefront copy rules hold every
  * value (no health, financial or legal promise; no award or certification the
  * brief does not give). The planned field names are kept, in order, because
- * the pages planned around the dataset already name them.
+ * the pages planned around the dataset already name them. A record the brief
+ * gives no entry for is a SAMPLE, marked so, for the owner to replace
+ * (AGL-4065); a numbered placeholder is never one.
  */
 
 export const AI_DATASET_TOOL_NAME = 'submit_dataset'
@@ -66,6 +68,12 @@ export interface AiDataset {
   fields: Array<{ name: string; type: AiDatasetFieldType }>
   /** Each record's values in field order; an empty string is no value. */
   records: string[][]
+  /**
+   * Which records are SAMPLES the owner replaces, by position (AGL-4065):
+   * the brief gave no entries for the list, so the record is a typical one
+   * of its kind. Absent where none is.
+   */
+  samples?: boolean[]
 }
 
 const string = (description: string) => ({ type: 'string', description })
@@ -98,16 +106,20 @@ export const AI_DATASET_TOOL: AiTool = {
       },
       records: {
         type: 'array',
-        description: `${AI_DATASET_LIMITS.recordsMin} to ${AI_DATASET_LIMITS.recordsMax} records.`,
+        description: `${AI_DATASET_LIMITS.recordsMin} to ${AI_DATASET_LIMITS.recordsMax} records: the brief's own, or samples where it gives none for this list.`,
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['values'],
+          required: ['values', 'sample'],
           properties: {
             values: {
               type: 'array',
               description: `One value per field, in field order: "" where the brief gives nothing for it; a list's items joined by "${AI_DATASET_LIST_SEPARATOR}"; a boolean "yes" or "no".`,
               items: { type: 'string' },
+            },
+            sample: {
+              type: 'boolean',
+              description: 'true for a sample the owner replaces, written because the brief gives no entry for this list; false for an entry the brief gives.',
             },
           },
         },
@@ -154,10 +166,15 @@ const key = (name: string) => line(name).toLowerCase()
  */
 export function checkAiDataset(
   answer: Record<string, unknown>,
-  context: { planned: readonly string[]; merchantWords: string },
+  context: {
+    planned: readonly string[]
+    merchantWords: string
+    /** The fewest records a non-empty answer may hold; the list's own minimum by default. */
+    recordsMin?: number
+  },
 ): AiGenerationCheckResult<AiDataset> {
   const findings: Findings = { violations: [], offending: {} }
-  const limits = AI_DATASET_LIMITS
+  const limits = { ...AI_DATASET_LIMITS, recordsMin: context.recordsMin ?? AI_DATASET_LIMITS.recordsMin }
   const fields: AiDataset['fields'] = []
   const rawFields = Array.isArray(answer['fields']) ? (answer['fields'] as unknown[]) : []
   if (!rawFields.length) fail(findings, 'fields', 'missing', 'The dataset needs its fields.', answer['fields'])
@@ -188,14 +205,19 @@ export function checkAiDataset(
   }
 
   const rawRecords = Array.isArray(answer['records']) ? (answer['records'] as unknown[]) : []
-  if (rawRecords.length < limits.recordsMin || rawRecords.length > limits.recordsMax) {
+  // No records is an answer (AGL-4065): a list the brief gives no entries for
+  // starts empty, for the owner to fill in Data, never with numbered stand-ins.
+  if ((rawRecords.length > 0 && rawRecords.length < limits.recordsMin) || rawRecords.length > limits.recordsMax) {
     fail(findings, RECORDS_AT, 'count', `Write ${limits.recordsMin} to ${limits.recordsMax} records; this has ${rawRecords.length}.`, answer['records'])
   }
   const records: string[][] = []
+  /** Which records are samples (AGL-4065), by position. */
+  const sampled: boolean[] = []
   const samples: AiStorefrontCopySample[] = []
   const names = new Set<string>()
   rawRecords.forEach((raw, index) => {
     const at = `records[${index}]`
+    sampled.push((raw as Record<string, unknown> | null)?.['sample'] === true)
     const values = Array.isArray((raw as Record<string, unknown> | null)?.['values'])
       ? ((raw as Record<string, unknown>)['values'] as unknown[]).map((value) => line(value))
       : []
@@ -240,7 +262,7 @@ export function checkAiDataset(
     ...detectOffVoiceCopy(samples, null),
   )
   return {
-    value: findings.violations.length ? null : { fields, records },
+    value: findings.violations.length ? null : { fields, records, ...(sampled.some(Boolean) ? { samples: sampled } : {}) },
     violations: findings.violations,
     offending: findings.offending,
   }
