@@ -32,6 +32,7 @@ import {
   type PosPermission,
 } from '../model/plugin-permissions'
 import { posOpsSettings, type PosOpsSettings } from '../pos-ops-config'
+import { holdsCommerceWorkspaceSiteKey } from './commerce-site-keys'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /*==========================================
@@ -197,7 +198,10 @@ export interface PosOpsStaff {
   orgId: string
   org: Record<string, any> | null
   membership: PosOpsMembership
-  /** An admin of the whole workspace: the one role with no refund limit. */
+  /**
+   * "Approve refunds over the register's limit" (`commerce.posApprovals`,
+   * AGL-4047): no refund limit, a manager's approval, other members' PINs.
+   */
   isManager: boolean
   settings: PosOpsSettings
   hostRef: FirebaseFirestore.DocumentReference
@@ -225,12 +229,19 @@ export function mayWorkRegister(membership: PosOpsMembership): boolean {
 }
 
 /**
- * The one role whose say-so a refund above the cashier limit needs: an admin
- * of the whole workspace who is also this site's admin — the role
- * `refund.ts` has always required to refund at all.
+ * Whose say-so a refund above the cashier limit needs, and who sets other
+ * members' PINs: "Approve refunds over the register's limit"
+ * (`commerce.posApprovals`, AGL-4047). Its preset is the gate this asked
+ * before: an admin of the whole workspace who is also this site's admin,
+ * which someone added to just this site as its admin never was. `hostDoc` is
+ * the site's document (its stamp and `memberRoles`).
  */
-export function isPosManager(memberRole: unknown, membership: PosOpsMembership): boolean {
-  return memberRole === 'admin' && membership.orgWide && membership.hostRole === 'admin'
+export function isPosManager(
+  hostDoc: { get(field: string): unknown } | null | undefined,
+  uid: string,
+  membership: PosOpsMembership,
+): boolean {
+  return holdsCommerceWorkspaceSiteKey(hostDoc, uid, 'commerce.posApprovals', membership)
 }
 
 /**
@@ -259,9 +270,6 @@ export async function authorizePosOps(
   const hostRef = deps.firestore().collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   if (!hostSnapshot.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  // Still read: whether the member is a workspace admin and this site's
-  // admin decides who may approve above the cashier's limits.
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[uid]
   const membership = await deps.membership(uid, hostId)
   if (!mayWorkRegister(membership)) {
     return { ok: false, status: 403, error: 'Not permitted' }
@@ -284,7 +292,7 @@ export async function authorizePosOps(
       orgId: owner?.orgId ?? '',
       org: owner?.org ?? null,
       membership,
-      isManager: isPosManager(memberRole, membership),
+      isManager: isPosManager(hostSnapshot, uid, membership),
       settings,
       hostRef,
     },
@@ -411,9 +419,7 @@ export async function resolvePosStaffAssertion(
   if (!read) return null
   const membership = await deps.membership(read.memberUid, expected.hostId)
   if (expected.purpose !== 'manager') return mayWorkRegister(membership) ? read.memberUid : null
-  const host = await hostRef.get()
-  const memberRole = (host.get('memberRoles') ?? {})[read.memberUid]
-  return isPosManager(memberRole, membership) ? read.memberUid : null
+  return isPosManager(await hostRef.get(), read.memberUid, membership) ? read.memberUid : null
 }
 
 /**

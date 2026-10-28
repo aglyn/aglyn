@@ -67,14 +67,19 @@ export function hostPermissionKeys(): HostPermissionKey[] {
   )
 }
 
-/** What a host role grants for every per-site key, before any toggle. */
+/**
+ * What a host role grants a site collaborator for every per-site key, before
+ * any toggle. A key whose site-role preset holds for members of the whole
+ * workspace only (`workspaceMembersOnly`, AGL-4047) grants a collaborator
+ * nothing, whatever their site role.
+ */
 export function hostRolePermissionDefaults(
   role: HostAccessRole,
 ): Record<HostPermissionKey, boolean> {
   const defaults: Record<HostPermissionKey, boolean> = {}
   for (const definition of ORG_PERMISSIONS) {
     if (!definition.hostRoleDefaults) continue
-    defaults[definition.key] = definition.hostRoleDefaults[role] === true
+    defaults[definition.key] = !definition.workspaceMembersOnly && definition.hostRoleDefaults[role] === true
   }
   return defaults
 }
@@ -144,6 +149,12 @@ export function resolveCollaboratorHostPermissions(
  * workspace standing to refine, so only the site's toggle moves their
  * verdict, as for every other per-site key.
  *
+ * A key declared `workspaceMembersOnly` replaces a gate that asked for an
+ * admin of the whole workspace who is also this site's admin: its preset at
+ * 2 is the site role's for a member of the whole workspace and refusal for a
+ * collaborator, whose site role (even Admin) never carried it. The site's
+ * toggle at 4 still grants it to them.
+ *
  * These keys narrow nothing (`narrowsPerSite` is dropped): the site role is
  * already their preset. With no site named, the org catalog's verdict
  * (`roleDefaults`, then the layers) stands, which is the same answer for a
@@ -182,13 +193,15 @@ export function resolveSiteRolePresetPermissions(
     return Object.fromEntries(definitions.map((definition) => [definition.key, false]))
   }
   const toggles = member.hostPermissions?.[hostId]
+  const workspaceMember = isOrgWideMember(member)
   const layers: ReadonlyArray<Readonly<Partial<Record<string, unknown>>> | null | undefined> =
-    isOrgWideMember(member)
+    workspaceMember
       ? [member.roleId ? customRole?.permissions : undefined, member.permissions, toggles]
       : [toggles]
   const out: Record<string, boolean> = {}
   for (const definition of definitions) {
-    let verdict = definition.hostRoleDefaults?.[role] === true
+    let verdict =
+      (workspaceMember || !definition.workspaceMembersOnly) && definition.hostRoleDefaults?.[role] === true
     for (const layer of layers) {
       const value = layer?.[definition.key]
       if (typeof value === 'boolean') verdict = value
@@ -238,6 +251,36 @@ export function hostStampedSitePermission(
   if (typeof stamped === 'boolean') return stamped
   const role = (host?.memberRoles as Record<string, unknown> | undefined)?.[uid]
   return typeof role === 'string' && presetFor[role as HostAccessRole] === true
+}
+
+/**
+ * The same for a key whose preset holds for members of the whole workspace
+ * only (`workspaceMembersOnly`, AGL-4047), which `memberRoles` alone cannot
+ * answer: an admin of one site and an admin of the whole workspace project
+ * the same `'admin'` there. The site's stamp when the projection wrote one;
+ * else the preset of the role `memberRoles` holds for them AND of the role
+ * the fresh resolution gives them on the site, for a member of the whole
+ * workspace only. Exactly the gate these keys replaced: the projection's
+ * role, `orgWide` and the fresh site role, all three.
+ */
+export function hostStampedWorkspaceSitePermission(
+  host: { memberPermissions?: unknown; memberRoles?: unknown } | null | undefined,
+  uid: string,
+  permission: string,
+  presetFor: Readonly<Partial<Record<HostAccessRole, boolean>>>,
+  membership: { orgWide: boolean; hostRole: string | null | undefined },
+): boolean {
+  const stamped = (host?.memberPermissions as Record<string, Record<string, unknown> | undefined> | undefined)?.[uid]?.[
+    permission
+  ]
+  if (typeof stamped === 'boolean') return stamped
+  if (membership.orgWide !== true) return false
+  const fresh = membership.hostRole
+  return (
+    typeof fresh === 'string' &&
+    presetFor[fresh as HostAccessRole] === true &&
+    hostStampedSitePermission({ memberRoles: host?.memberRoles }, uid, permission, presetFor)
+  )
 }
 
 /*
@@ -551,6 +594,22 @@ export type HostDocumentLike =
  * the host document already; it costs no read.
  */
 export function holdsSiteKey(hostDoc: HostDocumentLike, uid: string, key: CoreSiteKey): boolean {
+  return holdsStampedSiteKey(hostDoc, uid, key, CORE_SITE_ROLE_PRESETS[key] ?? {})
+}
+
+/**
+ * The same for a plugin's key whose preset is the site role (AGL-4047): the
+ * site's `memberPermissions` stamp, else `presetFor` read for the member's
+ * `memberRoles` entry. `presetFor` is the declaring plugin's own table, so the
+ * answer does not depend on which plugins this process loaded. For the doors
+ * and the cards that hold the host document already; it costs no read.
+ */
+export function holdsStampedSiteKey(
+  hostDoc: HostDocumentLike,
+  uid: string | null | undefined,
+  key: string,
+  presetFor: Readonly<Partial<Record<HostAccessRole, boolean>>>,
+): boolean {
   if (!hostDoc || !uid) return false
   // `hostDoc`, not `host`: the host-field deny guard reads every `host.…`
   // in this folder as a field of the host document, and `get` is none.
@@ -562,7 +621,7 @@ export function holdsSiteKey(hostDoc: HostDocumentLike, uid: string, key: CoreSi
     { memberPermissions: read('memberPermissions'), memberRoles: read('memberRoles') },
     uid,
     key,
-    CORE_SITE_ROLE_PRESETS[key] ?? {},
+    presetFor,
   )
 }
 

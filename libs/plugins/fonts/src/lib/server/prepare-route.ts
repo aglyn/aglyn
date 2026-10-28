@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -50,7 +51,6 @@ const refuse = (status: number, error: string, code?: string) =>
   Response.json({ error, ...(code ? { code } : {}) }, { status, headers: NO_STORE })
 
 /** Host roles that may change a site's theme. */
-const THEME_ROLES = new Set(['admin', 'editor'])
 
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -76,9 +76,10 @@ export async function prepareFontRoute(request: Request): Promise<Response> {
   if (!HOST_ID.test(hostId)) return refuse(400, 'Missing hostId')
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
   if (!host.exists) return refuse(404, 'Unknown site')
-  const role = String((host.get('memberRoles') as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (decoded['staff'] !== true && !THEME_ROLES.has(role)) {
-    return refuse(403, "Only a site admin or editor can change this site's fonts")
+  // "Publish site content" (AGL-4047): a font goes live with the theme, and
+  // the key's preset is the site Admin and Editor who changed fonts before.
+  if (decoded['staff'] !== true && !holdsSiteKey(host, decoded.uid, 'site.publish')) {
+    return refuse(403, siteKeyRefusal('site.publish'))
   }
 
   // Refused before the body is read when the request says it is too big.

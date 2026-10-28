@@ -45,10 +45,6 @@
       "kind": "not-a-gate",
       "note": "Validates the site role a request names."
     },
-    "apps/console/app/api/hosts/pages/route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
     "apps/console/app/api/orgs/invites/route.ts": {
       "count": 6,
       "kind": "exception",
@@ -133,39 +129,15 @@
       "kind": "not-a-gate",
       "note": "Picks who an allotment alert goes to."
     },
-    "libs/plugins/bookings/src/lib/server/booking-manage.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/bookings/src/lib/server/in-person-payment.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/bookings/src/lib/server/refund.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/pos-hardware-admin.ts": {
       "count": 2,
       "kind": "not-a-gate",
       "note": "Platform staff roles (super, billing) on a staff page, not a member’s role."
     },
-    "libs/plugins/commerce/src/lib/server/pos-ops-gate.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/pos-reader-splash-admin.ts": {
       "count": 2,
       "kind": "not-a-gate",
       "note": "Platform staff roles (super, billing) on a staff page, not a member’s role."
-    },
-    "libs/plugins/commerce/src/lib/server/refund.ts": {
-      "count": 3,
-      "kind": "pending"
     },
     "libs/plugins/crm/src/lib/components/settings-section.tsx": {
       "count": 1,
@@ -237,103 +209,11 @@
       "count": 2,
       "kind": "pending"
     },
-    "libs/plugins/fonts/src/lib/server/prepare-route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/fonts/src/lib/server/theme-route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/components/funnels-card.component.tsx": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/model/funnels.types.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/server/funnel-drafts.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/server/funnels-api.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/inbox/src/lib/server.ts": {
       "count": 5,
       "kind": "pending"
     },
-    "libs/plugins/live-chat/src/lib/server/settings-route.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketing/src/lib/server/campaign-manage.ts": {
-      "count": 4,
-      "kind": "pending"
-    },
-    "libs/plugins/marketing/src/lib/server/campaign-recipients.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketing/src/lib/server/campaign-send.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/marketplace/src/lib/components/publisher-agreement-client.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-email-starter.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-email-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-layout.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-plugin.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-theme.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-email-starter.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-email-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-layout.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-theme.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish.ts": {
       "count": 1,
       "kind": "pending"
     },
@@ -351,10 +231,6 @@
       "kind": "pending"
     },
     "libs/plugins/workflows/src/lib/transfer/org-automations-package.server.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/zapier/src/lib/server/console-hooks.ts": {
       "count": 1,
       "kind": "pending"
     },

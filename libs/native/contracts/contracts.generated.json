@@ -7359,12 +7359,18 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "funnels.manage",
+        "bookings.payments",
+        "bookings.refunds",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7372,8 +7378,11 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "marketing.campaigns",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7389,6 +7398,8 @@
         "site.sensitive",
         "ai.use",
         "ai.generate",
+        "funnels.manage",
+        "bookings.payments",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7400,6 +7411,9 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
+        "marketing.campaigns",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7429,12 +7443,18 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "funnels.manage",
+        "bookings.payments",
+        "bookings.refunds",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7442,8 +7462,11 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "marketing.campaigns",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7480,14 +7503,30 @@
         "label": "AI"
       },
       {
+        "id": "funnels",
+        "label": "Funnels"
+      },
+      {
+        "id": "bookings",
+        "label": "Bookings"
+      },
+      {
         "id": "commerce",
         "label": "Commerce",
         "pluginId": "commerce"
       },
       {
+        "id": "marketplace",
+        "label": "Marketplace"
+      },
+      {
         "id": "outreach",
         "label": "Sequences",
         "pluginId": "outreach"
+      },
+      {
+        "id": "marketing",
+        "label": "Marketing"
       },
       {
         "id": "accounting",
@@ -7587,7 +7626,7 @@
         "scope": "site"
       },
       {
-        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "description": "Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.",
         "group": "sites",
         "key": "site.publish",
         "label": "Publish site content",
@@ -7601,7 +7640,7 @@
         "scope": "site"
       },
       {
-        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
@@ -7659,6 +7698,27 @@
         "scope": "org"
       },
       {
+        "description": "Create, change and remove a site’s funnels, and draft them with AI. Follows the site role unless a role or member sets it.",
+        "group": "funnels",
+        "key": "funnels.manage",
+        "label": "Manage funnels",
+        "scope": "site"
+      },
+      {
+        "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.payments",
+        "label": "Take booking payments in person",
+        "scope": "site"
+      },
+      {
+        "description": "Refund a paid booking, in full or in part. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.refunds",
+        "label": "Refund bookings",
+        "scope": "site"
+      },
+      {
         "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.reservations",
@@ -7699,6 +7759,27 @@
         "group": "commerce",
         "key": "commerce.shippingConnections",
         "label": "Connect shipping apps",
+        "scope": "site"
+      },
+      {
+        "description": "Refund any order, online or at the register, in full or in part, with no register limit. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.refunds",
+        "label": "Refund orders",
+        "scope": "site"
+      },
+      {
+        "description": "Refund at the register above its refund limit, approve a cashier’s refund over it with a PIN, and set or clear other staff members’ PINs. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.posApprovals",
+        "label": "Approve refunds over the register’s limit",
+        "scope": "site"
+      },
+      {
+        "description": "Add, change, test and remove the store’s order webhooks, roll their secrets and resend deliveries. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.webhooks",
+        "label": "Manage order webhooks",
         "scope": "site"
       },
       {
@@ -7764,6 +7845,20 @@
         "scope": "org"
       },
       {
+        "description": "Install templates, themes, layouts, components, email designs and plugins from the marketplace into a site (with \"Install from the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.siteInstall",
+        "label": "Install marketplace items into a site",
+        "scope": "site"
+      },
+      {
+        "description": "Publish a site’s templates, themes, layouts, components and email designs to the marketplace (with \"Publish to the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.sitePublish",
+        "label": "Publish a site’s items to the marketplace",
+        "scope": "site"
+      },
+      {
         "description": "Open Sequences, and work its email sequences and connected mailboxes.",
         "group": "outreach",
         "key": "outreach.use",
@@ -7778,6 +7873,13 @@
         "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
         "scope": "org"
+      },
+      {
+        "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
+        "group": "marketing",
+        "key": "marketing.campaigns",
+        "label": "Run email campaigns",
+        "scope": "site"
       },
       {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",

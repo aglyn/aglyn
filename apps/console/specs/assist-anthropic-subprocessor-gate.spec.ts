@@ -160,6 +160,18 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The privacy build item's live plan eval (AGL-4033). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is three fixed sample privacy requests written in the spec over an in-memory site, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
   [
+    'libs/plugins/ai/src/lib/jobs/ai-build-left-out-live.spec.ts',
+    "The build kind's live left-out eval (AGL-4087). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is one fixed sample request for a made-up business written in the spec over an empty in-memory Free site, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-job-insight-cache-live.spec.ts',
+    "The insight step's live cache check (AGL-4076). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1, and refuses new requests near its spend cap (AGLYN_LIVE_AI_CAP_USD); the requests go through the adapter, and what it sends is the brief and figure tables of one eval case committed under tools/ai-eval/cases, read through the step's figure-reader seam over an in-memory site, never a customer's content or a workspace's figures. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'libs/plugins/ai/src/lib/server/assist-chat-honest-live.spec.ts',
+    "The chat's live honest-answers check (AGL-4075). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the requests go through the real chat route and the adapter, and what they send is ten fixed sample questions written in the spec, over an in-memory workspace whose name, plan and waiting jobs the spec writes, with the repository's own docs, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
     'tools/scripts/lib/emulated-env.mjs',
     "The local emulator stack's environment builder (AGL-3596). It names the key only to BLANK it for an emulated console unless a developer asks for live AI on their own machine, in which case it passes the developer's own key through unchanged. It reads no customer data and is never part of a deployment.",
   ],
