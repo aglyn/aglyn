@@ -318,7 +318,10 @@ names only an address is found by staff on the To attach list and cleared with
 **Remove buyer's details** (the staff route's `forget-buyer`, the same patch an
 erasure applies) on a privacy request (see `PRIVACY_REQUESTS.md`). Its
 `posHardwareSales` record names the selling store's register sale and where
-the money went (`source`, `posOrderId`, `paidTo`), never the buyer.
+the money went (`source`, `posOrderId`, `paidTo`), never the buyer. A buyer's
+return request (`returnRequest`) keeps their own words and account on the
+order until their account is erased, which takes both off and keeps the
+outcome; each refund (`refunds`) is amounts and dates only.
 
 **Support threads are erased by the org and redacted by the person (AGL-1971),
 and the asymmetry is deliberate.** `eraseOrg` `recursiveDelete`s each

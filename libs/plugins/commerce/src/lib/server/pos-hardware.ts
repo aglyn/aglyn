@@ -159,6 +159,11 @@ export function merchantHardwareOrderView(id: string, order: PosHardwareOrder) {
     discountCents: order.discountCents ?? 0,
     /** Readers still to set up, for an in-person order that took serials. */
     readersToSetUp: (order.units ?? []).filter((unit) => !unit.readerId).length,
+    refundedCents: order.refundedCents ?? 0,
+    /** The buyer's return request and what was decided, without who asked. */
+    returnRequest: order.returnRequest
+      ? { state: order.returnRequest.state, requestedAtMs: order.returnRequest.requestedAtMs, note: order.returnRequest.note }
+      : null,
   }
 }
 
@@ -249,7 +254,9 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
     hostId,
     action === 'checkout' ? 'posBuyHardware' : settingUp ? 'posDevices' : undefined,
     mayVisitPosHardwareShop,
-    action === 'waiting' ? { planRequired: false } : {},
+    // A workspace whose plan lost the point of sale still sees what it bought
+    // and may ask to return a reader bought in person.
+    action === 'waiting' || action === 'orders' || action === 'request-return' ? { planRequired: false } : {},
   )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
@@ -258,6 +265,24 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
     switch (action) {
       case 'waiting':
         return res.status(200).json(await waitingInPersonReaders(staff.orgId, staff.hostId))
+      case 'request-return': {
+        const returns = await import('./pos-hardware-returns')
+        const orderId = String(body['orderId'] ?? '')
+        try {
+          const order = await returns.requestPosHardwareReturn({
+            orgId: staff.orgId,
+            orderId,
+            uid: staff.uid,
+            reason: body['reason'],
+          })
+          return res.status(200).json({ ok: true, order: merchantHardwareOrderView(orderId, order) })
+        } catch (error) {
+          if (error instanceof returns.PosHardwareReturnRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
+      }
       case 'choose-store':
       case 'mark-set-up': {
         const readers = await import('./pos-hardware-readers')

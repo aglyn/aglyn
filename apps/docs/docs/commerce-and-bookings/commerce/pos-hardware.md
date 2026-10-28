@@ -229,6 +229,22 @@ Stripe Reader M2 you pair by Bluetooth, select **Mark set up** when it is done.
 Staff can also add the reader to your store for you at the event, by its pairing
 code, while you are there.
 
+The order is in your purchase history on the **Hardware** card, under **Your
+orders**, even before buying online is open for your workspace.
+
+**Returning one.** Returns follow Stripe's hardware terms, and the return shipping
+is yours to pay. There are three ways:
+
+- Bring it to Aglyn's register at a later event. The refund goes back the way
+  you paid.
+- On the **Hardware** card, under **Your orders**, select **Request a return** on
+  the order and say why. Aglyn's team arranges the return with you, then refunds
+  it to the card you paid with, or tells you why it can't. The order shows
+  **Return requested**, then **Returned** or **Return declined**.
+- Aglyn's team can also refund it to the card you paid with at any time.
+
+A reader paid for in cash is refunded at Aglyn's register.
+
 ### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
 
 When a workspace is

@@ -158,6 +158,9 @@ describe('refunding a return', () => {
     expect(adjustments.map(([, row]) => [row['delta'], row['reason'], row['locationId']])).toEqual([[1, 'refund', 'loc-1']])
     expect(effects).toHaveLength(1)
     expect(effects[0]).toMatchObject({ orderId: 'o1', refundCents: oneMug, closedTheOrder: false, email: 'dana@acme.com' })
+    // Each line taken back with its share, for what follows a line in
+    // particular: a card reader's hardware order (AGL-4038).
+    expect(effects[0]!.lines).toEqual([{ index: expect.any(Number), quantity: 1, refundCents: oneMug }])
   })
 
   it('splits the money to the tenders the cashier names, and pays cash out of the open drawer', async () => {

@@ -59,6 +59,10 @@ import { sendPosHardwareEmail } from './pos-hardware-notify'
  *                 Registered); Shipped needs a tracking number
  *         cancel  cancel and refund in full, before it ships
  *         refund  refund in full, before it ships
+ *         refund  an order sold in person (AGL-4038): what is left of it,
+ *                 through the register sale's own card refund on the
+ *                 selling store's account (`pos-hardware-returns.ts`)
+ *         decline-return  decline a buyer's open return request, with a note
  *         forget-buyer  take the buyer's address and account off an order
  *                 sold in person (AGL-4038), for a privacy request from
  *                 someone who never made an account
@@ -109,6 +113,9 @@ function staffView(id: string, order: PosHardwareOrder) {
     paidTo: order.paidTo ?? null,
     attachment: order.attachment ?? null,
     units: order.units ?? [],
+    refundedCents: order.refundedCents ?? 0,
+    refunds: order.refunds ?? [],
+    returnRequest: order.returnRequest ?? null,
   }
 }
 
@@ -159,8 +166,14 @@ async function handler(request: Request): Promise<Response> {
       const requested = String(query?.['status'] ?? '')
       const attach = String(query?.['attach'] ?? '')
       if (attach && attach !== 'pending') return json({ error: 'Unknown filter' }, 400)
+      const returns = String(query?.['returns'] ?? '')
+      if (returns && returns !== 'requested') return json({ error: 'Unknown filter' }, 400)
       let ordersQuery: any = firestore.collectionGroup(POS_HARDWARE_ORDERS_COLLECTION)
-      if (attach === 'pending') {
+      if (returns === 'requested') {
+        // Buyers' open return requests (AGL-4038), oldest waiting first in the
+        // newest-first list like every other filter.
+        ordersQuery = ordersQuery.where('returnRequest.state', '==', 'requested')
+      } else if (attach === 'pending') {
         // A sale whose recording was missed is recorded before the list is read.
         const config = posHardwareInPersonConfig()
         if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
@@ -205,6 +218,12 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
     if (action === 'forget-buyer') return await forgetBuyer(firestore, ref, orgId, orderId, actor)
+    if (action === 'decline-return') return await inPersonReturn(firestore, orgId, orderId, action, input, actor)
+    // Handed over at the sale, an in-person order is never canceled: either
+    // button refunds it, its own way.
+    if ((action === 'refund' || action === 'cancel') && (await soldInPerson(ref))) {
+      return await inPersonReturn(firestore, orgId, orderId, 'refund', input, actor)
+    }
     if (action === 'cancel' || action === 'refund') {
       return await refundOrder(firestore, orgId, orderId, action, actor)
     }
@@ -290,6 +309,57 @@ async function updateOrder(
   if (outcome.reached === 'shipped') await sendPosHardwareEmail('shipped', orderId, outcome.after)
   if (outcome.reached === 'delivered') await sendPosHardwareEmail('delivered', orderId, outcome.after)
   return json({ ok: true, order: staffView(orderId, outcome.after) })
+}
+
+/** Whether an order was sold in person (AGL-4038), which refunds its own way. */
+async function soldInPerson(ref: any): Promise<boolean> {
+  const snapshot = await ref.get()
+  return snapshot.exists && posHardwareOrderSource(snapshot.data()) === 'in_person'
+}
+
+/**
+ * A refund or a declined return of an order sold in person (AGL-4038): the
+ * refund goes back through the register sale's own card refund on the
+ * selling store's account, never the platform's Checkout.
+ */
+async function inPersonReturn(
+  firestore: any,
+  orgId: string,
+  orderId: string,
+  action: 'refund' | 'decline-return',
+  input: Record<string, unknown>,
+  actor: Actor,
+): Promise<Response> {
+  const returns = await import('./pos-hardware-returns')
+  try {
+    const outcome =
+      action === 'refund'
+        ? await returns.refundInPersonPosHardwareOrder({
+            config: posHardwareInPersonConfig(),
+            orgId,
+            orderId,
+            actorUid: actor.actorUid,
+          })
+        : await returns.declinePosHardwareReturn({ orgId, orderId, actorUid: actor.actorUid, note: input['note'] })
+    await addAdminAudit(firestore, {
+      action: action === 'refund' ? 'pos-hardware-order-refund' : 'pos-hardware-return-decline',
+      ...actor,
+      scope: 'posHardwareOrder',
+      target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+      orgId,
+      before: { status: outcome.before.status, refundedCents: outcome.before.refundedCents ?? 0 },
+      after: {
+        status: outcome.order.status,
+        refundedCents: outcome.order.refundedCents ?? 0,
+        returnRequest: outcome.order.returnRequest?.state ?? null,
+      },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    return json({ ok: true, order: staffView(orderId, outcome.order) })
+  } catch (error) {
+    if (error instanceof returns.PosHardwareReturnRefusal) throw new Refusal(error.message, error.status)
+    throw error
+  }
 }
 
 /**

@@ -298,6 +298,7 @@ const POLICIES: Array<{
       'libs/plugins/commerce/src/lib/server/pos-hardware-user-eraser.ts',
       'libs/plugins/commerce/src/lib/server/pos-hardware-attach.ts',
       'libs/plugins/commerce/src/lib/server/pos-hardware-readers.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-returns.ts',
     ],
     stamp: 'posHardwareSaleRecord(',
   },
