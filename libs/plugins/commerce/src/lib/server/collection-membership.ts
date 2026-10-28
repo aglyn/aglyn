@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
@@ -57,7 +58,6 @@ export interface MembershipPass {
  * An allowlist (AGL-2372): the roles `/api/hosts/collections` lets edit a
  * collection, since whoever may change the rules may move what they match.
  */
-const COLLECTION_EDITORS = new Set(['admin', 'editor', 'author'])
 
 /**
  * One bounded pass: every product from `after` onward, up to the scan cap,
@@ -160,9 +160,9 @@ export const collectionMembershipHandler: PluginApiHandler = async (req, res) =>
     const firestore = firebaseAdmin.app().firestore()
     const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
     if (!hostSnapshot.exists) return res.status(404).json({ error: 'Unknown site' })
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (decoded['staff'] !== true && !COLLECTION_EDITORS.has(String(memberRole))) {
-      return res.status(403).json({ error: 'Not permitted' })
+    // "Edit site content" (`site.edit`, AGL-4047), as the rules ask it of the catalog.
+    if (decoded['staff'] !== true && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
+      return res.status(403).json({ error: siteKeyRefusal('site.edit') })
     }
     const pass = await restampCollectionMembership(firestore, hostId, collectionId, after)
     return res.status(200).json(pass)

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -78,10 +79,10 @@ async function handler(request: Request): Promise<Response> {
     }
     // Same role model as every other content write (canWriteHostContent):
     // seeding adds library documents to somebody's site.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     // `author` (AGL-2334): starter templates land as unpublished drafts.
-    if (!hostRoleCanWrite(memberRole)) {
-      return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
+    // "Edit site content" (`site.edit`, AGL-4047).
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
+      return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
     }
 
     // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct

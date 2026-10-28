@@ -254,7 +254,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     group: 'sites',
     scope: 'site',
     label: 'Manage site settings',
-    description: 'Turn a site’s plugins on and off, and change their settings and its security allow-lists.',
+    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.',
   },
   {
     key: 'data.manage',

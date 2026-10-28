@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -72,9 +73,9 @@ async function handler(request: Request): Promise<Response> {
     if (!hostSnapshot.exists) {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (decoded['staff'] !== true && !hostRoleCanWrite(memberRole)) {
-      return Response.json({ error: 'Not permitted' }, { status: 403 })
+    // "Edit site content" (`site.edit`, AGL-4047): the site's name and icon.
+    if (decoded['staff'] !== true && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
+      return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
     }
 
     // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct

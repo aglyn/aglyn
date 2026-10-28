@@ -36,8 +36,9 @@
  * page that catches up late.
  */
 
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { CORE_SITE_ROLE_PRESETS } from '@aglyn/aglyn/app-utils/org-role-grants'
 import {
-  hostRoleCanWrite,
   pluginRequestFromWeb,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
@@ -48,9 +49,9 @@ import {
   isImpersonationSession,
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { collectionLivePageScope } from '@aglyn/tenant-data-admin/server/collection-live-pages'
 import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
-import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   screenIdsUsingComponentDeep,
   screenIdsUsingLayoutDeep,
@@ -114,12 +115,17 @@ async function mayRevalidate(
   hostSnapshot: FirebaseFirestore.DocumentSnapshot,
 ): Promise<boolean> {
   if (decoded['staff']) return true
-  const projected = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (hostRoleCanWrite(projected)) return true
+  // "Edit site content" (`site.edit`, AGL-4047): the site's stamp, else the
+  // preset of its `memberRoles` projection, as the rules read it; and, for a
+  // member the projection has not reached yet, the same key resolved fresh
+  // from their membership.
+  if (holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) return true
+  // A member the projection has not reached: the preset of the role their
+  // membership gives them on this site, resolved fresh (fails closed).
   const { hostRole } = await resolveOrgPermissions(decoded.uid, {
     hostId: hostSnapshot.id,
   })
-  return hostRoleCanWrite(hostRole)
+  return hostRole ? CORE_SITE_ROLE_PRESETS['site.edit'][hostRole] === true : false
 }
 
 /**

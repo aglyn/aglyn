@@ -54,8 +54,8 @@
  * that raise it.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
-  hostRoleCanPublish,
   isSiteEventType,
   type PluginApiHandler,
   planLabelGrantingFeature,
@@ -219,11 +219,8 @@ export function createActionTestRunHandler(
       const hostRef = firestore.collection('hosts').doc(hostId)
       const host = await hostRef.get()
       if (!host.exists) return res.status(404).json({ error: 'Unknown site' })
-      const role = (host.get('memberRoles') ?? {})[caller.uid]
-      if (caller.staff !== true && !hostRoleCanPublish(role)) {
-        return res
-          .status(403)
-          .json({ error: 'Only a site admin or editor can test an action' })
+      if (caller.staff !== true && !holdsSiteKey(host, caller.uid, 'site.publish')) {
+        return res.status(403).json({ error: siteKeyRefusal('site.publish') })
       }
 
       const rate = await deps.consumeRateLimit(

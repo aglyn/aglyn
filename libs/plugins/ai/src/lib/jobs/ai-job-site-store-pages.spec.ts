@@ -178,6 +178,6 @@ describe('whether a store’s pages may be added', () => {
   it('refuses the Free plan, which has no store, a site without commerce, and a viewer', async () => {
     expect(await ask({ plan: 'free' }, 'editor')).toBe('Your plan does not include a store.')
     expect(await ask({ plan: 'starter' }, 'editor', false)).toBe('Turn on Commerce for this site before starting the job.')
-    expect(await ask({ plan: 'starter' }, 'viewer')).toBe('Editing requires the editor role')
+    expect(await ask({ plan: 'starter' }, 'viewer')).toBe('Your role does not include "Edit site content" — ask an organization admin')
   })
 })

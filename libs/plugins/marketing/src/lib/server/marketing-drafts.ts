@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   registerPluginResourceDraftWriter,
   type PluginDraftContext,
@@ -79,7 +79,8 @@ export const EXPERIMENT_DRAFT_RESOURCE = 'experiment'
 
 const MARKETING_PLUGIN_ID = 'marketing'
 
-export const OVERLAY_DRAFT_ROLE_REFUSAL = 'Editing this site requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const OVERLAY_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 export const OVERLAY_DRAFT_PLAN_REFUSAL =
   'Announcement bars and popups are not included on this workspace’s plan — see Billing to upgrade.'
 export const OVERLAY_DRAFT_ROOM_REFUSAL =
@@ -103,8 +104,7 @@ async function siteFor(
   if (!host.exists || (context.orgId && host.get('orgId') && host.get('orgId') !== context.orgId)) {
     return { status: 404, error: 'Unknown site' }
   }
-  const role = ((host.get('memberRoles') ?? {}) as Record<string, unknown>)[context.uid]
-  if (!hostRoleCanWrite(role)) return { status: 403, error: OVERLAY_DRAFT_ROLE_REFUSAL }
+  if (!holdsSiteKey(host, context.uid, 'site.edit')) return { status: 403, error: OVERLAY_DRAFT_ROLE_REFUSAL }
   return { host }
 }
 

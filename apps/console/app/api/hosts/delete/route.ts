@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
@@ -88,13 +89,11 @@ async function siteDeleteCaller(
   if (!hostSnapshot.exists) {
     return Response.json({ error: 'Unknown site' }, { status: 404 })
   }
-  // Deleting a site is an admin-level action (mirrors the rules'
-  // host-delete gate: only a site admin, staff aside).
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (decoded['staff'] !== true && memberRole !== 'admin') {
-    return Response.json({
-      error: 'Deleting a site requires the site admin role',
-    }, { status: 403 })
+  // Deleting a site asks "Manage site settings" (`site.manage`, AGL-4047)
+  // on it, as the rules' host-delete gate does (staff aside), beside the
+  // workspace's "Delete sites" below.
+  if (decoded['staff'] !== true && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.manage')) {
+    return Response.json({ error: siteKeyRefusal('site.manage') }, { status: 403 })
   }
 
   /*==========================================

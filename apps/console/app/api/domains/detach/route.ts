@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import {
@@ -75,9 +76,9 @@ async function handler(request: Request): Promise<Response> {
     if (!hostSnapshot.exists) {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin') {
-      return Response.json({ error: 'Not a site admin' }, { status: 403 })
+    // "Manage site settings" (`site.manage`, AGL-4047).
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.manage')) {
+      return Response.json({ error: siteKeyRefusal('site.manage') }, { status: 403 })
     }
 
     // Lockdown verdict (AGL-1506): host doc in hand; the owning org's doc

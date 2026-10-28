@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   DUPLICABLE_HOST_RESOURCE_KINDS,
   DUPLICATE_NAME_MAX,
   isDuplicableHostResourceKind,
   type DuplicableHostResourceKind,
 } from '@aglyn/aglyn/app-utils/duplicate-resource'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import {
@@ -146,9 +146,8 @@ export async function runAiDuplicateResourceTool(
       }
     }
   }
-  const memberRole = ((host.get('memberRoles') ?? {}) as Record<string, unknown>)[gate.uid]
-  if (!hostRoleCanWrite(memberRole)) {
-    return { ok: false, status: 403, error: 'Editing requires the editor role' }
+  if (!holdsSiteKey(host, gate.uid, 'site.edit')) {
+    return { ok: false, status: 403, error: siteKeyRefusal('site.edit') }
   }
 
   const result = await duplicateResource(parsed.kind, {

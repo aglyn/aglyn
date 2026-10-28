@@ -145,7 +145,7 @@ describe('the duplicate_resource tool', () => {
     expect(await call({ kind: 'screen', sourceId: 's-1', name: null })).toEqual({
       ok: false,
       status: 403,
-      error: 'Editing requires the editor role',
+      error: 'Your role does not include "Edit site content" — ask an organization admin',
     })
     hostDoc = { orgId: 'org-2', memberRoles: { 'u-1': 'admin' } }
     expect(await call({ kind: 'screen', sourceId: 's-1', name: null })).toMatchObject({
@@ -179,7 +179,7 @@ describe('the duplicate_resource tool', () => {
     hostDoc = { orgId: 'org-1', memberRoles: {} }
     expect(
       await call({ kind: 'screen', sourceId: 's-1', name: null }, { staff: true }),
-    ).toMatchObject({ ok: false, status: 403, error: 'Editing requires the editor role' })
+    ).toMatchObject({ ok: false, status: 403, error: 'Your role does not include "Edit site content" — ask an organization admin' })
     expect(mockGetOrgForUser).not.toHaveBeenCalled()
   })
 })

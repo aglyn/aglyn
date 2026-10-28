@@ -18,8 +18,9 @@
 // The leaf module, not the server barrel: specs stage that barrel as a
 // closed world, and the list keys every create stamps (AGL-3321) are
 // nothing they have reason to name.
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
-import { hostRoleCanPublish, hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   AUTHORS_MAX_PER_HOST,
   checkEntitlement,
@@ -530,7 +531,6 @@ async function handler(request: Request): Promise<Response> {
     if (!hostSnapshot.exists) {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     // `author` (AGL-2334): creating a screen, layout or component is
     // AUTHORING — the document is not reachable by anyone until a route is
     // registered for it, and registering a route is refused in the rules.
@@ -541,15 +541,12 @@ async function handler(request: Request): Promise<Response> {
     // which matters here because `strictNullChecks` is off and the missing
     // role would otherwise just be falsy in whichever direction the
     // expression happened to lean.
-    const roleOk = resource?.requiresPublishRole
-      ? hostRoleCanPublish(memberRole)
-      : hostRoleCanWrite(memberRole)
-    if (!roleOk) {
-      return Response.json({
-        error: resource?.requiresPublishRole
-          ? `Creating ${resource.label} requires a publishing role`
-          : 'Editing requires the editor role',
-      }, { status: 403 })
+    // The keys whose presets are those two sets (AGL-4047): "Publish site
+    // content" for a resource that is live once it exists, else "Edit site
+    // content", each read as the rules read it.
+    const roleKey = resource?.requiresPublishRole ? 'site.publish' : 'site.edit'
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, roleKey)) {
+      return Response.json({ error: siteKeyRefusal(roleKey) }, { status: 403 })
     }
 
     // Quota/entitlements ride the owning org's doc (AGL-238); suspension

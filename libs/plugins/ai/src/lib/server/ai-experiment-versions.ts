@@ -19,10 +19,10 @@
 // The gate carries the org verdict; the handler adds the site's own below,
 // with the host document in hand.
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   checkEntitlement,
   encodeStoredNodes,
-  hostRoleCanWrite,
 } from '@aglyn/aglyn/server'
 import { pageContentRootId } from '@aglyn/aglyn/app-utils/page-markdown'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
@@ -185,9 +185,8 @@ export async function POST(request: Request): Promise<Response> {
   if (!host || host['orgId'] !== orgId) {
     return Response.json({ error: 'Unknown site' }, { status: 404 })
   }
-  const role = ((host['memberRoles'] ?? {}) as Record<string, unknown>)[uid]
-  if (!staff && !hostRoleCanWrite(role)) {
-    return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
+  if (!staff && !holdsSiteKey(host, uid, 'site.edit')) {
+    return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
   }
   const locked = await lockdownRefusal({
     request,

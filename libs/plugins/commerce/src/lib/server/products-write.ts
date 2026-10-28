@@ -16,10 +16,9 @@
  */
 
 import { createHash } from 'node:crypto'
+import { holdsSiteKey, hostStampedSitePermission, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
-import { hostStampedSitePermission } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
@@ -61,7 +60,8 @@ import { planRefusal, roomRefusal } from './product-drafts'
 
 type Firestore = FirebaseFirestore.Firestore
 
-export const ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const ROLE_REFUSAL = siteKeyRefusal('site.edit')
 const MAX_BODY_BYTES = 256_000
 
 /** The reasons the Adjust stock dialog offers. */
@@ -124,7 +124,7 @@ export interface GatePermission {
  * reservation key, read as the rules read it, from the site's
  * `memberPermissions` stamp, else the preset of the member's `memberRoles`
  * entry, so the route and the rules give one answer. Without it, the
- * product routes still ask the content-write role.
+ * product routes ask "Edit site content" (`site.edit`) the same way.
  */
 export async function gate(
   req: Parameters<PluginApiHandler>[0],
@@ -154,7 +154,7 @@ export async function gate(
     const { permission } = options
     const allowed = permission
       ? hostStampedSitePermission(host.data(), decoded.uid, permission.key, permission.presetFor)
-      : hostRoleCanWrite((host.get('memberRoles') ?? {})[decoded.uid])
+      : holdsSiteKey(host, decoded.uid, 'site.edit')
     if (!allowed) return void res.status(403).json({ error: permission?.refusal ?? ROLE_REFUSAL }), null
   }
   const org = ((await deps.orgForHost(hostId))?.org ?? {}) as Record<string, unknown>

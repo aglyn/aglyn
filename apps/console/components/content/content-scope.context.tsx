@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   ENTRY_PUBLISH_SORT_FIELD,
   entryPublishSortStamp,
@@ -846,11 +847,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
   )
 
   /**
-   * Delete collection (AGL-1324) is admin-only, and so is the control that
-   * opens it. The route re-checks the role; this only hides a button that
-   * would 403.
+   * Delete collection (AGL-1324) asks "Manage site settings" (`site.manage`,
+   * AGL-4047), and so does the control that opens it. The route re-checks
+   * the key; this only hides a button that would 403.
    */
-  const isSiteAdmin = hostDoc?.memberRoles?.[(user as any)?.uid] === 'admin'
+  const isSiteAdmin = holdsSiteKey(hostDoc as never, (user as any)?.uid ?? '', 'site.manage')
 
   /* ── shared entry actions ──────────────────────────────────────────── */
 

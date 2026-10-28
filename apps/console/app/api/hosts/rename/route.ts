@@ -1,4 +1,5 @@
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 /**
  * @license
@@ -92,11 +93,9 @@ async function handler(request: Request): Promise<Response> {
     // Renaming changes the site's public address, so it is admin-level —
     // the same gate the rules apply to deletion, not the editor-level gate
     // that content writes use.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (decoded['staff'] !== true && memberRole !== 'admin') {
-      return Response.json({
-        error: 'Changing the subdomain requires the site admin role',
-      }, { status: 403 })
+    // "Manage site settings" (`site.manage`, AGL-4047).
+    if (decoded['staff'] !== true && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.manage')) {
+      return Response.json({ error: siteKeyRefusal('site.manage') }, { status: 403 })
     }
 
     // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct

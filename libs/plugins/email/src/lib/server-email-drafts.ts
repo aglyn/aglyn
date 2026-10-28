@@ -16,9 +16,9 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { uniqueDuplicateName } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import {
   NON_PAGE_SCREEN_MAX_PER_HOST,
   nonPageScreenIds,
@@ -99,7 +99,8 @@ export const EMAIL_DESIGN_LIMIT_REFUSAL =
   'delete some to make room'
 
 /** The resources route's refusal for a member who may not write the site. */
-export const EMAIL_DESIGN_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const EMAIL_DESIGN_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 
 /*
  * What the check renders against. No mail is sent and nothing is fetched: the
@@ -325,8 +326,7 @@ async function readScreenRows(
 }
 
 function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: EMAIL_DESIGN_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: EMAIL_DESIGN_ROLE_REFUSAL }
 }
 
 function roomRefusal(rows: ScreenRow[], host: FirebaseFirestore.DocumentSnapshot): PluginDraftRefusal | null {

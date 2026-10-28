@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   checkEntitlement,
   createResourceUid,
   decodeStoredNodes,
   encodeStoredNodes,
-  hostRoleCanWrite,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
@@ -195,13 +195,13 @@ async function handler(request: Request): Promise<Response> {
     }
     // Same role model as the rules' canWriteHostContent, and as
     // /api/hosts/resources: host member role admin/editor.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     // `author` (AGL-2334): a new version is a DRAFT. Nothing is live until
     // the parent's `versionId` points at it, and moving that pointer is
-    // exactly what the rules refuse an author.
-    if (!hostRoleCanWrite(memberRole)) {
+    // exactly what the rules refuse an author. "Edit site content"
+    // (`site.edit`, AGL-4047), read as the rules read it.
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
       return Response.json(
-        { error: 'Editing requires the editor role' },
+        { error: siteKeyRefusal('site.edit') },
         { status: 403 },
       )
     }
