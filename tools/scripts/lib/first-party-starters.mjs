@@ -190,6 +190,13 @@ function propsHolding(nodes, needle) {
  * the site's name as the token every site renders as its own, the page's
  * search title and description in words that suit any site, and the layout's
  * links to Home by slug.
+ *
+ * The nodes are the default site's exactly, NOT run through the marketplace's
+ * portable-definition sanitizer: it refuses components the default site is
+ * built from (`muiGrid`, `muiCard`, `div`, `icon`, the accordion, the theme
+ * switcher) and strips `sx` and interactions, so a sanitized copy would not be
+ * the site a new site starts as. They are the platform's own, not a
+ * publisher's, and `siteStarterRefusal` still decides that they start a site.
  */
 function starterSitePages(core) {
   const home = core.buildDefaultHomeScreen(SITE_NAME_TOKEN)

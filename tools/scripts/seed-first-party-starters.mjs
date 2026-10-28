@@ -57,7 +57,20 @@ import {
 } from './lib/first-party-starters.mjs'
 import { listingQueryFieldsPatch } from './lib/listing-query-fields.mjs'
 
+// `--org <id>` as well as the parser's own `--org=<id>`.
+const argv = []
+for (let index = 2; index < process.argv.length; index += 1) {
+  const arg = process.argv[index]
+  const next = process.argv[index + 1]
+  if (arg === '--org' && next && !next.startsWith('-')) {
+    argv.push(`--org=${next}`)
+    index += 1
+  } else {
+    argv.push(arg)
+  }
+}
 const args = parseDeployArgs({
+  argv,
   command: 'seed-first-party-starters',
   summary:
     "List the platform's own site starters in the marketplace. A dry run unless --write; " +
