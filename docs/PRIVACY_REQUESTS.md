@@ -220,6 +220,14 @@ data goes. Neither waits on Stripe: a refund Stripe refuses is raised to staff
 as a **must** operator alert, to be refunded by hand, and the erasure goes on.
 Tell the requester this when they have an order in flight.
 
+**A card reader bought in person and not yet attached (AGL-4038).** A reader
+sold at the platform's own store's register to someone with no account keeps
+the address the register took on the selling workspace's pending order until
+it is attached. Erasing an account does not reach an order that names only an
+address: find it on **Staff → Hardware orders → Sold in person, to attach**,
+open it and select **Remove buyer's details** (super or billing staff) before
+closing the request. The order and its amounts stay; the address goes.
+
 It refuses with `skippedReason: 'owns-orgs'` and a `blockers` list if they own
 a workspace. That refusal is correct — deleting a workspace as a side effect of
 closing a personal account is consent nobody gave. Tell them which orgs need

@@ -782,6 +782,12 @@ export interface PosHardwareOrder {
     taxRegion?: PosHardwareTaxRegion | null
   }
   taxCents: number
+  /**
+   * The register sale's discounts that fell on this order's lines, for an
+   * in-person order (AGL-4038): `totalCents` is the lines less this, plus
+   * the tax. Absent, and so nothing, on every online order.
+   */
+  discountCents?: number
   totalCents: number
   currency: string
   /** Whether Stripe Tax computed the tax on the checkout. Absent on orders before it was recorded. */
@@ -882,6 +888,8 @@ export interface PosHardwareSaleRecord {
   shippingMethod: PosHardwareOrderShippingMethod
   shippingCents: number
   taxCents: number
+  /** The register discount on an in-person order's lines; 0 for every online one. */
+  discountCents: number
   totalCents: number
   currency: string
   /** The sales tax sourcing input: country, state and postal code, never the street. */
@@ -1020,6 +1028,7 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     shippingMethod: order.shipping?.method ?? 'standard',
     shippingCents: order.shipping?.cents ?? 0,
     taxCents: order.taxCents ?? 0,
+    discountCents: stampOrNull(order.discountCents) ?? 0,
     totalCents: order.totalCents ?? 0,
     currency: order.currency ?? POS_HARDWARE_CURRENCY,
     shipTo: posHardwareTaxRegion(order),

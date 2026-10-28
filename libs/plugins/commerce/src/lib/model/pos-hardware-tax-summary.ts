@@ -257,3 +257,76 @@ export function posHardwareTaxSummary(
   }
   return summary
 }
+
+/*==========================================
+ * AN IN-PERSON SALE IS ON THE RETURN ONCE (AGL-4038).
+ *
+ * A card reader the platform sells at its own store's register is the
+ * platform's own hardware sale, and the hardware section counts it from its
+ * `posHardwareSales` record. A register sale paid by a payment link ALSO
+ * files a storefront tax row for the whole register sale, under the link's
+ * Checkout Session id — which the record names as `storefrontTaxRowId`. So
+ * the storefront section takes the hardware's part out of that row: what is
+ * left is the rest of the register sale, and a sale of hardware alone leaves
+ * nothing. A sale paid in cash, on a reader or offline files no storefront
+ * row, and the hardware section is its only line.
+ *
+ * Only a record the hardware section counts is taken out — a live one — so
+ * a test sale is not removed from one section without being in the other.
+ * The row is matched by its id, not by period, so a sale and its row that
+ * fall either side of a period's edge still meet.
+ *=========================================*/
+
+/** The part of a storefront row an in-person hardware record accounts for. */
+export interface PosHardwareStorefrontPart {
+  storefrontTaxRowId: string
+  /** The hardware's share of the register sale, tax included. */
+  totalCents: number
+  taxCents: number
+}
+
+/** The parts the hardware section counts, from its records. */
+export function posHardwareStorefrontParts(
+  records: ReadonlyArray<{
+    source?: unknown
+    storefrontTaxRowId?: unknown
+    totalCents?: unknown
+    taxCents?: unknown
+    livemode?: unknown
+  }>,
+): PosHardwareStorefrontPart[] {
+  return records.flatMap((record) =>
+    record.source === 'in_person' &&
+    record.livemode === true &&
+    typeof record.storefrontTaxRowId === 'string' &&
+    record.storefrontTaxRowId
+      ? [{ storefrontTaxRowId: record.storefrontTaxRowId, totalCents: cents(record.totalCents), taxCents: cents(record.taxCents) }]
+      : [],
+  )
+}
+
+/**
+ * The storefront rows with each in-person hardware part taken out: a row's
+ * receipts and tax less the hardware's, and a row left with nothing dropped.
+ * A row's stated tax lines are kept as they are: a register sale's row is a
+ * manual-rate row, which states none.
+ */
+export function storefrontRowsWithoutInPersonHardware<
+  Row extends { id: string; grossCents?: unknown; taxCents?: unknown },
+>(rows: readonly Row[], parts: readonly PosHardwareStorefrontPart[]): Row[] {
+  const byRow = new Map<string, { totalCents: number; taxCents: number }>()
+  for (const part of parts) {
+    const held = byRow.get(part.storefrontTaxRowId) ?? { totalCents: 0, taxCents: 0 }
+    byRow.set(part.storefrontTaxRowId, {
+      totalCents: held.totalCents + part.totalCents,
+      taxCents: held.taxCents + part.taxCents,
+    })
+  }
+  return rows.flatMap((row) => {
+    const part = byRow.get(row.id)
+    if (!part) return [row]
+    const gross = cents(row.grossCents) - part.totalCents
+    if (gross <= 0) return []
+    return [{ ...row, grossCents: gross, taxCents: Math.max(0, cents(row.taxCents) - part.taxCents) }]
+  })
+}

@@ -48,6 +48,7 @@ import { holdsPosPermission, posPermissionRefusal } from '../model/plugin-permis
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { notifyPosSaleCompleted } from './pos-sale'
 import { posSaleStamp } from './pos-sale-stamp'
+import { posHardwareSaleFields } from './pos-hardware-sale-fields'
 import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { posKioskPrincipal } from './pos-kiosk-principal'
@@ -341,6 +342,15 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (lineItems.length === 0) {
       return res.status(400).json({ error: 'No valid lines' })
     }
+    // A sale of card readers on the platform's own store (AGL-4038) is
+    // marked from the moment it is written, so its hardware order is
+    // recorded once it is paid even if the completion listener misses it.
+    const hardwareFields = posHardwareSaleFields({
+      hostId,
+      orgId: String(ownerOrg?.org?.id ?? ownerOrg?.orgId ?? ''),
+      lineItems,
+      products: productsById,
+    })
     // WHAT THE COUNT SAYS, said out loud (AGL-2357). Every storefront door
     // gates on `canPurchase`; a register that skips it silently downgrades a
     // merchant's `oversellPolicy: 'deny'` to `backorder` at the till.
@@ -808,6 +818,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           registerId,
           cashierId: saleStamp.cashierId,
           ...saleStamp.fields,
+          ...hardwareFields,
           ...(discountPct > 0 ? { discountPct, discountBy: saleStamp.cashierId } : {}),
           // The slot stays HELD until the sale completes, and is settled or
           // handed back by `pos-sale.ts` (AGL-305): a sale voided half-paid
@@ -881,6 +892,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           registerId,
           cashierId: saleStamp.cashierId,
           ...saleStamp.fields,
+          ...hardwareFields,
           // WHO COMPED IT (AGL-2161). `totals.discountCents` recorded that
           // a discount happened and nothing recorded who asked for it or on
           // what basis — `decoded.uid` was read once, for the role gate, and
@@ -1144,6 +1156,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // reads the same as a split one rather than by inference.
         cashierId: saleStamp.cashierId,
         ...saleStamp.fields,
+        ...hardwareFields,
         payments: [
           {
             id: `pay_${payment}`,

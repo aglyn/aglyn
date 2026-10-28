@@ -408,6 +408,22 @@ export interface OrderCredit {
   appliedAs: 'discount' | 'tender'
 }
 
+/**
+ * The buyer a register user attached to a sale of point of sale hardware on
+ * the platform's own store (AGL-4038): an account the lookup found and the
+ * workspace (and store, when they chose one) the hardware is for, or an
+ * address for someone with no account yet, invited to sign up.
+ */
+export interface OrderHardwareBuyer {
+  uid: string | null
+  orgId: string | null
+  hostId: string | null
+  email: string | null
+  /** The register user who attached them, and when. */
+  attachedBy: string
+  attachedAtMs: number
+}
+
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
@@ -480,6 +496,17 @@ export interface HostOrder {
    */
   posSource?: 'kiosk'
   kioskDeviceId?: string
+  /**
+   * A register sale on the platform's own store that sold point of sale
+   * hardware (AGL-4038): set when the sale is written, cleared once its
+   * hardware order is recorded, so a sale whose recording was missed is
+   * found again rather than lost.
+   */
+  hardwareSalePending?: boolean
+  /** The hardware order the sale became (`orgs/{orgId}/hardwareOrders/{id}`). */
+  hardwareOrderId?: string
+  /** Whose the sale's hardware is, as the register attached them (AGL-4038). */
+  hardwareBuyer?: OrderHardwareBuyer
   /**
    * Set while a kiosk order waits in its register's queue for a cashier to
    * take payment ("Pay at counter"), and when it joined.
