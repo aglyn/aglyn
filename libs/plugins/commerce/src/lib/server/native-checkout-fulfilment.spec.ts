@@ -375,6 +375,8 @@ beforeEach(() => {
   docs.set('hosts/host-1/products/product-1', {
     name: 'Monthly box',
     type: 'physical',
+    // Live and for sale online: checkout asks productListedOnline (AGL-4060).
+    status: 'active',
     variants: [
       { id: 'large', priceUsd: 15, sku: 'BOX-L', inventory: 10, weightGrams: 400 },
     ],
@@ -451,6 +453,7 @@ describe('the webhook fulfils a Payment Element sale with no client at all', () 
     docs.set('hosts/host-1/products/product-1', {
       name: 'Monthly box',
       type: 'physical',
+      status: 'active',
       variants: [
         { id: 'large', priceUsd: 15, sku: 'BOX-L', inventory: 10, weightGrams: 400 },
       ],

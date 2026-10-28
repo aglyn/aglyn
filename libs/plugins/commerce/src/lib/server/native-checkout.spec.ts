@@ -255,6 +255,8 @@ function seedStore() {
   docs.set('hosts/host-1/products/product-1', {
     name: 'Widget',
     type: 'physical',
+    // Live and for sale online: Buy now asks productListedOnline (AGL-4060).
+    status: 'active',
     priceUsd: 25,
     variants: [{ id: 'v1', priceUsd: 25, stock: 100, weightGrams: 400 }],
   })
