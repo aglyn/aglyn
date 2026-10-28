@@ -33,6 +33,11 @@ import {
   firebaseAdmin,
   registerOrgHost,
 } from '@aglyn/tenant-data-admin'
+import {
+  queueSiteStarterWrites,
+  siteStarterWrites,
+  type SiteStarterInstall,
+} from '@aglyn/tenant-data-admin/server/provision-starter'
 
 /**
  * The two steps that actually provision a site, shared by the console's
@@ -115,8 +120,12 @@ export interface ClaimHostInput {
    * guided start for it, through `provisionStarterSite`. The theme and the
    * site-wide SEO are written either way — a site with a theme and a
    * description is no less blank, and the guided start keeps both.
+   *
+   * A starter picked from the marketplace (AGL-4049) is passed as itself:
+   * the site is born with that starter's pages, layout and theme instead of
+   * the default site, in the same transaction.
    */
-  starter?: boolean
+  starter?: boolean | SiteStarterInstall
 }
 
 /**
@@ -333,12 +342,18 @@ export async function claimHostForOrg(
   const { firestore, orgId, displayName, subdomain, org } = input
   const starter = input.starter !== false
   const hostId = createResourceUid()
+  const install =
+    input.starter && typeof input.starter === 'object'
+      ? siteStarterWrites(input.starter)
+      : null
   const preCount = (
     await firestore.collection('hosts').where('orgId', '==', orgId).count().get()
   ).data().count
   const orgRef = firestore.collection('orgs').doc(orgId)
   const hostRef = firestore.collection('hosts').doc(hostId)
-  const home = defaultSiteWrites(displayName)
+  // The default site's documents, or none for a site born from a picked
+  // starter, whose own replace them.
+  const home = install ? null : defaultSiteWrites(displayName)
   // Annotated rather than inferred. The body has three exits and an inferred
   // union of object literals does not narrow reliably with `strictNullChecks`
   // off — the same reason `ClaimHostResult` is one interface with optional
@@ -389,18 +404,33 @@ export async function claimHostForOrg(
       // the site's first request, where an empty map answered with the 404.
       // A site born for the guided start (AGL-3594) has no page yet, and the
       // tenant answers its `/` with a holding page until it does.
-      screens: starter ? { [home.screenId]: home.path } : {},
+      // A picked starter routes every page it publishes (AGL-4049).
+      screens: install
+        ? install.routing
+        : starter
+          ? { [home.screenId]: home.path }
+          : {},
       // Which screen is the platform's placeholder rather than the owner's
       // page. A starter applied later may take `/` from it, and the
       // `first_publish` dimension does not count it — never any other screen.
       // Cleared the moment a starter takes the root, or the owner publishes
       // this page themselves (AGL-3478).
-      ...(starter ? { defaultHomeScreenId: home.screenId } : {}),
+      // A picked starter's Home is the placeholder in the same sense.
+      ...(install
+        ? install.homeScreenId
+          ? { defaultHomeScreenId: install.homeScreenId }
+          : {}
+        : starter
+          ? { defaultHomeScreenId: home.screenId }
+          : {}),
       // Born themed and described (AGL-3497): the site's own theme, so the
       // theme library files it as "Site theme", and the site-wide title,
       // description and sharing image a search result or a shared link shows.
-      theme: home.host.theme,
-      seo: home.host.seo,
+      // A picked starter's theme is planned against this empty host
+      // (`planSiteStarterTheme`): the built-in or full theme it names, its
+      // brand and fonts as the override, and the library entry it files.
+      ...(install ? install.host : { theme: home.host.theme }),
+      seo: install ? defaultSiteSeo(displayName) : home.host.seo,
       /*
        * A new site starts with User Accounts ON. The catalog still marks
        * `accounts` default-off per site, so a host doc with no opt-in list —
@@ -421,7 +451,8 @@ export async function claimHostForOrg(
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
-    if (starter) queueStarterPages(tx, hostRef, hostId, home)
+    if (install) queueSiteStarterWrites(tx, hostRef, hostId, install)
+    else if (starter) queueStarterPages(tx, hostRef, hostId, home)
     // The claim itself. `set(…, { merge: true })` deep-merges the map, so this
     // adds one key without disturbing the org's other fields — and it is what
     // makes a concurrent create see this site on its retry. `registerOrgHost`

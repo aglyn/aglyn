@@ -16,6 +16,7 @@
  */
 
 import {
+  checkQuota,
   pluginRequestFromWeb,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
@@ -31,6 +32,7 @@ import {
   firebaseAdmin,
   freeWorkspaceCapRefusalResponse,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   lockdownRefusal,
   logHostActivity,
   memberHasOrgPermission,
@@ -45,6 +47,17 @@ import {
   resumeUnfinishedCreate,
 } from '../../../../utils/server/provision-host'
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
+import {
+  resolveSiteStarterSource,
+  type PluginSiteStarterSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
+import type { SiteStarterPayload } from '@aglyn/aglyn/app-utils/site-starter'
+import {
+  readSiteStarterChoice,
+  siteStarterPickRefusal,
+  type SiteStarterInstall,
+} from '@aglyn/tenant-data-admin/server/provision-starter'
 import { reportServerError } from '../../../../utils/report-server-error'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
@@ -85,6 +98,14 @@ async function handler(request: Request): Promise<Response> {
   // Shared reserved + profanity policy (AGL-147).
   if (isBlockedSubdomain(subdomain)) {
     return Response.json({ error: 'That subdomain is not available' }, { status: 409 })
+  }
+  // A starter picked before the site exists (AGL-4049): a listing, and the
+  // version it pins. Absent, the create decides as before; present but not a
+  // pick, it is refused like any other malformed field.
+  const starterChoice =
+    body?.starter == null ? null : readSiteStarterChoice(body.starter)
+  if (body?.starter != null && !starterChoice) {
+    return Response.json({ error: 'Unknown starter' }, { status: 400 })
   }
 
   const authorization = headers.authorization ?? ''
@@ -227,6 +248,57 @@ async function handler(request: Request): Promise<Response> {
     })
     if (locked) return locked
 
+    // The picked starter, resolved before anything is spent (AGL-4049):
+    // after the 401/403/423 refusals and before the rate limiter, so a
+    // refused pick burns no token, and before the claim, so no site exists
+    // for one. A 402 answers with the listing and its price; once bought, the
+    // same request again creates the site.
+    let starterInstall: SiteStarterInstall | null = null
+    let starterSource: PluginSiteStarterSource | null = null
+    if (starterChoice) {
+      if (
+        decoded['staff'] !== true &&
+        !(await isServerReleaseFlagOnForOrg('release_site_starters', orgMembership.orgId))
+      ) {
+        return Response.json(
+          { error: 'Site starters are not available for this workspace yet' },
+          { status: 403 },
+        )
+      }
+      // The starters are a plugin's (core names the seam), registered by
+      // its server declarations; memoized, so this is the boot's work once.
+      await registerPluginServerDeclarations().catch((error: unknown) => {
+        console.error('[hosts/create] plugin declarations failed', error)
+      })
+      starterSource = resolveSiteStarterSource()
+      if (!starterSource) {
+        return Response.json(
+          { error: 'Starters are unavailable right now. Try again in a moment.' },
+          { status: 503 },
+        )
+      }
+      const resolved = await starterSource.resolve(starterChoice, {
+        orgId: orgMembership.orgId,
+        uid: decoded.uid,
+      })
+      const refused = siteStarterPickRefusal(resolved, {
+        listingId: starterChoice.listingId,
+        pagesAllowed: checkQuota(org as never, 'screensPerHost', 0).limit,
+      })
+      if (refused) return Response.json(refused.body, { status: refused.status })
+      starterInstall = {
+        payload: resolved as SiteStarterPayload,
+        // The source answers with a payload and no listing name, and a name
+        // the client sent is not trusted, so the library entry a full theme
+        // files is named "Starter theme" until this route reads the listing.
+        listing: {
+          listingId: starterChoice.listingId,
+          version: starterChoice.version ?? 'latest',
+          displayName: 'Starter',
+        },
+      }
+    }
+
     // Rate limit (AGL-1968) — the always-on layer under the hostLimit quota.
     // `*.aglyn.app` is ONE global namespace shared by every customer, so a
     // subdomain someone squats is gone for everybody. The quota below bounds
@@ -296,7 +368,10 @@ async function handler(request: Request): Promise<Response> {
     // A person who chose the starter in "Create site"'s start (AGL-3761) asked
     // for it before the site existed, so it is born with it, in the same
     // transaction, and is not offered the start again.
-    const starterChosen = body?.start === 'starter'
+    //
+    // A starter picked from the marketplace (AGL-4049) is a choice too, the
+    // more specific one: the site is born with that starter instead.
+    const starterChosen = body?.start === 'starter' || starterChoice !== null
     const guidedStart =
       !starterChosen &&
       (await guidedStartOffered({
@@ -312,7 +387,7 @@ async function handler(request: Request): Promise<Response> {
       displayName,
       subdomain,
       org,
-      starter: !guidedStart,
+      starter: starterInstall ?? !guidedStart,
     })
     // Lost the subdomain to a concurrent create between the pre-check above
     // and the transaction's commit (AGL-2465). The console has no idempotency
@@ -346,6 +421,15 @@ async function handler(request: Request): Promise<Response> {
       'Created the site',
       { type: 'host', id: hostId, name: displayName },
     )
+    // The starter's listing counts the install. Best-effort by contract; a
+    // throw is caught anyway, since the site already exists.
+    if (starterInstall && starterSource?.installed) {
+      await starterSource
+        .installed(starterChoice, { orgId: orgMembership.orgId, uid: decoded.uid }, { hostId })
+        .catch((error: unknown) => {
+          console.error('[hosts/create] starter install count failed', error)
+        })
+    }
     // A workspace provisioned on the way here is announced exactly as one
     // made through `/api/orgs/create` is (AGL-3491): this is the door a
     // brand-new account most often takes, and it used to welcome nobody and
@@ -373,7 +457,11 @@ async function handler(request: Request): Promise<Response> {
       subdomain,
       orgSlug,
       createdBy: actorEmail,
-      start: guidedStart ? 'guided-ai' : 'starter',
+      start: guidedStart
+        ? 'guided-ai'
+        : starterInstall
+          ? 'marketplace-starter'
+          : 'starter',
     })
     // No starter seeding here (AGL-687). Starters render from the code
     // definitions and are copied in only when a user uses or edits one, so a
@@ -400,6 +488,15 @@ async function handler(request: Request): Promise<Response> {
         // and the caller emits it through the same consent-gated transport as
         // every other event.
         orgCreated: orgMembership.created === true,
+        // The starter the site was created from (AGL-4049), when one was picked.
+        ...(starterChoice
+          ? {
+              starter: {
+                listingId: starterChoice.listingId,
+                version: starterChoice.version ?? null,
+              },
+            }
+          : {}),
       },
       { status: 200 },
     )

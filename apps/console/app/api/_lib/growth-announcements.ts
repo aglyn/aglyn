@@ -301,8 +301,12 @@ export interface NewSiteAnnouncement {
   orgSlug: string | null
   /** Who made it: an address for a console session, a label for an API key. */
   createdBy: string | null
-  /** How it was started: the guided AI start, a starter design, the API, or a create that was resumed. */
-  start?: 'guided-ai' | 'starter' | 'api' | 'resumed'
+  /**
+   * How it was started: the guided AI start, a starter design, a starter
+   * picked from the marketplace (AGL-4049), the API, or a create that was
+   * resumed.
+   */
+  start?: 'guided-ai' | 'starter' | 'marketplace-starter' | 'api' | 'resumed'
 }
 
 /**
@@ -352,11 +356,13 @@ export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> 
                 ? 'The guided AI start'
                 : start === 'starter'
                   ? 'A starter design'
-                  : start === 'api'
-                    ? 'The API'
-                    : start === 'resumed'
-                      ? 'A create that was resumed'
-                      : null,
+                  : start === 'marketplace-starter'
+                    ? 'A starter from the marketplace'
+                    : start === 'api'
+                      ? 'The API'
+                      : start === 'resumed'
+                        ? 'A create that was resumed'
+                        : null,
           },
           { label: 'Created by', value: createdBy },
           { label: 'How they found us', value: acquisition ? describeAccountAcquisition(acquisition, { primaryHost: homeHost() }) : null },
