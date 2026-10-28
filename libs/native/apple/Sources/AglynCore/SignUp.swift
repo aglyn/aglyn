@@ -160,7 +160,8 @@ public enum WorkspaceName {
   public static let reserved: Set<String> = [
     "www", "app", "api", "admin", "console", "mail", "demo", "staging", "dev", "test", "docs", "blog", "help",
     "support", "status", "cdn", "assets", "static", "ftp", "smtp", "ns1", "ns2", "aglyn", "billing", "account",
-    "login", "signup", "auth", "staff", "org", "orgs", "workspace", "kiosk",
+    "login", "signup", "auth", "accounts", "signin", "sso", "secure", "verify", "portal", "webmail", "imap", "mx",
+    "com", "net", "staff", "org", "orgs", "workspace", "kiosk",
   ]
   /// `BLOCKED_FRAGMENTS`, refused as substrings.
   static let blockedFragments = ["fuck", "shit", "cunt", "nigger", "faggot", "bitch", "porn", "nazi"]
