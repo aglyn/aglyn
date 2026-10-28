@@ -59,6 +59,7 @@ import { publishDatasetSchemaHandler } from './server/publish-dataset-schema'
 import { publishEmailStarterHandler } from './server/publish-email-starter'
 import { publishEmailTemplateHandler } from './server/publish-email-template'
 import { publishLayoutHandler } from './server/publish-layout'
+import { publishStarterHandler } from './server/publish-starter'
 import { publishTemplateHandler } from './server/publish-template'
 import { publishThemeHandler } from './server/publish-theme'
 import { updateArtifactHandler } from './server/update-artifact'
@@ -200,6 +201,8 @@ export function registerMarketplaceConsoleApi(): void {
   )
   registerPluginApiRoute('marketplace/publish-layout', publishLayoutHandler)
   registerPluginApiRoute('marketplace/publish-template', publishTemplateHandler)
+  // A whole site as a site starter, picked in "Create site" (AGL-4049).
+  registerPluginApiRoute('marketplace/publish-starter', publishStarterHandler)
   registerPluginApiRoute('marketplace/publish-theme', publishThemeHandler)
   registerPluginApiRoute(
     'marketplace/publish-dataset-schema',
