@@ -76,10 +76,6 @@
       "kind": "exception",
       "note": "Changing the workspace URL and transferring ownership are the owner’s."
     },
-    "apps/console/app/api/presence/token/route.ts": {
-      "count": 3,
-      "kind": "pending"
-    },
     "apps/console/app/api/resources/erase/route.ts": {
       "count": 2,
       "kind": "pending"
@@ -404,10 +400,6 @@
     },
     "libs/plugins/zapier/src/lib/server/console-hooks.ts": {
       "count": 1,
-      "kind": "pending"
-    },
-    "libs/tenant/data/admin/src/lib/server/edit-access-authz.ts": {
-      "count": 3,
       "kind": "pending"
     },
     "libs/tenant/data/admin/src/lib/server/notifications.ts": {

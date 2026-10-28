@@ -101,7 +101,7 @@ Four permissions decide what someone may do on a site:
 
 | Permission | What it opens | Admin | Editor | Author | Viewer |
 |---|---|---|---|---|---|
-| **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live | Yes | Yes | Yes | No |
+| **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live; edit alongside others in the Besigner, and open the edit bar on the live site | Yes | Yes | Yes | No |
 | **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
 | **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns, and set up its webhooks | Yes | Yes | No | No |
 | **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings and security allow-lists, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
@@ -109,8 +109,10 @@ Four permissions decide what someone may do on a site:
 Each starts from the member's role on the site, the columns above, so nobody's access
 changed when they became permissions. Owners and admins are admins of every site, and
 someone whose access to one site differs from their workspace role starts from their
-access there. A custom role or a per-member override can then grant or deny any of
-them, and it applies on every site the member can reach. For someone added to one site
+access there. An editor of the whole workspace given **Viewer** access to one site, for
+example, can't edit alongside others on that site or open its edit bar unless the site
+grants them **Edit site content**. A custom role or a per-member override can then grant
+or deny any of them, and it applies on every site the member can reach. For someone added to one site
 only, set them for that site in its **Users** card: choose **Permissions** beside them.
 
 ### Order permissions {#order-permissions}

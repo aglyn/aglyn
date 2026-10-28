@@ -17,9 +17,12 @@
 
 import {
   type AglynOrgMember,
-  hostRoleCanWrite,
+  holdsSiteKey,
   hostRoleFor,
   isOrgWideMember,
+  resolveOrgPermissions,
+  resolveSiteRolePresetPermissions,
+  siteKeyRefusal,
 } from '@aglyn/aglyn/server'
 import type { DocumentSnapshot, Firestore } from 'firebase-admin/firestore'
 import { lockdownRefusal } from './lockdown'
@@ -108,35 +111,30 @@ export async function hostContentEditRefusal(options: {
     return Response.json({ error: 'Not a member of this site' }, { status: 403 })
   }
 
-  // A roster row proves membership of the ORG, not reach to this host. The
-  // roster holds site collaborators too, and one can carry the org role
-  // `editor` with `allHosts: false` and a `hostAccess` map naming only their
-  // own sites — so the org-role arm counts only when the member is org-wide,
-  // exactly as the presence broker asks it (AGL-1881). Otherwise that
-  // collaborator would be minted a token for every site in the org, and the
-  // bar would show them another site's screens and today's traffic
-  // (AGL-3062).
-  //
-  // `hostRoleFor` reads `hostAccess`/`allHosts` for this host, and
-  // `isOrgWideMember` sits beside it for the one shape the two read
-  // differently: a pre-`allHosts` row with no `hostAccess` is org-wide, and
-  // `hostRoleFor` alone would lock that member out of their own sites.
-  const member = (membership.data() ?? {}) as Partial<AglynOrgMember>
-  const orgRole = member.role
-  const hostRole = ((host.get('memberRoles') ?? {}) as Record<string, string>)[
-    uid
-  ]
-  // `author` (AGL-2334) — the edit-bar entry token. Same reasoning as the
-  // presence broker: this buys entry to the editor, and an author's whole
-  // purpose is to be in it. What they cannot do once inside is enforced by
-  // the rules on the publish fields.
+  // "Edit site content" (`site.edit`, AGL-4047) on THIS site decides, resolved
+  // fresh from the membership: its preset is the member's role on the site
+  // (`hostRoleFor`, so a collaborator scoped to other sites reaches nothing
+  // here, AGL-3062), then their custom role, their own permissions and the
+  // site's toggle for them. A workspace editor given Viewer access to this
+  // site is refused unless the site grants them the key; an author, whose
+  // whole purpose is to be in the editor, holds it. What they cannot do once
+  // inside is enforced by the rules on the publish fields.
+  const member = (membership.data() ?? {}) as Partial<AglynOrgMember> & { roleId?: string }
+  const customRole = member.roleId
+    ? ((await firestore.collection('orgs').doc(orgId).collection('roles').doc(member.roleId).get()).data() ?? null)
+    : null
+  // Beside it, two arms that keep every member who reached the editor before
+  // in it, both on the key: the site's own stamp (a grant the host's
+  // `memberRoles` carries), and, for a workspace member the site role cannot
+  // place at all (the legacy row with neither `allHosts` nor `hostAccess`,
+  // which `isOrgWideMember` reads as workspace-wide so it is not locked out of
+  // its own workspace), their workspace verdict for the key.
   const canEdit =
-    hostRoleCanWrite(hostRole) ||
-    hostRoleCanWrite(hostRoleFor(member, host.id)) ||
-    (isOrgWideMember(member) &&
-      (orgRole === 'owner' || orgRole === 'admin' || orgRole === 'editor'))
+    holdsSiteKey(host, uid, 'site.edit') ||
+    resolveSiteRolePresetPermissions(member, host.id, customRole)['site.edit'] === true ||
+    (isOrgWideMember(member) && !hostRoleFor(member, host.id) && resolveOrgPermissions(member, customRole)['site.edit'] === true)
   if (!canEdit) {
-    return Response.json({ error: 'No edit access' }, { status: 403 })
+    return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
   }
 
   // Host doc already in hand; the org scope rides the member doc's

@@ -187,3 +187,56 @@ describe('the edit-access mint gate decides reach to this host (AGL-3062)', () =
     ).resolves.toBe(403)
   })
 })
+
+/**
+ * "Edit site content" decides the edit bar, per site (AGL-4047): the owner's
+ * call was that the permission decides, so a workspace editor given Viewer
+ * access to this site is refused unless the site grants them the key.
+ */
+describe('a site’s "Edit site content" decides the edit-access token (AGL-4047)', () => {
+  const NARROWED = { role: 'editor', allHosts: true, hostAccess: { [HOST]: 'viewer' } }
+
+  beforeEach(() => {
+    mockFlagOn = true
+    mockLockdownResponse = null
+  })
+
+  it('refuses a workspace editor narrowed to Viewer here, naming the permission', async () => {
+    await expect(verdict(NARROWED, { [UID]: 'viewer' })).resolves.toBe(403)
+    const refusal = await editAccessMintRefusal({
+      request: new Request('https://this-site.aglyn.app/api/edit-access/exchange', { method: 'POST' }),
+      firestore: firestoreWithMember(NARROWED),
+      host: snapshot(HOST, { orgId: ORG, memberRoles: { [UID]: 'viewer' } }),
+      orgId: ORG,
+      uid: UID,
+    })
+    await expect(refusal?.json()).resolves.toEqual({
+      error: 'Your role does not include "Edit site content" — ask an organization admin',
+    })
+  })
+
+  it('admits them once the site grants the key, on their member document or in its stamp', async () => {
+    await expect(
+      verdict({ ...NARROWED, hostPermissions: { [HOST]: { 'site.edit': true } } }, { [UID]: 'viewer' }),
+    ).resolves.toBe('admitted')
+    const stamped = await editAccessMintRefusal({
+      request: new Request('https://this-site.aglyn.app/api/edit-access/exchange', { method: 'POST' }),
+      firestore: firestoreWithMember(NARROWED),
+      host: snapshot(HOST, {
+        orgId: ORG,
+        memberRoles: { [UID]: 'viewer' },
+        memberPermissions: { [UID]: { 'site.edit': true } },
+      }),
+      orgId: ORG,
+      uid: UID,
+    })
+    expect(stamped).toBeNull()
+  })
+
+  it('admits a workspace editor narrowed to Author here, as an author', async () => {
+    await expect(verdict({ ...NARROWED, hostAccess: { [HOST]: 'author' } }, { [UID]: 'author' })).resolves.toBe(
+      'admitted',
+    )
+  })
+})
+
