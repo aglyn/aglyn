@@ -192,6 +192,15 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // Commerce's order keys (AGL-4047): the order routes ask "Manage orders"
   // and the gift cards route "Issue gift cards" through `holdsCommerceSiteKey`.
   'commerce.orders': ["'commerce.orders'"],
+  // Workspace acts that asked for roles (AGL-4047): `/api/orgs/export-data`,
+  // `/api/email/sending-domains`, the rules' business profile write, the
+  // media scope and the rules' workspace media library, and the erase
+  // route's workspace records.
+  'org.export': ["'org.export'"],
+  'org.sendingDomains': ["'org.sendingDomains'"],
+  'org.businessProfile': ["'org.businessProfile'"],
+  'org.media': ["'org.media'"],
+  'org.eraseRecords': ["'org.eraseRecords'"],
   'commerce.giftCards': ["'commerce.giftCards'"],
 }
 
@@ -235,7 +244,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(23)
+    expect(CATALOG.length).toBe(28)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

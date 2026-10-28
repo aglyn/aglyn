@@ -92,11 +92,12 @@ const SITE_KEYS_FOR = {
 describe('the org catalog carries the keys plugins declare', () => {
   it('lists them after the core keys, in plugin order, with their owner', () => {
     const keys = [...ORG_PERMISSION_KEYS]
-    // The seventeen core keys first (AGL-4047 added three, then the four site keys).
-    expect(keys.slice(0, 17)).not.toContain('reviews.reply')
+    // The twenty-two core keys first (AGL-4047 added three, the four site
+    // keys, then five workspace keys).
+    expect(keys.slice(0, 22)).not.toContain('reviews.reply')
     // Neither plugin is first-party, so they order by id.
-    expect(keys.slice(17)).toEqual(['bookings.refund', 'reviews.reply', 'reviews.export'])
-    expect(pluginOrgPermissionKeys()).toEqual(keys.slice(17))
+    expect(keys.slice(22)).toEqual(['bookings.refund', 'reviews.reply', 'reviews.export'])
+    expect(pluginOrgPermissionKeys()).toEqual(keys.slice(22))
     expect(ORG_PERMISSIONS.find((entry) => entry.key === 'reviews.reply')).toMatchObject({
       label: 'Reply to reviews',
       pluginId: 'acme-reviews',
@@ -133,7 +134,7 @@ describe('the org catalog carries the keys plugins declare', () => {
 
   it('a key never outlives its registration', () => {
     resetPluginEntitlementsForTests()
-    expect(ORG_PERMISSION_KEYS).toHaveLength(17)
+    expect(ORG_PERMISSION_KEYS).toHaveLength(22)
     expect(DEFAULT_ROLE_PERMISSIONS.editor['reviews.reply']).toBeUndefined()
     // The core's site keys stay (AGL-4047); a plugin's go with it.
     expect(hostPermissionKeys()).toEqual(['site.edit', 'site.publish', 'site.sensitive', 'site.manage'])

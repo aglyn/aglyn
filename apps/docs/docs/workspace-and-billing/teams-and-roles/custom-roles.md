@@ -95,6 +95,21 @@ opens the register to sell and nothing else; allowing **Use the point of sale** 
 back the whole register, as far as their workspace role and custom role allow it.
 Everything else about them is still set on their Team page.
 
+### Workspace permissions {#workspace-permissions}
+
+Five more workspace actions have a permission each, so a custom role or a per-member
+override can hand one to someone outside the roles that held it, or take it away:
+
+| Permission | What it opens | Owner / Admin | Editor | Viewer |
+|---|---|---|---|---|
+| **Export workspace data** (`org.export`) | Download a copy of everything the workspace holds | Yes | No | No |
+| **Sending domains** (`org.sendingDomains`) | Add, verify and remove the domains the workspace's mail is sent from | Yes | No | No |
+| **Business profile** (`org.businessProfile`) | Change the services, audience and tone every site starts from | Yes | No | No |
+| **Edit the workspace media library** (`org.media`) | Upload, change, move and remove the files every site shares | Yes | Yes | No |
+| **Delete workspace records** (`org.eraseRecords`) | Delete records the whole workspace shares | Yes | Yes | No |
+
+Each starts with exactly the roles that could do it before, so nobody's access changed.
+
 ### Site permissions {#site-permissions}
 
 Four permissions decide what someone may do on a site:
