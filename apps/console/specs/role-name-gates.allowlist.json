@@ -6,10 +6,6 @@
       "kind": "exception",
       "note": "The Ownership and Delete sections are the owner’s: transferring and deleting the workspace are ownership itself."
     },
-    "apps/console/app/(app)/[orgSlug]/settings/(sections)/profile/page.tsx": {
-      "count": 1,
-      "kind": "pending"
-    },
     "apps/console/app/(app)/[orgSlug]/team/[uid]/page.tsx": {
       "count": 3,
       "kind": "not-a-gate",
@@ -35,10 +31,6 @@
       "kind": "not-a-gate",
       "note": "Validates the default role an SSO connection assigns."
     },
-    "apps/console/app/api/email/sending-domains/route.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "apps/console/app/api/email/sending-identity/route.ts": {
       "count": 1,
       "kind": "pending"
@@ -57,10 +49,6 @@
       "count": 2,
       "kind": "pending"
     },
-    "apps/console/app/api/orgs/export-data/route.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "apps/console/app/api/orgs/invites/route.ts": {
       "count": 6,
       "kind": "exception",
@@ -75,10 +63,6 @@
       "count": 2,
       "kind": "exception",
       "note": "Changing the workspace URL and transferring ownership are the owner’s."
-    },
-    "apps/console/app/api/resources/erase/route.ts": {
-      "count": 2,
-      "kind": "pending"
     },
     "apps/console/components/member-permissions-editor.component.tsx": {
       "count": 1,
@@ -120,17 +104,13 @@
       "kind": "not-a-gate",
       "note": "Picks who a lockdown notice is mailed to."
     },
-    "apps/console/utils/server/media-scope.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "apps/tenant/app/api/health/funnel/funnel-probe.ts": {
       "count": 1,
       "kind": "not-a-gate",
       "note": "The health probe picks a member of its own test site."
     },
     "cloud/firebase-firestore.deploy.rules": {
-      "count": 79,
+      "count": 76,
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-job-import-step.ts": {

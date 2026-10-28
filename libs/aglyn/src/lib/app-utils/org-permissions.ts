@@ -53,6 +53,11 @@ export type CoreOrgPermission =
   | 'org.apiKeys'
   | 'org.privacy'
   | 'org.holds'
+  | 'org.export'
+  | 'org.sendingDomains'
+  | 'org.businessProfile'
+  | 'org.media'
+  | 'org.eraseRecords'
   | 'billing.view'
   | 'billing.manage'
   | 'members.manage'
@@ -525,6 +530,15 @@ export function orgPermissionLabel(permission: OrgPermission): string {
     ORG_PERMISSIONS.find((definition) => definition.key === permission)?.label ??
     permission
   )
+}
+
+/**
+ * The sentence a door answers when a member does not hold a key (AGL-4047):
+ * it names the permission by its catalog label and who can change it, never
+ * a role.
+ */
+export function permissionRefusalText(permission: OrgPermission): string {
+  return `Your role does not include "${orgPermissionLabel(permission)}" — ask an organization admin`
 }
 
 /** The keys plugins declared into the catalog, in catalog order. */

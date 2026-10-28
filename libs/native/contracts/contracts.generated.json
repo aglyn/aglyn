@@ -7339,6 +7339,9 @@
         "org.apiKeys",
         "org.privacy",
         "org.holds",
+        "org.export",
+        "org.sendingDomains",
+        "org.businessProfile",
         "billing.view",
         "billing.manage",
         "members.manage",
@@ -7349,6 +7352,8 @@
         "site.sensitive",
         "site.manage",
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
@@ -7371,6 +7376,8 @@
       ],
       "editor": [
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "site.edit",
@@ -7398,6 +7405,9 @@
         "org.apiKeys",
         "org.privacy",
         "org.holds",
+        "org.export",
+        "org.sendingDomains",
+        "org.businessProfile",
         "billing.view",
         "billing.manage",
         "members.manage",
@@ -7408,6 +7418,8 @@
         "site.sensitive",
         "site.manage",
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
@@ -7512,6 +7524,24 @@
         "label": "Holds and reviews"
       },
       {
+        "description": "Download a copy of everything the workspace holds.",
+        "group": "organization",
+        "key": "org.export",
+        "label": "Export workspace data"
+      },
+      {
+        "description": "Add, verify and remove the domains the workspace’s mail is sent from.",
+        "group": "organization",
+        "key": "org.sendingDomains",
+        "label": "Sending domains"
+      },
+      {
+        "description": "Change the services, audience and tone every site starts from.",
+        "group": "organization",
+        "key": "org.businessProfile",
+        "label": "Business profile"
+      },
+      {
         "description": "See the plan, usage meters, and invoices.",
         "group": "billing",
         "key": "billing.view",
@@ -7574,6 +7604,18 @@
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
+      },
+      {
+        "description": "Upload, change, move and remove the files in the media library every site shares.",
+        "group": "datasets",
+        "key": "org.media",
+        "label": "Edit the workspace media library"
+      },
+      {
+        "description": "Delete records the whole workspace shares, such as dataset rows, contacts and lists.",
+        "group": "datasets",
+        "key": "org.eraseRecords",
+        "label": "Delete workspace records"
       },
       {
         "description": "Publish listings under the organization profile.",

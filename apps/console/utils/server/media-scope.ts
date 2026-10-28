@@ -33,9 +33,10 @@ import {
   lockdownJsonResponse,
   type LockdownVerdictOptions,
   mediaStoragePathInScope,
+  memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import type { LockdownFeatureKey } from '@aglyn/aglyn/server'
+import { permissionRefusalText, type LockdownFeatureKey } from '@aglyn/aglyn/server'
 
 export interface MediaScope {
   /** Storage prefix + Firestore parent: `hosts/{id}` or `orgs/{id}`. */
@@ -171,12 +172,13 @@ export async function resolveMediaScope(
 
   if (orgId) {
     const membership = await resolveOrgMembership(uid, orgId)
-    const role = membership?.member.role
-    if (!role || role === 'viewer') {
+    // "Edit the workspace media library" (`org.media`, AGL-4047), whose
+    // default is the owner, admin and editor this asked for.
+    if (!membership || !(await memberHasOrgPermission(orgId, membership.member, 'org.media'))) {
       return {
         error: {
           status: 403,
-          message: 'Editing the organization library requires the editor role',
+          message: permissionRefusalText('org.media'),
         },
       }
     }
