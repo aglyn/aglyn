@@ -625,6 +625,12 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-hardware', async (req, res) =>
     (await import('./server/pos-hardware')).posHardwareHandler(req, res),
   )
+  // Selling a card reader in person at the platform's own store's register
+  // (AGL-4038): whether this store is that seller. Gated like a sale, and
+  // silent about the configuration on every other store. Loaded on first call.
+  registerPluginApiRoute('commerce/pos-hardware-sale', async (req, res) =>
+    (await import('./server/pos-hardware-sale')).posHardwareSaleHandler(req, res),
+  )
   // A store's card reader start-up screen (AGL-4048): the POS devices card's
   // setting, gated like a sale, and the staff page's platform default. Both
   // draw images, so each loads with its first call.

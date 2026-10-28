@@ -605,6 +605,8 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "modifierGroups",
         "posQuickKey",
         "sellOnline",
+        "offerOnKiosk",
+        "hardwareSku",
         "checkIn",
         "shipping",
         "createdAtMs",

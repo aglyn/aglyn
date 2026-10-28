@@ -19,6 +19,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type {
   PosHardwareLine,
   PosHardwareOffer,
+  PosHardwareOrderShippingMethod,
   PosHardwareOrderStatus,
   PosHardwareShippingMethod,
   PosHardwareTracking,
@@ -40,7 +41,8 @@ export class PosHardwareRequestError extends Error {
   }
 }
 
-async function send<T>(
+/** One request to a hardware route, refused with the route's own words. */
+export async function sendPosHardwareRequest<T>(
   user: User,
   url: string,
   init: { method: 'GET' | 'POST'; body?: unknown; attemptKey?: string },
@@ -94,11 +96,11 @@ export function openPosHardwareCheckout(url: string): void {
 }
 
 export function posHardwareCatalog(user: User, hostId: string) {
-  return send<PosHardwareCatalog>(user, SHOP, { method: 'POST', body: { action: 'catalog', hostId } })
+  return sendPosHardwareRequest<PosHardwareCatalog>(user, SHOP, { method: 'POST', body: { action: 'catalog', hostId } })
 }
 
 export function posHardwareOrders(user: User, hostId: string) {
-  return send<{ orders: PosHardwareOrderRow[] }>(user, SHOP, {
+  return sendPosHardwareRequest<{ orders: PosHardwareOrderRow[] }>(user, SHOP, {
     method: 'POST',
     body: { action: 'orders', hostId },
   })
@@ -113,7 +115,7 @@ export function posHardwareCheckout(
     shippingMethod: PosHardwareShippingMethod
   },
 ) {
-  return send<{ url: string; orderId: string }>(user, SHOP, {
+  return sendPosHardwareRequest<{ url: string; orderId: string }>(user, SHOP, {
     method: 'POST',
     body: { ...body, action: 'checkout' },
     attemptKey,
@@ -126,7 +128,7 @@ export interface StaffHardwareOrderRow extends Omit<PosHardwareOrderRow, 'shippi
   hostId: string
   contactEmail: string | null
   shipping: {
-    method: PosHardwareShippingMethod
+    method: PosHardwareOrderShippingMethod
     label: string
     cents: number
     name: string | null
@@ -156,7 +158,7 @@ export function staffHardwareOrders(user: User, status: PosHardwareOrderStatus |
   if (status) params.set('status', status)
   if (after) params.set('after', after)
   const search = params.toString()
-  return send<{ orders: StaffHardwareOrderRow[]; next: string | null; pageSize: number; canWrite: boolean }>(
+  return sendPosHardwareRequest<{ orders: StaffHardwareOrderRow[]; next: string | null; pageSize: number; canWrite: boolean }>(
     user,
     search ? `${STAFF}?${search}` : STAFF,
     { method: 'GET' },
@@ -174,5 +176,5 @@ export function staffHardwareOrderAction(
     status?: PosHardwareOrderStatus
   },
 ) {
-  return send<{ ok: true; order: StaffHardwareOrderRow }>(user, STAFF, { method: 'POST', body })
+  return sendPosHardwareRequest<{ ok: true; order: StaffHardwareOrderRow }>(user, STAFF, { method: 'POST', body })
 }

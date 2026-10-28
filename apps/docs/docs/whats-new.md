@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — choose what the kiosk offers
+
+- **[Offer on the kiosk](commerce-and-bookings/commerce/catalog.md#offer-on-the-kiosk)** —
+  each product has its own **Offer on the kiosk** switch under **At the
+  register**, and a product with options lets you pick which variants the kiosk
+  offers. Products you keep off the kiosk still sell at the register, in the
+  Aglyn POS apps and on your site.
+
 ## October 2026 — permissions decide the register, the hardware shop and three settings
 
 - **[The register follows its permission alone](commerce-and-bookings/commerce/pos-and-reservations.md#who-can-do-what-at-the-register)** —

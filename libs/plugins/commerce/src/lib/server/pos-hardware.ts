@@ -24,6 +24,7 @@ import {
   isPosHardwareShippingMethod,
   POS_HARDWARE_ANCHOR,
   parsePosHardwareConfig,
+  parsePosHardwareInPersonConfig,
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_METADATA_TYPE,
   POS_HARDWARE_ORDERS_COLLECTION,
@@ -34,6 +35,7 @@ import {
   posHardwareSku,
   pricePosHardwareCart,
   type PosHardwareConfig,
+  type PosHardwareInPersonConfig,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
 import { mayVisitPosHardwareShop } from '../model/plugin-permissions'
@@ -70,6 +72,35 @@ export function posHardwareConfig(
   // shop opens only where the register offers card readers at all.
   if (!posTerminalAvailable()) return null
   return parsePosHardwareConfig(env)
+}
+
+/**
+ * The platform's own store that sells hardware in person (AGL-4038), or
+ * `null` while that is off. Read like the shop's other figures; a store is
+ * the seller only when BOTH its id and its workspace's match, so a site moved
+ * to another workspace stops selling hardware rather than selling it for them.
+ */
+export function posHardwareInPersonConfig(
+  env: Record<string, string | undefined> = process.env,
+): PosHardwareInPersonConfig | null {
+  return parsePosHardwareInPersonConfig(env)
+}
+
+/** Whether a store, owned by `orgId`, is the platform's own hardware seller. */
+export function isPosHardwareSellerStore(
+  config: PosHardwareInPersonConfig | null,
+  hostId: string,
+  orgId: string,
+): config is PosHardwareInPersonConfig {
+  return Boolean(config) && config?.sellerHostId === hostId && config?.sellerOrgId === orgId
+}
+
+/**
+ * An in-person order's id, from the register sale it came from: one register
+ * sale is one hardware order however often its completion is told.
+ */
+export function posHardwareInPersonOrderId(hostId: string, registerOrderId: string): string {
+  return `hw_${createHash('sha256').update(`pos:${hostId}:${registerOrderId}`).digest('hex').slice(0, 20)}`
 }
 
 /** The order's id, derived from the attempt so a repeated press is one order. */

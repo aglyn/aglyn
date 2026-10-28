@@ -25,8 +25,14 @@
 import {
   decodePosHardwareLines,
   encodePosHardwareLines,
+  isPosHardwareSkuId,
   nextPosHardwareStatus,
+  normalizePosHardwareSerial,
   parsePosHardwareConfig,
+  parsePosHardwareInPersonConfig,
+  posHardwareBuyerErasedPatch,
+  posHardwareOrderSource,
+  posHardwareShippingLabel,
   POS_HARDWARE_DEFAULT_MARKUP_BPS,
   POS_HARDWARE_ENV,
   POS_HARDWARE_MAX_PER_LINE,
@@ -350,5 +356,151 @@ describe('a sale record is kept seven years from the sale, then deleted (AGL-403
     } as unknown as PosHardwareOrder
     // The sale, not the refund, starts the clock.
     expect(posHardwareSaleRecord('hw_1', order).expiresAt?.toISOString()).toBe('2033-11-03T00:00:01.000Z')
+  })
+})
+
+describe('the in-person sale is off until it is turned on and its store is named (AGL-4038)', () => {
+  const on = {
+    [POS_HARDWARE_ENV.inPersonEnabled]: 'true',
+    [POS_HARDWARE_ENV.sellerHostId]: 'host-seller',
+    [POS_HARDWARE_ENV.sellerOrgId]: 'org-seller',
+  }
+
+  it('names the store and its workspace, and needs nothing of the online shop', () => {
+    expect(parsePosHardwareInPersonConfig(on)).toEqual({ sellerHostId: 'host-seller', sellerOrgId: 'org-seller' })
+    expect(parsePosHardwareInPersonConfig({ ...on, [POS_HARDWARE_ENV.inPersonEnabled]: ' TRUE ' })).not.toBeNull()
+  })
+
+  it('is off when not turned on, or when the store or its workspace is missing or not an id', () => {
+    expect(parsePosHardwareInPersonConfig({})).toBeNull()
+    expect(parsePosHardwareInPersonConfig({ ...on, [POS_HARDWARE_ENV.inPersonEnabled]: 'yes' })).toBeNull()
+    expect(parsePosHardwareInPersonConfig({ ...on, [POS_HARDWARE_ENV.sellerHostId]: '' })).toBeNull()
+    expect(parsePosHardwareInPersonConfig({ ...on, [POS_HARDWARE_ENV.sellerOrgId]: undefined })).toBeNull()
+    expect(parsePosHardwareInPersonConfig({ ...on, [POS_HARDWARE_ENV.sellerHostId]: 'hosts/x' })).toBeNull()
+  })
+})
+
+describe('in-person orders in the model (AGL-4038)', () => {
+  it('reads an order with no source as online, and only `in_person` as in person', () => {
+    expect(posHardwareOrderSource({})).toBe('online')
+    expect(posHardwareOrderSource(null)).toBe('online')
+    expect(posHardwareOrderSource({ source: 'online' })).toBe('online')
+    expect(posHardwareOrderSource({ source: 'in_person' })).toBe('in_person')
+    expect(posHardwareOrderSource({ source: 'kiosk' })).toBe('online')
+  })
+
+  it('names a catalog item by its id, and nothing else', () => {
+    expect(isPosHardwareSkuId('stripe-reader-s710')).toBe(true)
+    expect(isPosHardwareSkuId('Stripe Reader S710')).toBe(false)
+    expect(isPosHardwareSkuId(undefined)).toBe(false)
+  })
+
+  it('compares serial numbers in one form', () => {
+    expect(normalizePosHardwareSerial(' stre710-123 456 ')).toBe('STRE710-123456')
+    expect(normalizePosHardwareSerial(null)).toBe('')
+    expect(normalizePosHardwareSerial('x'.repeat(80))).toHaveLength(64)
+  })
+
+  it('labels the in-person method, which checkout never offers', () => {
+    expect(posHardwareShippingLabel('in_person')).toBe('Handed over in person')
+    expect(posHardwareShippingLabel('express')).toBe('Express shipping')
+    expect(posHardwareShippingLabel(undefined)).toBe('Standard shipping')
+  })
+
+  const inPerson = {
+    orgId: 'org-buyer',
+    hostId: 'host-buyer',
+    createdBy: 'uid-buyer',
+    contactEmail: 'pat@example.com',
+    lines: [{ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 1, unitCents: 30_000, lineCents: 30_000 }],
+    subtotalCents: 30_000,
+    shipping: { method: 'in_person', label: 'Handed over in person', cents: 0, name: null, phone: null, address: null },
+    taxCents: 2_475,
+    totalCents: 32_475,
+    currency: 'usd',
+    stripeCheckoutSessionId: null,
+    stripePaymentIntentId: null,
+    stripeHardwareOrderId: null,
+    tracking: null,
+    status: 'delivered',
+    livemode: true,
+    createdAtMs: 1_000,
+    updatedAtMs: 1_000,
+    paidAtMs: 1_000,
+    deliveredAtMs: 1_000,
+    source: 'in_person',
+    posSale: {
+      hostId: 'host-seller',
+      orgId: 'org-seller',
+      orderId: 'order-1',
+      number: 12,
+      registerId: 'register-1',
+      kiosk: false,
+      offline: false,
+      paymentLinkSessionId: 'cs_link',
+    },
+    paidTo: {
+      account: 'seller_store',
+      hostId: 'host-seller',
+      orgId: 'org-seller',
+      tenders: ['cash'],
+      stripeAccountId: 'acct_seller',
+    },
+    attachment: {
+      state: 'attached',
+      email: 'pat@example.com',
+      uid: 'uid-buyer',
+      orgId: 'org-buyer',
+      hostId: 'host-buyer',
+      attachedBy: 'uid-staff',
+      attachedAtMs: 1_000,
+    },
+  } as unknown as PosHardwareOrder
+
+  it("keeps where the sale was rung and where its money went on the retained record, and no buyer", () => {
+    const record = posHardwareSaleRecord('hw_1', inPerson)
+    expect(record).toMatchObject({
+      source: 'in_person',
+      posHostId: 'host-seller',
+      posOrderId: 'order-1',
+      shippingMethod: 'in_person',
+      storefrontTaxRowId: 'cs_link',
+      stripeCheckoutSessionId: null,
+      paidTo: { account: 'seller_store', hostId: 'host-seller', orgId: 'org-seller', tenders: ['cash'], stripeAccountId: 'acct_seller' },
+    })
+    // The workspace that bought it, by id, as every sale record keeps it;
+    // never the person, their store or who attached it.
+    expect(record.orgId).toBe('org-buyer')
+    const wire = JSON.stringify(record)
+    for (const buyer of ['pat@example.com', 'uid-buyer', 'host-buyer', 'uid-staff']) {
+      expect(wire).not.toContain(buyer)
+    }
+  })
+
+  it('records an online order as paid to the platform, with no register sale', () => {
+    const online = { ...inPerson, source: undefined, posSale: undefined, paidTo: undefined } as PosHardwareOrder
+    expect(posHardwareSaleRecord('hw_2', online)).toMatchObject({
+      source: 'online',
+      posHostId: null,
+      posOrderId: null,
+      paidTo: { account: 'platform' },
+      storefrontTaxRowId: null,
+    })
+  })
+
+  it('takes the buyer off the attachment when their account is erased, keeping the workspace', () => {
+    const patch = posHardwareBuyerErasedPatch(inPerson, 5_000)
+    expect(patch['attachment']).toEqual({
+      state: 'attached',
+      email: null,
+      uid: null,
+      orgId: 'org-buyer',
+      hostId: 'host-buyer',
+      attachedBy: 'uid-staff',
+      attachedAtMs: 1_000,
+    })
+    expect(patch['shipping']).toMatchObject({ method: 'in_person', label: 'Handed over in person' })
+    // An online order has no attachment to rewrite.
+    expect(posHardwareBuyerErasedPatch({ shipping: inPerson.shipping }, 5_000)).not.toHaveProperty('attachment')
   })
 })

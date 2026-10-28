@@ -1187,6 +1187,16 @@ price, a shipping figure is set, and card readers are available (a test key, or
 | `POS_HARDWARE_MARKUP_BPS` | Optional | Runtime, console | The markup on Stripe's price as a whole number of basis points (hundredths of a percent). Unset is the default, `3000`. `0` sells at Stripe's price; a value that is not a whole number hides the shop. |
 | `POS_HARDWARE_SHIPPING` | Optional | Runtime, console | JSON of a flat shipping amount in cents for each speed offered: `standard`, `express`, `priority`. The merchant pays it. |
 | `POS_HARDWARE_AUTOMATIC_TAX` | Optional | Runtime, console | Exactly `true` turns on Stripe automatic tax for hardware checkouts, on the platform's own tax registrations. |
+| `POS_HARDWARE_IN_PERSON_ENABLED` | Optional | Runtime, console | Exactly `true` lets your own store's register sell readers in person (below). Anything else keeps it off. |
+| `POS_HARDWARE_SELLER_HOST_ID` | Optional | Runtime, console | The site id of your own store whose register sells readers in person. |
+| `POS_HARDWARE_SELLER_ORG_ID` | Optional | Runtime, console | The id of the workspace that owns that store. A store moved to another workspace stops selling hardware. |
+
+**Selling readers in person.** With the three variables above set, a product on
+that one store can say which reader or accessory it is (**Point of sale
+hardware** in the product editor, shown on that store only), and a sale of it at
+the store's register becomes a hardware order for the buyer's workspace. The
+store's own prices, sales tax and payment account apply, exactly as for anything
+else it sells; none of the shop's figures above are needed.
 
 Paid orders arrive on the platform webhook as `checkout.session.completed`, which
 the endpoint already subscribes to; there is no new endpoint.

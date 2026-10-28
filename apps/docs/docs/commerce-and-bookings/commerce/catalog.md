@@ -68,6 +68,22 @@ online** back on and everything above returns. The switch comes with the point
 of sale; on a plan without it, a product already set to in person only still
 shows the switch so you can put it back online.
 
+## Offer on the kiosk {#offer-on-the-kiosk}
+
+The [self-service kiosk](pos-and-reservations.md#self-service-kiosk) offers
+every product it can sell unless you say otherwise. To keep a product off the
+kiosk, open it in the product editor and, under **At the register**, turn off
+**Offer on the kiosk**. The kiosk leaves it out of its product grid, and a kiosk
+cart that still holds it is refused at checkout. The register, the Aglyn POS
+apps and your site sell it as before.
+
+For a product with options, **Variants the kiosk offers** lists each variant.
+Clear one to keep only that variant off the kiosk, such as a size you serve
+only at the counter. Turn **Offer on the kiosk** back on and the product
+returns to the kiosk with the variants you left checked.
+
+The choice comes with the point of sale, like the rest of **At the register**.
+
 ## Billing modes and subscriptions
 
 Each product's **Billing** setting picks how buyers pay:
