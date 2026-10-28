@@ -21,7 +21,6 @@ import {
   narrowPermissionsToSite,
   RELEASE_FLAGS,
   releaseStageOfSurface,
-  siteNarrowedPermissionKeys,
   type ReleaseFlagKey,
 } from '@aglyn/aglyn'
 import { resolveConsolePluginPage } from '@aglyn/aglyn'
@@ -134,8 +133,9 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
 
   /*
    * A site that narrows this member (AGL-4047): an editor of the whole
-   * workspace given Viewer or Author access to THIS site does not hold its
-   * register or waivers here unless the site grants them, which is what the
+   * workspace given Viewer or Author access to THIS site does not hold the
+   * keys that follow the site role for them (the register and waivers by
+   * default) here unless the site grants them, which is what the
    * server answers. Until the site role is read, and for everyone the site
    * does not narrow, it is the workspace's map unchanged.
    */
@@ -145,7 +145,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   )
   const canOnSite = useCallback(
     (permission: string) =>
-      narrowing && siteNarrowedPermissionKeys().includes(permission)
+      narrowing && permission in narrowing.narrows
         ? permissions[permission] === true
         : canOrgPermission(permission),
     [narrowing, permissions, canOrgPermission],

@@ -32,8 +32,10 @@ import {
   pluginPermissionChanges,
   ORG_PERMISSION_KEYS,
   orgPermissionLabel,
+  siteNarrowedPermissionKeys,
 } from '@aglyn/aglyn/server'
 import {
+  narrowingChangesAsGrants,
   overrideWriteRefusal,
   parsePermissionOverrides,
 } from '@aglyn/aglyn/app-utils/org-permission-editor'
@@ -587,14 +589,36 @@ async function handler(request: Request): Promise<Response> {
        */
       const targetUid = String(body?.uid ?? '')
       if (!targetUid) return Response.json({ error: 'Missing uid' }, { status: 400 })
-      let parsed = parsePermissionOverrides(body?.permissions, ORG_PERMISSION_KEYS)
+      /*
+       * Either map, or both: `permissions` (allow / deny / clear per key) and
+       * `siteNarrowing` (AGL-4047: per key a site can narrow, follow a
+       * narrower site role `true`, keep it `false`, or clear `null`).
+       */
+      const parseBoth = () => ({
+        permissions:
+          body?.permissions === undefined ? null : parsePermissionOverrides(body?.permissions, ORG_PERMISSION_KEYS),
+        narrowing:
+          body?.siteNarrowing === undefined
+            ? null
+            : parsePermissionOverrides(body?.siteNarrowing, siteNarrowedPermissionKeys()),
+      })
+      let parsed = parseBoth()
       // A plugin's key reaches this process through its declarations; a key
       // the catalog does not hold yet runs the boot step once and asks again
       // (AGL-3596) rather than refusing a real permission.
-      if (parsed.error && (await runPluginDeclarationsRepair().catch(() => false))) {
-        parsed = parsePermissionOverrides(body?.permissions, ORG_PERMISSION_KEYS)
+      if (
+        (parsed.permissions?.error || parsed.narrowing?.error) &&
+        (await runPluginDeclarationsRepair().catch(() => false))
+      ) {
+        parsed = parseBoth()
       }
-      if (parsed.error || !parsed.changes) return Response.json({ error: parsed.error }, { status: 400 })
+      if (!parsed.permissions && !parsed.narrowing) {
+        return Response.json({ error: 'No permission to change' }, { status: 400 })
+      }
+      const parseError = parsed.permissions?.error ?? parsed.narrowing?.error
+      if (parseError) return Response.json({ error: parseError }, { status: 400 })
+      const permissionChanges = parsed.permissions?.changes ?? {}
+      const narrowingChanges = parsed.narrowing?.changes ?? {}
       const targetSnapshot = await firestore
         .collection('orgs')
         .doc(orgId)
@@ -613,22 +637,30 @@ async function handler(request: Request): Promise<Response> {
         actorGranted: actor?.member
           ? await resolveMemberOrgPermissions(orgId, actor.member)
           : {},
-        changes: parsed.changes,
+        // Keeping a key on narrower sites hands it over where the site would
+        // take it, so it is checked like a grant of that key; a key either
+        // map grants is checked once.
+        changes: Object.fromEntries(
+          Object.entries({ ...narrowingChangesAsGrants(narrowingChanges), ...permissionChanges }).map(
+            ([key, value]) => [key, value === true || narrowingChanges[key] === false ? true : value],
+          ),
+        ),
         labelOf: orgPermissionLabel,
       })
       if (refusal) return Response.json({ error: refusal.error }, { status: refusal.status })
       const pluginBefore = await resolveMemberPluginPermissionsOnOrg(orgId, targetUid)
-      const { after } = await setMemberPermissionOverrides({
+      const { after, siteNarrowing } = await setMemberPermissionOverrides({
         orgId,
         uid: targetUid,
-        changes: parsed.changes,
+        changes: permissionChanges,
+        narrowing: narrowingChanges,
       })
       const targetName = String(
         targetSnapshot.get('displayName') ?? targetSnapshot.get('email') ?? targetUid,
       )
       // One row per key, saying what it became, so the feed answers "who
       // gave them billing" without a diff.
-      for (const [key, value] of Object.entries(parsed.changes)) {
+      for (const [key, value] of Object.entries(permissionChanges)) {
         const label = orgPermissionLabel(key)
         await logOrgActivity(
           orgId,
@@ -636,6 +668,19 @@ async function handler(request: Request): Promise<Response> {
           value === null
             ? `Reset ${targetName}'s "${label}" to their role`
             : `${value ? 'Allowed' : 'Denied'} "${label}" for ${targetName}`,
+          { type: 'member', id: targetUid, name: targetName },
+        )
+      }
+      for (const [key, value] of Object.entries(narrowingChanges)) {
+        const label = orgPermissionLabel(key)
+        await logOrgActivity(
+          orgId,
+          { uid: decoded.uid, email: decoded.email },
+          value === null
+            ? `Reset whether ${targetName}'s "${label}" follows a narrower site role to their role`
+            : value
+              ? `"${label}" follows the site role for ${targetName} on sites where their role is narrower`
+              : `${targetName} keeps "${label}" on sites where their role is narrower`,
           { type: 'member', id: targetUid, name: targetName },
         )
       }
@@ -651,7 +696,7 @@ async function handler(request: Request): Promise<Response> {
           })
         }
       }
-      return Response.json({ ok: true, uid: targetUid, permissions: after }, { status: 200 })
+      return Response.json({ ok: true, uid: targetUid, permissions: after, siteNarrowing }, { status: 200 })
     }
 
     if (action === 'remove') {

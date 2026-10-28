@@ -82,7 +82,13 @@ import { POST } from '../app/api/orgs/members/route'
 
 beforeAll(() => {
   registerPluginPermissions([
-    { key: 'managePos', pluginId: 'commerce', label: 'Use the point of sale', defaults: { admin: true, editor: true, viewer: false } },
+    {
+      key: 'managePos',
+      pluginId: 'commerce',
+      label: 'Use the point of sale',
+      defaults: { admin: true, editor: true, viewer: false },
+      narrowsPerSite: true,
+    },
   ])
   registerPluginEventHandler('org.permissions.changed', (payload) => mockPermissionEvents(payload), {
     pluginId: 'commerce',
@@ -120,6 +126,7 @@ describe('per-member permission overrides (AGL-4047)', () => {
       orgId: 'org-1',
       uid: 'viewer-1',
       changes: { managePos: true, 'billing.view': null },
+      narrowing: {},
     })
     expect(mockLogOrgActivity.mock.calls.map((call) => call[2])).toEqual([
       'Allowed "Use the point of sale" for Pat Lee',
@@ -150,5 +157,56 @@ describe('per-member permission overrides (AGL-4047)', () => {
   it('lets staff grant what they do not hold', async () => {
     mockVerifyIdToken.mockResolvedValue({ uid: 'staff-1', email_verified: true, staff: true })
     expect((await post({ uid: 'viewer-1', permissions: { 'billing.manage': true } })).status).toBe(200)
+  })
+})
+
+describe('whether a key follows a narrower site role, per member (AGL-4047)', () => {
+  beforeEach(() => {
+    mockSetOverrides.mockResolvedValue({ before: {}, after: {}, siteNarrowing: { managePos: false } })
+    mockDocs.set('orgs/org-1/members/editor-1', { role: 'editor', allHosts: true, displayName: 'Jordan Lee' })
+  })
+
+  it('keeps, follows and resets a key, records each, and answers the resolved choices', async () => {
+    const response = await post({ uid: 'editor-1', siteNarrowing: { managePos: false } })
+    expect(response.status).toBe(200)
+    expect(mockSetOverrides).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      uid: 'editor-1',
+      changes: {},
+      narrowing: { managePos: false },
+    })
+    expect((await response.json()).siteNarrowing).toEqual({ managePos: false })
+    await post({ uid: 'editor-1', siteNarrowing: { managePos: true } })
+    await post({ uid: 'editor-1', siteNarrowing: { managePos: null } })
+    expect(mockLogOrgActivity.mock.calls.map((call) => call[2])).toEqual([
+      'Jordan Lee keeps "Use the point of sale" on sites where their role is narrower',
+      '"Use the point of sale" follows the site role for Jordan Lee on sites where their role is narrower',
+      `Reset whether Jordan Lee's "Use the point of sale" follows a narrower site role to their role`,
+    ])
+  })
+
+  it('sets a permission and a narrowing choice in one save', async () => {
+    expect(
+      (await post({ uid: 'editor-1', permissions: { 'billing.view': true }, siteNarrowing: { managePos: true } })).status,
+    ).toBe(200)
+    expect(mockSetOverrides).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      uid: 'editor-1',
+      changes: { 'billing.view': true },
+      narrowing: { managePos: true },
+    })
+  })
+
+  it('refuses a key no site can narrow, an empty save, and keeping a key the actor does not hold', async () => {
+    expect((await post({ uid: 'editor-1', siteNarrowing: { 'billing.view': false } })).status).toBe(400)
+    expect((await post({ uid: 'editor-1' })).status).toBe(400)
+    // The actor's own custom layer takes the register from them.
+    mockDocs.set('orgs/org-1/members/admin-1', { role: 'admin', allHosts: true, permissions: { managePos: false } })
+    const keep = await post({ uid: 'editor-1', siteNarrowing: { managePos: false } })
+    expect(keep.status).toBe(403)
+    expect((await keep.json()).error).toMatch(/Use the point of sale/)
+    // Following the site role takes access away, which needs no grant.
+    expect((await post({ uid: 'editor-1', siteNarrowing: { managePos: true } })).status).toBe(200)
+    expect(mockSetOverrides).toHaveBeenCalledTimes(1)
   })
 })

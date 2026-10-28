@@ -17,13 +17,16 @@
 'use client'
 
 import {
+  roleCanBeNarrowed,
   type AglynOrgCustomRole,
 } from '@aglyn/aglyn'
 import {
   groupOrgPermissions,
+  narrowingChoice,
   offeredOrgPermissions,
   permissionChoice,
   searchOrgPermissions,
+  withNarrowingChoice,
   withPermissionChoice,
 } from '@aglyn/aglyn/app-utils/org-permission-editor'
 import {
@@ -82,11 +85,25 @@ function inheritHint(definition: OrgPermissionDefinition): string {
     : 'Inherit: no org role holds it by default'
 }
 
+/**
+ * What "inherit" means for a key's narrowing in a custom role (AGL-4047): the
+ * built-in roles a site can narrow whose default follows the site role.
+ */
+function narrowingInheritHint(definition: OrgPermissionDefinition): string {
+  const followers = (Object.keys(ROLE_WORDS) as Array<keyof typeof ROLE_WORDS>)
+    .filter((role) => roleCanBeNarrowed(role) && definition.narrowsPerSite?.[role])
+    .map((role) => ROLE_WORDS[role])
+  return followers.length
+    ? `Inherit: follows the site role for ${followers.join(', ')} by default`
+    : 'Inherit: kept by default'
+}
+
 /** The editor's sections: the offered keys a search keeps, grouped, with the draft's choices. */
 function roleSections(
   offered: readonly OrgPermissionDefinition[],
   search: string,
   permissions: Partial<Record<string, boolean>> | undefined,
+  siteNarrowing: Partial<Record<string, boolean>> | undefined,
 ): PermissionChoiceSection[] {
   return groupOrgPermissions(searchOrgPermissions(offered, search)).map((section) => ({
     id: section.group.id,
@@ -97,6 +114,14 @@ function roleSections(
       description: definition.description,
       choice: permissionChoice(permissions, definition.key),
       inheritHint: inheritHint(definition),
+      ...(definition.narrowsPerSite
+        ? {
+            narrowing: {
+              choice: narrowingChoice(siteNarrowing, definition.key),
+              inheritHint: narrowingInheritHint(definition),
+            },
+          }
+        : {}),
     })),
   }))
 }
@@ -182,6 +207,7 @@ export function OrgRolesCard() {
         name: editor.name.trim(),
         description: editor.description ?? '',
         permissions: editor.permissions ?? {},
+        siteNarrowing: editor.siteNarrowing ?? {},
       })
       if (saved) {
         enqueueSnackbar('Role saved', { variant: 'success', persist: false })
@@ -227,7 +253,7 @@ export function OrgRolesCard() {
             size="small"
             color="primary"
             variant="contained"
-            onClick={() => setEditor({ name: '', permissions: {} })}
+            onClick={() => setEditor({ name: '', permissions: {}, siteNarrowing: {} })}
           >
             {'New role'}
           </Button>
@@ -297,8 +323,13 @@ export function OrgRolesCard() {
             {'Allow or deny a permission for everyone on this role, or leave it on ' +
               'Inherit to use each member’s org role default.'}
           </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {'Permissions a site can narrow also choose what happens on a site where an ' +
+              'editor of the whole workspace has Viewer or Author access: follow that ' +
+              'site role there, or keep the permission.'}
+          </Typography>
           <PermissionChoiceList
-            sections={roleSections(offered, search, editor?.permissions)}
+            sections={roleSections(offered, search, editor?.permissions, editor?.siteNarrowing)}
             search={search}
             onSearchChange={setSearch}
             groupActions
@@ -307,6 +338,16 @@ export function OrgRolesCard() {
               setEditor((draft) =>
                 draft
                   ? { ...draft, permissions: withPermissionChoice(draft.permissions as Record<string, boolean>, keys, choice) }
+                  : draft,
+              )
+            }
+            onNarrowingChange={(key, choice) =>
+              setEditor((draft) =>
+                draft
+                  ? {
+                      ...draft,
+                      siteNarrowing: withNarrowingChoice(draft.siteNarrowing as Record<string, boolean>, key, choice),
+                    }
                   : draft,
               )
             }

@@ -127,4 +127,26 @@ describe('the custom role editor (AGL-4047)', () => {
       'hosts.create': true,
     })
   })
+
+  it('sets whether a key follows a narrower site role, and saves the choices (AGL-4047)', async () => {
+    render(<OrgRolesCard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cashier' }))
+    const dialog = await screen.findByRole('dialog')
+    // The register follows the site role for editors by default; AI is kept.
+    expect(within(dialog).getAllByText('Inherit: follows the site role for Editor by default').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('Inherit: kept by default').length).toBe(2)
+    fireEvent.click(
+      within(
+        within(dialog).getByRole('group', { name: 'Sell at the register: on sites where their role is narrower' }),
+      ).getByRole('button', { name: 'Keep this permission' }),
+    )
+    fireEvent.click(
+      within(
+        within(dialog).getByRole('group', { name: 'Use AI assistance: on sites where their role is narrower' }),
+      ).getByRole('button', { name: 'Follow the site role' }),
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save role' }))
+    await waitFor(() => expect(lastSave()['action']).toBe('save'))
+    expect(lastSave()['siteNarrowing']).toEqual({ posSell: false, 'ai.use': true })
+  })
 })

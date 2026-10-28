@@ -21,7 +21,9 @@ import {
   hostRoleFor,
   isOrgWideMember,
   resolveCollaboratorHostPermissions,
+  siteMayNarrow,
   siteNarrowingFor,
+  type AglynOrgCustomRole,
   type AglynOrgMember,
   type HostAccessRole,
   type SiteNarrowing,
@@ -57,9 +59,10 @@ export interface HostRoleState {
   hostPermissions: Record<string, boolean> | null
   /**
    * How this site narrows an ORG-WIDE member (AGL-4047): an editor of the
-   * workspace with Viewer or Author access here, whose register and waivers
-   * keys this site decides (`narrowPermissionsToSite`). Null until read, on a
-   * failed read, for a collaborator, and for a member the site does not
+   * workspace with Viewer or Author access here, whose keys that follow the
+   * site role (their own choice, their custom role's, or the built-in
+   * default) this site decides (`narrowPermissionsToSite`). Null until read,
+   * on a failed read, for a collaborator, and for a member the site does not
    * narrow, so a caller may apply it unconditionally.
    */
   narrowing?: SiteNarrowing | null
@@ -131,6 +134,21 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
         const member = (snapshot.data() ?? {}) as Partial<AglynOrgMember>
         const hostRole = hostRoleFor(member, hostId as never)
         const orgWide = isOrgWideMember(member)
+        // Their custom role's narrowing choices (AGL-4047), read only when
+        // this site's access is narrower than their workspace role and they
+        // carry one. A dangling id falls back to their own choices and the
+        // built-in defaults, as the server does; so does a failed read here,
+        // which this display gate can afford because the server decides.
+        let customRole: AglynOrgCustomRole | null = null
+        if (member.roleId && siteMayNarrow(member, hostId as never)) {
+          try {
+            const roleSnapshot = await getDoc(doc(firestore, 'orgs', orgId, 'roles', member.roleId))
+            if (roleSnapshot.exists()) customRole = roleSnapshot.data() as AglynOrgCustomRole
+          } catch {
+            customRole = null
+          }
+        }
+        if (!active) return
         setState({
           hostRole,
           canPublish: hostRoleCanPublish(hostRole),
@@ -139,7 +157,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
           hostPermissions: orgWide
             ? null
             : resolveCollaboratorHostPermissions(member, hostId as never),
-          narrowing: siteNarrowingFor(member, hostId as never),
+          narrowing: siteNarrowingFor(member, hostId as never, customRole),
         })
       } catch {
         // Fail closed on the display gate: `loaded` stays true so the caller

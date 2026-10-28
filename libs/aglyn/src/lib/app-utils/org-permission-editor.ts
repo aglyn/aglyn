@@ -243,6 +243,104 @@ export function explainOrgPermissions(
   return out
 }
 
+/*
+ * THE NARROWING CONTROL (AGL-4047). Each key a site can narrow
+ * (`narrowsPerSite`) carries a second choice beside allow/deny: on a site
+ * where the member's access is narrower than their workspace role, does the
+ * key follow that site role, or do they keep it? A custom role and a member
+ * store it in `siteNarrowing`, `true` following the site role and `false`
+ * keeping the permission, and a key left out inherits.
+ */
+
+/** What a custom role or a member stores for one key's narrowing: nothing, follow the site role (`true`), or keep it (`false`). */
+export type NarrowingChoice = 'inherit' | 'narrow' | 'keep'
+
+export const NARROWING_CHOICES: readonly NarrowingChoice[] = ['inherit', 'narrow', 'keep']
+
+/** The keys of a list a site can narrow, in its order. */
+export function narrowableOrgPermissions(
+  definitions: readonly OrgPermissionDefinition[] = ORG_PERMISSIONS,
+): OrgPermissionDefinition[] {
+  return definitions.filter((definition) => Boolean(definition.narrowsPerSite))
+}
+
+/** The stored narrowing choice for a key; anything but a boolean reads as inherit. */
+export function narrowingChoice(
+  stored: Readonly<Partial<Record<string, unknown>>> | null | undefined,
+  key: string,
+): NarrowingChoice {
+  const value = stored?.[key]
+  return value === true ? 'narrow' : value === false ? 'keep' : 'inherit'
+}
+
+/** The stored narrowing map with keys set to a choice: `inherit` deletes the key. */
+export function withNarrowingChoice(
+  stored: Readonly<Partial<Record<string, boolean>>> | null | undefined,
+  keys: string | readonly string[],
+  choice: NarrowingChoice,
+): Record<string, boolean> {
+  return withPermissionChoice(stored, keys, choice === 'inherit' ? 'inherit' : choice === 'narrow' ? 'grant' : 'deny')
+}
+
+/** Which layer decided whether a key follows a narrower site role for a member. */
+export type NarrowingSource = 'role' | 'customRole' | 'override'
+
+/** One key's narrowing for a member, and where it came from. */
+export interface ExplainedNarrowing {
+  /** It follows the site role where their access is narrower (`false`: they keep it). */
+  narrows: boolean
+  source: NarrowingSource
+  /** The built-in role's default, what remains when every layer above is cleared. */
+  roleDefault: boolean
+  /** The custom role's stored choice, when the member carries one that sets it. */
+  customRole?: boolean
+  /** The member's own stored choice, when set. */
+  override?: boolean
+}
+
+/**
+ * A member's narrowing for every key a site can narrow, with the layer that
+ * produced it: their own choice, then their custom role's, then the built-in
+ * role's default, the precedence `siteNarrowingChoices` applies.
+ */
+export function explainSiteNarrowing(
+  member:
+    | (Partial<AglynOrgMember> & { roleId?: string | null; siteNarrowing?: Partial<Record<string, boolean>> })
+    | null
+    | undefined,
+  customRole?: Pick<AglynOrgCustomRole, 'siteNarrowing'> | null,
+  definitions: readonly OrgPermissionDefinition[] = ORG_PERMISSIONS,
+): Record<string, ExplainedNarrowing> {
+  const role = ((member?.role as OrgRole | undefined) ?? 'viewer') as OrgRole
+  const out: Record<string, ExplainedNarrowing> = {}
+  for (const definition of narrowableOrgPermissions(definitions)) {
+    const key = definition.key
+    const roleDefault = definition.narrowsPerSite?.[role] === true
+    const fromRole = member?.roleId ? customRole?.siteNarrowing?.[key] : undefined
+    const fromOverride = member?.siteNarrowing?.[key]
+    out[key] = {
+      narrows:
+        typeof fromOverride === 'boolean' ? fromOverride : typeof fromRole === 'boolean' ? fromRole : roleDefault,
+      source: typeof fromOverride === 'boolean' ? 'override' : typeof fromRole === 'boolean' ? 'customRole' : 'role',
+      roleDefault,
+      ...(typeof fromRole === 'boolean' ? { customRole: fromRole } : {}),
+      ...(typeof fromOverride === 'boolean' ? { override: fromOverride } : {}),
+    }
+  }
+  return out
+}
+
+/**
+ * A narrowing write as the grant check reads it: choosing to KEEP a key on
+ * narrower sites hands the member that key where they would not otherwise
+ * hold it, so it is a grant of the key (`true`); following the site role, or
+ * clearing the choice, takes nothing the actor must hold (`false`). Feed it
+ * to `overrideWriteRefusal` beside the permission changes.
+ */
+export function narrowingChangesAsGrants(changes: PermissionOverrideChanges): PermissionOverrideChanges {
+  return Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, value === false]))
+}
+
 /** A request's override changes, read: each named key to `true`, `false` or `null` (clear). */
 export type PermissionOverrideChanges = Record<string, boolean | null>
 

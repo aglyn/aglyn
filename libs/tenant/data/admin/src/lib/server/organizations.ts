@@ -45,7 +45,9 @@ import {
   projectMemberScopeTokens,
   resolveCollaboratorHostPermissions,
   narrowPermissionsToSite,
+  siteMayNarrow,
   siteNarrowingFor,
+  type SiteNarrowing,
   scopeTokensForHost,
   type AglynOrganization,
   type AglynOrgBilling,
@@ -977,19 +979,42 @@ export async function resolveMemberOrgPermissions(
   orgId: string,
   member: Partial<AglynOrgMember> | null | undefined,
 ): Promise<Record<OrgPermission, boolean>> {
-  let customRole: AglynOrgCustomRole | null = null
-  if (member?.roleId) {
-    const snapshot = await firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .collection('roles')
-      .doc(member.roleId)
-      .get()
-    customRole = snapshot.exists
-      ? (snapshot.data() as AglynOrgCustomRole)
-      : null
-  }
-  return resolveOrgPermissions(member, customRole)
+  return resolveOrgPermissions(member, await resolveMemberCustomRole(orgId, member))
+}
+
+/**
+ * The custom role a member carries, or null: one read, and none without a
+ * `roleId`. A dangling id resolves to null, so the member falls back to
+ * their role's defaults (see `resolveMemberOrgPermissions`).
+ */
+export async function resolveMemberCustomRole(
+  orgId: string,
+  member: Partial<AglynOrgMember> | null | undefined,
+): Promise<AglynOrgCustomRole | null> {
+  if (!member?.roleId) return null
+  const snapshot = await firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('roles')
+    .doc(member.roleId)
+    .get()
+  return snapshot.exists ? (snapshot.data() as AglynOrgCustomRole) : null
+}
+
+/**
+ * How this site narrows this member (AGL-4047), with their custom role's
+ * narrowing choices applied, or null where it does not. Reads the custom
+ * role only for a member whose access to the site is narrower than their
+ * workspace role, so every other caller pays nothing.
+ */
+export async function resolveMemberSiteNarrowing(
+  orgId: string,
+  member: Partial<AglynOrgMember> | null | undefined,
+  hostId: string | null | undefined,
+): Promise<SiteNarrowing | null> {
+  const site = typeof hostId === 'string' ? hostId.trim() : ''
+  if (!siteMayNarrow(member, site)) return null
+  return siteNarrowingFor(member, site, await resolveMemberCustomRole(orgId, member))
 }
 
 export async function memberHasOrgPermission(
@@ -1062,9 +1087,11 @@ export async function memberHasPermissionOnHost(
   if (!member) return false
   const site = typeof hostId === 'string' ? hostId.trim() : ''
   if (isOrgWideMember(member)) {
-    // On a site that narrows them (AGL-4047), the keys such a site narrows
-    // are decided for it; everywhere else this is the workspace's verdict.
-    const narrowing = siteNarrowingFor(member, site)
+    // On a site that narrows them (AGL-4047), the keys that follow the site
+    // role for them (their own choice, their custom role's, or the built-in
+    // default) are decided for it; everywhere else this is the workspace's
+    // verdict.
+    const narrowing = await resolveMemberSiteNarrowing(orgId, member, site)
     return verdictFor(
       permission,
       narrowPermissionsToSite(await resolveMemberOrgPermissions(orgId, member), narrowing),

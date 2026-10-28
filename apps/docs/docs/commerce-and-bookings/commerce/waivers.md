@@ -38,7 +38,8 @@ dates of birth and their children's names.
 
 Both belong to the site. An editor who works across the whole workspace but has
 **Viewer** or **Author** access to one site holds neither there, unless that site's
-**Users** card allows it for them — see
+**Users** card allows it for them, or their custom role or own permissions keep it on
+such sites — see
 [A site's access narrows its register and waivers](../../workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows).
 :::
 

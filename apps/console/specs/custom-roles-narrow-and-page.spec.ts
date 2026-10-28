@@ -163,15 +163,38 @@ function makeQuery(
   return self
 }
 
+/** What the double's `FieldValue.delete()` returns. */
+const DELETE_SENTINEL = '__delete__'
+
+/**
+ * `set(..., { merge: true })` as Firestore applies it: a map merges key by
+ * key, one level down here (every map the route writes is one level), and
+ * `FieldValue.delete()` removes the key. A shallow spread would hide the
+ * very defect a key set back to Inherit has: merging keeps it stored.
+ */
+function mergeLikeFirestore(before: any, data: any): any {
+  const out: any = { ...before }
+  for (const [key, value] of Object.entries(data ?? {})) {
+    if (value === DELETE_SENTINEL) delete out[key]
+    else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nested: any = { ...(before?.[key] ?? {}) }
+      for (const [inner, innerValue] of Object.entries(value)) {
+        if (innerValue === DELETE_SENTINEL) delete nested[inner]
+        else nested[inner] = innerValue
+      }
+      out[key] = nested
+    } else out[key] = value
+  }
+  return out
+}
+
 function docRef(path: string, id: string): any {
   return {
     id,
     get: async () => snapshot(id, store[path]?.[id]),
     set: async (data: any, options?: { merge?: boolean }) => {
       store[path] = store[path] ?? {}
-      store[path][id] = options?.merge
-        ? { ...(store[path][id] ?? {}), ...data }
-        : data
+      store[path][id] = options?.merge ? mergeLikeFirestore(store[path][id] ?? {}, data) : data
     },
     delete: async () => {
       if (store[path]) delete store[path][id]
@@ -218,13 +241,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldPath: { documentId: () => '__name__' },
+  FieldValue: { delete: () => '__delete__' },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => {
   const permissions = jest.requireActual('@aglyn/aglyn/app-utils/org-permissions')
+  const hostPermissions = jest.requireActual('@aglyn/aglyn/app-utils/host-permissions')
   return {
     __esModule: true,
     ...permissions,
+    ...hostPermissions,
     runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
     createResourceUid: () => 'role-new',
     pluginRequestFromWeb: async (request: Request) => {
@@ -273,6 +299,7 @@ jest.mock('@aglyn/aglyn/server', () => {
   }
 }
 
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { GET as rolesGet, POST as rolesPost } from '../app/api/orgs/roles/route'
 
 const call = (
@@ -578,5 +605,56 @@ describe('an AI key moved on a role is an activity row (AGL-2929)', () => {
         granted: false,
       },
     ])
+  })
+})
+
+describe('a role sets whether each key follows a narrower site role (AGL-4047)', () => {
+  const save = (body: Record<string, unknown>) =>
+    call(rolesPost, { method: 'POST', body: { orgId: 'org-1', action: 'save', ...body } })
+
+  beforeAll(() => {
+    registerPluginPermissions([
+      {
+        key: 'rolesTestTill',
+        pluginId: 'roles-test',
+        label: 'Till',
+        defaults: { admin: true, editor: true, viewer: false },
+        narrowsPerSite: true,
+      },
+      {
+        key: 'rolesTestShop',
+        pluginId: 'roles-test',
+        label: 'Shop',
+        defaults: { admin: true, editor: true, viewer: false },
+      },
+    ])
+  })
+
+  it('stores a choice for a key a site can narrow, and drops one for a key it cannot', async () => {
+    const response = await save({
+      roleId: 'role-floor',
+      name: 'Floor',
+      permissions: {},
+      siteNarrowing: { rolesTestTill: false, rolesTestShop: false, 'members.manage': true },
+    })
+    expect(response.status).toBe(200)
+    expect(store['orgs/org-1/roles']['role-floor'].siteNarrowing).toEqual({ rolesTestTill: false })
+    // The rules read the answer, so the roster is re-projected.
+    expect(mockSyncOrgAuthProjections).toHaveBeenCalledWith('org-1')
+  })
+
+  it('Inherit clears a stored choice and a stored permission, and leaves a key it does not know', async () => {
+    store['orgs/org-1/roles'] = {
+      'role-floor': {
+        name: 'Floor',
+        permissions: { 'billing.view': true, 'some.unloaded.key': true },
+        siteNarrowing: { rolesTestTill: false },
+      },
+    }
+    const response = await save({ roleId: 'role-floor', name: 'Floor', permissions: {}, siteNarrowing: {} })
+    expect(response.status).toBe(200)
+    const role = store['orgs/org-1/roles']['role-floor']
+    expect(role.siteNarrowing).toEqual({})
+    expect(role.permissions).toEqual({ 'some.unloaded.key': true })
   })
 })

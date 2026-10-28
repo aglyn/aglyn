@@ -29,11 +29,11 @@ import {
   ORG_PERMISSION_REFINEMENTS,
   narrowPermissionsToSite,
   refinePermissionMap,
-  siteNarrowingFor,
   tierPermissionsOf,
 } from '@aglyn/aglyn/server'
 import {
   resolveMemberOrgPermissions,
+  resolveMemberSiteNarrowing,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -243,11 +243,13 @@ export async function resolveOrgPermissions(
     )
     // A site that narrows this member (AGL-4047): an editor of the whole
     // workspace given Viewer or Author access to the site in context loses
-    // that site's register and waivers there, unless the site grants them.
-    // Null for every other member and with no site named, which leaves the
-    // map exactly as the workspace resolves it.
+    // there each key that follows the site role for them (their own choice,
+    // their custom role's, or the built-in default: the register and
+    // waivers, not AI), unless the site grants it. Null for every other
+    // member and with no site named, which leaves the map exactly as the
+    // workspace resolves it.
     const narrowing = context.hostId
-      ? siteNarrowingFor(membership.member, context.hostId)
+      ? await resolveMemberSiteNarrowing(membership.orgId, membership.member, context.hostId)
       : null
     return {
       orgId: membership.orgId,

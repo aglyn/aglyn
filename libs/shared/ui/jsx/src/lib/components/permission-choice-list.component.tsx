@@ -42,6 +42,14 @@ import { useId, type ReactNode } from 'react'
 
 export type PermissionChoiceValue = 'inherit' | 'grant' | 'deny'
 
+/**
+ * A key a site can narrow (AGL-4047) carries a second choice: on a site where
+ * the member's access is narrower than their workspace role, does it follow
+ * that site role (`narrow`) or do they keep it (`keep`)? `inherit`: the layer
+ * below decides.
+ */
+export type PermissionNarrowingValue = 'inherit' | 'narrow' | 'keep'
+
 export interface PermissionChoiceItem {
   key: string
   label: string
@@ -56,6 +64,12 @@ export interface PermissionChoiceItem {
   inheritHint?: string
   /** A reason the row cannot change, shown as the toggle's tooltip. */
   lockedReason?: string
+  /**
+   * The narrowing choice, for a key a site can narrow; absent, the row has
+   * none. `effective` is the verdict and where it came from ("Follows the
+   * site role · from the Editor role"); `inheritHint` what inherit resolves to.
+   */
+  narrowing?: { choice: PermissionNarrowingValue; effective?: string; inheritHint?: string }
 }
 
 export interface PermissionChoiceSection {
@@ -78,6 +92,10 @@ export interface PermissionChoiceListProps {
   emptyMessage?: ReactNode
   /** Offer "set the whole group" on each heading. */
   groupActions?: boolean
+  /** Sets one key's narrowing choice; absent, the narrowing rows are read-only. */
+  onNarrowingChange?: (key: string, choice: PermissionNarrowingValue) => void
+  /** The words before the narrowing choice. */
+  narrowingLabel?: string
 }
 
 const CHOICES: readonly PermissionChoiceValue[] = ['inherit', 'grant', 'deny']
@@ -118,6 +136,56 @@ function ChoiceToggle(props: {
         </ToggleButton>
       ))}
     </ToggleButtonGroup>
+  )
+}
+
+const NARROWING_CHOICES: readonly PermissionNarrowingValue[] = ['inherit', 'narrow', 'keep']
+
+const NARROWING_LABELS: Record<PermissionNarrowingValue, string> = {
+  inherit: 'Inherit',
+  narrow: 'Follow the site role',
+  keep: 'Keep this permission',
+}
+
+function NarrowingToggle(props: {
+  label: string
+  value: PermissionNarrowingValue
+  onChange: (choice: PermissionNarrowingValue) => void
+  disabled?: boolean
+  ariaLabel: string
+}) {
+  return (
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      spacing={1}
+      sx={{ alignItems: { xs: 'flex-start', sm: 'center' }, mt: 0.5 }}
+    >
+      <Typography variant="caption" color="text.secondary">
+        {props.label}
+      </Typography>
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        value={props.value}
+        disabled={props.disabled}
+        aria-label={props.ariaLabel}
+        onChange={(_event, next: PermissionNarrowingValue | null) => {
+          if (next) props.onChange(next)
+        }}
+        sx={{ flexWrap: 'wrap' }}
+      >
+        {NARROWING_CHOICES.map((choice) => (
+          <ToggleButton
+            key={choice}
+            value={choice}
+            color={choice === 'keep' ? 'success' : choice === 'narrow' ? 'warning' : 'standard'}
+            sx={{ px: 1, py: 0, textTransform: 'none', typography: 'caption' }}
+          >
+            {NARROWING_LABELS[choice]}
+          </ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+    </Stack>
   )
 }
 
@@ -213,6 +281,27 @@ export function PermissionChoiceList(props: PermissionChoiceListProps) {
                         <Typography variant="caption" color="text.secondary" component="p">
                           {item.inheritHint}
                         </Typography>
+                      ) : null}
+                      {item.narrowing ? (
+                        <>
+                          <NarrowingToggle
+                            label={props.narrowingLabel ?? 'On sites where their role is narrower:'}
+                            value={item.narrowing.choice}
+                            disabled={props.disabled || Boolean(item.lockedReason) || !props.onNarrowingChange}
+                            ariaLabel={`${item.label}: on sites where their role is narrower`}
+                            onChange={(choice) => props.onNarrowingChange?.(item.key, choice)}
+                          />
+                          {item.narrowing.effective ? (
+                            <Typography variant="caption" color="text.secondary" component="p">
+                              {item.narrowing.effective}
+                            </Typography>
+                          ) : null}
+                          {item.narrowing.choice === 'inherit' && item.narrowing.inheritHint ? (
+                            <Typography variant="caption" color="text.secondary" component="p">
+                              {item.narrowing.inheritHint}
+                            </Typography>
+                          ) : null}
+                        </>
                       ) : null}
                     </Box>
                     {item.lockedReason ? <Tooltip title={item.lockedReason}>{toggle}</Tooltip> : toggle}

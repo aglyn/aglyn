@@ -139,8 +139,9 @@ Organization-wide members are not set here; their permissions follow their org
 role, custom role and per-member overrides, set on their Team page — see
 [Custom roles & permissions](custom-roles.md#per-member-overrides). The exception is
 an editor of the whole workspace you give **Viewer** or **Author** access to this
-site: that takes this site's register and waivers from them, and **Permissions**
-beside them gives either back here — see
+site: that takes this site's register and waivers from them (unless their custom
+role or own permissions keep them), and **Permissions** beside them gives either back
+here — see
 [A site's access narrows its register and waivers](custom-roles.md#site-access-narrows).
 
 A site's **Users** card also shows what each collaborator drew from the workspace's AI
