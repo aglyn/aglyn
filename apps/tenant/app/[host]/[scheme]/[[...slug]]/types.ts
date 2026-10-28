@@ -158,6 +158,12 @@ export interface Props {
   /** Maintenance mode (AGL-131): 503 screen or the built-in notice. */
   maintenanceFallback?: boolean
   /**
+   * Preview (AGL-4086), set beside `maintenanceFallback`: the site is in
+   * preview and this is the public's answer. The 503 page when one is
+   * assigned, else the built-in notice in the holding page's words.
+   */
+  sitePreview?: boolean
+  /**
    * The holding page (AGL-3594): the site's `/` while it routes no page at
    * all — a site born for the guided AI start, before its home page is
    * published or the starter is added. Its name and a line saying it is on

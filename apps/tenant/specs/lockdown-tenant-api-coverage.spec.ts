@@ -282,6 +282,8 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
     'read-only projection for the admin bar; the capability it describes is gated at the mint (editAccessMintRefusal)',
   'apps/tenant/app/api/revalidate/route.ts':
     'shared-secret cache purge on behalf of the console, which ran the verdict before the publish that called it',
+  'apps/tenant/app/api/site-preview/enter/route.ts':
+    'plants one signed preview cookie on this host and redirects (AGL-4086); the preview it opens renders behind the middleware verdict and the loader lockdown branch',
   // The cron beat. Its obligation is pushed down to the jobs, and the second
   // describe below is what holds that.
   'apps/tenant/app/api/plugins/run-jobs/route.ts':

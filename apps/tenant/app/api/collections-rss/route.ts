@@ -22,6 +22,7 @@ import {
 } from '@aglyn/tenant-data-admin/render-cache'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getHost from '../../../utils/get-host'
+import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,6 +82,11 @@ export async function GET(request: Request): Promise<Response> {
   }
   const hostRes = await getHost({ host })
   if (hostRes.error || !hostRes.host) {
+    return new Response('Not found', { status: 404 })
+  }
+  // A site in preview (AGL-4086) publishes no feed: only its team may see it,
+  // and a feed is read by machines that hold no team cookie.
+  if (isHostInPreview(hostRes.host as never)) {
     return new Response('Not found', { status: 404 })
   }
 

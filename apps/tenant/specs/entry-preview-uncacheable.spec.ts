@@ -191,7 +191,8 @@ const previewPage = () =>
       '[host]',
       '[scheme]',
       'aglyn-preview',
-      '[...slug]',
+      // Optional since AGL-4086, so a site's home page reaches it too.
+      '[[...slug]]',
       'page.tsx',
     ),
     'utf8',

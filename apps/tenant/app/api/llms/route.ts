@@ -19,7 +19,7 @@ import {
   MARKDOWN_CONTENT_TYPE,
   buildLlmsTxt,
   hostPublicOrigin,
-  isSearchDiscouraged,
+  isSiteKeptFromSearch,
 } from '@aglyn/aglyn/server'
 import { visitorContentRefusal } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
@@ -53,7 +53,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const { host, error } = await getHost({ host: tenantHost })
   if (error || !host) return new Response('Not found', { status: 404 })
-  if (isSearchDiscouraged(host)) return new Response('Not found', { status: 404 })
+  if (isSiteKeptFromSearch(host)) return new Response('Not found', { status: 404 })
   /*
     A LOCKED SITE MUST NOT PUBLISH THROUGH ITS OWN TAKEDOWN (AGL-2495).
 

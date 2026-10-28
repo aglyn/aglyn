@@ -533,6 +533,33 @@ export interface AglynHost extends AglynDocument {
   /** Maintenance mode (AGL-131): every path renders the 503 screen. */
   maintenance?: boolean
   /**
+   * Preview (AGL-4086): only the site's team, and Aglyn staff, see the site;
+   * the public gets the 503 page or a "Coming soon" notice at every address.
+   * Unlike `maintenance`, which replaces the site for EVERYONE, this keeps the
+   * whole site working for the people building it.
+   *
+   * ADMIN-SDK ONLY: written by `/api/hosts/preview` (a site admin) and by
+   * `/api/hosts/create` (the create flow's Start in preview choice). The
+   * console never writes it from the client, because flipping it public is a
+   * launch: it reports `site_published` once and drops every cached page.
+   */
+  preview?: boolean
+  /**
+   * The pages in preview on a site that is otherwise public (AGL-4086):
+   * screen id → `true`. A page in preview answers the public with the site's
+   * 404 and its team with the page. Kept on the host rather than the screen
+   * so the middleware's verdict, which holds only the host document, can
+   * route the team around the cache at exactly those addresses.
+   */
+  previewScreens?: Record<ScreenUid, boolean>
+  /**
+   * When the site was first public after a stretch in preview, or when it
+   * was put into preview while public (AGL-4086). Its presence is what tells
+   * the switch the site has been public before, so `site_published` is
+   * reported once and never again. Epoch ms. Admin-SDK only, with `preview`.
+   */
+  publicSinceMs?: number
+  /**
    * STAFF host takedown (AGL-1501) — the host scope of the panic button,
    * for an infected or abusive site. The same field family as the org's
    * AGL-202 suspension: while `suspendedAt` is set (and `suspendedUntilMs`
