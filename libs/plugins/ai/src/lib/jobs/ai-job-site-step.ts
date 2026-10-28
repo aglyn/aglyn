@@ -97,12 +97,15 @@ import {
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
   AI_SITE_PRODUCTS_PRICE_NOTE,
+  AI_SITE_SAMPLE_PRODUCTS_INPUT,
+  AI_SITE_SAMPLE_PRODUCTS_NOTE,
   aiPublishSitePosts,
   aiSiteContentBriefLines,
   aiSiteContentPart,
   aiSiteContentRefusal,
   aiSiteListings,
   aiSiteProductsBriefLine,
+  aiSiteSampleProductKinds,
   createAiSiteProductsRunner,
   runAiSitePostsUnit,
   type AiSitePostsInput,
@@ -764,7 +767,9 @@ export function aiSiteUnitJob(
       brief.push(...aiSiteContentBriefLines(job.outputs ?? []), ...aiSiteDatasetBriefLines(job.outputs ?? []))
     }
   }
-  if (unit.kind === 'products') brief.push(aiSiteProductsBriefLine())
+  // A store whose brief names only kinds of product starts with samples of them (AGL-4065).
+  const sampleKinds = unit.kind === 'products' ? aiSiteSampleProductKinds(job.inputs) : null
+  if (unit.kind === 'products') brief.push(aiSiteProductsBriefLine(undefined, sampleKinds))
   if (unit.kind === 'email') {
     brief.push(...aiSiteEmailBriefLines(job.inputs))
   }
@@ -885,6 +890,7 @@ export function aiSiteUnitJob(
     unitInputs[AI_SITE_CONTENT_INPUT] = posts
   }
   if (unit.kind === 'products') unitInputs['target'] = 'catalog'
+  if (sampleKinds) unitInputs[AI_SITE_SAMPLE_PRODUCTS_INPUT] = sampleKinds
   // The event an event unit drafts (AGL-3755).
   if (unit.kind === 'event' && unit.item) unitInputs[AI_SITE_EVENT_INPUT] = unit.item
   // Where the plan lists a dataset, which its design reads, and the form
@@ -1667,7 +1673,9 @@ export function createAiJobSiteStep(
         // the row says what is left before the store sells.
         note:
           unit.kind === 'products' && outcome.outputs.length
-            ? AI_SITE_PRODUCTS_PRICE_NOTE
+            ? aiSiteSampleProductKinds(job.inputs)
+              ? AI_SITE_SAMPLE_PRODUCTS_NOTE
+              : AI_SITE_PRODUCTS_PRICE_NOTE
             : unit.kind === 'store' && outcome.outputs.length
               ? AI_SITE_STORE_PAGES_NOTE
               : note,

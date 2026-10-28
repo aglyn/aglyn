@@ -488,8 +488,95 @@ export function aiSiteProductChoices(
 }
 
 /** The sentence the products unit's brief ends with, which the catalog's rules read as how many. */
-export function aiSiteProductsBriefLine(input: AiSiteProductsInput = AI_SITE_PRODUCTS): string {
-  return `Propose between ${input.min} and ${input.max} products: the store's first ones.`
+export function aiSiteProductsBriefLine(input: AiSiteProductsInput = AI_SITE_PRODUCTS, samples: readonly string[] | null = null): string {
+  const count = `Propose between ${input.min} and ${input.max} products: the store's first ones.`
+  // A store whose brief names only kinds of product starts with samples of them (AGL-4065).
+  return samples?.length
+    ? `${count} The brief names kinds of product and no product, so each is a sample of one of these kinds, which the owner replaces with their own: ${samples.join('; ')}. Name each as a plain item of its kind, never a brand, a model, or the kind with "Item", "Order" or "Part" after it.`
+    : count
+}
+
+// ── Sample products (AGL-4065) ──────────────────────────────────────────
+
+/**
+ * THE Q1 DECISION (AGL-4065, 2026-10-28): a store whose brief names kinds
+ * of product and no product starts with SAMPLE products, one or more of
+ * each kind, at a suggested price as before. Each is named as a plain item
+ * of its kind ("Knobby dirt bike tire", never "Riding Gear Item"), written
+ * with the commerce plugin's `sample` mark, which Products shows as a sample
+ * to replace and the storefront never does, and the job's note says they
+ * were made from the kinds the brief named. Products the brief does name
+ * keep the rule they always had.
+ */
+export const AI_SITE_SAMPLE_PRODUCTS_INPUT = 'siteSampleProducts'
+
+/**
+ * What a sample product's name carries after it, on the storefront too:
+ * nothing, so a shopper reads a plain product; Products marks it instead.
+ */
+export const AI_SITE_SAMPLE_PRODUCT_NAME_SUFFIX = ''
+
+/** What each sample product a start wrote says on the job's page (AGL-4065). */
+export const AI_SITE_SAMPLE_PRODUCT_NOTE =
+  'A sample made from the kinds of product you named, at a suggested price. Replace it with your own product in Products.'
+
+/** The note a store's products row carries when they are samples (AGL-4065). */
+export const AI_SITE_SAMPLE_PRODUCTS_NOTE =
+  'Your store starts with sample products made from the kinds of product you named, at suggested prices. Replace each with your own in Products.'
+
+/** Where a business type lists what it sells: after a colon, or after "selling", "offering"… */
+const SELLS_LIST = /(?::\s*|\b(?:selling|sells|sell|offering|offers|stocking|stocks|carrying|carries|making|makes)\s+)(.+)$/i
+
+/** A listed thing that is what the shop does rather than something it sells. */
+const SERVICE_HEAD =
+  /\b(?:orders?|pick-?ups?|deliver(?:y|ies)|shipping|repairs?|services?|installations?|installs?|rentals?|advice|consultations?|fittings?|fitment|bookings?|quotes?|estimates?|classes|lessons?|workshops?|tours?|events?)$/i
+
+/** A listed thing's last word that names a kind and never one product. */
+const KIND_WORD =
+  /\b(?:parts?|gear|items?|accessor(?:y|ies)|suppl(?:y|ies)|equipment|products?|goods|merchandise|essentials?|stuff|things?)$/i
+
+/** What a listed thing is said with that is not what it is: "online", "to order", "and more". */
+const LISTED_TAIL = /\s+(?:online|in[- ]store|to order|by hand|and more|etc\.?|for (?:sale|you)|near you)$/i
+
+/**
+ * The kinds of product a store's brief lists and no product of its own
+ * (AGL-4065), which its first products are samples of; `null` where the
+ * brief names its products or lists nothing it sells. Read off the business
+ * type the person gave: what follows a colon, or "selling", is a list of
+ * what the shop sells, less what it does ("special orders", "in-store
+ * pickup"). One thing said in two words or more of what it is ("hand-poured
+ * soy candles") names the products; anything else is kinds ("OEM and
+ * aftermarket parts, tires, riding gear"). Pure.
+ */
+export function aiSiteSampleProductKinds(inputs: Readonly<Record<string, unknown>> | null | undefined): string[] | null {
+  const business = str(inputs?.['businessType']).replace(/\s+/g, ' ')
+  const list = SELLS_LIST.exec(business)?.[1]
+  if (!list) return null
+  const kinds = list
+    .split(/[;,]|\s+(?:&|\+)\s+/)
+    .map((item) => item.trim().replace(/^(?:and|or)\s+/i, '').replace(/[.!]+$/, ''))
+    .map((item) => {
+      let kept = item
+      while (LISTED_TAIL.test(kept)) kept = kept.replace(LISTED_TAIL, '')
+      return kept.trim()
+    })
+    .filter((item) => item && !SERVICE_HEAD.test(item))
+  if (!kinds.length) return null
+  const [only] = kinds
+  if (kinds.length === 1 && only && only.split(/[\s-]+/).length >= 2 && !KIND_WORD.test(only)) return null
+  return kinds.slice(0, AI_SITE_PRODUCTS.max)
+}
+
+/** Whether a store's brief names its products (AGL-4065): it lists no kinds to make samples of. Pure. */
+export function aiSiteBriefNamesProducts(inputs: Readonly<Record<string, unknown>> | null | undefined): boolean {
+  return aiSiteSampleProductKinds(inputs) === null
+}
+
+/** The kinds a products unit's job makes samples of, as the site start handed them; `null` for none. */
+function sampleKindsOf(job: Pick<AiJob, 'inputs'>): string[] | null {
+  const raw = job.inputs?.[AI_SITE_SAMPLE_PRODUCTS_INPUT]
+  const kinds = Array.isArray(raw) ? raw.map(str).filter(Boolean) : []
+  return kinds.length ? kinds : null
 }
 
 /**
@@ -520,6 +607,8 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
     )
     if (!catalog || catalog.proposal?.kind !== 'catalog') return { ...outcome, outputs: [] }
     const proposed = catalog.proposal.products.slice(0, AI_SITE_PRODUCTS.max)
+    // Samples of the kinds the brief named, for the owner to replace (AGL-4065).
+    const samples = sampleKindsOf(job) !== null
     const photos = await (deps.photos ?? aiSiteProductPhotos)({
       job,
       names: proposed.map((product) => product.name),
@@ -548,6 +637,8 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         // 2026-10-12), held to range once more here: none, or one out of
         // range, is left unstated and the writer gives the store's default.
         ...aiSiteProductPriceContent(product.price),
+        // A sample the owner replaces (AGL-4065): Products says so, the storefront never.
+        ...(samples ? { sample: true } : {}),
       }
       // A photo we picked that the product's rules refuse is dropped, never
       // the product: its slot stays empty for the owner's own.
@@ -571,7 +662,7 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         org: (context.org ?? null) as Readonly<Record<string, unknown>> | null,
         now: context.now,
         id: aiSiteProductId(job.$id, index),
-        name: product.name,
+        name: samples ? `${product.name}${AI_SITE_SAMPLE_PRODUCT_NAME_SUFFIX}` : product.name,
         // Its suggested price, else the store's default, for the owner to
         // change (AGL-3676). Listed at once. Its photo slot holds a stock or
         // starter photo for the owner to replace.
@@ -600,7 +691,7 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         hostId: job.hostId,
         hostSubdomain: catalog.output.hostSubdomain ?? null,
         label: written.name,
-        note: AI_SITE_PRODUCT_NOTE,
+        note: samples ? AI_SITE_SAMPLE_PRODUCT_NOTE : AI_SITE_PRODUCT_NOTE,
       })
     }
     if (!outputs.length) {

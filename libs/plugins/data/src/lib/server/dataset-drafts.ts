@@ -89,6 +89,12 @@ import {
  *  - A PAGE is a `page` field (AGL-3763): text storage riding the "Page"
  *    custom type, each value one of the site's pages as `screen:{id}`
  *    (`isDatasetPageValue`), which a Button or Link binds.
+ *  - A SAMPLE is a seeded record the caller marks as one (`samples`,
+ *    AGL-4065): a site start whose brief gave no entries for a list seeds it
+ *    with complete-looking samples, and the record carries `sample: true`
+ *    beside its values, which the Data card shows as a sample to replace
+ *    and a published page never reads. Saving the record in Data makes it
+ *    the owner's.
  *
  * Nothing is published. The writer touches the one new dataset and its
  * records; a page shows them only where a person (or a job's draft page)
@@ -177,6 +183,11 @@ export interface DatasetDraftContent {
    * asked for where a record page will show each record at its own address.
    */
   pageAddressFrom?: string
+  /**
+   * Which seeded records are samples for the owner to replace, by position
+   * as `records` (AGL-4065). Absent, or false, is a record of the owner's.
+   */
+  samples?: boolean[]
 }
 
 /** What the writer reports about a dataset. */
@@ -196,6 +207,8 @@ export interface DatasetDraftRead {
   /** Each record's values by field id, coerced and addressed. */
   records: Array<Record<string, unknown>>
   addressField: string | null
+  /** Which records are samples, by position (AGL-4065); absent where none is. */
+  samples?: boolean[]
 }
 
 export type DatasetDraftContentRead =
@@ -342,6 +355,14 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
       records.push(values)
     })
   }
+  // Which records are samples (AGL-4065): true or false, one a record at most.
+  const rawSamples = content['samples']
+  if (rawSamples !== undefined && (!Array.isArray(rawSamples) || rawSamples.some((entry) => typeof entry !== 'boolean'))) {
+    problems.push('Samples are a list of true or false, one a record')
+  } else if (Array.isArray(rawSamples) && rawSamples.length > records.length) {
+    problems.push('Samples name more records than the dataset is seeded with')
+  }
+  const samples = Array.isArray(rawSamples) && rawSamples.some((entry) => entry === true) ? records.map((_values, index) => rawSamples[index] === true) : null
   if (problems.length) return { ok: false, problems: [...new Set(problems)] }
 
   // Every seeded record its own address, unique within the dataset.
@@ -353,7 +374,7 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
       if (address) values[addressField as string] = address.slice(0, RECORD_PAGE_ADDRESS_MAX)
     })
   }
-  return { ok: true, value: { name, model, records, addressField } }
+  return { ok: true, value: { name, model, records, addressField, ...(samples ? { samples } : {}) } }
 }
 
 /** The first photo field of a model, by id. */
@@ -514,7 +535,7 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
       const orgRef = db.collection('orgs').doc(request.orgId)
       const datasets = orgRef.collection('datasets')
       const datasetRef = datasets.doc(request.id)
-      const { name, model, records, addressField } = read.value
+      const { name, model, records, addressField, samples } = read.value
       const recordQuota = checkQuota(request.org as never, 'recordsPerDataset', Math.max(0, records.length - 1))
       if (records.length && !recordQuota.allowed) {
         return { ok: false, status: 403, error: datasetDraftRecordLimitRefusal(recordQuota.limit) }
@@ -545,6 +566,8 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
           tx.create(datasetRef.collection('records').doc(recordIds[order]), {
             values,
             ...datasetIntegrityFields(model, values),
+            // A sample for the owner to replace (AGL-4065), beside its values: no page reads it.
+            ...(samples?.[order] ? { sample: true } : {}),
             order,
             createdAt: request.now,
             updatedAt: request.now,

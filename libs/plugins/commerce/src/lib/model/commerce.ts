@@ -259,6 +259,13 @@ export interface HostProduct {
   name: string
   /** Host-unique URL segment for /products/{slug}. */
   slug: string
+  /**
+   * A SAMPLE a guided start made for the merchant to replace (AGL-4065): the
+   * store's brief named kinds of product and no product. Products shows it
+   * as a sample; the storefront never reads it; the merchant's save clears
+   * it (`productSaveFields`).
+   */
+  sample?: boolean
   description?: string
   type: ProductType
   status: ProductStatus
@@ -1298,6 +1305,15 @@ export function smartCollectionMatches(
 export function productSellsOnline(product: { sellOnline?: unknown } | null | undefined): boolean {
   return product?.sellOnline !== false
 }
+
+/** Whether a product is a sample a guided start made for the merchant to replace (AGL-4065). */
+export function productIsSample(product: { sample?: unknown } | null | undefined): boolean {
+  return product?.sample === true
+}
+
+/** What Products says beside a sample (AGL-4065). */
+export const PRODUCT_SAMPLE_NOTE =
+  'A sample made from the kinds of product your site’s brief named. Replace it with your own product: saving your changes makes it yours.'
 
 /**
  * Whether a shopper online may see or buy a product (AGL-4060): live, active

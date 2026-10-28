@@ -1776,6 +1776,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{product ? 'Edit product' : 'Add product'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* A sample a guided start made, to replace with the merchant's own (AGL-4065). */}
+        {CommerceModel.productIsSample(current) ? (
+          <Alert severity="info">{CommerceModel.PRODUCT_SAMPLE_NOTE}</Alert>
+        ) : null}
         <ProductBasicsFields
           name={current.name}
           slug={current.slug}

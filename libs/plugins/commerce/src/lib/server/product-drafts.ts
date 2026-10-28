@@ -145,6 +145,13 @@ export interface ProductDraftContent {
    * merchant to replace with their own.
    */
   mediaUrls?: string[]
+  /**
+   * A SAMPLE for the merchant to replace (AGL-4065): a guided start whose
+   * brief named kinds of product and no product writes its first products
+   * as samples of those kinds. Stored as `sample: true`, which Products
+   * shows and the storefront never reads; the merchant's save clears it.
+   */
+  sample?: boolean
 }
 
 /** The most photos a draft is written with. */
@@ -182,6 +189,8 @@ export interface ProductDraftRead {
   /** Listed before it has a price (`ProductDraftContent.comingSoon`). */
   comingSoon: boolean
   mediaUrls: string[]
+  /** A sample to replace (`ProductDraftContent.sample`, AGL-4065); absent where it is not one. */
+  sample?: true
 }
 
 export type ProductDraftContentRead =
@@ -279,6 +288,8 @@ export function readProductDraftContent(
   if (rawComingSoon !== undefined && typeof rawComingSoon !== 'boolean') {
     problems.push('Coming soon is true or false')
   }
+  const rawSample = content['sample']
+  if (rawSample !== undefined && typeof rawSample !== 'boolean') problems.push('Sample is true or false')
   const mediaUrls = strings('Photos', content['mediaUrls'], problems)
   if (mediaUrls.length > PRODUCT_DRAFT_MEDIA_MAX) {
     problems.push(`A product is written with at most ${PRODUCT_DRAFT_MEDIA_MAX} photos`)
@@ -303,6 +314,7 @@ export function readProductDraftContent(
       categoryIds,
       comingSoon: rawComingSoon === true,
       mediaUrls,
+      ...(rawSample === true ? { sample: true as const } : {}),
     },
   }
 }
@@ -331,6 +343,8 @@ export function productDraftDocument(
     ...(read.comingSoon ? { status: 'active' as const } : {}),
     ...(read.mediaUrls.length ? { mediaUrls: read.mediaUrls } : {}),
     ...(read.categoryIds.length ? { categoryIds: read.categoryIds } : {}),
+    // A sample for the merchant to replace (AGL-4065): Products marks it.
+    ...(read.sample ? { sample: true } : {}),
   }
 }
 

@@ -16,8 +16,11 @@
  */
 
 import {
+  AI_CATALOG_NAME_CODE,
+  AI_CATALOG_NAME_REASK,
   AI_CATALOG_OPTION_VALUES_MAX,
   AI_PRODUCT_CATEGORY_LIST_MAX,
+  aiCatalogNameProblem,
   aiProductMerchantWords,
   type AiCatalogProduct,
   type AiCategoriesProposal,
@@ -39,7 +42,8 @@ import {
   checkAiCategories,
   checkAiProductCopy,
 } from '../tools/ai-products-tool'
-import { runValidatedGeneration, type AiValidatedGeneration } from './ai-doctrine'
+import { runValidatedGeneration, type AiGenerationCheckResult, type AiValidatedGeneration } from './ai-doctrine'
+import { AI_GENERATION_MAX_ATTEMPTS } from './ai-generation-bounds'
 import type { AiSystemBlock } from './ai-runtime'
 
 /**
@@ -121,6 +125,8 @@ export const AI_CATALOG_INSTRUCTIONS: AiSystemBlock[] = [
       'Rules:\n' +
       [
         'Propose 6 to 12 products that fit the brief, unless the brief says how many.',
+        // AGL-4065: a parts shop's brief named kinds of part, and its products were "Riding Gear Item" and "OEM ATV Parts Order".
+        'Name each product as one thing a shopper buys. A kind of product ("tires", "riding gear") is not a product: where the brief names only kinds, name a plain item of one of them, never the kind with "Item", "Order" or "Part" after it, and never a brand or a model the brief does not name.',
         'Write only from the brief. Never invent a material, a size, an origin or a feature it does not give; where a shopper would need a fact the brief does not give, mark it in square brackets, like [material], in the description only.',
         // The price has its own field (Zach, 2026-10-12); the copy states none.
         'Never write a price, a discount, a shipping promise or a stock level in any text: the price goes only in its own field, and the owner sets the rest.',
@@ -254,6 +260,43 @@ export function aiCatalogPrompt(input: Pick<GenerateAiCatalogInput, 'store' | 'b
   return [`Store: ${input.store || 'untitled store'}`, 'Brief:', input.brief.trim()].join('\n')
 }
 
+/**
+ * A catalog's check (AGL-4065): the tool's, and on the FIRST answer only, a
+ * product named for a kind of product, a make or a model the brief does not
+ * give ({@link aiCatalogNameProblem}), which the re-ask names. A second answer
+ * is kept as the tool's check holds it; the products step leaves out any
+ * product it still names so (`aiCatalogProductsNamed`).
+ */
+export function aiCatalogCheck(brief: string): (answer: Record<string, unknown>) => AiGenerationCheckResult<AiCatalogProduct[]> {
+  let answers = 0
+  return (answer) => {
+    answers += 1
+    const checked = checkAiCatalog(answer, { merchantWords: brief })
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return checked
+    const raw = Array.isArray(answer['products']) ? (answer['products'] as unknown[]) : []
+    const named = raw.flatMap((entry, index) => {
+      const name = typeof (entry as Record<string, unknown> | null)?.['name'] === 'string' ? ((entry as Record<string, unknown>)['name'] as string) : ''
+      return aiCatalogNameProblem(name, brief) ? [{ index, name }] : []
+    })
+    if (!named.length) return checked
+    const offending: Record<string, unknown> = { ...(checked.offending ?? {}) }
+    for (const { index, name } of named) offending[`products[${index}].name`] = name
+    return {
+      value: null,
+      violations: [
+        ...checked.violations,
+        { rule: null, code: AI_CATALOG_NAME_CODE, message: AI_CATALOG_NAME_REASK, paths: named.map(({ index }) => `products[${index}].name`) },
+      ],
+      offending,
+    }
+  }
+}
+
+/** A catalog's products less any its re-ask still named for a kind, a make or a model (AGL-4065). Pure. */
+export function aiCatalogProductsNamed(products: readonly AiCatalogProduct[], brief: string): AiCatalogProduct[] {
+  return products.filter((product) => !aiCatalogNameProblem(product.name, brief))
+}
+
 /** Propose a store's first products from a brief. It writes nothing. */
 export function generateAiCatalog(input: GenerateAiCatalogInput & { maxTokens: number }): Promise<AiValidatedGeneration<AiCatalogProduct[]>> {
   return runValidatedGeneration('catalog', {
@@ -267,7 +310,7 @@ export function generateAiCatalog(input: GenerateAiCatalogInput & { maxTokens: n
     ...thinkingOf(),
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.provider ? { provider: input.provider } : {}),
-    check: (answer) => checkAiCatalog(answer, { merchantWords: input.brief }),
+    check: aiCatalogCheck(input.brief),
   })
 }
 

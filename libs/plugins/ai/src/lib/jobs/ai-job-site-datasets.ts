@@ -36,10 +36,17 @@ import { AI_STEP_TIERS } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import {
   AI_DATASET_MAX_TOKENS,
+  AI_DATASET_PLACEHOLDER_CODE,
   AI_DATASET_STEP,
   aiDatasetDraftContent,
+  aiDatasetListedAsPast,
+  aiDatasetRealRecords,
+  aiDatasetSampleDates,
+  aiDatasetWithoutPlaceholders,
   generateAiDataset,
+  type AiDatasetSplit,
 } from '../runtime/ai-dataset-generation'
+import type { AiDataset } from '../tools/ai-dataset-tool'
 import {
   aiLayoutListingId,
   aiLayoutRecordBaseOf,
@@ -148,6 +155,12 @@ export interface AiSiteDatasetInput {
    * list a visitor reads rather than looks at: questions, steps, hours.
    */
   pictures?: AiSiteDatasetPictures
+  /**
+   * The sections of one page that each list part of it, and the value of a
+   * planned field each lists (AGL-4065, {@link aiSiteDatasetSplitOf}):
+   * absent where no page lists it twice.
+   */
+  split?: AiDatasetSplit
 }
 
 /** What a dataset's records are pictured as: things or people. */
@@ -198,6 +211,28 @@ export function aiSiteDatasetNote(records: number): string {
   return `${records} ${records === 1 ? 'record' : 'records'} to start, in Data. Edit them there and every page that lists them follows.`
 }
 
+/**
+ * The note a dataset that starts with samples carries (AGL-4065): the brief
+ * gave no entries for the list, so its rows are samples to replace.
+ */
+export function aiSiteDatasetSampleNote(records: number, samples: number): string {
+  return samples >= records
+    ? `${records} sample ${records === 1 ? 'record' : 'records'} to start, made because the brief gave none: replace them with your own in Data, and every page that lists them follows.`
+    : `${records} records to start, ${samples} of them ${samples === 1 ? 'a sample' : 'samples'} to replace with your own, in Data. Edit them there and every page that lists them follows.`
+}
+
+/**
+ * The note a dataset written with no records carries (AGL-4065): where its
+ * rows go. A list the brief gives no entries for starts with samples
+ * (`AI_DATASET_LIST_WITHOUT_ENTRIES`), so this is the one whose samples were
+ * placeholders even after the re-ask, or a start that makes none. Its band
+ * stays on every page that lists it — its heading, one honest line, and the
+ * live list the owner's first row fills.
+ */
+export function aiSiteDatasetEmptyNote(name: string): string {
+  return `No ${name} rows yet: add them in Data › ${name}, and every page that lists them follows.`
+}
+
 /** The note a record template's row adds: the binding is the member's to save (rule 13). */
 export const AI_SITE_RECORD_PAGE_NOTE =
   'A page per record is drafted, not live: open Page Properties → Record pages to save it.'
@@ -227,18 +262,23 @@ export function aiSitePlanDatasets(plan: Pick<AiJobPlan, 'create'>): AiBuildPlan
 
 /** Where the plan lists a dataset, in words its design reads, whether a page is its record template, and the form that writes to it. */
 export function aiSiteDatasetInputOf(
-  dataset: Pick<AiBuildPlanCreate, 'name'>,
+  dataset: Pick<AiBuildPlanCreate, 'name'> & Partial<Pick<AiBuildPlanCreate, 'fields'>>,
   screens: readonly AiBuildPlanScreen[],
   create: readonly AiBuildPlanCreate[] = [],
 ): AiSiteDatasetInput {
   const shownIn: string[] = []
   const sectionNames: string[] = []
+  let split: AiDatasetSplit | null = null
   for (const screen of screens) {
+    const here: string[] = []
     for (const section of screen.sections) {
       if (!section.uses.some((ref) => namesDataset(ref, dataset.name))) continue
       shownIn.push(`${screen.title} › ${section.name}${section.items ? ` (${section.items} items)` : ''}`)
       sectionNames.push(section.name)
+      here.push(section.name)
     }
+    // A page that lists it twice lists part of it in each (AGL-4065).
+    split ??= aiSiteDatasetSplitOf({ name: dataset.name, fields: dataset.fields ?? [] }, here)
   }
   const recordPages = screens.some((screen) => !!screen.record && namesDataset(screen.record.dataset, dataset.name))
   const form = create.find((entry) => entry.kind === 'form' && !!entry.writesTo && namesDataset(entry.writesTo, dataset.name))
@@ -249,7 +289,144 @@ export function aiSiteDatasetInputOf(
     recordPages,
     ...(form ? { forForm: { name: form.name, fields: form.fields.slice(0, AI_SITE_FORM_DATASET_FIELDS_MAX) } } : {}),
     ...(pictures ? { pictures } : {}),
+    ...(split && !form ? { split } : {}),
   }
+}
+
+// ── Two lists of one dataset on one page (AGL-4065) ─────────────────────
+
+/** A planned field that can tell a page's lists of one dataset apart: a status, a stage, a category. */
+const SPLIT_FIELD =
+  /^(?:status|state|stage|timing|when|category|categories|type|kind|group|section|season|period|collection|series|occasion)$/i
+
+/** Words a section's name frames its records with, which name no value of theirs. */
+const SPLIT_FRAMING = new Set(
+  'a an and the of our my your for with in at to by from all more list lists see view this these those here every each recent selected featured gallery galleries photos pictures cards grid section'.split(
+    ' ',
+  ),
+)
+
+/** A planned field's name without the type a form's dataset may give it: "Status:text" is "Status". */
+const plainField = (spec: string) => {
+  const at = spec.lastIndexOf(':')
+  return (at > 0 ? spec.slice(0, at) : spec).trim()
+}
+
+/** A word as a split compares it: lowercase, a plural's "-s" dropped. */
+const splitStem = (word: string) => {
+  const lower = word.toLowerCase()
+  return lower.length > 3 && lower.endsWith('s') && !lower.endsWith('ss') ? lower.slice(0, -1) : lower
+}
+
+/**
+ * The value of a dataset's planned field each of a page's sections lists
+ * (AGL-4065), where the page lists the dataset in two sections or more: the
+ * words of each section's name that are not the dataset's own (its name, its
+ * fields) nor framing — "Upcoming races" and "Past results" over "Race
+ * events", whose fields include Result and Status, are "Upcoming" and
+ * "Past". `null` where the dataset plans no field that files its records
+ * (a Status, a Category, a Type…), or a section names no value of its own,
+ * or two name the same. Pure.
+ */
+export function aiSiteDatasetSplitOf(
+  dataset: { name: string; fields: readonly string[] },
+  sections: readonly string[],
+): AiDatasetSplit | null {
+  if (sections.length < 2) return null
+  const field = dataset.fields.map(plainField).find((name) => SPLIT_FIELD.test(name))
+  if (!field) return null
+  const own = new Set(
+    [dataset.name, ...dataset.fields.map(plainField)].flatMap((text) => text.split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(splitStem)),
+  )
+  const values = sections.map((section) => {
+    const words = section.split(/\s+/).filter(Boolean)
+    const named = (word: string) => {
+      const stem = splitStem(word.replace(/[^\p{L}\p{N}-]+/gu, ''))
+      return Boolean(stem) && !own.has(stem) && !SPLIT_FRAMING.has(stem)
+    }
+    // The value is the run of the name's words between its framing at either end.
+    let start = 0
+    let end = words.length
+    while (start < end && !named(words[start] as string)) start += 1
+    while (end > start && !named(words[end - 1] as string)) end -= 1
+    const kept = words.slice(start, end).join(' ').replace(/[^\p{L}\p{N}]+$/u, '')
+    return kept && kept.split(' ').length <= 3 ? kept.charAt(0).toUpperCase() + kept.slice(1) : null
+  })
+  if (values.some((value) => !value)) return null
+  const distinct = new Set(values.map((value) => (value as string).toLowerCase()))
+  if (distinct.size !== values.length) return null
+  return { field, sections: [...sections], values: values as string[] }
+}
+
+/**
+ * A site start's plan with each page that lists one of its new datasets in
+ * two sections or more, where nothing can tell those sections' records apart
+ * ({@link aiSiteDatasetSplitOf}), listing it in one (AGL-4065): the first
+ * section keeps its place and takes the others' names and the most items
+ * any of them planned, and the others come off. Two lists of one dataset on
+ * one page would otherwise show the same records twice: the platform's
+ * repeat can filter by a field's value, and has no "the next five". A plan
+ * that needs no fold comes back as it was. Pure.
+ */
+export function aiSettlePlanSplitListings<P extends Pick<AiBuildPlan, 'screens' | 'create'>>(plan: P): P {
+  const datasets = plan.create.filter((entry) => entry.kind === 'dataset')
+  if (!datasets.length) return plan
+  let changed = false
+  const screens = plan.screens.map((screen) => {
+    let sections = screen.sections
+    for (const dataset of datasets) {
+      const listing = sections.flatMap((section, index) => (section.uses.some((ref) => namesDataset(ref, dataset.name)) ? [index] : []))
+      if (listing.length < 2) continue
+      const names = listing.map((index) => sections[index]?.name ?? '')
+      if (aiSiteDatasetSplitOf({ name: dataset.name, fields: dataset.fields }, names)) continue
+      const [first, ...rest] = listing as [number, ...number[]]
+      const joined = names.reduce((all, name, at) => {
+        // A name's first letter is lowered after the first, unless it opens an acronym ("ATV parts").
+        const said = /^\p{Lu}\p{Ll}/u.test(name) ? name.charAt(0).toLowerCase() + name.slice(1) : name
+        return at === 0 ? name : `${all}${at === names.length - 1 ? ' and ' : ', '}${said}`
+      }, '')
+      const items = Math.max(...listing.map((index) => sections[index]?.items ?? 0))
+      const uses = [...new Set(listing.flatMap((index) => sections[index]?.uses ?? []))]
+      sections = sections.flatMap((section, index) =>
+        index === first ? [{ ...section, name: joined, uses, items }] : rest.includes(index) ? [] : [section],
+      )
+      changed = true
+    }
+    return sections === screen.sections ? screen : { ...screen, sections }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
+/**
+ * A designed dataset's split field held to the values its sections list
+ * (AGL-4065): a record whose value is one of them in another case takes
+ * the section's spelling, so the page's filter (`status == Upcoming`) lists
+ * it. Pure.
+ */
+function aiDatasetWithSplitValues(dataset: AiDataset, split: AiDatasetSplit | undefined): AiDataset {
+  const column = split ? dataset.fields.findIndex((field) => field.name.trim().toLowerCase() === split.field.trim().toLowerCase()) : -1
+  if (!split || column < 1) return dataset
+  const spelled = new Map(split.values.map((value) => [value.trim().toLowerCase(), value]))
+  return {
+    ...dataset,
+    records: dataset.records.map((values) => {
+      const value = (values[column] ?? '').trim()
+      const own = spelled.get(value.toLowerCase())
+      return own && own !== value ? values.map((entry, at) => (at === column ? own : entry)) : [...values]
+    }),
+  }
+}
+
+/** A value's words as a split compares them: "Family portraits" is "Family portrait". */
+const splitWords = (value: string) => value.split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(splitStem).join(' ')
+
+/**
+ * The values a page's sections list, each as its records spell it where one
+ * is the same words in another form ("Family portraits" for a section's
+ * "Family portrait"), so a section matches one value, never two. Pure.
+ */
+function splitSpellings(expected: readonly string[], recorded: readonly string[]): string[] {
+  return expected.map((value) => recorded.find((own) => own && splitWords(own) === splitWords(value)) ?? value)
 }
 
 /** Whether a plan screen is the record template of a dataset the plan creates, and which. */
@@ -273,7 +450,17 @@ function datasetInputOf(job: Pick<AiJob, 'inputs'>): AiSiteDatasetInput {
         }
       : {}),
     ...(raw.pictures === 'things' || raw.pictures === 'people' ? { pictures: raw.pictures } : {}),
+    ...splitOf(raw.split),
   }
+}
+
+/** A unit input's split as its job carries it; one that does not read is none. */
+function splitOf(raw: unknown): { split?: AiDatasetSplit } {
+  const split = (raw ?? {}) as Partial<AiDatasetSplit>
+  const field = str(split.field)
+  const sections = Array.isArray(split.sections) ? split.sections.map(str).filter(Boolean).slice(0, 8) : []
+  const values = Array.isArray(split.values) ? split.values.map(str).filter(Boolean).slice(0, 8) : []
+  return field && sections.length >= 2 && values.length === sections.length ? { split: { field, sections, values } } : {}
 }
 
 /** The most fields a form's dataset is designed with: the data plugin writer's own ceiling is higher. */
@@ -632,9 +819,14 @@ interface AiSiteDatasetProposal {
   /**
    * What its records are filed under (AGL-3921): the category-like field, by
    * id, and each record's value of it, by position as {@link recordNames}.
-   * A section named for one value lists only its records.
+   * A section named for one value lists only its records. Where a page lists
+   * it in sections each naming a value of one planned field (AGL-4065), that
+   * field, with the values the sections list as `expected`, so each section
+   * is filtered even before the owner adds its first row.
    */
-  groups?: { field: string; values: string[] }
+  groups?: { field: string; values: string[]; expected?: string[] }
+  /** It was designed with no records (AGL-4065): the brief gave none, and the pages say so. */
+  emptyList?: true
 }
 
 /** A field whose name says it files its records: a category, a type, a kind. */
@@ -712,9 +904,36 @@ function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposa
     photos: Array.isArray(raw.photos) ? raw.photos.map(str).filter((src) => src.startsWith('media:')).slice(0, 24) : [],
     sparseFields: Array.isArray(raw.sparseFields) ? raw.sparseFields.map(str).filter(Boolean) : [],
     ...(raw.groups && typeof raw.groups === 'object' && str(raw.groups.field) && Array.isArray(raw.groups.values)
-      ? { groups: { field: str(raw.groups.field), values: raw.groups.values.slice(0, 12).map(str) } }
+      ? {
+          groups: {
+            field: str(raw.groups.field),
+            values: raw.groups.values.slice(0, 12).map(str),
+            ...(Array.isArray(raw.groups.expected) ? { expected: raw.groups.expected.map(str).filter(Boolean).slice(0, 8) } : {}),
+          },
+        }
       : {}),
+    ...(raw.emptyList === true ? { emptyList: true as const } : {}),
   }
+}
+
+/**
+ * A dataset's groups for the page that lists it in sections each named for a
+ * value of one planned field (AGL-4065): that field, by its written id, each
+ * record's value of it, and the values the sections list. `null` where the
+ * written dataset has no such field.
+ */
+function aiSiteDatasetSplitGroups(
+  split: AiDatasetSplit | undefined,
+  written: readonly AiLayoutListingField[],
+  designed: AiDataset,
+): AiSiteDatasetProposal['groups'] | null {
+  if (!split) return null
+  const name = split.field.trim().toLowerCase()
+  const field = written.find((entry) => entry.name.trim().toLowerCase() === name)?.id
+  const column = designed.fields.findIndex((entry) => entry.name.trim().toLowerCase() === name)
+  if (!field || column < 1) return null
+  const values = designed.records.flatMap((record) => (record[0] ? [(record[column] ?? '').trim()] : [])).slice(0, 12)
+  return { field, values, expected: splitSpellings(split.values, values) }
 }
 
 /**
@@ -802,26 +1021,51 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       fields: creation.fields,
       shownIn: input.shownIn,
       recordPages: input.recordPages,
+      // The value of a field each of a page's lists of it shows (AGL-4065).
+      ...(input.split ? { split: input.split } : {}),
       model,
       maxTokens: AI_SITE_DATASET_BUDGET.maxTokens(model),
       ...(signal ? { signal } : {}),
     })
     const spent = aiGenerationSpent(generation)
     if (generation.status === 'refused') return { ...spent, refused: true }
-    if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
-    const designed = aiDatasetDraftContent(creation.name, generation.value, {
+    // An answer that still numbers placeholders after its re-ask is kept with
+    // the records that name real things — none, as often as not — and written
+    // with its fields, for the owner to fill (AGL-4065).
+    const salvaged =
+      generation.status === 'needs_input' && generation.violations.some((violation) => violation.code === AI_DATASET_PLACEHOLDER_CODE)
+        ? aiDatasetWithoutPlaceholders(generation.answer, { planned: creation.fields, merchantWords: job.brief, name: creation.name })
+        : null
+    if (generation.status === 'needs_input' && !salvaged) return { ...spent, failure: generation.message }
+    // No placeholder record is ever written, whatever let it through (AGL-4065);
+    // a split field holds the values its sections list, and a dated list's
+    // samples fall on a season's weekends from today, its past ones behind it.
+    const language = (job.plan as AiJobPlan | null)?.language ?? null
+    const value = aiDatasetSampleDates(
+      aiDatasetWithSplitValues(
+        aiDatasetRealRecords(generation.status === 'ok' ? generation.value : (salvaged as AiDataset), creation.name),
+        input.split,
+      ),
+      {
+        now: context.now,
+        language,
+        split: input.split ?? null,
+        pastOnly: aiDatasetListedAsPast(input.shownIn.map((where) => where.split(' › ').slice(1).join(' › ') || where)),
+      },
+    )
+    const designed = aiDatasetDraftContent(creation.name, value, {
       recordPages: input.recordPages,
-      ...((job.plan as AiJobPlan | null)?.language ? { language: (job.plan as AiJobPlan).language } : {}),
+      ...(language ? { language } : {}),
     })
     // What each record is filed under, which its photo and the sections that list it by its value read (AGL-3856).
-    const category = aiSiteDatasetCategoryOf(generation.value)
+    const category = aiSiteDatasetCategoryOf(value)
     // A list a visitor looks at keeps its records' photos (AGL-3616): searched
     // in code, never asked of the model, so they cost no credits.
     const photos = input.pictures
       ? await photosFor({
           job,
           name: creation.name,
-          names: generation.value.records.map((values) => values[0] ?? ''),
+          names: value.records.map((values) => values[0] ?? ''),
           ...(category ? { categories: category.values } : {}),
           pictures: input.pictures,
           ...(signal ? { signal } : {}),
@@ -830,8 +1074,8 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     const content = input.pictures
       ? aiSiteDatasetContentWithPhotos(
           designed,
-          generation.value.records.map((_values, index) => photos[index]?.src ?? null),
-          generation.value.records.map((_values, index) => photos[index]?.alt ?? null),
+          value.records.map((_values, index) => photos[index]?.src ?? null),
+          value.records.map((_values, index) => photos[index]?.alt ?? null),
         )
       : designed
     // The data plugin's own rules, before anything is written: content we
@@ -868,15 +1112,18 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
         ? [{ src: photo.placed, width: photo.width, height: photo.height, ...(photo.alt ? { alt: photo.alt } : {}) }]
         : [],
     )
+    // A page's lists each named for a value of a planned field are filtered by it (AGL-4065), else by the category.
+    const split = aiSiteDatasetSplitGroups(input.split, facts.fields ?? [], value)
     const proposal: AiSiteDatasetProposal = {
       fields: facts.fields ?? [],
-      recordNames: generation.value.records.map((values) => values[0] ?? '').filter(Boolean).slice(0, 12),
+      recordNames: value.records.map((values) => values[0] ?? '').filter(Boolean).slice(0, 12),
       addressField: facts.addressField ?? null,
       ...(facts.imageField ? { imageField: facts.imageField } : {}),
       ...(placed.length ? { photos: placed } : {}),
       ...(placedPhotos.length ? { placedPhotos } : {}),
-      sparseFields: aiDatasetSparseFields(generation.value, facts.fields ?? []),
-      ...aiSiteDatasetGroupsOf(category, facts.fields ?? [], generation.value),
+      sparseFields: aiDatasetSparseFields(value, facts.fields ?? []),
+      ...(split ? { groups: split } : aiSiteDatasetGroupsOf(category, facts.fields ?? [], value)),
+      ...(value.records.length ? {} : { emptyList: true as const }),
     }
     // Its records left on a starter, which the site start's late photo pass fills (AGL-3988).
     const starters = aiSiteDatasetStarterList({
@@ -885,13 +1132,23 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       imageField: facts.imageField ?? null,
       fields: facts.fields ?? [],
       people: input.pictures === 'people',
-      names: generation.value.records.map((values) => values[0] ?? ''),
+      names: value.records.map((values) => values[0] ?? ''),
       categories: category?.values ?? [],
       photos,
     })
+    const count = facts.records ?? value.records.length
+    const sampled = (value.samples ?? []).filter(Boolean).length
+    const made = output(result.id, result.name, proposal, count)
     return {
       ...spent,
-      outputs: [output(result.id, result.name, proposal, facts.records ?? generation.value.records.length)],
+      outputs: [
+        // A list the brief gave no rows for says its rows are samples, or where its rows go (AGL-4065).
+        !value.records.length
+          ? { ...made, note: aiSiteDatasetEmptyNote(creation.name) }
+          : sampled
+            ? { ...made, note: aiSiteDatasetSampleNote(value.records.length, sampled) }
+            : made,
+      ],
       ...(starters ? { sitePhotos: { pages: [], lists: [starters] } satisfies AiSitePhotos } : {}),
     }
   }
@@ -1013,7 +1270,7 @@ export function aiDatasetListingsOf(
     /** The record's page-address field, where the writer added one (AGL-3727). */
     addressField?: string | null
     /** What its records are filed under, by position as `records` (AGL-3921): a section named for one value lists its records alone. */
-    groups?: { field: string; values: readonly string[] } | null
+    groups?: { field: string; values: readonly string[]; expected?: readonly string[] } | null
   }>,
   screens: readonly AiLayoutListingScreen[],
 ): AiLayoutListing[] {
@@ -1318,9 +1575,17 @@ export function aiSiteDatasetPlacedPhotoDetails(outputs: readonly AiJobOutput[])
 export function aiSiteDatasetBriefLines(outputs: readonly AiJobOutput[]): string[] {
   const datasets = outputs.filter((output) => output.resource === 'draft' && output.draftResource === AI_SITE_DATASET_RESOURCE)
   return datasets.flatMap((output) => {
-    const names = proposalOf(output).recordNames
-    return names.length
-      ? [`This site's dataset “${output.label}” holds: ${names.map((name) => `“${name}”`).join(', ')}. Where a page names one, name it as written; never name one that is not in this list.`]
+    const proposal = proposalOf(output)
+    const names = proposal.recordNames
+    if (names.length) {
+      return [`This site's dataset “${output.label}” holds: ${names.map((name) => `“${name}”`).join(', ')}. Where a page names one, name it as written; never name one that is not in this list.`]
+    }
+    // A list written with no rows keeps its band (AGL-4065): its heading and
+    // an honest line, over the live list the owner fills.
+    return proposal.emptyList
+      ? [
+          `This site's dataset “${output.label}” has no records yet: the owner adds them in Data. Where a page lists it, write its heading and one line saying its entries are on the way, and never name, date or describe one.`,
+        ]
       : []
   })
 }
