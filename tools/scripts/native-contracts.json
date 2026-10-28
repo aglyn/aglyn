@@ -665,6 +665,7 @@
         "MAX_RESOURCE_UNITS",
         "FEW_UNITS_LEFT",
         "MAX_RESERVATION_GUESTS",
+        "RESERVATION_GUESTS_ROUTE",
         "STAY_CHECK_IN_MODES"
       ]
     },

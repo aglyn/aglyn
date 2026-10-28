@@ -45,7 +45,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { useFirestore, useMerchantPayments, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
@@ -59,6 +59,12 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 export interface ReservationsCardProps {
   hostId: string
 }
+
+/** A stay's guest count after booking (AGL-4043), loaded the first time it opens. */
+const ReservationGuestsDialog = lazy(() => import('./reservation-guests-dialog.component'))
+
+/** The statuses whose guest count staff can still change. */
+const GUESTS_OPEN_STATUSES = ['pending', 'confirmed', 'checked_in']
 
 const STATUS_COLOR: Record<
   string,
@@ -256,6 +262,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
     attemptId: string
   } | null>(null)
   const [walkInBusy, setWalkInBusy] = useState(false)
+  /** The stay whose guests are being changed (AGL-4043). */
+  const [guestsFor, setGuestsFor] = useState<string | null>(null)
 
   const handleResourceSave = useCallback(async () => {
     if (!resourceDraft?.name?.trim() || !(resourceDraft.nightlyRateUsd! > 0)) {
@@ -693,6 +701,11 @@ export function ReservationsCard(props: ReservationsCardProps) {
                   {'Check out'}
                 </Button>
               ) : null}
+              {GUESTS_OPEN_STATUSES.includes(reservation.status) ? (
+                <Button size="small" onClick={() => setGuestsFor(reservation.$id)}>
+                  {'Guests'}
+                </Button>
+              ) : null}
               {['pending', 'confirmed'].includes(reservation.status) ? (
                 <Button
                   size="small"
@@ -714,6 +727,25 @@ export function ReservationsCard(props: ReservationsCardProps) {
           onPageSizeChange={setPageSize}
         />
       </Stack>
+
+      {guestsFor ? (
+        <Suspense fallback={null}>
+          <ReservationGuestsDialog
+            reservationId={guestsFor}
+            hostId={hostId}
+            onClose={() => setGuestsFor(null)}
+            onDone={(answer) => {
+              setGuestsFor(null)
+              enqueueSnackbar(
+                answer.unchanged
+                  ? `Still ${answer.guests} guest${answer.guests === 1 ? '' : 's'}`
+                  : `Guests changed to ${answer.guests}`,
+                { variant: 'success', persist: false },
+              )
+            }}
+          />
+        </Suspense>
+      ) : null}
 
       <Dialog
         open={Boolean(resourceDraft)}

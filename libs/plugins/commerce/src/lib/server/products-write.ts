@@ -94,6 +94,8 @@ export const validId = (value: unknown): value is string =>
 
 export interface Gate {
   uid: string
+  /** The caller's address, for an activity line; null when the token has none. */
+  email: string | null
   staff: boolean
   host: FirebaseFirestore.DocumentSnapshot
   org: Record<string, unknown>
@@ -135,7 +137,8 @@ export async function gate(
   const org = ((await deps.orgForHost(hostId))?.org ?? {}) as Record<string, unknown>
   const locked = await deps.lockdown({ staff, uid: decoded.uid, org: org as never, host: host.data() as never, request: { method: 'POST' } as never })
   if (locked) return void res.status(423).json({ error: 'This site is not accepting changes right now' }), null
-  return { uid: decoded.uid, staff, host, org }
+  const email = typeof decoded['email'] === 'string' ? decoded['email'] : null
+  return { uid: decoded.uid, email, staff, host, org }
 }
 
 /** The site-wide cache drop a product change is owed (AGL-3386): an outbox entry in the write, then the drop. */

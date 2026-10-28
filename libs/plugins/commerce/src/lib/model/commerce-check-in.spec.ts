@@ -37,7 +37,10 @@ import {
   productNeedsCheckIn,
   rainCheckLabel,
   rainCheckProblem,
+  stayCheckInPlan,
+  storedStayCheckIns,
   type CheckInRow,
+  type StayCheckInSlot,
 } from './commerce-check-in'
 
 /** The product setting, wristbands and the labels the window reads (AGL-4043). */
@@ -283,5 +286,82 @@ describe('a stay checked in per guest', () => {
       perGuest: true,
     })
     expect([...unknown.keys()]).toEqual(['r_s2_2027-01-16_0'])
+  })
+})
+
+describe('a stay’s check-ins when its count changes (AGL-4043)', () => {
+  const slot = (place: number, status: StayCheckInSlot['status'] = 'expected'): StayCheckInSlot => ({
+    id: `r_s1_2027-01-16_${place}`,
+    status,
+    unitIndex: place,
+  })
+
+  it('adds the lowest free places for more guests', () => {
+    expect(stayCheckInPlan({ unitCount: 5, existing: [slot(0), slot(1, 'checked_in'), slot(2)] })).toEqual({
+      unitIndexes: [0, 1, 2, 3, 4],
+      create: [3, 4],
+      drop: [],
+      checkedIn: 1,
+    })
+    // A gap left by an earlier change is filled first.
+    expect(stayCheckInPlan({ unitCount: 3, existing: [slot(0), slot(2, 'checked_in')] }).create).toEqual([1])
+  })
+
+  it('drops waiting guests from the highest place down, and never one checked in', () => {
+    expect(stayCheckInPlan({ unitCount: 2, existing: [slot(0), slot(1), slot(2, 'checked_in'), slot(3)] })).toEqual({
+      unitIndexes: [0, 2],
+      create: [],
+      drop: ['r_s1_2027-01-16_1', 'r_s1_2027-01-16_3'],
+      checkedIn: 1,
+    })
+  })
+
+  it('keeps every guest checked in when more are in than the count, and says how many', () => {
+    expect(stayCheckInPlan({ unitCount: 1, existing: [slot(0), slot(1, 'checked_in'), slot(2, 'checked_in')] })).toEqual({
+      unitIndexes: [1, 2],
+      create: [],
+      drop: ['r_s1_2027-01-16_0'],
+      checkedIn: 2,
+    })
+  })
+
+  it('makes every place from the first when nothing is stored yet', () => {
+    expect(stayCheckInPlan({ unitCount: 3, existing: [] }).unitIndexes).toEqual([0, 1, 2])
+  })
+
+  it('follows what is stored when it works out a stay’s due check-ins', () => {
+    const stay = { status: 'confirmed' as const, checkInDayMs: Date.UTC(2027, 0, 15), checkOutDayMs: Date.UTC(2027, 0, 17), guestName: 'Sam Rivera', guests: 2 }
+    const due = dueCheckInsForReservation({
+      reservationId: 's1',
+      reservation: stay,
+      resourceName: 'Cabin 3',
+      dayKey: '2027-01-16',
+      perGuest: true,
+      existing: [slot(0), slot(1), slot(2, 'checked_in')],
+    })
+    expect([...due].map(([id, entry]) => `${id} ${entry.unitCount}`)).toEqual([
+      'r_s1_2027-01-16_0 2',
+      'r_s1_2027-01-16_2 2',
+    ])
+  })
+
+  it('groups stored check-ins by stay, leaving out passes', () => {
+    const doc = (id: string, data: Record<string, unknown>) => ({ id, get: (field: string) => data[field] })
+    const grouped = storedStayCheckIns([
+      doc('r_s1_2027-01-16_0', { source: 'reservation', reservationId: 's1', status: 'checked_in', unitIndex: 0 }),
+      doc('r_s1_2027-01-16_1', { source: 'reservation', reservationId: 's1', status: 'expected', unitIndex: 1 }),
+      doc('o_o1_0_0', { source: 'order', reservationId: null, status: 'expected', unitIndex: 0 }),
+    ])
+    expect([...grouped.keys()]).toEqual(['s1'])
+    expect(grouped.get('s1')).toEqual([
+      { id: 'r_s1_2027-01-16_0', status: 'checked_in', unitIndex: 0 },
+      { id: 'r_s1_2027-01-16_1', status: 'expected', unitIndex: 1 },
+    ])
+  })
+
+  it('never names a place past the count: no "4 of 2"', () => {
+    const row = { itemName: 'Cabin 3', variantLabel: null, unitIndex: 3, unitCount: 2 }
+    expect(checkInItemLabel(row)).toBe('Cabin 3')
+    expect(checkInItemLabel({ ...row, unitIndex: 1 })).toBe('Cabin 3 (2 of 2)')
   })
 })

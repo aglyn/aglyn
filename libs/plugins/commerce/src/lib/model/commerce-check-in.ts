@@ -56,6 +56,7 @@ import {
   type CheckInCustomer,
   type CheckInDayTotals,
   type CheckInRow,
+  type CheckInStatus,
   type CheckInWristband,
   type HostCheckIn,
 } from './commerce-check-in-record'
@@ -350,11 +351,89 @@ export function checkInDayMs(dayKey: string): number | null {
   return check.getUTCDate() === Number(match[3]) && check.getUTCMonth() === Number(match[2]) - 1 ? ms : null
 }
 
+/** Where the store's stay check-in control lives (AGL-4043): `hosts/{hostId}/settings/checkIn.stays`. */
+export const STAY_CHECK_IN_SETTINGS_DOC = 'checkIn'
+
+/** One stay's stored check-in on one day, as far as how many it needs goes. */
+export interface StayCheckInSlot {
+  id: string
+  status: CheckInStatus
+  unitIndex: number
+}
+
+/**
+ * Which check-ins one stay keeps on one day when it needs `unitCount` of
+ * them (AGL-4043): when staff change a stay's guests, or the store switches
+ * between one check-in per stay and one per guest.
+ *
+ * A guest already checked in is never dropped, whatever their place: staff
+ * check a family in in any order, so the third guest may be in while the
+ * first is still on the way. The waiting ones fill what is left, lowest place
+ * first, and the rest are dropped; new places are the lowest free ones.
+ * `checkedIn` above `unitCount` is a count that cannot be honored without
+ * taking back a check-in: the guests route refuses it, and a reconcile keeps
+ * every checked-in guest and drops every waiting one.
+ */
+export function stayCheckInPlan(input: {
+  unitCount: number
+  existing: ReadonlyArray<StayCheckInSlot>
+}): {
+  /** Every place the stay is due under that day: the checked-in, the waiting kept, the new. */
+  unitIndexes: number[]
+  /** New places to write. */
+  create: number[]
+  /** Waiting check-ins it no longer needs. */
+  drop: string[]
+  /** How many of its guests are checked in that day. */
+  checkedIn: number
+} {
+  const wanted = Math.max(0, Math.floor(Number(input.unitCount) || 0))
+  const placeOf = (slot: StayCheckInSlot) => Math.max(0, Math.floor(Number(slot.unitIndex) || 0))
+  const checkedIn = input.existing.filter((slot) => slot.status === 'checked_in')
+  const waiting = input.existing
+    .filter((slot) => slot.status !== 'checked_in')
+    .sort((a, b) => placeOf(a) - placeOf(b) || a.id.localeCompare(b.id))
+  const room = Math.max(0, wanted - checkedIn.length)
+  const kept = waiting.slice(0, room)
+  const used = new Set(input.existing.map(placeOf))
+  const create: number[] = []
+  for (let place = 0; create.length < room - kept.length; place += 1) {
+    if (!used.has(place)) create.push(place)
+  }
+  return {
+    unitIndexes: [...checkedIn.map(placeOf), ...kept.map(placeOf), ...create].sort((a, b) => a - b),
+    create,
+    drop: waiting.slice(room).map((slot) => slot.id),
+    checkedIn: checkedIn.length,
+  }
+}
+
+/** Stored check-ins of stays grouped by stay, as {@link stayCheckInPlan} reads them. */
+export function storedStayCheckIns(
+  docs: ReadonlyArray<{ id: string; get(field: string): unknown }>,
+): Map<string, StayCheckInSlot[]> {
+  const byStay = new Map<string, StayCheckInSlot[]>()
+  for (const doc of docs) {
+    const reservationId = doc.get('reservationId')
+    if (doc.get('source') !== 'reservation' || typeof reservationId !== 'string' || !reservationId) continue
+    const slots = byStay.get(reservationId) ?? []
+    slots.push({
+      id: doc.id,
+      status: doc.get('status') === 'checked_in' ? 'checked_in' : 'expected',
+      unitIndex: Number(doc.get('unitIndex') ?? 0),
+    })
+    byStay.set(reservationId, slots)
+  }
+  return byStay
+}
+
 /**
  * The check-ins a stay makes on a day it covers; empty on any other day. One
  * per stay, or with `perGuest` one per guest (`guests`, at least one), each
  * with its own wristband: the resource's setting under the store's control
- * (`stayChecksInPerGuest`).
+ * (`stayChecksInPerGuest`). Given the stay's check-ins already stored that
+ * day (`existing`), its places follow {@link stayCheckInPlan}, so a guest
+ * checked in is kept and a waiting one beyond the count is not due.
  */
 export function dueCheckInsForReservation(input: {
   reservationId: string
@@ -362,6 +441,7 @@ export function dueCheckInsForReservation(input: {
   resourceName: string | null
   dayKey: string
   perGuest?: boolean
+  existing?: ReadonlyArray<StayCheckInSlot>
 }): Map<string, DueCheckIn> {
   const { reservationId, reservation, dayKey } = input
   const due = new Map<string, DueCheckIn>()
@@ -378,7 +458,7 @@ export function dueCheckInsForReservation(input: {
   const unitCount = input.perGuest ? reservationGuests(reservation) : 1
   const customerKey = checkInCustomerKey({ email, name, fallback: `reservation:${reservationId}` })
   const searchTokens = checkInSearchTokens({ name, email })
-  for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
+  for (const unitIndex of stayCheckInPlan({ unitCount, existing: input.existing ?? [] }).unitIndexes) {
     due.set(reservationCheckInId(reservationId, dayKey, unitIndex), {
       source: 'reservation',
       orderId: null,
@@ -597,7 +677,11 @@ export function alreadyCheckedInLabel(row: Pick<CheckInRow, 'checkedInAtMs' | 'c
 /** One person's line, as the list and the spreadsheet name it: "Day pass · Adult (2 of 3)". */
 export function checkInItemLabel(row: Pick<CheckInRow, 'itemName' | 'variantLabel' | 'unitIndex' | 'unitCount'>): string {
   const item = row.variantLabel ? `${row.itemName} · ${row.variantLabel}` : row.itemName
-  return row.unitCount > 1 ? `${item} (${row.unitIndex + 1} of ${row.unitCount})` : item
+  // A guest checked in before their stay's count came down keeps their place,
+  // which can lie past the new count: no "4 of 2".
+  return row.unitCount > 1 && row.unitIndex < row.unitCount
+    ? `${item} (${row.unitIndex + 1} of ${row.unitCount})`
+    : item
 }
 
 /** The day's check-ins as a spreadsheet, one row per person. */

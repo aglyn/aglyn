@@ -269,6 +269,20 @@
       ]
     },
     {
+      "collectionGroup": "checkIns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "reservationId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dayKey",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "returns",
       "queryScope": "COLLECTION",
       "fields": [

@@ -538,6 +538,13 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/reservations/walk-in', async (req, res) =>
     (await import('./server/reservation-walk-in')).reservationWalkInHandler(req, res),
   )
+  // A stay's guest count after it is booked (AGL-4043), from the Reservations
+  // card and the check-in screen: the walk-in's gate, and the stay's
+  // check-ins for today on brought in line in the same transaction. Loaded
+  // on first call.
+  registerPluginApiRoute('commerce/reservations/guests', async (req, res) =>
+    (await import('./server/reservation-guests')).reservationGuestsHandler(req, res),
+  )
   // The products list's Duplicate and Delete for the native apps (AGL-3841):
   // the console's own copy and soft delete, with the site-wide cache drop.
   registerPluginApiRoute('commerce/products/duplicate', async (req, res) =>

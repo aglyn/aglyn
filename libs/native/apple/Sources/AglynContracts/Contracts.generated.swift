@@ -5886,6 +5886,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
   public let replySubjectMax: Int
+  public let reservationGuestsRoute: String
   public let reservedScreenRouteSegments: [String]
   public let returnReasonLabels: [String: String]
   public let returnReasons: [ReturnReason]
@@ -6237,6 +6238,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
+    case reservationGuestsRoute = "RESERVATION_GUESTS_ROUTE"
     case reservedScreenRouteSegments = "RESERVED_SCREEN_ROUTE_SEGMENTS"
     case returnReasonLabels = "RETURN_REASON_LABELS"
     case returnReasons = "RETURN_REASONS"

@@ -477,6 +477,13 @@ At the check-in window, a resource set to **One check-in per guest** under
 **At check-in** gives each guest their own check-in and wristband; see
 [check-in at the window](pos-operations.md#check-in-at-the-window).
 
+To change the count after a stay is booked, choose **Guests** on the stay in
+the **Reservations** card, enter the new number and **Save**. It takes 1 up to
+what the resource **Sleeps**, while the stay is pending, confirmed or checked
+in. Changing it needs the admin, editor or author role on the site, the same
+as booking a walk-in, and the change is recorded in the site's activity with
+who made it.
+
 ### Several identical units
 
 When you have several of the same thing, such as 12 RV hookups, 30 tent

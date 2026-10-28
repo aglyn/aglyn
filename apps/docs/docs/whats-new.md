@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — change a stay's guests
+
+- **[Change how many guests a stay is for](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —
+  after a stay is booked, **Guests** on the **Reservations** card, on
+  **Today's check-ins** and in the register's **Check in** window changes its
+  count, up to what the resource sleeps. When the stay is checked in per guest,
+  the day's check-ins follow, and a guest already checked in always stays.
+
 ## October 2026 — choose what the kiosk offers
 
 - **[Offer on the kiosk](commerce-and-bookings/commerce/catalog.md#offer-on-the-kiosk)** —
