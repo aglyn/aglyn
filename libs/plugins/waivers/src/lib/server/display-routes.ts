@@ -28,6 +28,7 @@ import {
 } from './display-grant'
 import { json, publicSite, readJsonBody, refuse, waiversGate } from './gate'
 import { recordSignature, waiversNow } from './sign'
+import { signedCopyPath } from './signed-copy'
 import { requestAudit } from './signature-routes'
 
 /*==========================================
@@ -128,6 +129,8 @@ export async function signOnDisplayRoute(request: Request): Promise<Response> {
       people: [signature.signer.name, ...signature.minors.map((minor) => minor.name)],
       window: signatureWindowLabel(signature),
       emailed: Boolean(signature.signer.email),
+      // The signer's own copy, as a code to scan from the display (AGL-4042).
+      copyUrl: await signedCopyPath({ orgId: site.orgId, hostId: grant.hostId, signature }).catch(() => null),
     },
     outcome.replayed ? 200 : 201,
   )

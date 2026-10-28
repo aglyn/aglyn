@@ -22,6 +22,7 @@ import { customerDisplayReturnPath } from '@aglyn/aglyn/plugin-manager/plugin-cu
 import { Alert, Box, Button, Container, Stack } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
+import type { SigningResult } from './signing-form.component'
 import { WaiverSignFlow } from './waiver-sign-flow.component'
 import { publicWaiversRequest } from './waivers-api'
 
@@ -114,7 +115,7 @@ export function WaiverDisplayPage(_props: ConsolePublicPageProps) {
 
   const submit = useCallback(
     (payload: Record<string, unknown>) =>
-      publicWaiversRequest<{ people: string[]; window: string; emailed: boolean }>(WAIVERS_API_ROUTES.signOnDisplay, {
+      publicWaiversRequest<SigningResult>(WAIVERS_API_ROUTES.signOnDisplay, {
         body: { ...payload, hostId: params?.hostId ?? '', grant: params?.grant ?? '' },
       }),
     [params],

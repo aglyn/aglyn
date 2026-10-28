@@ -55,6 +55,11 @@ function registerPublicRoutes(): void {
   registerPluginApiRoute(WAIVERS_API_ROUTES.publicSign, {
     web: lazy('public', (routes) => routes.publicSignRoute),
   })
+  // The signer's own copy, by the one-hour link the signing answered with
+  // (AGL-4042): on whichever app the signing page was.
+  registerPluginApiRoute(WAIVERS_API_ROUTES.signedCopy, {
+    web: async (request) => (await import('./server/signed-copy')).signedCopyRoute(request),
+  })
 }
 
 /**

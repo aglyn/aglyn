@@ -24,6 +24,7 @@ import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
 import { setWaiverDisplaySecretForTests } from './display-grant'
 import { displayGrantRoute, displayGrantStateRoute, signOnDisplayRoute } from './display-routes'
 import { setWaiversEmailSenderForTests, type WaiverEmail } from './emails'
+import { signedCopyPath, signedCopyRoute } from './signed-copy'
 import { setWaiversGateDepsForTests } from './gate'
 import { eraseWaiversPerson, setWaiversErasureDepsForTests } from './person-eraser'
 import { publicSignRoute, publicWaiverRoute } from './public-routes'
@@ -342,7 +343,7 @@ describe('signing before arriving', () => {
       emailLower: 'jordan@example.com',
       guardianRelationship: 'Parent',
       contactId: 'contact-1',
-      consent: { agreed: true, version: 1 },
+      consent: { agreed: true, version: 2 },
       audit: { ip: '203.0.113.7', userAgent: 'Mozilla/5.0 (iPhone) Spec', signedOnHost: 'acme.example.com', staffUid: null },
     })
     expect(stored.signedTextSha256).toBe(createHash('sha256').update(stored.signedText).digest('hex'))
@@ -1109,5 +1110,60 @@ describe('the retention job', () => {
     retentionYears[OTHER_HOST] = 1
     expect(await tick(NOW + HOUR)).toMatchObject({ sites: 1, restamped: 0 })
     expect(signatures().every((one) => one.retentionYears === 7)).toBe(true)
+  })
+})
+
+describe('e-sign consent v2 and the signer’s own copy (AGL-4042)', () => {
+  const contactHost = () =>
+    db.docs.set(`hosts/${HOST}`, {
+      ...(db.docs.get(`hosts/${HOST}`) as Record<string, unknown>),
+      seo: { entity: { email: 'hello@example.com', telephone: '+1-555-010-0100' } },
+    })
+  const copyQuery = (copyUrl: string) => Object.fromEntries(new URL(copyUrl, 'https://console.test').searchParams)
+
+  it('stores the consent as this site’s signers read it, with the business and how to reach it', async () => {
+    contactHost()
+    const waiver = await publishedWaiver()
+    const read = await (await call(publicWaiverRoute, 'GET', { token: null, query: { waiverId: waiver.id } })).json()
+    expect(read.site).toEqual({ name: 'Acme Motocross', contact: 'hello@example.com or +1-555-010-0100' })
+    expect(read.consent).toMatchObject({ heading: 'Signing electronically', version: 2 })
+    expect(read.consent.text).toContain('by contacting Acme Motocross at hello@example.com or +1-555-010-0100.')
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+    const [stored] = signatures()
+    // The words signed are the words shown, and the signed text carries them.
+    expect(stored.consent).toEqual({ agreed: true, text: read.consent.text, version: 2 })
+    expect(stored.signedText).toContain(`Electronic signature consent: ${read.consent.text}`)
+    // The signed copy email repeats the paper copy and how to reach the business.
+    expect(sent[0].tokens['waiver.contact']).toBe('Contact Acme Motocross at hello@example.com or +1-555-010-0100.')
+    expect(sent[0].fallback.text).toContain('a paper copy at no charge')
+  })
+
+  it('answers an electronic signing with a one-hour link to its own PDF, and nothing else', async () => {
+    const waiver = await publishedWaiver()
+    const answer = await (await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })).json()
+    expect(answer.copyUrl).toMatch(/^\/api\/waivers\/signed-copy\?/)
+    const query = copyQuery(answer.copyUrl)
+    const download = await call(signedCopyRoute, 'GET', { token: null, query })
+    expect(download.status).toBe(200)
+    expect(download.headers.get('content-type')).toBe('application/pdf')
+    expect(Buffer.from(await download.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-')
+    // The token is stored as a hash, never as itself.
+    expect(JSON.stringify(signatures()[0])).not.toContain(query['token'])
+    expect((await call(signedCopyRoute, 'GET', { token: null, query: { ...query, token: 'forged-token' } })).status).toBe(404)
+    expect((await call(signedCopyRoute, 'GET', { token: null, query: { ...query, hostId: OTHER_HOST } })).status).toBe(404)
+    setWaiversClockForTests(() => NOW + 61 * 60 * 1000)
+    expect((await call(signedCopyRoute, 'GET', { token: null, query })).status).toBe(404)
+  })
+
+  it('gives a signer at the window with no email a copy to scan, and a paper waiver none', async () => {
+    const waiver = await publishedWaiver()
+    const response = await call(signAtWindowRoute, 'POST', {
+      token: 'tok-clerk',
+      body: signing(waiver, { signer: { name: 'Jordan Lee', email: '', phone: '', dateOfBirth: '1990-04-02' }, signature: { kind: 'typed', text: 'Jordan Lee' } }),
+    })
+    const answer = await response.json()
+    expect(answer.copyUrl).toMatch(/^\/api\/waivers\/signed-copy\?/)
+    expect((await call(signedCopyRoute, 'GET', { token: null, query: copyQuery(answer.copyUrl) })).status).toBe(200)
+    expect(await signedCopyPath({ orgId: ORG, hostId: HOST, signature: { id: 'paper-1', method: 'paper' } })).toBeNull()
   })
 })

@@ -187,4 +187,6 @@ export const WAIVERS_API_ROUTES = {
   publicWaiver: 'waivers/public',
   /** Public: sign one. */
   publicSign: 'waivers/sign',
+  /** Public: the signer's own signed copy as a PDF, by its one-hour link (AGL-4042). */
+  signedCopy: 'waivers/signed-copy',
 } as const
