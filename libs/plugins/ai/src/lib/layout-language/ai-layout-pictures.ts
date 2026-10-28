@@ -65,6 +65,14 @@ import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-label
  * still pinned to the site's dark scheme so the words written for a dark
  * photo stay readable, and a split's words take the row's width.
  *
+ * A gallery picture the library found nothing fitting for takes one of the
+ * job's own photos first, one the page does not show yet (AGL-4065), and a
+ * band of pictures left with none at all is left out of the page, never
+ * shown as a heading over captions ({@link aiLayoutDropEmptyPictureBands}):
+ * the 2026-10-25 Rut Runners Racing home shipped "The team at the track in
+ * pictures" as six captions and no picture, while its job had copied
+ * thirteen motocross photos.
+ *
  * A slot keeps the alt text the model wrote only when it describes the photo
  * placed: a stock photo that is not what it says is described by what it is
  * (`aiStockPhotoAlt`), and a starter photo always by its own words, since
@@ -610,6 +618,96 @@ export function aiLayoutDropEmptyPictures(
 }
 
 /**
+ * A section's name that says it is a band of pictures (AGL-4065): "The team
+ * at the track in pictures", "Photo gallery", "Photos from race day".
+ */
+const PICTURE_BAND =
+  /\b(?:in|through)\s+(?:pictures|photos|photographs|images)\b|\b(?:photo|picture|image)\s+galler(?:y|ies)\b|\bgalleries?\b|^\W*(?:photos|pictures|photographs|snapshots)\b/i
+
+/** Components that only hold words, or lay them out: what a band of captions is made of. */
+const WORDS_ONLY: ReadonlySet<string> = new Set([
+  'section',
+  'div',
+  'muiContainer',
+  'muiStack',
+  'muiGrid',
+  'muiBox',
+  'muiTypography',
+  'muiListItemText',
+  'muiList',
+  'muiListItem',
+  'muiDivider',
+  'muiButton',
+  'icon',
+])
+
+/**
+ * Which slots are cells of a band of pictures (AGL-4065): two or more of one
+ * section's pictures, each in a cell of the same grid, as the compiler draws
+ * a group of pictures over their captions. Pure.
+ */
+export function aiLayoutPictureBandCells(nodes: NodesMap, slots: readonly AiLayoutPictureSlot[]): boolean[] {
+  const map = nodes as unknown as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
+  const parent = new Map<string, string>()
+  for (const [id, node] of Object.entries(map)) for (const child of node?.nodes ?? []) parent.set(child, id)
+  /** The grid a picture sits in a cell of: the nearest container above it. */
+  const gridOf = (id: string) => {
+    let at = parent.get(id)
+    while (at && !(map[at]?.componentId === 'muiGrid' && map[at]?.props?.['container'] === true)) at = parent.get(at)
+    return at ?? null
+  }
+  const grids = slots.map((slot) => (slot.sectionIndex > 0 ? gridOf(slot.frameId ?? slot.imageId) : null))
+  return slots.map((slot, index) => {
+    const grid = grids[index]
+    return Boolean(grid) && slots.filter((other, at) => other.sectionIndex === slot.sectionIndex && grids[at] === grid).length >= 2
+  })
+}
+
+/**
+ * The page without its bands of pictures that show no picture (AGL-4065): a
+ * section, never the first, whose own name says it is pictures, or whose
+ * every picture was a cell of one grid, and which holds nothing but words
+ * once its empty pictures are gone. It is left out whole: never a heading
+ * over captions. The 2026-10-25 Rut Runners Racing and Pit Row Tacos homes
+ * shipped "The team at the track in pictures" and "The trailer and the food
+ * in pictures" as six captions each. A band holding a photo, a record's
+ * picture, a form or anything else that is not words is kept.
+ */
+export function aiLayoutDropEmptyPictureBands(
+  nodes: NodesMap,
+  input: {
+    sectionIds: readonly string[]
+    sectionNames: readonly string[]
+    slots?: readonly AiLayoutPictureSlot[]
+    photos?: ReadonlyArray<AiLayoutPicturePhoto | null>
+  },
+): NodesMap {
+  const map = nodes as unknown as Record<string, Record<string, unknown>>
+  const children = (id: string) => (map[id]?.['nodes'] as string[] | undefined) ?? []
+  const within = (id: string): string[] => [id, ...children(id).flatMap(within)]
+  const slots = input.slots ?? []
+  const photos = input.photos ?? []
+  const parentOf = (id: string) => Object.keys(map).find((key) => children(key).includes(id)) ?? null
+  const cells = aiLayoutPictureBandCells(nodes, slots)
+  const dropped = input.sectionIds.filter((sectionId, index) => {
+    if (index === 0 || !map[sectionId]) return false
+    // Every picture it had was a cell of its band, and none is left with a photo.
+    const own = slots.map((slot, at) => ({ slot, at })).filter(({ slot }) => slot.sectionIndex === index)
+    const pictured = own.length > 0 && own.every(({ at }) => cells[at] && !photos[at]?.src)
+    if (!pictured && !PICTURE_BAND.test(input.sectionNames[index] ?? '')) return false
+    return within(sectionId).every((id) => WORDS_ONLY.has(String(map[id]?.['componentId'] ?? '')))
+  })
+  if (!dropped.length) return nodes
+  const next = { ...map }
+  for (const sectionId of dropped) {
+    const parent = parentOf(sectionId)
+    if (parent) next[parent] = { ...next[parent], nodes: ((next[parent]?.['nodes'] as string[] | undefined) ?? []).filter((child) => child !== sectionId) }
+    for (const id of within(sectionId)) delete next[id]
+  }
+  return next as unknown as NodesMap
+}
+
+/**
  * A source of photos found for the slots themselves — a stock search copied
  * into the site's library — answering per slot, in order: a photo; or
  * {@link AI_LAYOUT_NO_PHOTO} where the library answered and nothing fits,
@@ -681,7 +779,8 @@ export async function aiResolveLayoutPictures(
       ids: input.sectionIds,
       names: input.sectionNames,
     })
-    if (!slots.length) return nodes
+    // A band of pictures drawn with no picture at all is left out (AGL-4065).
+    if (!slots.length) return aiLayoutDropEmptyPictureBands(nodes, input)
     let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
     const report: AiLayoutPictureReport = { refused: new Map() }
     if (input.source) {
@@ -699,6 +798,22 @@ export async function aiResolveLayoutPictures(
       otherLanguage ? { ...photo, alt: aiLayoutLabel('illustrativePhoto', input.language) } : photo
     /** The slots the source could not answer: no library, or it failed them. */
     const unanswered = slots.map((_slot, index) => !found[index])
+    /**
+     * The gallery pictures the library answered with nothing fitting
+     * (AGL-4065): one of the job's own photos fills each, one the page does
+     * not show yet; so does a cell of a band of pictures, whatever its words
+     * say. Never a hero, a portrait of the business's people or a product,
+     * which keep their no-photo treatment (AGL-3831).
+     */
+    const cells = aiLayoutPictureBandCells(nodes, slots)
+    const fitless = slots.map(
+      (slot, index) =>
+        Boolean(found[index]) &&
+        !found[index]?.src &&
+        !slot.product &&
+        !slot.people &&
+        (slot.role === 'gallery' || (slot.role === 'about' && Boolean(cells[index]))),
+    )
     const photos: Array<AiLayoutPicturePhoto | null> = slots.map((_slot, index) => {
       const answer = found[index]
       return answer?.src ? answer : null
@@ -727,6 +842,10 @@ export async function aiResolveLayoutPictures(
       aiLayoutJobPhotoPicks(slots, unanswered, own, photos, input.seed, lateStart ? { repeats: 'never' } : {}).forEach((pick, index) => {
         if (pick && unanswered[index]) photos[index] = pick
       })
+      // A gallery picture nothing fit takes a photo the page does not show yet, never one twice.
+      aiLayoutJobPhotoPicks(slots, fitless, own, photos, input.seed, { repeats: 'never' }).forEach((pick, index) => {
+        if (pick && fitless[index]) photos[index] = pick
+      })
     }
     // A failed slot takes a neutral starter only where the job had no photo
     // of its own before this page, as #1831 had it. On a site start, where
@@ -745,8 +864,12 @@ export async function aiResolveLayoutPictures(
         : hadOwn && !lateStart
           ? []
           : aiLayoutNeutralStarterPhotos(slots, input.seed)
+    // On a site start, a gallery picture nothing fit that none of the job's
+    // photos fills yet keeps a neutral starter too, for the late photo pass
+    // (AGL-4065); anywhere else it is taken out.
+    const holds = (index: number) => unanswered[index] || (fitless[index] && lateStart && own.length > 0)
     starters.forEach((photo, index) => {
-      if (photo && unanswered[index] && !photos[index]) photos[index] = said(photo)
+      if (photo && holds(index) && !photos[index]) photos[index] = said(photo)
     })
     // The page floor (AGL-3923; Zach, 2026-10-12: a starter photo before no
     // photo at all): a page the library answered that would show no picture
@@ -770,7 +893,11 @@ export async function aiResolveLayoutPictures(
       })
       if (left.length) input.onStarters(left)
     }
-    return aiLayoutDropEmptyPictures(aiLayoutPlacePictures(nodes, slots, photos), slots, photos, input.sectionIds)
+    return aiLayoutDropEmptyPictureBands(aiLayoutDropEmptyPictures(aiLayoutPlacePictures(nodes, slots, photos), slots, photos, input.sectionIds), {
+      ...input,
+      slots,
+      photos,
+    })
   } catch (error) {
     console.error('ai layout pictures: the page keeps its empty picture slots', { error })
     return nodes
