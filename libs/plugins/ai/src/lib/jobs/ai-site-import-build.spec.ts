@@ -454,6 +454,7 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     expect(h.published).toHaveLength(1)
     expect(outcome.sitePublish?.liveUrl).toBe('https://import-check.aglyn.app/')
     expect(outcome.review?.reason).toBe('wave')
+    expect(outcome.review?.message).toBe('Main pages is in your site’s preview: 1 page is on your site, where only you and your team can see it. Start Legal when you are ready.')
     expect(outcome.siteImport?.pages.find((page) => page.slot === 'p1')?.brought).toEqual({ words: 120 })
   })
 

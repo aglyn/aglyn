@@ -558,6 +558,17 @@ async function readDraftWords(firestore: FirebaseFirestore.Firestore, hostId: st
   return stored ? aiSiteImportShownWords(stored.nodes as unknown as Record<string, unknown>) : null
 }
 
+/**
+ * The review a wave that went live in the site's preview parks on (AGL-4084):
+ * where its pages are now, who sees them, and the next wave's start.
+ */
+export function aiSiteImportPreviewMessage(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'label'>, published: number): string {
+  const pages = `${published.toLocaleString('en-US')} ${published === 1 ? 'page is' : 'pages are'}`
+  const lead = `${wave.label} is in your site’s preview: ${pages} on your site, where only you and your team can see ${published === 1 ? 'it' : 'them'}.`
+  const next = state.waves.find((entry) => entry.status === 'waiting')
+  return next ? `${lead} Start ${next.label} when you are ready.` : lead
+}
+
 /** Whether every row of the wave is settled, its header and footer included. */
 function waveSettled(state: AiSiteImportState, wave: AiSiteImportWave, items: readonly AiJobItemLedger[]): boolean {
   if (wave.frame && state.frame && aiSiteImportItemOpen(items, AI_SITE_IMPORT_FRAME_SLOT)) return false
@@ -623,7 +634,10 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       const published = sitePublish ? { sitePublish } : {}
       await review('wave-finished', closed, ledger, wave.index)
       const waiting = closed.waves.find((entry) => entry.index === wave.index)?.status === 'review'
-      if (waiting) return { ...outcome, ...published, siteImport: closed, review: waveReview(aiSiteImportWaveMessage(closed, ledger)) }
+      if (waiting) {
+        const message = sitePublish?.published.length ? aiSiteImportPreviewMessage(closed, wave, sitePublish.published.length) : aiSiteImportWaveMessage(closed, ledger)
+        return { ...outcome, ...published, siteImport: closed, review: waveReview(message) }
+      }
       // "Start every remaining wave" (AGL-4083): the next wave starts with no review between them.
       const more = closed.autoContinue === true && closed.waves.some((entry) => entry.status === 'waiting')
       return { ...outcome, ...published, siteImport: closed, ...(more ? { continue: true } : {}) }
