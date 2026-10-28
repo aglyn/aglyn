@@ -26,7 +26,10 @@ import {
 } from 'firebase/firestore'
 
 import { type AuthPersistenceClass } from './auth-persistence'
-import { memoryCacheFallbackActive } from './firestore-multitab-wedge'
+import {
+  memoryCacheFallbackActive,
+  sharedCacheLockActive,
+} from './firestore-multitab-wedge'
 import {
   pruneBrowserSharedClientState,
   type SharedClientStatePrunePlan,
@@ -153,7 +156,8 @@ export function localCacheFor(
 
 /**
  * The cache class THIS TAB's Firestore runs, which is the origin's own class
- * unless the tab has fallen back to the memory cache (AGL-3428).
+ * unless the tab has fallen back to the memory cache (AGL-3428), or another
+ * tab has just seen the shared one locked (AGL-4090).
  *
  * A durable origin's tab that found the shared IndexedDB locked by another
  * tab records a fallback in its `sessionStorage` and reloads; this is where
@@ -161,11 +165,18 @@ export function localCacheFor(
  * ephemeral cache is exactly what the tab needs — memory only, shared with no
  * other tab — and nothing else keys off this answer: the AUTH persistence of
  * the tab keeps the origin's class, so the session survives the reload.
- * Every other tab keeps the durable cache. See `firestore-multitab-wedge.ts`.
+ *
+ * When what that tab found was a LOCK on `databaseName`, it also leaves a
+ * short-lived record in `localStorage`, and a tab opened while it is fresh
+ * starts on the memory cache here instead of hanging on the same lock until
+ * it finds out for itself. Tabs already running keep the durable cache. See
+ * `firestore-multitab-wedge.ts`.
  */
 export function firestoreCacheClassFor(
   originClass: AuthPersistenceClass,
-  fallbackActive: () => boolean = () => memoryCacheFallbackActive(),
+  databaseName?: string,
+  fallbackActive: () => boolean = () =>
+    memoryCacheFallbackActive() || sharedCacheLockActive(databaseName),
 ): AuthPersistenceClass {
   if (originClass === 'durable' && fallbackActive()) return 'ephemeral'
   return originClass

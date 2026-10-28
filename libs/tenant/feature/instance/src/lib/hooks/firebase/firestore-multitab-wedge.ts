@@ -62,8 +62,8 @@ import { type Firestore } from 'firebase/firestore'
  * The tab records a {@link MemoryCacheFallback} in `sessionStorage` and
  * reloads. `firestoreCacheClassFor` reads it at startup and gives this tab the
  * memory cache, which shares nothing with other tabs, so the locked database
- * cannot reach it. `sessionStorage` is per tab: other tabs keep the durable
- * cache, and the fallback leaves when this tab closes or after
+ * cannot reach it. `sessionStorage` is per tab: tabs already running keep the
+ * durable cache, and the fallback leaves when this tab closes or after
  * {@link MEMORY_CACHE_FALLBACK_TTL_MS}.
  *
  * A reload, not an in-place swap, because nothing in place can work: the
@@ -72,6 +72,45 @@ import { type Firestore } from 'firebase/firestore'
  * hundreds of readers hold the instance from context and from closures.
  * Nothing that could be saved is lost — the wedge had already stopped every
  * write in the tab from leaving it.
+ *
+ * ## The tabs that open next (AGL-4090)
+ *
+ * Every tab used to find the lock on its own, so each NEW tab spent the whole
+ * path above — the 8 s stall, the cycle's two 5 s steps, the settle, the 4 s
+ * read, the reload — on an empty page: about half a minute, per tab. So a tab
+ * whose read found the store LOCKED also leaves a {@link SharedCacheLock} in
+ * `localStorage`, and `firestoreCacheClassFor` starts every tab that opens
+ * while it is fresh on the memory cache at once: no stall, no reload.
+ *
+ * - **Only a lock is shared.** A locked store hangs every tab that opens the
+ *   database, a new one included. A stale lease does not: no transaction
+ *   holds the store, and a freshly started tab wins a lapsed lease at its
+ *   first election (AGL-3373). That fallback stays per tab.
+ * - **Each tab that starts from it reads the lease again**, read-only, once
+ *   ({@link confirmSharedCacheLock}). Still locked, it re-stamps the record;
+ *   anything else clears it, so the first tab after the lock lifts is the
+ *   last one moved. The record lasts as long as the lock while tabs keep
+ *   opening, and {@link SHARED_CACHE_LOCK_TTL_MS} past the last tab that saw it.
+ * - **Nothing here writes to IndexedDB or touches the lease.** A tab on the
+ *   memory cache takes no part in the multi-tab protocol, so it can never be
+ *   a second primary over the shared cache (AGL-3788).
+ *
+ * The cost is the memory cache's, and it is why the fallback was per tab: a
+ * write made offline in such a tab is lost if the tab closes first, and the
+ * tab shares no cache with the others. But while the store is locked, the
+ * durable cache in a new tab can do none of that either: its persistence
+ * never starts, so it reads nothing and no write leaves it. The cost is real
+ * only for a record that has outlived its lock, and the re-read clears that
+ * at the first tab that starts from it.
+ *
+ * Not chosen: a lease read at boot in every tab, in place of the record. The
+ * cache is fixed when `initializeFirestore` runs, synchronously in the
+ * provider's first render, and IndexedDB answers asynchronously, so a boot
+ * read can shorten the wait to the read plus a reload but never skip it. It
+ * would also add a read to every healthy tab's boot, and at boot the store can
+ * be held for seconds for healthy reasons (the primary's LRU collection, a
+ * schema upgrade) that the stall and the cycle rule out today, so it would
+ * reload healthy tabs.
  */
 
 /** `sessionStorage` key of this tab's memory-cache fallback. */
@@ -84,6 +123,17 @@ export const MEMORY_CACHE_FALLBACK_KEY = 'aglyn:firestore-memory-cache-fallback'
  * cache again, and falls back again if it has to.
  */
 export const MEMORY_CACHE_FALLBACK_TTL_MS = 30 * 60 * 1000
+
+/** `localStorage` key of the lock a tab saw, for the tabs that open next (AGL-4090). */
+export const SHARED_CACHE_LOCK_KEY = 'aglyn:firestore-shared-cache-locked'
+
+/**
+ * How long a lock one tab saw starts new tabs on the memory cache, unless a
+ * tab that starts from it sees the lock again. Long enough for the tabs a
+ * person opens together (a page, then its preview); short, because a record
+ * that outlives its lock moves every new tab, not one.
+ */
+export const SHARED_CACHE_LOCK_TTL_MS = 5 * 60 * 1000
 
 /**
  * A lease older than this, read from a visible online tab right after a
@@ -128,6 +178,26 @@ export type WedgeEvidence =
 
 /** The fallback this tab recorded, and why. */
 export type MemoryCacheFallback = WedgeEvidence & { at: number }
+
+/** A lock one tab saw, recorded for the tabs that open next (AGL-4090). */
+export interface SharedCacheLock {
+  reason: 'lease-locked'
+  /** The database whose store was locked: `<persistence prefix>main`. */
+  databaseName: string
+  /** When a tab last saw it locked. */
+  at: number
+}
+
+/** What a tab that started from a {@link SharedCacheLock} found when it read the lease again. */
+export type SharedCacheLockCheck =
+  /** There was no fresh record for this database: nothing was read. */
+  | 'absent'
+  /** The store is still locked; the record was re-stamped. */
+  | 'still-locked'
+  /** The store answered; the record is gone, so the next tab gets the durable cache. */
+  | 'cleared'
+  /** Storage could not be read or written; the record is left to expire. */
+  | 'failed'
 
 /**
  * Reads the SDK's `owner` row from `databaseName`.
@@ -249,17 +319,18 @@ export function wedgeEvidenceFrom(
 }
 
 /**
- * This tab's fallback, or `undefined` when there is none, it has expired, or
- * it does not parse.
+ * The object stored under `key`, when it parses and its `at` is within
+ * `ttlMs` of `now` and not ahead of it.
  */
-export function readMemoryCacheFallback(
+function readStampedRecord(
   storage: Pick<Storage, 'getItem'> | undefined,
+  key: string,
   now: number,
-  ttlMs = MEMORY_CACHE_FALLBACK_TTL_MS,
-): MemoryCacheFallback | undefined {
+  ttlMs: number,
+): ({ at: number } & Record<string, unknown>) | undefined {
   let raw: string | null
   try {
-    raw = storage?.getItem(MEMORY_CACHE_FALLBACK_KEY) ?? null
+    raw = storage?.getItem(key) ?? null
   } catch {
     return undefined
   }
@@ -271,10 +342,42 @@ export function readMemoryCacheFallback(
     return undefined
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined
-  const record = parsed as Partial<MemoryCacheFallback>
+  const record = parsed as { at?: unknown } & Record<string, unknown>
   if (typeof record.at !== 'number' || !Number.isFinite(record.at)) return undefined
   if (now - record.at >= ttlMs || record.at > now) return undefined
-  return record as MemoryCacheFallback
+  return record as { at: number } & Record<string, unknown>
+}
+
+/**
+ * This tab's fallback, or `undefined` when there is none, it has expired, or
+ * it does not parse.
+ */
+export function readMemoryCacheFallback(
+  storage: Pick<Storage, 'getItem'> | undefined,
+  now: number,
+  ttlMs = MEMORY_CACHE_FALLBACK_TTL_MS,
+): MemoryCacheFallback | undefined {
+  return readStampedRecord(storage, MEMORY_CACHE_FALLBACK_KEY, now, ttlMs) as
+    | MemoryCacheFallback
+    | undefined
+}
+
+/**
+ * The lock a tab saw on `databaseName`, or `undefined` when there is none, it
+ * names another database, it has expired, or it does not parse.
+ */
+export function readSharedCacheLock(
+  storage: Pick<Storage, 'getItem'> | undefined,
+  databaseName: string | undefined,
+  now: number,
+  ttlMs = SHARED_CACHE_LOCK_TTL_MS,
+): SharedCacheLock | undefined {
+  if (databaseName === undefined) return undefined
+  const record = readStampedRecord(storage, SHARED_CACHE_LOCK_KEY, now, ttlMs)
+  if (record?.reason !== 'lease-locked' || record.databaseName !== databaseName) {
+    return undefined
+  }
+  return record as unknown as SharedCacheLock
 }
 
 const browserSessionStorage = (): Storage | undefined => {
@@ -286,9 +389,93 @@ const browserSessionStorage = (): Storage | undefined => {
   }
 }
 
+const browserLocalStorage = (): Storage | undefined => {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage
+  } catch {
+    // Site data blocked: reading `window.localStorage` throws.
+    return undefined
+  }
+}
+
+const browserIndexedDb = (): IDBFactory | undefined => {
+  try {
+    return typeof window === 'undefined' ? undefined : window.indexedDB
+  } catch {
+    return undefined
+  }
+}
+
 /** Whether this browser tab is running on its memory-cache fallback. */
 export function memoryCacheFallbackActive(now = Date.now()): boolean {
   return readMemoryCacheFallback(browserSessionStorage(), now) !== undefined
+}
+
+/**
+ * Whether another tab has just seen the store of `databaseName` locked, so
+ * this tab should start on the memory cache rather than wait to find out.
+ */
+export function sharedCacheLockActive(
+  databaseName: string | undefined,
+  now = Date.now(),
+): boolean {
+  return readSharedCacheLock(browserLocalStorage(), databaseName, now) !== undefined
+}
+
+/**
+ * Records, for the tabs that open next, that the store of `databaseName` is
+ * locked now. Never throws: without the record, the next tab finds the lock
+ * itself, as it always has.
+ */
+export function recordSharedCacheLock(
+  databaseName: string,
+  {
+    storage = browserLocalStorage(),
+    now = Date.now,
+  }: { storage?: Pick<Storage, 'setItem'>; now?: () => number } = {},
+): void {
+  const record: SharedCacheLock = { reason: 'lease-locked', databaseName, at: now() }
+  try {
+    storage?.setItem(SHARED_CACHE_LOCK_KEY, JSON.stringify(record))
+  } catch {
+    // Full or blocked.
+  }
+}
+
+/**
+ * Run once by a tab that started on the memory cache: reads the lease of
+ * `databaseName` again and keeps another tab's lock record only while the
+ * store is still locked. Never creates a record and never rejects.
+ */
+export async function confirmSharedCacheLock(
+  databaseName: string,
+  {
+    probe = () => probePrimaryLease(browserIndexedDb(), databaseName),
+    storage = browserLocalStorage(),
+    now = Date.now,
+  }: {
+    probe?: () => Promise<PrimaryLeaseProbe>
+    storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+    now?: () => number
+  } = {},
+): Promise<SharedCacheLockCheck> {
+  if (!storage) return 'absent'
+  const seen = readSharedCacheLock(storage, databaseName, now())
+  if (!seen) return 'absent'
+  try {
+    if ((await probe()).state === 'locked') {
+      recordSharedCacheLock(databaseName, { storage, now })
+      return 'still-locked'
+    }
+    const current = readSharedCacheLock(storage, databaseName, now())
+    // Another tab saw the lock again while this read ran; its record is
+    // newer than this read, so it stands.
+    if (current && current.at !== seen.at) return 'still-locked'
+    if (current) storage.removeItem(SHARED_CACHE_LOCK_KEY)
+    return 'cleared'
+  } catch {
+    return 'failed'
+  }
 }
 
 export interface WedgeEscalationDeps {
@@ -348,19 +535,31 @@ export function createWedgeEscalation(
  * Records the fallback for this tab and reloads it onto the memory cache.
  * When the record cannot be written it does not reload: without it, the
  * reloaded tab would open the same locked database and hang again.
+ *
+ * A lock is also recorded for the tabs that open next (AGL-4090), first and
+ * whatever happens to this tab's own record: they would hang on it too.
  */
 export function fallBackToMemoryCache(
   evidence: WedgeEvidence,
   {
     storage = browserSessionStorage(),
+    sharedStorage = browserLocalStorage(),
+    databaseName,
     reload = () => window.location.reload(),
     now = Date.now,
   }: {
     storage?: Pick<Storage, 'setItem'>
+    /** Where the tabs that open next look for a lock this tab saw. */
+    sharedStorage?: Pick<Storage, 'setItem'>
+    /** The locked database. Without it, nothing is shared. */
+    databaseName?: string
     reload?: () => void
     now?: () => number
   } = {},
 ): void {
+  if (evidence.reason === 'lease-locked' && databaseName !== undefined) {
+    recordSharedCacheLock(databaseName, { storage: sharedStorage, now })
+  }
   if (!storage) return
   const record: MemoryCacheFallback = { ...evidence, at: now() }
   try {
@@ -400,15 +599,7 @@ export function browserWedgeEscalationFor(
   const databaseName = multiTabDatabases.get(firestore)
   if (databaseName === undefined) return undefined
   return createWedgeEscalation({
-    probe: () => {
-      let factory: IDBFactory | undefined
-      try {
-        factory = typeof window === 'undefined' ? undefined : window.indexedDB
-      } catch {
-        factory = undefined
-      }
-      return probePrimaryLease(factory, databaseName)
-    },
-    fallBack: (evidence) => fallBackToMemoryCache(evidence),
+    probe: () => probePrimaryLease(browserIndexedDb(), databaseName),
+    fallBack: (evidence) => fallBackToMemoryCache(evidence, { databaseName }),
   })
 }
