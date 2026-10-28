@@ -177,9 +177,9 @@
     },
     "release_ai_site_inspiration": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
       },
-      "description": "Guided AI site start asks for sites the person likes (1 Free, 3 paid) and reads signals only, never their words, images or logos (AGL-3975). OFF by default.",
+      "description": "Guided AI site start asks for sites the person likes (1 Free, 3 paid) and reads signals only, never their words, images or logos (AGL-3975). ON since 2026-10-28; turned off, no field is shown and no site is read.",
       "valueType": "JSON"
     },
     "release_ad_audience_sync": {

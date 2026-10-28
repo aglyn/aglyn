@@ -24212,7 +24212,7 @@
                   "label": "Off"
                 }
               ],
-              "help": "Super staff only. Off by default for everyone: yes."
+              "help": "Super staff only. Off by default for everyone: no."
             },
             {
               "key": "release.release_ad_audience_sync",
