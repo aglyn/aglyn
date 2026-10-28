@@ -23,45 +23,18 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  FIRST_PARTY_STARTER_MODULE_PATHS,
   FIRST_PARTY_STARTER_SEED_SOURCE,
   FIRST_PARTY_STARTER_STAFF_OWNED_FIELDS,
   SITE_NAME_TOKEN,
   buildFirstPartyStarterPlan,
   firstPartyStarterListingId,
   firstPartyStarterOwnedFields,
-  hasStarterLinksModule,
   loadFirstPartyStarterSources,
   reconcileFirstPartyStarter,
 } from './first-party-starters.mjs'
 import { listingQueryFields } from './listing-query-fields.mjs'
-import { importWorkspaceModule } from './workspace-module.mjs'
 
-/**
- * The publish side of `site-starter-links.ts` as its contract states it
- * (AGL-4049 phase 2, §1.4), used only while that module has not reached this
- * checkout: every `screenId` prop naming a routed page becomes `screenSlug`.
- * Once it lands, the real one is loaded and this is never called.
- */
-function contractStarterLinksBySlug(nodes, routing) {
-  const out = {}
-  for (const [id, node] of Object.entries(nodes)) {
-    const props = { ...(node.props ?? {}) }
-    if (typeof props.screenId === 'string' && props.screenId in routing) {
-      props.screenSlug = routing[props.screenId]
-      delete props.screenId
-    }
-    out[id] = { ...node, ...(node.props ? { props } : {}) }
-  }
-  return out
-}
-
-const realLinks = hasStarterLinksModule()
-const sources = await loadFirstPartyStarterSources((path) =>
-  path === FIRST_PARTY_STARTER_MODULE_PATHS.links && !realLinks
-    ? Promise.resolve({ starterLinksBySlug: contractStarterLinksBySlug })
-    : importWorkspaceModule(path),
-)
+const sources = await loadFirstPartyStarterSources()
 const ORG = 'org-platform'
 const plan = buildFirstPartyStarterPlan({ orgId: ORG, ...sources })
 const byId = new Map(plan.map((entry) => [entry.listingId, entry]))
@@ -150,8 +123,6 @@ describe('the plan', () => {
     assert.deepEqual(home.seo, { title: 'Home', description: sources.core.defaultHomeDescription('') })
     assert.equal(home.key, undefined)
     assert.ok(Object.values(home.nodes).some((node) => node.props?.children === SITE_NAME_TOKEN))
-    const def = sources.core.buildDefaultHomeScreen(SITE_NAME_TOKEN)
-    assert.deepEqual(home.nodes, JSON.parse(JSON.stringify(def.nodes)))
 
     const links = Object.values(starter.layout.nodes).filter((node) => node.props?.screenSlug !== undefined)
     assert.ok(links.length >= 2, 'the brand and the footer link to Home')
@@ -160,6 +131,55 @@ describe('the plan', () => {
       assert.equal(node.props.screenId, undefined)
     }
     assert.ok(Object.values(starter.layout.nodes).some((node) => node.componentId === 'layoutSlot'))
+  })
+
+  it('stores the starter site through the starter rule with every node kept', () => {
+    const { starter } = byId.get('fp-starter-default').version
+    const asStored = (value) => JSON.parse(JSON.stringify(value))
+    const root = sources.core.canvasRootId
+    /** The source node as the starter rule stores it: the same, the root's parent filled in as none. */
+    const kept = (node) => ({ ...node, parentId: node.parentId ?? null })
+
+    const home = asStored(sources.core.buildDefaultHomeScreen(SITE_NAME_TOKEN).nodes)
+    const stored = starter.screens[0].nodes
+    assert.deepEqual(Object.keys(stored).sort(), Object.keys(home).sort())
+    for (const [id, node] of Object.entries(home)) assert.deepEqual(stored[id], kept(node), id)
+    const rule = sources.core.sanitizeSiteStarterNodes({ rootId: root, nodes: home })
+    assert.equal(rule.ok, true)
+    assert.deepEqual(stored, asStored(rule.nodes))
+
+    const layout = asStored(sources.core.buildDefaultSiteLayout('home-id').nodes)
+    const chrome = starter.layout.nodes
+    assert.deepEqual(Object.keys(chrome).sort(), Object.keys(layout).sort())
+    for (const [id, node] of Object.entries(layout)) {
+      const { screenId, ...props } = node.props ?? {}
+      const expected = screenId === 'home-id' ? { ...kept(node), props: { ...props, screenSlug: '/' } } : kept(node)
+      assert.deepEqual(chrome[id], expected, id)
+    }
+
+    // The styles and interactions the portable rule would have stripped are all there.
+    const count = (nodes, key) => Object.values(nodes).filter((node) => node[key] !== undefined).length
+    assert.ok(count(home, 'sx') > 0 && count(home, 'interactions') > 0)
+    assert.equal(count(stored, 'sx'), count(home, 'sx'))
+    assert.equal(count(stored, 'interactions'), count(home, 'interactions'))
+    assert.equal(count(chrome, 'sx'), count(layout, 'sx'))
+  })
+
+  it('fails the plan when the starter rule refuses, drops a node or loses the slot', () => {
+    const withRule = (sanitizeSiteStarterNodes) => ({ ...sources.core, sanitizeSiteStarterNodes })
+    const refuse = withRule(() => ({ ok: false, error: 'Component "x" cannot be in a starter' }))
+    assert.throws(
+      () => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core: refuse }),
+      /The starter site's Home page: Component "x" cannot be in a starter/,
+    )
+    const drop = withRule((definition, options) => {
+      const result = sources.core.sanitizeSiteStarterNodes(definition, options)
+      const [first, ...rest] = Object.keys(result.nodes).filter((id) => id !== definition.rootId)
+      return rest.length ? { ...result, nodes: Object.fromEntries(Object.entries(result.nodes).filter(([id]) => id !== first)) } : result
+    })
+    assert.throws(() => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core: drop }), /the starter rule dropped /)
+    const noSlot = { ...sources.core, layoutSlotId: 'no-such-slot' }
+    assert.throws(() => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core: noSlot }), /no content slot/)
   })
 
   it('gives each kind its first base the platform has, its first pairing and a brand from its first hue', () => {
@@ -347,11 +367,3 @@ describe('reconcile', () => {
     )
   })
 })
-
-if (!realLinks) {
-  describe('site-starter-links.ts', () => {
-    it('is not in this checkout yet: the layout links were rewritten by its contract', (t) => {
-      t.diagnostic(`${FIRST_PARTY_STARTER_MODULE_PATHS.links} is missing; the seed CLI refuses to run until it lands`)
-    })
-  })
-}
