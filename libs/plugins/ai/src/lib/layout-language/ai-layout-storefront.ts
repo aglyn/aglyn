@@ -143,35 +143,84 @@ function storefrontHome<S extends Pick<AiBuildPlanScreen, 'sections'>>(screen: S
   return sections.length === screen.sections.length ? screen : { ...screen, sections }
 }
 
-// ── Icons for a store's reasons to buy ────────────────────────────────────
+// ── Icons for a row's items: a store's reasons to buy, any site's reasons, its places ──
 
-/** Words that suggest an icon from the platform's icon library, first match wins. */
+/**
+ * Words that suggest an icon from the platform's icon library, first match
+ * wins: a store's reasons (AGL-3676), then a service business's (AGL-4065) —
+ * its languages, its water and its tools, its time and its prices, its
+ * riders and its sponsors.
+ */
 const ICON_WORDS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\b(ship|shipping|shipped|deliver\w*|dispatch\w*|post(?:age|ed)?|courier)\b/i, 'truck'],
   [/\b(returns?|refunds?|exchanges?)\b/i, 'recycle'],
   [/\b(gifts?|gifting|wrapped|wrapping|boxed)\b/i, 'gift'],
+  [/\b(languages?|bilingual|spanish|español|english and|translat\w*)\b/i, 'translate'],
+  [/\b(water|watering|irrigation|sprinklers?|drip)\b/i, 'water'],
+  [/\b(on[- ]time|punctual|hours|time)\b/i, 'clock'],
+  [/\b(schedules?|scheduling|calendar|dates?|seasons?|seasonal)\b/i, 'calendar'],
+  [/\b(prices?|pricing|estimates?|quotes?|costs?|upfront|fees?)\b/i, 'receipt'],
+  [/\b(repairs?|fix\w*|tools?|wrench\w*|trades?|drywall|carpentry|mechanics?)\b/i, 'tools'],
   [/\b(natural|soy|organic|plant|vegan|botanical|clean|non-toxic|eco|sustainab\w*|cotton|wood)\b/i, 'leaf'],
   [/\b(hand|handmade|hand-poured|poured|small[- ]batch|batch|crafted|made|maker|artisan)\b/i, 'care'],
-  [/\b(guarantee\w*|secure|safe|safety|warranty|protected)\b/i, 'shield'],
+  [/\b(guarantee\w*|secure|safe|safety|warranty|protected|protect\w*|helmets?|insured|licensed)\b/i, 'shield'],
   [/\b(fast|quick|same[- ]day|next[- ]day)\b/i, 'fast'],
   [/\b(quality|award\w*|premium|finest)\b/i, 'award'],
   [/\b(scents?|fragrances?|aroma\w*|candles?|glow|light|burn\w*)\b/i, 'sparkle'],
+  [/\b(sponsors?|sponsorship|partners?|partnership)\b/i, 'handshake'],
+  [/\b(riders?|racing|racers?|races?|race[- ]day|motocross|podiums?|laps?)\b/i, 'flag'],
+  [/\b(famil(?:y|ies)|kids|children|youth|parents)\b/i, 'people'],
+  [/\b(phone|call)\b/i, 'phone'],
+  [/\b(e-?mail|messages?|inbox)\b/i, 'mail'],
   [/\b(local|town|city|community)\b/i, 'location'],
-  [/\b(support|help|questions?|chat)\b/i, 'chat'],
+  [/\b(support|help|questions?|chat|answers?|advice|explain\w*)\b/i, 'chat'],
 ]
 
-/** The fallbacks an item takes in turn, so a row of icons never repeats one. */
-const ICON_FALLBACKS = ['star', 'heart', 'sparkle', 'check', 'smile', 'award'] as const
+/**
+ * The section names that say their items are places (AGL-4065): "Areas we
+ * serve", "Towns we serve", "Where we work", "Service area", "Our
+ * locations". A practice's or a studio's "areas" of work are not places.
+ */
+const PLACES =
+  /\b(?:(?:service|delivery|coverage) areas?|areas? (?:we (?:serve|cover|work)|served|covered)|towns?|cities|cit(?:y|ies) we|neighbou?rhoods?|where (?:we (?:work|serve|go|are)|to find us)|find us|locations?)\b/i
 
 /**
- * The icon each of a store's reasons to buy shows (AGL-3676): its own where
- * the design named one, else one its words suggest, else the next of a few
- * neutral ones — never the same twice in one row.
+ * The kinds whose rows take the sparkle where no word names an icon: a calm
+ * practice's, a salon's, a celebration's. Every other kind takes the check,
+ * and draws the sparkle and the heart nowhere their words do not ask for
+ * them (AGL-4065).
+ */
+const SPARKLE_KINDS: ReadonlySet<string> = new Set(['yoga', 'wellness', 'beauty', 'events'])
+
+/** The icons only those kinds, and a store whose words name its scents and its glow, take from a word. */
+const QUIET_ICONS: ReadonlySet<string> = new Set(['sparkle', 'heart'])
+
+/**
+ * The icon each item of a row shows (AGL-3676, AGL-4065):
+ *
+ *  - in a section of places ("Areas we serve"), the place marker, every one
+ *    alike: a list of towns is one kind of thing, and the 2026-10-25 booth
+ *    kit drew its towns with a marker, a star, a heart and a sparkle;
+ *  - else its own where the design named one;
+ *  - else one its title suggests, then one its words suggest — "On time" a
+ *    clock, "English and Spanish" the translate mark — each once a row;
+ *  - else one neutral icon, the same along the row: the check, or the
+ *    sparkle on a calm or celebratory site. Never a random mix.
+ *
+ * `section` is what the section is called (its plan name and its headings);
+ * `kind` is the site's kind (`AI_SITE_KINDS`), absent on a page drawn with
+ * no design.
  */
 export function aiStorefrontItemIcons(
   items: ReadonlyArray<{ title: string; text: string; icon?: string }>,
   known: (word: string | undefined) => boolean,
+  options: { section?: string; kind?: string } = {},
 ): string[] {
+  if (options.section && PLACES.test(options.section) && known('location')) return items.map(() => 'location')
+  const sparkles = !!options.kind && SPARKLE_KINDS.has(options.kind)
+  const neutral = sparkles && known('sparkle') ? 'sparkle' : 'check'
+  // A page drawn with no design keeps every word's icon, as before.
+  const quiet = !!options.kind && !sparkles && options.kind !== 'store'
   const used = new Set<string>()
   const designed = items.map((item) => {
     if (item.icon && known(item.icon) && !used.has(item.icon)) {
@@ -180,11 +229,13 @@ export function aiStorefrontItemIcons(
     }
     return ''
   })
+  const suggest = (words: string) =>
+    ICON_WORDS.find(([pattern, word]) => pattern.test(words) && !used.has(word) && known(word) && !(quiet && QUIET_ICONS.has(word)))?.[1]
   return designed.map((icon, index) => {
     if (icon) return icon
-    const words = `${items[index].title} ${items[index].text}`
-    const suggested = ICON_WORDS.find(([pattern, word]) => pattern.test(words) && !used.has(word) && known(word))?.[1]
-    const picked = suggested ?? ICON_FALLBACKS.find((word) => !used.has(word) && known(word)) ?? 'star'
+    const item = items[index] as { title: string; text: string }
+    const picked = suggest(item.title) ?? suggest(`${item.title} ${item.text}`)
+    if (!picked) return neutral
     used.add(picked)
     return picked
   })

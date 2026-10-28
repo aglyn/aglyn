@@ -4267,6 +4267,37 @@ the element budget its request asks for.
   the pick), the group style among cards, ruled columns and icon columns, and whether a
   section of words takes a photo (`features`, 60%, always on a storefront); icon columns
   outside a store draw side by side only, where rule 1 knows them by their cells.
+  AGL-4065 widened the two signatures that held one option, after the 2026-10-25 booth
+  kit's two trades sites read as one page: trades now draws its groups as cards, ruled
+  columns or icon rows and its steps numbered or ruled, fitness its groups as cards or
+  ruled columns and its steps either way (`AI_LAYOUT_KIND_SIGNATURES`), and two trades
+  seeds now share hero, group style and steps about one time in twelve instead of one in
+  two. Every site also draws two more choices from its seed, after `writing` so each
+  seed's earlier choices stay what they were: `headingCase` sets a designed group's item
+  titles (ruled columns, icon rows, a ruled timeline) in the theme's own overline label
+  instead of its item heading, three sites in ten for trades and fitness and one in ten
+  elsewhere (a section heading's case stays the look's font pairing); `bandRhythm` either
+  keeps the model's plain and soft bands, turning the second of two like neighbors to the
+  other, or keeps one ground for the page (soft drawn plain, brand and dark untouched),
+  one site in three, one in two for galleries and publications. Two more compiler rules
+  shipped with them. A section that would be the third in a row to show no picture — its
+  own, a stand-in, a record's photo, or a listing of products, posts or events — is set
+  beside a stand-in photo of its heading's subject, its words and its one group of cards
+  or lines in the wider half, at most twice a page (`rhythmSection`, settled as "drawn
+  beside a photo: third text-only band"); steps, questions, figures, a designed group of
+  pictures, a section with its own picture, form or row, and the closing call to action
+  are left as designed, and a page drawn with no design is unchanged. And a row's icons
+  follow what its items mean (`aiStorefrontItemIcons`): a section named for places
+  ("Areas we serve", "Towns we serve") gives every place the map marker, a reason's title
+  and then its words suggest one ("On time" a clock, "English and Spanish" the translate
+  mark, from the compiler's own `AI_ICON_DRAWN`, which the model's schema does not list),
+  and a reason that suggests none takes one neutral icon along the row — the check, or the
+  sparkle on a yoga, wellness, beauty or events site — never the star, heart, sparkle mix
+  the booth kit's towns showed. A hero eyebrow over its 40 characters is fitted around the
+  site's own names (`aiLayoutFitEyebrow`, the names read from the job's words by
+  `aiLayoutPlaceWords`): it loses a coordinated part before its town ("Lawn care and
+  landscaping in New Braunfels" → "Landscaping in New Braunfels"), and a cut never ends
+  inside a name or on a word that joins.
 - **A paid blog start's blog is the blog (AGL-3660, AGL-3676).** Its first posts are
   written into a collection at /blog, and the live Slow Roads start (2026-10-08) also
   planned an "Articles" page of featured cards that the header linked while it never
