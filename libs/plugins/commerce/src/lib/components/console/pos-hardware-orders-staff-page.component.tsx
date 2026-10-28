@@ -444,6 +444,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                   {`Into the store's own account${open.paidTo?.stripeAccountId ? ` (${open.paidTo.stripeAccountId})` : ''}, not the platform's.`}
                 </Typography>
                 <Typography variant="body2">{attachedTo(open)}</Typography>
+                {open.attachment?.state === 'pending' ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {'Attach it from the selling store’s register, under To attach, with the buyer’s email, name or workspace.'}
+                  </Typography>
+                ) : null}
                 {open.refundedCents ? (
                   <Typography variant="body2" color="text.secondary">
                     {`Refunded ${formatPosHardwareCents(open.refundedCents)}${open.refunds.some((refund) => refund.via === 'register') ? ', partly as a return at the register' : ''}`}
