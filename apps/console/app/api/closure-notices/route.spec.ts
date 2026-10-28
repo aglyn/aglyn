@@ -42,7 +42,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => ({
         collection: () => ({
           doc: (id: string) => ({
-            get: async () => ({ exists: Boolean(mockOrgs[id]), get: (field: string) => mockOrgs[id]?.[field] }),
+            get: async () => ({
+              exists: Boolean(mockOrgs[id]),
+              get: (field: string) => mockOrgs[id]?.[field],
+              data: () => mockOrgs[id],
+            }),
           }),
         }),
       }),
@@ -50,6 +54,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
+  // The workspace branch answers the lockdown verdict as /api/orgs/delete
+  // does (AGL-4038); no workspace here is locked.
+  lockdownRefusal: async () => null,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
