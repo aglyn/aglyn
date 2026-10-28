@@ -162,6 +162,20 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    where this module lists it ("gym" of "Synchronicity Gym"); and a
  *    training word's other senses (a railway's train, an elevator's lift, a
  *    newspaper's press, a boat's row) never fill a gym's picture.
+ * 10. **The trade, never a word of it** (the 2026-10-25 booth kit, AGL-4065:
+ *    six trades whose photos were race cars, cyclists, horses, a Honda
+ *    scooter, a canoe for "Parts for the ranch", hotel buffets for a taco
+ *    trailer and an office for a landscaper). A business named by two
+ *    things ("Motorcycle and dirt bike repair shop") is both; the craft
+ *    named first leads, never one named only in what a customer may ask
+ *    ("takes catering requests"); a hero's first tag and a broad search's
+ *    hit name the business's own world ({@link AiStockSiteTerms.lead}),
+ *    never any word of its type ("race" of "race car"); a two-word world
+ *    ("dirt bike") is named whole; a maker's name never shows; a sentence to
+ *    the reader, a job or an order is never a subject, and a part or gear is
+ *    searched only with its world; a record's cover is searched in its world
+ *    first; and a listed world widens only where the library knew nothing of
+ *    it, never an outdoor or a trade world to an office.
  *
  * A slot the library could not fill because it never answered — down, or
  * out of time before its first answer — or because the site's library
@@ -254,7 +268,63 @@ const STOPWORDS = words(
     'this that these those is are be being was were who whom which where while as about than then very just ' +
     'small local best new top quality premium family-owned family owned independent professional ' +
     'business company services service page photo picture image showing shows show ' +
-    'someone people person one two three some many several',
+    'someone people person one two three some many several ' +
+    // A sentence to the reader, never what a picture shows (AGL-4065): "Tell us
+    // the bike and we will say if it will fit" searched "tell us bike".
+    'we us you they them i me if tell say describe send ask need want get let know see find will would could',
+)
+
+/**
+ * Words of a sentence to the reader that a business type may use as a name
+ * ("IT support", "Fit club", "call center"): never a picture's subject
+ * (AGL-4065), always a business's own word.
+ */
+const SENTENCE_WORDS = words('it fit can call')
+
+/**
+ * Nouns that never stand alone as what a picture shows (AGL-4065): a job, a
+ * request, an order. "Describe your job" searched "handyman describe job" and
+ * placed a job application form; "OEM ATV Parts Order" searched "atv parts
+ * order" and placed trees tagged "order".
+ */
+const GENERIC_OBJECTS = words(
+  'job jobs request requests order orders service services detail details thing things stuff action cta',
+)
+
+/**
+ * Things a world has many of, which a photo shows only in that world
+ * (AGL-4065): a part, gear, a machine. Searched only with the site's own
+ * world ("dirt bike parts"), never alone: "parts" answered a canoe on a
+ * river, tagged "part", for a dirt bike shop's "Parts for the ranch".
+ */
+const WORLD_OBJECTS = words('part parts gear gears machine machines equipment spare spares accessory accessories')
+
+/**
+ * The verbs a business type's clause opens with when it says what a customer
+ * may ask of it (AGL-4065): "takes quote requests", "books repair
+ * appointments". The verb is never the business's world.
+ */
+const TRANSACTION_VERBS = words('take takes taking book books booking accept accepts accepting welcome welcomes')
+
+/**
+ * What a business does with a customer, never what its photos show
+ * (AGL-4065), as stems: dropped from its world. "Special orders" named
+ * Berm & Bolt's world, so a delivery man's "order" and trees tagged "order"
+ * filled its products.
+ */
+const TRANSACTION_STEMS: ReadonlySet<string> = new Set(
+  // "Takes" and "books" are verbs only where they open a clause (TRANSACTION_VERBS): a bookshop's books are its world.
+  'booking appointment order request quote estimate free inquiry pickup special around town'.split(' '),
+)
+
+/**
+ * Words of a business's own clause that name its world only beside another
+ * (AGL-4065): "race" and "team" of "amateur motocross race team" are a race
+ * car's and an office's as often. Never its own world alone.
+ */
+const LEAD_GENERIC = words(
+  'amateur pro race racing team club crew group repair repairs service home house food truck trailer mobile ' +
+    'street event events custom family families',
 )
 
 /**
@@ -596,6 +666,59 @@ const SENSITIVE_STEMS = SENSITIVE_TOPICS.map((topic) => ({
 }))
 
 /**
+ * Makers whose names a photo's tags or its page address give, which no
+ * site's pictures carry unless its own words name the maker (AGL-4065): the
+ * Rut Runners Racing heroes were race cars in a pit lane under their makers'
+ * logos, and Holeshot Moto Repair's a Honda scooter and an Indian cruiser. A
+ * name that is also a common word ("apple", "puma", "triumph", "indian") is
+ * named only in the phrase that makes it the maker's. Read from the tags and
+ * the address, so a logo no tag names still shows: the live check is where
+ * that is seen.
+ */
+const MAKERS = [
+  'porsche', 'ferrari', 'lamborghini', 'bmw', 'mercedes', 'audi', 'volkswagen', 'vw', 'toyota', 'honda', 'yamaha',
+  'kawasaki', 'suzuki', 'ktm', 'ducati', 'harley', 'harley-davidson', 'husqvarna', 'gasgas', 'tesla', 'ford',
+  'chevrolet', 'chevy', 'dodge', 'jeep', 'nissan', 'subaru', 'mazda', 'indian motorcycle', 'triumph motorcycle',
+  'gran turismo', 'playstation', 'xbox', 'nintendo', 'nike', 'adidas', 'reebok', 'red bull', 'monster energy',
+  'coca cola', 'cocacola', 'pepsi', 'iphone', 'ipad', 'macbook', 'imac', 'samsung', 'starbucks', 'mcdonalds',
+  'mcdonald',
+]
+
+/** The makers as stems and stem phrases, as a hit's words are read. */
+const MAKER_STEMS: ReadonlySet<string> = new Set(MAKERS.map((maker) => stemList(maker).join(' ')))
+
+/**
+ * A phrase's words and each pair of them in turn, as stems (AGL-4065): "dirt
+ * bike" names the motocross world where "bike" alone names a bicycle's too.
+ */
+function withPairs(list: readonly string[]): string[] {
+  const out = [...list]
+  for (let index = 0; index + 1 < list.length; index += 1) out.push(`${list[index]} ${list[index + 1]}`)
+  return out
+}
+
+/** A text's stems and stem pairs, every tag or phrase read on its own. */
+function termsOf(texts: readonly string[]): Set<string> {
+  return new Set(texts.flatMap((text) => withPairs(stemList(text))))
+}
+
+/** A word or phrase as stems: "dirt bikes" is "dirt bike". */
+const stemPhrase = (phrase: string) => stemList(phrase).join(' ')
+
+/**
+ * A tag that says what a photo suits, never what it shows (AGL-4065):
+ * "samsung wallpaper", "iphone wallpaper", "lock screen". A latte tagged so
+ * shows no phone.
+ */
+const SUITS = /\b(?:wallpapers?|backgrounds?|screens?|screensavers?|lockscreen|4k|hd)\b/i
+
+/** The words a photo names a maker by: its tags, those of what it suits left out, its description and its page address. */
+function aiStockMakerTerms(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>): Set<string> {
+  const tags = (photo.tags ?? []).filter((tag) => !SUITS.test(tag))
+  return termsOf([...tags, photo.alt ?? '', pageSlug(photo.pageUrl)])
+}
+
+/**
  * Hands are never a picture's subject (AGL-3660): "hand-poured", "handmade"
  * and "by hand" say how a thing was made, and a search for "hands" found
  * bronze mannequin hands for the beta.239 Ember & Oak story band. Each of
@@ -743,6 +866,33 @@ const OBJECT_KIN: ReadonlyArray<{
     ],
     queries: ['body lotion', 'hand cream', 'cream jar', 'moisturizer'],
   },
+  {
+    // A rider's gear is what they wear (AGL-4065): "Riding Gear Item" took a
+    // gear wheel of a transmission, tagged "gear, mechanics, bikes".
+    objects: ['gear'],
+    within: ['motocross', 'motorcycle', 'motorbike', 'dirtbike', 'dirt bike', 'enduro', 'atv'],
+    kin: [
+      'riding gear',
+      'motocross gear',
+      'protective gear',
+      'helmet',
+      'helmets',
+      'motocross helmet',
+      'motorcycle helmet',
+      'jersey',
+      'boots',
+      'goggles',
+      'gloves',
+    ],
+    queries: ['motocross gear', 'motocross helmet'],
+  },
+  {
+    // A dirt bike's tire is knobby; a car's on a highway is not one (AGL-4065).
+    objects: ['tire'],
+    within: ['motocross', 'motorcycle', 'motorbike', 'dirtbike', 'dirt bike', 'enduro', 'atv'],
+    kin: ['tire', 'tires', 'knobby tire', 'motocross tire', 'dirt bike tire', 'motorcycle tire', 'bike tire', 'wheel'],
+    queries: ['dirt bike tire', 'motocross tire'],
+  },
 ]
 
 /** An object's kin where the site or the subject is of its world, else `null`. */
@@ -754,7 +904,7 @@ function objectKin(
     OBJECT_KIN.find(
       (entry) =>
         entry.objects.some((word) => aiStockStem(word) === object) &&
-        entry.within.some((word) => world.includes(aiStockStem(word))),
+        entry.within.some((word) => world.includes(stemPhrase(word))),
     ) ?? null
   )
 }
@@ -805,6 +955,20 @@ const CRAFT_KIN: ReadonlyArray<{
    * a press photographer, nor a camera.
    */
   maker?: readonly string[]
+  /**
+   * The worlds a trade of this kind serves, one of which the business type
+   * must name for the trade to be listed, and then the trade is its craft
+   * (AGL-4065): "parts" is a dirt bike shop's craft, its world the motocross
+   * group's.
+   */
+  of?: readonly string[]
+  /**
+   * Words a photo of the world names beside its own, which say the world
+   * only together with them (AGL-4065): a rider, a helmet, a track. Its
+   * world's words for a picture of a thing, never what a hero or a broad
+   * search is held to.
+   */
+  near?: readonly string[]
 }> = [
   {
     match: [
@@ -1119,6 +1283,85 @@ const CRAFT_KIN: ReadonlyArray<{
       core: ['camera', 'photograph', 'photography', 'photographer', 'photo', 'photoshoot', 'analog'],
     },
   },
+  // The six trades of the 2026-10-25 booth kit (AGL-4065), none of which the
+  // table listed: a landscaper and a handyman widened to an office, three
+  // motocross businesses took race cars, cyclists, horses and scooters, and a
+  // taco trailer that also takes catering requests was read as a caterer.
+  {
+    // A landscaper's photos are lawns, beds and gardens at work; a zen garden
+    // of raked sand is not one (Bluebonnet's irrigation section).
+    match: [
+      'landscaping', 'landscaper', 'landscapers', 'lawn', 'lawns', 'xeriscape', 'xeriscaping', 'sod', 'irrigation',
+      'hardscape', 'hardscaping', 'gardening', 'gardener', 'gardeners',
+    ],
+    kin: [
+      'landscaping', 'landscape', 'landscaper', 'lawn', 'grass', 'garden', 'yard', 'mower', 'mowing', 'lawn mower', 'turf',
+      'hedge', 'shrub', 'mulch', 'sprinkler', 'planting', 'flowerbed', 'flower bed', 'backyard', 'gardening', 'gardener',
+      'xeriscape', 'sod', 'irrigation',
+    ],
+    broad: ['lawn care', 'landscaping garden', 'garden landscaping'],
+    making: ['landscaper mowing lawn', 'gardener planting'],
+    shunLead: ['zen', 'sand', 'office', 'business', 'desk', 'laptop', 'meeting', 'golf', 'stadium'],
+  },
+  {
+    // A handyman's photos are tools and repairs; never an architect's house
+    // with a family before it, nor a job application (Two Oaks).
+    match: ['handyman', 'handymen', 'repairman', 'drywall', 'remodel', 'remodeling', 'remodeler', 'renovation', 'renovations', 'home repair'],
+    kin: [
+      'handyman', 'tools', 'tool', 'tool belt', 'toolbox', 'drill', 'hammer', 'screwdriver', 'wrench', 'ladder', 'workshop',
+      'repair', 'home repair', 'carpenter', 'carpentry', 'renovation', 'remodel', 'deck', 'fence', 'door', 'wall', 'plaster',
+      'drywall', 'construction',
+    ],
+    broad: ['handyman tools', 'home repair', 'carpenter workshop'],
+    making: ['handyman at work', 'handyman drilling'],
+    shunLead: ['architecture', 'family', 'office', 'application', 'job', 'business', 'meeting', 'desk', 'laptop'],
+  },
+  {
+    // Motocross and the motorcycle world: a dirt bike, never a bicycle, a
+    // race car, a horse or a scooter (Rut Runners, Holeshot, Berm & Bolt).
+    match: [
+      'motocross', 'motorcycle', 'motorcycles', 'motorbike', 'motorbikes', 'dirtbike', 'dirtbikes', 'dirt bike', 'enduro',
+      'supercross', 'moto', 'mx', 'atv', 'quad bike', 'powersports',
+    ],
+    kin: [
+      'motocross', 'dirt bike', 'dirtbike', 'enduro', 'supercross', 'motorbike', 'motorcycle', 'mx', 'atv', 'quad bike',
+      'motocross track', 'motocross rider', 'dirt track',
+    ],
+    near: ['rider', 'riders', 'helmet', 'jump', 'track', 'mud', 'dust', 'berm', 'racing', 'race', 'racer'],
+    broad: ['motocross', 'dirt bike', 'motocross race', 'motocross rider'],
+    making: ['motorcycle mechanic', 'motorcycle workshop'],
+    rivals: {
+      words: [
+        'bicycle', 'bicycles', 'cycling', 'cyclist', 'cyclists', 'cycle racing', 'bike race', 'road bike', 'mountain bike',
+        'mtb', 'downhill', 'car', 'cars', 'race car', 'formula', 'kart', 'karting', 'horse', 'horses', 'equestrian', 'scooter',
+        'moped', 'vespa', 'cruiser', 'chopper',
+      ],
+      core: ['motocross', 'motorcycle', 'motorbike', 'dirt bike', 'dirtbike', 'supercross', 'atv', 'quad bike'],
+    },
+    shunLead: ['car', 'scooter', 'moped', 'cruiser', 'chopper', 'vespa', 'bicycle', 'cyclist', 'horse', 'highway', 'asphalt', 'traffic'],
+  },
+  {
+    // A parts shop of the motocross world: its parts, tires and riding gear,
+    // never a canoe, a delivery or an industrial lathe (Berm & Bolt).
+    match: ['parts', 'part', 'aftermarket', 'oem', 'spare parts'],
+    of: ['motocross', 'motorcycle', 'motorbike', 'dirtbike', 'dirt bike', 'enduro', 'supercross', 'moto', 'atv', 'quad bike', 'powersports'],
+    kin: ['parts', 'part', 'spare part', 'motorcycle parts', 'tire', 'tires', 'wheel', 'chain', 'sprocket', 'brake', 'exhaust', 'riding gear', 'helmet'],
+    broad: ['dirt bike parts', 'motorcycle parts', 'motocross gear'],
+    making: ['motorcycle mechanic', 'motorcycle workshop'],
+    shunLead: ['canoe', 'river', 'delivery', 'food', 'trees', 'office', 'industry', 'industrial', 'factory'],
+  },
+  {
+    // A taco trailer's photos are tacos and the truck, never a hotel's buffet,
+    // a chef in whites or raw potatoes (Pit Row Tacos).
+    match: ['taco', 'tacos', 'taqueria', 'taco truck', 'taco trailer', 'burrito', 'burritos'],
+    kin: [
+      'taco', 'tacos', 'tortilla', 'tortillas', 'salsa', 'mexican', 'mexican food', 'street food', 'food truck', 'taco truck',
+      'griddle', 'burrito', 'quesadilla', 'nachos', 'guacamole', 'carnitas', 'pastor', 'asada',
+    ],
+    broad: ['tacos', 'street tacos', 'taco truck'],
+    making: ['taco truck cooking', 'tacos on the griddle'],
+    shunLead: ['buffet', 'hotel', 'fine dining', 'chef', 'indian', 'potato', 'banquet', 'cafeteria', 'wedding'],
+  },
 ]
 
 /** Lowercase words, letters only, without stopwords. */
@@ -1160,27 +1403,70 @@ function stemList(text: string): string[] {
 const CLAUSE_BREAK =
   /[,;:.()]|\s[-–—]\s|\b(?:with|on|in|at|against|beside|next|near|under|over|by|from|for|during|while|atop|inside|across|beneath|through|into|onto|amid|among|and|of|that|which|who)\b|&/
 
-/** A business type's clauses, each with the word that opened it. */
-function businessClauses(
-  businessType: string,
-): Array<{ opener: string; words: string[] }> {
-  const text = businessType.toLowerCase().replace(DOING, ' | ')
-  const clauses: Array<{ opener: string; words: string[] }> = []
-  const breaker = new RegExp(`${BUSINESS_BREAK.source}|\\|`, 'g')
-  let at = 0
-  let opener = ''
-  for (const match of text.matchAll(breaker)) {
-    clauses.push({ opener, words: contentWords(text.slice(at, match.index)) })
-    opener = match[0].trim()
-    at = (match.index ?? 0) + match[0].length
-  }
-  clauses.push({ opener, words: contentWords(text.slice(at)) })
-  return clauses
+/** One clause of a business type ({@link businessClauses}). */
+interface AiStockClause {
+  /** The word that opened it: a break's, "|" after a verb of making, "" for the first. */
+  opener: string
+  words: string[]
+  /**
+   * Where the business's own clause was a noun phrase joined to the one before
+   * it by "and" (AGL-4065): the second, which holds the head ("dirt bike
+   * repair shop" of "Motorcycle and dirt bike repair shop").
+   */
+  joined?: string[]
+  /** Whether it says what a customer may ask of the business: "takes quote requests" (AGL-4065). */
+  asked?: boolean
 }
 
 /** A clause's words that name the business: no site kind, no filler. */
 const businessOf = (clause: readonly string[]) =>
   clause.filter((word) => !SITE_KINDS.has(word) && !FILLER.has(word))
+
+/**
+ * A business type's clauses, each with the word that opened it. Where the
+ * business's own clause is a word or two joined by "and" to a noun phrase
+ * that ends in a place of business ("Motorcycle and dirt bike repair shop",
+ * "Dirt bike and ATV parts shop"), the two are one clause (AGL-4065): the
+ * Holeshot start read its business as "motorcycle" and lost the dirt bikes,
+ * Berm & Bolt's as "dirt bike" and its craft as "bike". "And" before a verb
+ * or a place still ends the clause. A clause that opens with what a customer
+ * may ask ("takes", "books") loses that verb.
+ */
+function businessClauses(businessType: string): AiStockClause[] {
+  const text = businessType.toLowerCase().replace(DOING, ' | ')
+  const clauses: AiStockClause[] = []
+  const breaker = new RegExp(`${BUSINESS_BREAK.source}|\\|`, 'g')
+  let at = 0
+  let opener = ''
+  const push = (raw: string) => {
+    const found = contentWords(raw)
+    // Never the type's first words: "Books and coffee" sells books.
+    const asked = opener !== '' && found.length > 1 && TRANSACTION_VERBS.has(found[0] ?? '')
+    clauses.push({ opener, words: asked ? found.slice(1) : found, ...(asked ? { asked: true } : {}) })
+  }
+  for (const match of text.matchAll(breaker)) {
+    push(text.slice(at, match.index))
+    opener = match[0].trim()
+    at = (match.index ?? 0) + match[0].length
+  }
+  push(text.slice(at))
+  const own = clauses.findIndex((clause) => businessOf(clause.words).length > 0)
+  const first = clauses[own]
+  const next = clauses[own + 1]
+  if (first && next && (next.opener === 'and' || next.opener === '&')) {
+    const left = businessOf(first.words)
+    const right = businessOf(next.words)
+    const head = right[right.length - 1] ?? ''
+    if (
+      left.length <= 2 &&
+      left.every((word) => !VENUES.has(word) && !ROLES.has(word)) &&
+      right.length >= 2 &&
+      VENUES.has(head)
+    )
+      clauses.splice(own, 2, { opener: first.opener, words: [...first.words, ...next.words], joined: next.words })
+  }
+  return clauses
+}
 
 /**
  * The kind of business in a few words: the first clause of the business
@@ -1189,10 +1475,14 @@ const businessOf = (clause: readonly string[]) =>
  * of an English noun phrase is at its end). "ceramic artist" from "a
  * portfolio for a ceramic artist who makes stoneware bowls"; "candle shop"
  * from "a small-batch candle shop selling hand-poured soy candles online".
+ * A business named by two things joined by "and" is its second noun phrase
+ * whole: "dirt bike repair shop" of "Motorcycle and dirt bike repair shop"
+ * (AGL-4065).
  */
 export function aiStockBusinessWords(businessType: string): string {
-  for (const { words: clause } of businessClauses(businessType)) {
+  for (const { words: clause, joined } of businessClauses(businessType)) {
     const named = businessOf(clause)
+    if (joined) return businessOf(joined).slice(-4).join(' ')
     if (named.length) return named.slice(-3).join(' ')
   }
   return ''
@@ -1232,6 +1522,19 @@ export interface AiStockSiteTerms {
    * held to it.
    */
   domain: string[]
+  /**
+   * The business's own world (AGL-4065): the listed crafts its own clause
+   * names, their names and kin, and its own words where no craft covers
+   * them, as stems and stem pairs ("dirt bike"). What a hero's first tag and a
+   * broad search's hit name. Its whole domain where no craft is listed.
+   */
+  lead?: string[]
+  /**
+   * The world a trade serves, as its type names it, where the craft is the
+   * trade ("dirt bike" for a parts shop's craft "part", AGL-4065): what its
+   * pictures are qualified by in place of the craft.
+   */
+  leadWord?: string
   /** The searches for the site's world itself, broadest last. */
   broad: string[]
   /** The searches for its maker at work, for a story of the craft (AGL-3660); empty for a craft not listed. */
@@ -1267,19 +1570,43 @@ export interface AiStockSiteTerms {
   work?: AiStockScene[]
 }
 
-/** The site's terms, read from its business type. */
+/** A word or phrase of a group's list, as stems: what a business type and a hit are read for. */
+const groupTerm = (word: string) => stemPhrase(word)
+
+/**
+ * The site's terms, read from its business type.
+ *
+ * Two worlds are read (AGL-4065). Its DOMAIN is everything its words name
+ * of its world, what a picture of a thing is held to. Its LEAD is the
+ * business's own world: the listed crafts its own clause names (and the
+ * craft's), their names and kin, and the clause's own words where no craft
+ * covers them, never a word that names a world only beside another ("race",
+ * "team") nor what a customer is asked to do. A hero's first tag and a broad
+ * search's hit name the lead: the Rut Runners heroes, held to every word of
+ * "Amateur motocross race team: rider profiles, race schedule…", took race
+ * cars because "race car" named "race". Of the crafts its words list, the one
+ * named first leads (a taco trailer that "takes catering requests" is a taco
+ * trailer), and a craft named only in what a customer may ask for gives the
+ * site no searches of its own.
+ */
 export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   let business = aiStockBusinessWords(businessType)
   let craft = aiStockCraftWords(business)
   const domain = new Set<string>()
   /** The things it makes, by their head nouns. */
   const made = new Set<string>()
+  /** Stems and stem pairs of every clause that names its world, and of those that only say what it is asked for. */
+  const said = new Set<string>()
+  const asked = new Set<string>()
+  /** The business's own clause, as stems and stem pairs: what its lead is read from. */
+  let own: string[] = []
+  let ownSeen = false
   /** The last word of the first clause that names the world: "soap" of "for handmade cold-process soap". */
   let firstWorld = ''
   let named = false
   let making = false
   let place = false
-  for (const { opener, words: clause } of businessClauses(businessType)) {
+  for (const { opener, words: clause, asked: isAsked } of businessClauses(businessType)) {
     if (opener === '|') making = true
     // Where it is, and who it is for, are not its world — once something has named it.
     if (named && PLACE_OR_AUDIENCE.test(opener)) {
@@ -1295,6 +1622,10 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     const kept = businessOf(clause).filter(
       (word) => !VENUES.has(word) && !ROLES.has(word),
     )
+    if (!ownSeen && businessOf(clause).length) {
+      ownSeen = true
+      own = kept.filter((word) => !LEAD_GENERIC.has(word))
+    }
     if (kept.length) named = true
     // What it makes names its world by what the things are made of, never
     // the things: "stoneware" of "stoneware bowls", "soy" of "soy candles".
@@ -1305,6 +1636,7 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     )
     for (const word of world)
       for (const stem of stemList(word)) domain.add(stem)
+    for (const term of termsOf([kept.join(' ')])) (isAsked ? asked : said).add(term)
     const last = world[world.length - 1]
     if (!firstWorld && last) firstWorld = aiStockStem(last)
     if (making)
@@ -1313,33 +1645,50 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   }
   // A business named only by what it sells ("a shop selling pottery") is of that world.
   if (!domain.size) for (const stem of made) domain.add(stem)
-  const groups = CRAFT_KIN.filter((group) =>
-    group.match.some(
-      (word) =>
-        domain.has(aiStockStem(word)) ||
-        made.has(aiStockStem(word)) ||
-        aiStockStem(word) === craft,
-    ),
-  )
+  const typeStems = stemList(businessType)
+  const typeTerms = withPairs(typeStems)
+  /** Where a word or a two-word name first stands in the business type; the end where it stands nowhere. */
+  const positionOf = (term: string) => {
+    const [head, tail] = term.split(' ') as [string, string | undefined]
+    const index = typeStems.findIndex((stem, at) => stem === head && (tail === undefined || typeStems[at + 1] === tail))
+    return index >= 0 ? index : Number.MAX_SAFE_INTEGER
+  }
+  /** Where a group's list first meets the business type, its words in order. */
+  const at = (list: readonly string[]) => Math.min(...list.map((word) => positionOf(groupTerm(word))))
+  const names = (word: string) => {
+    const term = groupTerm(word)
+    return term.includes(' ') ? said.has(term) || asked.has(term) : domain.has(term) || made.has(term) || term === craft
+  }
+  const found = CRAFT_KIN.map((group, index) => ({ group, index }))
+    .filter(({ group }) => group.match.some(names) && (!group.of || group.of.some(names)))
+    .sort(
+      (a, b) =>
+        Number(Boolean(b.group.of)) - Number(Boolean(a.group.of)) || at(a.group.match) - at(b.group.match) || a.index - b.index,
+    )
+  const groups = found.map(({ group }) => group)
+  // A craft named only in what the business is asked for ("takes catering
+  // requests") lends its kin and its refusals, never its searches (AGL-4065).
+  const major = groups.filter((group) => group.match.some((word) => said.has(groupTerm(word)) || made.has(groupTerm(word))))
   // A business that is only a place ("an online shop for handmade
   // cold-process soap") takes its craft from what it is for: the Saltmarsh
   // Soap Co start (2026-10-10) read its craft as nothing, so its hero searched
   // "shop" (a florist's bouquet) and no product was held to soap.
   if (!craft) {
-    const listed = groups[0]?.match
-      .map(aiStockStem)
-      .find((stem) => domain.has(stem) || made.has(stem))
+    const listed = major[0]?.match
+      .map(groupTerm)
+      .find((stem) => !stem.includes(' ') && (domain.has(stem) || made.has(stem)))
     craft = listed || firstWorld || [...made][0] || ''
     if (craft && !stemList(business).includes(craft))
       business = `${craft} ${business}`.trim()
-  } else if (groups[0] && !groups.some((group) => group.match.some((word) => aiStockStem(word) === craft))) {
+  } else if (major[0] && !major.some((group) => group.match.some((word) => groupTerm(word) === craft))) {
     // A word the table does not list, beside a craft it does, says what kind
     // of that craft it is (AGL-3856): "wedding" of "a wedding and portrait
     // photographer" is a photographer's subject, never a craft to search by.
     craft =
-      groups[0].match.map(aiStockStem).find((stem) => domain.has(stem) || made.has(stem)) ?? craft
+      major[0].match.map(groupTerm).find((stem) => !stem.includes(' ') && (domain.has(stem) || made.has(stem))) ?? craft
   }
   if (craft) domain.add(craft)
+  const craftGroup = major.find((group) => group.match.some((word) => groupTerm(word) === craft))
   const broad: string[] = []
   const makingSearches: string[] = []
   const rivals: Array<{ words: string[]; core: string[] }> = []
@@ -1347,32 +1696,70 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   const shun = new Set<string>()
   const shunLead = new Set<string>()
   for (const group of groups) {
-    for (const word of group.shun ?? []) shun.add(aiStockStem(word))
-    for (const word of group.shunLead ?? []) shunLead.add(aiStockStem(word))
-    for (const word of group.match) core.add(aiStockStem(word))
-    for (const word of group.kin) domain.add(aiStockStem(word))
-    broad.push(...group.broad)
-    makingSearches.push(...group.making)
+    for (const word of group.shun ?? []) shun.add(groupTerm(word))
+    for (const word of group.shunLead ?? []) shunLead.add(groupTerm(word))
+    for (const word of [...group.kin, ...(group.near ?? [])]) domain.add(groupTerm(word))
     if (group.rivals)
       rivals.push({
-        words: group.rivals.words.map(aiStockStem),
-        core: group.rivals.core.map(aiStockStem),
+        words: group.rivals.words.map(groupTerm),
+        core: group.rivals.core.map(groupTerm),
       })
   }
+  for (const group of major) {
+    for (const word of group.match) core.add(groupTerm(word))
+    broad.push(...group.broad)
+    makingSearches.push(...group.making)
+  }
+  // A two-word name of a listed world names it whole: "dirt bike", never
+  // "bike" (a bicycle's) where the type says it nowhere else (AGL-4065).
+  for (const group of groups)
+    for (const word of group.match) {
+      const term = groupTerm(word)
+      if (!term.includes(' ') || !typeTerms.includes(term)) continue
+      domain.add(term)
+      const [head, tail] = term.split(' ') as [string, string]
+      const alone = (stem: string) =>
+        typeStems.some((found, index) => found === stem && !(found === head ? typeStems[index + 1] === tail : typeStems[index - 1] === head))
+      for (const stem of [head, tail]) if (!alone(stem)) domain.delete(stem)
+    }
+  // What a customer is asked to do is never a world (AGL-4065).
+  for (const stem of TRANSACTION_STEMS) domain.delete(stem)
+  // The business's own world: the crafts its own clause names, and the craft's.
+  const ownTerms = new Set(termsOf([own.join(' ')]))
+  const leading = major.filter((group) => group === craftGroup || group.match.some((word) => ownTerms.has(groupTerm(word))))
+  const lead = new Set<string>()
+  for (const group of leading) for (const word of [...group.match, ...group.kin]) lead.add(groupTerm(word))
+  if (leading.length)
+    for (const word of own)
+      for (const stem of stemList(word))
+        if (![...lead].some((term) => term === stem || (term.includes(' ') && term.split(' ').includes(stem) && ownTerms.has(term))))
+          lead.add(stem)
+  // A trade's world, named by the world it serves: "dirt bike" for a dirt bike parts shop.
+  const served = craftGroup?.of
+    ? groups
+        .filter((group) => group !== craftGroup)
+        .flatMap((group) => group.match)
+        .filter((word) => typeTerms.includes(groupTerm(word)))
+        .sort((a, b) => positionOf(groupTerm(a)) - positionOf(groupTerm(b)))[0]
+    : undefined
   if (!broad.length) broad.push(business, craft)
+  // A part or gear names no world on its own: a dirt bike shop's part, never a canoe's (AGL-4065).
+  const ofAWorld = (term: string) => term.length > 1 && !term.split(' ').every((word) => WORLD_OBJECTS.has(word))
   return {
     business,
     craft,
     domain: [...domain].filter((stem) => stem.length > 1),
+    lead: leading.length ? [...lead].filter(ofAWorld) : [...domain].filter((stem) => stem.length > 1),
+    ...(served ? { leadWord: served } : {}),
     broad: [...new Set(broad.map((query) => query.trim()).filter(Boolean))],
     making: [...new Set(makingSearches)],
     ...(groups.some((group) => group.scenes) ? { scenes: true } : {}),
     ...(groups.some((group) => group.maker?.length)
       ? { maker: [...new Set(groups.flatMap((group) => group.maker ?? []).map(aiStockStem))] }
       : {}),
-    named: [...new Set(stemList(businessType))],
+    named: [...new Set(typeTerms)],
     rivals,
-    core: [...core],
+    core: [...core].filter((term) => !craftGroup?.of || ofAWorld(term)),
     shun: [...shun],
     shunLead: [...shunLead],
   }
@@ -1387,25 +1774,44 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
 const PLACEHOLDER_SUBJECTS = words(
   'project projects piece pieces item items example examples sample samples entry entries untitled work works ' +
     'selected recent latest ' +
-    'four five six seven eight nine ten first second third fourth fifth sixth seventh eighth ninth tenth',
+    'four five six seven eight nine ten first second third fourth fifth sixth seventh eighth ninth tenth ' +
+    // When a thing is, never the thing (AGL-4065): "Upcoming race 1 (details to be added)" searched "upcoming race".
+    'upcoming past next previous future',
 )
 
 /** A phrase's content words without its filler; all filler, and nothing is left. */
 function subjectOf(list: readonly string[]): string[] {
-  return list.filter((word) => !FILLER.has(word) && !PLACEHOLDER_SUBJECTS.has(word))
+  return list.filter(
+    (word) => !FILLER.has(word) && !PLACEHOLDER_SUBJECTS.has(word) && !GENERIC_OBJECTS.has(word) && !SENTENCE_WORDS.has(word),
+  )
 }
 
 /**
  * A picture's subject in a few words (AGL-3660): the noun phrase its alt
  * text opens with — its first clause holding more than filler, cut where a
  * preposition starts the setting, filler dropped, its last three words (the
- * head noun is the last) — else its section's name.
+ * head noun is the last) — else its section's name. A word or two joined by
+ * "and" to a longer noun phrase only modify its head: the subject of "Potato
+ * and egg breakfast taco" is "egg breakfast taco", never "potato" (AGL-4065).
  */
 export function aiStockSubjectWords(alt: string, sectionName: string): string {
   // "Hand-poured", "by hand" and "hands" say how it was made, never what it shows.
-  for (const clause of withoutHands(alt).split(CLAUSE_BREAK)) {
-    const found = subjectOf(contentWords(clause ?? ''))
-    if (found.length) return found.slice(-3).join(' ')
+  const text = withoutHands(alt)
+  const breaker = new RegExp(CLAUSE_BREAK.source, 'g')
+  const clauses: Array<{ words: string[]; then: string }> = []
+  let at = 0
+  for (const match of text.matchAll(breaker)) {
+    clauses.push({ words: subjectOf(contentWords(text.slice(at, match.index))), then: match[0].trim() })
+    at = (match.index ?? 0) + match[0].length
+  }
+  clauses.push({ words: subjectOf(contentWords(text.slice(at))), then: '' })
+  for (const [index, { words: found, then }] of clauses.entries()) {
+    if (!found.length) continue
+    // Never where the second is one thing in a wrapper: "Soap and Lotion Gift Set" is a gift of both.
+    const next = clauses[index + 1]?.words ?? []
+    const things = next.filter((word) => !WRAPPERS.has(word))
+    if ((then === 'and' || then === '&') && found.length <= 2 && things.length >= 2) return next.slice(-3).join(' ')
+    return found.slice(-3).join(' ')
   }
   return subjectOf(contentWords(withoutHands(sectionName))).slice(0, 2).join(' ')
 }
@@ -2115,7 +2521,7 @@ export function aiStockProductSearches(
 export function aiStockSearchesFor(
   slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect' | 'people' | 'record' | 'product'>,
   terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'> &
-    Partial<Pick<AiStockSiteTerms, 'making' | 'core' | 'scenes' | 'setting' | 'maker' | 'work'>>,
+    Partial<Pick<AiStockSiteTerms, 'making' | 'core' | 'scenes' | 'setting' | 'maker' | 'work' | 'leadWord'>>,
   subject: string,
   part?: AiStockSlotPart,
   sectionName = '',
@@ -2160,10 +2566,24 @@ export function aiStockSearchesFor(
   // A hero of a craft names the craft itself: the Saltmarsh Soap Co hero
   // (2026-10-10) was a florist's bouquet tagged "natural" (AGL-3660).
   const core = terms.core ?? []
+  // The world a trade serves qualifies its pictures where the craft is the trade: "dirt bike", never "part" (AGL-4065).
+  const leadWord = terms.leadWord ?? terms.craft
+  const leadStems = stemList(leadWord)
   const qualify = (phrase: string) =>
-    terms.craft && !namesWorld && !stemList(phrase).includes(terms.craft)
-      ? `${terms.craft} ${phrase}`
+    leadWord && !namesWorld && !leadStems.every((stem) => stemList(phrase).includes(stem))
+      ? `${leadWord} ${phrase}`
       : phrase
+  // A part, gear, a machine, or one word of a two-word world ("bike" of "dirt
+  // bike"), is never searched alone (AGL-4065): searched with the world, and
+  // its photo is OF the thing and names the world. "Parts for the ranch"
+  // searched "parts" and took a canoe tagged "part".
+  const ofTheWorld =
+    Boolean(leadWord) &&
+    subjectStems.length > 0 &&
+    subjectStems.every((stem) => WORLD_OBJECTS.has(stem) || leadStems.includes(stem)) &&
+    (subjectStems.some((stem) => WORLD_OBJECTS.has(stem)) || (leadStems.length > 1 && subjectStems.length < leadStems.length))
+  /** The words a photo of the world names, the world's things left out: a dirt bike's, never "part". */
+  const worldNames = core.filter((stem) => !stem.split(' ').some((word) => WORLD_OBJECTS.has(word)))
   type Query = {
     query: string
     broad?: boolean
@@ -2172,6 +2592,10 @@ export function aiStockSearchesFor(
     category?: boolean
     /** Where the site's work is searched ({@link AiStockSiteTerms.work}). */
     work?: boolean
+    /** Whether the thing must be among its photo's first tags: a record's cover, a thing of the world (AGL-4065). */
+    leads?: boolean
+    /** Whether its photo names the world's own words ({@link AiStockSiteTerms.core}) as well as the thing (AGL-4065). */
+    ofWorld?: boolean
   }
   // A collection tile is product-like: held to the shop's category and its
   // own object among the first tags, and searched by its object's kin, never
@@ -2204,15 +2628,30 @@ export function aiStockSearchesFor(
   }
   // The work's own subject is never qualified by the craft: "getting ready", never "photographer getting ready".
   const own = work ? (phrase: string) => phrase : qualify
+  // A record's cover is OF what it names, searched in the site's world first
+  // (AGL-4065): "handyman drywall" before "drywall", which took an architect's
+  // house with a family before its studs.
+  const record = Boolean(slot.record) && !work && !ofTheWorld && Boolean(leadWord)
   const thing: Query[] = (
-    subject
-      ? [
-          { query: own(subject), held: true },
-          ...(kin
-            ? kin.queries.map((query) => ({ query, held: true }))
-            : [{ query: own(object), held: true }]),
-        ]
-      : []
+    !subject
+      ? []
+      : ofTheWorld
+        ? [
+            {
+              query: `${leadWord} ${subjectStems.some((stem) => !leadStems.includes(stem)) ? subject.split(/\s+/).filter((word) => !leadStems.includes(aiStockStem(word))).join(' ') : ''}`.trim(),
+              held: true,
+              leads: true,
+              ofWorld: true,
+            },
+            ...(kin ? kin.queries.map((query) => ({ query, held: true, leads: true, ofWorld: true })) : []),
+          ]
+        : [
+            ...(record && !leadStems.every((stem) => subjectStems.includes(stem)) ? [{ query: `${leadWord} ${subject}`, held: true, leads: true }] : []),
+            { query: own(subject), held: true, ...(record ? { leads: true } : {}) },
+            ...(kin
+              ? kin.queries.map((query) => ({ query, held: true, ...(record ? { leads: true } : {}) }))
+              : [{ query: own(object), held: true, ...(record ? { leads: true } : {}) }]),
+          ]
   ).filter((query) => said(query.query))
   // Never the maker, the camera, an animal or a toy, unless the record names it.
   const recordNamed = work ? new Set(stemList(`${slot.alt} ${slot.record?.category ?? ''}`)) : null
@@ -2318,13 +2757,14 @@ export function aiStockSearchesFor(
       ...(raw.people ? { people: true } : {}),
       ...(raw.broad ? { broad: true } : {}),
       ...(held && kinPhrases.length ? { kin: kinPhrases } : {}),
-      ...(held && collection ? { lead: true } : {}),
-      ...(terms.craft && (raw.category || (raw.held && collection))
+      ...((held && collection) || raw.leads ? { lead: true } : {}),
+      ...(terms.craft && !raw.ofWorld && (raw.category || (raw.held && collection))
         ? {
             requires: terms.craft,
             ...(ownWorld.length ? { category: [terms.craft, ...ownWorld] } : {}),
           }
         : {}),
+      ...(raw.ofWorld && worldNames.length ? { category: worldNames } : {}),
       ...(slot.role === 'hero' && core.length ? { category: core } : {}),
       // A hero is OF the site's world: its first tag names it (AGL-3760).
       ...(slot.role === 'hero' ? { first: true } : {}),
@@ -2369,6 +2809,12 @@ export interface AiStockJudgement {
   subject?: string
   /** The site's domain stems ({@link AiStockSiteTerms.domain}). */
   domain?: readonly string[]
+  /**
+   * The business's own world ({@link AiStockSiteTerms.lead}, AGL-4065): what a
+   * hero's first tag and a hit of a search that is not of a thing name. The
+   * domain where absent.
+   */
+  world?: readonly string[]
   /**
    * Whether a hit must name the subject's object. A broad search, a hero
    * and an about picture need only name the domain.
@@ -2435,8 +2881,10 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
   const tags = (photo.tags ?? [])
     .map((tag) => tag.toLowerCase().trim())
     .filter(Boolean)
-  const lead = new Set(stemList([...tags.slice(0, 3), slug].join(' ')))
-  const all = new Set(stemList([...tags, photo.alt ?? '', slug].join(' ')))
+  // Each tag's words and pairs of them, read tag by tag (AGL-4065): "race car"
+  // and "dirt bike" are phrases a world names; the page address is read whole.
+  const lead = termsOf([...tags.slice(0, 3), slug])
+  const all = termsOf([...tags, photo.alt ?? '', slug])
   const phrases = [
     ...tags.map((tag) => stemList(tag).join(' ')),
     stemList(photo.alt ?? '').join(' '),
@@ -2478,6 +2926,9 @@ export function aiStockSensitive(
 ): boolean {
   const { words: found } = hitWords(photo)
   const site = new Set(named)
+  // A maker's name, in its tags or its page address, unless the site names the maker (AGL-4065).
+  const makers = aiStockMakerTerms(photo)
+  if ([...MAKER_STEMS].some((maker) => makers.has(maker) && !site.has(maker))) return true
   return SENSITIVE_STEMS.some(
     (topic) =>
       [...topic.words].some((word) => found.has(word)) &&
@@ -2558,7 +3009,8 @@ export function aiStockRelevance(
   const kinNamed = kin.some((phrase) => among(hit.phrases, phrase))
   const kinLead = kin.some((phrase) => among(hit.leadPhrases, phrase))
   const required = stemList(judgement.requires ?? '')
-  const category = (judgement.category ?? []).flatMap(stemList)
+  // A two-word name stays whole: "dirt bike", never "bike" (AGL-4065).
+  const category = (judgement.category ?? []).map(stemPhrase).filter(Boolean)
   const anyOf = category.length ? [...new Set([...required, ...category])] : []
   const demanded = required.length > 0 || anyOf.length > 0
   const meets = anyOf.length
@@ -2570,10 +3022,13 @@ export function aiStockRelevance(
     judgement.object ??
     (judgement.subject ? aiStockObjectWord(judgement.subject) : '')
   const domain = (judgement.domain ?? []).filter((stem) => stem !== object)
+  // The business's own world, which a picture that is not of a thing names (AGL-4065).
+  const own = judgement.world?.length ? judgement.world.filter((stem) => stem !== object) : domain
   // A hit naming the word it must name is of the site's world: a product's
   // category is that world even where it is the product's own object.
   const world =
     demanded || kinNamed || domain.some((stem) => hit.all.has(stem))
+  const ownWorld = demanded || kinNamed || own.some((stem) => hit.all.has(stem))
   const worldLead =
     (anyOf.length
       ? anyOf.some((stem) => hit.lead.has(stem))
@@ -2584,10 +3039,12 @@ export function aiStockRelevance(
   // The first tag alone, never the page's address: Pixabay's slug repeats a
   // late tag ("coffee-latte-art-candle-…"). A site whose words name no world
   // holds its hero to none.
-  const worldStems = new Set([...anyOf, ...required, ...domain])
+  // The business's own world, never every word of its type (AGL-4065): "race
+  // car" named "race" of "Amateur motocross race team: … race schedule".
+  const worldStems = new Set([...anyOf, ...required, ...own])
   if (judgement.first && (worldStems.size || kin.length)) {
     const firstWorld =
-      hit.firstPhrase.split(' ').some((stem) => worldStems.has(stem)) ||
+      withPairs(hit.firstPhrase.split(' ').filter(Boolean)).some((stem) => worldStems.has(stem)) ||
       kin.some((phrase) => among([hit.firstPhrase], phrase))
     if (!firstWorld) return 0
   }
@@ -2608,8 +3065,8 @@ export function aiStockRelevance(
     score += leading ? 4 : 2
     if (kinNamed) score += 3
     if (firstNamed(kin.length ? kin : [object])) score += 1
-  } else if (domain.length) {
-    if (!world) return 0
+  } else if (own.length) {
+    if (!ownWorld) return 0
   }
   if (leadAny.length && firstNamed(leadAny)) score += 1
   if (phrased) score += 3
@@ -2624,7 +3081,7 @@ export function aiStockRelevance(
   // attorney" over "lawyers, personal injury, accident" (AGL-3856): a second
   // of them naming its world says it is of that world, not of something else.
   if (judgement.first && worldStems.size) {
-    const said = hit.leadPhrases.slice(0, -1).filter((phrase) => phrase.split(' ').some((stem) => worldStems.has(stem)))
+    const said = hit.leadPhrases.slice(0, -1).filter((phrase) => withPairs(phrase.split(' ')).some((stem) => worldStems.has(stem)))
     if (said.length >= 2) score += 0.25
   }
   return Math.max(score, 0.5)
@@ -2905,6 +3362,8 @@ const BRANDS = words(
     'apple iphone ipad macbook imac samsung huawei android google microsoft windows dell lenovo nintendo playstation ' +
     'xbox nike adidas puma reebok peloton bmw mercedes audi porsche ferrari lamborghini tesla ford toyota honda ' +
     'volkswagen vw jeep chevrolet coca-cola pepsi starbucks mcdonalds ikea lego barbie disney altman ' +
+    // The vehicle makers a moto site's photos are tagged with (AGL-4065).
+    'yamaha kawasaki suzuki ktm ducati harley harley-davidson husqvarna gasgas nissan subaru mazda chevy dodge reebok ' +
     'petri zenit praktica yashica minolta mamiya rolleiflex voigtlander contax ricoh konica lomo lomography holga zeiss',
 )
 
@@ -3819,9 +4278,12 @@ export function aiStockKindTerms(kind: string): AiStockSiteTerms | null {
   const base = aiStockSiteTerms(entry.subject)
   if (!entry.kin?.length) return base
   const kin = entry.kin.map(aiStockStem)
+  const domain = [...new Set([...base.domain, ...kin])]
   return {
     ...base,
-    domain: [...new Set([...base.domain, ...kin])],
+    domain,
+    // The kind's own world is all of it: its subject and its kin (AGL-4065).
+    lead: domain,
     broad: [...(entry.broad ?? base.broad)],
     // A hero names one of the kind's own words, never only the subject's.
     core: [...new Set([...base.core, ...kin])],
@@ -4026,27 +4488,63 @@ function worldOfKind(terms: Pick<AiStockSiteTerms, 'craft' | 'broad' | 'domain'>
  * nothing, and shipped a flat dark band with no photo.
  */
 export function aiStockWiderTerms(
-  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'broad' | 'domain'>,
+  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'broad' | 'domain'> & Partial<Pick<AiStockSiteTerms, 'lead'>>,
   kind: string,
 ): Array<{ rung: 'kind' | 'starter' | 'generic'; terms: AiStockSiteTerms }> {
   const rungs: Array<{ rung: 'kind' | 'starter' | 'generic'; terms: AiStockSiteTerms }> = []
   const seen = new Set<string>([JSON.stringify([terms.craft, [...terms.broad]])])
-  const add = (rung: 'kind' | 'starter' | 'generic', found: AiStockSiteTerms | null) => {
+  // An outdoor or a trade world never widens to an office's photos (AGL-4065).
+  const outdoor = aiStockWorldIsOutdoorOrTrade(terms)
+  const add = (rung: 'kind' | 'starter' | 'generic', of: string, found: AiStockSiteTerms | null) => {
     if (!found || !found.broad.length) return
+    if (outdoor && OFFICE_KINDS.has(of)) return
     const key = JSON.stringify([found.craft, found.broad])
     if (seen.has(key)) return
     seen.add(key)
     rungs.push({ rung, terms: found })
   }
   if (!aiStockWorldIsUnlisted(terms)) {
-    if (kind && worldOfKind(terms, kind)) add('generic', aiStockKindGenericTerms(kind))
+    if (kind && worldOfKind(terms, kind)) add('generic', kind, aiStockKindGenericTerms(kind))
     return rungs
   }
   const starter = starterOfKind(kind)
-  if (kind) add('kind', aiStockKindTerms(kind))
-  add('starter', aiStockKindTerms(STARTER_KINDS[starter] ?? 'business'))
-  add('generic', aiStockKindGenericTerms(kind) ?? aiStockKindGenericTerms(STARTER_GENERIC_KIND[starter] ?? 'business'))
+  const starterKind = STARTER_KINDS[starter] ?? 'business'
+  if (kind) add('kind', kind, aiStockKindTerms(kind))
+  add('starter', starterKind, aiStockKindTerms(starterKind))
+  const generic = KIND_GENERIC[kind] ? kind : (STARTER_GENERIC_KIND[starter] ?? 'business')
+  add('generic', generic, aiStockKindGenericTerms(generic))
   return rungs
+}
+
+/**
+ * The kinds of site whose photos are an office, a desk or a workspace
+ * (AGL-4065): what a landscaper, a roofer or a taco trailer never widens to.
+ */
+const OFFICE_KINDS: ReadonlySet<string> = new Set(['business', 'landing', 'professional', 'personal', 'coming-soon', 'studio'])
+
+/**
+ * Words of a world whose work is done outdoors, on a vehicle, with tools or
+ * over food (AGL-4065), as stems: such a world's pictures are never an
+ * office's. The Bluebonnet Yard & Landscape start, a world the module did not
+ * list, picked as Business & services, opened every page on an office.
+ */
+const OUTDOOR_AND_TRADE_STEMS: ReadonlySet<string> = new Set(
+  (
+    'landscaping landscaper landscape lawn garden gardening yard roof roofing roofer fence fencing deck patio construction ' +
+    'contractor farm ranch moto motorcycle motocross bike dirt atv truck trailer tow towing auto car mechanic food ' +
+    'restaurant kitchen taco plumbing plumber electrician electrical hvac painting painter handyman carpentry carpenter ' +
+    'tree pool pest cleaning junk excavation concrete masonry welding'
+  )
+    .split(' ')
+    .map(aiStockStem),
+)
+
+/** Whether a site's own world is outdoors, on a vehicle, with tools or over food ({@link OUTDOOR_AND_TRADE_STEMS}). */
+export function aiStockWorldIsOutdoorOrTrade(
+  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain'> & Partial<Pick<AiStockSiteTerms, 'lead'>>,
+): boolean {
+  const own = [...(terms.lead ?? terms.domain), ...stemList(`${terms.business} ${terms.craft}`)]
+  return own.some((term) => term.split(' ').some((stem) => OUTDOOR_AND_TRADE_STEMS.has(stem)))
 }
 
 /**
@@ -4319,6 +4817,7 @@ export function aiLayoutStockPhotoSource(
     ): AiStockJudgement => ({
       subject: request.subject ?? (request.broad ? '' : subject),
       domain: world.domain,
+      ...(world.lead?.length ? { world: world.lead } : {}),
       strict:
         (slot.role === 'gallery' && !request.broad) || !!request.requires || !!request.strict,
       named: request.allow?.length ? [...new Set([...terms.named, ...request.allow])] : terms.named,
@@ -4453,6 +4952,8 @@ export function aiLayoutStockPhotoSource(
             )),
         ...craftSearches(slot),
       ]
+      /** Whether the library answered any of the slot's own searches with a photo at all (AGL-4065). */
+      let knew = false
       /** The slot's accepted hits for a search; `null` once the page's searches are spent. */
       const accepted = async (
         request: AiStockSearch,
@@ -4460,6 +4961,7 @@ export function aiLayoutStockPhotoSource(
       ): Promise<StockPhoto[] | null> => {
         const found = await search(request)
         if (found === null) return null
+        if (found.length && !worldOf.has(request)) knew = true
         const blocked = new Set<string>()
         if (!repeat) {
           for (const key of claimed) blocked.add(key)
@@ -4516,22 +5018,26 @@ export function aiLayoutStockPhotoSource(
         ? requests.filter((request) => request.tier === 'weak')
         : []
       // 3. Nothing of its own world at all: the wider worlds (AGL-3923), new
-      //    and then, for a hero, one the job already shows.
+      //    and then, for a hero, one the job already shows. A listed world
+      //    widens only where the library knew nothing of it (AGL-4065): one
+      //    it answered with photos it turned down keeps its slot without a
+      //    photo, never an office. A world of its own words alone still widens.
       const widened = widerSearches(slot, subject, sectionName)
-      const phases: Array<[readonly AiStockSearch[], boolean]> = [
-        [sure, false],
-        ...(repeats ? [[sure, true] as [readonly AiStockSearch[], boolean]] : []),
+      const phases: Array<[readonly AiStockSearch[], boolean, boolean]> = [
+        [sure, false, false],
+        ...(repeats ? [[sure, true, false] as [readonly AiStockSearch[], boolean, boolean]] : []),
         ...(unsure.length
           ? [
-              [unsure, false] as [readonly AiStockSearch[], boolean],
-              [unsure, true] as [readonly AiStockSearch[], boolean],
+              [unsure, false, false] as [readonly AiStockSearch[], boolean, boolean],
+              [unsure, true, false] as [readonly AiStockSearch[], boolean, boolean],
             ]
           : []),
-        ...(widened.length ? [[widened, false] as [readonly AiStockSearch[], boolean]] : []),
-        ...(widened.length && repeats ? [[widened, true] as [readonly AiStockSearch[], boolean]] : []),
+        ...(widened.length ? [[widened, false, true] as [readonly AiStockSearch[], boolean, boolean]] : []),
+        ...(widened.length && repeats ? [[widened, true, true] as [readonly AiStockSearch[], boolean, boolean]] : []),
       ]
-      for (const [tried, repeat] of phases) {
+      for (const [tried, repeat, wide] of phases) {
         if (choice || signal.aborted) break
+        if (wide && knew && !unlisted) break
         choice = await choose(tried, repeat)
       }
       choices.push(choice)

@@ -42,8 +42,9 @@ const LOOKUP_WINDOW_MS = 10 * 60 * 1000
  *            waiting to be recorded first (`sweepInPersonPosHardwareSales`).
  *   find     look the buyer up across the platform by exact email, a
  *            person's name or a workspace's name (`pos-hardware-buyer-lookup.ts`):
- *            the least that picks the right person. Rate-limited per register
- *            user and written to the platform's audit log, every time.
+ *            the least that picks the right person, their address in full.
+ *            Rate-limited per register user and written to the platform's
+ *            audit log (the address masked there), every time.
  *   attach   say whose a sale is — by the register sale or the To attach
  *            entry — as an account and workspace (and store), an account
  *            with no workspace yet, or the address of someone with no
@@ -53,9 +54,17 @@ const LOOKUP_WINDOW_MS = 10 * 60 * 1000
  *   serials  the serial numbers of the sale's readers, scanned or typed at
  *            the sale, so the order sets itself up when the buyer registers
  *            them (`pos-hardware-readers.ts`).
+ *   terms    the terms of sale the buyer accepts before paying (Terms
+ *            4.26–4.32 in short, with the link), and `terms-status` whether
+ *            they have, for the register waiting on its display.
+ *   accept-terms  the buyer accepted on the register tablet handed to them;
+ *            `terms-on-display` notes who is putting them on the customer
+ *            display, before the register shows them there (`pos-hardware-terms.ts`).
  *   register-at-booth  register a reader to the buyer's chosen store by the
- *            code it shows, while they are there. Idempotency-Key required;
- *            audited.
+ *            code it shows, while they are there, with the store's address
+ *            when it has no reader Location yet (`address`; refused with
+ *            `reason: 'needs-address'` without one). Idempotency-Key
+ *            required; audited.
  *
  * `status` is asked of whoever works the register; everything else needs
  * "Sell at the register" (`posSell`) on the seller store, since it is part
@@ -104,7 +113,8 @@ export const posHardwareSaleHandler: PluginApiHandler = async (req, res) => {
         if (!rate.allowed) return res.status(429).json({ error: 'Too many lookups. Try again in a few minutes.' })
         const found = await (await import('./pos-hardware-buyer-lookup')).findHardwareBuyers(query)
         await audit(staff, 'pos-hardware-buyer-lookup', {
-          // An address is kept masked; a name as typed.
+          // The audit log keeps an address masked; a name as typed. The
+          // register itself is answered in full.
           query: found.kind === 'email' ? maskEmailAddress(query) : query,
           kind: found.kind,
           matched: [
@@ -113,6 +123,38 @@ export const posHardwareSaleHandler: PluginApiHandler = async (req, res) => {
           ],
         })
         return res.status(200).json(found)
+      }
+      case 'terms':
+      case 'terms-status':
+      case 'terms-on-display':
+      case 'accept-terms': {
+        const terms = await import('./pos-hardware-terms')
+        const registerOrderId = String(body['registerOrderId'] ?? '')
+        try {
+          if (action === 'terms') return res.status(200).json(terms.posHardwareTermsView())
+          if (action === 'terms-status') {
+            return res.status(200).json(await terms.posHardwareTermsStatus(config, registerOrderId))
+          }
+          if (action === 'terms-on-display') {
+            await terms.requestPosHardwareTermsOnDisplay({ config, registerOrderId, uid: staff.uid })
+            return res.status(200).json({ ok: true })
+          }
+          const device = terms.posHardwareTermsDevice(req.headers as Record<string, unknown>)
+          const acceptance = await terms.recordPosHardwareTermsAcceptance({
+            config,
+            registerOrderId,
+            method: 'tablet',
+            staffUid: staff.uid,
+            ...device,
+          })
+          await audit(staff, 'pos-hardware-terms-accepted', { method: acceptance.method, version: acceptance.version, registerOrderId }, null)
+          return res.status(200).json({ ok: true, acceptance })
+        } catch (error) {
+          if (error instanceof terms.PosHardwareTermsRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
       }
       case 'serials':
       case 'register-at-booth': {
@@ -132,23 +174,47 @@ export const posHardwareSaleHandler: PluginApiHandler = async (req, res) => {
           const orderId = registerOrderId
             ? (await import('./pos-hardware')).posHardwareInPersonOrderId(config.sellerHostId, registerOrderId)
             : String(body['orderId'] ?? '')
-          const { order, readerId } = await readers.registerPosHardwareAtBooth({
+          const { order, readerId, storeAddress } = await readers.registerPosHardwareAtBooth({
             config,
             orderId,
             registrationCode: body['registrationCode'],
             label: body['label'],
+            address: body['address'],
             uid: staff.uid,
           })
           await audit(
             staff,
             'pos-hardware-register-at-booth',
-            { readerId, hostId: order.hostId, orgId: order.orgId },
+            {
+              readerId,
+              hostId: order.hostId,
+              orgId: order.orgId,
+              // That the buyer's store address was typed here, and where:
+              // the store's reader Location was made from it. The street
+              // stays with the store, never in the audit log.
+              ...(storeAddress
+                ? {
+                    storeAddressEntered: {
+                      city: storeAddress.city,
+                      state: storeAddress.state ?? null,
+                      country: storeAddress.country,
+                    },
+                  }
+                : {}),
+            },
             orderId,
           )
-          return res.status(200).json({ ok: true, readerId, order: toAttachView(orderId, order) })
+          return res.status(200).json({
+            ok: true,
+            readerId,
+            storeAddressSaved: Boolean(storeAddress),
+            order: toAttachView(orderId, order),
+          })
         } catch (error) {
           if (error instanceof readers.PosHardwareReaderRefusal) {
-            return res.status(error.status).json({ error: error.message })
+            return res
+              .status(error.status)
+              .json({ error: error.message, ...(error.reason ? { reason: error.reason } : {}) })
           }
           throw error
         }
@@ -223,13 +289,9 @@ export function toAttachView(id: string, order: PosHardwareOrder) {
     lines: (order.lines ?? []).map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })),
     totalCents: order.totalCents ?? 0,
     createdAtMs: order.createdAtMs ?? 0,
-    // An account's address is masked, as the lookup showed it; a receipt
-    // address or one typed for a buyer with no account is the register's own.
-    contactEmail: order.attachment?.uid
-      ? order.contactEmail
-        ? maskEmailAddress(order.contactEmail)
-        : null
-      : (order.contactEmail ?? null),
+    // The buyer's address in full, as the lookup shows it (AGL-4038): the
+    // account's, a receipt's, or one typed for a buyer with no account.
+    contactEmail: order.contactEmail ?? null,
     attached: order.attachment?.state === 'attached',
     /** Attached with the buyer's store chosen: a reader can be registered to it here. */
     storeChosen: order.attachment?.state === 'attached' && Boolean(order.hostId),

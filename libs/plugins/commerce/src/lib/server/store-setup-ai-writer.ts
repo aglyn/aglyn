@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanPublish } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type {
   PluginDraftContext,
   PluginDraftRecord,
@@ -71,7 +71,8 @@ type Firestore = FirebaseFirestore.Firestore
 type Stored = Record<string, unknown>
 
 /** The refusal for a member without the publishing role (admin or editor). */
-export const STORE_SETUP_ROLE_REFUSAL = 'Changing store settings through AI needs an admin or editor role'
+/** Names "Publish site content" (`site.publish`, AGL-4047): store settings are live the moment they change. */
+export const STORE_SETUP_ROLE_REFUSAL = siteKeyRefusal('site.publish')
 /** The refusal for a plan without commerce. */
 export const STORE_SETUP_PLAN_REFUSAL = 'Selling online is not included in your plan — see Billing'
 /** What a member is told while a lockdown refuses writes to the site. */
@@ -117,8 +118,7 @@ export function createStoreSetupAiWriter(deps: StoreSetupAiWriterDeps): PluginRe
   ): Promise<PluginDraftRefusal | null> {
     if (!host.exists) return { status: 404, error: 'Unknown site' }
     const data = (host.data() ?? {}) as Stored
-    const role = ((data['memberRoles'] ?? {}) as Stored)[context.uid]
-    if (!hostRoleCanPublish(role)) return { status: 403, error: STORE_SETUP_ROLE_REFUSAL }
+    if (!holdsSiteKey(data, context.uid, 'site.publish')) return { status: 403, error: STORE_SETUP_ROLE_REFUSAL }
     if (!checkEntitlement((context.org ?? {}) as never, 'commerce')) {
       return { status: 403, error: STORE_SETUP_PLAN_REFUSAL }
     }

@@ -17,11 +17,14 @@
 'use client'
 
 import {
-  hostRoleCanPublish,
   hostRoleFor,
   isOrgWideMember,
   resolveCollaboratorHostPermissions,
+  siteMayNarrow,
   siteNarrowingFor,
+  resolveSiteRolePresetPermissions,
+  siteRolePresetPermissionKeys,
+  type AglynOrgCustomRole,
   type AglynOrgMember,
   type HostAccessRole,
   type SiteNarrowing,
@@ -36,7 +39,11 @@ import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 export interface HostRoleState {
   /** The member's effective role on this site, or null for no access. */
   hostRole: HostAccessRole | null
-  /** May they make content live? `author` may not — that IS the role. */
+  /**
+   * May they make content live? "Publish site content" (`site.publish`,
+   * AGL-4047) on this site, whose preset is the site Admin and Editor: an
+   * author may not unless a role or the site grants it.
+   */
   canPublish: boolean
   /** False until the member doc has been read; see the note on gating. */
   loaded: boolean
@@ -57,12 +64,22 @@ export interface HostRoleState {
   hostPermissions: Record<string, boolean> | null
   /**
    * How this site narrows an ORG-WIDE member (AGL-4047): an editor of the
-   * workspace with Viewer or Author access here, whose register and waivers
-   * keys this site decides (`narrowPermissionsToSite`). Null until read, on a
-   * failed read, for a collaborator, and for a member the site does not
+   * workspace with Viewer or Author access here, whose keys that follow the
+   * site role (their own choice, their custom role's, or the built-in
+   * default) this site decides (`narrowPermissionsToSite`). Null until read,
+   * on a failed read, for a collaborator, and for a member the site does not
    * narrow, so a caller may apply it unconditionally.
    */
   narrowing?: SiteNarrowing | null
+  /**
+   * The member document and custom role the answer was read from, for the
+   * keys whose preset is the member's role on this site (AGL-4047), which
+   * `usePermissionsOnHost` decides at render (`resolveSiteRolePresetPermissions`)
+   * so a plugin that registers its keys after this read still gets them
+   * decided. Null until read and on a failed read.
+   */
+  member?: Partial<AglynOrgMember> | null
+  customRole?: AglynOrgCustomRole | null
 }
 
 /**
@@ -131,15 +148,37 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
         const member = (snapshot.data() ?? {}) as Partial<AglynOrgMember>
         const hostRole = hostRoleFor(member, hostId as never)
         const orgWide = isOrgWideMember(member)
+        // Their custom role's narrowing choices (AGL-4047), read only when
+        // this site's access is narrower than their workspace role and they
+        // carry one. A dangling id falls back to their own choices and the
+        // built-in defaults, as the server does; so does a failed read here,
+        // which this display gate can afford because the server decides.
+        // And for the keys whose preset is their role on the site (AGL-4047),
+        // which a custom role can grant or refuse.
+        let customRole: AglynOrgCustomRole | null = null
+        if (
+          member.roleId &&
+          (siteMayNarrow(member, hostId as never) || siteRolePresetPermissionKeys().length > 0)
+        ) {
+          try {
+            const roleSnapshot = await getDoc(doc(firestore, 'orgs', orgId, 'roles', member.roleId))
+            if (roleSnapshot.exists()) customRole = roleSnapshot.data() as AglynOrgCustomRole
+          } catch {
+            customRole = null
+          }
+        }
+        if (!active) return
         setState({
           hostRole,
-          canPublish: hostRoleCanPublish(hostRole),
+          canPublish: resolveSiteRolePresetPermissions(member, hostId as never, customRole)['site.publish'] === true,
           loaded: true,
           orgWide,
           hostPermissions: orgWide
             ? null
             : resolveCollaboratorHostPermissions(member, hostId as never),
-          narrowing: siteNarrowingFor(member, hostId as never),
+          narrowing: siteNarrowingFor(member, hostId as never, customRole),
+          member,
+          customRole,
         })
       } catch {
         // Fail closed on the display gate: `loaded` stays true so the caller
@@ -153,6 +192,8 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
             orgWide: false,
             hostPermissions: null,
             narrowing: null,
+            member: null,
+            customRole: null,
           })
       }
     })()

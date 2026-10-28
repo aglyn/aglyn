@@ -22,13 +22,14 @@ import { customerDisplayReturnPath } from '@aglyn/aglyn/plugin-manager/plugin-cu
 import { Alert, Box, Button, Container, Stack } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
+import type { SigningResult } from './signing-form.component'
 import { WaiverSignFlow } from './waiver-sign-flow.component'
 import { publicWaiversRequest } from './waivers-api'
 
-/** How long the display waits on a screen nobody is touching before it goes back. */
-export const WAIVER_DISPLAY_IDLE_MS = 5 * 60 * 1000
-/** And after a signing, if nobody taps Done. */
+/** How long after a signing the display goes back, if nobody taps Done or Next signer. */
 export const WAIVER_DISPLAY_DONE_MS = 60 * 1000
+/** How often the display asks whether staff closed its screen. */
+export const WAIVER_DISPLAY_CHECK_MS = 5_000
 
 /** Leaves for the display's own screen; an object so a spec can watch it. */
 export const waiverDisplayNavigation = {
@@ -58,9 +59,12 @@ function DoneActions(props: { reset: () => void; back: () => void }) {
  * `/kiosk/waivers/display-sign`: the page core's customer display seam opens
  * when staff choose **Customer display** beside a customer at check-in. The
  * rider reads and signs as at the window; the signing carries the grant the
- * console minted for that staff member, so the record names them. **Done**,
- * **Cancel**, a minute after a signing or five minutes untouched sends the
- * display back to the register's screen it came from.
+ * console minted for that staff member, so the record names them.
+ *
+ * It stays until it is closed, with no timer while the rider reads: staff
+ * close it from the check-in (the page asks every few seconds and goes back),
+ * or **Done**, **Cancel**, or a minute after a signing sends the display
+ * back to the register's screen it came from, closing the grant as it goes.
  */
 export function WaiverDisplayPage(_props: ConsolePublicPageProps) {
   const [params, setParams] = useState<{ hostId: string; grant: string; returnTo: string | null } | null>(null)
@@ -70,31 +74,48 @@ export function WaiverDisplayPage(_props: ConsolePublicPageProps) {
     setParams({ hostId: query.get('host') ?? '', grant: query.get('grant') ?? '', returnTo: customerDisplayReturnPath(search) })
   }, [])
   const returnTo = params?.returnTo ?? null
-  const back = useCallback(() => {
+  const hostId = params?.hostId ?? ''
+  const grant = params?.grant ?? ''
+  const [closed, setClosed] = useState(false)
+  const leave = useCallback(() => {
     if (returnTo) waiverDisplayNavigation.leave(returnTo)
   }, [returnTo])
+  // Going back closes the grant, so nothing signs under it again; the
+  // display leaves whether or not the close was heard (staff can close it too).
+  const back = useCallback(() => {
+    if (!grant || !hostId) return leave()
+    void publicWaiversRequest(WAIVERS_API_ROUTES.displayGrantState, { body: { grant, hostId, close: true } })
+      .catch(() => undefined)
+      .finally(leave)
+  }, [grant, hostId, leave])
 
-  // Nobody touching the screen for a while: it goes back to the register's.
+  // Staff closed it from the check-in: say so and go back.
   useEffect(() => {
-    if (!returnTo) return undefined
-    let last = Date.now()
-    const touched = () => {
-      last = Date.now()
+    if (!grant || !hostId) return undefined
+    let live = true
+    const check = async () => {
+      try {
+        const answer = await publicWaiversRequest<{ open: boolean }>(WAIVERS_API_ROUTES.displayGrantState, {
+          body: { grant, hostId },
+        })
+        if (live && !answer.open) {
+          setClosed(true)
+          leave()
+        }
+      } catch {
+        // A missed check is asked again on the next tick.
+      }
     }
-    const events = ['pointerdown', 'keydown'] as const
-    for (const event of events) window.addEventListener(event, touched)
-    const timer = window.setInterval(() => {
-      if (Date.now() - last > WAIVER_DISPLAY_IDLE_MS) back()
-    }, 15_000)
+    const timer = window.setInterval(() => void check(), WAIVER_DISPLAY_CHECK_MS)
     return () => {
-      for (const event of events) window.removeEventListener(event, touched)
+      live = false
       window.clearInterval(timer)
     }
-  }, [returnTo, back])
+  }, [grant, hostId, leave])
 
   const submit = useCallback(
     (payload: Record<string, unknown>) =>
-      publicWaiversRequest<{ people: string[]; window: string; emailed: boolean }>(WAIVERS_API_ROUTES.signOnDisplay, {
+      publicWaiversRequest<SigningResult>(WAIVERS_API_ROUTES.signOnDisplay, {
         body: { ...payload, hostId: params?.hostId ?? '', grant: params?.grant ?? '' },
       }),
     [params],
@@ -103,12 +124,12 @@ export function WaiverDisplayPage(_props: ConsolePublicPageProps) {
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default', py: { xs: 2, sm: 4 } }}>
       <Container maxWidth="sm">
-        {params === null ? null : !params.hostId || !params.grant ? (
+        {params === null ? null : !params.hostId || !params.grant || closed ? (
           <Stack spacing={2}>
-            <Alert severity="info">{'This screen has expired. Ask staff to show the waiver again.'}</Alert>
+            <Alert severity="info">{'Staff closed this screen. Ask them to show the waiver again.'}</Alert>
             {returnTo ? (
               <div>
-                <Button onClick={back}>{'Back'}</Button>
+                <Button onClick={leave}>{'Back'}</Button>
               </div>
             ) : null}
           </Stack>

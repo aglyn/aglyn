@@ -22,10 +22,10 @@
  * platform's own store (AGL-4038), through the real route with Firestore and
  * the sign-in pools faked:
  *
- * - a lookup by exact email shows the address in full; by a person's or a
- *   workspace's name, the address masked; a name search reads workspace
- *   rosters only, and never a store's own contacts on an email list; each is
- *   rate-limited and written to the audit log;
+ * - a lookup by exact email, a person's name or a workspace's name shows
+ *   the whole address (masked in the audit log only); a name search reads
+ *   workspace rosters only, and never a store's own contacts on an email
+ *   list; each is rate-limited and written to the audit log;
  * - attaching checks the account, the workspace and the store, moves a
  *   recorded sale into the buyer's workspace (or rides an open sale until it
  *   is paid), invites a buyer with no account once, and can be undone until a
@@ -211,7 +211,20 @@ function paidSale(id: string, fields: Record<string, unknown> = {}) {
   })
 }
 
+/** Stripe, as far as these specs reach it: a store's reader Location. */
+const stripeGets: string[] = []
+const STORE_LOCATION = {
+  id: 'tml_1',
+  address: { line1: '1 Market Sq', line2: null, city: 'Austin', state: 'TX', postal_code: '78701', country: 'US' },
+}
+
 beforeEach(() => {
+  stripeGets.length = 0
+  global.fetch = jest.fn(async (url: string) => {
+    stripeGets.push(String(url))
+    const found = String(url).endsWith('/terminal/locations/tml_1')
+    return { ok: found, status: found ? 200 : 404, json: async () => (found ? STORE_LOCATION : {}) }
+  }) as unknown as typeof fetch
   resetFakeFirestore()
   mockRateAllowed = true
   mockAudits.length = 0
@@ -267,26 +280,26 @@ describe('finding the buyer', () => {
     })
   })
 
-  it("by name: rosters only, the name must match, and the address is masked", async () => {
+  it("by name: rosters only, the name must match, and the whole address is shown", async () => {
     const result = await sale({ action: 'find', query: 'pat' })
     expect(result.body.kind).toBe('name')
-    expect(result.body.people.map((person: any) => [person.uid, person.email])).toEqual([['uid-pat', 'p***@example.com']])
+    expect(result.body.people.map((person: any) => [person.uid, person.email])).toEqual([['uid-pat', 'pat@example.com']])
     // Neither the list contact named Pat Lee, nor Jordan, whose address starts "pat".
     expect(JSON.stringify(result.body)).not.toMatch(/contact-1|uid-jordan|patio/)
   })
 
-  it("by a workspace's name: the workspace, its stores and its owner, masked", async () => {
+  it("by a workspace's name: the workspace, its stores and its owner, address in full", async () => {
     const result = await sale({ action: 'find', query: 'acme build' })
     expect(result.body.workspaces).toEqual([
       expect.objectContaining({
         orgId: 'org-pat',
         name: 'Acme Builders',
-        owner: { uid: 'uid-pat', name: 'Pat Lee', email: 'p***@example.com' },
+        owner: { uid: 'uid-pat', name: 'Pat Lee', email: 'pat@example.com' },
       }),
     ])
   })
 
-  it('is written to the audit log every time, with an address masked, and rate-limited', async () => {
+  it('is written to the audit log every time, the address masked there only, and rate-limited', async () => {
     await sale({ action: 'find', query: 'pat@example.com' })
     await sale({ action: 'find', query: 'acme' })
     expect(mockAudits.map((entry) => [entry.action, entry.actorUid, entry.after.kind, entry.after.query])).toEqual([
@@ -331,8 +344,8 @@ describe('attaching the buyer', () => {
     const result = await sale({ action: 'attach', orderId: id, buyer: { uid: 'uid-pat', orgId: 'org-pat' } })
     expect(result.status).toBe(200)
     expect(result.body.outcome).toBe('attached')
-    // The account's address is masked to the register user who attached it.
-    expect(result.body.order).toMatchObject({ id, attached: true, contactEmail: 'p***@example.com' })
+    // The account's whole address, as the lookup showed it.
+    expect(result.body.order).toMatchObject({ id, attached: true, contactEmail: 'pat@example.com' })
     expect(fakeDocs.has(`orgs/org-seller/hardwareOrders/${id}`)).toBe(false)
     expect(fakeDocs.get(`orgs/org-pat/hardwareOrders/${id}`)).toMatchObject({ orgId: 'org-pat', hostId: '' })
     expect(fakeDocs.get(`posHardwareSales/${id}`)?.['orgId']).toBe('org-pat')
@@ -409,6 +422,58 @@ describe('attaching the buyer', () => {
     const order = fakeDocs.get(`orgs/org-pat/hardwareOrders/${id}`)!
     fakeDocs.set(`orgs/org-pat/hardwareOrders/${id}`, { ...order, units: [{ ...order['units'][0], readerId: 'tmr_1' }] })
     expect((await sale({ action: 'detach', orderId: id })).status).toBe(409)
+  })
+})
+
+describe('the buyer’s name and address, kept for the reseller’s records (AGL-4038)', () => {
+  const idOf = (registerOrderId: string) => posHardwareInPersonOrderId('host-seller', registerOrderId)
+  const typed = { line1: '9 Elm St', city: 'Dallas', state: 'TX', postalCode: '75201', country: 'us' }
+
+  it('takes the account’s name and, with no address typed, the address of the store chosen for the readers', async () => {
+    paidSale('id-1')
+    await sale({ action: 'attach', registerOrderId: 'id-1', buyer: { uid: 'uid-pat', orgId: 'org-pat', hostId: 'host-pat-1' } })
+    const id = idOf('id-1')
+    expect(fakeDocs.get(`orgs/org-pat/hardwareOrders/${id}`)?.['attachment']).toMatchObject({
+      name: 'Pat Lee',
+      address: { line1: '1 Market Sq', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+    })
+    expect(fakeDocs.get(`posHardwareSales/${id}`)?.['buyer']).toEqual({
+      name: 'Pat Lee',
+      address: { line1: '1 Market Sq', line2: null, city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+    })
+    // Still taxed where the selling store is, not where the buyer is.
+    expect(fakeDocs.get(`posHardwareSales/${id}`)?.['shipTo']).toMatchObject({ state: 'TX' })
+    // The address never reaches the audit log.
+    expect(JSON.stringify(mockAudits)).not.toContain('Market Sq')
+  })
+
+  it('keeps an address the register typed rather than the store’s, and refuses half of one', async () => {
+    paidSale('id-2')
+    const bad = await sale({ action: 'attach', registerOrderId: 'id-2', buyer: { uid: 'uid-pat', orgId: 'org-pat', address: { line1: '9 Elm St' } } })
+    expect(bad.status).toBe(400)
+    await sale({ action: 'attach', registerOrderId: 'id-2', buyer: { uid: 'uid-pat', orgId: 'org-pat', hostId: 'host-pat-1', address: typed } })
+    expect(fakeDocs.get(`posHardwareSales/${idOf('id-2')}`)?.['buyer']).toEqual({
+      name: 'Pat Lee',
+      address: { line1: '9 Elm St', line2: null, city: 'Dallas', state: 'TX', postalCode: '75201', country: 'US' },
+    })
+    expect(stripeGets).toHaveLength(0)
+  })
+
+  it('keeps a name typed for a buyer with no account through their sign-up, and drops a buyer detached', async () => {
+    paidSale('id-3')
+    await sale({ action: 'attach', registerOrderId: 'id-3', buyer: { email: 'new@example.com', name: 'Robin Diaz', address: typed } })
+    const id = idOf('id-3')
+    expect(fakeDocs.get(`posHardwareSales/${id}`)?.['buyer']).toMatchObject({ name: 'Robin Diaz' })
+    await claimPosHardwareForNewWorkspace({ config: CONFIG, orgId: 'org-new', ownerUid: 'uid-new', ownerEmail: 'new@example.com', emailVerified: true })
+    expect(fakeDocs.get(`orgs/org-new/hardwareOrders/${id}`)?.['attachment']).toMatchObject({ name: 'Robin Diaz', address: { city: 'Dallas' } })
+    expect(fakeDocs.get(`posHardwareSales/${id}`)?.['buyer']).toMatchObject({ name: 'Robin Diaz', address: { city: 'Dallas' } })
+
+    paidSale('id-4')
+    await sale({ action: 'attach', registerOrderId: 'id-4', buyer: { uid: 'uid-pat', orgId: 'org-pat' } })
+    expect(fakeDocs.get(`posHardwareSales/${idOf('id-4')}`)?.['buyer']).toMatchObject({ name: 'Pat Lee' })
+    await sale({ action: 'detach', orderId: idOf('id-4') })
+    // The wrong buyer was chosen: they come off the record too.
+    expect(fakeDocs.get(`posHardwareSales/${idOf('id-4')}`)?.['buyer']).toBeNull()
   })
 })
 

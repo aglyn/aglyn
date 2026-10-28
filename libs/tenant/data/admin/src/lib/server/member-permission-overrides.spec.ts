@@ -69,8 +69,17 @@ jest.mock('./firebase-admin', () => ({
 jest.mock('./organizations', () => ({
   __esModule: true,
   syncOrgAuthProjections: (...args: unknown[]) => mockSync(...args),
-  resolveMemberOrgPermissions: async (_orgId: string, member: unknown) =>
-    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null),
+  resolveMemberOrgPermissions: async (orgId: string, member: { roleId?: string } | null) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/org-permissions')
+      .resolveOrgPermissions(member, member?.roleId ? (docs.get(`orgs/${orgId}/roles/${member.roleId}`) ?? null) : null),
+  // The custom role by `roleId`, as the real ones read it (AGL-4047).
+  resolveMemberCustomRole: async (orgId: string, member: { roleId?: string } | null) =>
+    member?.roleId ? (docs.get(`orgs/${orgId}/roles/${member.roleId}`) ?? null) : null,
+  resolveMemberSiteNarrowing: async (orgId: string, member: { roleId?: string } | null, hostId: string) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/host-permissions')
+      .siteNarrowingFor(member, hostId, member?.roleId ? (docs.get(`orgs/${orgId}/roles/${member.roleId}`) ?? null) : null),
 }))
 
 import { setHostPermissionOverrides, setMemberPermissionOverrides } from './member-permission-overrides'
@@ -132,6 +141,39 @@ describe('setMemberPermissionOverrides (AGL-4047)', () => {
     ).rejects.toThrow(/not a catalog permission/)
     expect(mockUpdates).toHaveLength(0)
     expect(mockSync).not.toHaveBeenCalled()
+  })
+
+  it('sets and clears a narrowing choice in the same write, and answers the resolved choices', async () => {
+    docs.set(MEMBER, { role: 'editor', allHosts: true, siteNarrowing: { 'desk.collect': true } })
+    const kept = await setMemberPermissionOverrides({
+      orgId: 'org-1',
+      uid: 'm1',
+      changes: { 'billing.view': true },
+      narrowing: { 'desk.collect': false },
+    })
+    expect(mockUpdates).toHaveLength(1)
+    expect(docs.get(MEMBER)?.['siteNarrowing']).toEqual({ 'desk.collect': false })
+    expect(docs.get(MEMBER)?.['permissions']).toEqual({ 'billing.view': true })
+    expect(kept.siteNarrowing['desk.collect']).toBe(false)
+    const cleared = await setMemberPermissionOverrides({
+      orgId: 'org-1',
+      uid: 'm1',
+      changes: {},
+      narrowing: { 'desk.collect': null },
+    })
+    expect(docs.get(MEMBER)?.['siteNarrowing']).toEqual({})
+    // Back to the built-in default, which follows the site role.
+    expect(cleared.siteNarrowing['desk.collect']).toBe(true)
+    // Every site is re-projected: the choice moves the verdict on each one that narrows them.
+    expect(mockSync).toHaveBeenLastCalledWith('org-1')
+  })
+
+  it('refuses a narrowing choice for a key no site can narrow', async () => {
+    docs.set(MEMBER, { role: 'editor', allHosts: true })
+    await expect(
+      setMemberPermissionOverrides({ orgId: 'org-1', uid: 'm1', changes: {}, narrowing: { 'billing.view': false } }),
+    ).rejects.toThrow(/not a permission a site can narrow/)
+    expect(mockUpdates).toHaveLength(0)
   })
 })
 
@@ -196,6 +238,15 @@ describe('setHostPermissionOverrides (AGL-4047)', () => {
       setHostPermissionOverrides({ orgId: 'org-1', uid: 'm1', hostId: 'host-a', changes: { 'reviews.reply': true } }),
     ).rejects.toThrow(/not a per-site permission/)
     docs.set(MEMBER, { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'viewer' } })
+    await expect(
+      setHostPermissionOverrides({ orgId: 'org-1', uid: 'm1', hostId: 'host-a', changes: { 'desk.collect': true } }),
+    ).rejects.toThrow(/not a per-site permission/)
+    expect(mockUpdates).toHaveLength(0)
+  })
+
+  it('a workspace editor whose custom role keeps the key is not narrowed, so the site sets nothing (AGL-4047)', async () => {
+    docs.set('orgs/org-1/roles/floor', { name: 'Floor', siteNarrowing: { 'desk.collect': false } })
+    docs.set(MEMBER, { role: 'editor', allHosts: true, roleId: 'floor', hostAccess: { 'host-a': 'viewer' } })
     await expect(
       setHostPermissionOverrides({ orgId: 'org-1', uid: 'm1', hostId: 'host-a', changes: { 'desk.collect': true } }),
     ).rejects.toThrow(/not a per-site permission/)

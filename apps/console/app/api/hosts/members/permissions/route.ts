@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   hostPermissionKeys,
   hostRoleFor,
@@ -26,6 +27,8 @@ import {
   resolveCollaboratorHostPermissions,
   resolveMemberHostPermissions,
   runPluginEventHandlers,
+  narrowedPermissionKeysOf,
+  siteMayNarrow,
   siteNarrowedPermissionKeys,
   siteNarrowingFor,
   type AglynOrgCustomRole,
@@ -62,8 +65,9 @@ import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
  * organization is not locked. A member who reaches the whole workspace is
  * decided by the org catalog, so their row is refused here and set on their
  * Team page, except on a site that narrows them (AGL-4047): an editor of the
- * workspace given Viewer or Author access here, whose register and waivers
- * keys this site decides, and whose row here sets exactly those. Nobody but
+ * workspace given Viewer or Author access here, whose keys that follow the
+ * site role (the register and waivers by default) this site decides, and
+ * whose row here sets exactly those. Nobody but
  * staff changes their own toggles, and nobody but staff and the owner grants
  * a key they do not hold on this site.
  *
@@ -99,10 +103,14 @@ async function handler(request: Request): Promise<Response> {
     const firestore = app.firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const host = (await hostRef.get()).data()
-    const memberRole = (host?.['memberRoles'] ?? {})[decoded.uid]
+    // "Manage site settings" here (`site.manage`, AGL-4047), or the
+    // workspace's "Manage members", or staff.
     const actorPermissions = await resolveOrgPermissions(decoded.uid, { hostId })
-    if (!host || (memberRole !== 'admin' && !actorPermissions.permissions.manageMembers && !isStaff)) {
-      return Response.json({ error: 'Not a site admin' }, { status: 403 })
+    if (
+      !host ||
+      (!holdsSiteKey(host, decoded.uid, 'site.manage') && !actorPermissions.permissions.manageMembers && !isStaff)
+    ) {
+      return Response.json({ error: siteKeyRefusal('site.manage') }, { status: 403 })
     }
     const resolved = await getOrgForHost(hostId)
     if (!resolved) {
@@ -125,21 +133,24 @@ async function handler(request: Request): Promise<Response> {
     const member = { $id: uid, ...memberSnapshot.data() } as AglynOrgMember
     const orgWide = isOrgWideMember(member)
     const role = hostRoleFor(member, hostId)
-    // A workspace-wide member this site narrows (AGL-4047): set here, for
-    // the keys such a site narrows, and nothing else.
-    const narrowing = siteNarrowingFor(member, hostId)
     /** A member's custom role, or null: one read, and none without a `roleId`. */
     const customRoleOf = async (roleId: string | undefined): Promise<AglynOrgCustomRole | null> => {
       if (!roleId) return null
       const roleSnapshot = await firestore.collection('orgs').doc(orgId).collection('roles').doc(roleId).get()
       return roleSnapshot.exists ? (roleSnapshot.data() as AglynOrgCustomRole) : null
     }
+    // A workspace-wide member this site narrows (AGL-4047): set here, for
+    // the keys that follow the site role for them (their own choice, their
+    // custom role's, or the built-in default), and nothing else. The custom
+    // role is read only for a member whose access here is narrower.
+    const memberCustomRole = siteMayNarrow(member, hostId) ? await customRoleOf(member.roleId) : null
+    const narrowing = siteNarrowingFor(member, hostId, memberCustomRole)
 
     if (method === 'GET') {
       const stored = member.hostPermissions?.[hostId] ?? {}
       if (narrowing) {
-        const keys = siteNarrowedPermissionKeys()
-        const customRole = await customRoleOf(member.roleId)
+        const keys = narrowedPermissionKeysOf(narrowing)
+        const customRole = memberCustomRole
         const verdicts = resolveMemberHostPermissions({ member, customRole, hostId })
         // Inherit: what the narrower access leaves them here, the site's own
         // verdicts set aside.
@@ -189,7 +200,7 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     if (!role) return Response.json({ error: 'This member has no access to this site' }, { status: 409 })
-    const allowedKeys = () => (narrowing ? siteNarrowedPermissionKeys() : hostPermissionKeys())
+    const allowedKeys = () => (narrowing ? narrowedPermissionKeysOf(narrowing) : hostPermissionKeys())
     let parsed = parsePermissionOverrides(body?.permissions, allowedKeys())
     if (parsed.error && (await runPluginDeclarationsRepair().catch(() => false))) {
       parsed = parsePermissionOverrides(body?.permissions, allowedKeys())

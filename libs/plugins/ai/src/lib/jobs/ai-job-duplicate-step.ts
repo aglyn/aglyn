@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import {
   DUPLICABLE_RESOURCE_NOUNS,
   type DuplicableHostResourceKind,
 } from '@aglyn/aglyn/app-utils/duplicate-resource'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { duplicateResource, recipeFor } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
@@ -73,7 +74,8 @@ export const AI_DUPLICATE_KIND = 'duplicate' as const
 export const AI_JOB_DUPLICATE_STEP_MINIMUM_MS = 5_000
 
 export const AI_DUPLICATE_NO_SITE_COPY = 'Open the site whose content should be copied.'
-export const AI_DUPLICATE_ROLE_COPY = 'Copying on this site needs the admin, editor or author role on it.'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AI_DUPLICATE_ROLE_COPY = `Copying on this site needs the "${orgPermissionLabel('site.edit')}" permission on this site — ask an organization admin.`
 export const AI_DUPLICATE_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_DUPLICATE_UNREADABLE_COPY = 'The request did not name something on this site to copy.'
 export const AI_DUPLICATE_NOT_YET_COPY = 'Only something the site already has can be copied, not something this build is making.'
@@ -165,8 +167,7 @@ export async function aiDuplicateAccessRefusal(
   deps: { lockdown?: typeof getLockdownVerdict } = {},
 ): Promise<string | null> {
   if (!input.host.exists) return 'Unknown site'
-  const roles = (input.host.get('memberRoles') ?? {}) as Record<string, unknown>
-  if (!hostRoleCanWrite(roles[input.uid])) return AI_DUPLICATE_ROLE_COPY
+  if (!holdsSiteKey(input.host, input.uid, 'site.edit')) return AI_DUPLICATE_ROLE_COPY
   const locked = await (deps.lockdown ?? getLockdownVerdict)({
     staff: false,
     uid: input.uid,

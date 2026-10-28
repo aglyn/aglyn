@@ -19,11 +19,14 @@
  */
 
 import { createHash } from 'crypto'
+import { registerPluginPersonRecords } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
 import { setWaiverDisplaySecretForTests } from './display-grant'
-import { displayGrantRoute, signOnDisplayRoute } from './display-routes'
+import { displayGrantRoute, displayGrantStateRoute, signOnDisplayRoute } from './display-routes'
 import { setWaiversEmailSenderForTests, type WaiverEmail } from './emails'
+import { signedCopyPath, signedCopyRoute } from './signed-copy'
 import { setWaiversGateDepsForTests } from './gate'
 import { eraseWaiversPerson, setWaiversErasureDepsForTests } from './person-eraser'
 import { publicSignRoute, publicWaiverRoute } from './public-routes'
@@ -342,7 +345,7 @@ describe('signing before arriving', () => {
       emailLower: 'jordan@example.com',
       guardianRelationship: 'Parent',
       contactId: 'contact-1',
-      consent: { agreed: true, version: 1 },
+      consent: { agreed: true, version: 2 },
       audit: { ip: '203.0.113.7', userAgent: 'Mozilla/5.0 (iPhone) Spec', signedOnHost: 'acme.example.com', staffUid: null },
     })
     expect(stored.signedTextSha256).toBe(createHash('sha256').update(stored.signedText).digest('hex'))
@@ -433,6 +436,14 @@ describe('signing on the register’s customer display', () => {
     const response = await call(displayGrantRoute, 'POST', { token, host })
     return { status: response.status, body: await response.json() }
   }
+  async function staff(action: 'state' | 'close', grantId: string, token = 'tok-clerk', host = HOST) {
+    const response = await call(displayGrantRoute, 'POST', { token, host, body: { action, grantId } })
+    return { status: response.status, body: await response.json() }
+  }
+  async function displayState(body: Record<string, unknown>) {
+    const response = await call(displayGrantStateRoute, 'POST', { token: null, body })
+    return { status: response.status, body: await response.json() }
+  }
 
   it('grants it only to a member who may take signatures', async () => {
     expect((await grantFor('tok-viewer')).status).toBe(403)
@@ -440,7 +451,10 @@ describe('signing on the register’s customer display', () => {
     expect((await grantFor(null as never)).status).toBe(401)
     const granted = await grantFor('tok-window')
     expect(granted.status).toBe(201)
-    expect(granted.body).toMatchObject({ grant: expect.stringMatching(/^aglyn-waiver-display-v1\./), expiresAtMs: NOW + 30 * 60 * 1000 })
+    expect(granted.body).toEqual({
+      grant: expect.stringMatching(/^aglyn-waiver-display-v2\./),
+      grantId: expect.stringMatching(/^[a-f0-9]{32}$/),
+    })
   })
 
   it('signs with the grant and no session, naming the staff member who put it on the display', async () => {
@@ -459,7 +473,42 @@ describe('signing on the register’s customer display', () => {
     })
   })
 
-  it('refuses no grant, a forged one, another site’s, an expired one, and stores nothing', async () => {
+  it('lasts until staff close it: no timer, then nothing signs under it (AGL-4042)', async () => {
+    const waiver = await publishedWaiver()
+    const { body } = await grantFor()
+    // Hours later, still open, still signs.
+    setWaiversClockForTests(() => NOW + 6 * 60 * 60 * 1000)
+    expect((await staff('state', body.grantId)).body).toEqual({ open: true })
+    expect((await displayState({ grant: body.grant, hostId: HOST })).body).toEqual({ open: true })
+    const late = await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })
+    expect(late.status).toBe(201)
+    // A member who may not take signatures can neither ask nor close.
+    expect((await staff('close', body.grantId, 'tok-viewer')).status).toBe(403)
+    expect((await staff('close', body.grantId)).body).toEqual({ closed: true })
+    expect((await staff('state', body.grantId)).body).toEqual({ open: false })
+    expect((await displayState({ grant: body.grant, hostId: HOST })).body).toEqual({ open: false })
+    const refused = await call(signOnDisplayRoute, 'POST', {
+      token: null,
+      body: { ...signing(waiver, { attemptKey: 'after-close-1' }), grant: body.grant },
+    })
+    expect(refused.status).toBe(401)
+    expect((await refused.json()).error).toMatch(/closed this screen/)
+    expect(signatures()).toHaveLength(1)
+  })
+
+  it('closes as the display goes back, by the grant it holds, and for its own site only', async () => {
+    const { body } = await grantFor()
+    // Another site named, or a forged grant: nothing closes.
+    expect((await displayState({ grant: body.grant, hostId: OTHER_HOST, close: true })).body).toEqual({ open: false })
+    expect((await displayState({ grant: `${body.grant}x`, hostId: HOST, close: true })).body).toEqual({ open: false })
+    expect((await staff('state', body.grantId)).body).toEqual({ open: true })
+    // A grant of this site is not another site's staff's to close.
+    expect((await staff('close', body.grantId, 'tok-clerk', OTHER_HOST)).body).toEqual({ closed: false })
+    expect((await displayState({ grant: body.grant, hostId: HOST, close: true })).body).toEqual({ open: false })
+    expect((await staff('state', body.grantId)).body).toEqual({ open: false })
+  })
+
+  it('refuses no grant, a forged one, another site’s, and stores nothing', async () => {
     const waiver = await publishedWaiver()
     const { body } = await grantFor()
     const attempts: Array<Record<string, unknown>> = [
@@ -470,10 +519,8 @@ describe('signing on the register’s customer display', () => {
     for (const attempt of attempts) {
       const refused = await call(signOnDisplayRoute, 'POST', { token: null, body: attempt })
       expect(refused.status).toBe(401)
-      expect((await refused.json()).error).toMatch(/expired/)
+      expect((await refused.json()).error).toMatch(/closed this screen/)
     }
-    setWaiversClockForTests(() => NOW + 31 * 60 * 1000)
-    expect((await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })).status).toBe(401)
     expect(signatures()).toHaveLength(0)
   })
 
@@ -1065,5 +1112,131 @@ describe('the retention job', () => {
     retentionYears[OTHER_HOST] = 1
     expect(await tick(NOW + HOUR)).toMatchObject({ sites: 1, restamped: 0 })
     expect(signatures().every((one) => one.retentionYears === 7)).toBe(true)
+  })
+})
+
+describe('e-sign consent v2 and the signer’s own copy (AGL-4042)', () => {
+  const contactHost = () =>
+    db.docs.set(`hosts/${HOST}`, {
+      ...(db.docs.get(`hosts/${HOST}`) as Record<string, unknown>),
+      seo: { entity: { email: 'hello@example.com', telephone: '+1-555-010-0100' } },
+    })
+  const copyQuery = (copyUrl: string) => Object.fromEntries(new URL(copyUrl, 'https://console.test').searchParams)
+
+  it('stores the consent as this site’s signers read it, with the business and how to reach it', async () => {
+    contactHost()
+    const waiver = await publishedWaiver()
+    const read = await (await call(publicWaiverRoute, 'GET', { token: null, query: { waiverId: waiver.id } })).json()
+    expect(read.site).toEqual({ name: 'Acme Motocross', contact: 'hello@example.com or +1-555-010-0100' })
+    expect(read.consent).toMatchObject({ heading: 'Signing electronically', version: 2 })
+    expect(read.consent.text).toContain('by contacting Acme Motocross at hello@example.com or +1-555-010-0100.')
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+    const [stored] = signatures()
+    // The words signed are the words shown, and the signed text carries them.
+    expect(stored.consent).toEqual({ agreed: true, text: read.consent.text, version: 2 })
+    expect(stored.signedText).toContain(`Electronic signature consent: ${read.consent.text}`)
+    // The signed copy email repeats the paper copy and how to reach the business.
+    expect(sent[0].tokens['waiver.contact']).toBe('Contact Acme Motocross at hello@example.com or +1-555-010-0100.')
+    expect(sent[0].fallback.text).toContain('a paper copy at no charge')
+  })
+
+  it('answers an electronic signing with a one-hour link to its own PDF, and nothing else', async () => {
+    const waiver = await publishedWaiver()
+    const answer = await (await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })).json()
+    expect(answer.copyUrl).toMatch(/^\/api\/waivers\/signed-copy\?/)
+    const query = copyQuery(answer.copyUrl)
+    const download = await call(signedCopyRoute, 'GET', { token: null, query })
+    expect(download.status).toBe(200)
+    expect(download.headers.get('content-type')).toBe('application/pdf')
+    expect(Buffer.from(await download.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-')
+    // The token is stored as a hash, never as itself.
+    expect(JSON.stringify(signatures()[0])).not.toContain(query['token'])
+    expect((await call(signedCopyRoute, 'GET', { token: null, query: { ...query, token: 'forged-token' } })).status).toBe(404)
+    expect((await call(signedCopyRoute, 'GET', { token: null, query: { ...query, hostId: OTHER_HOST } })).status).toBe(404)
+    setWaiversClockForTests(() => NOW + 61 * 60 * 1000)
+    expect((await call(signedCopyRoute, 'GET', { token: null, query })).status).toBe(404)
+  })
+
+  it('gives a signer at the window with no email a copy to scan, and a paper waiver none', async () => {
+    const waiver = await publishedWaiver()
+    const response = await call(signAtWindowRoute, 'POST', {
+      token: 'tok-clerk',
+      body: signing(waiver, { signer: { name: 'Jordan Lee', email: '', phone: '', dateOfBirth: '1990-04-02' }, signature: { kind: 'typed', text: 'Jordan Lee' } }),
+    })
+    const answer = await response.json()
+    expect(answer.copyUrl).toMatch(/^\/api\/waivers\/signed-copy\?/)
+    expect((await call(signedCopyRoute, 'GET', { token: null, query: copyQuery(answer.copyUrl) })).status).toBe(200)
+    expect(await signedCopyPath({ orgId: ORG, hostId: HOST, signature: { id: 'paper-1', method: 'paper' } })).toBeNull()
+  })
+})
+
+describe('matching a rider at check-in by the birth date on their CRM contact (AGL-4042)', () => {
+  const status = async (query: Record<string, string>) =>
+    (await (await call(statusRoute, 'GET', { token: 'tok-clerk', query: { dayKey: '2026-10-24', ...query } })).json()) as {
+      signed: boolean
+      matched: boolean
+      matchedBy: string | null
+      birthDateFrom?: string | null
+      searchName: string | null
+      label: string
+    }
+  const contact = (id: string, facets: Record<string, Record<string, unknown>>, name = 'Pat Lee') =>
+    db.docs.set(`orgs/${ORG}/contacts/${id}`, { name, facets })
+
+  // The plugin that keeps people, as core's seam reaches it: waivers never
+  // opens a contacts collection itself.
+  beforeAll(() => {
+    registerPluginPersonRecords({
+      find: async () => null,
+      read: async (request) =>
+        request.records.map((record) => {
+          const data = db.docs.get(`orgs/${request.orgId}/contacts/${record.id}`)
+          return record.kind === 'contact' && data ? { kind: 'contact', id: record.id, email: null, data } : null
+        }),
+    }, { pluginId: 'crm' })
+  })
+  afterAll(() => resetPluginServicesForTests())
+
+  beforeEach(async () => {
+    // Jordan Lee (born 1990-04-02) signs for themself and for Pat Lee (born 2014-09-30).
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+  })
+
+  it('matches by the name and birth date this site keeps on the contact, when no email matches', async () => {
+    contact('contact-pat', { [HOST]: { name: 'Pat Lee', birthdate: '2014-09-30' } })
+    expect(await status({ contactId: 'contact-pat' })).toMatchObject({
+      signed: true,
+      matched: true,
+      matchedBy: 'nameDob',
+      birthDateFrom: 'contact',
+      label: 'Waiver signed',
+    })
+    // An email that matches nothing still falls back to the contact's birth date.
+    expect(await status({ email: 'nobody@example.com', contactId: 'contact-pat', name: 'Pat Lee' })).toMatchObject({
+      matched: true,
+      matchedBy: 'nameDob',
+      birthDateFrom: 'contact',
+    })
+  })
+
+  it('leaves Find by name for a contact with no birth date, and never reads another site’s record of them', async () => {
+    contact('contact-none', { [HOST]: { name: 'Pat Lee' } })
+    expect(await status({ contactId: 'contact-none', name: 'Pat Lee' })).toMatchObject({
+      matched: false,
+      matchedBy: null,
+      searchName: 'Pat Lee',
+    })
+    // Only another site keeps the birth date: this site does not see it.
+    contact('contact-other', { [OTHER_HOST]: { name: 'Pat Lee', birthdate: '2014-09-30' } })
+    expect(await status({ contactId: 'contact-other', name: 'Pat Lee' })).toMatchObject({ matched: false, searchName: 'Pat Lee' })
+  })
+
+  it('takes a date of birth the caller gives over the contact’s', async () => {
+    contact('contact-pat', { [HOST]: { name: 'Pat Lee', birthdate: '2014-09-30' } })
+    expect(await status({ contactId: 'contact-pat', name: 'Pat Lee', dateOfBirth: '2000-01-01' })).toMatchObject({
+      matched: false,
+      matchedBy: null,
+    })
   })
 })

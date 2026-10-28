@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type {
   DomainConnectDiscoverResponse,
   DomainConnectFinishResponse,
@@ -125,8 +126,10 @@ async function memberGate(request: Request, deps: DomainConnectRouteDeps): Promi
   if (!DOCUMENT_ID.test(hostId)) return refusal(400, 'Missing domain or hostId', 'invalid-request')
   const site = await deps.readSite(hostId)
   if (!site) return refusal(404, 'Unknown site', 'unknown-site')
-  const role = (site.host['memberRoles'] as Record<string, unknown> | undefined)?.[caller.uid]
-  if (role !== 'admin' && !caller.staff) return refusal(403, 'Not a site admin', 'not-admin')
+  // "Manage site settings" (`site.manage`, AGL-4047); the reason code stays.
+  if (!caller.staff && !holdsSiteKey(site.host, caller.uid, 'site.manage')) {
+    return refusal(403, siteKeyRefusal('site.manage'), 'not-admin')
+  }
   if (!deps.entitled(site.org)) {
     return refusal(403, 'Custom domains require a Starter plan', 'not-entitled')
   }

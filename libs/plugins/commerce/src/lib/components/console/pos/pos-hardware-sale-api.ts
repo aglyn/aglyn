@@ -138,14 +138,72 @@ export function posHardwareSerials(
 }
 
 /** Registers a reader to the buyer's chosen store, by its code, at the booth. */
+/** The buyer's store address, typed at the booth for a store with no card reader location yet. */
+export interface BoothStoreAddress {
+  line1: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
+}
+
 export function posHardwareRegisterAtBooth(
   user: User,
   attemptKey: string,
-  body: { hostId: string; registrationCode: string; registerOrderId?: string; orderId?: string },
+  body: {
+    hostId: string
+    registrationCode: string
+    registerOrderId?: string
+    orderId?: string
+    address?: BoothStoreAddress
+  },
 ) {
-  return sendPosHardwareRequest<{ ok: true; readerId: string; order: ToAttachRow }>(user, SALE, {
+  return sendPosHardwareRequest<{ ok: true; readerId: string; storeAddressSaved: boolean; order: ToAttachRow }>(user, SALE, {
     method: 'POST',
     body: { ...body, action: 'register-at-booth' },
     attemptKey,
+  })
+}
+
+/** The terms of sale the buyer accepts before paying (AGL-4038). */
+export interface PosHardwareTermsView {
+  version: string
+  sections: string
+  url: string
+  summary: string[]
+}
+
+/** How and when the buyer accepted, as the route answers it. */
+export interface PosHardwareTermsAcceptanceView {
+  version: string
+  sections: string
+  method: 'tablet' | 'display' | 'notice'
+  atMs: number
+}
+
+export function posHardwareTerms(user: User, hostId: string) {
+  return sendPosHardwareRequest<PosHardwareTermsView>(user, SALE, { method: 'POST', body: { action: 'terms', hostId } })
+}
+
+export function posHardwareTermsStatus(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ acceptance: PosHardwareTermsAcceptanceView | null }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'terms-status', hostId, registerOrderId },
+  })
+}
+
+/** Notes who is putting the terms on the display, before the register shows them there. */
+export function posHardwareTermsOnDisplay(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ ok: true }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'terms-on-display', hostId, registerOrderId },
+  })
+}
+
+/** The buyer accepted on the register tablet handed to them. */
+export function posHardwareAcceptTerms(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ ok: true; acceptance: PosHardwareTermsAcceptanceView }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'accept-terms', hostId, registerOrderId },
   })
 }

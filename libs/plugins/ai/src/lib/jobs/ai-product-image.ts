@@ -112,6 +112,13 @@ export async function encodeAiProductImage(bytes: Buffer): Promise<Buffer> {
  * The product's first photo as a picture part, or what kept it from being
  * one. Never throws: a photo that cannot be read leaves the copy to be written
  * from the product's words, and says so.
+ *
+ * On Vercel the read and the encode run in the plugins' image function, the
+ * one function that ships `sharp`'s native library (`ai-image-reads.ts`,
+ * AGL-4048), bounded by `AI_PRODUCT_IMAGE_READ_MS`, the time a pass counts
+ * for it; anywhere else, and wherever a caller hands its own reads (a spec,
+ * the eval harness), they run here. Either way an answer that does not come
+ * is an unreadable photo.
  */
 export async function readAiProductImage(
   firestore: FirebaseFirestore.Firestore,
@@ -122,20 +129,63 @@ export async function readAiProductImage(
   const location = aiMediaAssetLocation(input.value, input.hostId, input.orgId)
   if (!location) return { status: 'not-in-library' }
   try {
-    const read =
-      seams.readBytes ??
-      ((store, where, hostId) =>
-        readAiMediaAssetBytes(store, where, hostId, {
-          maxBytes: AI_PRODUCT_IMAGE_MAX_SOURCE_BYTES,
-          types: AI_PRODUCT_IMAGE_TYPES,
-        }))
-    const asset = await read(firestore, location, input.hostId)
-    if (!asset) return { status: 'unreadable' }
-    const jpeg = await (seams.encode ?? encodeAiProductImage)(asset.buffer)
-    if (!jpeg.length) return { status: 'unreadable' }
-    return { status: 'read', image: { type: 'image', mediaType: 'image/jpeg', data: jpeg.toString('base64') } }
+    const images = seams.readBytes || seams.encode ? null : await import('./ai-image-reads')
+    const origin = images?.aiImageReadsOrigin() ?? null
+    if (images && origin) {
+      const payload = images.aiImageReadsRequest('product-photo', location, input.hostId, input.orgId)
+      if (!payload) return { status: 'unreadable' }
+      const answer = await images.requestAiImageReads<{ read?: unknown }>(
+        origin,
+        payload,
+        AbortSignal.timeout(AI_PRODUCT_IMAGE_READ_MS),
+      )
+      return productImageAnswer(answer?.read)
+    }
+    return await readAiProductImageAt(firestore, location, input.hostId, seams)
   } catch (error) {
     console.error('ai product image read failed', { hostId: input.hostId, error })
     return { status: 'unreadable' }
   }
+}
+
+/**
+ * The photo read and encoded in THIS process, from a location already held
+ * to the media library's rule: what `readAiProductImage` does off Vercel,
+ * and what the images function does for it on Vercel. Throws when the read
+ * or the encode does.
+ */
+export async function readAiProductImageAt(
+  firestore: FirebaseFirestore.Firestore,
+  location: AiMediaAssetLocation,
+  hostId: string,
+  seams: AiProductImageSeams = {},
+): Promise<AiProductImage> {
+  const read =
+    seams.readBytes ??
+    ((store, where, site) =>
+      readAiMediaAssetBytes(store, where, site, {
+        maxBytes: AI_PRODUCT_IMAGE_MAX_SOURCE_BYTES,
+        types: AI_PRODUCT_IMAGE_TYPES,
+      }))
+  const asset = await read(firestore, location, hostId)
+  if (!asset) return { status: 'unreadable' }
+  const jpeg = await (seams.encode ?? encodeAiProductImage)(asset.buffer)
+  if (!jpeg.length) return { status: 'unreadable' }
+  return { status: 'read', image: { type: 'image', mediaType: 'image/jpeg', data: jpeg.toString('base64') } }
+}
+
+/**
+ * What the images function answered, held to the shapes a read takes: a
+ * JPEG picture part, or the asset not being the library's. Anything else is
+ * an unreadable photo.
+ */
+function productImageAnswer(answer: unknown): AiProductImage {
+  const read = (answer ?? {}) as { status?: unknown; image?: Record<string, unknown> | null }
+  if (read.status === 'not-in-library') return { status: 'not-in-library' }
+  if (read.status !== 'read') return { status: 'unreadable' }
+  const data = read.image?.['data']
+  const isJpeg = read.image?.['type'] === 'image' && read.image['mediaType'] === 'image/jpeg'
+  return isJpeg && typeof data === 'string' && data.length > 0
+    ? { status: 'read', image: { type: 'image', mediaType: 'image/jpeg', data } }
+    : { status: 'unreadable' }
 }

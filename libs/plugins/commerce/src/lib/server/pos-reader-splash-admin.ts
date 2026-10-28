@@ -91,6 +91,28 @@ function view(doc: PlatformSplashDoc) {
 
 export type StaffReaderSplashView = ReturnType<typeof view>
 
+/**
+ * An uploaded screen's format and size, read here where this process can
+ * draw, else by the images function (AGL-4048), which ships `sharp`.
+ */
+async function uploadedImageFacts(body: Buffer): Promise<{ contentType: string; width: number; height: number } | null> {
+  const images = await import('./pos-reader-splash-images')
+  const origin = images.posReaderSplashImagesOrigin()
+  if (!origin) {
+    const { loadSharp } = await import('./pos-reader-splash-server')
+    return posReaderSplashImageFacts((await loadSharp()) as any, body)
+  }
+  try {
+    const answer = await images.requestPosReaderSplashImages<{
+      facts: { contentType: string; width: number; height: number } | null
+    }>(origin, { op: 'facts', dataBase64: body.toString('base64') })
+    return answer.facts
+  } catch (error) {
+    if (error instanceof images.PosReaderSplashImagesRefusal) return null
+    throw error
+  }
+}
+
 async function upload(
   doc: PlatformSplashDoc,
   input: Record<string, unknown>,
@@ -104,8 +126,7 @@ async function upload(
     return { error: 'Use an image under 2 MB.', status: 400 }
   }
   const body = Buffer.from(raw, 'base64')
-  const { loadSharp } = await import('./pos-reader-splash-server')
-  const facts = await posReaderSplashImageFacts((await loadSharp()) as any, body)
+  const facts = await uploadedImageFacts(body)
   if (!facts) return { error: 'That image could not be read.', status: 400 }
   // The bytes decide the type, never the name or the browser's claim.
   const problem = posReaderSplashImageProblem({ ...facts, bytes: body.length }, family)

@@ -27,6 +27,105 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — editing together follows Edit site content
+
+- **[Edit site content decides who edits a site](workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions)** —
+  editing alongside others in the Besigner and the edit bar on the live site now
+  follow the **Edit site content** permission on that site. An editor of the whole
+  workspace given **Viewer** access to one site no longer edits there unless the site
+  grants them the permission.
+
+## October 2026 — orders and gift cards are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  working a store's orders and issuing gift cards now each have a permission,
+  **Manage orders** and **Issue gift cards**. A site's admins and editors keep them,
+  and a custom role or a per-member override can grant or deny either one.
+
+## October 2026 — the site roles are permissions you can adjust
+
+- **[Site permissions](workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions)** —
+  editing a site's content, publishing it, seeing its orders and webhooks, and managing
+  its settings are now four permissions. Each site role still starts with exactly what
+  it had, and a custom role or a per-member override can now grant or deny any of them,
+  so you can let one trusted Author publish, or keep an Editor out of the order book.
+
+## October 2026 — walk-ins and stays are permissions
+
+- **[Reservation permissions](workspace-and-billing/teams-and-roles/custom-roles.md#reservation-permissions)** —
+  booking a walk-in, changing a stay's guests, and editing, checking in and
+  canceling stays now each have a permission, **Book walk-ins and change guests**
+  and **Manage reservations**. Everyone keeps the access their role on the site gave
+  them, and a custom role or a per-member override can now grant either one, so the
+  staff at your check-in window can book walk-ins without being editors.
+
+## October 2026 — a waiver stays on the customer display until you close it
+
+- **[No timer on the customer display](commerce-and-bookings/commerce/waivers.md#on-the-customer-display)** —
+  a waiver you put on the customer display at check-in stays there however long the
+  rider takes to read it, until you select **Close display** beside the customer or
+  the rider is done. Once closed, the display can't sign under it again.
+
+## October 2026 — waivers matched by the birth date on a contact
+
+- **[A rider matched by their contact's birth date](commerce-and-bookings/commerce/waivers.md#how-a-rider-is-matched)** —
+  at check-in, when a customer's email matches no waiver and their contact record on
+  the site has a birthdate, their waiver is found by their name and that birth date,
+  without asking them. **Find by name** is still there for everyone else.
+
+## October 2026 — waivers: clearer e-signature consent and a copy to download
+
+- **[Signing electronically](commerce-and-bookings/commerce/waivers.md#signing-electronically)** —
+  the consent signers agree to now comes before the signature, covers any minors they
+  list, says what they need and how to get a paper copy, change their email or withdraw,
+  and names your business's contact. The signing page shows your contact, the signed
+  copy email repeats it, and every signer can download their signed copy when they
+  finish: a button on their own phone, a code to scan at your window or display.
+
+## October 2026 — accept the terms of sale for a reader bought in person
+
+- **[The terms of sale, accepted at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —
+  when you buy a card reader from Aglyn in person, you accept its terms of sale on
+  the register's customer display or the tablet the staff hand you, before you pay.
+  Every receipt for it says which terms the sale is made under.
+
+## October 2026 — return a card reader order shipped to you
+
+- **[Request a return of an order shipped to you](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —
+  once a card reader order has shipped, select **Request a return** on it on the
+  **Hardware** card, as for a reader bought in person. Aglyn's team arranges it,
+  refunds the items and their tax once it's back, and emails you what was refunded.
+- **The Stripe Reader S710** on the Hardware card no longer says it comes with its
+  own 4G: 4G needs Stripe's cellular service, which is billed monthly for each reader.
+
+## October 2026 — card reader sale records keep the buyer's name and address
+
+- **[Who bought each reader, on Aglyn's record of the sale](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
+  as a reseller of Stripe's readers, Aglyn now keeps the buyer's name and address
+  on its record of each card reader sale, online or in person, for the record's
+  seven years, including after the buyer closes their account. Their email, phone
+  and tracking are still removed from the order when they do.
+
+## October 2026 — card readers bought at an event
+
+- **[Your store's address at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —
+  when you buy a card reader from Aglyn at an event and your store has no address
+  for card readers yet, Aglyn's staff can enter it with you and add the reader to
+  your store there and then. It is saved to your store just as the **POS devices**
+  card saves it, and a store that already has an address keeps it. You can still
+  add it yourself later instead.
+- **The Hardware card** no longer notes that Stripe may stop selling the BBPOS
+  WisePOS E.
+
+## October 2026 — narrowing per site is a permission setting
+
+- **[Follow the site role, or keep the permission](workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows)** —
+  each permission a site can narrow (the point of sale, waivers and AI ones) now has
+  a setting for sites where an editor of the whole workspace has **Viewer** or
+  **Author** access: **Follow the site role** or **Keep this permission**. Set it on a
+  custom role, or for one member in their **Permissions** card. Left on **Inherit**,
+  nothing changes: the register and waivers follow the site role and AI is kept.
+
 ## October 2026 — reviews of products sold in store
 
 - **[Reviews of a product sold in person only](commerce-and-bookings/commerce/catalog.md#sell-in-person-only)** —
@@ -633,7 +732,7 @@ for the how-to.
 
 - **[Buy a reader from Aglyn](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —
   order Stripe card readers and accessories from the Hardware card on **Products →
-  Point of sale**, including the Stripe Reader S710 with its own 4G connection.
+  Point of sale**, including the Stripe Reader S710 handheld.
   Stripe ships them straight to you, the card shows each order's status and
   tracking, and you're emailed as it ships and arrives, with the steps to add the
   reader to a register. If the workspace is deleted, or the account that placed

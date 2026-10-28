@@ -667,6 +667,38 @@ async function ensureDomainRegistrationProduct() {
 env['STRIPE_PRODUCT_DOMAIN_REGISTRATION'] = await ensureDomainRegistrationProduct()
 
 /**
+ * 4G for Stripe Reader S710s (AGL-4038): a monthly charge in arrears, on a
+ * one-off invoice whose line carries its own amount (Stripe's cellular price
+ * per reader plus the cost of collecting it, `POS_CELLULAR_*`), so like a
+ * domain there is no Price, only the product that carries the tax code.
+ * Found by metadata, created on a miss. The tax code is the platform's, as
+ * on every other product here; whether reselling cellular service is taxed
+ * differently is the accountant's to confirm before it bills.
+ */
+async function ensurePosCellularProduct() {
+  const query = encodeURIComponent(`active:'true' AND metadata['aglynProduct']:'pos_cellular'`)
+  const search = await stripe(`products/search?query=${query}`)
+  const existing = (search?.data ?? [])[0]
+  if (existing?.id) {
+    console.log(`= Card reader 4G product already exists (${existing.id})`)
+    return existing.id
+  }
+  if (DRY_RUN) {
+    dryRunMissing += 1
+    console.log('! Card reader 4G product MISSING (would be created)')
+    return '<MISSING:pos_cellular_product>'
+  }
+  const product = await stripe('products', {
+    name: 'Card reader 4G',
+    'metadata[aglynProduct]': 'pos_cellular',
+    tax_code: PLATFORM_TAX_CODE,
+  })
+  console.log(`+ created Card reader 4G product (${product.id})`)
+  return product.id
+}
+env['STRIPE_PRODUCT_POS_CELLULAR'] = await ensurePosCellularProduct()
+
+/**
  * THE TAX POSITION, checked on every run (AGL-1877).
  *
  * The products this account already had were tagged by hand in the Stripe

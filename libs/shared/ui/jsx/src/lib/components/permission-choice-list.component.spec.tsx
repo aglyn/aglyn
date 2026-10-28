@@ -93,4 +93,56 @@ describe('PermissionChoiceList (AGL-4047)', () => {
     const deny = within(screen.getByRole('group', { name: 'Manage members' })).getByRole('button', { name: 'Deny' })
     expect((deny as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('draws a narrowing choice on a key a site can narrow, and answers a new one (AGL-4047)', () => {
+    const onNarrowingChange = jest.fn()
+    render(
+      <PermissionChoiceList
+        sections={[
+          {
+            id: 'commerce',
+            label: 'Commerce',
+            items: [
+              {
+                key: 'posSell',
+                label: 'Sell at the register',
+                choice: 'inherit',
+                narrowing: { choice: 'inherit', inheritHint: 'Inherit: follows the site role for Editor by default' },
+              },
+              { key: 'posBuyHardware', label: 'Buy hardware', choice: 'inherit' },
+            ],
+          },
+        ]}
+        onChange={jest.fn()}
+        onNarrowingChange={onNarrowingChange}
+      />,
+    )
+    const narrowing = screen.getByRole('group', { name: 'Sell at the register: on sites where their role is narrower' })
+    expect(within(narrowing).getByRole('button', { name: 'Inherit' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText('Inherit: follows the site role for Editor by default')).toBeTruthy()
+    fireEvent.click(within(narrowing).getByRole('button', { name: 'Keep this permission' }))
+    expect(onNarrowingChange).toHaveBeenLastCalledWith('posSell', 'keep')
+    // A key no site narrows has no such choice.
+    expect(screen.queryByRole('group', { name: 'Buy hardware: on sites where their role is narrower' })).toBeNull()
+  })
+
+  it('locks the narrowing choice with the row, and without a handler', () => {
+    render(
+      <PermissionChoiceList
+        sections={[
+          {
+            id: 'commerce',
+            label: 'Commerce',
+            items: [{ key: 'posSell', label: 'Sell', choice: 'inherit', narrowing: { choice: 'keep' } }],
+          },
+        ]}
+        onChange={jest.fn()}
+      />,
+    )
+    const keep = within(screen.getByRole('group', { name: 'Sell: on sites where their role is narrower' })).getByRole(
+      'button',
+      { name: 'Follow the site role' },
+    )
+    expect((keep as HTMLButtonElement).disabled).toBe(true)
+  })
 })

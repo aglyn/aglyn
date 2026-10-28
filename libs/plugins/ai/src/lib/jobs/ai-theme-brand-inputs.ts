@@ -206,8 +206,41 @@ const LOGO_TYPES = /^image\/(png|jpeg|webp|gif|avif|svg\+xml)$/
  * A library logo's colors, read the way the media CDN would serve it
  * (`readAiMediaAssetBytes`). `null` when the asset may not be read or the bytes
  * cannot be decoded.
+ *
+ * On Vercel the read and the decode run in the plugins' image function, the
+ * one function that ships `sharp`'s native library (`ai-image-reads.ts`,
+ * AGL-4048), inside the brand reads' own bound (`signal`); anywhere else they
+ * run here. Either way an answer that does not come is a logo whose colors
+ * could not be read.
  */
 async function readLogoColors(
+  firestore: FirebaseFirestore.Firestore,
+  location: AiThemeLogoLocation,
+  hostId: string,
+  signal?: AbortSignal,
+): Promise<string[] | null> {
+  const images = await import('./ai-image-reads')
+  const origin = images.aiImageReadsOrigin()
+  if (!origin) return readAiThemeLogoColorsAt(firestore, location, hostId)
+  // The location was held to the site's org already: an org asset's scope
+  // IS that org, and a site's own asset needs none.
+  const orgId = location.scope.isOrg ? location.scope.scopeId : ''
+  const payload = images.aiImageReadsRequest('logo-colors', location, hostId, orgId)
+  if (!payload) return null
+  const answer = await images.requestAiImageReads<{ colors?: unknown }>(
+    origin,
+    payload,
+    signal ?? AbortSignal.timeout(AI_THEME_BRAND_BUDGET_MS),
+  )
+  return logoColorsAnswer(answer?.colors)
+}
+
+/**
+ * A library logo's colors read and decoded in THIS process, from a location
+ * already held to the media library's rule: what `readLogoColors` does off
+ * Vercel, and what the images function does for it on Vercel.
+ */
+export async function readAiThemeLogoColorsAt(
   firestore: FirebaseFirestore.Firestore,
   location: AiThemeLogoLocation,
   hostId: string,
@@ -224,6 +257,15 @@ async function readLogoColors(
     .raw()
     .toBuffer({ resolveWithObject: true })
   return dominantColorsFromPixels(data, info.channels)
+}
+
+/** What the images function answered, as hex colors: only colors leave it. */
+function logoColorsAnswer(colors: unknown): string[] | null {
+  if (!Array.isArray(colors)) return null
+  return colors
+    .map((color) => (typeof color === 'string' ? normalizeThemeHex(color) : null))
+    .filter((hex): hex is string => Boolean(hex))
+    .slice(0, AI_THEME_BRAND_COLORS_PER_SOURCE)
 }
 
 /* ------------------------------------------------------------------------ *
@@ -585,6 +627,8 @@ export interface AiThemeBrandSeams {
     firestore: FirebaseFirestore.Firestore,
     location: AiThemeLogoLocation,
     hostId: string,
+    /** The brand reads' bound, which a read made elsewhere waits no longer than. */
+    signal?: AbortSignal,
   ) => Promise<string[] | null>
   referenceColors?: (url: URL, signal: AbortSignal) => Promise<string[] | null>
 }
@@ -620,6 +664,7 @@ export async function gatherAiThemeBrandInputs(
         input.firestore,
         location,
         input.hostId,
+        clock.signal,
       ).catch(() => null)
       if (found) add(found, 'logo')
       else notes.push("The site logo's colors could not be read, so the proposal does not use them.")

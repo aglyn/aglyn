@@ -125,6 +125,25 @@ export interface AiLayoutDesignChoices {
    * cover beside each title — the two ways an editorial site lists writing.
    */
   writing: 'grid' | 'ruled'
+  /**
+   * How the titles of a designed group read (AGL-4065): `sentence`, each set
+   * in the theme's heading style for an item; or `caps`, each set as the
+   * theme's label (its overline: spaced capitals where the site's eyebrows
+   * are capitals) over its words, as a designer's ruled columns and icon
+   * rows title their items. Only a variant the theme defines is chosen: the
+   * case of a section's own heading is the look's font pairing, never the
+   * compiler's.
+   */
+  headingCase: 'sentence' | 'caps'
+  /**
+   * How the plain and soft bands run down a page (AGL-4065): `alternate`, the
+   * bands as the model wrote them except that two neighbors of one never
+   * meet — the second takes the other — so sections read apart; or `plain`,
+   * one ground for the whole page, every soft band drawn plain and the
+   * sections set apart by their spacing. Brand and dark bands are the
+   * model's either way.
+   */
+  bandRhythm: 'alternate' | 'plain'
 }
 
 type Family = 'gallery' | 'editorial' | 'hospitality' | 'calm' | 'retail' | 'standard'
@@ -183,8 +202,10 @@ const MOSTLY_MOSAIC: readonly AiLayoutDesignChoices['pictures'][] = ['mosaic', '
 export const AI_LAYOUT_KIND_SIGNATURES: Readonly<Record<string, AiLayoutKindSignature>> = {
   // Clear and confident: a contained split, or the words on a card over the place.
   business: { heroes: ['split', 'panel'], groups: ['cards', 'icons'], steps: BOTH_STEPS, features: 0.6, coverClose: 0.3, splitHeads: 0.5, pictures: MOSTLY_MOSAIC },
-  // Direct: a full-bleed job photo with the promise at the start, services as tight cards.
-  trades: { heroes: ['cover', 'split'], groups: ['cards'], steps: ['numbers'], features: 0.5, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // Direct: a full-bleed job photo with the promise at the start, services as
+  // tight cards, ruled columns or icon rows, and a job's steps numbered or
+  // ruled (AGL-4065: two trades sites of 2026-10-25 shared one layout).
+  trades: { heroes: ['cover', 'split'], groups: ['cards', 'ruled', 'icons'], steps: BOTH_STEPS, features: 0.5, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
   // Measured: the words on a card over the office, practice areas ruled, headings beside them.
   professional: { heroes: ['panel', 'editorial'], groups: ['ruled'], steps: ['timeline'], features: 0.5, coverClose: 0.2, splitHeads: 0.8, pictures: MOSTLY_MOSAIC },
   // Reassuring: half the band a calm room, or a quiet centered masthead.
@@ -204,7 +225,8 @@ export const AI_LAYOUT_KIND_SIGNATURES: Readonly<Record<string, AiLayoutKindSign
   // Celebratory: two pictures of the day beside its name, or the name over one.
   events: { heroes: ['collage', 'poster'], groups: ['cards', 'icons'], steps: ['timeline'], features: 0.7, coverClose: 0.6, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
   // High energy: half the band a photo, half a loud headline; or full-bleed.
-  fitness: { heroes: ['bleed', 'cover'], groups: ['cards'], steps: ['numbers'], features: 0.5, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // Its groups as cards or ruled columns, its steps numbered or ruled (AGL-4065).
+  fitness: { heroes: ['bleed', 'cover'], groups: ['cards', 'ruled'], steps: BOTH_STEPS, features: 0.5, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
   // Calm and spacious: a centered masthead, or a soft split.
   yoga: { heroes: ['column', 'split'], groups: ['icons', 'cards'], steps: BOTH_STEPS, features: 0.6, coverClose: 0.2, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
   // Image-led: two pictures of the work and the place, or half the band one.
@@ -249,6 +271,12 @@ export function aiLayoutFamily(kind: string): Family {
   return FAMILIES[kind] ?? 'standard'
 }
 
+/** The kinds whose item titles are set as labels three sites in ten (AGL-4065); every other kind's one in ten. */
+const LABEL_TITLE_KINDS: ReadonlySet<string> = new Set(['trades', 'fitness'])
+
+/** The families whose pages keep one ground as often as they alternate: a gallery's, a publication's (AGL-4065). */
+const ONE_GROUND_FAMILIES: ReadonlySet<Family> = new Set(['gallery', 'editorial'])
+
 /**
  * A site's choices, the same for every page of it, each drawn at even odds
  * among the options its kind's signature lists (AGL-3899, AGL-3985), so two
@@ -283,8 +311,12 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
     pictures: pick(next, signature.pictures),
     // Drawn last, so every choice above stays what it was for a seed.
     writing: pick(next, ['grid', 'ruled'] as const),
+    // Drawn after it (AGL-4065), so a seed's earlier choices stay too.
+    headingCase: next() < (LABEL_TITLE_KINDS.has(design.kind) ? 0.3 : 0.1) ? 'caps' : 'sentence',
+    bandRhythm: next() < (ONE_GROUND_FAMILIES.has(family) ? 0.5 : 0.35) ? 'plain' : 'alternate',
   }
 }
+
 
 const WORK = /\b(work|works|project|projects|portfolio|gallery|galleries|case|cases|studies|selected|commission|commissions|illustration|illustrations|photo|photos|series|book|books|editorial|brand|collection|collections|wedding|weddings|portrait|portraits|session|sessions|shoot|shoots)\b/i
 const WRITING = /\b(article|articles|post|posts|writing|writings|latest|featured|journey|journeys|recipe|recipes|story|stories|essay|essays|guide|guides|issue|issues|episode|episodes)\b/i
@@ -292,8 +324,15 @@ const DISHES = /\b(menu|menus|dish|dishes|breakfast|brunch|lunch|dinner|pastry|p
 // A store's own products are listed by its Product grid (AGL-3676), never drawn
 // from words: what a store shows as pictures is how its range is grouped — its
 // collections, gift sets, occasions and scents. "Candle care and burn notes" is no band of pictures.
-/** Words a section uses for itself when it is a showing of pictures, on any kind of site (AGL-3923). */
-const GALLERY = /\b(gallery|galleries|portfolio|portfolios|lookbook|lookbooks)\b/i
+/**
+ * Words a section uses for itself when it is a showing of pictures, on any
+ * kind of site (AGL-3923) — "in pictures" and "in photos" among them
+ * (AGL-4065): the 2026-10-25 Rut Runners Racing and Pit Row Tacos homes drew
+ * "The team at the track in pictures" and "The trailer and the food in
+ * pictures" as six captions each, with no picture slot for a photo to fill.
+ * Whole words only: "Picture-perfect" and "Photoshoot" show no pictures.
+ */
+const GALLERY = /\b(gallery|galleries|portfolio|portfolios|lookbook|lookbooks|pictures|photos)\b/i
 const CATEGORIES = /\b(collection|collections|range|ranges|categor(?:y|ies)|gift|gifts|gift sets?|sets|occasion|occasions|scent|scents|edit|edits)\b/i
 
 /**

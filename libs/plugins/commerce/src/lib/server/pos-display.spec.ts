@@ -241,6 +241,31 @@ describe('the end of a sale (AGL-3608)', () => {
     expect(poll.body.state.screen).toBeUndefined()
   })
 
+  it('takes a plugin’s screen off only while it is the one showing (AGL-4042)', async () => {
+    const token = await pairDisplay()
+    const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g.1' } }
+    await call({ action: 'push', ...SITE, state: { mode: 'screen', promptId: 's1', screen } }, { staff: true })
+    // Another plugin's close leaves it.
+    expect((await call({ action: 'close-screen', ...SITE, pluginId: 'other' }, { staff: true })).body).toEqual({
+      ok: true,
+      closed: false,
+    })
+    expect((await call({ action: 'poll' }, { method: 'GET', token })).body.state.mode).toBe('screen')
+    expect((await call({ action: 'close-screen', ...SITE, pluginId: 'acme-forms' }, { staff: true })).body.closed).toBe(true)
+    expect((await call({ action: 'poll' }, { method: 'GET', token })).body.state.mode).toBe('idle')
+    // A sale the register moved on to is never cleared by it.
+    await call(
+      {
+        action: 'push',
+        ...SITE,
+        state: { mode: 'cart', cart: { lines: [], itemsCents: 0, discountCents: 0, taxCents: 0, totalCents: 500 } },
+      },
+      { staff: true },
+    )
+    expect((await call({ action: 'close-screen', ...SITE, pluginId: 'acme-forms' }, { staff: true })).body.closed).toBe(false)
+    expect((await call({ action: 'poll' }, { method: 'GET', token })).body.state.mode).toBe('cart')
+  })
+
   it("formats in the store's chosen currency", async () => {
     const token = await pairDisplay()
     fakeDocs.set('hosts/host-1/settings/store', { currency: 'CAD' })

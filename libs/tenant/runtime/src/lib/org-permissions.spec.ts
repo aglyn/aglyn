@@ -60,9 +60,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       return mockResolveGranular(member as never, customRole as never)
     },
   ),
+  /** Modeled the same way (AGL-4047): the custom role by `roleId`, then the core's narrowing. */
+  resolveMemberSiteNarrowing: jest.fn(
+    async (orgId: string, member: Record<string, unknown> | null, hostId: string) => {
+      const roleId = member?.['roleId'] as string | undefined
+      const customRole = roleId ? (roles.get(`${orgId}:${roleId}`) ?? null) : null
+      return mockSiteNarrowingFor(member as never, hostId, customRole as never)
+    },
+  ),
 }))
 
-import { resolveOrgPermissions as mockResolveGranular } from '@aglyn/aglyn'
+import {
+  resolveOrgPermissions as mockResolveGranular,
+  siteNarrowingFor as mockSiteNarrowingFor,
+} from '@aglyn/aglyn'
 
 import { registerPluginPermissions } from '@aglyn/aglyn/server'
 
@@ -485,5 +496,28 @@ describe('a site narrows a workspace-wide member (AGL-4047)', () => {
     const resolved = await resolveOrgPermissions('contractor', { hostId: 'host-a' })
     expect(resolved.orgWide).toBe(false)
     expect(resolved.permissions.narrowTestRegister).toBe(false)
+  })
+
+  it('a custom role that keeps the register keeps it on the narrower site', async () => {
+    roles.set('org-1:floor', { name: 'Floor', siteNarrowing: { narrowTestRegister: false, narrowTestSell: false } })
+    members.set('org-1:ed', { ...narrowed, roleId: 'floor' })
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.permissions.narrowTestRegister).toBe(true)
+    expect(resolved.permissions.narrowTestSell).toBe(true)
+    // The key the role leaves alone still follows the site role.
+    expect(resolved.permissions.narrowTestCollect).toBe(false)
+  })
+
+  it("a member's own choice wins over their custom role's", async () => {
+    roles.set('org-1:floor', { name: 'Floor', siteNarrowing: { narrowTestRegister: false, narrowTestSell: false } })
+    members.set('org-1:ed', {
+      ...narrowed,
+      roleId: 'floor',
+      siteNarrowing: { narrowTestRegister: true, narrowTestSell: true, narrowTestCollect: false },
+    })
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.permissions.narrowTestRegister).toBe(false)
+    expect(resolved.permissions.narrowTestSell).toBe(false)
+    expect(resolved.permissions.narrowTestCollect).toBe(true)
   })
 })

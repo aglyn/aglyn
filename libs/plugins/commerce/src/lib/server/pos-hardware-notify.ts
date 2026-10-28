@@ -103,6 +103,7 @@ const FALLBACK: Record<PosHardwareEmailKind, (number: string) => string> = {
   canceled: (number) => `Your card reader order ${number} was canceled and refunded`,
   refunded: (number) => `Your refund for card reader order ${number}`,
   invited: (number) => `Your card reader order ${number} is waiting for your account`,
+  returnRefunded: (number) => `We refunded your returned card reader order ${number}`,
 }
 
 /** The fallback a workspace with no name gets in a sentence. */
@@ -159,6 +160,8 @@ export async function posHardwareEmailMerge(
       (order.refunds ?? []).slice(-1)[0]?.cents ?? order.refundedCents ?? order.totalCents ?? 0,
     ),
     'order.cancelReason': cancelReasonText(order.cancelReason, names.org),
+    // What a return kept back: the original shipping and any restocking fee.
+    'order.kept': formatPosHardwareCents(Math.max(0, (order.totalCents ?? 0) - (order.refundedCents ?? 0))),
   }
 }
 

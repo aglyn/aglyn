@@ -63,6 +63,14 @@ describe('the register offers its display to other plugins (AGL-4042)', () => {
     const push = call.mock.calls.find(([, body]) => body.action === 'push')?.[1]
     expect(push).toMatchObject({ action: 'push', hostId: 'host-1', registerId: 'reg-1', state: { mode: 'screen', screen } })
     expect(push.state.promptId).toMatch(/\S{8,}/)
+    // Staff close it: the register is asked to take that plugin's screen off.
+    expect(await host?.close?.('acme-forms')).toBe(true)
+    expect(call.mock.calls.find(([, body]) => body.action === 'close-screen')?.[1]).toEqual({
+      action: 'close-screen',
+      hostId: 'host-1',
+      registerId: 'reg-1',
+      pluginId: 'acme-forms',
+    })
     unmount()
     expect(customerDisplayHost()).toBeNull()
   })

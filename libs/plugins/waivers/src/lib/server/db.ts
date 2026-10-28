@@ -19,7 +19,7 @@ import { randomBytes } from 'crypto'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { Firestore } from 'firebase-admin/firestore'
-import { WAIVERS_COLLECTIONS, WAIVER_TITLES_SUBCOLLECTION } from '../constants/bundle-common'
+import { WAIVERS_COLLECTIONS } from '../constants/bundle-common'
 
 /**
  * The Firestore and the private Storage every waivers server module writes
@@ -130,7 +130,13 @@ export const waiversRefs = {
     org(orgId).collection(WAIVERS_COLLECTIONS.signatures).doc(signatureId),
   /** A site's retention state: the period its signatures are stamped with (AGL-4042). */
   retention: (orgId: string, hostId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.retention).doc(hostId),
-  /** The site's mirror of each waiver's title, for the Besigner's picker. */
+  /**
+   * The site's mirror of each waiver's title, for the Besigner's picker. The
+   * name is written out (it is `WAIVER_TITLES_SUBCOLLECTION`) because the
+   * repo's host-subcollection sweeps, the media usage corpus and the rules'
+   * write-deny coverage, read literal paths: behind a constant this
+   * collection is invisible to both, and its classification reads as stale.
+   */
   title: (hostId: string, waiverId: string) =>
-    waiversDb().collection('hosts').doc(hostId).collection(WAIVER_TITLES_SUBCOLLECTION).doc(waiverId),
+    waiversDb().collection('hosts').doc(hostId).collection('waiverTitles').doc(waiverId),
 }

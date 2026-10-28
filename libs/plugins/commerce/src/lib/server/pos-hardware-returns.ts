@@ -26,12 +26,14 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_RETURN_REASON_MAX,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
   type PosHardwareRefund,
 } from '../model/pos-hardware'
 import { COMMERCE_POS_HARDWARE_RETURN_REQUESTED } from '../constants/operator-alerts'
 import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
+import { posStripe } from './pos-stripe'
 import { createStripeRefund } from './stripe-refund'
 
 /*==========================================
@@ -55,8 +57,14 @@ import { createStripeRefund } from './stripe-refund'
  *      alerted, and refund it (2) or decline it.
  *
  * Each refund is written once by its key, and the order says Refunded once
- * every hardware item on it has come back. Returns follow Stripe's hardware
- * terms; nothing here decides them.
+ * every hardware item on it has come back. Returns follow the hardware terms
+ * of sale; nothing here decides them.
+ *
+ * AN ORDER SHIPPED TO THE BUYER (AGL-4038) is asked back the same way (3)
+ * once it has shipped, and declined the same way. Staff refund it as a
+ * return ({@link refundReturnedOnlinePosHardwareOrder}): the items and their
+ * tax, less any restocking fee Stripe charged, on the platform's own
+ * account, since the platform's Checkout took the payment.
  *=========================================*/
 
 export class PosHardwareReturnRefusal extends Error {
@@ -110,7 +118,7 @@ async function applyRefund(orderId: string, refund: PosHardwareRefund): Promise<
     const after = withPosHardwareRefund(before, refund)
     if (after === before) return before
     transaction.set(ref, after)
-    transaction.set(saleRef, posHardwareSaleRecord(orderId, after))
+    transaction.set(saleRef, posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
     return after
   })
 }
@@ -296,9 +304,19 @@ export async function refundInPersonPosHardwareOrder(input: {
 }
 
 /**
- * The buyer asks to return an in-person order (way 3), from their own
- * purchase history: once while a request is open, with a reason. Staff are
- * alerted. Never for an order already refunded.
+ * The statuses an online order may be asked back in (AGL-4038): once it has
+ * shipped. Before that, changing or canceling it is for support, who cancel
+ * and refund it in full from the staff page.
+ */
+export const POS_HARDWARE_ONLINE_RETURNABLE: readonly PosHardwareOrder['status'][] = ['shipped', 'delivered', 'registered']
+
+/**
+ * The buyer asks to return an order (way 3), from their own purchase
+ * history: once while a request is open, with a reason. Staff are alerted.
+ * An in-person order any time before it is refunded; an online one once it
+ * has shipped (AGL-4038), which staff refund as a return
+ * ({@link refundReturnedOnlinePosHardwareOrder}) or decline. Never for an
+ * order already refunded.
  */
 export async function requestPosHardwareReturn(input: {
   orgId: string
@@ -316,11 +334,14 @@ export async function requestPosHardwareReturn(input: {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReturnRefusal('No such order.', 404)
     const before = snapshot.data() as PosHardwareOrder
-    if (before.source !== 'in_person') {
-      throw new PosHardwareReturnRefusal('A return of an order shipped to you is arranged with support.', 409)
-    }
     if (before.status === 'refunded' || before.status === 'canceled') {
       throw new PosHardwareReturnRefusal('This order was already refunded.', 409)
+    }
+    if (before.source !== 'in_person' && !POS_HARDWARE_ONLINE_RETURNABLE.includes(before.status)) {
+      throw new PosHardwareReturnRefusal(
+        'This order has not shipped yet. To change or cancel it, contact support.',
+        409,
+      )
     }
     if (before.returnRequest?.state === 'requested') return { order: before, created: false }
     const after: PosHardwareOrder = {
@@ -387,3 +408,113 @@ export async function declinePosHardwareReturn(input: {
     return { before, order }
   })
 }
+
+/** The idempotency key of an online return's refund: the order and the amount. */
+export function posHardwareReturnRefundKey(orderId: string, cents: number): string {
+  return `pos-hw-return-${orderId}-${cents}`
+}
+
+/** What an online return gives back: the items and their tax, never the original shipping. */
+export function posHardwareReturnRefundableCents(order: Pick<PosHardwareOrder, 'totalCents' | 'shipping'>): number {
+  return Math.max(0, (order.totalCents ?? 0) - (order.shipping?.cents ?? 0))
+}
+
+/**
+ * Staff refund an ONLINE order the buyer sent back (AGL-4038), from the
+ * staff Hardware orders page, once its return was requested: the price of
+ * the items and the tax on them, less any restocking fee Stripe charged for
+ * the return, to the card it was paid with on the platform's own account.
+ * The original shipping is not refunded, under the hardware terms of sale.
+ *
+ * Claimed first, as a cancel is (`refundRequestedAtMs`), so two presses make
+ * one refund; the Stripe key names the order and the amount, so a retry of
+ * the same refund is the same refund. The order says Refunded, its return
+ * request Refunded, and the refund is written once by its key, with the
+ * sale record in the same transaction.
+ */
+export async function refundReturnedOnlinePosHardwareOrder(input: {
+  orgId: string
+  orderId: string
+  actorUid: string
+  restockingFeeCents: unknown
+  now?: () => number
+}): Promise<{ before: PosHardwareOrder; order: PosHardwareOrder; cents: number }> {
+  const fee = input.restockingFeeCents === undefined || input.restockingFeeCents === null || input.restockingFeeCents === '' ? 0 : Number(input.restockingFeeCents)
+  if (!Number.isSafeInteger(fee) || fee < 0) {
+    throw new PosHardwareReturnRefusal('Enter the restocking fee in whole cents, or 0.', 400)
+  }
+  if (!POS_HARDWARE_ORDER_ID.test(input.orderId)) throw new PosHardwareReturnRefusal('No such order', 404)
+  const now = input.now ?? Date.now
+  const ref = hardwareOrdersRef(input.orgId).doc(input.orderId)
+  const claimed = await firestore().runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) throw new PosHardwareReturnRefusal('No such order', 404)
+    const before = snapshot.data() as PosHardwareOrder & { refundRequestedAtMs?: number }
+    if (before.source === 'in_person') {
+      throw new PosHardwareReturnRefusal('A reader sold in person is refunded with Refund.', 409)
+    }
+    if (before.returnRequest?.state !== 'requested') {
+      throw new PosHardwareReturnRefusal('There is no open return request on this order.', 409)
+    }
+    if (!POS_HARDWARE_ONLINE_RETURNABLE.includes(before.status)) {
+      throw new PosHardwareReturnRefusal('Only an order that has shipped is refunded as a return.', 409)
+    }
+    if (!before.stripePaymentIntentId) throw new PosHardwareReturnRefusal('This order has no payment to refund.', 409)
+    if (before.refundRequestedAtMs && now() - before.refundRequestedAtMs < 2 * 60 * 1000) {
+      throw new PosHardwareReturnRefusal('A refund of this order is already in progress.', 409)
+    }
+    const cents = posHardwareReturnRefundableCents(before) - fee
+    if (cents <= 0) throw new PosHardwareReturnRefusal('The restocking fee leaves nothing to refund.', 400)
+    transaction.update(ref, { refundRequestedAtMs: now() })
+    return { before: before as PosHardwareOrder, cents }
+  })
+  const { before, cents } = claimed
+  const asked = await posStripe('POST', 'refunds', {
+    params: {
+      payment_intent: before.stripePaymentIntentId,
+      amount: cents,
+      'metadata[type]': 'pos-hardware-return',
+      'metadata[orderId]': input.orderId,
+      'metadata[orgId]': input.orgId,
+    },
+    idempotencyKey: posHardwareReturnRefundKey(input.orderId, cents),
+  })
+  if (!asked.ok || !asked.body?.id) {
+    await ref.update({ refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete() }).catch(() => undefined)
+    throw new PosHardwareReturnRefusal(
+      String(asked.body?.error?.message ?? '') || 'Stripe refused the refund.',
+      asked.status === 400 ? 409 : 502,
+    )
+  }
+  const at = now()
+  const stripeRefundId = String(asked.body.id)
+  const saleRef = posHardwareSaleRef(input.orderId)
+  const order = await firestore().runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    const current = snapshot.data() as PosHardwareOrder & { refundRequestedAtMs?: number }
+    const settled: PosHardwareOrder = { ...current }
+    delete (settled as { refundRequestedAtMs?: number }).refundRequestedAtMs
+    const refunded = withPosHardwareRefund(settled, {
+      key: `return:${stripeRefundId}`,
+      via: 'staff',
+      cents,
+      quantity: units(settled),
+      atMs: at,
+      stripeRefundId,
+    })
+    const after: PosHardwareOrder = {
+      ...refunded,
+      // Every item came back: the order is Refunded, whatever was kept.
+      status: 'refunded',
+      refundedAtMs: at,
+      returnRequest: refunded.returnRequest
+        ? { ...refunded.returnRequest, state: 'refunded', decidedBy: input.actorUid, decidedAtMs: at }
+        : refunded.returnRequest,
+    }
+    transaction.set(ref, after)
+    transaction.set(saleRef, posHardwareSaleRecord(input.orderId, after), posHardwareSaleSetOptions(after))
+    return after
+  })
+  return { before, order, cents }
+}
+

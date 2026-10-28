@@ -23,7 +23,10 @@ import {
 import type { OrderHardwareBuyer } from '../model/commerce-orders'
 import {
   POS_HARDWARE_ORDER_ID,
+  posHardwareBuyerAddress,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
+  type PosHardwareAddress,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
@@ -73,6 +76,10 @@ export interface PosHardwareBuyerRequest {
   orgId?: unknown
   hostId?: unknown
   email?: unknown
+  /** The buyer's name, typed at the sale; an account's own name wins. */
+  name?: unknown
+  /** The buyer's business address, typed at the sale (optional). */
+  address?: unknown
 }
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/
@@ -90,6 +97,26 @@ export interface CheckedBuyer {
   orgId: string | null
   hostId: string | null
   email: string | null
+  /**
+   * The buyer's name and business address, for the platform's reseller
+   * records (AGL-4038): the account's name, else the one typed; the address
+   * typed at the sale, when one was.
+   */
+  name?: string | null
+  address?: PosHardwareAddress | null
+}
+
+/** The name and address the register typed, checked: an address is all of it or refused. */
+function typedIdentity(request: PosHardwareBuyerRequest): { name: string | null; address: PosHardwareAddress | null } {
+  const name = typeof request.name === 'string' && request.name.trim() ? request.name.trim().slice(0, 200) : null
+  if (request.address === undefined || request.address === null || request.address === '') {
+    return { name, address: null }
+  }
+  const address = posHardwareBuyerAddress(request.address)
+  if (!address) {
+    throw new PosHardwareAttachRefusal('Enter the buyer’s street, city, postal code and two-letter country, or leave the address empty.', 400)
+  }
+  return { name, address }
 }
 
 /**
@@ -101,11 +128,13 @@ export async function checkHardwareBuyer(request: PosHardwareBuyerRequest): Prom
   const uid = id(request.uid)
   const orgId = id(request.orgId)
   const hostId = id(request.hostId)
+  const typed = typedIdentity(request)
   if (uid) {
     const user = await findUserByUidAcrossPools(uid)
     if (!user) throw new PosHardwareAttachRefusal('That account no longer exists. Look the buyer up again.', 404)
     const email = String(user.record.email ?? '').trim().toLowerCase() || null
-    if (!orgId) return { uid, orgId: null, hostId: null, email }
+    const name = String(user.record.displayName ?? '').trim().slice(0, 200) || typed.name
+    if (!orgId) return { uid, orgId: null, hostId: null, email, name, address: typed.address }
     const member = await firestore().collection('orgs').doc(orgId).collection('members').doc(uid).get()
     if (!member.exists) {
       throw new PosHardwareAttachRefusal('That person is not on that workspace. Look the buyer up again.', 409)
@@ -116,7 +145,7 @@ export async function checkHardwareBuyer(request: PosHardwareBuyerRequest): Prom
         throw new PosHardwareAttachRefusal('That store is not in the buyer’s workspace.', 409)
       }
     }
-    return { uid, orgId, hostId, email }
+    return { uid, orgId, hostId, email, name, address: typed.address }
   }
   const email = String(request.email ?? '').trim().toLowerCase()
   if (!EMAIL.test(email)) throw new PosHardwareAttachRefusal('Enter the buyer’s email address.', 400)
@@ -126,7 +155,7 @@ export async function checkHardwareBuyer(request: PosHardwareBuyerRequest): Prom
       409,
     )
   }
-  return { uid: null, orgId: null, hostId: null, email }
+  return { uid: null, orgId: null, hostId: null, email, ...typed }
 }
 
 /** The buyer as the register order keeps it. */
@@ -138,6 +167,8 @@ function orderBuyer(buyer: CheckedBuyer, attachedBy: string | null, now: number)
     email: buyer.email,
     attachedBy: attachedBy ?? '',
     attachedAtMs: now,
+    ...(buyer.name ? { name: buyer.name } : {}),
+    ...(buyer.address ? { address: buyer.address } : {}),
   }
 }
 
@@ -175,13 +206,26 @@ async function moveRecordedOrder(input: {
     if (before.status === 'canceled' || before.status === 'refunded') {
       throw new PosHardwareAttachRefusal('This sale was refunded and can no longer be attached.', 409)
     }
-    const attachment = posHardwareAttachmentOf(orderBuyer(buyer, attachedBy, now))
+    const fresh = posHardwareAttachmentOf(orderBuyer(buyer, attachedBy, now))
+    // The same person again (a claim on sign-up, a store chosen later)
+    // keeps the name and address already known of them.
+    const samePerson = Boolean(
+      (fresh.uid && before.attachment?.uid === fresh.uid) ||
+        (fresh.email && before.attachment?.email === fresh.email),
+    )
+    const attachment = {
+      ...fresh,
+      name: fresh.name ?? (samePerson ? (before.attachment?.name ?? null) : null),
+      address: fresh.address ?? (samePerson ? (before.attachment?.address ?? null) : null),
+    }
     const same =
       before.attachment?.state === attachment.state &&
       (before.attachment?.uid ?? null) === attachment.uid &&
       (before.attachment?.orgId ?? null) === attachment.orgId &&
       (before.attachment?.email ?? null) === attachment.email &&
-      (before.attachment?.hostId ?? null) === attachment.hostId
+      (before.attachment?.hostId ?? null) === attachment.hostId &&
+      (before.attachment?.name ?? null) === attachment.name &&
+      JSON.stringify(before.attachment?.address ?? null) === JSON.stringify(attachment.address)
     if (same) return { order: before, orgId: fromOrgId }
     if (input.requirePending && before.attachment?.state === 'attached') {
       throw new PosHardwareAttachRefusal('This sale is already attached. Detach it first.', 409)
@@ -210,7 +254,7 @@ async function moveRecordedOrder(input: {
       transaction.create(hardwareOrdersRef(toOrgId).doc(orderId), after)
       transaction.delete(fromRef)
     }
-    transaction.set(saleRef, posHardwareSaleRecord(orderId, after))
+    transaction.set(saleRef, posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
     const registerOrderId = before.posSale?.orderId
     if (registerOrderId) {
       transaction.set(
@@ -294,7 +338,16 @@ async function settled(
     const doc = await hardwareOrdersRef(orgId).doc(orderId).get()
     current = { order: doc.data() as PosHardwareOrder, orgId }
   }
-  const order = await invitePendingBuyer(orderId, current.orgId, current.order)
+  let order = await invitePendingBuyer(orderId, current.orgId, current.order)
+  // The buyer's address for the reseller's records, from the store chosen
+  // for the readers, where the register typed none (AGL-4038).
+  if (order.attachment?.state === 'attached' && order.attachment.hostId && !order.attachment.address) {
+    const { fillPosHardwareBuyerAddress } = await import('./pos-hardware-buyer-record')
+    if (await fillPosHardwareBuyerAddress({ orgId: current.orgId, orderId })) {
+      const fresh = await hardwareOrdersRef(current.orgId).doc(orderId).get()
+      order = (fresh.data() as PosHardwareOrder | undefined) ?? order
+    }
+  }
   return {
     outcome: order.attachment?.state === 'attached' ? 'attached' : 'pending',
     orderId,
@@ -372,7 +425,7 @@ export async function detachPosHardwareSale(input: {
     }
     transaction.create(hardwareOrdersRef(config.sellerOrgId).doc(orderId), after)
     transaction.delete(fromRef)
-    transaction.set(saleRef, posHardwareSaleRecord(orderId, after))
+    transaction.set(saleRef, posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
     const registerOrderId = before.posSale?.orderId
     if (registerOrderId) {
       transaction.set(
@@ -410,6 +463,9 @@ export async function claimPosHardwareForNewWorkspace(input: {
     if (doc.data().attachment?.state === 'pending') ids.add(String(doc.id))
   }
   let claimed = 0
+  // Their account's name, for the reseller's records of the sale.
+  const owner = ids.size ? await findUserByUidAcrossPools(input.ownerUid).catch(() => null) : null
+  const name = String(owner?.record.displayName ?? '').trim().slice(0, 200) || null
   for (const orderId of ids) {
     try {
       await moveRecordedOrder({
@@ -420,6 +476,7 @@ export async function claimPosHardwareForNewWorkspace(input: {
           hostId: null,
           // Their account's address carries the order's emails from now on.
           email: String(input.ownerEmail ?? '').trim().toLowerCase() || null,
+          name,
         },
         attachedBy: null,
         config,

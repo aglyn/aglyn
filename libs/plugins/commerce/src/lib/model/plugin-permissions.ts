@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
+import type { PluginOrgPermissionDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 
 /**
@@ -170,4 +172,112 @@ export function mayVisitPosHardwareShop(
 /** The refusal a register route answers when a finer key is not held. */
 export function posPermissionRefusal(permission: PosPermission): string {
   return `Your role does not include "${posPermissionLabel(permission)}" — ask an organization admin`
+}
+
+/*
+ * RESERVATIONS (AGL-4047).
+ *
+ * A site's stays and what they book were decided by the member's role ON THE
+ * SITE: Admin, Editor and Author could book a walk-in, change a stay's guests
+ * and edit or cancel stays, and a Viewer could not (`canWriteHostContent` in
+ * the rules, the same three roles at the routes). Those are now keys whose
+ * preset is that site role (`presetFromSiteRole`), so every member keeps
+ * exactly the access they had, and a custom role, a member's own permissions
+ * or a site's toggle can grant or refuse either one: the window's staff can
+ * be allowed walk-ins without editing anyone's booking.
+ */
+
+/** The reservation keys. */
+export type ReservationPermission = 'commerce.reservations' | 'commerce.walkIns'
+
+/** Commerce's keys whose preset is the site role (AGL-4047). */
+export type CommerceSitePermission = ReservationPermission | 'commerce.orders' | 'commerce.giftCards'
+
+/** Who held reservations on a site before they were keys: Admin, Editor and Author. */
+export const RESERVATION_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
+  admin: true,
+  editor: true,
+  author: true,
+  viewer: false,
+}
+
+/** The same, per workspace role: the answer with no site named. */
+const RESERVATION_ORG_ROLE_PRESET = { owner: true, admin: true, editor: true, viewer: false } as const
+
+/**
+ * Who worked a site's orders and gift cards before they were keys: the site's
+ * Admin and Editor (an Author edits the catalog and never touched an order).
+ */
+export const ORDERS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
+  admin: true,
+  editor: true,
+  author: false,
+  viewer: false,
+}
+
+/**
+ * The reservation keys as commerce declares them into the org permission
+ * catalog (AGL-4047), registered beside `COMMERCE_PERMISSIONS`.
+ */
+export const COMMERCE_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
+  {
+    key: 'commerce.reservations',
+    label: 'Manage reservations',
+    description:
+      'Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...RESERVATION_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.walkIns',
+    label: 'Book walk-ins and change guests',
+    description:
+      'Book a walk-in stay and change how many guests a stay is for. Follows "Manage reservations" unless a role or member sets it, and may be allowed without it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...RESERVATION_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+    follows: 'commerce.reservations',
+  },
+  {
+    key: 'commerce.orders',
+    label: 'Manage orders',
+    description:
+      'Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.giftCards',
+    label: 'Issue gift cards',
+    description: 'Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+]
+
+/** The refusal a door answers when a commerce site key is not held: names the permission. */
+export function commerceSitePermissionRefusal(key: CommerceSitePermission): string {
+  const label = COMMERCE_SITE_PERMISSIONS.find((entry) => entry.key === key)?.label ?? key
+  return `Your role does not include "${label}" — ask an organization admin`
+}
+
+/** One reservation key's label, for a refusal. */
+export function reservationPermissionLabel(permission: ReservationPermission): string {
+  return COMMERCE_SITE_PERMISSIONS.find((entry) => entry.key === permission)?.label ?? permission
+}
+
+/** The refusal a reservation route answers when its key is not held; names the permission, never a role. */
+export function reservationPermissionRefusal(permission: ReservationPermission): string {
+  return commerceSitePermissionRefusal(permission)
 }

@@ -695,6 +695,26 @@ export function contactDisplayName(
 }
 
 /**
+ * Who a contact is to ONE holder (AGL-4042): the name and the birthdate that
+ * holder keeps, and nothing else. For a plugin that was handed a contact id
+ * and must recognize the person — a waiver matched at check-in by name and
+ * date of birth — without reading the CRM's record. The birthdate is null
+ * unless it is a stored calendar date.
+ */
+export function contactIdentityForGroup(
+  contact: Record<string, unknown> | null | undefined,
+  groupId: string,
+): { name: string | null; birthdate: string | null } {
+  if (!contact) return { name: null, birthdate: null }
+  const name = contactDisplayName(contact, groupId).trim()
+  return {
+    name: name || null,
+    // A blank reads as no birthdate, like one that is not a date.
+    birthdate: normalizeContactBirthdate(readContactFacet(contact, groupId).birthdate) || null,
+  }
+}
+
+/**
  * Every group that holds this contact — the reference count behind a detach.
  *
  * Read from `visibleTo` rather than from the facet map, because `visibleTo`

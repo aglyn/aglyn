@@ -21,6 +21,7 @@ import {
   resolveAssistCreditBudget,
 } from '../usage/assist-credits'
 import { hostRoleFor, isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
+import { resolveSiteRolePresetPermissions } from '@aglyn/aglyn/app-utils/host-permissions'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
@@ -136,10 +137,14 @@ async function authenticate(
   return { decoded: { uid: decoded.uid, email: decoded.email, staff: decoded['staff'] === true } }
 }
 
-/** A collaborator scoped to the site who holds its admin role there. */
+/**
+ * A collaborator scoped to the site who holds "Manage site settings" there
+ * (`site.manage`, AGL-4047): their site role's preset (Admin), then the
+ * site's toggle for them.
+ */
 function isSiteAdminCollaborator(member: AglynOrgMember | null, hostId: string): boolean {
   if (!member || !hostId || isOrgWideMember(member)) return false
-  return hostRoleFor(member, hostId) === 'admin'
+  return resolveSiteRolePresetPermissions(member, hostId)['site.manage'] === true
 }
 
 interface RosterMonth {

@@ -16,7 +16,7 @@
  */
 
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
@@ -729,7 +729,7 @@ export async function aiSiteContentRefusal(
   if (!job.hostId) return 'Open the site first.'
   if (part === 'posts') {
     const host = await firestore.collection('hosts').doc(job.hostId).get()
-    return hostRoleCanWrite((host.get('memberRoles') ?? {})[job.createdBy]) ? null : 'Editing requires the editor role'
+    return holdsSiteKey(host, job.createdBy, 'site.edit') ? null : siteKeyRefusal('site.edit')
   }
   const admission = (deps.admissionFor ?? aiJobAdmissionFor)('products')
   const refused: AiJobAdmissionRefusal | null = admission

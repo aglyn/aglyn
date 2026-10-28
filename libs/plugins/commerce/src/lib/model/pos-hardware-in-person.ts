@@ -43,6 +43,7 @@ import type { OrderHardwareBuyer } from './commerce-orders'
 import {
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_IN_PERSON_SHIPPING_LABEL,
+  posHardwareBuyerAddress,
   posHardwareSku,
   type PosHardwareAttachment,
   type PosHardwareLine,
@@ -52,6 +53,7 @@ import {
   type PosHardwareTaxRegion,
   type PosHardwareUnit,
 } from './pos-hardware'
+import { posHardwareTermsAcceptance, posHardwareTermsAcceptanceOf } from './pos-hardware-terms'
 
 /** One register line, with the hardware item its product is, when it is one. */
 export interface PosHardwareRegisterLine {
@@ -154,6 +156,9 @@ export function posHardwareAttachmentOf(buyer: OrderHardwareBuyer | null | undef
     hostId: attached ? text(buyer?.hostId) : null,
     attachedBy: text(buyer?.attachedBy),
     attachedAtMs: attached && Number.isFinite(buyer?.attachedAtMs) ? Number(buyer?.attachedAtMs) : null,
+    // The reseller's records of who bought it (AGL-4038), when known.
+    name: text(buyer?.name)?.slice(0, 200) ?? null,
+    address: posHardwareBuyerAddress(buyer?.address),
   }
 }
 
@@ -184,6 +189,11 @@ export interface InPersonRegisterSale {
   stripeAccountId: string | null
   livemode: boolean
   currency?: string
+  /**
+   * How the buyer agreed to the terms of sale before paying (AGL-4038), from
+   * the register sale; absent, the receipt-and-sign notice at the sale.
+   */
+  termsAcceptance?: unknown
 }
 
 /**
@@ -250,6 +260,11 @@ export function inPersonPosHardwareOrder(sale: InPersonRegisterSale): PosHardwar
     paidAtMs: sale.paidAtMs,
     deliveredAtMs: sale.paidAtMs,
     source: 'in_person',
+    // Accepted on the tablet or the display before paying, or else agreed by
+    // paying under the receipt's and the booth sign's notice (Terms 4.28).
+    termsAcceptance:
+      posHardwareTermsAcceptanceOf(sale.termsAcceptance) ??
+      posHardwareTermsAcceptance({ method: 'notice', atMs: sale.paidAtMs }),
     posSale: {
       hostId: sale.sellerHostId,
       orgId: sale.sellerOrgId,

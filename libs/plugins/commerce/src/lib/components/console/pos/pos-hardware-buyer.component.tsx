@@ -18,6 +18,7 @@
 
 import {
   Alert,
+  Box,
   Button,
   Chip,
   Dialog,
@@ -37,6 +38,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react'
 import { formatPosHardwareCents } from '../../../model/pos-hardware'
 import { PosHardwareRequestError } from './pos-hardware-api'
+import { PosHardwareSaleTerms } from './pos-hardware-sale-terms.component'
 import {
   posHardwareAttach,
   posHardwareFindBuyer,
@@ -44,6 +46,7 @@ import {
   posHardwareSaleStatus,
   posHardwareSerials,
   posHardwareToAttach,
+  type BoothStoreAddress,
   type BuyerChoice,
   type BuyerFindResult,
   type BuyerWorkspace,
@@ -67,7 +70,23 @@ interface Option {
   label: string
   detail: string | null
   choice: BuyerChoice
+  /** A store chosen with no card reader location yet: the booth asks for its address. */
+  needsAddress?: boolean
 }
+
+/** Where the attached sale's readers go, as the register needs to know it. */
+interface AttachedStore {
+  /** A store was chosen, so a reader can be registered to it here. */
+  chosen: boolean
+  /** That store has no card reader location yet, so registering asks for its address. */
+  needsAddress: boolean
+}
+
+/** No store chosen yet: nothing to register a reader to here. */
+const NO_STORE: AttachedStore = { chosen: false, needsAddress: false }
+
+/** The address form's start, as the POS devices card starts it. */
+const EMPTY_ADDRESS: BoothStoreAddress = { line1: '', city: '', state: '', postalCode: '', country: 'US' }
 
 function newKey(): string {
   return `attach-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -81,9 +100,10 @@ function workspaceOptions(uid: string, workspace: BuyerWorkspace, who: string): 
       key: `${uid}:${workspace.orgId}:${store.hostId}`,
       label: `${who} · ${workspace.name} · ${store.name}`,
       detail:
-        [plan, store.hasLocation ? null : 'No card reader location on this store yet'].filter(Boolean).join('. ') ||
+        [plan, store.hasLocation ? null : 'No card reader location on this store yet: you can enter its address here'].filter(Boolean).join('. ') ||
         null,
       choice: { uid, orgId: workspace.orgId, hostId: store.hostId },
+      needsAddress: !store.hasLocation,
     })),
     {
       key: `${uid}:${workspace.orgId}:`,
@@ -122,16 +142,16 @@ function optionsOf(found: BuyerFindResult): Option[] {
 /**
  * Finding the buyer and saying whose the card reader is (AGL-4038): by an
  * exact email, a person's name or a workspace's name. Shows the least that
- * picks the right person — a name, a masked address, each workspace and its
- * stores, and what each still needs — and, for an address with no account,
- * offers to sell anyway and invite them.
+ * picks the right person — a name, their whole email address, each workspace
+ * and its stores, and what each still needs — and, for an address with no
+ * account, offers to sell anyway and invite them.
  */
 function AttachDialog(props: {
   user: User
   hostId: string
   target: { registerOrderId: string } | { orderId: string; row: ToAttachRow }
   onClose: () => void
-  onAttached: (message: string, storeChosen: boolean) => void
+  onAttached: (message: string, store: AttachedStore) => void
   notify: Notify
 }) {
   const { user, hostId, target, onClose, onAttached, notify } = props
@@ -159,7 +179,7 @@ function AttachDialog(props: {
     }
   }
 
-  const attach = async (choice: BuyerChoice) => {
+  const attach = async (choice: BuyerChoice, needsAddress = false) => {
     setBusy(true)
     try {
       const answer = await posHardwareAttach(user, attemptKey, {
@@ -175,7 +195,7 @@ function AttachDialog(props: {
             : 'email' in choice
               ? 'Invitation sent. The card reader joins their workspace when they sign up.'
               : 'Attached to their account. It joins the workspace they create.',
-        'hostId' in choice && Boolean(choice.hostId),
+        { chosen: 'hostId' in choice && Boolean(choice.hostId), needsAddress },
       )
     } catch (caught) {
       notify(caught instanceof PosHardwareRequestError ? caught.message : 'The card reader could not be attached', 'warning')
@@ -251,7 +271,11 @@ function AttachDialog(props: {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{'Cancel'}</Button>
-        <Button variant="contained" disabled={busy || !option} onClick={() => option && void attach(option.choice)}>
+        <Button
+          variant="contained"
+          disabled={busy || !option}
+          onClick={() => option && void attach(option.choice, Boolean(option.needsAddress))}
+        >
           {'Attach'}
         </Button>
       </DialogActions>
@@ -339,19 +363,32 @@ function SaleReaders(props: {
   user: User
   hostId: string
   saleOrderId: string
-  storeChosen: boolean
+  store: AttachedStore
   notify: Notify
 }) {
-  const { user, hostId, saleOrderId, storeChosen, notify } = props
+  const { user, hostId, saleOrderId, store, notify } = props
   const [serials, setSerials] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const [attemptKey] = useState(newKey)
+  const [attemptKey, setAttemptKey] = useState(newKey)
+  // The buyer's store address (AGL-4038), asked for when their store has no
+  // card reader location yet: from the lookup, or when the route says so.
+  const [askAddress, setAskAddress] = useState(store.needsAddress)
+  const [address, setAddress] = useState<BoothStoreAddress>(EMPTY_ADDRESS)
+  useEffect(() => setAskAddress(store.needsAddress), [store.needsAddress])
+  const addressComplete =
+    Boolean(address.line1.trim() && address.city.trim() && address.postalCode.trim()) &&
+    /^[A-Z]{2}$/.test(address.country)
   const run = async (work: () => Promise<string>) => {
     setBusy(true)
     try {
       notify(await work(), 'success')
     } catch (caught) {
+      if (caught instanceof PosHardwareRequestError && caught.reason === 'needs-address') {
+        setAskAddress(true)
+        // A new attempt: the request with the address is a different one.
+        setAttemptKey(newKey())
+      }
       notify(caught instanceof PosHardwareRequestError ? caught.message : 'That did not work. Try again.', 'warning')
     } finally {
       setBusy(false)
@@ -384,7 +421,51 @@ function SaleReaders(props: {
           {'Save'}
         </Button>
       </Stack>
-      {storeChosen ? (
+      {store.chosen && askAddress ? (
+        <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+          <Typography variant="body2" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
+            {'Their store has no address for card readers yet. Enter it with the buyer to register the reader now: ' +
+              'Stripe sets the reader up for this country. Or leave it, and they add it on their POS devices card.'}
+          </Typography>
+          <TextField
+            size="small"
+            label="Street"
+            required
+            value={address.line1}
+            onChange={(event) => setAddress({ ...address, line1: event.target.value })}
+            sx={{ gridColumn: '1 / -1' }}
+          />
+          <TextField
+            size="small"
+            label="City"
+            required
+            value={address.city}
+            onChange={(event) => setAddress({ ...address, city: event.target.value })}
+          />
+          <TextField
+            size="small"
+            label="State"
+            value={address.state}
+            onChange={(event) => setAddress({ ...address, state: event.target.value })}
+          />
+          <TextField
+            size="small"
+            label="Postal code"
+            required
+            value={address.postalCode}
+            onChange={(event) => setAddress({ ...address, postalCode: event.target.value })}
+          />
+          <TextField
+            size="small"
+            label="Country"
+            required
+            helperText="Two letters, like US"
+            value={address.country}
+            onChange={(event) => setAddress({ ...address, country: event.target.value.toUpperCase().slice(0, 2) })}
+          />
+        </Box>
+      ) : null}
+      {store.chosen ? (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
           <TextField
             size="small"
@@ -395,16 +476,21 @@ function SaleReaders(props: {
             sx={{ flex: 1 }}
           />
           <Button
-            disabled={busy || code.trim().length < 3}
+            disabled={busy || code.trim().length < 3 || (askAddress && !addressComplete)}
             onClick={() =>
               void run(async () => {
-                await posHardwareRegisterAtBooth(user, attemptKey, {
+                const answer = await posHardwareRegisterAtBooth(user, attemptKey, {
                   hostId,
                   registerOrderId: saleOrderId,
                   registrationCode: code.trim(),
+                  ...(askAddress ? { address } : {}),
                 })
                 setCode('')
-                return 'Reader registered to their store'
+                setAttemptKey(newKey())
+                if (answer.storeAddressSaved) setAskAddress(false)
+                return answer.storeAddressSaved
+                  ? 'Reader registered to their store, and the store’s address saved'
+                  : 'Reader registered to their store'
               })
             }
           >
@@ -428,7 +514,7 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
   const [dialog, setDialog] = useState<
     null | { kind: 'list' } | { kind: 'sale' } | { kind: 'entry'; row: ToAttachRow }
   >(null)
-  const [attached, setAttached] = useState<{ orderId: string; message: string; storeChosen: boolean } | null>(
+  const [attached, setAttached] = useState<{ orderId: string; message: string; store: AttachedStore } | null>(
     null,
   )
 
@@ -459,11 +545,15 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
         </Alert>
       ) : null}
       {saleOrderId ? (
+        // The terms of sale, accepted before paying (AGL-4038, Terms 4.28).
+        <PosHardwareSaleTerms user={user} hostId={hostId} saleOrderId={saleOrderId} notify={notify} />
+      ) : null}
+      {saleOrderId ? (
         <SaleReaders
           user={user}
           hostId={hostId}
           saleOrderId={saleOrderId}
-          storeChosen={Boolean(attachedHere?.storeChosen)}
+          store={attachedHere?.store ?? NO_STORE}
           notify={notify}
         />
       ) : null}
@@ -489,8 +579,8 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
           target={{ registerOrderId: saleOrderId }}
           notify={notify}
           onClose={() => setDialog(null)}
-          onAttached={(message, storeChosen) => {
-            setAttached({ orderId: saleOrderId, message, storeChosen })
+          onAttached={(message, store) => {
+            setAttached({ orderId: saleOrderId, message, store })
             setDialog(null)
             notify(message, 'success')
           }}

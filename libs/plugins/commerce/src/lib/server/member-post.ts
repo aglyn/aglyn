@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -76,9 +77,10 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
     // that publishes to paying subscribers and sends them mail on the
     // merchant's brand. A denylist that widens whenever the role union grows
     // is the defect; the set is the fix. Absent is refused, not permitted.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not permitted' })
+    // "Publish site content" (`site.publish`, AGL-4047): a post goes to paying
+    // subscribers the moment it exists, as the rules' delete asks it.
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
+      return res.status(403).json({ error: siteKeyRefusal('site.publish') })
     }
     const postRef = await hostRef.collection('memberPosts').add({
       title,

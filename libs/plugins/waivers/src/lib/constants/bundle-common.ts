@@ -52,6 +52,13 @@ export const WAIVERS_COLLECTIONS = {
    * compared it with the store's setting. Server-only, like the signatures.
    */
   retention: 'waiverRetention',
+  /**
+   * One document per OPEN customer display grant, at
+   * `orgs/{orgId}/waiverDisplayGrants/{grantId}` (AGL-4042): the site, the
+   * staff member who opened it and when. Deleted when the grant closes, so
+   * a display signs only while its grant's document is there. Server-only.
+   */
+  displayGrants: 'waiverDisplayGrants',
 } as const
 
 /**
@@ -166,12 +173,20 @@ export const WAIVERS_API_ROUTES = {
   paper: 'waivers/paper',
   /** Console: one person's waiver status for a day. */
   status: 'waivers/status',
-  /** Console: a grant for signing on the register's customer display. */
+  /**
+   * Console: a grant for signing on the register's customer display (POST
+   * `{hostId}`), whether one is still open (`action: 'state'`), or close it
+   * (`action: 'close'`), by its `grantId`.
+   */
   displayGrant: 'waivers/display-grant',
+  /** Console, no session: whether the display's grant is still open, or close it (`close: true`). */
+  displayGrantState: 'waivers/display-grant-state',
   /** Console, no session: sign on the customer display with that grant. */
   signOnDisplay: 'waivers/sign-on-display',
   /** Public: a site's published waivers, or one of them to sign. */
   publicWaiver: 'waivers/public',
   /** Public: sign one. */
   publicSign: 'waivers/sign',
+  /** Public: the signer's own signed copy as a PDF, by its one-hour link (AGL-4042). */
+  signedCopy: 'waivers/signed-copy',
 } as const

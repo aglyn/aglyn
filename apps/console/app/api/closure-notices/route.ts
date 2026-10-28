@@ -24,6 +24,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../_lib/invalid-id-token-response'
 
@@ -70,8 +71,19 @@ async function handler(request: Request): Promise<Response> {
       if (org.get('ownerUid') !== decoded.uid && decoded['staff'] !== true) {
         return json({ error: 'Only the organization owner can see this' }, 403)
       }
+      // Lockdown verdict (AGL-1506), as `/api/orgs/delete` itself answers it:
+      // a locked workspace can't ask to be deleted, so it has nothing to warn.
+      const locked = await lockdownRefusal({
+        request,
+        staff: decoded['staff'] === true,
+        uid: decoded.uid,
+        org: org.data(),
+      })
+      if (locked) return locked
       subject = { kind: 'workspace', orgId }
     } else {
+      // Not org-scoped: the caller's own account, which `/api/account/close`
+      // closes whatever any workspace's lockdown, so its warnings stay readable.
       subject = { kind: 'account', uid: decoded.uid }
     }
     return json(await readClosureNotices(subject))

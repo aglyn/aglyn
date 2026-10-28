@@ -20,6 +20,7 @@ import {
   createResourceUid,
   ORG_PERMISSION_KEYS,
   pluginPermissionChanges,
+  siteNarrowedPermissionKeys,
   type AglynOrgCustomRole,
   type OrgPermission,
 } from '@aglyn/aglyn/server'
@@ -34,7 +35,7 @@ import {
   resolveOrgMembership,
   syncOrgAuthProjections,
 } from '@aglyn/tenant-data-admin'
-import { FieldPath } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -59,10 +60,11 @@ const MEMBER_WRITE_CHUNK = 400
 
 function sanitizePermissions(
   raw: unknown,
+  keys: readonly OrgPermission[] = ORG_PERMISSION_KEYS,
 ): Partial<Record<OrgPermission, boolean>> {
   if (!raw || typeof raw !== 'object') return {}
   const permissions: Partial<Record<OrgPermission, boolean>> = {}
-  for (const key of ORG_PERMISSION_KEYS) {
+  for (const key of keys) {
     const value = (raw as Record<string, unknown>)[key]
     if (typeof value === 'boolean') permissions[key] = value
   }
@@ -152,14 +154,38 @@ async function handler(request: Request): Promise<Response> {
       // the save moved is one platform event (AGL-2929), and only a
       // comparison can say which moved. A new role reads as nothing stored.
       const stored = (await roleRef.get()).data() as
-        | Pick<AglynOrgCustomRole, 'permissions'>
+        | Pick<AglynOrgCustomRole, 'permissions' | 'siteNarrowing'>
         | undefined
       const permissions = sanitizePermissions(body?.permissions)
+      // Per key a site can narrow (AGL-4047): follow a narrower site role
+      // (`true`) or keep the permission there (`false`); a key left out
+      // inherits the built-in role's default. Written whole, like the map
+      // above, so clearing a choice in the editor clears it here.
+      const siteNarrowing = sanitizePermissions(body?.siteNarrowing, siteNarrowedPermissionKeys())
+      // `merge: true` merges a map key by key, so a key the editor set back
+      // to Inherit (and so left out) would stay stored. Each catalog key the
+      // stored map holds and the new one leaves out is deleted; a key the
+      // catalog does not know here (a plugin this process never loaded) is
+      // left as stored rather than dropped.
+      const cleared = (
+        before: Partial<Record<string, unknown>> | undefined,
+        after: Partial<Record<string, boolean>>,
+        keys: readonly string[],
+      ) =>
+        Object.fromEntries(
+          keys
+            .filter((key) => typeof before?.[key] === 'boolean' && typeof after[key] !== 'boolean')
+            .map((key) => [key, FieldValue.delete()]),
+        )
       await roleRef.set(
         {
           name,
           description: String(body?.description ?? '').trim(),
-          permissions,
+          permissions: { ...permissions, ...cleared(stored?.permissions, permissions, ORG_PERMISSION_KEYS) },
+          siteNarrowing: {
+            ...siteNarrowing,
+            ...cleared(stored?.siteNarrowing, siteNarrowing, siteNarrowedPermissionKeys()),
+          },
         },
         { merge: true },
       )

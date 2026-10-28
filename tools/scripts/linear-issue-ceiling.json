@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 4074,
-  "verifiedAt": "2026-10-27",
-  "verifiedBy": "Read from the workspace newest-first with archived issues 2026-10-27: AGL-4074 (ads: pause one Google ad group, Done) is the newest issue. The ids main cites above the old floor all exist: AGL-4069 (Besigner text editing on a phone), AGL-4072 (ad audience sync stage lists) and AGL-4073 (auth-doors retry on a 5xx).",
+  "highest": 4080,
+  "verifiedAt": "2026-10-28",
+  "verifiedBy": "Read from the workspace 2026-10-28, newest-first including archived: AGL-4079 (two console tabs landing at once give a new account two workspaces) and AGL-4080 (hosted-page review and SEO backlink articles) were created that day and are the newest issues.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

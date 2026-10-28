@@ -630,12 +630,12 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
       kind: 'exact', priority: 100, enabled: true,
     }
 
-    it('refuses an author, and says which role it wants', async () => {
+    it('refuses an author, and names the permission it wants (AGL-4047)', async () => {
       state.memberRoles = { 'user-1': 'author' }
       const response = await postResource('redirect', REDIRECT)
       expect(response.status).toBe(403)
       expect(await response.json()).toEqual({
-        error: 'Creating redirects requires a publishing role',
+        error: 'Your role does not include "Publish site content" — ask an organization admin',
       })
       expect(mockWrite).not.toHaveBeenCalled()
     })

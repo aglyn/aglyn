@@ -26,6 +26,7 @@ import {
   posHardwareBuyerErasedPatch,
   posHardwareRefundable,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
 import { closeUnshippedPosHardwareOrders, type PosHardwareClosureCounts } from './pos-hardware-closure'
@@ -37,9 +38,14 @@ import { closeUnshippedPosHardwareOrders, type PosHardwareClosureCounts } from '
  * an account erasure keeps it and every amount on it, and takes the BUYER
  * off it: who started it, the email, the name, the phone, the street and the
  * tracking (`posHardwareBuyerErasedPatch`). The country, state and postal
- * code stay, because sales tax is sourced by them. The retained sale record
- * (`posHardwareSales/{orderId}`) never held the person, and is rewritten
- * from the redacted order in the same transaction so the two agree.
+ * code stay, because sales tax is sourced by them.
+ *
+ * The retained sale record (`posHardwareSales/{orderId}`) KEEPS the buyer's
+ * name and address, and nothing else of theirs: they are the reseller's
+ * records Stripe's Terminal Reseller Terms §10 ask for, kept for the
+ * record's seven years. It is rewritten from the redacted order in the same
+ * transaction, with `posHardwareSaleSetOptions`, which leaves the stored
+ * name and address in place; the email, phone and tracking were never on it.
  *
  * Found by a COLLECTION-GROUP query on `createdBy`, so an order placed in a
  * workspace the person has since left is reached too — the support-thread
@@ -127,10 +133,15 @@ export function createPosHardwareUserEraser(deps: PosHardwareUserEraserDeps): Pl
         // Gone, or already someone else's: nothing of this person is on it.
         if (!snapshot.exists || !order || order.createdBy !== uid) return false
         const patch = posHardwareBuyerErasedPatch(order, now())
+        const erased = { ...order, ...patch } as PosHardwareOrder
         transaction.update(ref, patch)
+        // The record keeps the buyer's name and address (the reseller's
+        // records): the erased order no longer has them, so the write leaves
+        // the stored ones in place.
         transaction.set(
           db.collection(POS_HARDWARE_SALES_COLLECTION).doc(ref.id),
-          posHardwareSaleRecord(ref.id, { ...order, ...patch } as PosHardwareOrder),
+          posHardwareSaleRecord(ref.id, erased),
+          posHardwareSaleSetOptions(erased),
         )
         return true
       })

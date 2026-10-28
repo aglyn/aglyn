@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -102,9 +104,9 @@ export function createOrderPrintHandler(options: OrderPrintDeps = {}): PluginApi
       const hostRef = db.collection('hosts').doc(hostId)
       const host = await hostRef.get()
       if (!host.exists) return res.status(404).json({ error: 'Unknown site' })
-      const role = (host.get('memberRoles') ?? {})[decoded.uid]
-      if (decoded['staff'] !== true && role !== 'admin' && role !== 'editor') {
-        return res.status(403).json({ error: 'Not permitted' })
+      // "Manage orders" (`commerce.orders`, AGL-4047), read as the rules would read it.
+      if (decoded['staff'] !== true && !holdsCommerceSiteKey(host, decoded.uid, 'commerce.orders')) {
+        return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
       }
       const [stored, store] = await Promise.all([
         hostRef.collection('orders').doc(orderId).get(),

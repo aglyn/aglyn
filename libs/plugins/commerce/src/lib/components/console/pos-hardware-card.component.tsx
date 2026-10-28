@@ -292,7 +292,8 @@ export function PosHardwareCard({
         ),
       },
       {
-        // A reader bought in person (AGL-4038) can be asked back from here.
+        // A reader bought in person, or an order shipped to you once it has
+        // shipped (AGL-4038), can be asked back from here.
         field: 'returnRequest',
         headerName: 'Return',
         minWidth: 170,
@@ -300,7 +301,7 @@ export function PosHardwareCard({
         renderCell: ({ row }: { row: PosHardwareOrderRow }) =>
           row.returnRequest ? (
             RETURN_LABELS[row.returnRequest.state]
-          ) : row.source === 'in_person' && (row.status === 'delivered' || row.status === 'registered') ? (
+          ) : (row.status === 'delivered' || row.status === 'registered' || (row.source !== 'in_person' && row.status === 'shipped')) ? (
             <Button
               size="small"
               onClick={(event) => {
@@ -352,7 +353,7 @@ export function PosHardwareCard({
         <DialogTitle>{returning ? `Return ${returning.number}?` : ''}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            {'Tell us why. Our team gets your request and arranges the return with you. Returns follow Stripe’s hardware terms, and the return shipping is yours to pay.'}
+            {'Tell us why. Our team gets your request and arranges the return with you. Returns follow the hardware terms of sale: the return shipping is yours to pay, the original shipping is not refunded, and any restocking fee charged for the return comes off the refund.'}
           </Typography>
           <TextField
             label="Why are you returning it?"
@@ -442,11 +443,6 @@ export function PosHardwareCard({
                   <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
                     {offer.use}
                   </Typography>
-                  {offer.mayBeDiscontinued ? (
-                    <Typography variant="caption" color="text.secondary">
-                      {'Stripe may stop selling this reader.'}
-                    </Typography>
-                  ) : null}
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                     <Typography variant="body1">{formatPosHardwareCents(offer.unitCents)}</Typography>
                     <TextField

@@ -41,7 +41,7 @@ import {
 } from '../model/commerce-reservations'
 import { reservationsOnPlan } from './reservation-availability-query'
 import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './products-write'
-import { WALK_IN_PLAN_REFUSAL, WALK_IN_PLUGIN_OFF } from './reservation-walk-in'
+import { WALK_IN_PERMISSION, WALK_IN_PLAN_REFUSAL, WALK_IN_PLUGIN_OFF } from './reservation-walk-in'
 
 /*
  * `POST /api/commerce/reservations/guests` (AGL-4043): staff change how many
@@ -52,9 +52,10 @@ import { WALK_IN_PLAN_REFUSAL, WALK_IN_PLUGIN_OFF } from './reservation-walk-in'
  *
  * `guests` is a whole number from 1 up to what the resource sleeps
  * (`resourceGuestCeiling`). Who may ask is who may book a walk-in: the same
- * gate (`products-write.ts`'s, a content-write role on the site or staff,
- * while nothing is frozen), the commerce plugin on for the site, and the
- * store's plan taking reservations. A stay that is pending, confirmed or
+ * gate (`products-write.ts`'s), asking "Book walk-ins and change guests"
+ * (`commerce.walkIns`, AGL-4047) on the site, or staff, while nothing is
+ * frozen; the commerce plugin on for the site; and the store's plan taking
+ * reservations. A stay that is pending, confirmed or
  * checked in can change; one cancelled, a no-show or checked out cannot.
  *
  * WHEN THE STAY IS CHECKED IN ONE GUEST AT A TIME, its check-ins follow in
@@ -73,9 +74,8 @@ import { WALK_IN_PLAN_REFUSAL, WALK_IN_PLUGIN_OFF } from './reservation-walk-in'
 export const RESERVATION_GUESTS_GONE = 'That stay is gone.'
 export const RESERVATION_GUESTS_CLOSED =
   'Guests can change only on a stay that is booked or checked in'
-/** A member whose site role cannot change a stay, worded as the walk-in's refusal is. */
-export const RESERVATION_GUESTS_ROLE_REFUSAL =
-  'Changing a stay’s guests needs the admin, editor or author role on this site — ask an organization admin'
+/** A member who does not hold the key a guests change asks: the walk-in's refusal, naming it. */
+export const RESERVATION_GUESTS_PERMISSION_REFUSAL = WALK_IN_PERMISSION.refusal
 
 /** The most check-ins of one stay, from today on, the route reads in its transaction. */
 export const RESERVATION_GUESTS_CHECK_IN_ROWS = 500
@@ -123,7 +123,7 @@ export function createReservationGuestsHandler(options: ReservationGuestsDeps = 
       return res.status(400).json({ error: 'Missing guest details' })
     }
     try {
-      const door = await gate(req, res, hostId, deps, { roleRefusal: RESERVATION_GUESTS_ROLE_REFUSAL })
+      const door = await gate(req, res, hostId, deps, { permission: WALK_IN_PERMISSION })
       if (!door) return
       if (!isHostPluginEnabled(door.org as never, door.host.data() as never, BUNDLE_ID)) {
         return res.status(403).json({ error: WALK_IN_PLUGIN_OFF })

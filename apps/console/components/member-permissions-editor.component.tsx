@@ -20,17 +20,22 @@
 import {
   isOrgWideMember,
   orgPermissionLabel,
+  roleCanBeNarrowed,
   type AglynOrgCustomRole,
   type AglynOrgMember,
 } from '@aglyn/aglyn'
 import {
   explainOrgPermissions,
+  explainSiteNarrowing,
   groupOrgPermissions,
+  narrowingChoice,
   offeredOrgPermissions,
   overrideChangesBetween,
   permissionChoice,
   searchOrgPermissions,
+  withNarrowingChoice,
   withPermissionChoice,
+  type ExplainedNarrowing,
   type ExplainedPermission,
 } from '@aglyn/aglyn/app-utils/org-permission-editor'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -52,6 +57,7 @@ export type PermissionsMember = Partial<AglynOrgMember> & {
   $id: string
   roleId?: string | null
   permissions?: Partial<Record<string, boolean>>
+  siteNarrowing?: Partial<Record<string, boolean>>
   displayName?: string
   email?: string
 }
@@ -93,6 +99,26 @@ function inheritWords(explained: ExplainedPermission, roleWord: string, customRo
   return `Inherit: ${explained.roleDefault ? 'allowed' : 'not allowed'} for the ${roleWord} role`
 }
 
+/** Whether a key follows a narrower site role for this member, and the layer that says so. */
+function narrowingWords(explained: ExplainedNarrowing, roleWord: string, customRoleName: string | undefined): string {
+  const verdict = explained.narrows ? 'Follows the site role' : 'Kept'
+  if (explained.source === 'override') return `${verdict} · set for this member`
+  if (explained.source === 'customRole') return `${verdict} · from the "${customRoleName ?? 'custom'}" role`
+  return `${verdict} · from the ${roleWord} role`
+}
+
+/** What Inherit falls back to for a key's narrowing: the custom role's choice, else the org role's default. */
+function narrowingInheritWords(
+  explained: ExplainedNarrowing,
+  roleWord: string,
+  customRoleName: string | undefined,
+): string {
+  if (typeof explained.customRole === 'boolean') {
+    return `Inherit: ${explained.customRole ? 'follows the site role' : 'kept'} by the "${customRoleName ?? 'custom'}" role`
+  }
+  return `Inherit: ${explained.roleDefault ? 'follows the site role' : 'kept'} for the ${roleWord} role`
+}
+
 /**
  * A member's own permissions (AGL-4047): every key the workspace is offered,
  * grouped and searchable, each Allow / Deny / Inherit, with the verdict they
@@ -106,7 +132,12 @@ function inheritWords(explained: ExplainedPermission, roleWord: string, customRo
  */
 export function MemberPermissionsEditor(props: {
   member: PermissionsMember
-  roles: ReadonlyArray<{ $id: string; name?: string; permissions?: AglynOrgCustomRole['permissions'] }>
+  roles: ReadonlyArray<{
+    $id: string
+    name?: string
+    permissions?: AglynOrgCustomRole['permissions']
+    siteNarrowing?: AglynOrgCustomRole['siteNarrowing']
+  }>
   canManage: boolean
   layout: 'card' | 'dialog'
   onSaved?: () => void
@@ -128,6 +159,16 @@ export function MemberPermissionsEditor(props: {
     return values
   }, [member.permissions])
   useEffect(() => setDraft(stored), [stored])
+  // Per key a site can narrow (AGL-4047): follow a narrower site role or keep it.
+  const [narrowDraft, setNarrowDraft] = useState<Record<string, boolean>>({})
+  const storedNarrowing = useMemo(() => {
+    const values: Record<string, boolean> = {}
+    for (const [key, value] of Object.entries(member.siteNarrowing ?? {})) {
+      if (typeof value === 'boolean') values[key] = value
+    }
+    return values
+  }, [member.siteNarrowing])
+  useEffect(() => setNarrowDraft(storedNarrowing), [storedNarrowing])
 
   const customRole = member.roleId ? (roles.find((role) => role.$id === member.roleId) ?? null) : null
   const isOwner = member.role === 'owner'
@@ -145,6 +186,11 @@ export function MemberPermissionsEditor(props: {
   )
   // The verdict as it would be with the draft saved.
   const explained = explainOrgPermissions({ ...member, permissions: draft }, customRole, offered)
+  // The narrowing choice shows only where a site can narrow this member's role.
+  const narrowable = roleCanBeNarrowed(member.role)
+  const narrowingExplained = narrowable
+    ? explainSiteNarrowing({ ...member, siteNarrowing: narrowDraft }, customRole, offered)
+    : {}
   const sections: PermissionChoiceSection[] = groupOrgPermissions(searchOrgPermissions(offered, search)).map(
     (section) => ({
       id: section.group.id,
@@ -165,12 +211,22 @@ export function MemberPermissionsEditor(props: {
             : !canManage
               ? 'Only members who manage people can change permissions'
               : undefined,
+          ...(narrowingExplained[definition.key]
+            ? {
+                narrowing: {
+                  choice: narrowingChoice(narrowDraft, definition.key),
+                  effective: narrowingWords(narrowingExplained[definition.key], roleWord, customRole?.name),
+                  inheritHint: narrowingInheritWords(narrowingExplained[definition.key], roleWord, customRole?.name),
+                },
+              }
+            : {}),
         }
       }),
     }),
   )
   const changes = overrideChangesBetween(stored, draft)
-  const dirty = Object.keys(changes).length > 0
+  const narrowingChanges = overrideChangesBetween(storedNarrowing, narrowDraft)
+  const dirty = Object.keys(changes).length > 0 || Object.keys(narrowingChanges).length > 0
 
   const handleSave = async () => {
     if (!dirty || busy || !currentOrg?.$id) return
@@ -179,7 +235,13 @@ export function MemberPermissionsEditor(props: {
       const response = await authorizedFetch(user, '/api/orgs/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId: currentOrg.$id, action: 'permissions', uid: member.$id, permissions: changes }),
+        body: JSON.stringify({
+          orgId: currentOrg.$id,
+          action: 'permissions',
+          uid: member.$id,
+          ...(Object.keys(changes).length ? { permissions: changes } : {}),
+          ...(Object.keys(narrowingChanges).length ? { siteNarrowing: narrowingChanges } : {}),
+        }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -206,7 +268,11 @@ export function MemberPermissionsEditor(props: {
       <Typography variant="body2" color="text.secondary">
         {`${roleWord} role` +
           (customRole?.name ? ` with the "${customRole.name}" custom role` : '') +
-          '. Allow or deny a permission for this member alone, or leave it on Inherit.'}
+          '. Allow or deny a permission for this member alone, or leave it on Inherit.' +
+          (narrowable
+            ? ' Permissions a site can narrow also choose what happens on a site where this member ' +
+              'has Viewer or Author access: follow that site role there, or keep the permission.'
+            : '')}
       </Typography>
       <PermissionChoiceList
         sections={sections}
@@ -215,6 +281,7 @@ export function MemberPermissionsEditor(props: {
         groupActions={canManage && !isOwner}
         disabled={busy}
         onChange={(keys, choice) => setDraft((current) => withPermissionChoice(current, keys, choice))}
+        onNarrowingChange={(key, choice) => setNarrowDraft((current) => withNarrowingChoice(current, key, choice))}
       />
     </Stack>
   )

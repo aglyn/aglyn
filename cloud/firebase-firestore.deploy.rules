@@ -2937,7 +2937,20 @@ allow read, write: if false;
 
 
 
+
 match /posHardwareSales/{orderId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+match /posCellularReaders/{recordId} {
+allow read, write: if false;
+}
+match /posCellularCharges/{chargeId} {
 allow read, write: if false;
 }
 
@@ -2989,10 +3002,19 @@ return isSignedIn() && hostMemberRole(hostId) != null;
 
 
 
+
+
+
+
+
 function canWriteHostContent(hostId) {
 return isVerified() &&
-hostMemberRole(hostId) in ['admin', 'editor', 'author'];
+hostSiteRoleKey(hostId, 'site.edit', ['admin', 'editor', 'author']);
 }
+
+
+
+
 
 
 
@@ -3032,7 +3054,7 @@ hostMemberRole(hostId) in ['admin', 'editor', 'author'];
 
 
 function canPublishHostContent(hostId) {
-return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
+return isVerified() && hostSiteRoleKey(hostId, 'site.publish', ['admin', 'editor']);
 }
 
 
@@ -3063,8 +3085,12 @@ return r.size() == 0 || (r.size() == 1 &&
 
 
 
+
+
+
+
 function canReadHostSensitive(hostId) {
-return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+return isSignedIn() && hostSiteRoleKey(hostId, 'site.sensitive', ['admin', 'editor']);
 }
 
 
@@ -3117,6 +3143,34 @@ function hostNarrowsMember(hostId, member) {
 return member.get('allHosts', false) == true &&
 member.get('role', '') == 'editor' &&
 member.get('hostAccess', {}).get(hostId, '') in ['author', 'viewer'];
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function hostSiteRoleKey(hostId, permission, presetRoles) {
+let onSite = get(/databases/$(database)/documents/hosts/$(hostId)).data
+.get('memberPermissions', {}).get(request.auth.uid, {});
+return onSite.get(permission, null) is bool
+? onSite.get(permission, false) == true
+: hostMemberRole(hostId) in presetRoles;
 }
 
 
@@ -3475,7 +3529,9 @@ allow update: if isStaff() ||
 
 
 
-(hostMemberRole(hostId) == 'admin' ||
+
+
+(hostSiteRoleKey(hostId, 'site.manage', ['admin']) ||
 !request.resource.data.diff(resource.data).affectedKeys()
 .hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
 'approvedImageHosts', 'approvedMediaHosts',
@@ -3498,7 +3554,7 @@ allow update: if isStaff() ||
 .hasAny(['screens', 'defaultHomeScreenId'])) &&
 routeRemovalAllowed());
 allow delete: if isStaff() ||
-(hostMemberRole(hostId) == 'admin' && isVerified() &&
+(isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
 !hostWritesFrozen(hostId));
 
 
@@ -3956,7 +4012,7 @@ request.resource.data.diff(resource.data)
 match /pluginSettings/{pluginId} {
 allow read: if isStaff() || isHostMember(hostId);
 allow write: if pluginId != 'live-chat' && (isStaff() ||
-(hostMemberRole(hostId) == 'admin' && isVerified() &&
+(isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
 !hostWritesFrozen(hostId)));
 }
 
@@ -4163,6 +4219,12 @@ subcollection != 'reviewTokens' &&
 
 
 
+
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -4187,7 +4249,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
-'waiverTitles']) &&
+'waiverTitles', 'reservations', 'resources']) &&
 
 
 
@@ -4358,7 +4420,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
-'waiverTitles'])));
+'waiverTitles', 'reservations', 'resources'])));
 
 
 
@@ -4417,7 +4479,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
-'checkIns', 'checkInDays', 'waiverTitles'])));
+'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources'])));
 }
 
 
@@ -4489,6 +4551,35 @@ request.resource.data.diff(resource.data).affectedKeys()
 match /redirects/{redirectId} {
 allow update, delete: if isStaff() ||
 (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /reservations/{path=**} {
+allow create, update, delete: if isStaff() ||
+(isVerified() && !hostWritesFrozen(hostId) &&
+hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
+}
+match /resources/{path=**} {
+allow create, update, delete: if isStaff() ||
+(isVerified() && !hostWritesFrozen(hostId) &&
+hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
 }
 
 

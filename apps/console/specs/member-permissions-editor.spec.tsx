@@ -97,6 +97,41 @@ describe('the member Permissions card (AGL-4047)', () => {
     expect(screen.queryByRole('button', { name: 'Save permissions' })).toBeNull()
   })
 
+  it('offers the narrowing choice on the keys a site can narrow, says where it comes from, and saves it', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    const onSaved = jest.fn()
+    render(
+      <MemberPermissionsEditor
+        layout="card"
+        member={{ ...member, siteNarrowing: { 'ai.use': true } }}
+        roles={[{ ...roles[0], siteNarrowing: { posSell: false } }]}
+        canManage
+        onSaved={onSaved}
+      />,
+    )
+    // AI keeps by default, the register follows the site role: the two built-in defaults.
+    expect(screen.getByText('Follows the site role · set for this member')).toBeTruthy()
+    expect(screen.getByText('Kept · from the "Cashier" role')).toBeTruthy()
+    expect(screen.getAllByText('Kept · from the Editor role').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Follows the site role · from the Editor role').length).toBeGreaterThan(0)
+    // Hardware is the workspace's, never narrowed: no choice on it.
+    expect(screen.queryByRole('group', { name: 'Buy point of sale hardware: on sites where their role is narrower' })).toBeNull()
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Use the point of sale: on sites where their role is narrower' })).getByRole(
+        'button',
+        { name: 'Keep this permission' },
+      ),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save permissions' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(lastBody()).toEqual({ orgId: 'org-1', action: 'permissions', uid: 'm1', siteNarrowing: { managePos: false } })
+  })
+
+  it('offers no narrowing choice to a role no site can narrow', () => {
+    render(<MemberPermissionsEditor layout="card" member={{ $id: 'a1', role: 'admin', allHosts: true }} roles={[]} canManage />)
+    expect(screen.queryByRole('group', { name: 'Use the point of sale: on sites where their role is narrower' })).toBeNull()
+  })
+
   it('sends a site collaborator to their sites', () => {
     render(
       <MemberPermissionsEditor

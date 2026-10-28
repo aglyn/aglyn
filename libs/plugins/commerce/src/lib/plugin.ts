@@ -22,6 +22,8 @@ const PosConsolePage = lazy(() => import('./components/console/pos-page.componen
 /** The customer display (AGL-3608): loads only on the public page that shows it. */
 const PosDisplayPage = lazy(() => import('./components/console/pos-display-page.component'))
 const PosKioskPage = lazy(() => import('./components/console/pos-kiosk-page.component'))
+const PosHardwareTermsPage = lazy(() => import('./components/console/pos-hardware-terms-page.component'))
+const PosHardwareTermsSignPage = lazy(() => import('./components/console/pos-hardware-terms-sign-page.component'))
 /** Staff → Hardware orders (AGL-4038): loads only on its staff page. */
 const PosHardwareOrdersStaffPage = lazy(
   () => import('./components/console/pos-hardware-orders-staff-page.component'),
@@ -129,6 +131,12 @@ export function registerCommerceConsole(): void {
       // The self-service kiosk (AGL-3623), paired the same way with a kiosk
       // code; `server/pos-kiosk.ts` refuses every call without its token.
       { path: '/pos-kiosk', title: 'Self-service kiosk', Component: PosKioskPage },
+      // The terms of sale for a card reader sold at the platform's register
+      // (AGL-4038): on its customer display, by the display's own token
+      // (`server/pos-display.ts`), and the printable booth sign, which holds
+      // only the published terms' address and summary.
+      { path: '/hardware-terms', title: 'Terms of sale', Component: PosHardwareTermsPage },
+      { path: '/hardware-terms-sign', title: 'Terms of sale sign', Component: PosHardwareTermsSignPage },
     ],
     // Dashboard/analytics glance card (AGL-419): rendered through the
     // shell's 'commerceGlance' widget slot.

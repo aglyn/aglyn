@@ -43,6 +43,8 @@ export class PosHardwareRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The route's `reason`, when it names a step the caller takes next. */
+    readonly reason?: string,
   ) {
     super(message)
   }
@@ -64,7 +66,11 @@ export async function sendPosHardwareRequest<T>(
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new PosHardwareRequestError(String(payload?.error ?? 'Something went wrong'), response.status)
+    throw new PosHardwareRequestError(
+      String(payload?.error ?? 'Something went wrong'),
+      response.status,
+      typeof payload?.reason === 'string' ? payload.reason : undefined,
+    )
   }
   return payload as T
 }
@@ -229,7 +235,9 @@ export function staffHardwareOrders(user: User, filter: StaffHardwareFilter, aft
 export function staffHardwareOrderAction(
   user: User,
   body: {
-    action: 'update' | 'cancel' | 'refund' | 'forget-buyer' | 'decline-return'
+    action: 'update' | 'cancel' | 'refund' | 'refund-return' | 'forget-buyer' | 'decline-return'
+    /** An online return's restocking fee, in cents (AGL-4038). */
+    restockingFeeCents?: number
     note?: string
     orgId: string
     orderId: string

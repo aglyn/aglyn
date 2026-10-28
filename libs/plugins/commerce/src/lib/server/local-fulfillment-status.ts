@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import { pluginShippingRateQuoter } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
@@ -275,8 +277,10 @@ export const localFulfillmentHandler: PluginApiHandler = async (req, res) => {
     const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
     const host = await hostRef.get()
     if (!host.exists) return res.status(404).json({ error: 'Unknown site' })
-    const role = (host.get('memberRoles') ?? {})[uid]
-    if (role !== 'admin' && role !== 'editor') return res.status(403).json({ error: 'Not permitted' })
+    // "Manage orders" (`commerce.orders`, AGL-4047).
+    if (!holdsCommerceSiteKey(host, uid, 'commerce.orders')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
+    }
 
     if (req.method === 'GET') {
       // Distance zones need the store and the buyer placed on a map, which

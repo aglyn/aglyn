@@ -54,10 +54,17 @@ function resolveValue(existing: any, value: any): any {
   return value
 }
 
+type SetOptions = { merge?: boolean; mergeFields?: string[] }
+
+function setMode(options?: SetOptions): 'set' | 'merge' | 'fields' {
+  if (options?.mergeFields) return 'fields'
+  return options?.merge ? 'merge' : 'set'
+}
+
 function applyWrite(
   path: string,
   value: Record<string, any>,
-  mode: 'set' | 'merge' | 'update',
+  mode: 'set' | 'merge' | 'update' | 'fields',
 ) {
   const existing = fakeDocs.get(path)
   if (mode === 'update' && !existing) {
@@ -65,6 +72,8 @@ function applyWrite(
     error.code = 5
     throw error
   }
+  // `mergeFields`: each named top-level field is replaced whole, every
+  // other stored field stays (the callers name exactly the fields they send).
   const next: Record<string, any> = mode === 'set' ? {} : { ...(existing ?? {}) }
   for (const [key, raw] of Object.entries(value)) {
     if (raw && typeof raw === 'object' && DELETE in raw) {
@@ -114,8 +123,7 @@ export function docRef(path: string): any {
     id: path.split('/').pop() as string,
     path,
     get: async () => snapshotOf(path),
-    set: async (value: Record<string, any>, options?: { merge?: boolean }) =>
-      applyWrite(path, value, options?.merge ? 'merge' : 'set'),
+    set: async (value: Record<string, any>, options?: SetOptions) => applyWrite(path, value, setMode(options)),
     update: async (value: Record<string, any>) => applyWrite(path, value, 'update'),
     create: async (value: Record<string, any>) => {
       if (fakeDocs.has(path)) {
@@ -267,8 +275,8 @@ export const fakeFirestore: any = {
     const writes: Array<() => void> = []
     const outcome = await fn({
       get: (ref: any) => ref.get(),
-      set: (ref: any, value: any, options?: { merge?: boolean }) => {
-        writes.push(() => applyWrite(ref.path, value, options?.merge ? 'merge' : 'set'))
+      set: (ref: any, value: any, options?: SetOptions) => {
+        writes.push(() => applyWrite(ref.path, value, setMode(options)))
       },
       update: (ref: any, value: any) => {
         writes.push(() => applyWrite(ref.path, value, 'update'))

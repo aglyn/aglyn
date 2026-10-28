@@ -133,7 +133,7 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 
 | Item | What it's for |
 | --- | --- |
-| **Stripe Reader S710** | Handheld with its own 4G connection, for events and parking lots |
+| **Stripe Reader S710** | Handheld for events and parking lots. It can use 4G with Stripe's cellular service, which is billed monthly for each reader; without it, the S710 uses Wi-Fi |
 | **Stripe Reader S700** | Handheld or countertop reader on Wi-Fi |
 | **Stripe Reader T600** | Countertop reader on Wi-Fi, or on Ethernet with the hub |
 | **BBPOS WisePOS E** | Countertop reader on Wi-Fi |
@@ -142,8 +142,7 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 | The Stripe Reader Hub | Connects an S700, S710 or T600 to Ethernet and power |
 | A case for the S700/S710, and spare cables and chargers | Protect a handheld reader, or replace a lost cable or charger |
 
-The card shows only what is available to order, with its price. Stripe may stop
-selling the BBPOS WisePOS E, and the card says so beside it.
+The card shows only what is available to order, with its price.
 
 **Place an order**
 
@@ -191,6 +190,15 @@ You get an email when the order is received, when it ships (with the carrier and
 a tracking link), and when it is delivered (with the steps to set the reader
 up). To change or cancel an order before it ships, contact support.
 
+**Returning an order shipped to you.** Once it has shipped, select **Request a
+return** on the order under **Your orders** on the **Hardware** card, and say
+why. Aglyn's team arranges the return with you and, once it's back, refunds the
+price of the items and the tax on them to the card you paid with, or tells you
+why it can't. The return shipping is yours to pay, the original shipping isn't
+refunded, and any restocking fee charged for the return comes off the refund.
+The order shows **Return requested**, then **Returned** or **Return declined**,
+and you get an email with what was refunded.
+
 **When it arrives**
 
 Set the reader up as in [Setting one up](#card-readers): charge it, connect it to
@@ -203,11 +211,21 @@ the site, on a plan that includes POS.
 ### Bought from us in person {#bought-from-us-in-person}
 
 At an event, Aglyn may sell you a reader in person. You pay at Aglyn's register,
-take the reader with you, and the order joins your workspace:
+take the reader with you, and the order joins your workspace.
+
+**The terms of sale.** Before you pay, Aglyn's staff ask you to accept the terms
+of sale, Sections 4.26–4.32 of the [Terms](https://aglyn.com/legal/terms): on the
+register's customer display, or on the register tablet they hand you. The screen
+sums them up, links to the whole, and you tick the box and select **Accept**. If
+neither screen can be used, for example with no power or no connection, your
+receipt and a sign at the booth say which terms the sale is made under, and
+paying is agreeing to them. Every receipt for a reader bought this way says so too.
+
+Then:
 
 - **If you have an account**, Aglyn's staff look you up by your email address,
-  your name or your workspace's name, and attach the reader to the workspace you
-  choose, and to a store when you pick one.
+  your name or your workspace's name, check your email address with you, and
+  attach the reader to the workspace you choose, and to a store when you pick one.
 - **If you don't have an account yet**, you get an email inviting you to create
   one with the same address. Once you create your workspace, the reader is in it.
   There is nothing to accept.
@@ -227,13 +245,15 @@ If Aglyn's staff took the reader's serial number when you bought it, the order
 moves to **Set up** by itself as soon as you add the reader. Otherwise, or for a
 Stripe Reader M2 you pair by Bluetooth, select **Mark set up** when it is done.
 Staff can also add the reader to your store for you at the event, by its pairing
-code, while you are there.
+code, while you are there. If your store has no address for card readers yet,
+they can enter it with you, and it is saved to your store as if you had added it
+on the **POS devices** card; a store that already has one keeps it.
 
 The order is in your purchase history on the **Hardware** card, under **Your
 orders**, even before buying online is open for your workspace.
 
-**Returning one.** Returns follow Stripe's hardware terms, and the return shipping
-is yours to pay. There are three ways:
+**Returning one.** Returns follow the hardware terms of sale, and the return
+shipping is yours to pay. There are three ways:
 
 - Bring it to Aglyn's register at a later event. The refund goes back the way
   you paid.
@@ -271,18 +291,22 @@ and accounting: the items and their prices, shipping, tax, the total, the order'
 status dates, Stripe's payment references, and the state, ZIP code and country it
 shipped to. That record stays after the workspace is
 [deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
-and is kept for seven years from the sale, then deleted. It never holds the
-buyer's name, email, phone, street address or tracking number. If an order is
+and is kept for seven years from the sale, then deleted. Of the buyer, it keeps
+only their name and address, which Aglyn must keep as a reseller of Stripe's
+readers; it never holds their email, phone or tracking number. If an order is
 canceled and refunded, the record says so.
 
 For a reader bought from Aglyn in person, the record names Aglyn's register sale
 and how it was paid instead of a shipping address, and the tax is the one Aglyn's
-store charged at the sale.
+store charged at the sale. The buyer's name is their account's name, or the one
+given at the sale, and their address is the one given at the sale or else the
+address of the store the readers are set up on.
 
 If the person who placed an order
 [closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
 the workspace keeps the order and its amounts, and their name, email, phone,
-street address and the tracking are removed from it.
+street address and the tracking are removed from it. Aglyn's record of the sale
+keeps their name and address until it is deleted.
 
 ## Receipt printers
 

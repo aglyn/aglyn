@@ -18,7 +18,6 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { nameSearchKey, nameSearchTokens, NAME_TOKEN_MAX_PREFIX } from '@aglyn/aglyn/app-utils/name-search'
 import { firebaseAdmin, hostDisplayName } from '@aglyn/tenant-data-admin'
-import { maskEmailAddress } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { findUserByEmailAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 
 /*==========================================
@@ -42,10 +41,12 @@ import { findUserByEmailAcrossPools } from '@aglyn/tenant-data-admin/server/auth
  *
  * Every answer is an indexed query, never a scan of a loaded window, and is
  * capped. Each says the least that lets the right buyer be picked: a
- * person's display name and their address MASKED (in full only when it was
- * typed exactly), and each of their workspaces with its stores, whether the
- * workspace's plan includes the point of sale and whether each store has a
- * card reader Location. Never a phone number, an address, a role or a bill.
+ * person's display name and their email address in full, so the register
+ * user can read it back to them, and each of their workspaces with its
+ * stores, whether the workspace's plan includes the point of sale and
+ * whether each store has a card reader Location. Never a phone number, a
+ * street address, a role or a bill. The audit log keeps the typed address
+ * masked (`pos-hardware-sale.ts`).
  *=========================================*/
 
 export interface HardwareBuyerStore {
@@ -66,7 +67,7 @@ export interface HardwareBuyerWorkspace {
 export interface HardwareBuyerPerson {
   uid: string
   name: string
-  /** Masked, unless the address was typed exactly. */
+  /** Their email address, in full. */
   email: string
   workspaces: HardwareBuyerWorkspace[]
 }
@@ -209,7 +210,7 @@ async function workspacesNamed(typed: readonly string[]) {
           ? {
               uid: ownerUid,
               name: String(owner.get('displayName') ?? '').trim(),
-              email: maskEmailAddress(String(owner.get('email') ?? '')),
+              email: String(owner.get('email') ?? ''),
             }
           : null,
       }
@@ -218,8 +219,8 @@ async function workspacesNamed(typed: readonly string[]) {
 }
 
 /**
- * Looks a buyer up. An exact address is looked up as one (shown in full,
- * since it was typed); anything else as a person's name and a workspace's.
+ * Looks a buyer up. An exact address is looked up as one; anything else as
+ * a person's name and a workspace's. Every address is answered in full.
  */
 export async function findHardwareBuyers(query: string): Promise<HardwareBuyerFindResult> {
   const text = query.trim()
@@ -248,7 +249,7 @@ export async function findHardwareBuyers(query: string): Promise<HardwareBuyerFi
     named.map(async (person) => ({
       uid: person.uid,
       name: person.name,
-      email: maskEmailAddress(person.email),
+      email: person.email,
       workspaces: await workspacesOf(person.uid),
     })),
   )

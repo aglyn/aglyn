@@ -36,7 +36,8 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import type { PosCellularView } from '../../model/pos-cellular'
 import { posDisplayCall, posReadersCall, PosRequestError } from './pos/pos-api'
 import { POS_DEVICES_ANCHOR } from './pos/pos-kiosk-readiness.component'
 import { POS_REGISTERS_ANCHOR, usePosPairing } from './pos/pos-pairing.component'
@@ -56,8 +57,13 @@ interface ReadersAnswer {
   available: boolean
   testMode: boolean
   locationReady: boolean
+  /** 4G for the store's S710s, where it is offered and the store has one (AGL-4038). */
+  cellular?: PosCellularView
   readers: ReaderRow[]
 }
+
+/** Drawn only where 4G is offered, so it arrives with the first store that shows it. */
+const PosCellularControl = lazy(() => import('./pos-cellular-control.component'))
 
 interface DisplayRow {
   id: string
@@ -372,6 +378,16 @@ export function PosDevicesCard({
             )}
           </Stack>
         ) : null}
+        {showReaders && answer?.cellular ? (
+          <Suspense fallback={null}>
+            <PosCellularControl
+              hostId={hostId}
+              cellular={answer.cellular}
+              blocked={readersBlocked}
+              onChanged={() => load()}
+            />
+          </Suspense>
+        ) : null}
         {/* What the readers show while idle (AGL-4048); renders nothing
             where card readers are not offered. */}
         {showReaders ? (
@@ -491,6 +507,11 @@ export function PosDevicesCard({
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {'On the reader, open Settings and choose Generate pairing code, then enter the code it shows.'}
           </Typography>
+          {answer?.cellular?.enabled ? (
+            <Typography variant="body2" color="text.secondary">
+              {'4G is on at this store: a Stripe Reader S710 you add gets it too, and is charged for it each month.'}
+            </Typography>
+          ) : null}
           <TextField
             label="Registration code"
             value={code}

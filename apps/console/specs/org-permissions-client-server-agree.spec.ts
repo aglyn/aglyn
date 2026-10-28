@@ -183,6 +183,25 @@ describe('the console and the server resolve one permission model', () => {
     ).toHaveLength(1)
   })
 
+  it('a key whose preset is the site role is decided by ONE function on every side (AGL-4047)', () => {
+    // The site's stamp (the projection), the server's door, the console's
+    // two readers and the rules must give one answer. Each side applies the
+    // same core function, and the rules' helper reads the stamp it writes,
+    // falling back to the preset of the role projected beside it.
+    expect(read('libs/aglyn/src/lib/app-utils/host-permissions.ts')).toMatch(
+      /export function resolveMemberHostPermissions[\s\S]*applySiteRolePresets\(/,
+    )
+    expect(read(ADMIN_ORGS)).toMatch(/export async function memberHasPermissionOnHost[\s\S]*applySiteRolePresets\(/)
+    expect(read('apps/console/hooks/use-permissions-on-host.ts')).toContain('resolveSiteRolePresetPermissions(')
+    expect(read('apps/console/app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page.tsx')).toContain(
+      'applySiteRolePresets(',
+    )
+    const rules = read('cloud/firebase-firestore.deploy.rules')
+    expect(rules).toMatch(/function hostSiteRoleKey\(hostId, permission, presetRoles\)/)
+    expect(rules).toMatch(/get\('memberPermissions', \{\}\)\.get\(request\.auth\.uid, \{\}\)/)
+    expect(rules).toContain('hostMemberRole(hostId) in presetRoles')
+  })
+
   it('a REVOKED permission is revoked in the legacy map the gates read', () => {
     const granted = resolveOrgPermissions(REVOKED, null)
     expect(granted['plugins.install']).toBe(false)

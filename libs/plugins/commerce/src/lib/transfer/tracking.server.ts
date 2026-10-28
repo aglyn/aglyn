@@ -28,7 +28,6 @@ import {
   type TransferUndoSnapshot,
   type TransferUndoStep,
 } from '@aglyn/aglyn/data-transfer'
-import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
 import * as Aglyn from '@aglyn/aglyn/server'
 import type {
   PluginTransferResource,
@@ -41,9 +40,10 @@ import type {
   TransferRevertDecisions,
   TransferRevertResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
-import { firebaseAdmin, getOrgForHost, resolveOrgMembership } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost, memberHasPermissionOnHost, resolveOrgMembership } from '@aglyn/tenant-data-admin'
 import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { normalizeTrackingNumber, parseShippingOrderRef } from '../model/order-shipping-export'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import {
   cancelOrderFulfillment,
   recordOrderShipment,
@@ -91,9 +91,14 @@ async function shipperOf(ctx: TransferResourceContext): Promise<{ hostId: string
   if (!hostId) throw new TransferEngineError('invalid', 400, 'Tracking numbers belong to a site; name the site.')
   const uid = ctx.actorUid
   const membership = uid ? await resolveOrgMembership(uid, ctx.orgId) : null
-  const role = membership?.member ? hostRoleFor(membership.member, hostId as never) : null
-  if (!uid || (role !== 'admin' && role !== 'editor')) {
-    throw new TransferEngineError('forbidden', 403, 'Only a site’s admins and editors can record shipments.')
+  // "Manage orders" (`commerce.orders`, AGL-4047) on this site, resolved fresh
+  // from the membership: its preset is the site's Admin and Editor this
+  // asked for, then the member's custom role, own permissions and site toggle.
+  const allowed =
+    !!uid && !!membership?.member &&
+    (await memberHasPermissionOnHost(ctx.orgId, hostId, membership.member, 'commerce.orders'))
+  if (!allowed) {
+    throw new TransferEngineError('forbidden', 403, commerceSitePermissionRefusal('commerce.orders'))
   }
   const owner = await getOrgForHost(hostId).catch(() => null)
   if (!Aglyn.checkEntitlement(owner?.org as never, 'commerce')) {

@@ -76,6 +76,13 @@ export function registerCommerceConsoleServerDeclarations(): void {
     async (request) => (await import('./server/pos-hardware-closure')).posHardwareOrgEraser(request),
     { pluginId: BUNDLE_ID },
   )
+  // A workspace erasure turns 4G off at Stripe for every one of its stores
+  // that had it (AGL-4038), so the platform stops paying for readers nobody
+  // will be charged for. Never fails the erasure. Loaded with the first one.
+  registerPluginOrgEraser(
+    async (request) => (await import('./server/pos-cellular-billing')).posCellularOrgEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
   // …and says so BEFORE the closure (AGL-4038): the delete-workspace and
   // close-account screens list the unshipped hardware orders a closure will
   // cancel and refund. Loaded with the first screen that asks.

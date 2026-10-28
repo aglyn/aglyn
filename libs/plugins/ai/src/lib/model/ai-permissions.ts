@@ -61,6 +61,12 @@ const CONTENT_ROLES: Readonly<Record<HostAccessRole, boolean>> = {
  * asking the assistant nothing: a viewer spends none of the workspace's AI
  * credits. A site collaborator holds both on a site where their host role
  * may change content.
+ *
+ * A site can narrow both (AGL-4047), and by default neither does: an editor
+ * of the whole workspace given Viewer or Author access to one site keeps AI
+ * there, as before, unless a custom role or their own permissions choose
+ * "Follow the site role" for the key, in which case that site's access
+ * decides it (`CONTENT_ROLES` below: Author keeps it, Viewer does not).
  */
 export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
   {
@@ -71,6 +77,7 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
     hostRoleDefaults: CONTENT_ROLES,
     group: 'ai',
     groupLabel: 'AI',
+    narrowsPerSite: false,
   },
   {
     key: 'ai.generate',
@@ -81,6 +88,7 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
     hostRoleDefaults: CONTENT_ROLES,
     group: 'ai',
     groupLabel: 'AI',
+    narrowsPerSite: false,
   },
 ]
 

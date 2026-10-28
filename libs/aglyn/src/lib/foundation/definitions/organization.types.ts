@@ -244,6 +244,14 @@ export interface AglynOrgMember extends AglynDocument {
    */
   hostPermissions?: Record<HostUid, Partial<Record<HostPermissionKey, boolean>>>
   /**
+   * Per key a site can narrow (AGL-4047): `true` follows the site role on a
+   * site where this member's access is narrower than their workspace role,
+   * `false` keeps the permission there. A key it leaves out follows their
+   * custom role's `siteNarrowing`, then the built-in role's default. Read
+   * only for a member who works across the whole workspace.
+   */
+  siteNarrowing?: Partial<Record<string, boolean>>
+  /**
    * Denormalized reach as scope tokens (AGL-1038), so rules can intersect
    * it with a resource's `visibleTo` — they cannot derive it from
    * `hostAccess` because the rules language has no `.map()`. Written only

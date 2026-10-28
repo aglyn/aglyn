@@ -302,6 +302,36 @@ registerPluginJob({
 })
 
 /**
+ * The monthly 4G charge for Stripe Reader S710s (AGL-4038): each workspace
+ * whose readers had 4G in the month just ended is charged once, through
+ * core's usage-invoice charge. Every six hours, so the charge goes out early
+ * on the 1st and one that could not reach Stripe is tried again the same
+ * day; a month already settled costs a read per workspace. Nothing runs
+ * where 4G is not offered (`POS_CELLULAR_MONTHLY_COST_CENTS` unset).
+ * Per-host: a store locked for security or abuse is not charged while it is.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'pos-cellular-billing',
+  intervalMinutes: 6 * 60,
+  description:
+    'Charge each workspace for 4G on its Stripe Reader S710s for the month just ended, once (AGL-4038).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.POS_CELLULAR_MONTHLY_COST_CENTS) return
+    const { runPosCellularBilling } = await import('./server/pos-cellular-billing')
+    const report = await runPosCellularBilling(gate)
+    if (report.workspaces || report.storesGone) {
+      console.info(
+        `commerce: 4G for ${report.month} — ${report.paid} paid, ${report.open} left open, ` +
+          `${report.failed} not reached, ${report.unbillable} not billable, ${report.deferred} deferred, ` +
+          `${report.storesGone} deleted stores turned off`,
+      )
+    }
+  },
+})
+
+/**
  * Card reader start-up screens (AGL-4048) that went stale with nobody opening
  * the POS devices card: a logo changed on the organization profile or the
  * white-label brand, or the logo's file replaced in the media library. Every
@@ -639,8 +669,9 @@ export function registerCommerceConsoleApi(): void {
     (await import('./server/pos-hardware-sale')).posHardwareSaleHandler(req, res),
   )
   // A store's card reader start-up screen (AGL-4048): the POS devices card's
-  // setting, gated like a sale, and the staff page's platform default. Both
-  // draw images, so each loads with its first call.
+  // setting, gated like a sale, and the staff page's platform default. Each
+  // loads with its first call; the drawing they ask for is the images
+  // route's, below.
   registerPluginApiRoute('commerce/pos-reader-splash', async (req, res) =>
     (await import('./server/pos-reader-splash')).posReaderSplashHandler(req, res),
   )
@@ -648,6 +679,19 @@ export function registerCommerceConsoleApi(): void {
     web: async (request) =>
       (await import('./server/pos-reader-splash-admin')).posReaderSplashAdmin(request),
   })
+  // The image work behind both (AGL-4048): drawing a screen and reading an
+  // uploaded one take `sharp`, whose native library only the console's
+  // plugins' image function ships (`/api/plugin-images/…`), so the plugin
+  // API's function does not carry it. Called by our own servers, signed; a
+  // machine's door.
+  registerPluginApiRoute(
+    'commerce/pos-reader-splash-images',
+    {
+      web: async (request) =>
+        (await import('./server/pos-reader-splash-images-route')).posReaderSplashImagesRoute(request),
+    },
+    { machine: true, images: true },
+  )
   registerPluginApiRoute('commerce/admin/hardware-orders', {
     web: async (request) =>
       (await import('./server/pos-hardware-admin')).posHardwareAdminOrders(request),

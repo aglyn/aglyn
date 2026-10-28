@@ -16,6 +16,7 @@
  */
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import {
@@ -121,9 +122,9 @@ export const redirectCheckHandler: PluginApiHandler = async (req, res) => {
     const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
     const host = await hostRef.get()
     if (!host.exists) return res.status(404).json({ error: 'Unknown site' })
-    const role = (host.get('memberRoles') ?? {})[decoded.uid]
-    if (role !== 'admin' && role !== 'editor') {
-      return res.status(403).json({ error: 'Changing a redirect needs a publishing role — ask an editor or admin' })
+    // "Publish site content" (`site.publish`, AGL-4047), as the rules ask it of a redirect.
+    if (!holdsSiteKey(host, decoded.uid, 'site.publish')) {
+      return res.status(403).json({ error: siteKeyRefusal('site.publish') })
     }
     const snapshot = await hostRef.collection('redirects').limit(RULES_WINDOW).get()
     const rules = snapshot.docs.map((doc: { id: string; data: () => Record<string, unknown> }) => ({ $id: doc.id, ...doc.data() }))

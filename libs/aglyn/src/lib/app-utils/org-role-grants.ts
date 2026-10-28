@@ -226,6 +226,36 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     label: 'Delete sites',
     description: 'Delete sites the member can access.',
   },
+  // The site keys (AGL-4047): each replaced a gate on the member's role on a
+  // site, and keeps that role as its preset (`CORE_SITE_ROLE_PRESETS`).
+  {
+    key: 'site.edit',
+    group: 'sites',
+    scope: 'site',
+    label: 'Edit site content',
+    description: 'Create and change pages, content and everything else on a site, without making it live.',
+  },
+  {
+    key: 'site.publish',
+    group: 'sites',
+    scope: 'site',
+    label: 'Publish site content',
+    description: 'Make pages and content live, take them down or schedule them, and change redirects.',
+  },
+  {
+    key: 'site.sensitive',
+    group: 'sites',
+    scope: 'site',
+    label: 'See orders and webhooks',
+    description: 'Read a site’s orders and returns, and set up its webhooks.',
+  },
+  {
+    key: 'site.manage',
+    group: 'sites',
+    scope: 'site',
+    label: 'Manage site settings',
+    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.',
+  },
   {
     key: 'data.manage',
     group: 'datasets',
@@ -249,6 +279,26 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
 const CORE_KEYS = CORE_ORG_PERMISSION_ENTRIES.map((entry) => entry.key)
 
 /**
+ * The core keys whose preset is the member's role ON THE SITE (AGL-4047), and
+ * each site role's verdict: the sets the rules' `canWriteHostContent`,
+ * `canPublishHostContent`, `canReadHostSensitive` and the site-admin checks
+ * asked before they asked these keys. A member's preset on a site is the
+ * verdict for the role they hold there (the owner and admins are Admin on
+ * every site); a custom role, their own permissions and that site's toggle
+ * then grant or refuse it. Each workspace role's default below is the verdict
+ * for its own site role, which is the answer with no site named.
+ */
+export const CORE_SITE_ROLE_PRESETS: Readonly<Record<string, Readonly<Record<string, boolean>>>> = {
+  'site.edit': { admin: true, editor: true, author: true, viewer: false },
+  'site.publish': { admin: true, editor: true, author: false, viewer: false },
+  'site.sensitive': { admin: true, editor: true, author: false, viewer: false },
+  'site.manage': { admin: true, editor: false, author: false, viewer: false },
+}
+
+/** The workspace editor's site keys: its own site role's preset. */
+const EDITOR_SITE_KEYS = Object.keys(CORE_SITE_ROLE_PRESETS).filter((key) => CORE_SITE_ROLE_PRESETS[key].editor)
+
+/**
  * The core keys each org role holds when nothing refines it: owners and
  * admins hold every core key (owner-only acts like deleting the
  * organization stay role-checked, not permission-checked); editors work on
@@ -257,7 +307,7 @@ const CORE_KEYS = CORE_ORG_PERMISSION_ENTRIES.map((entry) => entry.key)
 export const CORE_ORG_ROLE_GRANTS: Readonly<Record<OrgRoleName, readonly string[]>> = {
   owner: CORE_KEYS,
   admin: CORE_KEYS,
-  editor: ['data.manage', 'marketplace.publish', 'plugins.install'],
+  editor: ['data.manage', 'marketplace.publish', 'plugins.install', ...EDITOR_SITE_KEYS],
   viewer: [],
 }
 
@@ -317,6 +367,12 @@ export function assembleOrgRoleGrants(
         label: declaration.groupLabel ?? group,
         ...(declaration.pluginId ? { pluginId: declaration.pluginId } : {}),
       })
+    } else if (group && declaration.pluginId) {
+      // A plugin's group opened by a declaration that names no plugin (an org
+      // catalog declaration, AGL-4047) is still that plugin's: the first of
+      // its declarations that names one says so.
+      const index = groups.findIndex((entry) => entry.id === group)
+      if (index >= 0 && !groups[index].pluginId) groups[index] = { ...groups[index], pluginId: declaration.pluginId }
     }
     const defaults = declarationRoleDefaults(declaration)
     for (const role of ORG_ROLE_NAMES) {

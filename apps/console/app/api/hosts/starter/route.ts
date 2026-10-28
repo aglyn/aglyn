@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
@@ -69,9 +70,10 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
     const staff = decoded['staff'] === true
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!staff && memberRole !== 'admin' && memberRole !== 'editor') {
-      return Response.json({ error: 'Not a site admin or editor' }, { status: 403 })
+    // "Publish site content" (`site.publish`, AGL-4047): a starter site is
+    // published as it is laid down, which is why this asked Admin or Editor.
+    if (!staff && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
+      return Response.json({ error: siteKeyRefusal('site.publish') }, { status: 403 })
     }
     const locked = await lockdownRefusal({
       request,

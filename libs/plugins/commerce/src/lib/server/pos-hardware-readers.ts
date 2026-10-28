@@ -22,13 +22,16 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   posHardwareSku,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
   type PosHardwareUnit,
 } from '../model/pos-hardware'
 import { posHardwareAttachmentOf } from '../model/pos-hardware-in-person'
+import { fillPosHardwareBuyerAddress } from './pos-hardware-buyer-record'
 import { hardwareOrdersRef, posHardwareInPersonOrderId, posHardwareSaleRef } from './pos-hardware'
+import type { PosTerminalAddress } from './pos-terminal'
 
 /*==========================================
  * A CARD READER SOLD IN PERSON, ONTO THE BUYER'S STORE (AGL-4038).
@@ -55,8 +58,34 @@ export class PosHardwareReaderRefusal extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** A refusal the register answers with a step of its own: `needs-address` asks for the store's address. */
+    readonly reason?: 'needs-address',
   ) {
     super(message)
+  }
+}
+
+/**
+ * A store address typed at the booth, read the way the POS devices card
+ * sends it (AGL-4038): each field a trimmed string within the lengths the
+ * reader registration keeps, the country as two capitals. Anything that is
+ * not an object reads as no address.
+ */
+export function boothStoreAddress(raw: unknown): PosTerminalAddress | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const field = (key: string, max: number) =>
+    String((raw as Record<string, unknown>)[key] ?? '')
+      .trim()
+      .slice(0, max)
+  const line2 = field('line2', 200)
+  const state = field('state', 100)
+  return {
+    line1: field('line1', 200),
+    ...(line2 ? { line2 } : {}),
+    city: field('city', 100),
+    ...(state ? { state } : {}),
+    postalCode: field('postalCode', 20),
+    country: field('country', 2).toUpperCase(),
   }
 }
 
@@ -139,6 +168,9 @@ export async function matchRegisteredPosHardwareReader(input: {
                   email: before.attachment?.email ?? null,
                   attachedBy: '',
                   attachedAtMs: now,
+                  // What the register typed of the buyer stays (AGL-4038).
+                  name: before.attachment?.name ?? null,
+                  address: before.attachment?.address ?? null,
                 }),
               },
             }
@@ -153,11 +185,14 @@ export async function matchRegisteredPosHardwareReader(input: {
         transaction.create(hardwareOrdersRef(after.orgId).doc(orderId), after)
         transaction.delete(fromRef)
       }
-      transaction.set(saleRef, posHardwareSaleRecord(orderId, after))
+      transaction.set(saleRef, posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
       return true
     })
     if (changed) matched.push(orderId)
   }
+  // The buyer's address for the reseller's records, from the store the
+  // reader is now on, where the sale has none yet.
+  for (const orderId of matched) await fillPosHardwareBuyerAddress({ orgId: input.orgId, orderId })
   return { matched }
 }
 
@@ -254,7 +289,7 @@ export async function choosePosHardwareStore(input: {
   hostId: string
 }): Promise<PosHardwareOrder> {
   const { ref } = workspaceOrder(input.orgId, input.orderId)
-  return firestore().runTransaction(async (transaction: any) => {
+  const chosen: PosHardwareOrder = await firestore().runTransaction(async (transaction: any) => {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReaderRefusal('No such order.', 404)
     const before = snapshot.data() as PosHardwareOrder
@@ -266,9 +301,11 @@ export async function choosePosHardwareStore(input: {
       updatedAtMs: Date.now(),
     }
     transaction.set(ref, after)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after))
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after), posHardwareSaleSetOptions(after))
     return after
   })
+  await fillPosHardwareBuyerAddress({ orgId: input.orgId, orderId: input.orderId })
+  return chosen
 }
 
 /**
@@ -288,7 +325,7 @@ export async function markPosHardwareSetUp(input: { orgId: string; orderId: stri
     const now = Date.now()
     const after: PosHardwareOrder = { ...before, status: 'registered', registeredAtMs: now, updatedAtMs: now }
     transaction.set(ref, after)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after))
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after), posHardwareSaleSetOptions(after))
     return after
   })
 }
@@ -308,17 +345,26 @@ export async function posHardwareStoreReadiness(hostId: string): Promise<{ posPl
 /**
  * Registers a reader sold at the booth to the buyer's chosen store, by the
  * code it shows, while the buyer is there (AGL-4038). The sale must be
- * attached to them with a store chosen; the store's plan must include the
- * point of sale; the store must already have its reader Location, since
- * the booth does not take the buyer's street address.
+ * attached to them with a store chosen, and the store's plan must include
+ * the point of sale.
+ *
+ * A store with no reader Location yet needs its address, which is where
+ * Stripe sets the reader up for. Booth staff may type it with the buyer
+ * (`address`): it goes exactly where the store's POS devices card would put
+ * it, through the same registration, which creates the store's Location from
+ * it and records it on the store's terminal settings. Without one the booth
+ * refuses with `needs-address`, and the buyer can add it later on that card.
+ * A store that already has its Location keeps it: an address sent for it is
+ * never used.
  */
 export async function registerPosHardwareAtBooth(input: {
   config: PosHardwareInPersonConfig
   orderId: string
   registrationCode: unknown
   label?: unknown
+  address?: unknown
   uid: string
-}): Promise<{ order: PosHardwareOrder; readerId: string }> {
+}): Promise<{ order: PosHardwareOrder; readerId: string; storeAddress: PosTerminalAddress | null }> {
   if (!POS_HARDWARE_ORDER_ID.test(input.orderId)) throw new PosHardwareReaderRefusal('Name the sale.', 400)
   const sale = await posHardwareSaleRef(input.orderId).get()
   if (!sale.exists) {
@@ -342,11 +388,19 @@ export async function registerPosHardwareAtBooth(input: {
       409,
     )
   }
+  // The store's address, only for a store with no Location: one that has
+  // its Location keeps it, whatever was sent.
+  const storeAddress = readiness.hasLocation ? null : boothStoreAddress(input.address)
   if (!readiness.hasLocation) {
-    throw new PosHardwareReaderRefusal(
-      'Their store has no address for card readers yet. They add it when they set the reader up on the POS devices card.',
-      409,
-    )
+    if (!storeAddress) {
+      throw new PosHardwareReaderRefusal(
+        'Their store has no address for card readers yet. Enter the store’s address to register the reader now, or they add it when they set the reader up on the POS devices card.',
+        409,
+        'needs-address',
+      )
+    }
+    const problem = (await import('./pos-terminal')).posTerminalAddressProblem(storeAddress)
+    if (problem) throw new PosHardwareReaderRefusal(problem, 400, 'needs-address')
   }
   const { registerPosTerminalReader } = await import('./pos-readers')
   const registered = await registerPosTerminalReader({
@@ -355,6 +409,7 @@ export async function registerPosHardwareAtBooth(input: {
     uid: input.uid,
     registrationCode: input.registrationCode,
     label: input.label,
+    ...(storeAddress ? { address: storeAddress } : {}),
   })
   if ('error' in registered) throw new PosHardwareReaderRefusal(registered.error, registered.status)
   // A reader with a serial matched its unit as it registered. One without
@@ -389,8 +444,9 @@ export async function registerPosHardwareAtBooth(input: {
       updatedAtMs: stamp,
     }
     transaction.set(ref, updated)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, updated))
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, updated), posHardwareSaleSetOptions(updated))
     return updated
   })
-  return { order: after, readerId: registered.id }
+  await fillPosHardwareBuyerAddress({ orgId, orderId: input.orderId })
+  return { order: after, readerId: registered.id, storeAddress }
 }

@@ -251,6 +251,10 @@ describe('one permission catalog (AGL-4047)', () => {
     expect(sections.find((section) => section.group.id === 'sites')?.permissions.map((d) => d.key)).toEqual([
       'hosts.create',
       'hosts.delete',
+      'site.edit',
+      'site.publish',
+      'site.sensitive',
+      'site.manage',
     ])
     const onlyBilling = groupOrgPermissions(ORG_PERMISSIONS.filter((d) => d.group === 'billing'))
     expect(onlyBilling.map((section) => section.group.id)).toEqual(['billing'])
@@ -263,7 +267,7 @@ describe('one permission catalog (AGL-4047)', () => {
     expect(keys('MANAGEPOS')).toEqual(['managePos'])
     expect(keys('billing')).toEqual(expect.arrayContaining(['billing.view', 'billing.manage']))
     expect(keys('sequences')).toEqual(['outreach.use'])
-    expect(keys('delete sites')).toEqual(['hosts.delete'])
+    expect(keys('delete sites')).toEqual(['hosts.delete', 'site.manage'])
     expect(keys('no such thing')).toEqual([])
   })
 

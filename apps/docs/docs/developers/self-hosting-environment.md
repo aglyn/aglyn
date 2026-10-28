@@ -426,6 +426,13 @@ which is drawn from the first when left empty). In the Stripe Dashboard, leave
 your platform account's **default** Terminal configuration without a splash
 screen: a Location without its own screen inherits it, so it would also show on
 white-label workspaces' readers.
+
+The screens are drawn with `sharp`. On Vercel only the console's
+`/api/plugin-images/…` function ships its native library, so
+the console's other functions and the tenant's scheduled jobs ask that function to
+draw, at `NEXT_PUBLIC_CONSOLE_URL`, signed with `TOKEN_SIGNING_SECRET`; set both on
+both projects. Anywhere else (one server holding every route) the screens are
+drawn where they are asked for, and nothing more is needed.
 :::
 
 #### Which events to subscribe {#stripe-webhook-events}
@@ -1204,15 +1211,28 @@ else it sells; none of the shop's figures above are needed.
 
 At that store's register, anyone who may sell there:
 
+- has the buyer accept the terms of sale before they pay (your published Terms,
+  Sections 4.26–4.32, summed up with a link): **Show on display** puts them on the
+  register's customer display, and **Accept on this tablet** shows them on the
+  register for the buyer to accept. Each acceptance is recorded on the sale and its
+  hardware order with the Terms version, the time, the screen, the register user and
+  the device's address and browser. Every receipt of the sale prints which terms it
+  is made under, and **Print the booth sign** opens a sign saying the same, for when
+  no screen can be used;
+
 - on a sale with a reader, selects **Attach buyer** and finds the buyer by their
   exact email address, their name or their workspace's name, then picks the
   workspace and, if they know it, the store. Each lookup is rate-limited and
-  written to the staff audit log, and shows only a name, a masked address and
-  each workspace's stores. Someone with no account is invited by email and gets
-  the reader in the workspace they create;
+  written to the staff audit log (the typed address masked there), and shows
+  only a name, the whole email address and each workspace's stores. Someone
+  with no account is invited by email and gets the reader in the workspace they
+  create;
 - may scan or type each reader's serial number, so the order is set up by itself
   when the buyer adds the reader, or add the reader to the buyer's store there
-  and then with its pairing code;
+  and then with its pairing code. A store with no card reader address yet takes
+  its address there too, with the buyer; it is saved as the store's reader
+  address, exactly as the store's **POS devices** card saves it, and a store
+  that already has one keeps it;
 - finds every reader sold at the kiosk, while the register was offline or to
   someone not yet attached under **To attach**.
 
@@ -1230,6 +1250,26 @@ store's sales are folded in.
 
 Paid orders arrive on the platform webhook as `checkout.session.completed`, which
 the endpoint already subscribes to; there is no new endpoint.
+
+### 4G for card readers {#pos-cellular}
+
+Stripe sells cellular service for the Stripe Reader S710 as a monthly
+subscription per reader, billed to the Stripe account the reader is registered
+to, which is your platform account. With these set, a store's **POS devices**
+card offers **Turn on 4G** wherever the store has an S710: it turns cellular on
+for every S710 at that store, on the store's reader configuration, and each
+workspace is charged once a month, in arrears, for each S710 that had 4G in the
+month just ended. The charge is Stripe's price plus what collecting it costs
+you, with no markup, on an invoice to the workspace's card. Set them on the
+**console and tenant** (the charge runs as a background job). Unset, nothing
+about 4G shows anywhere.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `POS_CELLULAR_MONTHLY_COST_CENTS` | Optional | Runtime, console and tenant | What Stripe charges you for one reader's cellular service a month, in whole cents. Unset, or not a whole number, keeps 4G hidden. |
+| `POS_CELLULAR_BILLING_COST_BPS` | Optional | Runtime, console and tenant | The card processing percentage on the monthly charge, in basis points. Unset is the platform's card rate. |
+| `POS_CELLULAR_BILLING_COST_FIXED_CENTS` | Optional | Runtime, console and tenant | The card processing fixed fee on the monthly charge, in cents. Unset is the platform's. |
+| `STRIPE_PRODUCT_POS_CELLULAR` | Optional | Runtime, console and tenant | The Stripe product the monthly charge is billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. Unset keeps 4G hidden. |
 
 ---
 
