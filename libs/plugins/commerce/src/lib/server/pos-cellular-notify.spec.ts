@@ -19,14 +19,15 @@
  */
 
 /**
- * The notice that 4G was turned off for an unpaid month (AGL-4038): the
- * designed system email to the workspace members who hold "Manage billing"
- * (a key, never a role), the console feed beside it without a second email,
- * and nothing at all for a banned account.
+ * The two notices of an unpaid 4G charge (AGL-4038), the warning the day it
+ * is left open and the notice that 4G was turned off: the designed system
+ * email to the workspace members who hold "Manage billing" (a key, never a
+ * role), the same members' console feed beside it without a second email,
+ * days in the workspace's time zone, and nothing at all for a banned account.
  */
 
 const mockSent: Array<Record<string, unknown>> = []
-const mockFeed: Array<{ orgId: string; payload: Record<string, unknown>; options: Record<string, unknown> }> = []
+const mockFeed: Array<{ uids: string[]; payload: Record<string, unknown>; options: Record<string, unknown> }> = []
 let mockOrg: Record<string, unknown> = {}
 const MEMBERS = [
   { $id: 'uid-owner', email: 'owner@example.com' },
@@ -45,8 +46,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     memberHasOrgPermission: async (_orgId: string, member: { $id: string }, key: string) =>
       key === 'billing.manage' && BILLING.has(member.$id),
     meterPlatformEmail: async () => undefined,
-    notifyOrgAdmins: async (orgId: string, payload: Record<string, unknown>, options: Record<string, unknown>) => {
-      mockFeed.push({ orgId, payload, options })
+    notifyUsers: async (uids: string[], payload: Record<string, unknown>, options: Record<string, unknown>) => {
+      mockFeed.push({ uids: [...uids], payload, options })
     },
   }
 })
@@ -70,7 +71,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
-import { sendPosCellularTurnedOffNotice } from './pos-cellular-notify'
+import { sendPosCellularPaymentDueNotice, sendPosCellularTurnedOffNotice } from './pos-cellular-notify'
 
 const NOTICE = {
   orgId: 'org-1',
@@ -107,19 +108,94 @@ describe('the notice that 4G was turned off (AGL-4038)', () => {
       'cellular.billingUrl': expect.stringMatching(/\/acme\/billing$/),
     })
     expect(mockSent[0]).toMatchObject({ context: 'pos-cellular-turned-off-unpaid' })
-    // The console feed says the same, without a second email.
+    // The same members' console feed says the same, without a second email.
     expect(mockFeed).toEqual([
-      expect.objectContaining({
-        orgId: 'org-1',
-        payload: expect.objectContaining({ type: 'billing.paymentFailed', link: '/acme/billing' }),
+      {
+        uids: ['uid-owner', 'uid-billing'],
+        payload: expect.objectContaining({ type: 'billing.paymentFailed', link: '/acme/billing', orgId: 'org-1' }),
         options: { skipEmail: true },
-      }),
+      },
     ])
   })
 
   it('sends a banned account nothing', async () => {
     fakeDocs.set('orgs/org-1', { ...mockOrg, suspendedAt: 1, suspendedReasonCode: 'abuse' })
     expect(await sendPosCellularTurnedOffNotice(NOTICE)).toBe(false)
+    expect(mockSent).toEqual([])
+    expect(mockFeed).toEqual([])
+  })
+})
+
+describe('the warning the day a 4G charge is left open (AGL-4038)', () => {
+  const DUE = {
+    orgId: 'org-1',
+    month: '2026-10',
+    amount: '$10.61',
+    readers: 2,
+    openedAtMs: Date.UTC(2026, 10, 2, 3),
+    turnsOffAtMs: Date.UTC(2026, 10, 16, 3),
+    hostIds: ['host-1', 'host-gone'],
+  }
+
+  it('emails the members who manage billing, by the key, with the amount, the stores and the day 4G turns off', async () => {
+    expect(await sendPosCellularPaymentDueNotice(DUE)).toBe(true)
+    expect(mockSent.map((message) => message['to']).sort()).toEqual(['billing@example.com', 'owner@example.com'])
+    expect(mockSent[0]).toMatchObject({
+      context: 'pos-cellular-payment-due',
+      subject: '4G turns off on November 16, 2026 unless the October 2026 charge is paid',
+    })
+    expect(JSON.parse(String(mockSent[0]['text']))).toEqual({
+      'org.name': 'Acme Builders',
+      'cellular.month': 'October 2026',
+      'cellular.amount': '$10.61',
+      'cellular.readers': '2 Stripe Reader S710s',
+      'cellular.openedOn': 'November 2, 2026',
+      'cellular.turnsOffOn': 'November 16, 2026',
+      // A store deleted since is left out.
+      'cellular.stores': 'Main Street',
+      'cellular.billingUrl': expect.stringMatching(/\/acme\/billing$/),
+    })
+    expect(mockFeed).toEqual([
+      {
+        uids: ['uid-owner', 'uid-billing'],
+        payload: expect.objectContaining({
+          type: 'billing.paymentFailed',
+          level: 'warning',
+          link: '/acme/billing',
+          orgId: 'org-1',
+          title: '4G turns off on November 16, 2026 unless the October 2026 charge is paid',
+          body: expect.stringContaining('before November 16, 2026'),
+        }),
+        options: { skipEmail: true },
+      },
+    ])
+  })
+
+  it('names the days in the workspace’s time zone', async () => {
+    fakeDocs.set('orgs/org-1', { ...mockOrg, timeZone: 'America/Chicago' })
+    await sendPosCellularPaymentDueNotice(DUE)
+    // 03:00 UTC is the evening before in Chicago.
+    expect(JSON.parse(String(mockSent[0]['text']))).toMatchObject({
+      'cellular.openedOn': 'November 1, 2026',
+      'cellular.turnsOffOn': 'November 15, 2026',
+    })
+  })
+
+  it('counts as told when nobody holds "Manage billing", and still puts nothing in anyone else’s feed', async () => {
+    BILLING.clear()
+    try {
+      expect(await sendPosCellularPaymentDueNotice(DUE)).toBe(true)
+      expect(mockSent).toEqual([])
+      expect(mockFeed.flatMap((entry) => entry.uids)).toEqual([])
+    } finally {
+      BILLING.add('uid-owner')
+      BILLING.add('uid-billing')
+    }
+  })
+
+  it('sends a banned account nothing, and says nobody was told', async () => {
+    fakeDocs.set('orgs/org-1', { ...mockOrg, suspendedAt: 1, suspendedReasonCode: 'abuse' })
+    expect(await sendPosCellularPaymentDueNotice(DUE)).toBe(false)
     expect(mockSent).toEqual([])
     expect(mockFeed).toEqual([])
   })

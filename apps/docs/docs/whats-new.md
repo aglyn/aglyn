@@ -27,6 +27,22 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — booking payments and refunds are permissions
+
+- **[Booking permissions](workspace-and-billing/teams-and-roles/custom-roles.md#booking-permissions)** —
+  taking a booking's payment in person and refunding a booking now each have a
+  permission, **Take booking payments in person** and **Refund bookings**. A site's admins
+  and editors keep the first and its admins the second, and a custom role or a
+  per-member override can grant or deny either one.
+
+## October 2026 — a warning before 4G turns off
+
+- **[The date 4G turns off, the day a charge is missed](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  when a month's 4G charge for your card readers doesn't go through, everyone
+  with **Manage billing** gets an email and a console notification that day. They
+  say how much is due and the date 4G turns off for your stores unless the
+  invoice is paid. Pay it on the **Billing** page before then and 4G stays on.
+
 ## October 2026 — 4G for card readers: who turns it on, and unpaid months
 
 - **[Turning on 4G needs Manage billing](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
@@ -41,6 +57,14 @@ for the how-to.
   when a deleted workspace is removed for good partway through a month, that
   month's 4G is charged then, and 4G is turned off.
 
+## October 2026 — Bring my site and everyone's Sequences are permissions
+
+- **[Bring a site in](workspace-and-billing/teams-and-roles/custom-roles.md#ai-permissions)** and
+  **[Manage everyone's Sequences](content-and-data/crm/sequences.md)** — bringing an
+  existing site in, and managing a mailbox or sequence someone else connected, each
+  have a permission now. Owners and admins keep both, and a custom role or a
+  per-member override can grant or deny either one.
+
 ## October 2026 — five more workspace permissions
 
 - **[Workspace permissions](workspace-and-billing/teams-and-roles/custom-roles.md#workspace-permissions)** —
@@ -48,6 +72,14 @@ for the how-to.
   shared media library and deleting its shared records each have a permission now.
   Everyone keeps what their role gave them, and a custom role or a per-member override
   can grant or deny any of them.
+
+## October 2026 — payment methods and shipping apps are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  changing a store's payment methods and connecting its shipping apps now each have a
+  permission, **Manage payment methods** and **Connect shipping apps**. A site's admins
+  keep them, anyone with **Manage orders** still sees both cards, and a custom role or a
+  per-member override can grant or deny either one.
 
 ## October 2026 — editing together follows Edit site content
 

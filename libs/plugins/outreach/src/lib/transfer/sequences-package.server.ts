@@ -45,7 +45,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import type { TransferReferenceKind, TransferRowResult } from '@aglyn/aglyn/data-transfer'
 import { checkEntitlement } from '@aglyn/aglyn/server'
-import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
+import { OUTREACH_MANAGE_ALL_PERMISSION, OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { defaultOutreachRouteDeps } from '../routes/register-routes'
 import type { OutreachRouteDeps } from '../routes/route-deps'
 import type { OutreachRouteCaller } from '../routes/route-gate'
@@ -70,7 +70,15 @@ async function importer(deps: Deps, ctx: TransferResourceContext): Promise<Outre
   if (membership.permissions[OUTREACH_USE_PERMISSION] !== true) return 'Your role does not include Use Sequences.'
   const org = (await deps.gate.readOrg(ctx.orgId)) ?? {}
   if (!checkEntitlement(org, 'outreach')) return "Sequences isn't available to this workspace yet."
-  return { uid: ctx.actorUid, email: null, staff: false, orgId: ctx.orgId, org, isOrgAdmin: membership.isOwner }
+  return {
+    uid: ctx.actorUid,
+    email: null,
+    staff: false,
+    orgId: ctx.orgId,
+    org,
+    // "Manage everyone's Sequences" (AGL-4047), as the routes ask it.
+    isOrgAdmin: membership.permissions[OUTREACH_MANAGE_ALL_PERMISSION] === true,
+  }
 }
 
 /**

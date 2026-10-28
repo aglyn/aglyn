@@ -31,7 +31,7 @@
     "@aglyn/shared-util-tools": "1.0.0-beta.287",
     "@aglyn/shared-util-vendor": "1.0.0-beta.287",
     "mobx-react-lite": "^5.1.0",
-    "react-is": "^19.3.0"
+    "react-is": "^19.3.1"
   },
   "peerDependencies": {
     "react": "^19.2.8"

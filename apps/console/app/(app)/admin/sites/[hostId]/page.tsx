@@ -25,9 +25,12 @@ import { RowActionsMenu } from '@aglyn/shared-ui-jsx/components/row-actions-menu
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   Chip,
+  CircularProgress,
   Link as MuiLink,
+  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -39,7 +42,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { firestoreDocPhase, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { SuperStaffOnly } from '../../../../../components/staff-super-only.component'
@@ -92,11 +95,18 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
 
-  const { data: host } = useFirestoreDoc<any>(
+  const hostRead = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId || 'missing'),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const host = hostRead.data
+  /*
+   * Until the site arrives the cards would state their empty values as facts
+   * — no name, "Not published", 0 published pages — and a site that was only
+   * slow to load read as an empty one (AGL-4089). So the page waits for it.
+   */
+  const hostState = firestoreDocPhase(hostRead)
   // The site names its organization; the URL no longer does (AGL-3378).
   const orgId = String(host?.orgId ?? '')
   // A workspace built for a client hands off on its build's intent (AGL-3958).
@@ -108,6 +118,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
    * from the auth pools, which only a server route can read.
    */
   const [site, setSite] = useState<StaffSiteRow | null>(null)
+  // Whether the row has answered once, so a missing owner is "—" only then.
+  const [siteLoaded, setSiteLoaded] = useState(false)
   const [siteNonce, setSiteNonce] = useState(0)
   useEffect(() => {
     if (!hostId || !user) return undefined
@@ -119,6 +131,9 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
         if (active) setSite((payload?.sites?.[0] as StaffSiteRow | undefined) ?? null)
       })
       .catch(() => undefined)
+      .finally(() => {
+        if (active) setSiteLoaded(true)
+      })
     return () => {
       active = false
     }
@@ -131,11 +146,12 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { widgets: staffSiteWidgets } = useSlotWidgets(['staffSite'])
 
   // Usage counts (AGL-392): screens = pages, media file count, members.
+  // `null` until the counts have answered: a count still loading is not "—" (AGL-4089).
   const [counts, setCounts] = useState<{
     screens: number | null
     media: number | null
     members: number | null
-  }>({ screens: null, media: null, members: null })
+  } | null>(null)
   useEffect(() => {
     if (!hostId) return
     let active = true
@@ -207,9 +223,9 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
-  const stat = (label: string, value: string | number | null) => (
+  const stat = (label: string, value: string | number | null, loading = false) => (
     <Stack>
-      <Typography variant="h5">{value ?? '—'}</Typography>
+      <Typography variant="h5">{loading ? <Skeleton /> : (value ?? '—')}</Typography>
       <Typography variant="caption" color="text.secondary">
         {label}
       </Typography>
@@ -255,7 +271,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             {...newTabLinkProps}
             aria-label={withNewTabHint('Open preview')}
             disabled={!homeId}
-            title={homeId ? undefined : 'No home page is published — preview a page from Content'}
+            title={homeId || hostState !== 'ready' ? undefined : 'No home page is published — preview a page from Content'}
           >
             {'Open preview'}
           </Button>
@@ -285,6 +301,18 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
+          {hostState === 'loading' ? (
+            <Stack role="status" sx={{ alignItems: 'center', py: 6, gap: 2 }}>
+              <CircularProgress />
+              <Typography color="text.secondary">{'Loading this site…'}</Typography>
+            </Stack>
+          ) : hostState === 'error' ? (
+            <Alert severity="warning">
+              {'This site could not be read. Reload the page to try again.'}
+            </Alert>
+          ) : hostState === 'missing' ? (
+            <Alert severity="info">{`No site has the id ${hostId}.`}</Alert>
+          ) : (
           <GridItems
             spacing={3}
             items={[
@@ -451,17 +479,21 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 <Typography variant="caption" color="text.secondary">
                                   {'Owner'}
                                 </Typography>
-                                <AppLink
-                                  href={
-                                    site?.owner
-                                      ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
-                                      : undefined
-                                  }
-                                >
-                                  {site?.owner
-                                    ? (site.owner.email ?? site.owner.displayName ?? site.owner.uid)
-                                    : '—'}
-                                </AppLink>
+                                {siteLoaded ? (
+                                  <AppLink
+                                    href={
+                                      site?.owner
+                                        ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
+                                        : undefined
+                                    }
+                                  >
+                                    {site?.owner
+                                      ? (site.owner.email ?? site.owner.displayName ?? site.owner.uid)
+                                      : '—'}
+                                  </AppLink>
+                                ) : (
+                                  <Skeleton />
+                                )}
                               </Stack>
                               {orgId ? (
                                 <StaffOrgOwnershipTransfer
@@ -528,9 +560,9 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                               sx={{ flexWrap: 'wrap', gap: 2 }}
                             >
                               {stat('Published pages', publishedPages)}
-                              {stat('All pages', counts.screens)}
-                              {stat('Media files (organization)', counts.media)}
-                              {stat('Site members', counts.members)}
+                              {stat('All pages', counts?.screens ?? null, !counts)}
+                              {stat('Media files (organization)', counts?.media ?? null, !counts)}
+                              {stat('Site members', counts?.members ?? null, !counts)}
                               {stat('Storage (MB)', storageMb)}
                             </Stack>
                           </CardDisplay>
@@ -629,6 +661,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
               },
             ]}
           />
+          )}
         </StaffOnly>
       </Container>
       <PhotoLinkDialogOnOpen hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />

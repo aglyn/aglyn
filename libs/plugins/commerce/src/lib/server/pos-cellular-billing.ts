@@ -36,12 +36,14 @@ import {
   closePosCellularPeriod,
   parsePosCellularConfig,
   posCellularChargeCents,
+  posCellularGraceEndsAtMs,
   posCellularMonthBounds,
   posCellularMonthKey,
   posCellularMonthLabel,
   posCellularOverdue,
   posCellularPreviousMonthKey,
   posCellularReadersByWorkspace,
+  posCellularWarningDue,
   POS_CELLULAR_CHARGE_KIND,
   POS_CELLULAR_CHARGES_COLLECTION,
   POS_CELLULAR_READERS_COLLECTION,
@@ -85,12 +87,17 @@ import {
  * told to turn cellular off; a workspace being erased does the same for all
  * of its stores first ({@link posCellularOrgEraser}).
  *
- * ALERT, THEN TURN OFF. A charge left open is asked about each day: paid
- * since, it is settled as paid; voided by staff, as voided. Still unpaid once
- * the grace period (`POS_CELLULAR_GRACE_DAYS`, 14 by default) has run from
- * the day it was left open, 4G is turned off at Stripe for every store of the
- * workspace, the members who manage its billing are emailed and notified,
- * and staff are alerted. Stripe that cannot be asked is never read as unpaid.
+ * WARN, THEN TURN OFF. A charge left open is asked about each day: paid
+ * since, it is settled as paid; voided by staff, as voided. The first time
+ * Stripe says it is still unpaid (the same run that left it open, unless
+ * Stripe could not be asked), the members who manage the workspace's billing
+ * are warned, once (`warnedAtMs`), of the amount and of the day 4G turns off
+ * unless it is paid; paid before then, nothing else is sent. Still unpaid
+ * once the grace period (`POS_CELLULAR_GRACE_DAYS`, 14 by default) has run
+ * from the day it was left open, 4G is turned off at Stripe for every store
+ * of the workspace, the members who manage its billing are emailed and
+ * notified again, and staff are alerted. Stripe that cannot be asked is never
+ * read as unpaid.
  * Paying does not turn 4G back on: the merchant does, once it is paid
  * (`pos-cellular.ts` refuses it until then). Each step is idempotent, so a run
  * that dies half-way is finished by the next.
@@ -125,6 +132,8 @@ export interface PosCellularBillingDeps {
   invoiceStatus?: InvoiceStatus
   /** Tells the workspace 4G was turned off; true once told (or there is nobody to tell). */
   notify?: (notice: import('./pos-cellular-notify').PosCellularTurnedOffNotice) => Promise<boolean>
+  /** Warns the workspace 4G turns off unless the charge is paid; true once told (or there is nobody to tell). */
+  warn?: (notice: import('./pos-cellular-notify').PosCellularPaymentDueNotice) => Promise<boolean>
 }
 
 export interface PosCellularBillingReport {
@@ -138,6 +147,8 @@ export interface PosCellularBillingReport {
   storesGone: number
   /** Open charges paid since, found by asking Stripe. */
   paidLate: number
+  /** Workspaces warned that 4G turns off unless a charge left open is paid. */
+  warned: number
   /** Workspaces whose 4G was turned off for a month unpaid past its grace. */
   turnedOff: number
 }
@@ -401,6 +412,7 @@ export async function runPosCellularBilling(
     deferred: 0,
     storesGone: 0,
     paidLate: 0,
+    warned: 0,
     turnedOff: 0,
   }
   if (!config) return report
@@ -444,17 +456,23 @@ export async function runPosCellularBilling(
     notify:
       deps.notify ??
       (async (notice) => (await import('./pos-cellular-notify')).sendPosCellularTurnedOffNotice(notice)),
+    warn:
+      deps.warn ??
+      (async (notice) => (await import('./pos-cellular-notify')).sendPosCellularPaymentDueNotice(notice)),
   })
   report.paidLate = grace.paidLate
+  report.warned = grace.warned
   report.turnedOff = grace.turnedOff
   return report
 }
 
 /**
- * ALERT, THEN TURN OFF (AGL-4038): every charge left open is asked about at
- * Stripe; paid or voided since, it is settled so; still unpaid past its grace,
- * 4G goes off for the workspace. A charge already suspended is finished if a
- * run died half-way (a store still on, nobody told yet) and settled once paid.
+ * WARN, THEN TURN OFF (AGL-4038): every charge left open is asked about at
+ * Stripe; paid or voided since, it is settled so; still unpaid within its
+ * grace, the workspace is warned once of the day 4G turns off; still unpaid
+ * past it, 4G goes off for the workspace. A charge already suspended is
+ * finished if a run died half-way (a store still on, nobody told yet) and
+ * settled once paid.
  */
 async function enforcePosCellularGrace(context: {
   config: PosCellularConfig
@@ -463,9 +481,11 @@ async function enforcePosCellularGrace(context: {
   turnOff: (configurationId: string) => Promise<boolean>
   invoiceStatus: InvoiceStatus
   notify: NonNullable<PosCellularBillingDeps['notify']>
-}): Promise<{ paidLate: number; turnedOff: number }> {
+  warn: NonNullable<PosCellularBillingDeps['warn']>
+}): Promise<{ paidLate: number; warned: number; turnedOff: number }> {
   const { config, now } = context
   let paidLate = 0
+  let warned = 0
   let turnedOff = 0
   for (const state of ['open', 'suspended'] as const) {
     const snapshot = await chargesRef().where('state', '==', state).limit(200).get()
@@ -486,7 +506,10 @@ async function enforcePosCellularGrace(context: {
       // Stripe could not be asked: never read as unpaid.
       if (!invoice) continue
       if (state === 'open') {
-        if (!posCellularOverdue(stored, config.graceDays, now)) continue
+        if (!posCellularOverdue(stored, config.graceDays, now)) {
+          if (posCellularWarningDue(stored) && (await warnPaymentDue(id, context))) warned += 1
+          continue
+        }
         const claimed = await claimSuspension(id, now)
         if (!claimed) continue
         turnedOff += 1
@@ -506,7 +529,63 @@ async function enforcePosCellularGrace(context: {
       await finishSuspension(id, { ...stored, state: 'suspended', suspendedAtMs: stored.suspendedAtMs ?? now }, context)
     }
   }
-  return { paidLate, turnedOff }
+  return { paidLate, warned, turnedOff }
+}
+
+/**
+ * Claims the warning of an open charge, once: the charge as it stood, or null
+ * when a run already warned of it or it is no longer open. The day its grace
+ * counts from is pinned with the claim, so the day the warning states is the
+ * day the turn-off keeps, even for a charge from before that day was stored.
+ */
+async function claimWarning(id: string, now: number): Promise<PosCellularCharge | null> {
+  const ref = chargesRef().doc(id)
+  return firestore().runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    const charge = snapshot.exists ? (snapshot.data() as PosCellularCharge) : null
+    if (!charge || !posCellularWarningDue(charge)) return null
+    const openedAtMs = Number(charge.openedAtMs ?? charge.updatedAtMs)
+    transaction.set(ref, { warnedAtMs: now, openedAtMs, updatedAtMs: now }, { merge: true })
+    return { ...charge, openedAtMs }
+  })
+}
+
+/**
+ * WARN AT THE START (AGL-4038): the members who manage the workspace's
+ * billing are told the charge is due and the day 4G turns off for its stores
+ * unless it is paid. Claimed before it is sent, so two runs never both send
+ * it; a warning nobody could be sent is released for the next run to try.
+ */
+async function warnPaymentDue(
+  id: string,
+  context: { config: PosCellularConfig; now: number; warn: NonNullable<PosCellularBillingDeps['warn']> },
+): Promise<boolean> {
+  const { config, now } = context
+  const charge = await claimWarning(id, now)
+  if (!charge) return false
+  const told = await (async () => {
+    // The stores that have 4G now, which lose it on that day.
+    const snapshot = await recordsRef().where('orgId', '==', charge.orgId).where('enabled', '==', true).limit(500).get()
+    const hostIds = [
+      ...new Set(
+        (snapshot.docs as unknown as Array<{ data: () => PosCellularReaderRecord }>).map((doc) => doc.data().hostId),
+      ),
+    ]
+    return context.warn({
+      orgId: charge.orgId,
+      month: charge.month,
+      amount: formatOperatorAlertAmount(charge.amountCents),
+      readers: charge.readers,
+      openedAtMs: Number(charge.openedAtMs),
+      turnsOffAtMs: posCellularGraceEndsAtMs(charge, config.graceDays),
+      hostIds,
+    })
+  })().catch((error: unknown) => {
+    console.error(`${LABEL}: the payment-due warning was not sent`, id, error)
+    return false
+  })
+  if (!told) await chargesRef().doc(id).set({ warnedAtMs: null, updatedAtMs: now }, { merge: true })
+  return told
 }
 
 /** Moves an open charge to `suspended`, once: false when a run already did, or it is no longer open. */

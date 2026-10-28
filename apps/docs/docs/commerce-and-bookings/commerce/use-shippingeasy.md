@@ -31,7 +31,8 @@ In ShippingEasy:
 
 The **ShippingEasy** card, on **Products → Shipping & delivery**, sends each paid order to
 your ShippingEasy account and takes each label back, using the API keys from
-[Before you start](#before-you-start). You need to be a site admin.
+[Before you start](#before-you-start). You need the **Connect shipping apps** permission,
+which a site's admins have.
 
 1. In Aglyn, open **Products → Shipping & delivery** and find the **ShippingEasy** card.
 2. Select **Connect ShippingEasy** and paste the API key, API secret and store

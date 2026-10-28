@@ -141,8 +141,9 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       // did not recognize, retired when Site Care mail moved to the support
       // address in AGL-3997), the four Site Care project emails
       // (AGL-3970), the emails of a card reader order from the POS
-      // hardware shop (AGL-4038, `pos-hardware-emails.ts`), and the notice
-      // that 4G was turned off for an unpaid month (AGL-4038,
+      // hardware shop (AGL-4038, `pos-hardware-emails.ts`), and the two
+      // notices of an unpaid month's 4G charge, the warning the day it is
+      // left open and the notice that 4G was turned off (AGL-4038,
       // `pos-cellular-emails.ts`).
       expect(editable.length).toBe(
         36 +

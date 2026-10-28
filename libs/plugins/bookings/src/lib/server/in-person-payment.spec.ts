@@ -218,6 +218,18 @@ describe('the gate', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('asks "Take booking payments in person", so the site’s stamp decides either way (AGL-4047)', async () => {
+    docs.set('hosts/host-1', {
+      memberRoles: { 'staff-1': 'editor', 'viewer-1': 'viewer' },
+      memberPermissions: { 'staff-1': { 'bookings.payments': false }, 'viewer-1': { 'bookings.payments': true } },
+    })
+    const refused = await call({ action: 'start', amountCents: 5000 }, { key: 'k' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toBe('Your role does not include "Take booking payments in person" — ask an organization admin')
+    expect(calls).toHaveLength(0)
+    expect((await call({ action: 'start', amountCents: 5000 }, { token: 'viewer', key: 'k2' })).status).toBe(200)
+  })
+
   it('refuses in live mode until Terminal live mode is on', async () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
     expect(inPersonCardsAvailable()).toBe(false)

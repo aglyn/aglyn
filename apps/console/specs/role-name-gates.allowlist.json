@@ -113,10 +113,6 @@
       "count": 76,
       "kind": "pending"
     },
-    "libs/plugins/ai/src/lib/jobs/ai-job-import-step.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": {
       "count": 4,
       "kind": "not-a-gate",
@@ -132,41 +128,13 @@
       "kind": "not-a-gate",
       "note": "The host roles the AI keys’ presets are tabled for."
     },
-    "libs/plugins/ai/src/lib/server/ai-site-import-route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
     "libs/plugins/ai/src/lib/usage/ai-allotment-alerts.ts": {
       "count": 1,
       "kind": "not-a-gate",
       "note": "Picks who an allotment alert goes to."
     },
-    "libs/plugins/bookings/src/lib/server/booking-manage.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/bookings/src/lib/server/in-person-payment.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/bookings/src/lib/server/refund.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/membership-admin-password.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/membership-admin-remove.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
       "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/payment-methods.ts": {
-      "count": 3,
       "kind": "pending"
     },
     "libs/plugins/commerce/src/lib/server/pos-hardware-admin.ts": {
@@ -185,10 +153,6 @@
     },
     "libs/plugins/commerce/src/lib/server/refund.ts": {
       "count": 3,
-      "kind": "pending"
-    },
-    "libs/plugins/commerce/src/lib/server/shipping-connectors.ts": {
-      "count": 1,
       "kind": "pending"
     },
     "libs/plugins/crm/src/lib/components/settings-section.tsx": {

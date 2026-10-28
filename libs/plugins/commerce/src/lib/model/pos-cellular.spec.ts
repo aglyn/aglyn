@@ -22,6 +22,7 @@ import {
   parsePosCellularConfig,
   posCellularBilledInMonth,
   posCellularChargeCents,
+  posCellularDayLabel,
   posCellularMonthBounds,
   posCellularMonthKey,
   posCellularGraceEndsAtMs,
@@ -31,6 +32,7 @@ import {
   posCellularReaderMonthlyCents,
   posCellularReadersByWorkspace,
   posCellularView,
+  posCellularWarningDue,
   POS_CELLULAR_DEFAULT_BILLING_COST_BPS,
   POS_CELLULAR_DAY_MS,
   POS_CELLULAR_DEFAULT_BILLING_COST_FIXED_CENTS,
@@ -226,5 +228,40 @@ describe('the grace period before 4G is turned off (AGL-4038)', () => {
     for (const state of ['paid', 'suspended', 'voided', 'failed'] as const) {
       expect(posCellularOverdue({ ...open, state }, 14, OPENED + 60 * POS_CELLULAR_DAY_MS)).toBe(false)
     }
+  })
+})
+
+describe('the warning, the day a charge is left open (AGL-4038)', () => {
+  const OPENED = Date.UTC(2026, 10, 2, 9)
+  const open = { state: 'open' as const, warnedAtMs: null, openedAtMs: OPENED, updatedAtMs: OPENED }
+
+  it('is owed once, for an open charge only, and never for one made as the workspace was erased', () => {
+    expect(posCellularWarningDue(open)).toBe(true)
+    expect(posCellularWarningDue({ ...open, warnedAtMs: OPENED })).toBe(false)
+    expect(posCellularWarningDue({ ...open, final: true })).toBe(false)
+    for (const state of ['charging', 'paid', 'suspended', 'voided', 'failed', 'no-customer'] as const) {
+      expect(posCellularWarningDue({ ...open, state })).toBe(false)
+    }
+  })
+
+  it('names the day the grace runs out, in the workspace’s time zone', () => {
+    const endsAt = posCellularGraceEndsAtMs(open, 14)
+    expect(posCellularDayLabel(endsAt)).toBe('November 16, 2026')
+    expect(posCellularDayLabel(endsAt, 'America/Chicago')).toBe('November 16, 2026')
+    // At the edge of a day: 03:00 UTC is still the evening before in Chicago,
+    // and already the next morning in Tokyo.
+    const lateOpened = { ...open, openedAtMs: Date.UTC(2026, 10, 2, 3) }
+    const lateEnds = posCellularGraceEndsAtMs(lateOpened, 14)
+    expect(posCellularDayLabel(lateEnds)).toBe('November 16, 2026')
+    expect(posCellularDayLabel(lateEnds, 'America/Chicago')).toBe('November 15, 2026')
+    const eveningOpened = { ...open, openedAtMs: Date.UTC(2026, 10, 2, 20) }
+    expect(posCellularDayLabel(posCellularGraceEndsAtMs(eveningOpened, 14), 'Asia/Tokyo')).toBe('November 17, 2026')
+    // The last instant of the grace is still the stated day; the turn-off is due from then.
+    expect(posCellularOverdue(open, 14, endsAt - 1)).toBe(false)
+    expect(posCellularOverdue(open, 14, endsAt)).toBe(true)
+  })
+
+  it('reads a zone the runtime cannot format in as UTC, rather than throwing', () => {
+    expect(posCellularDayLabel(Date.UTC(2026, 10, 16, 1), 'Not/AZone')).toBe('November 16, 2026')
   })
 })

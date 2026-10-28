@@ -107,7 +107,7 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
     <CardDisplay
       header={'Card readers to set up'}
       subheader={'Bought in person, ready for your store'}
-      help={pluginDocsHelp('posHardware', { anchor: '#bought-from-us-in-person' })}
+      help={pluginDocsHelp('posHardware', { anchor: '#card-readers-to-set-up' })}
       contentGutterX
       contentGutterY
     >

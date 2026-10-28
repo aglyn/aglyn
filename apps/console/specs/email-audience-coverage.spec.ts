@@ -90,11 +90,12 @@ const PLATFORM_SENDERS: Record<string, string> = {
     'sign-up invitation goes to someone who bought a reader from Aglyn in ' +
     'person with no account yet: again Aglyn writing to its own buyer.',
   [join('libs', 'plugins', 'commerce', 'src', 'lib', 'server', 'pos-cellular-notify.ts')]:
-    'The notice that 4G was turned off for a workspace’s card readers ' +
-    "because a month's 4G charge stayed unpaid (AGL-4038). The platform " +
-    "billed the charge and the recipients are Aglyn's customers, the " +
-    'workspace members who manage its billing — never a site visitor or ' +
-    'contact — so the mail is platform mail, metered as platform.',
+    'The two notices of a month’s unpaid 4G charge for a workspace’s card ' +
+    'readers (AGL-4038): the warning the day it is left open, naming the ' +
+    'day 4G turns off unless it is paid, and the notice that 4G was turned ' +
+    "off. The platform billed the charge and the recipients are Aglyn's " +
+    'customers, the workspace members who manage its billing — never a site ' +
+    'visitor or contact — so the mail is platform mail, metered as platform.',
   [join('apps', 'tenant', 'app', 'api', '_legal-intake', 'acknowledge.ts')]:
     'DMCA and abuse acknowledgements. The recipient is the REPORTER in ' +
     "Aglyn's own legal process, not the site's customer, and the mail is " +
