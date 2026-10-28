@@ -66,6 +66,43 @@ uses your site's theme colors. Order emails can use these tokens:
 | `{{refund.amount}}`, `{{refund.summary}}`, `{{refund.note}}` | refunded | The amount, the items refunded by name, and whether the order is fully refunded |
 | `{{cancel.note}}` | canceled | A line for paid orders telling the customer how to reach you; empty for unpaid ones |
 
+## Who on your side is told {#who-is-told}
+
+The emails above go to your customer. Your side is notified of a new order in two
+ways:
+
+| Who | What they get | For which orders |
+| -- | -- | -- |
+| Everyone who is an **Admin** or **Editor** of the site | A **New order** notification in the console, and a copy by email | Orders from the cart, from a product's **Buy now** button, and from a draft order's payment link |
+| The workspace owner | The **New sale** email, sent to the email address they sign in with | Orders from a product's **Buy now** button |
+
+The workspace's owner and admins are **Admin** on every site, so the notification
+reaches them too. **Authors** and **Viewers** aren't told. For a **Buy now** order,
+the owner gets the **New sale** email instead of the notification's email copy, so
+the sale doesn't reach their inbox twice. The notification still shows in their
+console.
+
+Each person gets the notification as their own notification settings say. Out of
+the box, **New order** arrives in the console and by email. The same people also
+get a **New order** notification when a buyer asks for a return, when a chargeback
+is decided, and when a delivery address is outside your local delivery zones.
+
+### Turning them off {#switch-off-team-notices}
+
+**To turn off the notification**, each person changes their own settings; nobody
+can switch it off for someone else. On **Notifications** → **Settings**, under
+**What you are told about**, open **Forms & bookings** and switch **New order** off
+under **In console**, **Email**, or both. To stop it for one site only, pick the
+site in **Workspace or site** under **One workspace or one site**, open
+**Forms & bookings** there, and set **New order** to **Off** for either channel. Switching
+**New order** off also stops the return, chargeback and delivery-zone notices,
+because they are the same kind of notification. See
+[Notification settings](../../getting-started/console-tour.md#notification-settings).
+
+**The New sale email** can't be turned off: it has no switch, and every **Buy now**
+order sends it to the workspace owner. You can change its wording and colors under
+**Emails**, like your other site emails.
+
 ## The order status page {#order-status-page}
 
 Every order email links to `/order-status` on your site, with a private link

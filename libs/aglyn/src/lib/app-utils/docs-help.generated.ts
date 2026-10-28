@@ -658,7 +658,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#org-marketing-overview', '#org-overlays', '#related'],
   marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
-  orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
+  orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#who-is-told', '#switch-off-team-notices', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
   ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#when-an-endpoint-is-down', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   ownShippingAccounts: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
