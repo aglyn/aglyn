@@ -50,6 +50,12 @@ const LOOKUP_WINDOW_MS = 10 * 60 * 1000
  *            account, who is invited to sign up (`pos-hardware-attach.ts`).
  *            Idempotency-Key required; audited.
  *   detach   put an attached sale back on the To attach list. Audited.
+ *   serials  the serial numbers of the sale's readers, scanned or typed at
+ *            the sale, so the order sets itself up when the buyer registers
+ *            them (`pos-hardware-readers.ts`).
+ *   register-at-booth  register a reader to the buyer's chosen store by the
+ *            code it shows, while they are there. Idempotency-Key required;
+ *            audited.
  *
  * `status` is asked of whoever works the register; everything else needs
  * "Sell at the register" (`posSell`) on the seller store, since it is part
@@ -107,6 +113,45 @@ export const posHardwareSaleHandler: PluginApiHandler = async (req, res) => {
           ],
         })
         return res.status(200).json(found)
+      }
+      case 'serials':
+      case 'register-at-booth': {
+        const readers = await import('./pos-hardware-readers')
+        try {
+          if (action === 'serials') {
+            const saved = await readers.recordPosHardwareSerials({
+              config,
+              registerOrderId: typeof body['registerOrderId'] === 'string' ? body['registerOrderId'] : null,
+              orderId: typeof body['orderId'] === 'string' ? body['orderId'] : null,
+              serials: body['serials'],
+            })
+            return res.status(200).json({ ok: true, serials: saved.serials, recorded: saved.recorded })
+          }
+          if (!posIdempotencyKey(req)) return res.status(400).json({ error: 'Missing Idempotency-Key' })
+          const registerOrderId = typeof body['registerOrderId'] === 'string' ? body['registerOrderId'] : ''
+          const orderId = registerOrderId
+            ? (await import('./pos-hardware')).posHardwareInPersonOrderId(config.sellerHostId, registerOrderId)
+            : String(body['orderId'] ?? '')
+          const { order, readerId } = await readers.registerPosHardwareAtBooth({
+            config,
+            orderId,
+            registrationCode: body['registrationCode'],
+            label: body['label'],
+            uid: staff.uid,
+          })
+          await audit(
+            staff,
+            'pos-hardware-register-at-booth',
+            { readerId, hostId: order.hostId, orgId: order.orgId },
+            orderId,
+          )
+          return res.status(200).json({ ok: true, readerId, order: toAttachView(orderId, order) })
+        } catch (error) {
+          if (error instanceof readers.PosHardwareReaderRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
       }
       case 'attach':
       case 'detach': {
@@ -186,6 +231,12 @@ export function toAttachView(id: string, order: PosHardwareOrder) {
         : null
       : (order.contactEmail ?? null),
     attached: order.attachment?.state === 'attached',
+    /** Attached with the buyer's store chosen: a reader can be registered to it here. */
+    storeChosen: order.attachment?.state === 'attached' && Boolean(order.hostId),
+    /** Readers on the sale, and how many have a serial or are set up. */
+    readers: (order.units ?? []).length,
+    serialsTaken: (order.units ?? []).filter((unit) => unit.serialNumber).length,
+    readersSetUp: (order.units ?? []).filter((unit) => unit.readerId).length,
     /** A buyer with an account and no workspace yet. */
     awaitingWorkspace: Boolean(order.attachment?.uid),
     /** A buyer with no account yet, invited to sign up. */

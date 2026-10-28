@@ -79,6 +79,13 @@ export async function authorizePosStaff(
    * who may buy hardware without the register.
    */
   admits: (permissions: Readonly<Record<string, boolean | undefined>>) => boolean = worksPosRegister,
+  /**
+   * `planRequired: false` admits a workspace whose plan does not include the
+   * point of sale, for the one read that must tell such a workspace what it
+   * needs first: a card reader it bought in person, waiting for that plan
+   * (AGL-4038). Everything that acts still asks the plan.
+   */
+  options: { planRequired?: boolean } = {},
 ): Promise<PosStaffGate> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -108,7 +115,7 @@ export async function authorizePosStaff(
     return { ok: false, status: 403, error: posPermissionRefusal(permission) }
   }
   const ownerOrg = await getOrgForHost(hostId)
-  if (!Aglyn.checkEntitlement(ownerOrg?.org as any, 'pos')) {
+  if (options.planRequired !== false && !Aglyn.checkEntitlement(ownerOrg?.org as any, 'pos')) {
     return { ok: false, status: 403, error: 'POS requires the Pro plan or above' }
   }
   return {

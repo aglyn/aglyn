@@ -19,7 +19,8 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubSections } from '@aglyn/shared-ui-next'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
+import { Stack } from '@mui/material'
 import {
   COMMERCE_SETTINGS_PAGE_ZONES,
   type CommerceConsoleSectionId,
@@ -49,6 +50,12 @@ import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
 import PosDevicesCard from './console/pos-devices-card.component'
 import PosHardwareCard from './console/pos-hardware-card.component'
+
+/**
+ * Card readers the workspace bought in person, waiting to be set up
+ * (AGL-4038): its own chunk, drawn only while there is one.
+ */
+const PosHardwareWaitingCard = lazy(() => import('./console/pos-hardware-waiting-card.component'))
 import { holdsPosPermission, posPermissionRefusal } from '../model/plugin-permissions'
 import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
@@ -276,7 +283,18 @@ function sectionBody(
       ])
     case 'pos':
       return settingsPage(section, hostId, [
-        <RegistersCard key="registers" hostId={hostId} />,
+        // A reader bought in person waits at the top until it is set up
+        // (AGL-4038), in the registers' own grid cell so an empty one
+        // leaves no gap.
+        <Stack key="registers" spacing={3}>
+          <Suspense fallback={null}>
+            <PosHardwareWaitingCard
+              hostId={hostId}
+              {...(pos.canSetUpDevices ? {} : { devicesBlockedReason: posPermissionRefusal('posDevices') })}
+            />
+          </Suspense>
+          <RegistersCard hostId={hostId} />
+        </Stack>,
         <PosStaffPinsCard key="pins" hostId={hostId} />,
         // A register's printers, cash drawer and status (AGL-3619), one card
         // per register, after the list that names them.

@@ -131,6 +131,39 @@ export function posHardwareCheckout(
   })
 }
 
+/** A reader the workspace bought in person, waiting to be set up (AGL-4038). */
+export interface WaitingReaderOrder extends PosHardwareOrderRow {
+  /** The store it is for; empty while the buyer has still to choose. */
+  hostId: string
+  /** Readers whose serial was taken at the sale: they set themselves up. */
+  serialsTaken: number
+}
+
+export interface WaitingReaders {
+  posPlan: boolean
+  stores: Array<{ hostId: string; name: string; hasLocation: boolean; setupUrl: string }>
+  orders: WaitingReaderOrder[]
+}
+
+export function posHardwareWaiting(user: User, hostId: string) {
+  return sendPosHardwareRequest<WaitingReaders>(user, SHOP, { method: 'POST', body: { action: 'waiting', hostId } })
+}
+
+/** Chooses the store (`hostId`) a reader bought in person is for. */
+export function posHardwareChooseStore(user: User, hostId: string, orderId: string) {
+  return sendPosHardwareRequest<{ ok: true; order: PosHardwareOrderRow }>(user, SHOP, {
+    method: 'POST',
+    body: { action: 'choose-store', hostId, orderId },
+  })
+}
+
+export function posHardwareMarkSetUp(user: User, hostId: string, orderId: string) {
+  return sendPosHardwareRequest<{ ok: true; order: PosHardwareOrderRow }>(user, SHOP, {
+    method: 'POST',
+    body: { action: 'mark-set-up', hostId, orderId },
+  })
+}
+
 /** An order as the staff page lists it. */
 export interface StaffHardwareOrderRow extends Omit<PosHardwareOrderRow, 'shippingCents' | 'shippingLabel'> {
   orgId: string

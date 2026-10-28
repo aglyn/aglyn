@@ -10551,6 +10551,20 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hardwareOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "attachment.state",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "createdAtMs",
           "order": "DESCENDING"
         }
@@ -10980,6 +10994,20 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "hardwareOrders",
+      "fieldPath": "serialNumbers",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
     {
       "collectionGroup": "hardwareOrders",
       "fieldPath": "createdBy",

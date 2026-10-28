@@ -19,6 +19,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { authorizePosStaff, posRequestBody, type PosStaff } from './pos-auth'
 import { revokePosDisplays } from './pos-display'
+import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
 import { posStripe, posStripeErrorMessage, posStripeTestMode, posTerminalAvailable } from './pos-stripe'
 import {
   ensurePosTerminalLocation,
@@ -130,23 +131,59 @@ async function registerReader(
   body: Record<string, any>,
   res: Parameters<PluginApiHandler>[1],
 ) {
-  if (!posTerminalAvailable()) {
-    return res.status(409).json({ error: 'Card readers are not available yet.' })
-  }
-  const registrationCode = String(body['registrationCode'] ?? '').trim()
-  if (!/^[A-Za-z0-9-]{3,64}$/.test(registrationCode)) {
-    return res.status(400).json({ error: 'Enter the code the reader shows on its screen.' })
-  }
-  const label = String(body['label'] ?? '').trim().slice(0, 60) || 'Card reader'
   const registerId = String(body['registerId'] ?? '')
   if (registerId && !(await registerExists(staff.hostId, registerId))) {
     return res.status(404).json({ error: 'Unknown register' })
   }
-  const host = await firebaseAdmin.app().firestore().collection('hosts').doc(staff.hostId).get()
-  const address = body['address'] as PosTerminalAddress | undefined
-  const location = await ensurePosTerminalLocation({
+  const registered = await registerPosTerminalReader({
     hostId: staff.hostId,
     orgId: staff.orgId,
+    uid: staff.uid,
+    registrationCode: body['registrationCode'],
+    label: body['label'],
+    ...(registerId ? { registerId } : {}),
+    ...(body['address'] ? { address: body['address'] as PosTerminalAddress } : {}),
+  })
+  if ('error' in registered) return res.status(registered.status).json({ error: registered.error })
+  return res.status(200).json({ reader: { id: registered.id, ...registered.reader } })
+}
+
+/**
+ * Registers a reader to a store by the code it shows: the store's Stripe
+ * Terminal Location (made from `address` when the store has none), the
+ * reader at Stripe, and `hosts/{hostId}/terminalReaders/{id}`. The POS
+ * devices card's Add card reader, and the platform's own register setting a
+ * reader up for the store of the person who just bought it (AGL-4038).
+ *
+ * A reader whose serial number was taken when it was sold in person is
+ * found on its hardware order, which moves on to Set up (AGL-4038,
+ * `pos-hardware-readers.ts`); that never fails the registration.
+ */
+export async function registerPosTerminalReader(input: {
+  hostId: string
+  orgId: string
+  uid: string
+  registrationCode: unknown
+  label?: unknown
+  registerId?: string
+  address?: PosTerminalAddress
+}): Promise<
+  { ok: true; id: string; reader: PosTerminalReader } | { ok: false; status: number; error: string }
+> {
+  if (!posTerminalAvailable()) {
+    return { ok: false, status: 409, error: 'Card readers are not available yet.' }
+  }
+  const registrationCode = String(input.registrationCode ?? '').trim()
+  if (!/^[A-Za-z0-9-]{3,64}$/.test(registrationCode)) {
+    return { ok: false, status: 400, error: 'Enter the code the reader shows on its screen.' }
+  }
+  const label = String(input.label ?? '').trim().slice(0, 60) || 'Card reader'
+  const registerId = input.registerId ?? ''
+  const host = await firebaseAdmin.app().firestore().collection('hosts').doc(input.hostId).get()
+  const address = input.address
+  const location = await ensurePosTerminalLocation({
+    hostId: input.hostId,
+    orgId: input.orgId,
     displayName: String(host.get('name') ?? host.get('title') ?? 'Store'),
     ...(address
       ? {
@@ -161,7 +198,7 @@ async function registerReader(
         }
       : {}),
   })
-  if ('error' in location) return res.status(location.status).json({ error: location.error })
+  if ('error' in location) return { ok: false, status: location.status, error: location.error }
   // Not keyed: a registration code is single-use at Stripe, which is the
   // dedupe — a second press with the same code is refused there, and no
   // other store can ever register a reader this one already holds.
@@ -170,18 +207,20 @@ async function registerReader(
       registration_code: registrationCode,
       label,
       location: location.locationId,
-      'metadata[orgId]': staff.orgId,
-      'metadata[hostId]': staff.hostId,
+      'metadata[orgId]': input.orgId,
+      'metadata[hostId]': input.hostId,
       ...(registerId ? { 'metadata[registerId]': registerId } : {}),
     },
   })
   if (!created.ok || !created.body?.id) {
-    return res.status(400).json({
+    return {
+      ok: false,
+      status: 400,
       error: posStripeErrorMessage(
         created.body,
         'That code did not register a reader. Check the code on the reader and try again.',
       ),
-    })
+    }
   }
   const reader: PosTerminalReader = {
     label,
@@ -192,10 +231,24 @@ async function registerReader(
     status: String(created.body.status ?? 'offline'),
     livemode: Boolean(created.body.livemode),
     createdAtMs: Date.now(),
-    createdBy: staff.uid,
+    createdBy: input.uid,
   }
-  await readersRef(staff.hostId).doc(String(created.body.id)).set(reader)
-  return res.status(200).json({ reader: { id: String(created.body.id), ...reader } })
+  const id = String(created.body.id)
+  await readersRef(input.hostId).doc(id).set(reader)
+  if (reader.serialNumber && parsePosHardwareInPersonConfig(process.env)) {
+    try {
+      await (await import('./pos-hardware-readers')).matchRegisteredPosHardwareReader({
+        hostId: input.hostId,
+        orgId: input.orgId,
+        uid: input.uid,
+        readerId: id,
+        serialNumber: reader.serialNumber,
+      })
+    } catch (error) {
+      console.error('[pos-readers] the hardware order was not matched', id, error)
+    }
+  }
+  return { ok: true, id, reader }
 }
 
 async function updateReader(

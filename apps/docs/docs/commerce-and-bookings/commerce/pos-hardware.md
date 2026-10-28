@@ -200,6 +200,35 @@ card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
 **Who can buy:** a member with the **Buy point of sale hardware** permission for
 the site, on a plan that includes POS.
 
+### Bought from us in person {#bought-from-us-in-person}
+
+At an event, Aglyn may sell you a reader in person. You pay at Aglyn's register,
+take the reader with you, and the order joins your workspace:
+
+- **If you have an account**, Aglyn's staff look you up by your email address,
+  your name or your workspace's name, and attach the reader to the workspace you
+  choose, and to a store when you pick one.
+- **If you don't have an account yet**, you get an email inviting you to create
+  one with the same address. Once you create your workspace, the reader is in it.
+  There is nothing to accept.
+
+The reader then waits on **Products → Point of sale**, in a **Card readers to set
+up** card, which says what it still needs:
+
+1. **A plan that includes the point of sale.** A reader takes payments at the
+   register, so the card asks you to add it first, with a link to the plans.
+2. **The store it is for**, when nobody chose one at the event. Pick it under
+   **Which store is it for?** and select **Choose**.
+3. **Adding it on the store's POS devices card** with the pairing code it shows,
+   as in [Setting one up](#card-readers). The first reader on a store asks for
+   the store's address.
+
+If Aglyn's staff took the reader's serial number when you bought it, the order
+moves to **Set up** by itself as soon as you add the reader. Otherwise, or for a
+Stripe Reader M2 you pair by Bluetooth, select **Mark set up** when it is done.
+Staff can also add the reader to your store for you at the event, by its pairing
+code, while you are there.
+
 ### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
 
 When a workspace is

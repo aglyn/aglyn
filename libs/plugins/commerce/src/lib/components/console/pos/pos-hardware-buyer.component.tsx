@@ -40,7 +40,9 @@ import { PosHardwareRequestError } from './pos-hardware-api'
 import {
   posHardwareAttach,
   posHardwareFindBuyer,
+  posHardwareRegisterAtBooth,
   posHardwareSaleStatus,
+  posHardwareSerials,
   posHardwareToAttach,
   type BuyerChoice,
   type BuyerFindResult,
@@ -129,7 +131,7 @@ function AttachDialog(props: {
   hostId: string
   target: { registerOrderId: string } | { orderId: string; row: ToAttachRow }
   onClose: () => void
-  onAttached: (message: string) => void
+  onAttached: (message: string, storeChosen: boolean) => void
   notify: Notify
 }) {
   const { user, hostId, target, onClose, onAttached, notify } = props
@@ -173,6 +175,7 @@ function AttachDialog(props: {
             : 'email' in choice
               ? 'Invitation sent. The card reader joins their workspace when they sign up.'
               : 'Attached to their account. It joins the workspace they create.',
+        'hostId' in choice && Boolean(choice.hostId),
       )
     } catch (caught) {
       notify(caught instanceof PosHardwareRequestError ? caught.message : 'The card reader could not be attached', 'warning')
@@ -327,6 +330,93 @@ function ToAttachDialog(props: {
 }
 
 /**
+ * The sale's readers onto the buyer's store (AGL-4038): their serial numbers,
+ * scanned or typed, so each sets itself up when the buyer adds it; and, with
+ * the buyer there and their store chosen, registering it to that store now
+ * by the code it shows.
+ */
+function SaleReaders(props: {
+  user: User
+  hostId: string
+  saleOrderId: string
+  storeChosen: boolean
+  notify: Notify
+}) {
+  const { user, hostId, saleOrderId, storeChosen, notify } = props
+  const [serials, setSerials] = useState('')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [attemptKey] = useState(newKey)
+  const run = async (work: () => Promise<string>) => {
+    setBusy(true)
+    try {
+      notify(await work(), 'success')
+    } catch (caught) {
+      notify(caught instanceof PosHardwareRequestError ? caught.message : 'That did not work. Try again.', 'warning')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const list = serials
+    .split(/[\s,;]+/)
+    .map((serial) => serial.trim())
+    .filter(Boolean)
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+        <TextField
+          size="small"
+          label="Reader serial numbers"
+          helperText="Scan or type each reader's serial. It sets itself up when the buyer adds it."
+          value={serials}
+          onChange={(event) => setSerials(event.target.value)}
+          sx={{ flex: 1 }}
+        />
+        <Button
+          disabled={busy || !list.length}
+          onClick={() =>
+            void run(async () => {
+              await posHardwareSerials(user, { hostId, registerOrderId: saleOrderId, serials: list })
+              return list.length === 1 ? 'Serial number saved' : 'Serial numbers saved'
+            })
+          }
+        >
+          {'Save'}
+        </Button>
+      </Stack>
+      {storeChosen ? (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+          <TextField
+            size="small"
+            label="Code on the reader"
+            helperText="Register it to the buyer's store now, while they are here."
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <Button
+            disabled={busy || code.trim().length < 3}
+            onClick={() =>
+              void run(async () => {
+                await posHardwareRegisterAtBooth(user, attemptKey, {
+                  hostId,
+                  registerOrderId: saleOrderId,
+                  registrationCode: code.trim(),
+                })
+                setCode('')
+                return 'Reader registered to their store'
+              })
+            }
+          >
+            {'Register'}
+          </Button>
+        </Stack>
+      ) : null}
+    </Stack>
+  )
+}
+
+/**
  * Selling a card reader at the platform's own store's register (AGL-4038):
  * on a sale that has one, the buyer is attached here, and every reader sold
  * without one waits on the To attach list. Draws nothing on any store but
@@ -338,7 +428,9 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
   const [dialog, setDialog] = useState<
     null | { kind: 'list' } | { kind: 'sale' } | { kind: 'entry'; row: ToAttachRow }
   >(null)
-  const [attached, setAttached] = useState<{ orderId: string; message: string } | null>(null)
+  const [attached, setAttached] = useState<{ orderId: string; message: string; storeChosen: boolean } | null>(
+    null,
+  )
 
   useEffect(() => {
     let live = true
@@ -366,6 +458,15 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
           {attachedHere?.message ?? 'This sale has a card reader. Attach it to the buyer’s workspace.'}
         </Alert>
       ) : null}
+      {saleOrderId ? (
+        <SaleReaders
+          user={user}
+          hostId={hostId}
+          saleOrderId={saleOrderId}
+          storeChosen={Boolean(attachedHere?.storeChosen)}
+          notify={notify}
+        />
+      ) : null}
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Chip size="small" variant="outlined" label="Card reader sales" />
         <Button size="small" onClick={() => setDialog({ kind: 'list' })}>
@@ -388,8 +489,8 @@ function PosHardwareBuyer(props: PosHardwareBuyerProps) {
           target={{ registerOrderId: saleOrderId }}
           notify={notify}
           onClose={() => setDialog(null)}
-          onAttached={(message) => {
-            setAttached({ orderId: saleOrderId, message })
+          onAttached={(message, storeChosen) => {
+            setAttached({ orderId: saleOrderId, message, storeChosen })
             setDialog(null)
             notify(message, 'success')
           }}
