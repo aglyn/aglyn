@@ -321,11 +321,12 @@ registerPluginJob({
     if (!process.env.STRIPE_SECRET_KEY || !process.env.POS_CELLULAR_MONTHLY_COST_CENTS) return
     const { runPosCellularBilling } = await import('./server/pos-cellular-billing')
     const report = await runPosCellularBilling(gate)
-    if (report.workspaces || report.storesGone) {
+    if (report.workspaces || report.storesGone || report.warned || report.turnedOff || report.paidLate) {
       console.info(
         `commerce: 4G for ${report.month} — ${report.paid} paid, ${report.open} left open, ` +
           `${report.failed} not reached, ${report.unbillable} not billable, ${report.deferred} deferred, ` +
-          `${report.storesGone} deleted stores turned off`,
+          `${report.storesGone} deleted stores turned off; unpaid charges: ${report.warned} warned, ` +
+          `${report.paidLate} paid since, ${report.turnedOff} turned off`,
       )
     }
   },

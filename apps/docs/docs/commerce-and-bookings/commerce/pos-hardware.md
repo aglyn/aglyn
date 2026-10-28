@@ -103,12 +103,17 @@ reader, and you agree to it before 4G turns on.
   charged for each S710 that had 4G at any time in the month before.
   Turning 4G off stops the charge from the next month.
 - **If a charge isn't paid.** It stays open on your workspace's **Billing**
-  page. If it's still unpaid after a grace period (two weeks unless your
-  platform sets a different one), 4G is turned off for all of your
-  workspace's stores, and everyone who manages billing gets an email. Your
-  readers keep working on Wi-Fi or Ethernet. To get 4G back, pay the open
-  invoice on the **Billing** page, then select **Turn on 4G** again for each
-  store. It doesn't come back on by itself.
+  page, and the same day everyone with the workspace's **Manage billing**
+  permission gets an email and a console notification. They say how much is due and the date 4G turns off
+  for your stores, in your workspace's time zone, unless the invoice is paid.
+  The grace period is two weeks unless your platform sets a different one.
+  Pay it on the **Billing** page before that date and 4G stays on, with
+  nothing else to do.
+- **If it's still unpaid on that date.** 4G is turned off for all of your
+  workspace's stores, and everyone with **Manage billing** gets another email
+  and notification. Your readers keep working on Wi-Fi or Ethernet. To get 4G
+  back, pay the open invoice on the **Billing** page, then select **Turn on
+  4G** again for each store. It doesn't come back on by itself.
 - **If you delete the workspace.** When the workspace is removed for good,
   after the waiting period, 4G is turned off. The month it's removed in is
   charged then, for each S710 that had 4G during that month, along with the
