@@ -63,7 +63,9 @@ import {
 } from '../runtime/assist-answer-cache'
 import {
   docsGroundingBlock,
+  docsLookupNeedsEnglish,
   retrieveDocsSections,
+  type ScoredSection,
 } from '@aglyn/aglyn/app-utils/docs-retrieval'
 import {
   composeDocsLinksAnswer,
@@ -115,6 +117,18 @@ import {
   visibleAssistText,
   withAssistOpenDraftAction,
 } from './assist-view-context'
+import {
+  assistJobsHere,
+  assistWorkspaceBlock,
+  readAssistOpenJobs,
+  type AssistOpenJob,
+} from './assist-jobs-context'
+import {
+  ASSIST_DOCS_QUERY_INPUT_CHARS,
+  ASSIST_DOCS_QUERY_MAX_TOKENS,
+  ASSIST_DOCS_QUERY_SYSTEM,
+  parseAssistDocsQuery,
+} from './assist-docs-query'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 // By its own entry point rather than the barrel (AGL-2903), for the reason
 // `isRefusedIdToken` is: this route's spec replaces the barrel with a
@@ -205,7 +219,9 @@ import {
  * answers PLUS page-context awareness (level 2 — the current route/host is
  * injected so the assistant can walk the user through the view they are
  * on). Free orgs get level 1 only: docs-grounded answers and deep links;
- * any client-sent page context is deliberately dropped.
+ * any client-sent page context is deliberately dropped. Every tier is told
+ * its plan by name and, where AI jobs exist, the workspace's open ones
+ * (AGL-4075); a job on the site the page named links its page there.
  *
  * Streaming: the route re-emits the provider's stream as simplified
  * `data: {type:'delta',text}` events, then one `{type:'done', exchangeId,
@@ -222,18 +238,20 @@ import {
  * thinking plus answer together, so leaving it off the request would spend
  * output-priced thinking tokens on "how do I publish a screen", stall the
  * stream behind a silent think (display defaults to `omitted`, i.e. empty
- * thinking blocks), and truncate the answer inside the same 1024-token
- * ceiling. `effort: low` is the documented posture for a scoped chat
- * workload; both are asserted in the spec so a silent default change fails.
+ * thinking blocks), and truncate the answer inside the same 2,048-token
+ * ceiling (1,024 until AGL-4075). `effort: low` is the documented posture for
+ * a scoped chat workload; both are asserted in the spec so a silent default
+ * change fails.
  *
- * Prompt caching: the system array is ordered stable → volatile across FIVE
+ * Prompt caching: the system array is ordered stable → volatile across SIX
  * blocks, with breakpoints after the first two.
  *
  *   1. static prompt        [breakpoint]  identical everywhere
  *   2. screen description   [breakpoint]  identical per ROUTE, any tenant
  *   3. product brand                      the org's name for the product
- *   4. request facts                      workspace, plan, host, path
- *   5. docs retrieval                     follows the question
+ *   4. workspace                          its plan and open AI jobs (AGL-4075)
+ *   5. request facts                      workspace, host, path (paid)
+ *   6. docs retrieval                     follows the question
  *
  * On the edit and build rungs a SITE block (AGL-3661) follows the stable
  * blocks: the business profile, status and remembered preferences of the
@@ -375,6 +393,10 @@ Rules:
 - Be concise and task-focused: answer the question, give the steps, link the source. Skip preamble.
 - If the question is not about the product, say so briefly and point the user back to product topics.
 - If you do not know, say so and suggest contacting support from the Support page rather than guessing.
+- A feature exists only when the documentation sections or the console page description given to you say so. When neither does, say you cannot confirm it exists rather than describing how it might work.
+- Right-to-left layout is not supported yet: every site is laid out left to right, including in Arabic, Hebrew, Persian and Urdu. Never say otherwise.
+- This chat takes text only. You cannot receive or open files, images or screenshots, and none can be attached here. When something needs a file, tell the user to upload it on the site's Media page.
+- Answer in the language the user wrote in. The documentation is in English: link it as given, but write your answer in the user's language.
 - The product's interface calls a site's pages "pages", never "screens". Routes, tools, fields and ids still say "screen" (a screenId, /screens), but always say "page" to the user.
 
 Guiding from the current page:
@@ -766,10 +788,10 @@ function buildViewBlock(
     sanitiseId(String(org['slug'] ?? '')) ||
     (ORGLESS_PATH_SEGMENTS.has(pathSlug) ? '' : sanitiseId(pathSlug))
   const view = describeView(route)
-  const { name, plan } = safeOrgFacts(org)
+  const { name } = safeOrgFacts(org)
   return {
     screen: viewScreenBlock(view, rung),
-    facts: viewFactsBlock({ route, hostId, orgSlug, name, plan }),
+    facts: viewFactsBlock({ route, hostId, orgSlug, name }),
     view,
     scope: { orgSlug, hostId },
   }
@@ -930,6 +952,63 @@ function upstreamFailureCopy(retryable: boolean): string {
   return retryable
     ? 'The assistant is busy right now — try again in a moment.'
     : 'The assistant request failed — try again.'
+}
+
+/** The docs a turn cites: each section's label and URL, and the paths the exchange records. */
+function citedDocs(scored: readonly ScoredSection[]): {
+  docs: { title: string; url: string }[]
+  docsPaths: string[]
+} {
+  return {
+    docs: scored.map(({ section }) => ({ title: sectionLabel(section), url: sectionUrl(section) })),
+    docsPaths: scored.map(({ section }) => section.path + section.anchor),
+  }
+}
+
+/** Two calls' tokens as one turn's: the English lookup's and the answer's, on one model. */
+function turnUsage(answer: AssistTokenUsage, lookup: AssistTokenUsage | null): AssistTokenUsage {
+  if (!lookup) return answer
+  const hour = (answer.cacheWriteHourTokens ?? 0) + (lookup.cacheWriteHourTokens ?? 0)
+  return {
+    ...answer,
+    inputTokens: answer.inputTokens + lookup.inputTokens,
+    outputTokens: answer.outputTokens + lookup.outputTokens,
+    cacheReadTokens: answer.cacheReadTokens + lookup.cacheReadTokens,
+    cacheWriteTokens: answer.cacheWriteTokens + lookup.cacheWriteTokens,
+    ...(hour ? { cacheWriteHourTokens: hour } : {}),
+  }
+}
+
+/**
+ * The question as an English search query (AGL-4075), on the turn's own
+ * model, inside the turn the reservation admitted — see `assist-docs-query`.
+ * `null` when the lookup failed, and the docs are searched as asked; the
+ * usage comes back whatever the answer, because the tokens were spent.
+ */
+async function englishDocsQuery(
+  model: string,
+  question: string,
+): Promise<{ query: string; usage: AssistTokenUsage } | null> {
+  try {
+    const result = await runAiRequest({
+      model,
+      maxTokens: ASSIST_DOCS_QUERY_MAX_TOKENS,
+      stream: false,
+      ...(CHAT_ROUTE.thinking ? { thinking: CHAT_ROUTE.thinking } : {}),
+      ...(CHAT_ROUTE.effort ? { effort: CHAT_ROUTE.effort } : {}),
+      system: [{ text: ASSIST_DOCS_QUERY_SYSTEM }],
+      messages: [{ role: 'user', content: question.slice(0, ASSIST_DOCS_QUERY_INPUT_CHARS) }],
+    })
+    return {
+      query: result.kind === 'completion' ? parseAssistDocsQuery(result.text) : '',
+      usage: result.usage,
+    }
+  } catch (error) {
+    // The answer still comes; it is grounded in what the question's own
+    // words find, as before the lookup existed.
+    console.error('assist english docs lookup failed', { model, error })
+    return null
+  }
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -1100,11 +1179,12 @@ async function handler(request: Request): Promise<Response> {
     // documentation back to the user is the spend this issue exists to
     // remove.
     const scored = retrieveDocsSections(body.question)
-    const docsPaths = scored.map(({ section }) => section.path + section.anchor)
-    const docs = scored.map(({ section }) => ({
-      title: sectionLabel(section),
-      url: sectionUrl(section),
-    }))
+    const { docs, docsPaths } = citedDocs(scored)
+    // A question the docs' English cannot find by its own words (AGL-4075):
+    // looked up in English below, once a model is paying for the turn, and
+    // never answered with an English quote, since its answer is written in
+    // the asker's language.
+    const needsEnglish = docsLookupNeedsEnglish(body.question)
 
     // On the edit rung a docs quote cannot carry the proposal the author may
     // be asking for, so only a question that reads on its own — a how-to, not
@@ -1114,7 +1194,7 @@ async function handler(request: Request): Promise<Response> {
     // exactly what an edit request leans on. So is a follow-up on a draft
     // this thread's build made (AGL-3616): "make the about page shorter".
     const deflection =
-      (editRung || buildRung || body.drafts.length) && !questionStandsAlone(body.question)
+      needsEnglish || ((editRung || buildRung || body.drafts.length) && !questionStandsAlone(body.question))
         ? null
         : deflectToDocs(body.question, scored, body.history.length > 0)
     if (deflection?.answered) {
@@ -1193,6 +1273,27 @@ async function handler(request: Request): Promise<Response> {
       })
     }
 
+    // ── The workspace's open AI jobs (AGL-4075) ───────────────────────────
+    // Read for every plan where the jobs exist at all — the same rungs the
+    // AI jobs list at the top of this panel climbs: `aiGenerative` and the
+    // release flag (staff preview). One bounded read, before the answer
+    // cache, which a turn told of a job must not use. A failure leaves the
+    // jobs out of the turn, never the answer.
+    const jobsShown =
+      checkEntitlement(org, 'aiGenerative') &&
+      (staff || (await isServerReleaseFlagOnForOrg('release_ai_generative', body.orgId)))
+    let openJobs: AssistOpenJob[] | null = null
+    let jobsUnread = false
+    if (jobsShown) {
+      try {
+        openJobs = await readAssistOpenJobs(firestore, { orgId: body.orgId, uid: decoded.uid })
+      } catch (error) {
+        console.error('assist open jobs read failed', { orgId: body.orgId, error })
+        jobsUnread = true
+      }
+    }
+    const plan = safeOrgFacts(org as Record<string, unknown>).plan
+
     // ── The answer cache (AGL-2486) ───────────────────────────────────────
     // Only reached by an ESCALATION, and only on a FIRST turn: a turn with
     // history is answered against a conversation this key cannot describe,
@@ -1221,15 +1322,22 @@ async function handler(request: Request): Promise<Response> {
     // rung (AGL-2906): that answer is composed against the canvas the request
     // described, which the key cannot describe either. Nor does a turn that
     // listed a build's drafts (AGL-3616): its answer may open one of them.
-    const cacheKey = body.history.length || body.model || editRung || buildRung || body.drafts.length
-      ? ''
-      : assistAnswerCacheKey({
-          question: body.question,
-          tier: entitled ? 'entitled' : 'free',
-          route: body.context?.route ?? '',
-          model: assistModel(),
-          productName: resolveBrandingProfile(org as never).productName,
-        })
+    //
+    // Nor does a turn told of an open AI job (AGL-4075), or one whose jobs
+    // could not be read: its answer may be about that job, which has moved
+    // on by the next time anyone asks. The plan's name, which every turn is
+    // told, is in the key.
+    const cacheKey =
+      body.history.length || body.model || editRung || buildRung || body.drafts.length || jobsUnread || openJobs?.length
+        ? ''
+        : assistAnswerCacheKey({
+            question: body.question,
+            tier: entitled ? 'entitled' : 'free',
+            route: body.context?.route ?? '',
+            model: assistModel(),
+            productName: resolveBrandingProfile(org as never).productName,
+            plan,
+          })
     const cached = cacheKey
       ? await readAssistAnswerCache(firestore, body.orgId, cacheKey)
       : null
@@ -1379,7 +1487,25 @@ async function handler(request: Request): Promise<Response> {
     })
     const model = choice?.model ?? assistModel()
 
-    const docsBlock = docsGroundingBlock(scored)
+    // The docs lookup in English (AGL-4075), for a question its own words
+    // cannot find: one small completion on this turn's model, metered with
+    // the answer. What it finds replaces what the words found, when it
+    // finds anything.
+    const lookup = needsEnglish ? await englishDocsQuery(model, body.question) : null
+    const englishFound = lookup?.query ? retrieveDocsSections(lookup.query) : []
+    const grounding = englishFound.length ? englishFound : scored
+    const cited = englishFound.length ? citedDocs(englishFound) : { docs, docsPaths }
+    const docsBlock = docsGroundingBlock(grounding)
+    // The plan by name for every workspace, and its open AI jobs (AGL-4075).
+    const workspaceBlock = assistWorkspaceBlock({
+      plan,
+      jobs: openJobs,
+      here: assistJobsHere(
+        sanitiseRoute(body.context?.route ?? ''),
+        body.context?.hostId ?? '',
+        ORGLESS_PATH_SEGMENTS,
+      ),
+    })
     // Level 2 is the paid rung. A free workspace gets docs grounding and
     // deep links; the view block, and with it the proposal channel, is not
     // assembled at all — not assembled-then-withheld, so there is no path
@@ -1446,6 +1572,9 @@ async function handler(request: Request): Promise<Response> {
       // `assistBrandBlock`. Unconditional: a free workspace assembles no
       // view block, and it must still be told what the product is called.
       { text: assistBrandBlock(org as never), volatile: true },
+      // The workspace's plan and open AI jobs (AGL-4075): per org and per
+      // moment, so after every breakpoint, for every plan.
+      ...(workspaceBlock ? [{ text: workspaceBlock, volatile: true as const }] : []),
       ...(guide ? [{ text: guide.facts, volatile: true as const }] : []),
       // The drafts a follow-up may open: the person's own labels, so volatile.
       ...(draftsBlock ? [{ text: draftsBlock, volatile: true as const }] : []),
@@ -1653,6 +1782,8 @@ async function handler(request: Request): Promise<Response> {
 
           // The data loop + meters — recorded even for a partial answer:
           // tokens were spent either way and the miner wants the question.
+          // The English lookup's tokens are this turn's too (AGL-4075).
+          const spent = turnUsage(usage, lookup?.usage ?? null)
           let exchangeId: string | null = null
           try {
             exchangeId = await recordAssistExchange(firestore, body.orgId, {
@@ -1663,8 +1794,8 @@ async function handler(request: Request): Promise<Response> {
               hostId: body.context?.hostId || null,
               model,
               tier,
-              usage,
-              docsPaths,
+              usage: spent,
+              docsPaths: cited.docsPaths,
               stopReason,
               // The account this turn drew on, as the reservation decided
               // it (AGL-2925) — so a Free turn lands on the owner's
@@ -1704,14 +1835,14 @@ async function handler(request: Request): Promise<Response> {
           ) {
             await writeAssistAnswerCache(firestore, body.orgId, cacheKey, {
               answer,
-              docs,
+              docs: cited.docs,
             })
           }
           emit({
             type: 'done',
             exchangeId,
-            usage,
-            docs,
+            usage: spent,
+            docs: cited.docs,
             // Inert data. The panel renders it as a card the user must
             // confirm, and confirming navigates — see the write boundary in
             // `assist-view-context.ts`.
@@ -1735,7 +1866,7 @@ async function handler(request: Request): Promise<Response> {
             // The usage strip's envelope (AGL-2942): this turn's credits
             // added to the pool and the asker's month the reservation read.
             meter: aiUsageMeter(quota, {
-              lastCredits: assistCreditsFromUsd(estimateAssistCostUsd(usage, model)),
+              lastCredits: assistCreditsFromUsd(estimateAssistCostUsd(spent, model)),
               model: { id: model, auto: choice?.auto ?? true },
             }),
           })
