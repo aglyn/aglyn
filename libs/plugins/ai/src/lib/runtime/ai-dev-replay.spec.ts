@@ -169,6 +169,14 @@ describe('the replay key', () => {
     expect(aiDevReplayKey('anthropic', true, request)).not.toBe(base)
   })
 
+  it('changes with the tool a request names, and is the key it always was for one that names none (AGL-4076)', () => {
+    const base = aiDevReplayKey('anthropic', false, request)
+    expect(aiDevReplayKey('anthropic', false, { ...request, toolChoice: 't' })).not.toBe(base)
+    expect(aiDevReplayKey('anthropic', false, { ...request, toolChoice: undefined })).toBe(base)
+    // The key a request with no named tool had before the field existed.
+    expect(base).toBe('3e263cf45622a23d197e8ce0b66ea7a9b4a2c6496b0c78ea3c20f9145bc3982e')
+  })
+
   it('keys the cached prefix on the tools and the blocks through the last breakpoint alone', () => {
     const otherSite = { ...request, system: [request.system[0], { text: 'another site', volatile: true as const }] }
     expect(aiCachedPrefixKey(otherSite)).toBe(aiCachedPrefixKey(request))

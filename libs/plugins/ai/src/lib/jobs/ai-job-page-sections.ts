@@ -35,6 +35,7 @@ import {
   aiNodeTreeContextFromInventory,
   type AiGenerationCheck,
 } from '../runtime/ai-doctrine'
+import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import {
   aiSettleCutHeadings,
   aiSettleDisagreeingNodes,
@@ -578,7 +579,11 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
   const sectionId = input.sectionIds[input.index]
   const components = new Set((input.inventory?.components ?? []).map((row) => row.id))
   const forms = new Set((input.inventory?.forms ?? []).map((row) => row.id))
+  let answers = 0
   return (answer) => {
+    // The last answer a pass takes has a link that goes nowhere settled rather than stopping the job (AGL-4076).
+    answers += 1
+    const last = answers >= AI_GENERATION_MAX_ATTEMPTS
     // A child named and never written, an element written and held by
     // nothing, and a heading whose first clause fits its ceiling are settled
     // where each has one reading (AGL-3596).
@@ -701,16 +706,22 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     // An attribute a rule has one answer for is applied on the page with the
     // section added, since the first image and the one h1 are the page's
     // (AGL-3660). The section keeps what that settled of its own nodes; what
-    // it settled of an earlier pass's is the last pass's to store.
+    // it settled of an earlier pass's is the last pass's to store. On the last
+    // answer, a link that goes nowhere is settled as the page check below
+    // reads it, and on an earlier one it is the re-ask's (AGL-4076).
+    const sectionOwn = new Set(Object.keys(sectionNodes))
+    const writtenNode = (id: string): unknown => (sectionOwn.has(id) ? drawnNodes[drawnIdOf(id)] : undefined)
     const settledPage = aiSettleMechanicalRules(
       {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         nodes: aiPageWithSection(input.page, section, input.sectionIds) as unknown as Record<string, AiDoctrineNode>,
       },
       'page',
+      last ? { ...input.context, writtenNode, scrollTargetIds: input.sectionIds } : undefined,
     )
     for (const id of Object.keys(sectionNodes)) {
-      sectionNodes[id] = settledPage.nodes[id] as unknown as Record<string, unknown>
+      if (settledPage.nodes[id]) sectionNodes[id] = settledPage.nodes[id] as unknown as Record<string, unknown>
+      else delete sectionNodes[id]
     }
     const page = settledPage.nodes as unknown as NodesMap
     const own = new Set(Object.keys(sectionNodes))

@@ -679,6 +679,14 @@ export interface AiJob {
    */
   siteRemoved?: AiJobSiteRemoved | null
   /**
+   * When the one reminder about a plan waiting for its confirmation went out
+   * (AGL-4076), a day after the plan was ready. Written once, by the AI jobs
+   * beat, in the transaction that decides to send it, and never cleared: a
+   * job is reminded at most once, however many plans it waits on. Absent on
+   * every job that was not reminded.
+   */
+  remindedAt?: ITimestamp | null
+  /**
    * An `import` job's site, read and cut into waves (AGL-3976): what was
    * found, what is brought in in which wave, what was left out and why, and
    * each wave's state. Written only by the machine's `recordStep`, from what

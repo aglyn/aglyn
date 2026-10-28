@@ -864,10 +864,18 @@ export function aiLayoutPageCheck(
     const dropped = [...copy.dropped]
     // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660),
     // and a link sent home for nothing is sent to the form or left out (AGL-3729).
+    // And on the last answer, a link that goes nowhere, as the check below reads it (AGL-4076).
     let nodes = aiSettleUnrelatedScreenLinks(
       aiSettleMechanicalRules(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
         'page',
+        last
+          ? {
+              ...context,
+              scrollTargetIds: input.sectionIds,
+              ownScreenIds: input.targets.pageId ? [input.targets.pageId] : [],
+            }
+          : undefined,
       ),
       'page',
       { ...context, ownScreenIds: input.targets.pageId ? [input.targets.pageId] : [] },

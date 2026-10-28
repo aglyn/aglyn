@@ -44,6 +44,7 @@ import {
   type AiSystemBlock,
   type AiUsage,
 } from '../runtime/ai-runtime'
+import type { AiTool } from '../providers/contract'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { checkAiInsightAnswer, type AiInsightCheck } from '../runtime/ai-insight-check'
 import {
@@ -149,6 +150,18 @@ export const AI_JOB_INSIGHT_SYSTEM: AiSystemBlock[] = [
   { text: `${AI_INSIGHT_RULES}\n\n${AI_ACCEPTABLE_USE_BLOCK}`, cacheBreakpoint: true },
 ]
 
+/**
+ * The tools BOTH calls send, in this order (AGL-4076). The provider's cached
+ * prefix opens with the tools, then the system blocks, so a call that sends
+ * other tools than the call before it reads none of the system block that
+ * call wrote: the answer call, sent the answer tool alone after a read call
+ * sent the read tool alone, read nothing on every insight. Each call names
+ * the one it is for (`toolChoice`), and its user turn says so.
+ */
+export function aiInsightTools(): AiTool[] {
+  return [aiInsightReadTool(), aiInsightAnswerTool()]
+}
+
 const ZERO_USAGE: AiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
@@ -190,12 +203,22 @@ export function aiInsightReadPrompt(input: {
     'Readers you may read here:',
     aiInsightReaderCatalog(input.readers),
     ...(input.datasets === null ? [] : ['', 'Datasets you may read, with their fields:', input.datasets]),
+    '',
+    `Call ${AI_INSIGHT_READ_TOOL_NAME} now.`,
   ].join('\n')
 }
 
 /** The answer call's user turn: the question and every table. */
 export function aiInsightAnswerPrompt(question: string, tables: readonly AiInsightTable[]): string {
-  return [`Question: ${question}`, '', 'Tables:', '', tables.map(aiInsightTableText).join('\n\n')].join('\n')
+  return [
+    `Question: ${question}`,
+    '',
+    'Tables:',
+    '',
+    tables.map(aiInsightTableText).join('\n\n'),
+    '',
+    `These are all the tables there are. Call ${AI_INSIGHT_ANSWER_TOOL_NAME} now.`,
+  ].join('\n')
 }
 
 /** What a re-ask tells the model: why nothing it wrote could be kept. */
@@ -271,12 +294,15 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
   ]
   // A development run's effort A/B arm (AGL-3781), else the row's.
   const effort = aiDevEffortFor('job.insight') ?? AI_ROUTING_TABLE['job.insight'].effort
+  // Both tools on both calls, so the answer call reads the prefix the read call wrote (AGL-4076).
+  const tools = aiInsightTools()
   const ask = (messages: AiMessage[], tool: 'read' | 'answer', ceiling: number) =>
     runAiRequest({
       model,
       system,
       messages,
-      tools: [tool === 'read' ? aiInsightReadTool() : aiInsightAnswerTool()],
+      tools,
+      toolChoice: tool === 'read' ? AI_INSIGHT_READ_TOOL_NAME : AI_INSIGHT_ANSWER_TOOL_NAME,
       maxTokens: Math.max(1, Math.min(ceiling, left())),
       ...(AI_ROUTING_TABLE['job.insight'].thinking ? { thinking: AI_ROUTING_TABLE['job.insight'].thinking } : {}),
       ...(effort ? { effort } : {}),

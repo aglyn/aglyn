@@ -740,9 +740,11 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // a time, as on one built whole (AGL-3838); a page that already moves —
       // by this pass or by its author — comes back as it is, and is not written.
       const motion = aiLayoutMotionSiteOf(job, screen.slug)
+      // A link that goes nowhere is settled as the check below reads it, with every section built (AGL-4076).
+      const links = { ...context, scrollTargetIds: sectionIds, ownScreenIds: [screen.id, draftId] }
       const settle = <T extends AiDoctrineTree>(tree: T): T => {
         const settled = aiSettleUnrelatedScreenLinks(
-          aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page'), 'page', context),
+          aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page', links), 'page', context),
           'page',
           {
             ...context,

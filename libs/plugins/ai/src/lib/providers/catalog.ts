@@ -283,7 +283,8 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     // `aiDefaultModelFor` answers, so Free, "Auto" and every step routed to
     // balanced run here. Rejects `thinking: {type: "disabled"}` and forced
     // tool choice: the adapter sends thinking off as `between_tools` and
-    // every tool call with `tool_choice: auto`.
+    // every tool call with `tool_choice: auto`, a request's `toolChoice`
+    // included (no `forcedToolChoice`, AGL-4076).
     id: 'claude-sonnet-5-5',
     provider: ANTHROPIC,
     label: 'Claude Sonnet 5.5',
@@ -318,7 +319,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'claude-sonnet-5',
     provider: ANTHROPIC,
     label: 'Claude Sonnet 5',
-    capabilities: anthropicCapabilities,
+    capabilities: { ...anthropicCapabilities, forcedToolChoice: true },
     providerRates: aiRatesPerMTok(2, 10),
     billedRates: aiRatesPerMTok(3, 15),
     tier: 'balanced',
@@ -329,7 +330,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'claude-sonnet-4-6',
     provider: ANTHROPIC,
     label: 'Claude Sonnet 4.6',
-    capabilities: anthropicCapabilities,
+    capabilities: { ...anthropicCapabilities, forcedToolChoice: true },
     ...aiRatesAtList(3, 15),
     tier: 'balanced',
     cacheMinTokens: 1_024,
@@ -375,7 +376,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'claude-opus-5',
     provider: ANTHROPIC,
     label: 'Claude Opus 5',
-    capabilities: anthropicCapabilities,
+    capabilities: { ...anthropicCapabilities, forcedToolChoice: true },
     ...aiRatesAtList(5, 25),
     tier: 'deep',
     cacheMinTokens: 512,
@@ -400,7 +401,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'claude-opus-4-8',
     provider: ANTHROPIC,
     label: 'Claude Opus 4.8',
-    capabilities: anthropicCapabilities,
+    capabilities: { ...anthropicCapabilities, forcedToolChoice: true },
     ...aiRatesAtList(5, 25),
     tier: 'deep',
     cacheMinTokens: 1_024,

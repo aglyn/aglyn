@@ -78,7 +78,7 @@ import {
   type AiNodeTreeContext,
   type AiNodeTreeResult,
 } from './ai-node-tree'
-import { AI_PAGE_SCROLL_TO_PROP, aiPageLinkTarget, aiStoredScrollTargets } from './ai-page-links'
+import { AI_PAGE_SCROLL_TO_PROP, aiPageLinkTarget, aiStoredScrollTargets, isAiFragmentHref } from './ai-page-links'
 import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
@@ -2368,6 +2368,145 @@ export function detectLinksWithoutDestination(
   return violations
 }
 
+/**
+ * What a link's destination is read against when it is settled (AGL-4076):
+ * what `detectLinksWithoutDestination` reads it against, and the page being
+ * checked by every id it goes by, which a link is never sent to.
+ */
+export type AiLinkSettleContext = Pick<
+  AiDoctrineTreeContext,
+  'pageSections' | 'scrollTargetIds' | 'writtenNode' | 'formScreenIds' | 'screenIds'
+> & {
+  ownScreenIds?: readonly string[]
+}
+
+/** The longest send label a Form takes, as its palette entry bounds `submitLabel`. */
+const FORM_SUBMIT_LABEL_MAX = 40
+
+/** The frames a link may be the last thing in, taken out with it rather than left empty. */
+const LINK_FRAMES = new Set(['muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'section', 'div', 'muiCardActions'])
+
+/**
+ * The links `detectLinksWithoutDestination` would refuse as going nowhere
+ * (`link-without-destination`) or to an anchor no section has
+ * (`link-fragment`), read conservatively: a link whose `screenId` names a page
+ * the site has, whose `href` is anything but a fragment, that carries a Scroll
+ * to element interaction to a section of its page, or whose `scrollTo` the
+ * check reads on its own terms (`scroll-target-unknown`), is not one. A tree
+ * as written is read as the check will read it once the palette validator has
+ * dropped the fragment.
+ */
+function linksWithoutDestination(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: AiLinkSettleContext,
+): Array<{ id: string; label: string; form: string | null }> {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const sections = context.pageSections ?? []
+  const targets = context.scrollTargetIds ? new Set(context.scrollTargetIds) : null
+  const known = context.screenIds ? new Set(context.screenIds) : null
+  const written = (id: string): unknown => (context.writtenNode ? context.writtenNode(id) : tree.nodes[id])
+  const found: Array<{ id: string; label: string; form: string | null }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    const screenId = node.props?.['screenId']
+    if (isFilled(screenId) && (!known || known.has(String(screenId).trim()))) continue
+    const href = node.props?.['href']
+    if (isFilled(href) && !isAiFragmentHref(href)) continue
+    const scrolls = aiStoredScrollTargets(node)
+    if (scrolls.length && (!targets || scrolls.some((target) => targets.has(target)))) continue
+    const target = aiPageLinkTarget(written(visit.id), sections)
+    if (target?.kind === 'section' || (target?.kind === 'unknown' && target.via === 'scrollTo')) continue
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    const form = [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'form') ?? null
+    found.push({ id: visit.id, label, form })
+  }
+  return found
+}
+
+/**
+ * RULE 10'S LINK THAT GOES NOWHERE, SETTLED IN CODE (AGL-4076).
+ *
+ * A Button or a Page Link with no destination (`link-without-destination`),
+ * or one sent to an anchor no section of its page has (`link-fragment`),
+ * stopped 5 of the 12 findings behind the 10/10 to 10/28 doctrine stops: the
+ * re-ask is spent, the job stops, and Try again asks the same. Each has one
+ * answer the rule itself gives, so it is applied before the check reads the
+ * tree, as `aiSettleUnrelatedScreenLinks` settles a link sent home:
+ *
+ * - a button drawn inside a Form is taken out, since the Form draws its own
+ *   send button; its words become the Form's `submitLabel` when the Form has
+ *   none of its own;
+ * - a link whose words ask a visitor to get in touch is sent to the page that
+ *   places the site's form, when the site has one that is not this page;
+ * - any other is left out: no page can be chosen for it from its words alone.
+ *
+ * A frame the link was the last thing in is taken out with it rather than
+ * left empty, up to the page's own sections, which always stay. A link to a
+ * section of its page, to a page the site has, or to any address is never
+ * touched, and nor is one whose `scrollTo` names no section, which the check
+ * re-asks as before. The root is never taken out. A tree with nothing to
+ * settle comes back as the same object; a node that is changed is copied.
+ */
+export function aiSettleLinksWithoutDestination<T extends AiDoctrineTree>(
+  tree: T,
+  outputKind: AiOutputKind,
+  context: AiLinkSettleContext = {},
+): T {
+  if (!tree.nodes[tree.rootId]) return tree
+  const found = linksWithoutDestination(tree, outputKind, context)
+  if (!found.length) return tree
+  const own = new Set(context.ownScreenIds ?? [])
+  const formScreen = (context.formScreenIds ?? []).find((id) => !own.has(id)) ?? null
+  // A page's sections, and anything a link scrolls to, always stay.
+  const kept = new Set([tree.rootId, ...(tree.nodes[tree.rootId].nodes ?? []), ...(context.scrollTargetIds ?? [])])
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const parents = new Map<string, string>()
+  for (const visit of walkTree(tree)) {
+    const parent = visit.ancestors[visit.ancestors.length - 1]
+    if (parent !== undefined) parents.set(visit.id, parent)
+  }
+  let changed = false
+  const takeOut = (id: string): void => {
+    let next: string | undefined = id
+    while (next !== undefined && nodes[next] && !kept.has(next)) {
+      const parent = parents.get(next)
+      if (parent === undefined || !nodes[parent]) return
+      const children = (nodes[parent].nodes ?? []).filter((child) => child !== next)
+      nodes[parent] = { ...nodes[parent], nodes: children }
+      changed = true
+      const stack = [next]
+      while (stack.length) {
+        const gone = stack.pop() as string
+        stack.push(...(nodes[gone]?.nodes ?? []))
+        delete nodes[gone]
+      }
+      next = !children.some((child) => nodes[child]) && LINK_FRAMES.has(nodes[parent].componentId) ? parent : undefined
+    }
+  }
+  for (const { id, label, form } of found) {
+    if (!nodes[id]) continue
+    if (form && nodes[form]) {
+      if (label && label.length <= FORM_SUBMIT_LABEL_MAX && !isFilled(nodes[form].props?.['submitLabel'])) {
+        nodes[form] = { ...nodes[form], props: { ...(nodes[form].props ?? {}), submitLabel: label } }
+        changed = true
+      }
+      takeOut(id)
+      continue
+    }
+    if (formScreen && label && aiAsksToGetInTouch(label)) {
+      const props: Record<string, unknown> = { ...(nodes[id].props ?? {}), screenId: formScreen }
+      delete props['href']
+      nodes[id] = { ...nodes[id], props }
+      changed = true
+      continue
+    }
+    takeOut(id)
+  }
+  return changed ? ({ ...tree, nodes } as T) : tree
+}
+
 /** Answer fields that say "publish", wherever the answer put them. */
 const PUBLISH_KEYS = /^(?:publish|published|publishNow|publishAt|goLive|isLive|live|makeLive)$/i
 
@@ -2853,6 +2992,22 @@ const DUPLICATE_SX_MIN_KEYS = 2
 const DUPLICATE_SX_MIN_NODES = 4
 
 /**
+ * Rule 16's repeated style: the elements whose `sx` is one style of at least
+ * `DUPLICATE_SX_MIN_KEYS` keys, grouped by that style, each group of at least
+ * `DUPLICATE_SX_MIN_NODES` elements, in document order.
+ */
+function duplicatedSxGroups(tree: AiDoctrineTree): string[][] {
+  const seen = new Map<string, string[]>()
+  for (const { id, node } of walkTree(tree)) {
+    const sx = node.sx ?? {}
+    if (Object.keys(sx).length < DUPLICATE_SX_MIN_KEYS) continue
+    const key = JSON.stringify(Object.keys(sx).sort().map((name) => [name, sx[name]]))
+    seen.set(key, [...(seen.get(key) ?? []), id])
+  }
+  return [...seen.values()].filter((ids) => ids.length >= DUPLICATE_SX_MIN_NODES)
+}
+
+/**
  * Whether a third-party player is one the confirmed plan lists (AGL-3433). A
  * Video embed is admitted where the plan lists a player, playing the video
  * the brief gave or none yet, which the site owner pastes. Raw HTML never is.
@@ -2898,7 +3053,6 @@ export function detectHeavyDocument(
   const video: string[] = []
   const embeds: string[] = []
   const embedLinks: string[] = []
-  const sxSeen = new Map<string, string[]>()
   let images = 0
   for (const { id, node } of visits) {
     const entry = AI_PALETTE[node.componentId]
@@ -2938,15 +3092,8 @@ export function detectHeavyDocument(
       if (verdict === 'unplanned') embeds.push(id)
       if (verdict === 'unplanned-link') embedLinks.push(id)
     }
-    const sx = node.sx ?? {}
-    if (Object.keys(sx).length >= DUPLICATE_SX_MIN_KEYS) {
-      const key = JSON.stringify(Object.keys(sx).sort().map((name) => [name, sx[name]]))
-      sxSeen.set(key, [...(sxSeen.get(key) ?? []), id])
-    }
   }
-  const duplicatedSx = [...sxSeen.values()]
-    .filter((ids) => ids.length >= DUPLICATE_SX_MIN_NODES)
-    .flat()
+  const duplicatedSx = duplicatedSxGroups(tree).flat()
   const violations: AiDoctrineViolation[] = []
   const add = (code: string, ids: string[], message: string) => {
     if (ids.length) violations.push({ rule: 16, code, message, nodeIds: ids })
@@ -3710,6 +3857,31 @@ export function aiSettleCutHeadings(input: unknown): unknown {
 
 // ── Mechanical rules, settled in code (AGL-3660) ─────────────────────────
 
+/** The inherited styles a repeated style may be carried once in, by the frame that holds every element repeating it (AGL-4076). */
+const HOISTED_SX_KEYS = ['textAlign', 'color'] as const
+
+/**
+ * The elements that take each of those styles from their parent when they set
+ * none themselves, which are also the frames that may carry one for the
+ * elements they hold: none of them draws anything of its own in it.
+ */
+const INHERITS_SX: Readonly<Record<(typeof HOISTED_SX_KEYS)[number], ReadonlySet<string>>> = {
+  // A Typography aligns as `inherit` unless its `align` says otherwise; a Card and a Paper set no alignment.
+  textAlign: new Set(['muiTypography', 'muiBox', 'muiStack', 'muiGrid', 'muiContainer', 'section', 'div', 'muiCardContent', 'muiCard', 'muiPaper']),
+  // A Card and a Paper paint their own text color, and a Button, a link and a list row theirs.
+  color: new Set(['muiTypography', 'muiBox', 'muiStack', 'muiGrid', 'muiContainer', 'section', 'div', 'muiCardContent']),
+}
+
+/** A Typography's `align` values, which draw exactly what the same `sx` text alignment does. */
+const TYPOGRAPHY_ALIGNS = new Set(['inherit', 'left', 'center', 'right', 'justify'])
+
+/** An `sx` without one key. */
+function sxWithout(sx: Record<string, unknown> | undefined, key: string): Record<string, unknown> {
+  const rest = { ...(sx ?? {}) }
+  delete rest[key]
+  return rest
+}
+
 /**
  * THE RULES A CHECK WOULD REFUSE FOR AN ATTRIBUTE, SETTLED IN CODE (AGL-3660).
  *
@@ -3745,12 +3917,25 @@ export function aiSettleCutHeadings(input: unknown): unknown {
  * - `page-text-on-band` (5): words on a band in a family's main or dark shade
  *   whose `sx` color is a page text color (`text.secondary`) are given the
  *   family's contrast text, and a List Item Text's secondary words there take
- *   the row's own color (`secondaryColor: inherit`).
+ *   the row's own color (`secondaryColor: inherit`);
+ * - `duplicated-inline-style` (16), where the style can be carried once
+ *   without changing what is drawn (AGL-4076): when the elements repeating it
+ *   are every element of one frame, its text alignment and its text color
+ *   move to that frame, which they inherit from, and a Typography's text
+ *   alignment becomes its `align`. Only where that leaves fewer repeats; a
+ *   repeated padding, size or border has no single place to go and is still
+ *   the re-ask's;
+ * - `link-without-destination` and `link-fragment` (10), given `links`, the
+ *   context the check reads links in (`aiSettleLinksWithoutDestination`).
  *
  * A tree with nothing to settle comes back as the same object, so settling is
  * idempotent; a node that is changed is copied, never edited in place.
  */
-export function aiSettleMechanicalRules<T extends AiDoctrineTree>(tree: T, outputKind: AiOutputKind): T {
+export function aiSettleMechanicalRules<T extends AiDoctrineTree>(
+  tree: T,
+  outputKind: AiOutputKind,
+  links?: AiLinkSettleContext,
+): T {
   if (!tree.nodes[tree.rootId]) return tree
   const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
   const copied = new Set<string>()
@@ -3861,7 +4046,71 @@ export function aiSettleMechanicalRules<T extends AiDoctrineTree>(tree: T, outpu
       node.sx = { ...(node.sx ?? {}), color: `${family}.contrastText` }
     }
   }
-  return copied.size ? ({ ...tree, nodes } as T) : tree
+
+  // Rule 16: a style a group of elements repeats, carried once where it draws the same (AGL-4076).
+  if (framed) {
+    const parentOf = new Map<string, string>()
+    for (const visit of walkTree({ rootId: tree.rootId, nodes })) {
+      const parent = visit.ancestors[visit.ancestors.length - 1]
+      if (parent !== undefined) parentOf.set(visit.id, parent)
+    }
+    const heavy = (): number =>
+      detectHeavyDocument({ rootId: tree.rootId, nodes }, outputKind).reduce(
+        (sum, violation) => sum + (violation.nodeIds?.length ?? 0),
+        0,
+      )
+    for (const group of duplicatedSxGroups({ rootId: tree.rootId, nodes })) {
+      const style = nodes[group[0]]?.sx ?? {}
+      const same = JSON.stringify(Object.keys(style).sort().map((name) => [name, style[name]]))
+      const alike = group.every((id) => {
+        const sx = nodes[id]?.sx ?? {}
+        return JSON.stringify(Object.keys(sx).sort().map((name) => [name, sx[name]])) === same
+      })
+      if (!alike) continue
+      const before = heavy()
+      const replaced = new Map<string, AiDoctrineNode>()
+      const wasCopied = new Set(copied)
+      const put = (id: string, node: AiDoctrineNode): void => {
+        if (!replaced.has(id)) replaced.set(id, nodes[id])
+        nodes[id] = node
+        copied.add(id)
+      }
+      const parent = parentOf.get(group[0])
+      const held = parent !== undefined ? (nodes[parent]?.nodes ?? []).filter((child) => nodes[child]) : []
+      const whole =
+        parent !== undefined &&
+        parent !== tree.rootId &&
+        held.length === group.length &&
+        group.every((id) => parentOf.get(id) === parent)
+      for (const key of whole ? HOISTED_SX_KEYS : []) {
+        const holder = nodes[parent as string]
+        if (style[key] === undefined || !INHERITS_SX[key].has(holder.componentId)) continue
+        if (!group.every((id) => INHERITS_SX[key].has(nodes[id].componentId))) continue
+        const own = holder.sx?.[key]
+        if (own !== undefined && JSON.stringify(own) !== JSON.stringify(style[key])) continue
+        // A border drawn in the frame's own text color would take the new one.
+        if (key === 'color' && Object.keys(holder.sx ?? {}).some((name) => /^(?:border|outline)/.test(name))) continue
+        put(parent as string, { ...holder, sx: { ...(holder.sx ?? {}), [key]: style[key] } })
+        for (const id of group) put(id, { ...nodes[id], sx: sxWithout(nodes[id].sx, key) })
+      }
+      for (const id of group) {
+        const node = nodes[id]
+        const align = node.sx?.['textAlign']
+        if (node.componentId !== 'muiTypography' || typeof align !== 'string' || !TYPOGRAPHY_ALIGNS.has(align)) continue
+        if (node.props?.['align'] !== undefined && node.props['align'] !== 'inherit') continue
+        put(id, { ...node, props: { ...(node.props ?? {}), align }, sx: sxWithout(node.sx, 'textAlign') })
+      }
+      // Kept only where it leaves the page lighter by the rule's own measure.
+      if (replaced.size && heavy() >= before) {
+        for (const [id, node] of replaced) nodes[id] = node
+        copied.clear()
+        for (const id of wasCopied) copied.add(id)
+      }
+    }
+  }
+
+  const settled = copied.size ? ({ ...tree, nodes } as T) : tree
+  return links ? aiSettleLinksWithoutDestination(settled, outputKind, links) : settled
 }
 
 /**
@@ -3869,8 +4118,14 @@ export function aiSettleMechanicalRules<T extends AiDoctrineTree>(tree: T, outpu
  * palette validator reads it (AGL-3660), as `aiSettleWrittenGridItems` settles
  * its items. Anything that is no flat node map comes back as it was, and a
  * node whose shape is not a palette node's is read as nothing and left as written.
+ * Given `links`, a link that goes nowhere is settled too (AGL-4076), and a
+ * node that takes out is gone from the answer.
  */
-export function aiSettleWrittenMechanicalRules(input: unknown, outputKind: AiOutputKind): unknown {
+export function aiSettleWrittenMechanicalRules(
+  input: unknown,
+  outputKind: AiOutputKind,
+  links?: AiLinkSettleContext,
+): unknown {
   if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
   const readable = Object.entries(input['nodes']).filter(
     ([, node]) =>
@@ -3885,8 +4140,11 @@ export function aiSettleWrittenMechanicalRules(input: unknown, outputKind: AiOut
     rootId: input['rootId'],
     nodes: Object.fromEntries(readable) as unknown as Record<string, AiDoctrineNode>,
   }
-  const settled = aiSettleMechanicalRules(tree, outputKind)
-  return settled === tree ? input : { ...input, nodes: { ...input['nodes'], ...settled.nodes } }
+  const settled = aiSettleMechanicalRules(tree, outputKind, links)
+  if (settled === tree) return input
+  const nodes: Record<string, unknown> = { ...input['nodes'], ...settled.nodes }
+  for (const id of Object.keys(tree.nodes)) if (!settled.nodes[id]) delete nodes[id]
+  return { ...input, nodes }
 }
 
 export interface AiDoctrineTreeReport {

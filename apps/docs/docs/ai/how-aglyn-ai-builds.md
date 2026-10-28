@@ -82,7 +82,8 @@ You never have to remember where a job went:
 - **The Assist button** at the bottom right shows a badge while a job runs, and a
   count in the warning color while one needs you.
 - **A notification** arrives when a job's plan is ready for you to confirm, when it
-  finishes and when it stops. It opens the job, or what it built. You can turn
+  finishes and when it stops. It opens the job, or what it built. A plan still
+  waiting a day after it was ready gets one reminder, and never another. You can turn
   these off under **AI job needs you**, **AI job finished** and **AI job stopped** in
   your notification settings.
 - **A site's AI jobs page** lists every job that worked on that site, newest first,
@@ -177,7 +178,8 @@ lists each job with where it stands.
 
 A plan or document that breaks a rule is not used. The AI is asked once more and
 told which rules it broke. If the second answer still breaks one, the job stops
-and shows you which rules. Choose **Try again** to ask once more, or cancel the
+and shows you which rules. A button or link the second answer leaves with
+nowhere to go does not stop the job: it is left out, as rule 10 says. Choose **Try again** to ask once more, or cancel the
 job. Every answer counts toward your AI usage, including the ones that were not
 used.
 

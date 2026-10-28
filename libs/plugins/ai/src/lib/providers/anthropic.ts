@@ -229,6 +229,17 @@ export function buildAnthropicRequestBody(
   const thinking = settable ? input.thinking : undefined
   const effort = settable ? (input.effort ?? ANTHROPIC_DEFAULT_EFFORT[input.model]) : undefined
   const thinkingOff = ANTHROPIC_THINKING_OFF[input.model] ?? 'disabled'
+  // A named tool is forced only where the model takes a forced choice and
+  // thinking is sent off, which the API requires of one (AGL-4076); every
+  // other request, a named one on Claude Sonnet 5.5 included, chooses for itself.
+  const forced =
+    input.toolChoice &&
+    tools?.some((tool) => tool.name === input.toolChoice) &&
+    aiCatalogEntry(input.model)?.capabilities.forcedToolChoice === true &&
+    thinking === 'off' &&
+    thinkingOff === 'disabled'
+      ? input.toolChoice
+      : null
   return {
     model: input.model,
     max_tokens: input.maxTokens,
@@ -251,7 +262,7 @@ export function buildAnthropicRequestBody(
           )
         : anthropicContentOf(message),
     })),
-    ...(tools?.length ? { tools, tool_choice: { type: 'auto' } } : {}),
+    ...(tools?.length ? { tools, tool_choice: forced ? { type: 'tool', name: forced } : { type: 'auto' } } : {}),
   }
 }
 
