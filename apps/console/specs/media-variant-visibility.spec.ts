@@ -152,6 +152,9 @@ describe('the sharp native libraries are traced into the lambda (AGL-1471)', () 
     expect(includes).toMatch(/'\/api\/plugin-images\/\[\.\.\.pluginApi\]':\s*SHARP_NATIVE_LIBRARIES/)
     expect(includes).toMatch(/'\/api\/\[\.\.\.pluginApi\]':\s*FONT_INSTALLER_WASM,/)
     expect(includes).not.toMatch(/'\/api\/\[\.\.\.pluginApi\]':[^\n]*SHARP_NATIVE_LIBRARIES/)
+    // Nor for the AI jobs beat: a job step's photo and logo reads ask the
+    // image function too (`ai/image-reads`), so the beat's lambda stays small.
+    expect(includes).not.toMatch(/'\/api\/admin\/ai-jobs-beat'/)
   })
 
   it('points at directories that actually hold a native library', () => {

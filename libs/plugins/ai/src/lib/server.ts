@@ -256,6 +256,20 @@ export function registerAiConsoleApi(): void {
   // minute by the console's scheduler on the cron secret, on the one surface
   // that holds the provider's key.
   registerPluginApiRoute(AI_JOBS_BEAT_PATH, { web: runAiJobsBeat })
+  // The image reads behind the products and theme steps (AGL-4048): a
+  // product's photo and the site logo are decoded with `sharp`, whose native
+  // library only the console's plugins' image function ships
+  // (`/api/plugin-images/…`), so neither the doors that run a first step nor
+  // the beat carry it, and on Vercel both ask this route. Called by our own
+  // servers, signed; a machine's door, loaded with its first call.
+  registerPluginApiRoute(
+    'ai/image-reads',
+    {
+      web: async (request) =>
+        (await import('./server/ai-image-reads-route')).aiImageReadsRoute(request),
+    },
+    { machine: true, images: true },
+  )
   // The weekly insights (AGL-2915): Monday's digests made for the people who
   // asked for them, and delivered once the beat has written them. Beside the
   // beat under `/api/admin/`, where the console's scheduled sweeps live.

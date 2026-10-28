@@ -2532,7 +2532,11 @@ the theme editor exposes, and nothing the editor does not.
   a white-label workspace's brand color, colors read from the site logo when
   the logo is an asset of the site's or its org's media library, and colors
   read from a public https page the brief links to, fetched through the
-  plugin-fetch SSRF guard. Only hex colors from those reach the prompt.
+  plugin-fetch SSRF guard. Only hex colors from those reach the prompt. On
+  Vercel the logo is read and decoded by the console's plugins' image function
+  (`ai/image-reads`, AGL-4048), the one function that ships `sharp`'s native
+  library, inside the same 8 s bound; a read that does not come back leaves
+  the logo's colors out with their note, as a failed read always did.
 - **What the model is asked.** The call is
   `runValidatedGeneration('theme', …)`: the doctrine's cached block, which
   carries the acceptable-use rules, then the step's own cached rules block,
@@ -4839,7 +4843,12 @@ cards and the eval harness read.
   or its org's, the way the media CDN would serve it, and sent as a new JPEG
   at most 768 px on its longer edge at quality 80, which carries none of the
   original's metadata (`src/lib/jobs/ai-product-image.ts`). No other asset,
-  file name or alt text is read, and nothing is fetched from a URL. The
+  file name or alt text is read, and nothing is fetched from a URL. On Vercel
+  the read and the encode run in the console's plugins' image function
+  (`ai/image-reads`, AGL-4048), which ships `sharp`'s native library while the
+  doors and the beat do not, signed and bounded by `AI_PRODUCT_IMAGE_READ_MS`;
+  a photo it does not return is unreadable, and the copy is written from the
+  product's words. The
   provider contract carries the picture as an image part of a user turn, and
   the runtime refuses one for a model whose catalog row does not say `vision`.
 - **Held in code.** Each answer runs through its tool's check
