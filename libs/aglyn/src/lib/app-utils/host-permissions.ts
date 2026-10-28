@@ -22,7 +22,6 @@ import type {
   HostUid,
   OrgRole,
 } from '../foundation'
-import { listPluginOrgPermissions } from '../plugin-manager/plugin-entitlements'
 import { refinePermissionMap, type PermissionRefinement } from '../plugin-manager/plugin-permissions'
 import { hostRoleFor, isOrgWideMember } from './organizations'
 import {
@@ -55,11 +54,15 @@ import { orgRoleTier } from './org-roles'
  * omitting the site.
  */
 
-/** The catalog keys a collaborator can hold per site, in catalog order. */
+/**
+ * The catalog keys a collaborator can hold per site, in catalog order: every
+ * key with host-role defaults, the core's site keys (AGL-4047) and the ones
+ * plugins declare.
+ */
 export function hostPermissionKeys(): HostPermissionKey[] {
-  return listPluginOrgPermissions()
-    .filter((permission) => permission.hostRoleDefaults !== undefined)
-    .map((permission) => permission.key)
+  return ORG_PERMISSIONS.filter((definition) => definition.hostRoleDefaults !== undefined).map(
+    (definition) => definition.key,
+  )
 }
 
 /** What a host role grants for every per-site key, before any toggle. */
@@ -67,9 +70,9 @@ export function hostRolePermissionDefaults(
   role: HostAccessRole,
 ): Record<HostPermissionKey, boolean> {
   const defaults: Record<HostPermissionKey, boolean> = {}
-  for (const permission of listPluginOrgPermissions()) {
-    if (!permission.hostRoleDefaults) continue
-    defaults[permission.key] = permission.hostRoleDefaults[role] === true
+  for (const definition of ORG_PERMISSIONS) {
+    if (!definition.hostRoleDefaults) continue
+    defaults[definition.key] = definition.hostRoleDefaults[role] === true
   }
   return defaults
 }

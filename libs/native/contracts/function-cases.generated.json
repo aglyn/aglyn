@@ -58427,7 +58427,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": true,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58464,7 +58468,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": true,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58501,7 +58509,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": false,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58538,7 +58550,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58575,7 +58591,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58612,7 +58632,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58656,7 +58680,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": false,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58702,7 +58730,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58743,7 +58775,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": true,
+            "site.publish": true,
+            "site.sensitive": true
           }
         }
       ]

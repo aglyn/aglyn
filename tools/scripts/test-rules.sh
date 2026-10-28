@@ -55,6 +55,7 @@ npx firebase emulators:exec --only firestore,database --project demo-rules-check
         cloud/rules-pos-hardware.spec.mjs \
         cloud/rules-pos-register.spec.mjs \
         cloud/rules-commerce-reservations.spec.mjs \
+        cloud/rules-site-keys.spec.mjs \
         cloud/marketplace-rules.spec.mjs \
         cloud/hosts-list-constraint.spec.mjs \
         cloud/override-merge.spec.mjs; do \

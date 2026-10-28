@@ -159,7 +159,11 @@ describe('the hook fails CLOSED, because it guards an enforced boundary', () => 
   it('resolves through hostRoleFor, not the memberRoles projection', () => {
     const code = readCode(HOOK)
     expect(code).toContain('hostRoleFor')
-    expect(code).toContain('hostRoleCanPublish')
+    // "Publish site content" (`site.publish`, AGL-4047), whose preset is the
+    // publishing roles: decided from the member document for this site, as
+    // `hostRoleCanPublish` was, with a custom role, an override or the site's
+    // toggle able to move it.
+    expect(code).toContain("resolveSiteRolePresetPermissions(member, hostId as never, customRole)['site.publish']")
     expect(code).not.toContain('memberRoles')
   })
 })

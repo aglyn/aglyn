@@ -152,13 +152,16 @@ describe('the per-site permissions door (AGL-4047)', () => {
   it('answers a collaborator’s site role, stored toggles, defaults and verdict', async () => {
     const response = await get('row-1')
     expect(response.status).toBe(200)
+    // The core's site keys (AGL-4047) lead, at the author's preset: content
+    // edits and nothing else.
+    const AUTHOR_SITE_KEYS = { 'site.edit': true, 'site.publish': false, 'site.sensitive': false, 'site.manage': false }
     expect(await response.json()).toEqual({
       orgWide: false,
       role: 'author',
-      keys: ['reviews.reply'],
+      keys: ['site.edit', 'site.publish', 'site.sensitive', 'site.manage', 'reviews.reply'],
       stored: { 'reviews.reply': true },
-      defaults: { 'reviews.reply': false },
-      effective: { 'reviews.reply': true },
+      defaults: { ...AUTHOR_SITE_KEYS, 'reviews.reply': false },
+      effective: { ...AUTHOR_SITE_KEYS, 'reviews.reply': true },
     })
   })
 

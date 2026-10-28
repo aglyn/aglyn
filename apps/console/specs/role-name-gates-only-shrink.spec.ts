@@ -81,11 +81,17 @@ export const TS_ROLE_GATE = [
   String.raw`\[\s*'(owner|admin|editor|author)',\s*'(owner|admin|editor|author|viewer)'`,
   String.raw`(ROLES|Roles)\.(includes|has)\(`,
   String.raw`\b(role|Role)\s+in\s+\[`,
+  // A projection read inline: `memberRoles[uid] === 'admin'`.
+  String.raw`memberRoles\b[^;=!]{0,60}(===|!==)\s*'(owner|admin|editor|author|viewer)'`,
 ].join('|')
 
-/** The deployed rules: a role helper called, or a role compared with a literal or a literal list. */
+/**
+ * The deployed rules: a role helper called, or a role compared with a literal
+ * or a literal list. `canWriteHostContent`, `canPublishHostContent` and
+ * `canReadHostSensitive` are not on it: they ask the site keys (AGL-4047).
+ */
 export const RULES_ROLE_GATE = [
-  String.raw`\b(canWriteHostContent|canPublishHostContent|canReadHostSensitive|canManageOrg|canWriteOrgData|canWriteOrgWideData|isOrgWideAudienceManager|publisherManager|listingManager|canReadTransferJobs|canReadScopedPeople|canReadOutreach)\(`,
+  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData|isOrgWideAudienceManager|publisherManager|listingManager|canReadTransferJobs|canReadScopedPeople|canReadOutreach)\(`,
   String.raw`hostMemberRole\(hostId\)\s*(==|in)\s*['\[]`,
   String.raw`\brole\s*(==|in)\s*['\[]`,
   String.raw`\.role\s+in\b`,

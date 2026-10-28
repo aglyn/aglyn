@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — the site roles are permissions you can adjust
+
+- **[Site permissions](workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions)** —
+  editing a site's content, publishing it, seeing its orders and webhooks, and managing
+  its settings are now four permissions. Each site role still starts with exactly what
+  it had, and a custom role or a per-member override can now grant or deny any of them,
+  so you can let one trusted Author publish, or keep an Editor out of the order book.
+
 ## October 2026 — walk-ins and stays are permissions
 
 - **[Reservation permissions](workspace-and-billing/teams-and-roles/custom-roles.md#reservation-permissions)** —

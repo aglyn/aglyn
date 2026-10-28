@@ -138,3 +138,20 @@ describe('a site key’s control asks the key its route or rule checks (AGL-4047
     expect(shell).toContain('isSiteRolePresetPermission(permission)')
   })
 })
+
+describe('the site’s publish and settings controls ask the keys the rules check (AGL-4047)', () => {
+  it('Publish controls ask "Publish site content" for the site in view, as the rules do', () => {
+    const hook = read('hooks/use-host-role.ts')
+    expect(hook).toContain("resolveSiteRolePresetPermissions(member, hostId as never, customRole)['site.publish']")
+    expect(hook).not.toContain('hostRoleCanPublish(')
+    expect(read('../../cloud/firebase-firestore.deploy.rules')).toContain("hostSiteRoleKey(hostId, 'site.publish', ['admin', 'editor'])")
+  })
+
+  it('the Site Admin surfaces ask "Manage site settings", read as the rules read it', () => {
+    const provider = read('components/host-id-provider.tsx')
+    expect(provider).toContain("hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage'])")
+    expect(provider).not.toMatch(/memberRoles\?\.\[uid\] === 'admin'/)
+    expect(read('../../cloud/firebase-firestore.deploy.rules')).toContain("hostSiteRoleKey(hostId, 'site.manage', ['admin'])")
+  })
+})
+

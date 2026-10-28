@@ -72,7 +72,8 @@ describe('the reservation keys (AGL-4047)', () => {
   })
 
   it('register into the one catalog, filed under Commerce, as site-role presets', () => {
-    expect(siteRolePresetPermissionKeys()).toEqual([...KEYS])
+    // After the core's site keys (AGL-4047).
+    expect(siteRolePresetPermissionKeys().filter((key) => key.startsWith('commerce.'))).toEqual([...KEYS])
     for (const key of KEYS) {
       const definition = ORG_PERMISSIONS.find((entry) => entry.key === key)
       expect(definition).toMatchObject({ pluginId: 'commerce', group: 'commerce', scope: 'site', presetFromSiteRole: true })

@@ -1025,6 +1025,7 @@
         "OrgPermissionLayer"
       ],
       "values": [
+        "CORE_SITE_ROLE_PRESETS",
         "ORG_ROLE_GRANTS",
         "ORG_ROLE_NAMES"
       ]

@@ -17,12 +17,12 @@
 'use client'
 
 import {
-  hostRoleCanPublish,
   hostRoleFor,
   isOrgWideMember,
   resolveCollaboratorHostPermissions,
   siteMayNarrow,
   siteNarrowingFor,
+  resolveSiteRolePresetPermissions,
   siteRolePresetPermissionKeys,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -39,7 +39,11 @@ import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 export interface HostRoleState {
   /** The member's effective role on this site, or null for no access. */
   hostRole: HostAccessRole | null
-  /** May they make content live? `author` may not — that IS the role. */
+  /**
+   * May they make content live? "Publish site content" (`site.publish`,
+   * AGL-4047) on this site, whose preset is the site Admin and Editor: an
+   * author may not unless a role or the site grants it.
+   */
   canPublish: boolean
   /** False until the member doc has been read; see the note on gating. */
   loaded: boolean
@@ -166,7 +170,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
         if (!active) return
         setState({
           hostRole,
-          canPublish: hostRoleCanPublish(hostRole),
+          canPublish: resolveSiteRolePresetPermissions(member, hostId as never, customRole)['site.publish'] === true,
           loaded: true,
           orgWide,
           hostPermissions: orgWide

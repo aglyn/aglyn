@@ -1616,6 +1616,32 @@
       "value": "TechArticle"
     }
   ],
+  "CORE_SITE_ROLE_PRESETS": {
+    "site.edit": {
+      "admin": true,
+      "author": true,
+      "editor": true,
+      "viewer": false
+    },
+    "site.manage": {
+      "admin": true,
+      "author": false,
+      "editor": false,
+      "viewer": false
+    },
+    "site.publish": {
+      "admin": true,
+      "author": false,
+      "editor": true,
+      "viewer": false
+    },
+    "site.sensitive": {
+      "admin": true,
+      "author": false,
+      "editor": true,
+      "viewer": false
+    }
+  },
   "CRM_ACTIVITIES_PER_RECORD_CEILING": 5000,
   "CRM_ACTIVITY_DIRECTION_LABELS": {
     "inbound": "Inbound",
@@ -7318,6 +7344,10 @@
         "members.manage",
         "hosts.create",
         "hosts.delete",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
+        "site.manage",
         "data.manage",
         "marketplace.publish",
         "plugins.install",
@@ -7341,6 +7371,9 @@
         "data.manage",
         "marketplace.publish",
         "plugins.install",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
         "ai.use",
         "ai.generate",
         "commerce.reservations",
@@ -7366,6 +7399,10 @@
         "members.manage",
         "hosts.create",
         "hosts.delete",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
+        "site.manage",
         "data.manage",
         "marketplace.publish",
         "plugins.install",
@@ -7497,6 +7534,34 @@
         "group": "sites",
         "key": "hosts.delete",
         "label": "Delete sites"
+      },
+      {
+        "description": "Create and change pages, content and everything else on a site, without making it live.",
+        "group": "sites",
+        "key": "site.edit",
+        "label": "Edit site content",
+        "scope": "site"
+      },
+      {
+        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "group": "sites",
+        "key": "site.publish",
+        "label": "Publish site content",
+        "scope": "site"
+      },
+      {
+        "description": "Read a site’s orders and returns, and set up its webhooks.",
+        "group": "sites",
+        "key": "site.sensitive",
+        "label": "See orders and webhooks",
+        "scope": "site"
+      },
+      {
+        "description": "Turn a site’s plugins on and off, and change their settings and its security allow-lists.",
+        "group": "sites",
+        "key": "site.manage",
+        "label": "Manage site settings",
+        "scope": "site"
       },
       {
         "description": "Create, edit, and delete organization datasets.",

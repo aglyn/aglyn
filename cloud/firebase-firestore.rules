@@ -2975,10 +2975,10 @@ service cloud.firestore {
      * is the whole test.
      *
      * It is NOT an admin gate and must never be used as one. Rules that mean
-     * admin-only spell the comparison out inline —
-     * `hostMemberRole(hostId) == 'admin'`, as the `pluginSettings` write
-     * does — so that a rule restricting something to owners cannot be
-     * satisfied by a viewer. It says nothing about writing either: mutating
+     * admin-only ask "Manage site settings" —
+     * `hostSiteRoleKey(hostId, 'site.manage', ['admin'])`, as the
+     * `pluginSettings` write does (AGL-4047) — so that a rule restricting
+     * something to admins cannot be satisfied by a viewer. It says nothing about writing either: mutating
      * content asks `canWriteHostContent`, making it live asks
      * `canPublishHostContent`, and the documents carrying webhook secrets and
      * shopper PII ask `canReadHostSensitive`.
@@ -3002,9 +3002,14 @@ service cloud.firestore {
      * on the reads because a screen holds the BODY of a campaign email, and
      * the send path resolves it from this tree.
      */
+    //
+    // Since AGL-4047 it asks the KEY "Edit site content" (`site.edit`), whose
+    // preset is exactly the three roles above: the site's stamp when the
+    // projection wrote one, else those roles (`hostSiteRoleKey`). A custom
+    // role, an override or a site toggle can now grant or refuse it.
     function canWriteHostContent(hostId) {
       return isVerified() &&
-        hostMemberRole(hostId) in ['admin', 'editor', 'author'];
+        hostSiteRoleKey(hostId, 'site.edit', ['admin', 'editor', 'author']);
     }
     /**
      * May this member make content LIVE? (`author` excluded — that is the
@@ -3044,8 +3049,12 @@ service cloud.firestore {
      * reasoning as the helper above and one step sharper: this one also gates
      * `publishOutbox`, which is a client write that makes the PLATFORM act.
      */
+    //
+    // Since AGL-4047 it asks "Publish site content" (`site.publish`), whose
+    // preset is Admin and Editor, the same way `canWriteHostContent` asks its
+    // key.
     function canPublishHostContent(hostId) {
-      return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
+      return isVerified() && hostSiteRoleKey(hostId, 'site.publish', ['admin', 'editor']);
     }
     // AGL-3463: a client write removes at most one route, and nothing else
     // in the map changes with it — one explicit unpublish or delete. The one
@@ -3076,8 +3085,12 @@ service cloud.firestore {
      * Keeping the two apart means a later decision to let authors publish
      * cannot drag the PII gate along with it by accident.
      */
+    //
+    // Since AGL-4047 it asks "See orders and webhooks" (`site.sensitive`),
+    // whose preset is Admin and Editor: still a key of its own, so granting
+    // an author content edits never hands them the order book.
     function canReadHostSensitive(hostId) {
-      return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+      return isSignedIn() && hostSiteRoleKey(hostId, 'site.sensitive', ['admin', 'editor']);
     }
     /**
      * Was this permission written down as granted for this member ON THIS
@@ -3516,7 +3529,9 @@ service cloud.firestore {
           // while publishing nothing. The console card writes this key from
           // the Admin -> Plugins page, which is already admin-only, so the
           // tier matches the surface that sets it.
-          (hostMemberRole(hostId) == 'admin' ||
+          // "Manage site settings" (`site.manage`, AGL-4047), whose preset is
+          // the site Admin this asked for before.
+          (hostSiteRoleKey(hostId, 'site.manage', ['admin']) ||
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
                        'approvedImageHosts', 'approvedMediaHosts',
@@ -3539,7 +3554,7 @@ service cloud.firestore {
               .hasAny(['screens', 'defaultHomeScreenId'])) &&
           routeRemovalAllowed());
       allow delete: if isStaff() ||
-        (hostMemberRole(hostId) == 'admin' && isVerified() &&
+        (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
           !hostWritesFrozen(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
       // resources enforces screensPerHost / sharedLayoutsPerHost (and the
@@ -3997,7 +4012,7 @@ service cloud.firestore {
       match /pluginSettings/{pluginId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow write: if pluginId != 'live-chat' && (isStaff() ||
-          (hostMemberRole(hostId) == 'admin' && isVerified() &&
+          (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
             !hostWritesFrozen(hostId)));
       }
       // Storefront product reviews (AGL-3736). Every review is CREATED by
