@@ -2067,9 +2067,9 @@ the `theme` kind's proposal, and no site plan may propose one.
 
 ### Sites I like (AGL-3975)
 
-Behind `release_ai_site_inspiration`, OFF by default. While it is on for a
-workspace, the guided start's Style step asks for sites the person likes: one
-on Free, three on a paid plan. A Free workspace sees the second and third
+Behind `release_ai_site_inspiration`, ON by default since 2026-10-28. While
+it is on for a workspace, the guided start's Style step asks for sites the
+person likes: one on Free, three on a paid plan. A Free workspace sees the second and third
 fields disabled with the reason and an Upgrade link (`BlockedControl` and
 `PrerequisiteNotice`), and the review lists the sites by host.
 

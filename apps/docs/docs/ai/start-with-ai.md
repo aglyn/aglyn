@@ -117,7 +117,7 @@ to the style.
 
 ### Sites you like {#sites-you-like}
 
-**Sites you like** (rolling out, not yet available) is an optional block under the style
+**Sites you like** is an optional block under the style
 cards. Type the address of a website whose look you like, such as `https://example.com`,
 in **Site 1**. A paid plan can name up to three sites. On the Free plan, **Site 2** and
 **Site 3** are shown but cannot be used, with the reason and an **Upgrade** link.
