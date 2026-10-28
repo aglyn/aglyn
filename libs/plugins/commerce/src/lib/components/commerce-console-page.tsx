@@ -143,6 +143,8 @@ function sectionBody(
     canBuyHardware: canManagePos,
     canCashDrawer: canManagePos,
   },
+  /** The reservation keys this site decides for the member (AGL-4047). */
+  reservations: { canManage: boolean; canWalkIn: boolean } = { canManage: true, canWalkIn: true },
 ): ReactNode {
   switch (section) {
     case 'catalog':
@@ -236,7 +238,13 @@ function sectionBody(
         />
       )
     case 'reservations':
-      return <ReservationsCard hostId={hostId} />
+      return (
+        <ReservationsCard
+          hostId={hostId}
+          canManage={reservations.canManage}
+          canWalkIn={reservations.canWalkIn}
+        />
+      )
     /*
      * The store's settings, a page each (AGL-3713). They were one `settings`
      * section — every card below in one column — and its old address opens
@@ -396,6 +404,14 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
     canBuyHardware: holdsPosPermission(permissions, 'posBuyHardware'),
     canCashDrawer: canManagePos && holdsPosPermission(permissions, 'posCashDrawer'),
   }
+  // The reservation keys (AGL-4047), whose preset is the member's role on
+  // this site; the shell decides them for the site in view. A map that does
+  // not carry one (a shell that predates them) leaves the card as it was:
+  // the rules and the routes decide.
+  const reservations = {
+    canManage: permissions?.['commerce.reservations'] !== false,
+    canWalkIn: permissions?.['commerce.walkIns'] !== false,
+  }
 
   /*
    * Nothing, deliberately, while the redirect is in flight.
@@ -408,7 +424,7 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos, pos)}
+      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos, pos, reservations)}
     </HubSections>
   )
 }

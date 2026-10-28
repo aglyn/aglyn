@@ -15,14 +15,17 @@
  * limitations under the License.
  */
 
+import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
-import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { COMMERCE_PERMISSIONS, COMMERCE_SITE_PERMISSIONS } from './model/plugin-permissions'
 
 let declared = false
 
 /**
- * The plugin's DECLARATIONS (AGL-4047): its permission keys (the point of sale key (`managePos`)), which
- * the one permission catalog lists beside the core keys. Loaded eagerly by
+ * The plugin's DECLARATIONS (AGL-4047): its permission keys (the point of
+ * sale's `managePos` and its finer keys, and the reservation keys whose
+ * preset is the site role), which the one permission catalog lists beside
+ * the core keys. Loaded eagerly by
  * the console (client and server) and the tenant's server through the
  * generated declarations manifest, so the role editor offers the keys, a
  * custom role or a per-member override keeps them, and a route resolves
@@ -32,6 +35,7 @@ let declared = false
 export function registerCommerceDeclarations(): void {
   if (declared) return
   declared = true
+  registerPluginEntitlements({ pluginId: 'commerce', orgPermissions: COMMERCE_SITE_PERMISSIONS })
   registerPluginPermissions(COMMERCE_PERMISSIONS)
 }
 

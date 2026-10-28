@@ -317,6 +317,12 @@ export function assembleOrgRoleGrants(
         label: declaration.groupLabel ?? group,
         ...(declaration.pluginId ? { pluginId: declaration.pluginId } : {}),
       })
+    } else if (group && declaration.pluginId) {
+      // A plugin's group opened by a declaration that names no plugin (an org
+      // catalog declaration, AGL-4047) is still that plugin's: the first of
+      // its declarations that names one says so.
+      const index = groups.findIndex((entry) => entry.id === group)
+      if (index >= 0 && !groups[index].pluginId) groups[index] = { ...groups[index], pluginId: declaration.pluginId }
     }
     const defaults = declarationRoleDefaults(declaration)
     for (const role of ORG_ROLE_NAMES) {

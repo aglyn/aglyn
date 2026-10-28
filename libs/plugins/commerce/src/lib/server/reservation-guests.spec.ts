@@ -25,7 +25,7 @@ import {
   createReservationGuestsHandler,
   RESERVATION_GUESTS_CLOSED,
   RESERVATION_GUESTS_GONE,
-  RESERVATION_GUESTS_ROLE_REFUSAL,
+  RESERVATION_GUESTS_PERMISSION_REFUSAL,
 } from './reservation-guests'
 import { WALK_IN_PLAN_REFUSAL } from './reservation-walk-in'
 
@@ -171,10 +171,27 @@ describe('who may change a stay’s guests', () => {
     expect(activity).not.toHaveBeenCalled()
   })
 
-  it('names the roles it takes, as the walk-in does', async () => {
+  it('names the permission it takes, as the walk-in does, never a role (AGL-4047)', async () => {
     expect(await guests('family', 4, 'viewer')).toMatchObject({
       statusCode: 403,
-      body: { error: RESERVATION_GUESTS_ROLE_REFUSAL },
+      body: { error: RESERVATION_GUESTS_PERMISSION_REFUSAL },
+    })
+    expect(RESERVATION_GUESTS_PERMISSION_REFUSAL).toBe(
+      'Your role does not include "Book walk-ins and change guests" — ask an organization admin',
+    )
+  })
+
+  it('asks the site’s stamp for the key once the projection wrote it (AGL-4047)', async () => {
+    h.memory.seed('hosts/shop', {
+      memberRoles: { owner: 'admin', cashier: 'editor', viewer: 'viewer' },
+      memberPermissions: { viewer: { 'commerce.walkIns': true }, cashier: { 'commerce.walkIns': false } },
+      timeZone: 'America/Chicago',
+    })
+    expect((await guests('family', 4, 'viewer')).statusCode).toBe(200)
+    expect(h.memory.read('hosts/shop/reservations/family')).toMatchObject({ guests: 4 })
+    expect(await guests('family', 5, 'editor')).toMatchObject({
+      statusCode: 403,
+      body: { error: RESERVATION_GUESTS_PERMISSION_REFUSAL },
     })
   })
 
