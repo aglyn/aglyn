@@ -269,6 +269,10 @@ and is kept for seven years from the sale, then deleted. It never holds the
 buyer's name, email, phone, street address or tracking number. If an order is
 canceled and refunded, the record says so.
 
+For a reader bought from Aglyn in person, the record names Aglyn's register sale
+and how it was paid instead of a shipping address, and the tax is the one Aglyn's
+store charged at the sale.
+
 If the person who placed an order
 [closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
 the workspace keeps the order and its amounts, and their name, email, phone,

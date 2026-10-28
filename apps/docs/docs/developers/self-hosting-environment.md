@@ -1198,6 +1198,27 @@ the store's register becomes a hardware order for the buyer's workspace. The
 store's own prices, sales tax and payment account apply, exactly as for anything
 else it sells; none of the shop's figures above are needed.
 
+At that store's register, anyone who may sell there:
+
+- on a sale with a reader, selects **Attach buyer** and finds the buyer by their
+  exact email address, their name or their workspace's name, then picks the
+  workspace and, if they know it, the store. Each lookup is rate-limited and
+  written to the staff audit log, and shows only a name, a masked address and
+  each workspace's stores. Someone with no account is invited by email and gets
+  the reader in the workspace they create;
+- may scan or type each reader's serial number, so the order is set up by itself
+  when the buyer adds the reader, or add the reader to the buyer's store there
+  and then with its pairing code;
+- finds every reader sold at the kiosk, while the register was offline or to
+  someone not yet attached under **To attach**.
+
+**Staff → Hardware orders** lists the same sales under **Sold in person, to
+attach**, buyers' return requests under **Return requested**, and refunds an
+in-person sale to the card it was paid with, from the store's own account. A
+sale paid in cash is refunded as a return at the store's register. On the staff
+sales tax return, each in-person sale counts once, in the card reader hardware
+section.
+
 Paid orders arrive on the platform webhook as `checkout.session.completed`, which
 the endpoint already subscribes to; there is no new endpoint.
 
