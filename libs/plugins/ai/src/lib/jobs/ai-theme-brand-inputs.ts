@@ -457,6 +457,12 @@ export interface PublicFetchOptions {
   userAgent?: string
   /** Sent as `Accept`. */
   acceptHeader?: string
+  /**
+   * Extra headers for one hop, asked again for EVERY hop's own address
+   * (AGL-4085): a header meant for one host never rides a redirect to
+   * another. `Accept` and `User-Agent` above always win over these.
+   */
+  headersFor?: (url: URL) => Readonly<Record<string, string>> | undefined
   /** Asked of every redirect hop before it is followed; the SSRF checks run as well. */
   redirectAllowed?: (from: URL, to: URL) => boolean
   /** Refuse a body over `maxBytes` rather than cut it. */
@@ -506,6 +512,7 @@ export async function fetchPublicTextDetailed(
         signal: clock.signal,
         dispatcher,
         headers: {
+          ...(options.headersFor?.(parsed) ?? {}),
           Accept: options.acceptHeader ?? 'text/html, text/css;q=0.9',
           ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
         },

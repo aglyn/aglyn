@@ -36,6 +36,10 @@
  *   group, else `*`. A robots.txt that answers 404 allows everything; one
  *   that cannot be read at all (5xx, no answer) stops the crawl, because
  *   "could not ask" is not "allowed".
+ * - **Our own edge.** A site this platform serves gets the edge secret
+ *   (`site-import-edge.ts`, AGL-4085), which lifts our bot challenge for
+ *   AglynBot; it is asked per request and per redirect hop, and a request
+ *   that leaves the site's two origins never carries it.
  * - **Sitemap first.** The sitemaps robots.txt names, else /sitemap.xml (an
  *   index's children included), then same-site links found on the pages read,
  *   for whatever the sitemap missed.
@@ -71,6 +75,7 @@ import {
   robotsRulesFor,
   type RobotsRule,
 } from './site-import-robots'
+import { NO_SITE_IMPORT_HEADERS, siteImportEdgeHeadersFor, type SiteImportHeadersFor } from './site-import-edge'
 
 /**
  * Where the bot's user agent points a site owner who wants to know what it is
@@ -209,6 +214,20 @@ export interface SiteImportCrawlOptions {
 export interface SiteImportCrawlSeams {
   fetch?: (url: string, options: PublicFetchOptions) => Promise<PublicFetchResult>
   now?: () => number
+  /**
+   * Extra headers for one request, asked again on every redirect hop
+   * (AGL-4085). Absent, the crawl asks `siteImportEdgeHeadersFor` once for its
+   * two origins: Aglyn's edge secret where this platform serves the name,
+   * nothing anywhere else. Either way, nothing reaches an address off the
+   * site's two origins.
+   */
+  headersFor?: SiteImportHeadersFor
+}
+
+/** The crawl's headers for its origins: the caller's, else the edge's; never any off the site. */
+async function siteHeadersFor(origins: readonly string[], seams: SiteImportCrawlSeams): Promise<SiteImportHeadersFor> {
+  const inner = seams.headersFor ?? (await siteImportEdgeHeadersFor(origins).catch(() => NO_SITE_IMPORT_HEADERS))
+  return (url: URL) => (origins.includes(url.origin) ? inner(url) : {})
 }
 
 /** The site's two origins for a domain. */
@@ -284,6 +303,7 @@ export async function crawlSiteForImport(
     return finish()
   }
 
+  const headersFor = await siteHeadersFor(origins, seams)
   const maxPages = Math.max(0, Math.floor(options.maxPages))
   const maxPageBytes = options.maxPageBytes ?? SITE_IMPORT_DEFAULTS.maxPageBytes
   const maxTotalBytes = options.maxTotalBytes ?? SITE_IMPORT_DEFAULTS.maxTotalBytes
@@ -303,6 +323,7 @@ export async function crawlSiteForImport(
       accept,
       acceptHeader,
       userAgent: AGLYN_BOT_USER_AGENT,
+      headersFor,
       signal: controller.signal,
       timeoutMs: Math.max(1, Math.min(SITE_IMPORT_DEFAULTS.requestTimeoutMs, deadlineAt - now())),
       redirectAllowed: (_from, to) => sameSite(to),
@@ -543,6 +564,7 @@ export async function readSiteVerificationMeta(
     accept: /text\/html|application\/xhtml\+xml/i,
     acceptHeader: 'text/html, application/xhtml+xml;q=0.9',
     userAgent: AGLYN_BOT_USER_AGENT,
+    headersFor: await siteHeadersFor(origins, seams),
     timeoutMs: SITE_IMPORT_DEFAULTS.requestTimeoutMs,
     redirectAllowed: (_from, to) => to.protocol === 'https:' && origins.includes(to.origin),
   })
