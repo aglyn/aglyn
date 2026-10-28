@@ -291,6 +291,23 @@ const SALE_PATH = `posHardwareSales/${ORDER_ID}`
  */
 const PERSONAL = /Jordan|Pat Lee|Main St|Elm St|buyer@example|5555550100|manager-1|\b1Z\b/
 
+/**
+ * The buyer's name and address the sale record keeps for the reseller's
+ * records (AGL-4038), as the online order's shipping names them.
+ */
+const RECORDED_BUYER = {
+  name: 'Jordan Lee',
+  address: { line1: '12 Main St', line2: null, city: 'Springfield', state: 'IL', postalCode: '62701', country: 'US' },
+}
+
+/** A sale record without the buyer it keeps for the reseller's records. */
+function withoutBuyer(record: PosHardwareSaleRecord | undefined): Omit<PosHardwareSaleRecord, 'buyer'> | undefined {
+  if (!record) return record
+  const rest: Partial<PosHardwareSaleRecord> = { ...record }
+  delete rest.buyer
+  return rest as Omit<PosHardwareSaleRecord, 'buyer'>
+}
+
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
 })
@@ -809,7 +826,7 @@ describe('the retained sale record (AGL-4038)', () => {
     })
   const sale = () => fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord | undefined
 
-  it('is written with the order, with the amounts and the tax region and nothing about the buyer', async () => {
+  it('is written with the order, with the amounts, the tax region and only the buyer’s name and address', async () => {
     await deliver(paidSession({ total_details: { amount_tax: 1_705 }, amount_total: 24_825 }))
     expect(sale()).toMatchObject({
       orderId: ORDER_ID,
@@ -830,7 +847,10 @@ describe('the retained sale record (AGL-4038)', () => {
       ['stripe-reader-m2', 1, 7_670],
     ])
     expect(sale()?.paidAtMs).toEqual(expect.any(Number))
-    expect(JSON.stringify(sale())).not.toMatch(PERSONAL)
+    // The reseller's records: the buyer's name and address, and nothing
+    // else of theirs — no email, phone, account or tracking.
+    expect(sale()?.buyer).toEqual(RECORDED_BUYER)
+    expect(JSON.stringify(withoutBuyer(sale()))).not.toMatch(PERSONAL)
     for (const field of ['hostId', 'createdBy', 'contactEmail', 'shipping', 'tracking']) {
       expect([field, field in (sale() ?? {})]).toEqual([field, false])
     }
@@ -975,10 +995,26 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
       taxRegion: { country: 'US', state: 'IL', postalCode: '62701' },
     })
     expect(JSON.stringify(after)).not.toMatch(PERSONAL)
-    // The sale record still names the region, and still holds no one.
+    // The sale record still names the region, and KEEPS the buyer's name
+    // and address for the reseller's records; nothing else of theirs.
     const record = fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
     expect(record).toMatchObject({ shipTo: { country: 'US', state: 'IL', postalCode: '62701' }, status: 'shipped' })
-    expect(JSON.stringify(record)).not.toMatch(PERSONAL)
+    expect(record.buyer).toEqual(RECORDED_BUYER)
+    expect(JSON.stringify(withoutBuyer(record))).not.toMatch(PERSONAL)
+  })
+
+  it('keeps the buyer’s name and address on the sale record through every later write of the order', async () => {
+    await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    // A staff write after the erasure rebuilds the record from an order
+    // that no longer names the buyer.
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'delivered' },
+    })
+    const record = fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
+    expect(record.status).toBe('delivered')
+    expect(record.buyer).toEqual(RECORDED_BUYER)
+    expect((fakeDocs.get(ORDER_PATH) as PosHardwareOrder).shipping.name).toBeNull()
   })
 
   it('leaves a colleague’s order alone', async () => {
@@ -1103,7 +1139,7 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
     expect(order().refundRequestedAtMs).toBeUndefined()
     // The retained record says so, and it is the one the workspace erasure leaves.
     expect(sale()).toMatchObject({ status: 'canceled', refundId: 're_1', refundedCents: 23_120, canceledAtMs: expect.any(Number) })
-    expect(JSON.stringify(sale())).not.toMatch(PERSONAL)
+    expect(JSON.stringify(withoutBuyer(sale()))).not.toMatch(PERSONAL)
     // The buyer is told; staff are not, because it was never placed with Stripe.
     expect(mockSendEmail).toHaveBeenCalledTimes(1)
     expect(mockSendEmail.mock.calls[0][0]).toMatchObject({

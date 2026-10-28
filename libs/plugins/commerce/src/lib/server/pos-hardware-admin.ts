@@ -32,6 +32,7 @@ import {
   posHardwareBuyerErasedPatch,
   posHardwareOrderSource,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareOrder,
   type PosHardwareOrderStatus,
   type PosHardwareTracking,
@@ -294,7 +295,7 @@ async function updateOrder(
     }
     const after = { ...before, ...patch } as PosHardwareOrder
     transaction.update(ref, patch)
-    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
     return { before, after, reached }
   })
 
@@ -401,7 +402,7 @@ async function forgetBuyer(firestore: any, ref: any, orgId: string, orderId: str
     const patch = posHardwareBuyerErasedPatch(before, Date.now())
     const next = { ...before, ...patch } as PosHardwareOrder
     transaction.update(ref, patch)
-    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, next))
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, next), posHardwareSaleSetOptions(next))
     return next
   })
   await addAdminAudit(firestore, {

@@ -422,6 +422,19 @@ export interface OrderHardwareBuyer {
   /** The register user who attached them, and when. */
   attachedBy: string
   attachedAtMs: number
+  /**
+   * The buyer's name and business address, for the platform's reseller
+   * records (AGL-4038): the account's name, or what the register typed.
+   */
+  name?: string | null
+  address?: {
+    line1: string
+    line2?: string
+    city: string
+    state?: string
+    postalCode: string
+    country: string
+  } | null
 }
 
 export interface HostOrder {

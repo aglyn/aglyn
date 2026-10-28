@@ -22,12 +22,14 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   posHardwareSku,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
   type PosHardwareUnit,
 } from '../model/pos-hardware'
 import { posHardwareAttachmentOf } from '../model/pos-hardware-in-person'
+import { fillPosHardwareBuyerAddress } from './pos-hardware-buyer-record'
 import { hardwareOrdersRef, posHardwareInPersonOrderId, posHardwareSaleRef } from './pos-hardware'
 import type { PosTerminalAddress } from './pos-terminal'
 
@@ -166,6 +168,9 @@ export async function matchRegisteredPosHardwareReader(input: {
                   email: before.attachment?.email ?? null,
                   attachedBy: '',
                   attachedAtMs: now,
+                  // What the register typed of the buyer stays (AGL-4038).
+                  name: before.attachment?.name ?? null,
+                  address: before.attachment?.address ?? null,
                 }),
               },
             }
@@ -180,11 +185,14 @@ export async function matchRegisteredPosHardwareReader(input: {
         transaction.create(hardwareOrdersRef(after.orgId).doc(orderId), after)
         transaction.delete(fromRef)
       }
-      transaction.set(saleRef, posHardwareSaleRecord(orderId, after))
+      transaction.set(saleRef, posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
       return true
     })
     if (changed) matched.push(orderId)
   }
+  // The buyer's address for the reseller's records, from the store the
+  // reader is now on, where the sale has none yet.
+  for (const orderId of matched) await fillPosHardwareBuyerAddress({ orgId: input.orgId, orderId })
   return { matched }
 }
 
@@ -281,7 +289,7 @@ export async function choosePosHardwareStore(input: {
   hostId: string
 }): Promise<PosHardwareOrder> {
   const { ref } = workspaceOrder(input.orgId, input.orderId)
-  return firestore().runTransaction(async (transaction: any) => {
+  const chosen: PosHardwareOrder = await firestore().runTransaction(async (transaction: any) => {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReaderRefusal('No such order.', 404)
     const before = snapshot.data() as PosHardwareOrder
@@ -293,9 +301,11 @@ export async function choosePosHardwareStore(input: {
       updatedAtMs: Date.now(),
     }
     transaction.set(ref, after)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after))
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after), posHardwareSaleSetOptions(after))
     return after
   })
+  await fillPosHardwareBuyerAddress({ orgId: input.orgId, orderId: input.orderId })
+  return chosen
 }
 
 /**
@@ -315,7 +325,7 @@ export async function markPosHardwareSetUp(input: { orgId: string; orderId: stri
     const now = Date.now()
     const after: PosHardwareOrder = { ...before, status: 'registered', registeredAtMs: now, updatedAtMs: now }
     transaction.set(ref, after)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after))
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after), posHardwareSaleSetOptions(after))
     return after
   })
 }
@@ -434,8 +444,9 @@ export async function registerPosHardwareAtBooth(input: {
       updatedAtMs: stamp,
     }
     transaction.set(ref, updated)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, updated))
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, updated), posHardwareSaleSetOptions(updated))
     return updated
   })
+  await fillPosHardwareBuyerAddress({ orgId, orderId: input.orderId })
   return { order: after, readerId: registered.id, storeAddress }
 }

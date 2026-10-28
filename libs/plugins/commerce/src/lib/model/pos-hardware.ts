@@ -726,6 +726,18 @@ export interface PosHardwareAttachment {
   attachedAtMs: number | null
   /** When the sign-up invitation went to `email`, for a buyer with no account. */
   invitedAtMs?: number | null
+  /**
+   * The buyer's name, for the platform's reseller records (AGL-4038): the
+   * account's name, or the one typed at the sale. An online order keeps it
+   * in `shipping.name` instead. Taken off with the buyer's account.
+   */
+  name?: string | null
+  /**
+   * The buyer's business address, for the same records: typed at the sale,
+   * or the address of the store the readers are set up on. Never the tax
+   * region, which stays the selling store's. Taken off with the account.
+   */
+  address?: PosHardwareAddress | null
 }
 
 /**
@@ -890,7 +902,17 @@ export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
  * record and owes the sales tax on it. So beside every order the server keeps
  * `posHardwareSales/{orderId}`, a TOP-LEVEL record of what tax and accounting
  * need — the lines, the amounts, the tax, Stripe's ids, the status dates and
- * the region it shipped to — and nothing about the person who bought it.
+ * the region it shipped to — and, of the person who bought it, only their
+ * NAME and ADDRESS ({@link PosHardwareSaleBuyer}).
+ *
+ * The name and address are the reseller's records Stripe's Terminal Reseller
+ * Terms §10 ask for: the identity and address of each buyer, open to Stripe's
+ * inspection. §10 states no period, so they are kept for the record's own
+ * seven years. They SURVIVE the buyer's account erasure, which still takes
+ * the email, phone, tracking and the name and street off the ORDER: every
+ * write sets the record through {@link posHardwareSaleSetOptions}, which
+ * leaves the stored name and address alone when the order no longer has
+ * them because its buyer was erased.
  *
  * It is the `platformRevenue` / `storefrontTaxCollected` shape on purpose
  * (AGL-1811, AGL-1904): keyed to the workspace by FIELD, outside
@@ -912,7 +934,33 @@ export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
 /** The top-level collection of retained hardware sale records. */
 export const POS_HARDWARE_SALES_COLLECTION = 'posHardwareSales'
 
-/** `posHardwareSales/{orderId}`: an order with every personal detail left out. */
+/**
+ * A street address as the sale record keeps it: every key present, so a
+ * later write of a different address replaces each one.
+ */
+export interface PosHardwareSaleAddress {
+  line1: string
+  line2: string | null
+  city: string
+  state: string | null
+  postalCode: string | null
+  country: string
+}
+
+/**
+ * Who bought it, for the reseller's records (AGL-4038): the buyer's name and
+ * address and nothing else of theirs. An online order's are the shipping
+ * name and address; an in-person order's are on its attachment.
+ */
+export interface PosHardwareSaleBuyer {
+  name: string | null
+  address: PosHardwareSaleAddress | null
+}
+
+/**
+ * `posHardwareSales/{orderId}`: an order with every personal detail left out
+ * but the buyer's name and address.
+ */
 export interface PosHardwareSaleRecord {
   orderId: string
   /** The workspace that bought it, by id; the record outlives the workspace. */
@@ -966,6 +1014,13 @@ export interface PosHardwareSaleRecord {
    * the return once, in the hardware section.
    */
   storefrontTaxRowId: string | null
+  /**
+   * The buyer's name and address, for the reseller's records; null when the
+   * order names none (a sale not attached to anyone yet). Absent from a write
+   * whose order no longer has them because the buyer's account was erased,
+   * so the stored ones stay ({@link posHardwareSaleSetOptions}).
+   */
+  buyer?: PosHardwareSaleBuyer | null
   /**
    * When the record is deleted: {@link POS_HARDWARE_SALE_RETENTION_YEARS}
    * after the sale, by the Firestore TTL policy on `posHardwareSales.expiresAt`.
@@ -1042,12 +1097,63 @@ export function posHardwareTaxRegion(order: Pick<PosHardwareOrder, 'shipping'>):
     : null
 }
 
+/** An address with every key present, or null when it names no place. */
+function saleAddress(address: Partial<PosHardwareAddress> | null | undefined): PosHardwareSaleAddress | null {
+  const line1 = textOrNull(address?.line1)
+  const city = textOrNull(address?.city)
+  const country = textOrNull(address?.country)
+  if (!line1 || !city || !country) return null
+  return {
+    line1: line1.slice(0, 200),
+    line2: textOrNull(address?.line2)?.slice(0, 200) ?? null,
+    city: city.slice(0, 100),
+    state: textOrNull(address?.state)?.slice(0, 100) ?? null,
+    postalCode: textOrNull(address?.postalCode)?.slice(0, 20) ?? null,
+    country: country.toUpperCase().slice(0, 2),
+  }
+}
+
+/**
+ * A buyer's business address as an in-person order keeps it (AGL-4038):
+ * trimmed and cut to length, or null when it lacks a street, city, postal
+ * code or two-letter country.
+ */
+export function posHardwareBuyerAddress(value: unknown): PosHardwareAddress | null {
+  const address = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof PosHardwareAddress, unknown>>
+  const line1 = textOrNull(address.line1)?.slice(0, 200)
+  const city = textOrNull(address.city)?.slice(0, 100)
+  const postalCode = textOrNull(address.postalCode)?.slice(0, 20)
+  const country = textOrNull(address.country)?.toUpperCase()
+  if (!line1 || !city || !postalCode || !country || !/^[A-Z]{2}$/.test(country)) return null
+  const line2 = textOrNull(address.line2)?.slice(0, 200)
+  const state = textOrNull(address.state)?.slice(0, 100)
+  return { line1, ...(line2 ? { line2 } : {}), city, ...(state ? { state } : {}), postalCode, country }
+}
+
+/**
+ * The buyer's name and address as the order holds them now (AGL-4038): the
+ * shipping name and address of an online order, the attachment's of an
+ * in-person one. `undefined` when the order has none BECAUSE its buyer's
+ * account was erased, which tells the write to keep what the record has;
+ * null when it simply names no one yet.
+ */
+export function posHardwareSaleBuyer(
+  order: Pick<PosHardwareOrder, 'shipping' | 'attachment' | 'source' | 'buyerErasedAtMs'>,
+): PosHardwareSaleBuyer | null | undefined {
+  const inPerson = posHardwareOrderSource(order) === 'in_person'
+  const name = textOrNull(inPerson ? order.attachment?.name : order.shipping?.name)?.slice(0, 200) ?? null
+  const address = saleAddress(inPerson ? order.attachment?.address : order.shipping?.address)
+  if (name || address) return { name, address }
+  return typeof order.buyerErasedAtMs === 'number' ? undefined : null
+}
+
 /**
  * The retained sale record of an order, as it stands. Every field is picked
  * by name, so a field added to the order later reaches the record only when
  * someone decides it should.
  */
 export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder): PosHardwareSaleRecord {
+  const buyer = posHardwareSaleBuyer(order)
   return {
     orderId,
     orgId: order.orgId,
@@ -1089,9 +1195,24 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     posOrderId: textOrNull(order.posSale?.orderId),
     paidTo: salePaidTo(order),
     storefrontTaxRowId: textOrNull(order.posSale?.paymentLinkSessionId),
+    // Left out, never written as null, once the buyer was erased: the
+    // stored name and address are the reseller's records and stay.
+    ...(buyer === undefined ? {} : { buyer }),
     // The TTL policy's field: the record outlives the workspace, not the law.
     expiresAt: posHardwareSaleExpiry(order),
   }
+}
+
+/**
+ * How every write of a sale record is made (AGL-4038): `set` with exactly
+ * the record's own fields as `mergeFields`, so each one is replaced whole —
+ * a map included, never merged key by key — and a field the record leaves
+ * out is left as stored. The record leaves out only `buyer`, and only once
+ * the buyer's account was erased ({@link posHardwareSaleBuyer}), so the
+ * buyer's name and address outlive the erasure and every write after it.
+ */
+export function posHardwareSaleSetOptions(order: PosHardwareOrder): { mergeFields: string[] } {
+  return { mergeFields: Object.keys(posHardwareSaleRecord('', order)) }
 }
 
 /** Where a sale's money went, picked by name: never a buyer detail. */
@@ -1117,6 +1238,10 @@ function salePaidTo(order: Pick<PosHardwareOrder, 'source' | 'paidTo'>): PosHard
  * The country, state and postal code stay, because sales tax is sourced by
  * them. Deterministic but for the stamp, and an order already erased no
  * longer answers to the person's uid, so a second run finds nothing.
+ *
+ * The buyer's NAME and ADDRESS stay on the platform's sale record, not on
+ * the order: `buyerErasedAtMs` is what tells the record's next write to keep
+ * them ({@link posHardwareSaleBuyer}, {@link posHardwareSaleSetOptions}).
  */
 export function posHardwareBuyerErasedPatch(
   order: Pick<PosHardwareOrder, 'shipping' | 'attachment' | 'returnRequest'>,
@@ -1140,7 +1265,8 @@ export function posHardwareBuyerErasedPatch(
     },
     tracking: null,
     // An in-person order's attachment names the buyer too (AGL-4038): their
-    // address and account come off it; the workspace and store it is in stay.
+    // email, account, name and address come off it (the map is rebuilt with
+    // none of them); the workspace and store it is in stay.
     ...(attachment
       ? {
           attachment: {

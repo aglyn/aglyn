@@ -102,6 +102,13 @@ jest.mock('./pos-stripe', () => ({
         body: { id: `tmr_${mockStripe.length}`, serial_number: mockSerial, device_type: 'stripe_s700', status: 'online', livemode: true },
       }
     }
+    if (method === 'GET' && path === 'terminal/locations/tml_pat') {
+      return {
+        ok: true,
+        status: 200,
+        body: { id: 'tml_pat', address: { line1: '1 Market Sq', city: 'Austin', state: 'TX', postal_code: '78701', country: 'US' } },
+      }
+    }
     return { ok: false, status: 404, body: {} }
   },
 }))
@@ -270,6 +277,10 @@ describe('a reader registered with a serial from a sale', () => {
       attachment: { state: 'attached', orgId: 'org-pat', hostId: 'host-pat-1' },
     })
     expect(fakeDocs.get('posHardwareSales/hw_bbbbbbbbbbbbbbbbbbbb')?.['orgId']).toBe('org-pat')
+    // The reseller's records take the address of the store it was set up on (AGL-4038).
+    expect(fakeDocs.get('posHardwareSales/hw_bbbbbbbbbbbbbbbbbbbb')?.['buyer']).toMatchObject({
+      address: { line1: '1 Market Sq', city: 'Austin', postalCode: '78701', country: 'US' },
+    })
   })
 
   it("leaves a sale attached to another workspace alone, and a reader with no serial on a sale changes nothing", async () => {
