@@ -324,8 +324,15 @@ const DISHES = /\b(menu|menus|dish|dishes|breakfast|brunch|lunch|dinner|pastry|p
 // A store's own products are listed by its Product grid (AGL-3676), never drawn
 // from words: what a store shows as pictures is how its range is grouped — its
 // collections, gift sets, occasions and scents. "Candle care and burn notes" is no band of pictures.
-/** Words a section uses for itself when it is a showing of pictures, on any kind of site (AGL-3923). */
-const GALLERY = /\b(gallery|galleries|portfolio|portfolios|lookbook|lookbooks)\b/i
+/**
+ * Words a section uses for itself when it is a showing of pictures, on any
+ * kind of site (AGL-3923) — "in pictures" and "in photos" among them
+ * (AGL-4065): the 2026-10-25 Rut Runners Racing and Pit Row Tacos homes drew
+ * "The team at the track in pictures" and "The trailer and the food in
+ * pictures" as six captions each, with no picture slot for a photo to fill.
+ * Whole words only: "Picture-perfect" and "Photoshoot" show no pictures.
+ */
+const GALLERY = /\b(gallery|galleries|portfolio|portfolios|lookbook|lookbooks|pictures|photos)\b/i
 const CATEGORIES = /\b(collection|collections|range|ranges|categor(?:y|ies)|gift|gifts|gift sets?|sets|occasion|occasions|scent|scents|edit|edits)\b/i
 
 /**

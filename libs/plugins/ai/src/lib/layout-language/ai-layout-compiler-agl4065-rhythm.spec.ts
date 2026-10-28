@@ -25,6 +25,14 @@ import {
   HOLESHOT_HOME_PLAN,
   HOLESHOT_HOME_SECTIONS,
   HOLESHOT_TARGETS,
+  PIT_ROW_IN_PICTURES,
+  PIT_ROW_PICTURES_PLAN,
+  PIT_ROW_PICTURES_SECTIONS,
+  PIT_ROW_PICTURES_TARGETS,
+  RUT_RUNNERS_IN_PICTURES,
+  RUT_RUNNERS_PICTURES_PLAN,
+  RUT_RUNNERS_PICTURES_SECTIONS,
+  RUT_RUNNERS_PICTURES_TARGETS,
   TWO_OAKS_HOME_PLAN,
   TWO_OAKS_HOME_SECTIONS,
   TWO_OAKS_TARGETS,
@@ -70,7 +78,7 @@ function full(section: AiLayoutSection): Record<string, unknown> {
 }
 
 /** The page compiled as the page step compiles it, through its own check: reader, compiler, store, copy check and doctrine. */
-function check(plan: AiLayoutPagePlan, sections: AiLayoutSection[], targets: AiLayoutTargets, seed: number | null, paid: boolean) {
+function check(plan: AiLayoutPagePlan, sections: AiLayoutSection[], targets: AiLayoutTargets, seed: number | null, paid: boolean, kind = 'trades') {
   const sectionIds = plan.sections.map((_, index) => `sec-${index + 1}`)
   const screen = { title: plan.title, slug: '/', layout: null, template: null, duplicateOf: null, nav: true, seoTitle: 'Home', seoDescription: 'Home.', record: null, sections: plan.sections } as unknown as AiBuildPlanScreen
   const result = aiLayoutPageCheck({
@@ -89,7 +97,7 @@ function check(plan: AiLayoutPagePlan, sections: AiLayoutSection[], targets: AiL
       ...(paid ? {} : { reusableComponents: false }),
     },
     reusableComponents: paid,
-    design: seed === null ? null : { kind: 'trades', seed, home: true },
+    design: seed === null ? null : { kind, seed, home: true },
   })({ sections: sections.map(full) })
   const nodes = (result.value?.nodes ?? {}) as unknown as Record<string, Node>
   const within = (id: string): Node[] => (nodes[id] ? [nodes[id], ...(nodes[id].nodes ?? []).flatMap(within)] : [])
@@ -164,6 +172,56 @@ describe('the band set beside a photo (AGL-4065)', () => {
     expect(built.settled).toContain('sections[5]: drawn beside a photo: third text-only band')
     expect(built.pictures[5]).toBe(1)
     expect(built.result.value?.items[5]).toBe(5)
+  })
+})
+
+describe('a band "in pictures" is a gallery of picture slots (AGL-4065)', () => {
+  /*
+   * The Rut Runners Racing and Pit Row Tacos homes of 2026-10-25 each planned
+   * a band of six pictures — "The team at the track in pictures", "The
+   * trailer and the food in pictures" — and drew six caption pairs with no
+   * picture slot, so no photo could ever fill them: the compiler read a
+   * gallery only from "gallery", "portfolio" or "lookbook".
+   */
+  it.each([
+    ['Rut Runners Racing', 'fitness', RUT_RUNNERS_PICTURES_PLAN, RUT_RUNNERS_PICTURES_SECTIONS, RUT_RUNNERS_PICTURES_TARGETS, RUT_RUNNERS_IN_PICTURES],
+    ['Pit Row Tacos', 'restaurant', PIT_ROW_PICTURES_PLAN, PIT_ROW_PICTURES_SECTIONS, PIT_ROW_PICTURES_TARGETS, PIT_ROW_IN_PICTURES],
+  ] as const)('draws the %s band as six picture slots captioned with its items, free or paid, for every seed', (_name, kind, plan, sections, targets, captions) => {
+    for (const seed of SEEDS.slice(0, 30)) {
+      for (const paid of [false, true]) {
+        const built = check(plan, sections, targets, seed, paid, kind)
+        expect([seed, paid, built.result.violations.map((violation) => `${violation.code}: ${violation.message}`)]).toEqual([seed, paid, []])
+        const band = built.within('sec-3')
+        const slots = band.filter((node) => node.componentId === 'image')
+        // A stand-in slot each, described by its item, which the photo fill reads.
+        expect([seed, paid, slots.map((node) => node.props?.['alt'])]).toEqual([seed, paid, captions.map((item) => item.title)])
+        for (const slot of slots) expect(slot.props?.['decorative']).toBe(true)
+        // Never caption pairs: the titles are the pictures' captions.
+        expect([seed, paid, band.filter((node) => node.componentId === 'muiListItemText')]).toEqual([seed, paid, []])
+        expect(built.result.value?.items[2]).toBe(6)
+      }
+    }
+  })
+
+  it('reads "photos" as it reads "pictures", and never a word that only holds one', () => {
+    for (const name of ['Race day in pictures', 'The trailer in photos', 'Pictures from the track', 'Photos of our work']) {
+      const sections: AiLayoutSection[] = [
+        RUT_RUNNERS_PICTURES_SECTIONS[0] as AiLayoutSection,
+        { band: 'plain', blocks: [{ kind: 'heading', text: name }, { kind: 'cards', items: [...RUT_RUNNERS_IN_PICTURES.slice(0, 3)] }] },
+      ]
+      const plan = { title: 'Home', sections: [RUT_RUNNERS_PICTURES_PLAN.sections[0], { name, uses: [], items: 3 }] } as AiLayoutPagePlan
+      const built = check(plan, sections, RUT_RUNNERS_PICTURES_TARGETS, SEEDS[0], true, 'fitness')
+      expect([name, built.pictures[1]]).toEqual([name, 3])
+    }
+    // "Photoshoot packages" and "Picture-perfect yards" name no showing of pictures.
+    for (const name of ['Photoshoot packages', 'Picture-perfect yards']) {
+      const sections: AiLayoutSection[] = [
+        RUT_RUNNERS_PICTURES_SECTIONS[0] as AiLayoutSection,
+        { band: 'plain', blocks: [{ kind: 'heading', text: name }, { kind: 'cards', items: [...RUT_RUNNERS_IN_PICTURES.slice(0, 3)] }] },
+      ]
+      const plan = { title: 'Home', sections: [RUT_RUNNERS_PICTURES_PLAN.sections[0], { name, uses: [], items: 3 }] } as AiLayoutPagePlan
+      expect([name, check(plan, sections, RUT_RUNNERS_PICTURES_TARGETS, SEEDS[0], true, 'fitness').pictures[1]]).toEqual([name, 0])
+    }
   })
 })
 

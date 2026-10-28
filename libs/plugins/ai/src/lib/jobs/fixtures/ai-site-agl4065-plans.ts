@@ -34,7 +34,9 @@ import type { AiLayoutListing } from '../../layout-language/ai-layout-listings'
  * service areas.
  *
  * Alongside them, the item groups whose icons came out random: the "Towns
- * we serve" and "Areas we serve" rows and the reasons to trust each shop.
+ * we serve" and "Areas we serve" rows and the reasons to trust each shop;
+ * and the Rut Runners Racing and Pit Row Tacos "… in pictures" bands, which
+ * showed six captions and no picture.
  */
 
 const block = (kind: AiLayoutSection['blocks'][number]['kind'], text = '', extra: Partial<AiLayoutSection['blocks'][number]> = {}) => ({
@@ -356,3 +358,155 @@ export const BERM_AND_BOLT_AREAS = items(
   ['Lockhart', 'Ranch and trail riders welcome.'],
   ['Austin', 'Worth the drive for fast parts.'],
 )
+
+// ── The two "in pictures" bands that showed no picture ────────────────────
+
+/**
+ * Each home's "… in pictures" band, as the model designed it: a heading and
+ * six captions, which the page drew as six caption pairs and no picture slot
+ * — "in pictures" said nothing the compiler read as a gallery. Each page
+ * here is the band between the sections that stood around it on the home,
+ * under the home plan's own section names.
+ */
+const IN_PICTURES_TARGETS = (facts: string): AiLayoutTargets => ({
+  pageId: 'pg-home',
+  pages: [
+    { id: 'pg-about', label: 'About', slug: '/about' },
+    { id: 'pg-contact', label: 'Contact', slug: '/contact' },
+  ],
+  homeIds: ['pg-home'],
+  forms: [{ id: 'form-inquiry', name: 'Inquiry form' }],
+  formPageId: 'pg-contact',
+  components: [],
+  facts,
+})
+
+/** Rut Runners Racing (fitness): "The team at the track in pictures", a dark band. */
+export const RUT_RUNNERS_FACTS = [
+  'Amateur motocross race team: rider profiles, race schedule and results, sponsor inquiries',
+  'fitness',
+  'Rut Runners Racing',
+  'Lockhart',
+  'Lockhart\nLuling\nSan Marcos\nAustin\nCentral Texas',
+  'English, Spanish',
+  'TX',
+].join('\n')
+
+export const RUT_RUNNERS_PICTURES_PLAN: AiLayoutPagePlan = {
+  title: 'Home',
+  sections: [
+    { name: 'Hero: built in Lockhart, raced across Texas', uses: [], items: 0 },
+    { name: 'How to get started with the team', uses: [], items: 4 },
+    { name: 'The team at the track in pictures', uses: [], items: 6 },
+    { name: 'Call to action: sponsor or join', uses: [], items: 0 },
+  ],
+}
+
+export const RUT_RUNNERS_IN_PICTURES = items(
+  ['Gate drop', 'Riders staged and ready for the start.'],
+  ['Pit crew', 'Families and friends wrenching together.'],
+  ['Practice laps', 'Working the ruts before race day.'],
+  ['Podium moments', 'Celebrating after a hard-fought moto.'],
+  ['Young riders', 'Our minis learning the basics.'],
+  ['Team spirit', 'Rut Runners Racing on and off the bike.'],
+)
+
+export const RUT_RUNNERS_PICTURES_SECTIONS: AiLayoutSection[] = [
+  {
+    band: 'plain',
+    blocks: [
+      block('eyebrow', 'Rut Runners Racing · Lockhart, TX'),
+      block('heading', 'Built in Lockhart, raced across Texas', { style: 'large' }),
+      block('lede', 'Amateur motocross since 2019. Ride with us, sponsor a rider or cheer from the fence.'),
+      block('button', 'Sponsor a rider', { to: 'page:pg-contact', style: 'primary' }),
+    ],
+  },
+  {
+    band: 'soft',
+    blocks: [
+      block('heading', 'How to get started with the team'),
+      block('steps', '', {
+        items: items(
+          ['Say hello', 'Tell us who you are and what you ride, or want to ride.'],
+          ['Meet the team', 'Come to the track and see how we train and race.'],
+          ['Find your class', 'We match each rider to an age class and skill level.'],
+          ['Hit the track', 'Train with the crew and line up at your first race.'],
+        ),
+      }),
+    ],
+  },
+  { band: 'dark', blocks: [block('heading', 'The team at the track in pictures'), block('cards', '', { items: RUT_RUNNERS_IN_PICTURES })] },
+  {
+    band: 'brand',
+    align: 'center',
+    blocks: [
+      block('heading', 'Sponsor a rider or join the team'),
+      block('lede', 'Back local riders or get your own number plate.'),
+      block('button', 'Get in touch', { to: 'page:pg-contact', style: 'primary' }),
+    ],
+  },
+]
+
+export const RUT_RUNNERS_PICTURES_TARGETS = IN_PICTURES_TARGETS(RUT_RUNNERS_FACTS)
+
+/** Pit Row Tacos (restaurant): "The trailer and the food in pictures", centered. */
+export const PIT_ROW_FACTS = [
+  'Taco food trailer: breakfast and street tacos at Texas motocross races and around town; takes catering requests',
+  'restaurant',
+  'Pit Row Tacos',
+  'Buda',
+  'Buda\nKyle\nSan Marcos\nAustin\nLockhart',
+  'English, Spanish',
+  'TX',
+].join('\n')
+
+export const PIT_ROW_PICTURES_PLAN: AiLayoutPagePlan = {
+  title: 'Home',
+  sections: [
+    { name: 'Hero: race-day tacos, made fresh on the line', uses: [], items: 0 },
+    { name: 'Our story: a taco trailer from Buda', uses: [], items: 0 },
+    { name: 'The trailer and the food in pictures', uses: [], items: 6 },
+    { name: 'Call to action: plan your catering', uses: [], items: 0 },
+  ],
+}
+
+export const PIT_ROW_IN_PICTURES = items(
+  ['The trailer', 'Our trailer parked and ready on race day.'],
+  ['Breakfast tacos', 'Egg, cheese and warm tortillas wrapped to go.'],
+  ['Street tacos', 'Carne asada, al pastor and carnitas piled high.'],
+  ['The griddle', 'Meat sizzling and tortillas toasting.'],
+  ['Salsas and toppings', 'Fresh, bright and made for sharing.'],
+  ['Fans in line', 'Riders and families waiting for their order.'],
+)
+
+export const PIT_ROW_PICTURES_SECTIONS: AiLayoutSection[] = [
+  {
+    band: 'dark',
+    align: 'center',
+    blocks: [
+      block('heading', 'Race-day tacos, made fresh on the line', { style: 'large' }),
+      block('lede', 'Street and breakfast tacos, hot off the griddle in Buda and at the track.'),
+      block('button', 'Plan your catering', { to: 'page:pg-contact', style: 'primary' }),
+    ],
+  },
+  {
+    band: 'plain',
+    blocks: [
+      block('eyebrow', 'Our story'),
+      block('heading', 'A taco trailer from Buda'),
+      block('text', 'Since 2021, Pit Row Tacos has fed riders, families and fans with breakfast tacos and street tacos made fresh on the line.'),
+    ],
+  },
+  { band: 'plain', align: 'center', blocks: [block('heading', 'The trailer and the food in pictures'), block('cards', '', { items: PIT_ROW_IN_PICTURES })] },
+  {
+    band: 'brand',
+    align: 'center',
+    blocks: [
+      block('heading', 'Plan your catering'),
+      block('lede', 'Tell us about your event and we will bring the tacos to you.'),
+      block('button', 'Plan your catering', { to: 'page:pg-contact', style: 'primary' }),
+    ],
+  },
+]
+
+export const PIT_ROW_PICTURES_TARGETS = IN_PICTURES_TARGETS(PIT_ROW_FACTS)
