@@ -75,6 +75,11 @@ export interface PluginSiteStarterSource {
     choice: SiteStarterChoice,
     viewer: SiteStarterViewer,
   ): Promise<SiteStarterPayload | { error: string; status: 402 | 403 | 404; priceUsd?: number }>
+  /**
+   * Records that a site was created from a starter; best-effort, never throws.
+   * Optional, so a source that does not count installs still satisfies the seam.
+   */
+  installed?(choice: SiteStarterChoice, viewer: SiteStarterViewer, site: { hostId: string }): Promise<void>
 }
 
 export const PLUGIN_SITE_STARTERS = definePluginServiceContract<PluginSiteStarterSource>(
