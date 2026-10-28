@@ -325,6 +325,19 @@ describe('authorization', () => {
     expect(sendEmail).not.toHaveBeenCalled()
   })
 
+  it('asks "Reply from the inbox", so the site’s stamp decides either way (AGL-4047)', async () => {
+    docs.set('hosts/host1', {
+      displayName: 'Lumen Studio',
+      memberRoles: { 'editor-uid': 'editor', 'viewer-uid': 'viewer' },
+      memberPermissions: { 'editor-uid': { 'inbox.reply': false }, 'viewer-uid': { 'inbox.reply': true } },
+    })
+    const refused = await reply(GOOD_BODY)
+    expect(refused.code).toBe(403)
+    expect(sendEmail).not.toHaveBeenCalled()
+    decodedToken = { uid: 'viewer-uid', email: 'viewer@lumen.co' }
+    expect((await reply(GOOD_BODY)).code).not.toBe(403)
+  })
+
   it('refuses a role below editor', async () => {
     decodedToken = { uid: 'viewer-uid', email: 'viewer@lumen.co' }
     const out = await reply(GOOD_BODY)

@@ -558,6 +558,14 @@
       "why": "The domains plugin's workspace key (manage the workspace's domains) and its role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
+      "path": "libs/plugins/email/src/lib/model/email-permissions.ts",
+      "why": "The email plugin's site keys (suppressions, list membership) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/inbox-permissions.ts",
+      "why": "The inbox plugin's site keys (reply, add to lists) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
       "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
     },

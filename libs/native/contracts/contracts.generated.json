@@ -7382,6 +7382,10 @@
         "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
         "marketing.campaigns",
         "workflows.orgAutomations",
         "workflows.sitePause",
@@ -7416,6 +7420,10 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
         "marketing.campaigns",
         "workflows.orgAutomations",
         "workflows.sitePause",
@@ -7471,6 +7479,10 @@
         "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
         "marketing.campaigns",
         "workflows.orgAutomations",
         "workflows.sitePause",
@@ -7531,6 +7543,14 @@
         "id": "outreach",
         "label": "Sequences",
         "pluginId": "outreach"
+      },
+      {
+        "id": "email",
+        "label": "Email"
+      },
+      {
+        "id": "inbox",
+        "label": "Inbox"
       },
       {
         "id": "marketing",
@@ -7649,7 +7669,7 @@
         "scope": "site"
       },
       {
-        "description": "Read a site’s orders and returns, and set up its webhooks.",
+        "description": "Read a site’s orders, returns and sending address, and set up its webhooks.",
         "group": "sites",
         "key": "site.sensitive",
         "label": "See orders and webhooks",
@@ -7889,6 +7909,34 @@
         "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
         "scope": "org"
+      },
+      {
+        "description": "Add addresses to the site’s suppression list and check addresses against it. Follows the site role unless a role or member sets it.",
+        "group": "email",
+        "key": "email.suppressions",
+        "label": "Manage the site’s suppressions",
+        "scope": "site"
+      },
+      {
+        "description": "Add and remove people on the organization’s marketing lists from a site (only for a member of the whole workspace who may write its lists, as the lists are the organization’s). Follows the site role unless a role or member sets it.",
+        "group": "email",
+        "key": "email.lists",
+        "label": "Add people to marketing lists from a site",
+        "scope": "site"
+      },
+      {
+        "description": "Reply by email to a form submission in the site’s inbox. Follows the site role unless a role or member sets it.",
+        "group": "inbox",
+        "key": "inbox.reply",
+        "label": "Reply from the inbox",
+        "scope": "site"
+      },
+      {
+        "description": "Add the person behind a form submission to the organization’s marketing lists (members of the whole workspace who may write its lists only). Follows the site role unless a role or member sets it.",
+        "group": "inbox",
+        "key": "inbox.assign",
+        "label": "Add people to lists from the inbox",
+        "scope": "site"
       },
       {
         "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",

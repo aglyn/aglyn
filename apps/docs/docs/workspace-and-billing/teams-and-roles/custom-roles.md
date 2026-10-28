@@ -118,7 +118,7 @@ Four permissions decide what someone may do on a site:
 |---|---|---|---|---|---|
 | **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live; edit alongside others in the Besigner, and open the edit bar on the live site | Yes | Yes | Yes | No |
 | **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, change the site's fonts, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
-| **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns, and set up its webhooks | Yes | Yes | No | No |
+| **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns and the address its mail is sent from, and set up its webhooks | Yes | Yes | No | No |
 | **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings (such as live chat) and security allow-lists, disconnect a Zap, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
 
 Each starts from the member's role on the site, the columns above, so nobody's access
@@ -217,6 +217,20 @@ Both are for members of the whole workspace. **Pause org automations on a site**
 (`workflows.sitePause`) starts from the member's role on the site instead: a site's admins
 and editors hold it. Nobody's access changed when these became permissions, and a custom
 role or a per-member override can grant or deny each one.
+
+### Email and inbox permissions {#email-and-inbox-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Manage the site's suppressions** (`email.suppressions`) | Add addresses to the site's suppression list and check addresses against it | Yes | Yes | No | No |
+| **Add people to marketing lists from a site** (`email.lists`) | Add and remove people on the organization's marketing lists from a site | Yes | Yes | No | No |
+| **Reply from the inbox** (`inbox.reply`) | Reply by email to a form submission | Yes | Yes | No | No |
+| **Add people to lists from the inbox** (`inbox.assign`) | Add a submission's person to the organization's marketing lists | Yes | Yes | No | No |
+
+Each starts from the member's role on the site, so nobody's access changed when they became
+permissions, and a custom role, a per-member override or the site's **Permissions** dialog
+can grant or deny any of them. Marketing lists belong to the whole organization, so changing
+who is on one also still needs an owner, admin or editor of the whole workspace.
 
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
