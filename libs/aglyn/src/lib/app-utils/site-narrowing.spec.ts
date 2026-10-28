@@ -27,10 +27,13 @@
 import type { AglynOrgMember } from '../foundation'
 import { registerPluginPermissions } from '../plugin-manager/plugin-permissions'
 import {
+  narrowedPermissionKeysOf,
   narrowPermissionsToSite,
   projectHostMemberPermissions,
   resolveMemberHostPermissions,
+  roleCanBeNarrowed,
   siteNarrowedPermissionKeys,
+  siteNarrowingChoices,
   siteNarrowingFor,
 } from './host-permissions'
 import { resolveOrgPermissions, type AglynOrgCustomRole } from './org-permissions'
@@ -60,6 +63,16 @@ beforeAll(() => {
     },
     { key: 'till.shop', pluginId: 'acme-till', label: 'Buy tills', defaults: { ...TIER }, follows: 'till.open' },
     { key: 'desk.collect', pluginId: 'acme-desk', label: 'Collect forms', defaults: { ...TIER }, narrowsPerSite: true },
+    // A key a site CAN narrow and, by default, does not (AI's shape).
+    { key: 'desk.assist', pluginId: 'acme-desk', label: 'Ask the assistant', defaults: { ...TIER }, narrowsPerSite: false },
+    // A per-role default: only the editor's follows the site role.
+    {
+      key: 'desk.print',
+      pluginId: 'acme-desk',
+      label: 'Print badges',
+      defaults: { ...TIER },
+      narrowsPerSite: { editor: true },
+    },
   ])
 })
 
@@ -69,14 +82,24 @@ function onSite(
   hostId: string,
   customRole: AglynOrgCustomRole | null = null,
 ): Record<string, boolean> {
-  return narrowPermissionsToSite(resolveOrgPermissions(member, customRole), siteNarrowingFor(member, hostId))
+  return narrowPermissionsToSite(
+    resolveOrgPermissions(member, customRole),
+    siteNarrowingFor(member, hostId, customRole),
+  )
 }
 
 const NARROWED: Partial<AglynOrgMember> = { role: 'editor', allHosts: true, hostAccess: { [A]: 'viewer' } }
 
 describe('the keys a site narrows', () => {
-  it('are the declarations that say so, in catalog order', () => {
-    expect(siteNarrowedPermissionKeys()).toEqual(['desk.collect', 'till.open', 'till.sell', 'till.refund'])
+  it('are the declarations that say so, in catalog order, a default of false included', () => {
+    expect(siteNarrowedPermissionKeys()).toEqual([
+      'desk.collect',
+      'desk.assist',
+      'desk.print',
+      'till.open',
+      'till.sell',
+      'till.refund',
+    ])
   })
 })
 
@@ -105,7 +128,18 @@ describe('a workspace editor narrowed to Viewer on one site', () => {
 
   it('narrowed to Author, holds what Author holds: the Viewer tier', () => {
     const author = { ...NARROWED, hostAccess: { [A]: 'author' as const } }
-    expect(siteNarrowingFor(author, A)).toEqual({ role: 'author', grants: {} })
+    expect(siteNarrowingFor(author, A)).toEqual({
+      role: 'author',
+      grants: {},
+      narrows: {
+        'desk.collect': true,
+        'desk.assist': false,
+        'desk.print': true,
+        'till.open': true,
+        'till.sell': true,
+        'till.refund': true,
+      },
+    })
     expect(onSite(author, A)['till.open']).toBe(false)
     expect(onSite(author, A)['desk.collect']).toBe(false)
   })
@@ -210,5 +244,116 @@ describe('the site projection carries the narrowed verdict (rules)', () => {
       'till.open': true,
       'desk.collect': true,
     })
+  })
+})
+
+/*
+ * Whether a key follows the site role is a CONTROL (AGL-4047), set per key
+ * on three layers: the built-in role's default the declaration names, a
+ * custom role's `siteNarrowing`, and the member's own, the nearest set one
+ * winning.
+ */
+describe('the narrowing control: built-in defaults', () => {
+  it('a key declared false keeps by default; one declared per role follows it for that role', () => {
+    const granted = onSite(NARROWED, A)
+    expect(granted['desk.assist']).toBe(true)
+    expect(granted['desk.print']).toBe(false)
+    expect(siteNarrowingChoices(NARROWED)).toMatchObject({ 'desk.assist': false, 'desk.print': true })
+    // A role the per-role map leaves out keeps.
+    expect(siteNarrowingChoices({ role: 'viewer' })['desk.print']).toBe(false)
+  })
+
+  it('only a role a site can narrow carries a control that changes anything', () => {
+    expect(roleCanBeNarrowed('editor')).toBe(true)
+    for (const role of ['owner', 'admin', 'viewer']) expect(roleCanBeNarrowed(role)).toBe(false)
+  })
+})
+
+describe('the narrowing control: a custom role', () => {
+  const keepsTill: AglynOrgCustomRole = {
+    name: 'Floor',
+    siteNarrowing: { 'till.open': false, 'till.sell': false, 'till.refund': false },
+  }
+
+  it('keeping the till keeps it on the narrower site, and the rest still follow the site role', () => {
+    const granted = onSite({ ...NARROWED, roleId: 'floor' }, A, keepsTill)
+    expect(granted['till.open']).toBe(true)
+    expect(granted['till.sell']).toBe(true)
+    expect(granted['till.refund']).toBe(true)
+    expect(granted['desk.collect']).toBe(false)
+  })
+
+  it('following the site role narrows a key that keeps by default', () => {
+    const narrowsAssist: AglynOrgCustomRole = { name: 'Careful', siteNarrowing: { 'desk.assist': true } }
+    expect(onSite({ ...NARROWED, roleId: 'careful' }, A, narrowsAssist)['desk.assist']).toBe(false)
+    // On a site that does not narrow them it is the workspace's verdict.
+    expect(onSite({ ...NARROWED, roleId: 'careful' }, B, narrowsAssist)['desk.assist']).toBe(true)
+  })
+
+  it("is read only for a member who carries the role's id", () => {
+    expect(onSite(NARROWED, A, keepsTill)['till.open']).toBe(false)
+  })
+
+  it('a role that keeps every key a site can narrow leaves the member un-narrowed', () => {
+    const keepsAll: AglynOrgCustomRole = {
+      name: 'Everything',
+      siteNarrowing: Object.fromEntries(siteNarrowedPermissionKeys().map((key) => [key, false])),
+    }
+    const member = { ...NARROWED, roleId: 'all' }
+    expect(siteNarrowingFor(member, A, keepsAll)).toBeNull()
+    expect(onSite(member, A, keepsAll)).toEqual(resolveOrgPermissions(member, keepsAll))
+  })
+})
+
+describe('the narrowing control: one member, over their custom role', () => {
+  const keepsTill: AglynOrgCustomRole = { name: 'Floor', siteNarrowing: { 'till.open': false, 'till.sell': false } }
+
+  it("a member's own choice wins over the custom role's", () => {
+    const member = { ...NARROWED, roleId: 'floor', siteNarrowing: { 'till.open': true, 'till.sell': true } }
+    const granted = onSite(member, A, keepsTill)
+    expect(granted['till.open']).toBe(false)
+    expect(granted['till.sell']).toBe(false)
+  })
+
+  it("and over the built-in default, with no custom role", () => {
+    const granted = onSite({ ...NARROWED, siteNarrowing: { 'desk.collect': false, 'desk.assist': true } }, A)
+    expect(granted['desk.collect']).toBe(true)
+    expect(granted['desk.assist']).toBe(false)
+  })
+
+  it('keeping only the sell key brings the till with it, and not refunds', () => {
+    const granted = onSite({ ...NARROWED, siteNarrowing: { 'till.sell': false } }, A)
+    expect(granted['till.sell']).toBe(true)
+    expect(granted['till.open']).toBe(true)
+    expect(granted['till.refund']).toBe(false)
+  })
+
+  it('keeping the till while the sell key follows the site role leaves selling to the site role', () => {
+    const granted = onSite({ ...NARROWED, siteNarrowing: { 'till.open': false } }, A)
+    expect(granted['till.open']).toBe(true)
+    // Viewer access holds none of the till's finer keys by default.
+    expect(granted['till.sell']).toBe(false)
+    expect(granted['till.refund']).toBe(false)
+  })
+
+  it('a kept key is the workspace verdict: a site toggle for it changes nothing', () => {
+    const member = { ...NARROWED, siteNarrowing: { 'desk.collect': false }, hostPermissions: { [A]: { 'desk.collect': false } } }
+    expect(onSite(member, A)['desk.collect']).toBe(true)
+  })
+
+  it('the narrowed keys a site sets are only those that follow its role', () => {
+    const narrowing = siteNarrowingFor({ ...NARROWED, siteNarrowing: { 'till.open': false, 'till.sell': false } }, A)
+    expect(narrowedPermissionKeysOf(narrowing)).toEqual(['desk.collect', 'desk.print', 'till.refund'])
+    expect(narrowedPermissionKeysOf(null)).toEqual([])
+  })
+
+  it('the projection stamps the same verdict the control gives', () => {
+    const keepsAll: AglynOrgCustomRole = { name: 'Floor', siteNarrowing: { 'till.open': false, 'till.sell': false, 'till.refund': false } }
+    const stamp = projectHostMemberPermissions(
+      [{ $id: 'floor', ...NARROWED, roleId: 'floor' }],
+      A,
+      new Map([['floor', keepsAll]]),
+    )
+    expect(stamp['floor']).toMatchObject({ 'till.open': true, 'till.sell': true, 'desk.collect': false })
   })
 })

@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — narrowing per site is a permission setting
+
+- **[Follow the site role, or keep the permission](workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows)** —
+  each permission a site can narrow (the point of sale, waivers and AI ones) now has
+  a setting for sites where an editor of the whole workspace has **Viewer** or
+  **Author** access: **Follow the site role** or **Keep this permission**. Set it on a
+  custom role, or for one member in their **Permissions** card. Left on **Inherit**,
+  nothing changes: the register and waivers follow the site role and AI is kept.
+
 ## October 2026 — reviews of products sold in store
 
 - **[Reviews of a product sold in person only](commerce-and-bookings/commerce/catalog.md#sell-in-person-only)** —

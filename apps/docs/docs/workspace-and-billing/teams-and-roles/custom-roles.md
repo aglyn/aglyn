@@ -65,13 +65,33 @@ takes **Use the point of sale**, its five finer permissions, **Manage waivers** 
 custom role and overrides give them, and members whose access matches their
 workspace role everywhere (owners and admins always do) see no change.
 
-To give one back on that site only, open the site's **Users** card and choose
-**Permissions** beside them. The dialog lists just these permissions, each **Allow**,
-**Deny** or **Inherit** (what their narrower access leaves, which is none of them).
-Allowing **Sell at the register** opens the register to sell and nothing else;
-allowing **Use the point of sale** gives back the whole register, as far as their
-workspace role and custom role allow it. Everything else about them is still set
-on their Team page.
+Whether a permission follows the narrower site role is a setting of its own. Each
+permission a site can narrow (the point of sale ones, the waivers ones and the two AI
+ones) has a second choice under it, **On sites where their role is narrower**:
+
+- **Follow the site role**: on that site the member holds what their Viewer or Author
+  access holds, which for the register and waivers is nothing.
+- **Keep this permission**: on that site they keep what their role, custom role and
+  overrides give them everywhere else.
+- **Inherit**: the layer below decides.
+
+Set it on a custom role for everyone on that role, or on one member in their
+**Permissions** card, where it wins over their custom role. Left on **Inherit**, the
+built-in default applies: the point of sale and waivers permissions follow the site
+role, and the AI permissions are kept, so nothing changes until you choose otherwise.
+Keeping **Sell at the register** also keeps the register open for selling, and only
+for selling. The choice changes something only for editors: owners and admins are
+admins of every site, and a viewer has no narrower access to be given. Keeping a
+permission for a member counts as granting it, so you can only keep one you hold
+yourself.
+
+To give a permission that follows the site role back on one site only, open the
+site's **Users** card and choose **Permissions** beside them. The dialog lists just
+the permissions that follow the site role for them, each **Allow**, **Deny** or
+**Inherit** (what their narrower access leaves). Allowing **Sell at the register**
+opens the register to sell and nothing else; allowing **Use the point of sale** gives
+back the whole register, as far as their workspace role and custom role allow it.
+Everything else about them is still set on their Team page.
 
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
@@ -98,7 +118,10 @@ Two keys decide who may spend the workspace's AI credits:
 | **Generate with AI** (`ai.generate`) | AI generation jobs and AI edits — pages, components, emails, campaigns, products, CRM, insights, workflows | Yes | Yes | No |
 
 Both are ordinary catalog keys: a custom role can grant or deny either, and a
-per-member override wins over the role. They are enforced at the AI endpoints
+per-member override wins over the role. An editor given **Viewer** or **Author**
+access to one site keeps both there unless a custom role or their own permissions
+set them to **Follow the site role** — see
+[A site's access narrows its register and waivers](#site-access-narrows). They are enforced at the AI endpoints
 themselves — a member whose role lacks a key is refused with a message naming it
 and asking them to see an organization admin, whichever button they reached it
 by. A viewer may not ask the assistant even on the Free plan, so an admin can
@@ -143,7 +166,10 @@ override** on top of the role instead of creating a whole new role for one excep
 1. Open the member from the **Team** roster (or choose their **Permissions** cell).
 2. In **Permissions**, find the permission (grouped like the role editor, with
    **Search permissions**) and set it to **Allow** or **Deny**. **Inherit** clears
-   the override, and says what the member falls back to.
+   the override, and says what the member falls back to. For an editor, a
+   permission a site can narrow also offers **Follow the site role** or **Keep this
+   permission** for sites where their access is narrower — see
+   [A site's access narrows its register and waivers](#site-access-narrows).
 3. Choose **Save permissions**.
 
 Overrides win over both the org role and the custom role. A few rules hold them in

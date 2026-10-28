@@ -60,16 +60,24 @@ export interface PluginPermission {
    */
   follows?: string
   /**
-   * Decided on each site for a member who works across the whole workspace,
-   * too (AGL-4047). Where their access to one site is narrower than their
-   * workspace role (an editor given Viewer or Author access there), the key
-   * on that site is what the narrower access holds by default, never more
+   * A site can narrow this key (AGL-4047). Where a member who works across
+   * the whole workspace has narrower access to one site than their workspace
+   * role (an editor given Viewer or Author access there), a key that narrows
+   * is, on that site, what the narrower access holds by default, never more
    * than the workspace grants, unless the site grants it to them. A key a
-   * site's own work needs, such as working its register, says so; a key
-   * about the workspace as a whole does not. Members with no narrower access
-   * anywhere are untouched.
+   * site's own work needs, such as working its register, offers this; a key
+   * about the workspace as a whole leaves it out.
+   *
+   * Declaring it offers a per-key CONTROL ("On sites where their role is
+   * narrower: Follow the site role / Keep this permission") on custom roles
+   * and per-member overrides, and the value here is the built-in roles'
+   * default: `true` narrows for every built-in role, `false` keeps for every
+   * one (the control is still offered), and a map names each built-in role's
+   * default, a role it leaves out keeping. Absent, the key never narrows and
+   * no control is offered. Members with no narrower access anywhere are
+   * untouched whatever it says.
    */
-  narrowsPerSite?: boolean
+  narrowsPerSite?: boolean | Partial<Record<'owner' | 'admin' | 'editor' | 'viewer', boolean>>
 }
 
 /**

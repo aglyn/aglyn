@@ -60,7 +60,9 @@ The register belongs to its site. An editor who works across the whole workspace
 but has **Viewer** or **Author** access to one site doesn't work that site's
 register, while keeping it on every other site. To let them sell there anyway,
 choose **Permissions** beside them on that site's **Users** card and allow **Sell at
-the register** (or **Use the point of sale** for the whole register) — see
+the register** (or **Use the point of sale** for the whole register). To let them
+keep the register on every such site, set the permission to **Keep this permission**
+on their custom role or their own **Permissions** — see
 [A site's access narrows its register and waivers](../../workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows).
 **Buy point of sale hardware** is the workspace's, so it doesn't change.
 

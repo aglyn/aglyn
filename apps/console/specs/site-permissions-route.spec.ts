@@ -263,5 +263,33 @@ describe('the per-site permissions door (AGL-4047)', () => {
       mockActorSiteKeys = { 'till.open': true, 'till.sell': true }
       expect((await patch({ memberId: 'row-org', permissions: { 'till.sell': true } })).status).toBe(409)
     })
+
+    it('lists only the keys that follow the site role for them: their custom role keeps the till', async () => {
+      mockDocs.set('orgs/org-1/roles/floor', { name: 'Floor', siteNarrowing: { 'till.open': false } })
+      mockDocs.set('orgs/org-1/members/n1', {
+        role: 'editor',
+        allHosts: true,
+        roleId: 'floor',
+        hostAccess: { 'host-1': 'viewer' },
+      })
+      const body = await (await get('row-narrowed')).json()
+      expect(body.narrowed).toBe(true)
+      expect(body.keys).toEqual(['till.sell'])
+      expect(body.effective).toEqual({ 'till.sell': false })
+      mockActorSiteKeys = { 'till.open': true, 'till.sell': true }
+      expect((await patch({ memberId: 'row-narrowed', permissions: { 'till.open': true } })).status).toBe(400)
+    })
+
+    it('sends them to the Team page when they keep every key a site can narrow', async () => {
+      mockDocs.set('orgs/org-1/members/n1', {
+        role: 'editor',
+        allHosts: true,
+        hostAccess: { 'host-1': 'viewer' },
+        siteNarrowing: { 'till.open': false, 'till.sell': false },
+      })
+      expect((await (await get('row-narrowed')).json()).narrowed).toBeUndefined()
+      mockActorSiteKeys = { 'till.open': true, 'till.sell': true }
+      expect((await patch({ memberId: 'row-narrowed', permissions: { 'till.sell': true } })).status).toBe(409)
+    })
   })
 })

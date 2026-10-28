@@ -112,11 +112,14 @@ export interface OrgPermissionDefinition {
    */
   follows?: OrgPermission
   /**
-   * Decided on each site for a member who works across the workspace too
-   * (AGL-4047): `narrowPermissionsToSite` narrows it where their access to
-   * one site is narrower than their workspace role. Only a plugin's key.
+   * Present when a site can narrow the key (AGL-4047): where a member who
+   * works across the workspace has narrower access to one site than their
+   * workspace role, whether the key follows that site role there is a
+   * control, set per key on a custom role (`siteNarrowing`) and per member
+   * (`AglynOrgMember.siteNarrowing`), and this is each built-in role's
+   * default for it. `narrowPermissionsToSite` applies it. Only a plugin's key.
    */
-  narrowsPerSite?: boolean
+  narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
 }
 
 /**
@@ -281,7 +284,7 @@ function syncCatalog(): void {
       ...(declared.hostRoleDefaults ? { hostRoleDefaults: declared.hostRoleDefaults } : {}),
       ...(declared.refines ? { refines: declared.refines } : {}),
       ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
-      ...(declared.narrowsPerSite ? { narrowsPerSite: true } : {}),
+      ...(declared.narrowsPerSite ? { narrowsPerSite: { ...declared.narrowsPerSite } } : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {
@@ -364,6 +367,14 @@ export interface AglynOrgCustomRole {
   description?: string
   /** Full permission map; missing keys read as false. */
   permissions?: Partial<Record<OrgPermission, boolean>>
+  /**
+   * Per key a site can narrow (AGL-4047): `true` follows the site role on a
+   * site where the member's access is narrower than their workspace role,
+   * `false` keeps the permission there. A key it leaves out follows the
+   * built-in role's default (`OrgPermissionDefinition.narrowsPerSite`), and
+   * a member's own `siteNarrowing` wins over it.
+   */
+  siteNarrowing?: Partial<Record<OrgPermission, boolean>>
 }
 
 /**
