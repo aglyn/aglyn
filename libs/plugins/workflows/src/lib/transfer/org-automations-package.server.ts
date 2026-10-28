@@ -42,7 +42,13 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { checkEntitlement, isOrgWideMember, planLabelGrantingFeature } from '@aglyn/aglyn/server'
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { getOrgDoc, logOrgActivity, resolveOrgMembership } from '@aglyn/tenant-data-admin/server/organizations'
+import {
+  getOrgDoc,
+  logOrgActivity,
+  memberHasOrgPermission,
+  resolveOrgMembership,
+} from '@aglyn/tenant-data-admin/server/organizations'
+import { workflowsPermissionRefusal } from '../model/workflows-permissions'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   ORG_AUTOMATION_ACTIVITY_TARGET,
@@ -69,6 +75,8 @@ export interface OrgAutomationsPackageDeps {
   firestore(): Firestore
   readOrg(orgId: string): Promise<Record<string, unknown> | null>
   memberOf(uid: string, orgId: string): Promise<Record<string, unknown> | null>
+  /** Whether a member holds "Manage org automations" (AGL-4047): `memberHasOrgPermission`. */
+  holdsOrgAutomations(orgId: string, member: Record<string, unknown>): Promise<boolean>
   logOrgActivity(orgId: string, uid: string, action: string, target: { id: string; name: string }): Promise<void>
 }
 
@@ -77,6 +85,7 @@ function defaultDeps(): OrgAutomationsPackageDeps {
     firestore: () => firebaseAdmin.app().firestore() as unknown as Firestore,
     readOrg: async (orgId) => ((await getOrgDoc(orgId)) as Record<string, unknown> | null) ?? null,
     memberOf: async (uid, orgId) => ((await resolveOrgMembership(uid, orgId))?.member as Record<string, unknown> | undefined) ?? null,
+    holdsOrgAutomations: (orgId, member) => memberHasOrgPermission(orgId, member as never, 'workflows.orgAutomations' as never),
     logOrgActivity: (orgId, uid, action, target) =>
       logOrgActivity(orgId, { uid, email: null }, action, { type: ORG_AUTOMATION_ACTIVITY_TARGET, ...target }),
   }
@@ -89,8 +98,10 @@ const automationsOf = (firestore: Firestore, orgId: string) =>
 async function importerRefusal(deps: OrgAutomationsPackageDeps, ctx: TransferResourceContext): Promise<string | null> {
   if (!ctx.actorUid) return 'Org automations are imported by a member of the organization.'
   const member = await deps.memberOf(ctx.actorUid, ctx.orgId)
-  if (!member || !isOrgWideMember(member as never) || !['owner', 'admin', 'editor'].includes(String(member['role'] ?? ''))) {
-    return 'Org automations are written by an organization owner, admin or editor.'
+  // "Manage org automations" (AGL-4047), for members of the whole workspace,
+  // as `automations/manage` asks it.
+  if (!member || !isOrgWideMember(member as never) || !(await deps.holdsOrgAutomations(ctx.orgId, member))) {
+    return workflowsPermissionRefusal('workflows.orgAutomations')
   }
   const org = await deps.readOrg(ctx.orgId)
   if (!org || !isPluginEnabled(org as never, BUNDLE_ID)) return 'Workflows is not on for this workspace.'

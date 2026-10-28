@@ -45,6 +45,12 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
 import { ORG_AUTOMATIONS_MAX } from '../model/org-automations'
+import { resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
+import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import { WORKFLOWS_PERMISSIONS } from '../model/workflows-permissions'
+
+// The workflows keys in the catalog (AGL-4047), as the declarations register them.
+beforeAll(() => registerPluginEntitlements({ pluginId: 'workflows', orgPermissions: WORKFLOWS_PERMISSIONS }))
 import {
   createOrgAutomationPauseHandler,
   createOrgAutomationsManageHandler,
@@ -188,6 +194,9 @@ const deps: Partial<OrgAutomationRouteDeps> = {
   getOrgDoc: async (orgId) => (orgId === ORG_ID ? orgDoc : null),
   resolveOrgIdForHost: async (hostId) =>
     hostId === FOREIGN_SITE ? OTHER_ORG : [SITE, SIBLING].includes(hostId) ? ORG_ID : null,
+  // The catalog's own verdict for the member with no site named: the role
+  // default, then their own permissions (no custom roles in these fixtures).
+  holdsOrgKey: async (_orgId, member, key) => resolveOrgPermissions(member, null)[key] === true,
   logOrgActivity: async (orgId, _actor, action, target) => {
     activity.push({ scope: 'org', id: orgId, action, target })
   },
@@ -503,6 +512,49 @@ describe('the subject the organization door names', () => {
         new Request('https://console.test/api/automations/manage'),
       ),
     ).toBeNull()
+  })
+})
+
+describe('the workflows keys decide, either way (AGL-4047)', () => {
+  it('a member whose own permissions refuse "Manage org automations" is refused, in its words', async () => {
+    MEMBERS['uid-admin'] = { role: 'admin', allHosts: true, permissions: { 'workflows.orgAutomations': false } }
+    try {
+      const result = await call(manage, { orgId: ORG_ID, action: 'create', automation: automation() }, 'admin')
+      expect(result).toEqual({
+        status: 403,
+        body: { error: 'Your role does not include "Manage org automations" — ask an organization admin' },
+      })
+    } finally {
+      MEMBERS['uid-admin'] = { role: 'admin', allHosts: true }
+    }
+  })
+
+  it('a workspace viewer granted it writes them', async () => {
+    MEMBERS['uid-viewer'] = { role: 'viewer', allHosts: true, permissions: { 'workflows.orgAutomations': true } }
+    try {
+      const result = await call(manage, { orgId: ORG_ID, action: 'create', automation: automation() }, 'viewer')
+      expect(result.status).toBe(200)
+    } finally {
+      MEMBERS['uid-viewer'] = { role: 'viewer', allHosts: true }
+    }
+  })
+
+  it('the site’s stamp decides "Pause org automations on a site"', async () => {
+    seedAutomation('a1', { pausedHostIds: [] })
+    store.set(`hosts/${SITE}`, {
+      memberRoles: { 'uid-site-editor': 'editor', 'uid-site-viewer': 'viewer' },
+      memberPermissions: {
+        'uid-site-editor': { 'workflows.sitePause': false },
+        'uid-site-viewer': { 'workflows.sitePause': true },
+      },
+    })
+    const refused = await call(pause, { hostId: SITE, automationId: 'a1', paused: true }, 'siteEditor')
+    expect(refused).toEqual({
+      status: 403,
+      body: { error: 'Your role does not include "Pause org automations on a site" — ask an organization admin' },
+    })
+    const granted = await call(pause, { hostId: SITE, automationId: 'a1', paused: true }, 'siteViewer')
+    expect(granted.status).toBe(200)
   })
 })
 

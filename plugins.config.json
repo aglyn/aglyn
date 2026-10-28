@@ -4434,6 +4434,7 @@
       "register": {
         "console": "registerDomainsConsole",
         "consoleApi": "registerDomainsConsoleApi",
+        "declarations": "registerDomainsDeclarations",
         "consoleServerDeclarations": "registerDomainsConsoleServerDeclarations",
         "subprocessors": "domainsSubprocessors"
       },

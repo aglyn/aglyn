@@ -206,6 +206,18 @@ marketplace, publishing to it), which is still asked too. Both start from the me
 on the site, so nobody's access changed when they became permissions, and a custom role, a
 per-member override or the site's **Permissions** dialog can grant or deny either one.
 
+### Automation and domain permissions {#automation-and-domain-permissions}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Manage org automations** (`workflows.orgAutomations`) | Create, change, switch on and off, remove and import the organization's automations | Yes | Yes | Yes | No |
+| **Manage the workspace's domains** (`domains.manage`) | The workspace's **Domains** page: buy, transfer in, unlock and renew domains, and change their contacts and DNS (paying also needs **Manage billing**) | Yes | Yes | No | No |
+
+Both are for members of the whole workspace. **Pause org automations on a site**
+(`workflows.sitePause`) starts from the member's role on the site instead: a site's admins
+and editors hold it. Nobody's access changed when these became permissions, and a custom
+role or a per-member override can grant or deny each one.
+
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
 Three settings sections have a permission each. Owners and admins hold all three by

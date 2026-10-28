@@ -27,6 +27,13 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — org automations and the workspace's domains are permissions
+
+- **[Automation and domain permissions](workspace-and-billing/teams-and-roles/custom-roles.md#automation-and-domain-permissions)** —
+  managing the organization's automations, pausing one on a site and managing the
+  workspace's domains now each have a permission. Everyone keeps what their role allowed,
+  and a custom role or a per-member override can grant or deny each one.
+
 ## October 2026 — installing and publishing on a site are permissions
 
 - **[Marketplace permissions on a site](workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-site-permissions)** —

@@ -39,7 +39,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     return orgId ? { orgId, org: mockStore.current.docs.get(`orgs/${orgId}`) ?? {} } : null
   },
   resolveOrgMembership: (uid: string, orgId: string) => mockMembership(uid, orgId),
-  memberHasOrgPermission: () => mockBilling(),
+  // "Manage billing" is the case's own answer; every other key, such as
+  // "Manage the workspace's domains" (AGL-4047), the catalog's verdict.
+  memberHasOrgPermission: (_orgId: string, member: unknown, permission: string) =>
+    permission === 'billing.manage'
+      ? mockBilling()
+      : jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null)[permission] ===
+        true,
 }))
 jest.mock('@aglyn/tenant-data-admin/server/payment-fraud-hold', () => ({
   isPaymentFraudHeld: (db: unknown, orgId: string) => mockFraudHeld(db, orgId),
@@ -53,6 +59,7 @@ jest.mock('@aglyn/tenant-data-admin/server/id-token-refusal', () => ({
 }))
 
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerDomainsDeclarations } from '../declarations'
 import {
   registerPurchaseGatePreclearance,
   type PurchaseGatePreclearanceInput,
@@ -127,6 +134,9 @@ async function registration(domain: string, patch: Partial<DomainRegistrationDoc
     ...patch,
   } as never)
 }
+
+// The workspace's domains key in the catalog (AGL-4047), as the declarations register it.
+beforeAll(() => registerDomainsDeclarations())
 
 beforeEach(() => {
   mockStore.current = new MemoryFirestore()
@@ -291,6 +301,24 @@ describe('the workspace-level gate (AGL-4040)', () => {
     expect(gate).not.toBeInstanceOf(Response)
     if (gate instanceof Response) return
     expect(gate.actor).toMatchObject({ orgId: 'org-1', hostId: null, host: null })
+  })
+
+  it('asks "Manage the workspace’s domains", so a role or the member’s own permissions decide (AGL-4047)', async () => {
+    mockMembership.mockImplementation(async () => ({
+      orgId: 'org-1',
+      member: { role: 'editor', allHosts: true, permissions: { 'domains.manage': true } },
+    }))
+    expect(await domainsGate(request({ orgId: 'org-1' }), { billing: false, scope: 'workspace', entitlement: false })).not.toBeInstanceOf(Response)
+    mockMembership.mockImplementation(async () => ({
+      orgId: 'org-1',
+      member: { role: 'admin', permissions: { 'domains.manage': false } },
+    }))
+    const refused = await domainsGate(request({ orgId: 'org-1' }), { billing: false, scope: 'workspace', entitlement: false })
+    expect((refused as Response).status).toBe(403)
+    expect(await (refused as Response).json()).toMatchObject({
+      error: 'Your role does not include "Manage the workspace’s domains" — ask an organization admin',
+      code: 'workspace-admin',
+    })
   })
 
   it('refuses a member who is not a workspace owner or admin', async () => {

@@ -1116,8 +1116,10 @@
         "MARKETPLACE_SITE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
         "MARKETING_SITE_PERMISSIONS",
+        "WORKFLOWS_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",
-        "WAIVERS_PERMISSION_DECLARATIONS"
+        "WAIVERS_PERMISSION_DECLARATIONS",
+        "DOMAINS_PERMISSIONS"
       ],
       "parts": [
         "libs/plugins/ai/src/lib/model/ai-permissions.ts",
@@ -1129,6 +1131,8 @@
         "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
         "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
+        "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",
+        "libs/plugins/domains/src/lib/model/domains-permissions.ts",
         "libs/plugins/waivers/src/lib/constants/permissions.ts"
       ]
     }

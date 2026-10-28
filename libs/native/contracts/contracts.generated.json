@@ -7383,9 +7383,12 @@
         "outreach.use",
         "outreach.manageAll",
         "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "accounting.manage",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "domains.manage"
       ],
       "editor": [
         "data.manage",
@@ -7414,6 +7417,8 @@
         "marketplace.siteInstall",
         "marketplace.sitePublish",
         "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7467,9 +7472,12 @@
         "outreach.use",
         "outreach.manageAll",
         "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "accounting.manage",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "domains.manage"
       ],
       "viewer": []
     },
@@ -7529,6 +7537,10 @@
         "label": "Marketing"
       },
       {
+        "id": "workflows",
+        "label": "Workflows"
+      },
+      {
         "id": "accounting",
         "label": "Accounting",
         "pluginId": "accounting"
@@ -7537,6 +7549,10 @@
         "id": "waivers",
         "label": "Waivers",
         "pluginId": "waivers"
+      },
+      {
+        "id": "domains",
+        "label": "Domains"
       }
     ],
     "permissions": [
@@ -7882,6 +7898,20 @@
         "scope": "site"
       },
       {
+        "description": "Create, change, switch on and off, remove and import the organization’s automations. Members of the whole workspace only.",
+        "group": "workflows",
+        "key": "workflows.orgAutomations",
+        "label": "Manage org automations",
+        "scope": "org"
+      },
+      {
+        "description": "Pause or resume one of the organization’s automations on a site. Follows the site role unless a role or member sets it; \"Manage org automations\" also allows it.",
+        "group": "workflows",
+        "key": "workflows.sitePause",
+        "label": "Pause org automations on a site",
+        "scope": "site"
+      },
+      {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",
         "group": "accounting",
         "key": "accounting.manage",
@@ -7903,6 +7933,13 @@
         "key": "collectWaivers",
         "label": "Collect waivers",
         "pluginId": "waivers",
+        "scope": "org"
+      },
+      {
+        "description": "Buy, transfer in, unlock and renew the workspace’s domains, and change their contacts and DNS. Paying for one also needs \"Manage billing\".",
+        "group": "domains",
+        "key": "domains.manage",
+        "label": "Manage the workspace’s domains",
         "scope": "org"
       }
     ]
