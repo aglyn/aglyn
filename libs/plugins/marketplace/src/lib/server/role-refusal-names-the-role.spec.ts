@@ -118,7 +118,7 @@ const refusals = repoRootFound
   : []
 
 describe('a site-role 403 names the roles it admits', () => {
-  it('THE CONTROL: the sweep reads real directories and finds both shapes', () => {
+  it('THE CONTROL: the sweep reads real directories and finds the shapes left', () => {
     // A wrong repo depth, a moved directory or a renamed message would
     // otherwise let every assertion below pass by finding nothing to check.
     expect({ REPO, repoRootFound }).toEqual({ REPO, repoRootFound: true })
@@ -126,7 +126,8 @@ describe('a site-role 403 names the roles it admits', () => {
     // so few role-worded refusals are left to pair; the ones that are still
     // must agree with their conditions.
     expect(refusals.length).toBeGreaterThan(0)
-    expect(refusals.some((refusal) => refusal.admitsEditor)).toBe(true)
+    // The admin-or-editor doors all ask keys now (AGL-4047); the admin-only
+    // shape is what is left to pair.
     expect(refusals.some((refusal) => !refusal.admitsEditor)).toBe(true)
   })
 

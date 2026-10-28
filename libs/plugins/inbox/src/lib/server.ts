@@ -131,6 +131,8 @@ import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retaine
 import { consentGroupOptOutHosts } from '@aglyn/aglyn/app-utils/consent-groups'
 import { messageFromName, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { INBOX_SITE_ROLE_PRESET, inboxSitePermissionRefusal } from './model/inbox-permissions'
 // The registries' own modules: a reply finds the submission it answers
 // through the index the forms plugin publishes (AGL-3080).
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
@@ -243,9 +245,10 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Reply from the inbox" (AGL-4047): the site's stamp, else the preset of
+    // the member's site role, the Admin and Editor this asked for.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'inbox.reply', INBOX_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: inboxSitePermissionRefusal('inbox.reply') })
     }
 
     // The address the reply goes back to, and the only thing that makes this
@@ -465,12 +468,14 @@ async function resolveAssignmentContext(
   if (!hostSnapshot.exists) {
     return { ok: false, status: 404, body: { error: 'Unknown site' } }
   }
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (memberRole !== 'admin' && memberRole !== 'editor') {
+  // "Add people to lists from the inbox" (AGL-4047): the site's stamp, else
+  // the preset of the member's site role, the Admin and Editor this asked
+  // for. The organization-wide writer is still asked below.
+  if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'inbox.assign', INBOX_SITE_ROLE_PRESET)) {
     return {
       ok: false,
       status: 403,
-      body: { error: 'Not a site admin or editor' },
+      body: { error: inboxSitePermissionRefusal('inbox.assign') },
     }
   }
 

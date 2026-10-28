@@ -349,6 +349,21 @@ describe('email/suppression-add', () => {
     expect(docs.has(ENTRY)).toBe(false)
   })
 
+  it('asks "Manage the site’s suppressions", so the site’s stamp decides either way (AGL-4047)', async () => {
+    docs.set(`hosts/${HOST}`, {
+      memberRoles: { 'uid-editor': 'editor', 'uid-viewer': 'viewer' },
+      memberPermissions: { 'uid-editor': { 'email.suppressions': false }, 'uid-viewer': { 'email.suppressions': true } },
+    })
+    const refused = await call({ hostId: HOST, email: ADDRESS })
+    expect(refused.status).toBe(403)
+    expect(refused.body).toEqual({
+      error: 'Your role does not include "Manage the site’s suppressions" — ask an organization admin',
+    })
+    expect(docs.has(ENTRY)).toBe(false)
+    decoded = { uid: 'uid-viewer' }
+    expect((await call({ hostId: HOST, email: ADDRESS })).status).toBe(200)
+  })
+
   it('refuses somebody holding no role on this site at all', async () => {
     // An ALLOWLIST, not a denylist: a role union that grows must not widen
     // this route by default.
