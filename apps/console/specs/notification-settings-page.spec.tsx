@@ -90,8 +90,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
  */
 jest.mock('../hooks/use-org-scope', () => {
   const value = {
-    orgs: [{ $id: 'org-1', name: 'Acme', slug: 'acme' }],
-    currentOrg: { $id: 'org-1', name: 'Acme', slug: 'acme' },
+    // The stored shape of `users/{uid}/orgs/{orgId}`: the name is `orgName`.
+    orgs: [{ $id: 'org-1', orgName: 'Acme', slug: 'acme' }],
+    currentOrg: { $id: 'org-1', orgName: 'Acme', slug: 'acme' },
     loading: false,
     confirmed: true,
     error: false,
@@ -156,6 +157,13 @@ describe('the notification settings page (AGL-3226)', () => {
     jest.clearAllMocks()
     mockStoredUser = {}
     mockIsStaff = false
+  })
+
+  it("names a workspace's weekly insights switch by the workspace, not as one you left", async () => {
+    mockStoredUser = { insightDigests: { 'org-1': true } }
+    render(<Page />)
+    expect(isOn(await screen.findByRole('switch', { name: 'Acme' }))).toBe(true)
+    expect(screen.queryByText('A workspace you left')).toBeNull()
   })
 
   it('replaces the settings field whole, so a cleared answer is gone from the store', async () => {
