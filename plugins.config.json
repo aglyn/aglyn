@@ -2261,6 +2261,7 @@
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
         "site": "registerMarketingPlugin",
+        "declarations": "registerMarketingDeclarations",
         "serverDeclarations": "registerMarketingServerDeclarations",
         "tenantEmails": "marketingTenantEmails"
       },
@@ -4166,6 +4167,7 @@
       "register": {
         "console": "registerFunnelsConsole",
         "consoleApi": "registerFunnelsConsoleApi",
+        "declarations": "registerFunnelsDeclarations",
         "serverDeclarations": "registerFunnelsServerDeclarations",
         "consoleServerDeclarations": "registerFunnelsConsoleServerDeclarations"
       },

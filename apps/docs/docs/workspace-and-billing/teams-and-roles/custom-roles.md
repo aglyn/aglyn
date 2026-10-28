@@ -182,6 +182,18 @@ booking always has. Like the site permissions, both start from the member's role
 the site, so nobody's access changed when they became permissions, and a custom role,
 a per-member override or the site's **Permissions** dialog can grant or deny either one.
 
+### Funnel and campaign permissions {#funnel-and-campaign-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Manage funnels** (`funnels.manage`) | Create, change, activate and remove a site's funnels, and draft them with AI | Yes | Yes | No | No |
+| **Run email campaigns** (`marketing.campaigns`) | Draft, send, duplicate and manage email campaigns, and see who a send reached | Yes | Yes | No | No |
+
+Both start from the member's role on the site, so nobody's access changed when they became
+permissions. In the organization hub, with no site picked, **Run email campaigns** starts from
+the workspace role instead: owners, admins and editors of the whole workspace hold it. A custom
+role, a per-member override or the site's **Permissions** dialog can grant or deny either one.
+
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
 Three settings sections have a permission each. Owners and admins hold all three by

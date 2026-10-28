@@ -594,6 +594,22 @@ export type HostDocumentLike =
  * the host document already; it costs no read.
  */
 export function holdsSiteKey(hostDoc: HostDocumentLike, uid: string, key: CoreSiteKey): boolean {
+  return holdsStampedSiteKey(hostDoc, uid, key, CORE_SITE_ROLE_PRESETS[key] ?? {})
+}
+
+/**
+ * The same for a plugin's key whose preset is the site role (AGL-4047): the
+ * site's `memberPermissions` stamp, else `presetFor` read for the member's
+ * `memberRoles` entry. `presetFor` is the declaring plugin's own table, so the
+ * answer does not depend on which plugins this process loaded. For the doors
+ * and the cards that hold the host document already; it costs no read.
+ */
+export function holdsStampedSiteKey(
+  hostDoc: HostDocumentLike,
+  uid: string | null | undefined,
+  key: string,
+  presetFor: Readonly<Partial<Record<HostAccessRole, boolean>>>,
+): boolean {
   if (!hostDoc || !uid) return false
   // `hostDoc`, not `host`: the host-field deny guard reads every `host.…`
   // in this folder as a field of the host document, and `get` is none.
@@ -605,7 +621,7 @@ export function holdsSiteKey(hostDoc: HostDocumentLike, uid: string, key: CoreSi
     { memberPermissions: read('memberPermissions'), memberRoles: read('memberRoles') },
     uid,
     key,
-    CORE_SITE_ROLE_PRESETS[key] ?? {},
+    presetFor,
   )
 }
 

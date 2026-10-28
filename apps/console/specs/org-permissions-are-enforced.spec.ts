@@ -223,6 +223,12 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   'commerce.refunds': ["'commerce.refunds'"],
   'commerce.posApprovals': ["'commerce.posApprovals'"],
   'commerce.webhooks': ["'commerce.webhooks'"],
+  // Funnels and Marketing (AGL-4047): the funnels routes and draft writer ask
+  // "Manage funnels", the campaign routes and draft writer "Run email
+  // campaigns", each through `holdsStampedSiteKey` (and the organization
+  // hub's campaigns through `memberHasOrgPermission`).
+  'funnels.manage': ["'funnels.manage'"],
+  'marketing.campaigns': ["'marketing.campaigns'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -265,7 +271,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(36)
+    expect(CATALOG.length).toBe(38)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

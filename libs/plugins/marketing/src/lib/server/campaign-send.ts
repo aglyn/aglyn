@@ -98,6 +98,8 @@ import {
  * harness.
  */
 import { isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { MARKETING_CAMPAIGNS_REFUSAL, MARKETING_CAMPAIGNS_SITE_ROLE_PRESET } from '../model/marketing-permissions'
 /*
  * The LEAF module, not the barrel, for the reason `document-id` is imported
  * the same way: a barrel import resolves to whatever a spec's `jest.mock` of
@@ -4042,9 +4044,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Run email campaigns" (AGL-4047): the site's stamp, else the preset of
+    // the member's site role, the Admin and Editor this asked for before.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'marketing.campaigns', MARKETING_CAMPAIGNS_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: MARKETING_CAMPAIGNS_REFUSAL })
     }
     /*==========================================
      * THE ORGANIZATION'S SENDS, AND WHICH OF THEM THIS SITE MAY TOUCH.

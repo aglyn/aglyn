@@ -18,6 +18,7 @@
 import { checkEntitlement, planLabelGrantingFeature } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { mdiPencilOutline, mdiPlus, mdiRefresh } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import {
@@ -54,6 +55,7 @@ import {
   type FunnelResult,
   type StoredFunnel,
 } from '../model/funnels.types'
+import { FUNNELS_MANAGE_SITE_ROLE_PRESET } from '../model/funnels-permissions'
 import { funnelStepTitle } from '../model/funnel-definition'
 import { FunnelDropOffDialog } from './funnel-drop-off.dialog'
 import { FunnelEditorDialog } from './funnel-editor.dialog'
@@ -111,12 +113,13 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
   const Zone = useConsoleWidgetSlot()
   const entitled = ready && checkEntitlement(org as never, FUNNEL_FEATURE)
 
-  const { data: host } = useFirestoreDoc<{ memberRoles?: Record<string, string> }>(
+  const { data: host } = useFirestoreDoc<{ memberRoles?: Record<string, string>; memberPermissions?: unknown }>(
     () => (hostId ? doc(firestore, 'hosts', hostId) : null),
     [firestore, hostId],
   )
-  const role = user?.uid ? host?.memberRoles?.[user.uid] : undefined
-  const canManage = role === 'admin' || role === 'editor'
+  // "Manage funnels" (AGL-4047), read as the server reads it: the site's
+  // stamp, else the preset of the member's site role.
+  const canManage = holdsStampedSiteKey(host, user?.uid, 'funnels.manage', FUNNELS_MANAGE_SITE_ROLE_PRESET)
 
   const { data: rows, status } = useFirestoreCollection<StoredFunnel>(
     () =>

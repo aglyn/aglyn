@@ -7359,6 +7359,7 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "funnels.manage",
         "bookings.payments",
         "bookings.refunds",
         "commerce.reservations",
@@ -7379,6 +7380,7 @@
         "posBuyHardware",
         "outreach.use",
         "outreach.manageAll",
+        "marketing.campaigns",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7394,6 +7396,7 @@
         "site.sensitive",
         "ai.use",
         "ai.generate",
+        "funnels.manage",
         "bookings.payments",
         "commerce.reservations",
         "commerce.walkIns",
@@ -7406,6 +7409,7 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketing.campaigns",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7435,6 +7439,7 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "funnels.manage",
         "bookings.payments",
         "bookings.refunds",
         "commerce.reservations",
@@ -7455,6 +7460,7 @@
         "posBuyHardware",
         "outreach.use",
         "outreach.manageAll",
+        "marketing.campaigns",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7491,6 +7497,10 @@
         "label": "AI"
       },
       {
+        "id": "funnels",
+        "label": "Funnels"
+      },
+      {
         "id": "bookings",
         "label": "Bookings"
       },
@@ -7503,6 +7513,10 @@
         "id": "outreach",
         "label": "Sequences",
         "pluginId": "outreach"
+      },
+      {
+        "id": "marketing",
+        "label": "Marketing"
       },
       {
         "id": "accounting",
@@ -7674,6 +7688,13 @@
         "scope": "org"
       },
       {
+        "description": "Create, change and remove a site’s funnels, and draft them with AI. Follows the site role unless a role or member sets it.",
+        "group": "funnels",
+        "key": "funnels.manage",
+        "label": "Manage funnels",
+        "scope": "site"
+      },
+      {
         "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
         "group": "bookings",
         "key": "bookings.payments",
@@ -7828,6 +7849,13 @@
         "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
         "scope": "org"
+      },
+      {
+        "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
+        "group": "marketing",
+        "key": "marketing.campaigns",
+        "label": "Run email campaigns",
+        "scope": "site"
       },
       {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",
