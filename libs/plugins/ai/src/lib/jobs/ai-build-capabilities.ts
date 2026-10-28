@@ -28,7 +28,7 @@ import {
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
 import { AI_TEMPLATE_SUBJECTS } from '../model/ai-template-subjects'
 import { AI_SITE_PASS_CREDITS } from '../model/ai-site-job'
-import type { AiBuildOps } from '../model/ai-build-job'
+import { AI_BUILD_THEME_OP, type AiBuildOps } from '../model/ai-build-job'
 import { AI_LOGIC_FUNCTION_RESOURCE } from '../model/ai-logic-job'
 import { AI_AUTOMATION_RESOURCE } from '../model/ai-workflow-job'
 import { AI_EDIT_TARGET_KINDS } from '../model/ai-edit-job'
@@ -56,8 +56,9 @@ import { AI_PRIVACY_ARGS_SCHEMA, AI_PRIVACY_WHERE } from './ai-job-privacy-step'
  * footer menu the `navigation` runner's (AGL-3728), a copy of something
  * it has the `duplicate` runner's (AGL-3740), a change to its settings
  * the `settings` runner's (AGL-3748), organizing its media library the
- * `media` runner's (AGL-3752), and a change to its analytics and
- * advertising tags the `tracking` runner's (AGL-3751).
+ * `media` runner's (AGL-3752), a change to its analytics and
+ * advertising tags the `tracking` runner's (AGL-3751), and a change to its
+ * theme the `theme` runner's proposal (AGL-4077).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -448,6 +449,25 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     estimateCredits: () => 0,
     degrade: 'omit',
   },
+  {
+    // A change to the site's theme (AGL-4077): the theme runner's proposal —
+    // the same one the Theme assistant makes — which the owner previews and
+    // applies in Setup → Theme. The build writes nothing to the theme, so it
+    // is never live. One a plan, on paid plans only; the Free taste changes
+    // its theme in Setup → Theme.
+    op: AI_BUILD_THEME_OP,
+    noun: 'theme change',
+    where: 'Setup → Theme',
+    intents: [
+      'a change to the site’s theme — its colors, fonts or corners — proposed for the owner to apply in Setup → Theme; the build never changes the live theme',
+    ],
+    argsSchema: NO_ARGS,
+    maxPerPlan: 1,
+    freeAllowed: false,
+    runnerKind: 'theme',
+    estimateCredits: passes(1),
+    degrade: 'omit',
+  },
 ]
 
 /**
@@ -572,6 +592,9 @@ export function aiBuildOpLines(ops: AiBuildOps, structural: readonly string[]): 
       } Args: ${args.length ? `{ ${args.join('; ')} }` : '{}'}.`,
     )
   }
+  // The plan's own vocabulary has a theme change in create, which a build
+  // does not build there (AGL-4077): the item is the one way it is made.
+  if (ops.has(AI_BUILD_THEME_OP)) lines.push(AI_BUILD_THEME_OP_LINE)
   // Measured live on the canonical request (AGL-3616): asked for "forms for
   // bookings", the planner made a plain form rather than the operation that
   // takes bookings. An operation does the job; a form that imitates it does not.
@@ -580,6 +603,10 @@ export function aiBuildOpLines(ops: AiBuildOps, structural: readonly string[]): 
   )
   return lines
 }
+
+/** What the plan is told where a build may change the theme (AGL-4077). */
+export const AI_BUILD_THEME_OP_LINE =
+  'A change to the theme is planned as the theme item, never as a theme change in create: at most one, and only when the request asks for a different look.'
 
 function aiNounWithArticle(noun: string): string {
   return `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`

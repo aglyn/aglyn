@@ -68,6 +68,8 @@ const OP_NOUNS: Readonly<Record<string, string>> = {
   products: 'Store',
   // A store's own account, cart and policy pages (AGL-3676).
   store: 'Store',
+  // A proposal for the site's theme, applied in Setup → Theme (AGL-4077).
+  theme: 'Theme change',
 }
 
 /** What an operation is called at the start of a row: its own noun, or the op spelled as words. */
