@@ -1714,6 +1714,28 @@ nothing itself.
   told to plan /shop with a "Product grid" section and is re-asked once for a
   missing Shop page (`plan-store-shop-page`); a store whose products were
   skipped or failed carries no cart until it sells.
+  A store whose brief names KINDS of product and no product (AGL-4065: the
+  2026-10-25 Berm & Bolt Moto Parts brief listed "OEM and aftermarket parts,
+  tires, riding gear, special orders; in-store pickup", and its products were
+  "OEM ATV Parts Order", "Riding Gear Item" and the like at suggested prices)
+  starts with SAMPLE products (Zach's Q1, `AI_SITE_SAMPLE_PRODUCTS_INPUT`,
+  `ai-job-site-content.ts`). `aiSiteSampleProductKinds` reads the business type:
+  what follows a colon or "selling" is what the shop sells, less what it does
+  (orders, pickup, repairs, services); one thing said in two words or more of
+  what it is ("hand-poured soy candles") names the products and keeps the old
+  rule, anything else is kinds. The products unit's brief then asks for samples
+  of those kinds, each a plain item of one ("Knobby dirt bike tire"), priced as
+  before, and each is written with the commerce plugin's `sample` mark, which
+  Products shows as a Sample chip and a "replace this with your own product"
+  line (the editor's save clears it) and the storefront never reads; the name
+  carries nothing extra (`AI_SITE_SAMPLE_PRODUCT_NAME_SUFFIX` is empty), and
+  the row's note says the samples were made from the kinds the brief named.
+  EVERY catalog (`generateAiCatalog`) is held to names a shopper buys: on its
+  first answer a name that is a kind with "Item", "Order", "Part", "Gear" or
+  the like after it, or a make or model number the brief does not name
+  (`aiCatalogNameProblem`, `model/ai-products.ts`), is refused and re-asked
+  once; a product the second answer still names so is left out of the
+  proposal (`aiCatalogProductsNamed`).
   A store is a STOREFRONT, the way a designer shop theme is (second round,
   2026-10-09: the beta.237 Willow Wick start was a lifestyle hero, one row of
   products and four text-only bands, its /shop grid below the fold;
@@ -1726,7 +1748,13 @@ nothing itself.
     (`aiSiteStorefrontPlan`): on a paid start the home gains any part it left
     out — bestsellers, collections, sign-up, then reviews — while it has room
     (eight sections, nothing removed); on any start the Shop page's grid
-    section moves to second, straight under its title.
+    section moves to second, straight under its title. The "Newsletter
+    sign-up" band is the platform's own email field (AGL-4065): the plan is
+    told so, and a sign-up section that names one of the plan's forms loses
+    it (`aiSiteSignupWithoutForms`) — the 2026-10-25 Berm & Bolt home drew its
+    parts inquiry form under that heading, since the listings place no
+    sign-up where a section places a form. A form placed nowhere else keeps a
+    band of its own, named for it, just before the sign-up.
   - **The pages.** A storefront home's hero gets "Shop all" as its first
     button where it had no button to the shop; the bestsellers list through
     the Product grid with quick add (`quickAdd`); collection groups draw as
@@ -2195,6 +2223,48 @@ photographer's gallery with six broken covers.
   listed all ten records; Northgate's /courses and Granite Peak's /services list
   their datasets once and are unchanged. `ai-stock-photo-agl3856-beta265.spec.ts`
   replays the real records and plan.
+
+### A list the brief gives no entries for (AGL-4065)
+
+The 2026-10-25 Rut Runners Racing start's "Race events" dataset came back as ten
+numbered placeholders, "Upcoming race 1 (details to be added)" to "Past race 5
+(details to be added)": the dataset rules forbid inventing a date and its first
+field may not be empty, so the model numbered rows; nothing checked them, and the
+Schedule page's "Upcoming races" and "Past results" both listed the first five.
+
+- **Samples, never placeholders** (Zach's Q2, `AI_DATASET_LIST_WITHOUT_ENTRIES`,
+  `runtime/ai-dataset-generation.ts`, `samples`). A list the brief gives no entries
+  for starts with SAMPLE records: each complete of its kind, named in the brief's
+  own words, marked `sample` through the `submit_dataset` tool, never a price,
+  contact detail, real person's name or brand. The dataset unit gives a dated
+  list's samples real dates (`aiDatasetSampleDates`): the first Saturday at least
+  two weeks after the job's day, then every three weeks; a sample that is behind
+  us (its split value or every section that lists it says past) on the Saturdays
+  as far back, the latest first; a sample still to come has no result. The data
+  plugin's writer stores `sample: true` beside each one's values (`samples` on
+  its content), which Data shows as a Sample chip with a "replace it with your
+  own" line, the record's save clears, and no page reads. `empty` is the other
+  answer: the fields and no records, and the pages say the entries are on the way.
+- **The check** (`checkAiDatasetRecords`). A record any value of which marks a gap
+  ("details to be added", "TBD", "coming soon") or whose name is a number after
+  nothing but the list's own words and stand-ins ("Item 1", "Race 2", "Upcoming
+  race 3") is refused with `AI_DATASET_PLACEHOLDER_REASK`, re-asked once; so is a
+  sample that names a make the brief does not. An answer that still holds
+  placeholders after the re-ask keeps the records that name real things
+  (`aiDatasetWithoutPlaceholders`) — none, as often as not — and is written with
+  its fields, its note saying where its rows go and the pages told it has none
+  yet, so each keeps its band, an honest line and the live list.
+- **Two lists of one dataset on one page** (`aiSiteDatasetSplitOf`,
+  `aiSettlePlanSplitListings`). Where a page lists a new dataset in two sections
+  or more and the dataset plans a field that files its records (Status, Stage,
+  Category, Type…), the value each section names — its words past the dataset's
+  own and its fields' ("Upcoming races" and "Past results" over Race events are
+  "Upcoming" and "Past") — goes to the dataset's design as one line, the unit holds
+  the field to those spellings, and its output's `groups` carries them as
+  `expected`, so each section is filtered (`status == Upcoming`) even before the
+  owner's first row. Where nothing can tell them apart, the plan is settled to list
+  the dataset once on that page, the first section taking the others' names and
+  the most items.
 
 ## The `build` kind: Assist builds from one request
 
