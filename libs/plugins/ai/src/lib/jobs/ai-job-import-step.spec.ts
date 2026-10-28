@@ -155,13 +155,13 @@ describe('who may start an import, and when: the admission both doors ask', () =
     createAiSiteImportAdmission({
       releaseFlagOn: async () => true,
       ownership: async () => ({ current: true, method: 'meta', provenAt: 1, detail: null }),
-      memberRole: async () => 'owner',
+      holdsSiteImport: async () => true,
       ...patch,
     })
 
   it('admits the owner or an admin of a paid workspace with a current proof', async () => {
     expect(await admission()(context())).toBeNull()
-    expect(await admission({ memberRole: async () => 'admin' })(context())).toBeNull()
+    expect(await admission({ holdsSiteImport: async () => true })(context())).toBeNull()
     // Asked before "Create site" makes the site, too.
     expect(await admission()(context({ hostId: null, siteToCome: true }))).toBeNull()
   })
@@ -175,7 +175,7 @@ describe('who may start an import, and when: the admission both doors ask', () =
   })
 
   it('refuses an editor, an address that is no website and a site that is not proved, before anything is spent', async () => {
-    expect(await admission({ memberRole: async () => 'editor' })(context())).toEqual({ status: 403, error: AI_SITE_IMPORT_COPY.role })
+    expect(await admission({ holdsSiteImport: async () => false })(context())).toEqual({ status: 403, error: AI_SITE_IMPORT_COPY.role })
     expect(await admission()(context({ inputs: { domain: 'not a website' } }))).toMatchObject({ status: 400 })
     expect(await admission({ ownership: async () => null })(context())).toEqual({
       status: 403,

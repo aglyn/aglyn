@@ -41,6 +41,14 @@ for the how-to.
   when a deleted workspace is removed for good partway through a month, that
   month's 4G is charged then, and 4G is turned off.
 
+## October 2026 — Bring my site and everyone's Sequences are permissions
+
+- **[Bring a site in](workspace-and-billing/teams-and-roles/custom-roles.md#ai-permissions)** and
+  **[Manage everyone's Sequences](content-and-data/crm/sequences.md)** — bringing an
+  existing site in, and managing a mailbox or sequence someone else connected, each
+  have a permission now. Owners and admins keep both, and a custom role or a
+  per-member override can grant or deny either one.
+
 ## October 2026 — five more workspace permissions
 
 - **[Workspace permissions](workspace-and-billing/teams-and-roles/custom-roles.md#workspace-permissions)** —

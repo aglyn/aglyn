@@ -206,9 +206,12 @@ again.
   [myapps.microsoft.com](https://myapps.microsoft.com) to end it at Microsoft
   too.
 
-Organization owners and admins can change the settings of, pause and
-disconnect any member's mailbox — a departing rep's mailbox has to be
-stoppable by somebody. Other members manage only their own.
+Members with the **Manage everyone's Sequences** permission, which owners and
+admins hold by default, can change the settings of, pause and disconnect any
+member's mailbox, send from it, and set up link domains — a departing rep's
+mailbox has to be stoppable by somebody. Other members manage only their own. A
+[custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md) can
+grant it or take it away.
 
 When a member deletes their account, the mailboxes they connected and the
 access stored for them are deleted, and Google is asked to revoke it; when an

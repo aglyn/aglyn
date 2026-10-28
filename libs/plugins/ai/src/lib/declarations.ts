@@ -28,7 +28,7 @@ import {
   type PluginEntitlementRegistration,
 } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { AI_PLUGIN_ID } from './constants'
-import { AI_ORG_PERMISSIONS } from './model/ai-permissions'
+import { AI_ORG_PERMISSIONS, AI_WORKSPACE_PERMISSIONS } from './model/ai-permissions'
 import { AI_CONFIG_SCHEMA } from './plugin-config'
 import { registerAiActivityActions } from './activity/ai-activity-actions'
 
@@ -103,7 +103,7 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
       apiPaths: { prefixes: ['ai/generate', 'ai/jobs', 'ai/seo'] },
     },
   ],
-  orgPermissions: AI_ORG_PERMISSIONS,
+  orgPermissions: [...AI_ORG_PERMISSIONS, ...AI_WORKSPACE_PERMISSIONS],
 }
 
 let declared = false

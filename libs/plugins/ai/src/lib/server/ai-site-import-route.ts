@@ -65,7 +65,8 @@ import {
 } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
-import { getOrgForUser } from '@aglyn/tenant-data-admin/server/organizations'
+import { getOrgForUser, memberHasOrgPermission } from '@aglyn/tenant-data-admin/server/organizations'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { consumeRateLimit } from '@aglyn/tenant-data-admin/server/rate-limit-store'
 import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -140,9 +141,11 @@ export async function siteImportGate(
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
   const member = resolved.member ?? null
-  if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+  // "Bring a site in" (`ai.import`, AGL-4047), whose default is the owner and
+  // admin this asked for.
+  if (!member || !(await memberHasOrgPermission(orgId, member, 'ai.import'))) {
     return Response.json(
-      { error: 'Only the workspace owner or an admin can bring a site in.', reason: 'role' },
+      { error: permissionRefusalText('ai.import'), reason: 'role' },
       { status: 403 },
     )
   }
@@ -181,7 +184,7 @@ export async function siteImportOfferFor(input: {
   } catch {
     return null
   }
-  if (!input.member || (input.member.role !== 'owner' && input.member.role !== 'admin')) return 'role'
+  if (!input.member || !(await memberHasOrgPermission(input.orgId, input.member, 'ai.import'))) return 'role'
   if (resolveEffectivePlan(input.org ?? {}) === 'free') return 'plan'
   return 'ready'
 }
