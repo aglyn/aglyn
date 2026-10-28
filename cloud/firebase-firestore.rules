@@ -5169,7 +5169,13 @@ service cloud.firestore {
                      'displayName', 'deletedAt', 'visibility',
                      // Buyer-read copy, phishing-screened by the API (AGL-3365).
                      'description', 'readme', 'homepageUrl', 'repositoryUrl',
-                     'license', 'workspaceLockedAt']));
+                     'license', 'workspaceLockedAt',
+                     // Site starters (AGL-4049): the facets and `official`
+                     // order the starter picker and gate nothing a client may
+                     // decide; `sourceStarterHostId` is the one-listing-per-
+                     // source key the publish door looks up.
+                     'official', 'starterKind', 'starterBase', 'starterFonts',
+                     'starterPages', 'starterMode', 'sourceStarterHostId']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which
