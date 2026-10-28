@@ -911,7 +911,7 @@ describe('when a pass stops', () => {
     return { button: button as string, row: row as string }
   }
 
-  it('builds a section the page’s stored rules are broken outside of, and leaves those breaks to the last pass, which names them (AGL-3078)', async () => {
+  it('builds a section the page’s stored rules are broken outside of, and leaves those breaks to the last pass, which names them (AGL-3078) or settles them (AGL-4076)', async () => {
     const { button, row } = await pageBreakingOutsideThisSection()
     // The pass answers its own section, whole and within the rules; a re-ask
     // would be served the same answer, since there is nothing in it to mend.
@@ -922,28 +922,25 @@ describe('when a pass stops', () => {
     expect([outcome.review, outcome.continue]).toEqual([undefined, true])
     expect(Object.keys(storedPage())).toContain(SECTION_IDS[2])
 
-    // The last pass reads the whole page, and names both breaks by the ids the
-    // draft stores them under, with the outline of what it refused.
+    // The last pass reads the whole page. The button that goes nowhere has one
+    // answer, to be left out (AGL-4076), so it is taken off the stored draft
+    // rather than stopping the job; the grid break is the model's, and is named
+    // by the id the draft stores it under, with the outline of what it refused.
     mockRunAiRequest.mockReset()
     mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[3]))
     expect(await step()(context())).toMatchObject({ continue: true })
     mockRunAiRequest.mockReset()
     const last = await step()(context())
     expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(Object.keys(storedPage())).not.toContain(button)
     // The draft is reported with the refusal (AGL-3143), so the member has it to mend.
     expect(last.outputs).toEqual([expect.objectContaining({ resource: 'screen', id: 'drftScreen' })])
     expect(last.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining('Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.'),
-      detail: expect.stringContaining('(1 more rule was also broken.)'),
-      findings: [
-        expect.objectContaining({ rule: 10, code: 'link-without-destination', nodeIds: [button] }),
-        expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [row] }),
-      ],
-      outline: expect.arrayContaining([
-        expect.objectContaining({ id: button, componentId: 'muiButton' }),
-        expect.objectContaining({ id: row, componentId: 'muiGrid' }),
-      ]),
+      detail: expect.stringContaining('Rule 12'),
+      findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [row] })],
+      outline: expect.arrayContaining([expect.objectContaining({ id: row, componentId: 'muiGrid' })]),
     })
   })
 

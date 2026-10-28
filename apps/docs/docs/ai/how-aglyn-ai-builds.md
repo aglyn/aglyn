@@ -178,7 +178,8 @@ lists each job with where it stands.
 
 A plan or document that breaks a rule is not used. The AI is asked once more and
 told which rules it broke. If the second answer still breaks one, the job stops
-and shows you which rules. Choose **Try again** to ask once more, or cancel the
+and shows you which rules. A button or link the second answer leaves with
+nowhere to go does not stop the job: it is left out, as rule 10 says. Choose **Try again** to ask once more, or cancel the
 job. Every answer counts toward your AI usage, including the ones that were not
 used.
 
