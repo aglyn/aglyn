@@ -26,6 +26,7 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_RETURN_REASON_MAX,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
   type PosHardwareRefund,
@@ -110,7 +111,7 @@ async function applyRefund(orderId: string, refund: PosHardwareRefund): Promise<
     const after = withPosHardwareRefund(before, refund)
     if (after === before) return before
     transaction.set(ref, after)
-    transaction.set(saleRef, posHardwareSaleRecord(orderId, after))
+    transaction.set(saleRef, posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
     return after
   })
 }

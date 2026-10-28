@@ -272,18 +272,22 @@ and accounting: the items and their prices, shipping, tax, the total, the order'
 status dates, Stripe's payment references, and the state, ZIP code and country it
 shipped to. That record stays after the workspace is
 [deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
-and is kept for seven years from the sale, then deleted. It never holds the
-buyer's name, email, phone, street address or tracking number. If an order is
+and is kept for seven years from the sale, then deleted. Of the buyer, it keeps
+only their name and address, which Aglyn must keep as a reseller of Stripe's
+readers; it never holds their email, phone or tracking number. If an order is
 canceled and refunded, the record says so.
 
 For a reader bought from Aglyn in person, the record names Aglyn's register sale
 and how it was paid instead of a shipping address, and the tax is the one Aglyn's
-store charged at the sale.
+store charged at the sale. The buyer's name is their account's name, or the one
+given at the sale, and their address is the one given at the sale or else the
+address of the store the readers are set up on.
 
 If the person who placed an order
 [closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
 the workspace keeps the order and its amounts, and their name, email, phone,
-street address and the tracking are removed from it.
+street address and the tracking are removed from it. Aglyn's record of the sale
+keeps their name and address until it is deleted.
 
 ## Receipt printers
 

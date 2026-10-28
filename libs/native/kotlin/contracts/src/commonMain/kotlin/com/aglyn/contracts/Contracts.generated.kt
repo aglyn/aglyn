@@ -1895,12 +1895,24 @@ internal object OrderFulfillmentStatusSerializer :
 
 @Serializable
 data class OrderHardwareBuyer(
+    val address: OrderHardwareBuyerAddress? = null,
     val attachedAtMs: Double,
     val attachedBy: String,
     val email: String? = null,
     val hostId: String? = null,
+    val name: String? = null,
     val orgId: String? = null,
     val uid: String? = null,
+)
+
+@Serializable
+data class OrderHardwareBuyerAddress(
+    val city: String,
+    val country: String,
+    val line1: String,
+    val line2: String? = null,
+    val postalCode: String,
+    val state: String? = null,
 )
 
 @Serializable

@@ -2839,20 +2839,42 @@ public enum OrderFulfillmentStatus: String, Codable, CaseIterable, Hashable, Sen
 }
 
 public struct OrderHardwareBuyer: Codable, Hashable, Sendable {
+  public var address: OrderHardwareBuyerAddress?
   public var attachedAtMs: Double
   public var attachedBy: String
   public var email: String?
   public var hostId: String?
+  public var name: String?
   public var orgId: String?
   public var uid: String?
 
-  public init(attachedAtMs: Double, attachedBy: String, email: String? = nil, hostId: String? = nil, orgId: String? = nil, uid: String? = nil) {
+  public init(address: OrderHardwareBuyerAddress? = nil, attachedAtMs: Double, attachedBy: String, email: String? = nil, hostId: String? = nil, name: String? = nil, orgId: String? = nil, uid: String? = nil) {
+    self.address = address
     self.attachedAtMs = attachedAtMs
     self.attachedBy = attachedBy
     self.email = email
     self.hostId = hostId
+    self.name = name
     self.orgId = orgId
     self.uid = uid
+  }
+}
+
+public struct OrderHardwareBuyerAddress: Codable, Hashable, Sendable {
+  public var city: String
+  public var country: String
+  public var line1: String
+  public var line2: String?
+  public var postalCode: String
+  public var state: String?
+
+  public init(city: String, country: String, line1: String, line2: String? = nil, postalCode: String, state: String? = nil) {
+    self.city = city
+    self.country = country
+    self.line1 = line1
+    self.line2 = line2
+    self.postalCode = postalCode
+    self.state = state
   }
 }
 

@@ -43,6 +43,7 @@ import type { OrderHardwareBuyer } from './commerce-orders'
 import {
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_IN_PERSON_SHIPPING_LABEL,
+  posHardwareBuyerAddress,
   posHardwareSku,
   type PosHardwareAttachment,
   type PosHardwareLine,
@@ -154,6 +155,9 @@ export function posHardwareAttachmentOf(buyer: OrderHardwareBuyer | null | undef
     hostId: attached ? text(buyer?.hostId) : null,
     attachedBy: text(buyer?.attachedBy),
     attachedAtMs: attached && Number.isFinite(buyer?.attachedAtMs) ? Number(buyer?.attachedAtMs) : null,
+    // The reseller's records of who bought it (AGL-4038), when known.
+    name: text(buyer?.name)?.slice(0, 200) ?? null,
+    address: posHardwareBuyerAddress(buyer?.address),
   }
 }
 
