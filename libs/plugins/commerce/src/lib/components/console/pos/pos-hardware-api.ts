@@ -236,9 +236,16 @@ export function staffHardwareOrderAction(
     stripeHardwareOrderId?: string | null
     tracking?: { carrier: string; number: string; url?: string } | null
     status?: PosHardwareOrderStatus
+    /** A cancel or a refund: email the buyer about it (AGL-4038). */
+    notifyBuyer?: boolean
   },
 ) {
-  return sendPosHardwareRequest<{ ok: true; order: StaffHardwareOrderRow }>(user, STAFF, { method: 'POST', body })
+  return sendPosHardwareRequest<{
+    ok: true
+    order: StaffHardwareOrderRow
+    /** A cancel or a refund: what became of the buyer's email, `off` when staff chose none. */
+    buyerEmail?: 'sent' | 'already' | 'skipped' | 'failed' | 'off'
+  }>(user, STAFF, { method: 'POST', body })
 }
 
 /** Asks to return a card reader bought in person, with the reason (AGL-4038). */

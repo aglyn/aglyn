@@ -593,17 +593,17 @@ const SECTIONS_UNDER_ANY_BRAND = [
     "id": "posHardware",
     "name": "Card reader hardware",
     "title": "Card reader hardware — {brand}’s own sales",
-    "help": "Card readers and accessories {brand} sold to workspaces from the POS hardware shop. {brand} is the seller, so these are its own sales; they are recorded apart from its invoices and are not in the filing figures above.",
-    "intro": "{brand} is the seller of record for every card reader order, so these are {brand}’s OWN sales, not facilitated ones. They are recorded apart from its invoices, so none of this is in the Webfile figures above: the card reader hardware lines beneath them say what to add. Refunds are counted in the period they were made and never netted.",
+    "help": "Card readers and accessories {brand} sold to workspaces, online from the POS hardware shop and in person at its own store. {brand} is the seller, so these are its own sales, folded into the filing figures above.",
+    "intro": "{brand} is the seller of record for every card reader order, so these are {brand}’s OWN sales, not facilitated ones, and they are folded into Items 1–3: the online ones as “Card reader shop (online)”, one sold in person in its store’s register sale. Refunds are counted in the period they were made and never netted.",
     "truncated": false,
     "undatedRows": 0,
     "findings": [
       {
-        "id": "posHardwareSalesNotInFigures",
+        "id": "posHardwareInPersonStoreNotRead",
         "severity": "review",
-        "count": 42500,
-        "label": "Texas card reader hardware sales are not in Items 1–3",
-        "detail": "Cents. {brand} sold these card readers itself, so they are its own sales, recorded apart from its invoices and NOT included in Items 1–3. Add the card reader hardware lines beneath the figures before filing."
+        "count": 0,
+        "label": "Card readers sold in person at a store that is not one of {brand}’s own",
+        "detail": "Folded into Items 1–3 from their hardware records. The store that sold them is not a site of the workspace named as {brand}’s own (POS_HARDWARE_SELLER_ORG_ID), so its other sales are not in the figures. Name the workspace, or check the store was moved on purpose."
       },
       {
         "id": "posHardwareUntaxed",
@@ -634,30 +634,22 @@ const SECTIONS_UNDER_ANY_BRAND = [
         "detail": "Counted as sales: the order is marked canceled or refunded, but no refund was recorded on it. Check the payment in Stripe."
       }
     ],
-    "filingLines": [
+    "filingLines": [],
+    "operatorSales": [
       {
-        "item": "Item 1 (add)",
-        "label": "Texas card reader hardware sales (NOT in Item 1 above)",
-        "dollars": "425.00",
-        "note": "{brand}’s own sales of card readers shipped to Texas, excluding the tax: the items and the shipping. Add to Item 1."
-      },
-      {
-        "item": "Item 2 (add)",
-        "label": "Texas card reader hardware taxable sales (NOT in Item 2 above)",
-        "dollars": "425.00",
-        "note": "Stripe’s taxable_amount on each order, once per order. Add to Item 2."
-      },
-      {
-        "item": "—",
-        "label": "Texas card reader hardware tax collected (NOT in the reconciliation above)",
-        "dollars": "35.06",
-        "note": "What Stripe Tax charged on those orders. Add it to the tax collected above before reconciling."
-      },
-      {
-        "item": "—",
-        "label": "Texas card reader hardware refunds made in this period (stated, not netted)",
-        "dollars": "0.00",
-        "note": "Receipts excluding tax refunded in this period, on orders paid in this or an earlier period; the tax refunded with them was $0.00. Stated beside the sales, as the invoices’ refunds are, and applying them is the preparer’s decision."
+        "id": "posHardwareShop",
+        "label": "Card reader shop (online)",
+        "byJurisdiction": {
+          "US-TX": {
+            "transactionCount": 1,
+            "totalSalesCents": 42500,
+            "taxableSalesCents": 42500,
+            "taxCollectedCents": 3506,
+            "refundCount": 0,
+            "refundedSalesCents": 0,
+            "refundedTaxCents": 0
+          }
+        }
       }
     ],
     "tables": [
@@ -731,7 +723,7 @@ const SECTIONS_UNDER_ANY_BRAND = [
           }
         ],
         "empty": "No card reader hardware was sold or refunded in this period.",
-        "footnote": "Test-mode orders are in no figure. A refund is counted in the period it was made, whenever the order was paid."
+        "footnote": "Every card reader sale, online and in person. The online ones are folded into the filing figures as “Card reader shop (online)”; one sold in person is in its store’s register sale there. Test-mode orders are in no figure. A refund is counted in the period it was made, whenever the order was paid."
       }
     ],
     "figures": [
@@ -746,7 +738,7 @@ const SECTIONS_UNDER_ANY_BRAND = [
         "placement": "jurisdictions",
         "rows": [
           [
-            "Card reader hardware — {brand}’s OWN sales by ship-to state (NOT in the filing figures above)"
+            "Card reader hardware — {brand}’s OWN sales by ship-to state (folded into the filing figures above, by source)"
           ],
           [
             "Ship-to state",
@@ -772,7 +764,7 @@ const SECTIONS_UNDER_ANY_BRAND = [
         "placement": "sections",
         "rows": [
           [
-            "Card reader hardware orders in this period (posHardwareSales) — NOT in the filing figures above"
+            "Card reader hardware orders in this period (posHardwareSales) — folded into the filing figures as each says"
           ],
           [
             "Order",
@@ -785,7 +777,8 @@ const SECTIONS_UNDER_ANY_BRAND = [
             "Tax collected (USD)",
             "Refunded (USD)",
             "Refunded at (UTC)",
-            "In this period as"
+            "In this period as",
+            "Folded in as"
           ],
           [
             "hw_tx",
@@ -798,7 +791,8 @@ const SECTIONS_UNDER_ANY_BRAND = [
             "35.06",
             "0.00",
             "",
-            "sale"
+            "sale",
+            "Card reader shop (online)"
           ]
         ]
       }
@@ -868,9 +862,140 @@ const SECTIONS_UNDER_ANY_BRAND = [
         "taxCents": 3506,
         "refundedCents": 0,
         "refundedAt": null,
-        "inPeriodAs": "sale"
+        "inPeriodAs": "sale",
+        "foldedAs": "shop"
       }
     ],
+    "outcome": "answered",
+    "pluginId": "commerce"
+  },
+  {
+    "id": "ownStores",
+    "name": "Own store",
+    "title": "{brand}’s own stores — its own sales",
+    "help": "Everything {brand} sold from a store of its own, in person and online: card readers, apparel and anything else. These are its own sales, folded into the filing figures above.",
+    "intro": "{brand} sold these itself, from its own stores, so they are its OWN sales and are folded into Items 1–3, one line per store and channel in the breakdown beside the figures. A merchant’s store is never here.",
+    "truncated": false,
+    "undatedRows": 0,
+    "findings": [
+      {
+        "id": "ownStoreUntaxed",
+        "severity": "review",
+        "count": 0,
+        "label": "{brand}’s own store sales with no tax charged",
+        "detail": "In Items 1–3 as sales, with nothing in taxable sales. If any was taxable where it was sold, the tax is still owed, out of {brand}’s receipt."
+      },
+      {
+        "id": "ownStoreMissingRegion",
+        "severity": "review",
+        "count": 0,
+        "label": "{brand}’s own store sales with no region",
+        "detail": "Listed as Not stated, and in no jurisdiction’s figures: a register sale whose store has no tax address, or an online one with no shipping or billing address. If it was sold in Texas, the figures understate it."
+      },
+      {
+        "id": "ownStoreCanceledWithoutRefund",
+        "severity": "review",
+        "count": 0,
+        "label": "Canceled {brand} own store orders with no refund recorded",
+        "detail": "Counted as sales: the order is canceled, but no refund was recorded on it. Check the payment."
+      }
+    ],
+    "filingLines": [],
+    "operatorSales": [],
+    "tables": [
+      {
+        "description": "Each store’s sales by where they are taxed — at the counter where the store is, online where the order shipped — with the refunds made in this period beside them. All of it is folded into the filing figures above.",
+        "columns": [
+          {
+            "label": "Store and channel"
+          },
+          {
+            "label": "State"
+          },
+          {
+            "label": "Sales",
+            "numeric": true
+          },
+          {
+            "label": "Total sales",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Taxable sales",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Tax collected",
+            "numeric": true,
+            "money": true
+          },
+          {
+            "label": "Refunded in period",
+            "numeric": true,
+            "money": true
+          }
+        ],
+        "rows": [],
+        "empty": "Nothing was sold or refunded at the operator’s own stores in this period.",
+        "footnote": "A sale is in the period it was paid and a refund in the period it was made, never netted. Taxable sales are the base Stripe stated where it computed the tax, else the whole sale less tax when tax was charged. Test-mode sales are in no figure."
+      }
+    ],
+    "figures": [
+      {
+        "label": "Stores read",
+        "value": "None named",
+        "note": "No workspace is named as the operator’s own (POS_HARDWARE_SELLER_ORG_ID), so no store’s sales are folded in."
+      },
+      {
+        "label": "Sales paid in this period",
+        "value": "0",
+        "note": "Every store, channel and state. Live sales only. Orders placed up to 15 months before the period are read for a payment or refund made in it; one later than that is not."
+      }
+    ],
+    "exports": [
+      {
+        "placement": "sections",
+        "rows": [
+          [
+            "{brand}’s own store orders in this period — folded into the filing figures above"
+          ],
+          [
+            "Store",
+            "Order",
+            "Channel",
+            "Paid (UTC)",
+            "Status",
+            "Jurisdiction",
+            "Total sales (USD)",
+            "Taxable sales (USD)",
+            "Taxable base",
+            "Tax collected (USD)",
+            "Refunded (USD)",
+            "Refunded at (UTC)",
+            "In this period as"
+          ]
+        ]
+      }
+    ],
+    "summary": {
+      "periodStart": "2026-07-01T00:00:00.000Z",
+      "periodEnd": "2026-10-01T00:00:00.000Z",
+      "orders": 0,
+      "totalSalesCents": 0,
+      "parts": [],
+      "excluded": {
+        "testModeOrders": 0,
+        "marketplaceRemitted": 0
+      },
+      "attention": {
+        "untaxedOrders": 0,
+        "ordersMissingRegion": 0,
+        "canceledWithoutRefund": 0
+      }
+    },
+    "rows": [],
     "outcome": "answered",
     "pluginId": "commerce"
   },

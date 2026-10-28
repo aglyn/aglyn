@@ -141,6 +141,26 @@ function fieldAt(data: Record<string, any> | undefined, field: string): any {
   return field.split('.').reduce((value: any, key) => (value == null ? undefined : value[key]), data)
 }
 
+/**
+ * One filter, as Firestore reads it: equality, `array-contains`, `in`, and
+ * the four ranges over two numbers or two dates (AGL-4038). A range never
+ * matches a missing or null field, which is why a period query cannot see
+ * an undated row.
+ */
+function matchesFilter(stored: any, op: string, value: any): boolean {
+  if (op === '==') return stored === value
+  if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
+  if (op === 'in') return Array.isArray(value) && value.includes(stored)
+  const numbers = typeof stored === 'number' && typeof value === 'number'
+  const dates = stored instanceof Date && value instanceof Date
+  if (!numbers && !dates) return false
+  if (op === '>=') return stored >= value
+  if (op === '>') return stored > value
+  if (op === '<=') return stored <= value
+  if (op === '<') return stored < value
+  return false
+}
+
 function collectionRef(path: string, filters: Array<[string, string, any]> = []): any {
   const children = () =>
     [...fakeDocs.keys()].filter(
@@ -154,16 +174,18 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
     get: async () => {
       const docs = children()
         .filter((key) =>
-          filters.every(([field, op, value]) => {
-            const stored = fieldAt(fakeDocs.get(key), field)
-            if (op === '==') return stored === value
-            if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
-            return false
-          }),
+          filters.every(([field, op, value]) => matchesFilter(fieldAt(fakeDocs.get(key), field), op, value)),
         )
         .map(snapshotOf)
       return { docs, empty: docs.length === 0, size: docs.length }
     },
+    /** The aggregate count over the same filters. */
+    count: () => ({
+      get: async () => {
+        const { size } = await query.get()
+        return { data: () => ({ count: size }) }
+      },
+    }),
   }
   return {
     ...query,

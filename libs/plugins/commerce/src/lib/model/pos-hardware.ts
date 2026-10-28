@@ -869,6 +869,12 @@ export interface PosHardwareOrder {
   refunds?: PosHardwareRefund[]
   /** The buyer's request to return it, and what staff decided. */
   returnRequest?: PosHardwareReturnRequest
+  /**
+   * The emails that are sent once (AGL-4038), by key: `canceled`, or
+   * `refunded:{refund key}`. Claimed before the send, so the staff page and a
+   * closure never both send one.
+   */
+  buyerEmails?: Record<string, { state: 'sending' | 'sent' | 'skipped' | 'failed'; atMs: number }>
 }
 
 /** The timestamp field each status stamps when it is reached. */

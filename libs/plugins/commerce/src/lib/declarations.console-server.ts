@@ -22,6 +22,7 @@ import { registerPluginOrgEraser } from '@aglyn/aglyn/plugin-manager/plugin-org-
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginUserEraser } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
 import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
 import { COMMERCE_SERVER_SEARCH_SOURCES } from './model/commerce-server-search-sources'
@@ -73,6 +74,16 @@ export function registerCommerceConsoleServerDeclarations(): void {
   // Never fails the erasure. Loaded with the first erasure.
   registerPluginOrgEraser(
     async (request) => (await import('./server/pos-hardware-closure')).posHardwareOrgEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // …and says so BEFORE the closure (AGL-4038): the delete-workspace and
+  // close-account screens list the unshipped hardware orders a closure will
+  // cancel and refund. Loaded with the first screen that asks.
+  registerClosureNoticeSource(
+    {
+      notices: async (subject) =>
+        (await import('./server/pos-hardware-closure-notices')).posHardwareClosureNoticeSource.notices(subject),
+    },
     { pluginId: BUNDLE_ID },
   )
   // A card reader bought in person before its buyer had a workspace

@@ -24,8 +24,9 @@
  * the return sums (`platformRevenue`, written only for a paid invoice, which a
  * hardware checkout never makes) and apart from the storefront's tax rows
  * (`storefrontTaxCollected`, whose recorder does not take a hardware session)
- * — so nothing here is already in another figure on the return, and nothing
- * here is added to one: the return states them beside its own.
+ * — so nothing here is already in another figure on the return. The return
+ * folds them into its filing figures as the operator's own sales
+ * (`server/pos-hardware-tax-return-source.ts`), each sale once.
  *
  * THE RULES, each pinned by `pos-hardware-tax-summary.spec.ts`:
  *
@@ -80,6 +81,10 @@ export interface PosHardwareTaxRowInput {
   refundedCents?: unknown
   refundedAtMs?: unknown
   canceledAtMs?: unknown
+  /** `in_person` for a reader sold at a store's register (AGL-4038), else sold online. */
+  source?: unknown
+  /** The store whose register sold it, for an in-person sale. */
+  posHostId?: unknown
 }
 
 /** One ship-to jurisdiction: the sales paid in the period and the refunds made in it. */

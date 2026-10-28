@@ -9360,7 +9360,14 @@
           {
             "key": "pos-hardware-order-canceled",
             "name": "Card reader order canceled and refunded",
-            "description": "Sent when a card reader order from the POS hardware shop is canceled and refunded in full because the workspace that bought it was deleted, or the account that placed it was closed, before it shipped.",
+            "description": "Sent when a card reader order from the POS hardware shop is canceled and refunded in full before it shipped: by the team from the staff Hardware orders page when they choose to email the buyer, or because the workspace that bought it was deleted or the account that placed it was closed. Sent once per order.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "pos-hardware-order-refunded",
+            "name": "Card reader bought in person: refunded",
+            "description": "Sent when the team refunds card reader hardware someone bought in person at the platform’s own store, from the staff Hardware orders page, when they choose to email the buyer. Sent once per refund.",
             "deliveredBy": "resend",
             "editable": true
           },
@@ -15983,8 +15990,50 @@
             },
             {
               "name": "order.cancelReason",
-              "description": "Why the order was canceled, as the end of a sentence",
-              "sample": "the Test Org workspace was deleted"
+              "description": "Who canceled the order, and why, as a sentence",
+              "sample": "We canceled your order because the Test Org workspace was deleted."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "pos-hardware-order-refunded": [
+            {
+              "name": "order.number",
+              "description": "The hardware order number",
+              "sample": "HW-3F9A21"
+            },
+            {
+              "name": "order.items",
+              "description": "What was ordered, one line per item",
+              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+            },
+            {
+              "name": "order.refundedNow",
+              "description": "What this refund returned to the card, tax included",
+              "sample": "$324.75"
+            },
+            {
+              "name": "order.refunded",
+              "description": "What was refunded to the card, shipping and tax included",
+              "sample": "$123.45"
+            },
+            {
+              "name": "order.total",
+              "description": "What was paid at the register, tax included",
+              "sample": "$324.75"
             },
             {
               "name": "brand.productName",

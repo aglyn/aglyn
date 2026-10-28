@@ -21,8 +21,9 @@
  * The commerce plugin's POS hardware shop sends these to the person who
  * placed the order: the order received, the parcel shipped with its
  * tracking, the parcel delivered with the way to set the reader up, and the
- * order canceled and refunded because the workspace was deleted or the
- * buyer's account closed before it shipped — and, for a reader bought in
+ * order canceled and refunded before it shipped (by staff, or because the
+ * workspace was deleted or the buyer's account closed), a reader bought in
+ * person refunded by staff — and, for a reader bought in
  * person at the platform's own store by someone with no account yet, the
  * invitation to sign up with that address so the order joins their
  * workspace on its own. The
@@ -46,6 +47,7 @@ export const POS_HARDWARE_EMAIL_KEYS = {
   shipped: 'pos-hardware-order-shipped',
   delivered: 'pos-hardware-order-delivered',
   canceled: 'pos-hardware-order-canceled',
+  refunded: 'pos-hardware-order-refunded',
   invited: 'pos-hardware-sign-up-invite',
 } as const
 
@@ -99,8 +101,13 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     },
     cancelReason: {
       name: 'order.cancelReason',
-      description: 'Why the order was canceled, as the end of a sentence',
-      sample: 'the Test Org workspace was deleted',
+      description: 'Who canceled the order, and why, as a sentence',
+      sample: 'We canceled your order because the Test Org workspace was deleted.',
+    },
+    refundedNow: {
+      name: 'order.refundedNow',
+      description: 'What this refund returned to the card, tax included',
+      sample: '$324.75',
     },
     paid: {
       name: 'order.total',
@@ -198,15 +205,17 @@ export function posHardwareSystemEmailTemplates(
       name: 'Card reader order canceled and refunded',
       description:
         'Sent when a card reader order from the POS hardware shop is canceled ' +
-        'and refunded in full because the workspace that bought it was ' +
-        'deleted, or the account that placed it was closed, before it shipped.',
+        'and refunded in full before it shipped: by the team from the staff ' +
+        'Hardware orders page when they choose to email the buyer, or because ' +
+        'the workspace that bought it was deleted or the account that placed ' +
+        'it was closed. Sent once per order.',
       deliveredBy: 'resend',
       defaultSubject: 'Your card reader order {{order.number}} was canceled and refunded',
       mergeTokens: [t.org, t.site, t.number, t.items, t.refunded, t.cancelReason],
       defaultBody: [
         { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your hardware order was canceled and refunded', variant: 'heading' },
-        { block: 'text', text: 'Your order had not shipped yet when {{order.cancelReason}}, so we canceled it and refunded the full amount, shipping and tax included, to the card you paid with.', variant: 'body' },
+        { block: 'text', text: '{{order.cancelReason}} It had not shipped yet, so we refunded the full amount, shipping and tax included, to the card you paid with.', variant: 'body' },
         { block: 'text', text: '{{order.items}}\nRefunded: {{order.refunded}}', variant: 'details' },
         { block: 'text', text: 'What happens next', variant: 'subheading' },
         { block: 'text', text: 'Nothing will ship, and there is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. If a parcel from this order arrives anyway, contact support before opening it and we will arrange its return.', variant: 'body' },
@@ -214,6 +223,31 @@ export function posHardwareSystemEmailTemplates(
         { block: 'text', text: 'Order {{order.number}} for {{org.name}}.', variant: 'caption' },
       ],
       footerReason: footer,
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.refunded,
+      name: 'Card reader bought in person: refunded',
+      description:
+        'Sent when the team refunds card reader hardware someone bought in ' +
+        'person at the platform’s own store, from the staff Hardware orders ' +
+        'page, when they choose to email the buyer. Sent once per refund.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your refund for card reader order {{order.number}}',
+      mergeTokens: [t.number, t.items, t.refundedNow, t.refunded, t.paid],
+      defaultBody: [
+        { block: 'text', text: 'Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'We refunded your card reader purchase', variant: 'heading' },
+        { block: 'text', text: 'We refunded {{order.refundedNow}} for the card reader hardware you bought from {{brand.productName}} in person, to the card you paid with.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nRefunded now: {{order.refundedNow}}\nRefunded in total: {{order.refunded}}\nPaid: {{order.total}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: 'There is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. If the amount is not what you expected, contact support and quote the order number.', variant: 'body' },
+        { block: 'button', label: 'Contact support', href: '{{brand.supportUrl}}' },
+        { block: 'text', text: 'Order {{order.number}}, bought in person from {{brand.productName}}.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you bought card reader hardware from ' +
+        '{{brand.productName}} in person and a refund was made on it.',
       source: SOURCE,
     },
     {

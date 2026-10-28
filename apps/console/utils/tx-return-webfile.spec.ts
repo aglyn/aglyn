@@ -24,6 +24,7 @@ import {
   taxReturnCsvFilename,
   taxReturnFilingLines,
   taxReturnJurisdictionRows,
+  taxReturnOwnSalesBreakdown,
   taxReturnPeriodOptions,
   taxReturnRegistration,
   taxReturnWebfileLines,
@@ -1072,5 +1073,106 @@ describe('the facilitated-sales sources on the return', () => {
       at('Sales tax — NOT in the Webfile figures'),
     )
     expect(at('Sales from the “resale” plugin — NOT READ')).toBeLessThan(at('Invoice rows'))
+  })
+})
+
+/**
+ * THE OPERATOR'S OWN SALES FOLD INTO ITEMS 1–2 (AGL-4038): what a source
+ * states as the operator's own — the card reader shop, its own stores — is
+ * added to the invoices' figures for the filing jurisdiction only, each part
+ * once, with the breakdown beside the figures adding up to them.
+ */
+describe('the operator’s own sales outside its invoices', () => {
+  const figures = (over: Record<string, number> = {}) => ({
+    transactionCount: 1,
+    totalSalesCents: 30000,
+    taxableSalesCents: 30000,
+    taxCollectedCents: 2475,
+    refundCount: 0,
+    refundedSalesCents: 0,
+    refundedTaxCents: 0,
+    ...over,
+  })
+  const ownSales = (operatorSales: unknown[]): TaxReturnSection =>
+    ({
+      outcome: 'answered',
+      pluginId: 'shop',
+      id: 'own',
+      name: 'Own',
+      title: 'Own sales',
+      help: '',
+      intro: '',
+      truncated: false,
+      undatedRows: 0,
+      findings: [],
+      filingLines: [],
+      tables: [],
+      figures: [],
+      exports: [],
+      summary: {},
+      rows: [],
+      operatorSales,
+    }) as TaxReturnSection
+  const payload = (): TaxReturnPayload => ({
+    ...cleanPayload(),
+    sources: [
+      ownSales([
+        { id: 'shop', label: 'Card reader shop (online)', byJurisdiction: { 'US-TX': figures(), 'US-CA': figures() } },
+        {
+          id: 'store:in-person',
+          label: 'Platform Shop — sold in person',
+          byJurisdiction: {
+            // A T-shirt with no tax charged, and a refund made this period.
+            'US-TX': figures({ totalSalesCents: 2500, taxableSalesCents: 0, taxCollectedCents: 0, refundCount: 1, refundedSalesCents: 1000, refundedTaxCents: 83 }),
+          },
+        },
+      ]),
+    ],
+  })
+
+  it('adds the filing jurisdiction’s own sales to Items 1–2, the tax and the count, and nothing from elsewhere', () => {
+    const lines = taxReturnWebfileLines(payload())
+    const by = Object.fromEntries(lines.map((line) => [line.item === '—' ? line.label : line.item, line]))
+    expect(by['Item 1'].dollars).toBe('425.00') // 100.00 + 300.00 + 25.00
+    expect(by['Item 2'].dollars).toBe('380.00') // 80.00 + 300.00 + 0.00
+    expect(by['Tax collected (reconciliation)'].dollars).toBe('31.35')
+    expect(by['Texas transactions'].dollars).toBe('3')
+    expect(by['Item 1'].note).toContain(
+      'Includes $325.00 of receipts from Aglyn’s own sales outside its invoices (Card reader shop (online); Platform Shop — sold in person)',
+    )
+    // Refunds are stated in the breakdown, never netted from the figures.
+    expect(by['Item 1'].dollars).not.toBe('415.00')
+  })
+
+  it('leaves the figures and their notes as they were when no own sale was stated', () => {
+    const lines = taxReturnWebfileLines(cleanPayload())
+    expect(lines[0]).toMatchObject({ item: 'Item 1', dollars: '100.00' })
+    expect(lines[0].note).not.toContain('Includes')
+  })
+
+  it('folds the configured jurisdiction’s own sales into a breakdown filing, never Texas’s', () => {
+    const california = { ...payload(), registration: { ...FAKE_REGISTRATION, jurisdiction: 'US-CA' } } as TaxReturnPayload
+    const [total] = taxReturnFilingLines(california)
+    expect(total).toMatchObject({ label: 'Total sales in US-CA', dollars: '400.00' })
+  })
+
+  it('lists every source and state beside the figures, the filing state’s rows first, adding up to Item 1', () => {
+    const rows = taxReturnOwnSalesBreakdown(payload())
+    expect(rows.map((row) => [row.source, row.jurisdiction, row.inFigures, row.totalSalesDollars, row.refundedSalesDollars])).toEqual([
+      ['Aglyn invoices (subscriptions and add-ons)', 'US-TX', true, '100.00', null],
+      ['Card reader shop (online)', 'US-TX', true, '300.00', '0.00'],
+      ['Platform Shop — sold in person', 'US-TX', true, '25.00', '10.00'],
+      ['Aglyn invoices (subscriptions and add-ons)', 'US-CA', false, '100.00', null],
+      ['Card reader shop (online)', 'US-CA', false, '300.00', '0.00'],
+    ])
+    const filed = rows.filter((row) => row.inFigures).reduce((sum, row) => sum + Number(row.totalSalesDollars), 0)
+    expect(filed.toFixed(2)).toBe(taxReturnWebfileLines(payload())[0].dollars)
+  })
+
+  it('carries the breakdown into the working papers', () => {
+    const csv = taxReturnCsv(payload())
+    expect(csv).toContain('Items 1–2 by source and jurisdiction')
+    expect(csv).toContain('Platform Shop — sold in person,US-TX,yes,1,25.00,0.00,0.00,1,10.00,0.83')
+    expect(csv).toContain('Aglyn invoices (subscriptions and add-ons),US-TX,yes,1,100.00,80.00,6.60,see refunds below,,')
   })
 })

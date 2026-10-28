@@ -1527,6 +1527,11 @@ registerTaxReturnSource({
     undatedRows: 0,        // rows no date range can reach
     findings: [{ id: 'ticketTaxHeld', severity: 'blocking', count: 825, label: '…', detail: '…' }],
     filingLines: [],       // lines beneath the filing figures, for request.filing.form
+    // The OPERATOR's own sales you hold, folded into the filing figures:
+    operatorSales: [{ id: 'tickets:box-office', label: 'Box office', byJurisdiction: {
+      'US-TX': { transactionCount: 1, totalSalesCents: 10000, taxableSalesCents: 10000,
+                 taxCollectedCents: 825, refundCount: 0, refundedSalesCents: 0, refundedTaxCents: 0 },
+    } }],
     tables: [], figures: [],
     exports: [{ placement: 'sections', rows: [['Ticket tax'], ['Held', '8.25']] }],
     summary, rows,         // your own figures and rows, carried whole for the audit
@@ -1545,15 +1550,54 @@ And declare it, in `plugins.config.json`:
 | `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. Its `read` answers one section, or a list of them — one per kind of sale the plugin records apart, each its own card. A list is all or nothing: an empty one, or one malformed section, refuses the plugin. |
 | `readTaxReturnSources(request)` | Every source's answer, declared sources first. **Never throws, never drops a declared source.** |
 | `PLUGIN_TAX_RETURN_SOURCES` | The plugins that declared `taxReturnSource`, compiled from the config. |
+| `operatorSales` (on an answer) | The operator's OWN sales the section holds — sales where the operator is the seller, not a merchant — by part and jurisdiction, in integer cents. The platform adds the filing jurisdiction's to its filing figures and lists every part and jurisdiction beside them. Leave it out for facilitated sales. A part id is unique on the return: a second source stating one already there is refused, so nothing folds in twice. |
+| `taxReturnOperatorSalesIn(sections, code)` / `taxReturnOperatorSalesRows(sections)` | The own sales in one jurisdiction summed over every part, and every part and jurisdiction as rows: what the platform folds in and what its breakdown lists. |
 
 **An unread source refuses the return.** A declared plugin that registered no
-source, a source that threw, and an answer with a malformed finding each come
+source, a source that threw, and an answer with a malformed finding or a figure
+of its own sales that is not a whole number each come
 back `outcome: 'refused'`, and the return raises a blocking "do not file"
 finding. So do a read that stopped at the cap and rows no period can reach,
 whatever the source's own findings say. The declaration is what makes a
 missing registration a refusal: a registry alone cannot tell "nothing
 registered" from "nothing sold". `sales-sources-are-registered.spec.ts`
 runs the real registrars through the console's manifest.
+
+## Before a closure — `plugin-closure-notices`
+
+When a workspace is deleted or an account is closed, a plugin finishes its share
+through `plugin-org-erasure` and `plugin-user-erasure`. If that share changes
+something the person paid for or relies on — an order canceled and refunded, a
+booking released — say so BEFORE they confirm: register a notice source, and the
+console's **Delete organization** card and **Close your account?** dialog print
+your notices above the confirm.
+
+```ts
+import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
+
+// from your consoleServerDeclarations, the import lazy
+registerClosureNoticeSource({
+  notices: async (subject) => {
+    // subject: { kind: 'workspace', orgId } | { kind: 'account', uid }
+    const held = await readWhatTheClosureWillCancel(subject)
+    if (!held.length) return []
+    return [{
+      id: 'tickets-refunded', severity: 'warning',
+      title: `${held.length} tickets will be refunded`,
+      body: 'When the workspace is deleted, each is refunded in full.',
+      items: held.map((ticket) => ({ id: ticket.id, primary: ticket.event, amount: ticket.price })),
+    }]
+  },
+}, { pluginId: 'tickets' })
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerClosureNoticeSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readClosureNotices(subject)` | Every source's notices, warnings first, each with its `pluginId`. **Never throws**: a source that threw, or answered a notice with no words, no severity or no items, is listed in `unavailable`, and the screens say some details could not be checked. With nothing registered, it runs the app's boot step once and asks again. |
+| `GET /api/closure-notices?subject=workspace&orgId=…` or `?subject=account` | The console's route the screens call: the workspace's owner (or staff), or the signed-in person for their own account. |
+
+A notice is information, never a gate: nothing it answers holds a closure back.
 
 ## Earnings on the operator's revenue report — `plugin-revenue-sources`
 

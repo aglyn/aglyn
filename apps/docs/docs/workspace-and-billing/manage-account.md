@@ -289,7 +289,8 @@ When you close your account, Aglyn permanently deletes:
   the street address and the tracking. The workspace keeps the order and its amounts.
   An order you placed that has not shipped yet is
   [canceled and refunded in full](../commerce-and-bookings/commerce/pos-hardware.md#hardware-orders-at-closure)
-  first, and you get an email saying so.
+  first, and you get an email saying so. The **Close your account?** dialog lists
+  any such order before you confirm.
 
 ### What is kept, and for how long {#close-account-kept}
 

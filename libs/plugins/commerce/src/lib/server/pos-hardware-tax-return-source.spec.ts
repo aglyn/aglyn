@@ -111,35 +111,75 @@ const answerFor = (rows: PosHardwareTaxRowInput[], request = TEXAS) =>
 beforeEach(() => mockDocs.clear())
 
 describe('the hardware section of the return', () => {
-  it('is its own card, the operator’s own sales, and says none of it is in the figures', () => {
+  it('is its own card, the operator’s own sales, and says they are folded into the figures', () => {
     const answer = answerFor([texasSale])
     expect(answer).toMatchObject({ id: 'posHardware', name: 'Card reader hardware', truncated: false, undatedRows: 0 })
     expect(answer.title).toContain('own sales')
-    expect(answer.intro).toContain('none of this is in the Webfile figures above')
+    expect(answer.intro).toContain('folded into Items 1–3')
+    // Nothing to add by hand any more (AGL-4038): the figures fold them in.
+    expect(answer.filingLines).toEqual([])
   })
 
-  it('states what to add to Items 1 and 2, the tax, and the period’s refunds, from the Texas orders alone', () => {
+  it('folds the shop’s online sales into the figures by state, with the period’s refunds beside them', () => {
     const answer = answerFor([texasSale, illinoisRefund])
-    expect(answer.filingLines.map((line) => [line.item, line.dollars])).toEqual([
-      ['Item 1 (add)', '231.20'],
-      ['Item 2 (add)', '231.20'],
-      ['—', '19.07'],
-      // The Illinois cancel is a refund of this period, but not a Texas one.
-      ['—', '0.00'],
+    expect(answer.operatorSales).toEqual([
+      {
+        id: 'posHardwareShop',
+        label: 'Card reader shop (online)',
+        byJurisdiction: {
+          'US-TX': {
+            transactionCount: 1,
+            totalSalesCents: 23_120,
+            taxableSalesCents: 23_120,
+            taxCollectedCents: 1_907,
+            refundCount: 0,
+            refundedSalesCents: 0,
+            refundedTaxCents: 0,
+          },
+          // The Illinois cancel is a refund of this period, stated, never netted.
+          'US-IL': {
+            transactionCount: 0,
+            totalSalesCents: 0,
+            taxableSalesCents: 0,
+            taxCollectedCents: 0,
+            refundCount: 1,
+            refundedSalesCents: 14_000,
+            refundedTaxCents: 0,
+          },
+        },
+      },
     ])
-    expect(answer.filingLines[0].label).toBe('Texas card reader hardware sales (NOT in Item 1 above)')
   })
 
-  it('raises a review finding while hardware sold into Texas, so the figures are never read as the whole', () => {
-    const findings = answerFor([texasSale]).findings
-    expect(findings.find((finding) => finding.id === 'posHardwareSalesNotInFigures')).toMatchObject({
-      severity: 'review',
-      count: 23_120,
+  it('folds a reader sold at an own store’s register in with that store, never a second time here', () => {
+    const inPerson: PosHardwareTaxRowInput = {
+      ...texasSale,
+      orderId: 'hw_booth',
+      source: 'in_person',
+      posHostId: 'host-own',
+      automaticTax: false,
+    }
+    const own = posHardwareTaxReturnAnswer({ rows: [texasSale, inPerson], truncated: false, undatedRows: 0 }, TEXAS, {
+      ownHostIds: new Set(['host-own']),
     })
-    // Nothing else to say about a clean Texas sale.
-    expect(findings.filter((finding) => finding.count > 0).map((finding) => finding.id)).toEqual([
-      'posHardwareSalesNotInFigures',
+    expect(own.operatorSales?.map((part) => [part.id, part.byJurisdiction['US-TX']?.transactionCount])).toEqual([
+      ['posHardwareShop', 1],
     ])
+    expect(own.rows.map((row) => (row as { foldedAs: string }).foldedAs)).toEqual(['shop', 'store register sale'])
+    expect(own.findings.find((finding) => finding.id === 'posHardwareInPersonStoreNotRead')?.count).toBe(0)
+    // Its store is not one of the operator's own: folded in from its record, out loud.
+    const unread = answerFor([texasSale, inPerson])
+    expect(unread.operatorSales?.map((part) => part.id)).toEqual(['posHardwareShop', 'posHardwareInPerson'])
+    expect(unread.findings.find((finding) => finding.id === 'posHardwareInPersonStoreNotRead')).toMatchObject({
+      severity: 'review',
+      count: 1,
+    })
+  })
+
+  it('raises no finding about a clean sale, which is in the figures already', () => {
+    const findings = answerFor([texasSale]).findings
+    expect(findings.filter((finding) => finding.count > 0)).toEqual([])
+    expect(findings.map((finding) => finding.id)).not.toContain('posHardwareSalesNotInFigures')
     expect(answerFor([illinoisRefund]).findings.every((finding) => finding.count === 0)).toBe(true)
   })
 
@@ -161,22 +201,19 @@ describe('the hardware section of the return', () => {
     expect(table.rows[0].cells[0].tag).toEqual({ label: 'Registered', tone: 'attention' })
   })
 
-  it('words the lines for a jurisdiction with no form of its own', () => {
+  it('keys a jurisdiction with no form of its own the same way, for the breakdown', () => {
     const answer = answerFor([{ ...texasSale, shipTo: { country: 'GB' } }], {
       ...TEXAS,
       filing: { code: 'GB', label: 'GB', form: 'breakdown', figuresName: 'the breakdown' },
     })
-    expect(answer.filingLines.map((line) => [line.item, line.label, line.dollars])[0]).toEqual([
-      '—',
-      'GB card reader hardware sales (NOT in the figures above)',
-      '231.20',
-    ])
+    expect(answer.filingLines).toEqual([])
+    expect(answer.operatorSales?.[0].byJurisdiction['GB']?.totalSalesCents).toBe(23_120)
   })
 
   it('carries every order of the period in the working papers, and no buyer', () => {
     const answer = answerFor([texasSale, illinoisRefund, { ...texasSale, orderId: 'hw_test', livemode: false }])
     expect(answer.rows).toEqual([
-      expect.objectContaining({ orderId: 'hw_tx', state: 'TX', totalSalesCents: 23_120, taxableSalesCents: 23_120, inPeriodAs: 'sale' }),
+      expect.objectContaining({ orderId: 'hw_tx', state: 'TX', totalSalesCents: 23_120, taxableSalesCents: 23_120, inPeriodAs: 'sale', foldedAs: 'shop' }),
       expect.objectContaining({ orderId: 'hw_il', refundedCents: 14_000, inPeriodAs: 'refund' }),
     ])
     const papers = answer.exports.find((block) => block.placement === 'sections')

@@ -211,7 +211,8 @@ data**. It's intentional and reversible for a short window:
    and the card reader records are deleted seven years after each sale. A card
    reader order that has not shipped by then is
    [canceled and refunded in full](../../commerce-and-bookings/commerce/pos-hardware.md#hardware-orders-at-closure)
-   first; the deletion does not wait for it.
+   first; the deletion does not wait for it. The **Delete organization** card
+   lists any such order above the confirm, with its number, items and amount.
 
 Deletion covers your organization's sites and their stored files and data. If you
 own an organization that still has **other members**, transfer or remove them

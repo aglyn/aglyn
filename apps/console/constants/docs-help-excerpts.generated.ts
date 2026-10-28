@@ -885,6 +885,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#tax-return-page': 'Staff → Sales tax turns a period\'s paid invoices into the figures the sales tax return asks for: pick the period, clear the rows that need attention, read the figures, and export the working papers for the filing…',
     '#taxable-purchases': 'Item 3 is the one line on the return that nothing here can compute.',
     '#the-figures': 'The Form 01-114 figures card is Texas only. Aglyn sells everywhere; a Texas return reports Texas receipts, so these lines come from the Texas jurisdiction bucket and never from the platform totals.',
+    '#what-the-figures-are-made-of': 'Beside the figures, the Items 1–2 by source and state card (The figures by source and jurisdiction outside Texas) lists every sale the figures add up, one row per source and state.',
     '#where-this-deployment-files': 'Staff → Platform settings → Sales tax filing. Reading it needs any staff role; changing it needs super, and every change is written to the audit log with the reason you type.',
   },
   sandboxSecurity: {

@@ -170,3 +170,80 @@ describe('Staff → Hardware orders, a return requested', () => {
     expect(await screen.findByText('Decline this return?')).toBeTruthy()
   })
 })
+
+/*==========================================
+ * EMAIL THE BUYER (AGL-4038): canceling or refunding from this page asks
+ * whether to tell the buyer, on by default; the server gets the choice as
+ * `notifyBuyer`, explicitly, either way.
+ *=========================================*/
+describe('Staff → Hardware orders, canceling or refunding', () => {
+  const online = {
+    ...inPerson,
+    id: 'hw_bbbbbbbbbbbbbbbbbbbb',
+    number: 'HW-BBBBBB',
+    orgId: 'org-buyer',
+    hostId: 'host-buyer',
+    status: 'paid',
+    source: 'online',
+    shipping: { method: 'standard', label: 'Standard shipping', cents: 1_000, name: 'Pat Lee', phone: null, address: null },
+    stripePaymentIntentId: 'pi_test_1',
+    posSale: null,
+    paidTo: null,
+    attachment: null,
+  }
+  const action = () =>
+    jest.requireMock('./pos/pos-hardware-api').staffHardwareOrderAction as jest.Mock
+
+  beforeEach(() => {
+    requested.length = 0
+    rows = [online]
+    action().mockReset()
+    action().mockImplementation(async (_user: unknown, body: Record<string, unknown>) => ({
+      ok: true,
+      order: { ...online, status: 'canceled' },
+      buyerEmail: body['notifyBuyer'] ? 'sent' : 'off',
+    }))
+  })
+
+  const openCancel = async (button: 'Cancel and refund' | 'Refund') => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: button }))
+    return screen.findByRole('dialog', { name: button === 'Refund' ? 'Refund this order?' : 'Cancel and refund this order?' })
+  }
+
+  it('emails the buyer by default, and says what goes back', async () => {
+    const confirm = await openCancel('Cancel and refund')
+    const toggle = within(confirm).getByLabelText('Email the buyer') as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(within(confirm).getByText(/\$324\.75 goes back to the card it was paid with/)).toBeTruthy()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel and refund' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toEqual({
+      action: 'cancel',
+      notifyBuyer: true,
+      orgId: 'org-buyer',
+      orderId: 'hw_bbbbbbbbbbbbbbbbbbbb',
+    })
+  })
+
+  it('sends no email when staff turn it off', async () => {
+    const confirm = await openCancel('Refund')
+    fireEvent.click(within(confirm).getByLabelText('Email the buyer'))
+    expect((within(confirm).getByLabelText('Email the buyer') as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Refund' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toMatchObject({ action: 'refund', notifyBuyer: false })
+  })
+
+  it('offers the same choice on a refund of a reader sold in person', async () => {
+    rows = [{ ...inPerson, attachment: { ...inPerson.attachment, state: 'attached', orgId: 'org-pat' } }]
+    const confirm = await openCancel('Refund')
+    expect(within(confirm).getByText(/goes back to the card the register sale was paid with/)).toBeTruthy()
+    expect((within(confirm).getByLabelText('Email the buyer') as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Refund' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toMatchObject({ action: 'refund', notifyBuyer: true, orgId: 'org-seller' })
+  })
+})
