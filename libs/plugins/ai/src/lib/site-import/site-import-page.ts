@@ -28,20 +28,32 @@
  *   and its photos' addresses. The text is kept as the page says it and is
  *   fenced as untrusted data only where a prompt shows it; the section names
  *   and the title travel outside the fence, so they are neutralized (no
- *   fence marker, no hidden character) and cut short.
+ *   fence marker, no hidden character) and cut short. Every block of its
+ *   main region rides along too (AGL-4083), so a page can be brought in word
+ *   for word.
+ *
+ * And from the home page, what the site's header and footer are made of
+ * (AGL-4083): its brand as the source draws it (`siteImportHeaderBrand`) and
+ * its own facts (`siteImportSiteFacts`), for the header and footer the import
+ * builds.
  *=========================================*/
 
 import { neutralizeUntrustedText } from '@aglyn/shared-util-tools/untrusted-text'
 import {
+  AI_SITE_IMPORT_BLOCKED_STATUSES,
   AI_SITE_IMPORT_IMAGES_PER_PAGE,
   AI_SITE_IMPORT_LABEL_MAX_CHARS,
   AI_SITE_IMPORT_MAX_SECTIONS,
   AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS,
+  AI_SITE_IMPORT_READ_MAX_CHARS,
+  aiSiteImportCapBlocks,
   type AiSiteImportLeftOutReason,
   type AiSiteImportListedPage,
   type AiSiteImportPageRead,
 } from '../model/ai-site-import'
 import type { SiteImportPage, SiteImportSkipReason } from './site-import-crawl'
+import type { SiteImportBlock, SiteImportOrganization } from './site-import-html'
+import { siteImportLogoCandidates, type SiteImportLogoCandidate } from './site-import-images'
 
 /** A line of untrusted text safe to show outside a fence: neutralized, one line, cut short. */
 export function siteImportLabel(text: string, max = AI_SITE_IMPORT_LABEL_MAX_CHARS): string {
@@ -51,9 +63,12 @@ export function siteImportLabel(text: string, max = AI_SITE_IMPORT_LABEL_MAX_CHA
 
 const wordsIn = (text: string) => (text.match(/[\p{L}\p{N}]+/gu) ?? []).length
 
-/** How many words a page says, its title and headings included. */
+/** How many words a page says, its title and headings included; a link inside a sentence is counted once. */
 export function siteImportPageWords(page: Pick<SiteImportPage, 'title' | 'blocks'>): number {
-  return page.blocks.reduce((total, block) => total + (block.kind === 'image' ? 0 : wordsIn(block.text)), 0)
+  return page.blocks.reduce(
+    (total, block) => total + (block.kind === 'image' || (block.kind === 'link' && block.inline) ? 0 : wordsIn(block.text)),
+    0,
+  )
 }
 
 /** Between a page's own name and its site's in a browser title: "About | Rosie's Bakery". */
@@ -132,28 +147,132 @@ export function siteImportPageText(page: Pick<SiteImportPage, 'title' | 'descrip
     else if (block.kind === 'image') lines.push(`${where}[photo: ${block.alt || 'no description'}]`)
     else if (block.kind === 'list-item') lines.push(`${where}- ${block.text}`)
     else if (block.kind === 'quote') lines.push(`${where}> ${block.text}`)
-    else lines.push(`${where}${block.text}`)
+    else if (block.kind === 'link') {
+      // A link inside a sentence is in its block's words already.
+      if (!block.inline) lines.push(`${where}${block.text}`)
+    } else lines.push(`${where}${block.text}`)
   }
   const text = lines.join('\n')
   return text.length > AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS ? text.slice(0, AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS) : text
 }
 
-/** The page as a wave reads it. */
+/** The page as a wave reads it: its main region's blocks whole, within the read's budget. */
 export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImportPageRead {
+  const main = page.blocks.filter((block) => block.region === 'main')
+  const capped = aiSiteImportCapBlocks(main, AI_SITE_IMPORT_READ_MAX_CHARS)
   return {
     at,
     title: siteImportPageTitle(page),
     text: siteImportPageText(page),
     sections: siteImportPageSections(page),
     images: siteImportPageImages(page),
+    blocks: capped.blocks,
+    ...(capped.cut ? { cut: true } : {}),
+    words: siteImportPageWords({ title: '', blocks: main }),
+    forms: page.forms.kept,
   }
 }
 
+/*------------------------------------------
+ * The home page's header and footer (AGL-4083)
+ *-----------------------------------------*/
+
 /**
- * The answers bot protection and firewalls turn a crawler away with: asked to
- * sign in, refused, or told to slow down. The owner can let AglynBot through.
+ * How the source's header draws its brand: its logo alone (aglyn.com), its
+ * logo with its name beside it, or its name alone. `text` is the name as the
+ * header prints it, or the site's own name when it prints nothing at all.
  */
-const SITE_IMPORT_BLOCKED_STATUSES: ReadonlySet<number> = new Set([401, 403, 429])
+export interface SiteImportHeaderBrand {
+  kind: 'logo-only' | 'logo-and-name' | 'name-only'
+  logo: SiteImportLogoCandidate | null
+  /** Whether the header prints the name as words. */
+  name: boolean
+  text: string
+}
+
+/** The site's own name: its head's, its structured data's, else its home page's title before a separator. */
+export function siteImportSiteName(home: Pick<SiteImportPage, 'siteName' | 'organization' | 'title'>): string {
+  return siteImportLabel(home.siteName || home.organization?.name || (home.title ?? '').split(TITLE_SEPARATOR).pop() || '')
+}
+
+/** Words short enough to be a name, not a sentence. */
+const looksLikeName = (text: string) => text.length >= 2 && text.length <= AI_SITE_IMPORT_LABEL_MAX_CHARS && text.split(/\s+/).length <= 8
+
+/**
+ * The home page's header brand (AGL-4083), as the source shows it: the link
+ * home in its header, the picture inside it, and whether words sit beside
+ * the picture, inside the link or next to it. A header with no picture link
+ * home is the name alone.
+ */
+export function siteImportHeaderBrand(
+  home: Pick<SiteImportPage, 'brand' | 'images' | 'icons' | 'siteName' | 'organization' | 'title' | 'blocks'>,
+): SiteImportHeaderBrand {
+  const logo = siteImportLogoCandidates(home).find((candidate) => candidate.source === 'header') ?? null
+  const siteName = siteImportSiteName(home)
+  const linked = siteImportLabel(home.brand?.text ?? '')
+  const beside = home.blocks.find(
+    (block) =>
+      block.region === 'header' &&
+      (block.kind === 'paragraph' || block.kind === 'heading' || block.kind === 'link') &&
+      !!siteName &&
+      block.text.trim().toLowerCase() === siteName.toLowerCase(),
+  )
+  const printed = looksLikeName(linked) ? linked : beside && beside.kind !== 'image' ? siteImportLabel(beside.text) : ''
+  if (logo && printed) return { kind: 'logo-and-name', logo, name: true, text: printed }
+  if (logo) return { kind: 'logo-only', logo, name: false, text: '' }
+  return { kind: 'name-only', logo: null, name: true, text: printed || siteName }
+}
+
+/** The facts a site's header and footer carry, as the source writes them. */
+export interface SiteImportSiteFacts {
+  header: SiteImportBlock[]
+  footer: SiteImportBlock[]
+  organization: SiteImportOrganization | null
+  /** Email addresses, from its structured data and its `mailto:` links. */
+  emails: string[]
+  /** Phone numbers as written, from its structured data and its `tel:` links. */
+  phones: string[]
+  /** Its profiles on other sites: its structured data's `sameAs` and its links to them. */
+  social: string[]
+}
+
+const SOCIAL_HOSTS =
+  /(?:^|\.)(?:twitter\.com|x\.com|facebook\.com|instagram\.com|linkedin\.com|youtube\.com|tiktok\.com|github\.com|pinterest\.com|threads\.net|yelp\.com|tripadvisor\.com|nextdoor\.com|vimeo\.com|bsky\.app|mastodon\.social)$/i
+
+/**
+ * The home page's own facts (AGL-4083), word for word: its header and footer
+ * blocks, its Organization structured data, and the email addresses, phone
+ * numbers and profiles they hold. Nothing here is invented or reworded; a
+ * fact the page does not state is not here.
+ */
+export function siteImportSiteFacts(home: Pick<SiteImportPage, 'blocks' | 'organization'>): SiteImportSiteFacts {
+  const header = home.blocks.filter((block) => block.region === 'header')
+  const footer = home.blocks.filter((block) => block.region === 'footer')
+  const organization = home.organization ?? null
+  const emails: string[] = []
+  const phones: string[] = []
+  const social: string[] = []
+  const add = (list: string[], value: string) => {
+    const clean = value.trim()
+    if (clean && !list.some((entry) => entry.toLowerCase() === clean.toLowerCase())) list.push(clean)
+  }
+  if (organization?.email) add(emails, organization.email.toLowerCase())
+  if (organization?.telephone) add(phones, organization.telephone)
+  for (const url of organization?.sameAs ?? []) add(social, url)
+  for (const block of [...header, ...footer]) {
+    if (block.kind !== 'link') continue
+    if (block.href.startsWith('mailto:')) add(emails, block.href.slice('mailto:'.length))
+    else if (block.href.startsWith('tel:')) add(phones, block.text)
+    else {
+      try {
+        if (SOCIAL_HOSTS.test(new URL(block.href).hostname)) add(social, block.href)
+      } catch {
+        // A link that is not an address is no profile.
+      }
+    }
+  }
+  return { header, footer, organization, emails, phones, social }
+}
 
 /** Why the crawler could not read a page, as an import leaves it out; `status` is the answer an `http-error` got. */
 export function siteImportLeftOutReason(reason: SiteImportSkipReason, status?: number): AiSiteImportLeftOutReason {
@@ -167,7 +286,9 @@ export function siteImportLeftOutReason(reason: SiteImportSkipReason, status?: n
     case 'off-origin-redirect':
       return 'off-site'
     case 'http-error':
-      return status !== undefined && SITE_IMPORT_BLOCKED_STATUSES.has(status) ? 'blocked' : 'unreadable'
+      return status !== undefined && AI_SITE_IMPORT_BLOCKED_STATUSES.has(status) ? 'blocked' : 'unreadable'
+    case 'not-reached':
+      return 'not-reached'
     default:
       return 'unreadable'
   }

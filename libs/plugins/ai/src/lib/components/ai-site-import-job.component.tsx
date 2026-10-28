@@ -25,6 +25,7 @@ import {
   mdiChevronDown,
   mdiClockOutline,
   mdiMinusCircleOutline,
+  mdiOpenInNew,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
@@ -47,10 +48,13 @@ import type { AiJobSummary } from '../model/ai-jobs.types'
 import { aiSiteImportReviewWave, aiSiteImportRunningWave, type AiSiteImportWave } from '../model/ai-site-import'
 import {
   aiSiteImportFoundText,
+  aiSiteImportHeldCopy,
   aiSiteImportLeftOutLines,
   aiSiteImportPhaseOf,
   aiSiteImportPlanText,
   aiSiteImportStartAction,
+  aiSiteImportStartAllAction,
+  aiSiteImportVerdictNote,
   aiSiteImportWaveRows,
   aiSiteImportWaveSpent,
   type AiSiteImportClaim,
@@ -103,9 +107,28 @@ function WaveRows({ job, wave, orgSlug }: { job: AiJobSummary; wave: AiSiteImpor
                     </Button>
                   ) : null}
                 </Stack>
-                <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-                  {`${row.from} → ${row.to}`}
-                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                    {`${row.from} → ${row.to}`}
+                  </Typography>
+                  <Button
+                    size="small"
+                    component="a"
+                    href={row.oldPage}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    endIcon={<MdiIcon path={mdiOpenInNew.path} aria-hidden />}
+                    aria-label={`Old page: ${row.from}, opens in a new tab`}
+                    sx={{ minWidth: 0, py: 0 }}
+                  >
+                    {'Old page'}
+                  </Button>
+                </Stack>
+                {row.build || row.words ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {[row.build, row.words].filter(Boolean).join(' · ')}
+                  </Typography>
+                ) : null}
                 {row.photos ? (
                   <Typography variant="body2" color="text.secondary">
                     {row.photos}
@@ -163,6 +186,11 @@ export interface AiSiteImportJobProps {
   notice: string | null
   /** Starts the next wave, or reads the site again: the resume door. */
   onResume: () => void
+  /**
+   * Starts every remaining wave with no review between them (AGL-4083). The
+   * button is drawn only where the page can start them this way.
+   */
+  onStartAll?: () => void
   onJob: (job: AiJobSummary) => void
 }
 
@@ -173,10 +201,12 @@ export interface AiSiteImportJobProps {
  * button — the only way the next one starts. A wave held for a new proof, the
  * day's limit or a site that could not be read says so and offers the way on.
  */
-export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, busy, notice, onResume, onJob }: AiSiteImportJobProps) {
+export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, busy, notice, onResume, onStartAll, onJob }: AiSiteImportJobProps) {
   const phase = aiSiteImportPhaseOf(job)
   const state = job.siteImport ?? null
   const start = aiSiteImportStartAction(job)
+  const startAll = onStartAll ? aiSiteImportStartAllAction(job) : null
+  const held = aiSiteImportHeldCopy(job)
   const pagesHref = host && orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host }) : null
   const [claim, setClaim] = useState<AiSiteImportClaim | null>(null)
   const [claimNotice, setClaimNotice] = useState<string | null>(null)
@@ -195,17 +225,31 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   )
   const startButton = start ? (
     <Stack spacing={1}>
-      <Box>
-        <Button variant="contained" size="large" disabled={busy} onClick={onResume}>
-          {busy ? 'Starting…' : start.label}
-        </Button>
-      </Box>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
+        <Box>
+          <Button variant="contained" size="large" disabled={busy} onClick={onResume}>
+            {busy ? 'Starting…' : start.label}
+          </Button>
+        </Box>
+        {startAll && onStartAll ? (
+          <Box>
+            <Button variant="outlined" size="large" disabled={busy} onClick={onStartAll}>
+              {startAll.label}
+            </Button>
+          </Box>
+        ) : null}
+      </Stack>
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
           {`${start.quote}, from your AI credits. Every page is a draft until you publish it.`}
         </Typography>
         <HelpTip {...AI_SITE_IMPORT_HELP.waves} ariaLabel="How waves work" />
       </Stack>
+      {startAll && onStartAll ? (
+        <Typography variant="body2" color="text.secondary">
+          {`${startAll.quote} for every remaining wave (${startAll.waves}), one after another with no review between them. You review the last one.`}
+        </Typography>
+      ) : null}
     </Stack>
   ) : null
   const waves = state ? (
@@ -273,6 +317,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     return (
       <Frame siteName={siteName} heading="Your site is read" lede={job.review?.message ?? undefined}>
         {notice && <Alert severity="warning">{notice}</Alert>}
+        {aiSiteImportVerdictNote(state) ? <Alert severity="warning">{aiSiteImportVerdictNote(state)}</Alert> : null}
         <Stack spacing={1}>
           <Typography variant="body1">{aiSiteImportFoundText(state)}</Typography>
           <Typography variant="body2" color="text.secondary">
@@ -348,6 +393,25 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         ) : null}
         {startButton}
         {waves}
+        {leftOutCard}
+        {cancel}
+      </Frame>
+    )
+  }
+
+  // The home page was turned away or could not be read (AGL-4083): nothing was
+  // planned or spent, and Check again reads the site again, for free.
+  if (phase === 'held' && held) {
+    return (
+      <Frame siteName={siteName} heading={held.heading}>
+        {notice && <Alert severity="warning">{notice}</Alert>}
+        <Alert severity="warning">{held.message}</Alert>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <Button variant="contained" disabled={busy} onClick={onResume}>
+            {busy ? 'Checking…' : held.action}
+          </Button>
+          <HelpTip {...AI_SITE_IMPORT_HELP.turnedAway} ariaLabel="How to let AglynBot in" />
+        </Stack>
         {leftOutCard}
         {cancel}
       </Frame>

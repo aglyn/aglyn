@@ -43,7 +43,7 @@ import {
   type PublicFetchResult,
 } from '../jobs/ai-theme-brand-inputs'
 import type { AiSiteImportPage, AiSiteImportPhoto } from '../model/ai-site-import'
-import { AGLYN_BOT_USER_AGENT } from './site-import-crawl'
+import { AGLYN_BOT_USER_AGENT, type SiteImportPage } from './site-import-crawl'
 
 /** The largest picture brought in. */
 export const SITE_IMPORT_IMAGE_MAX_BYTES = 8 * 1024 * 1024
@@ -211,4 +211,85 @@ export async function bringInSiteImportPhotos(
     }
   }
   return { brought, reused, skipped, assets }
+}
+
+/*------------------------------------------
+ * The site's logo (AGL-4083)
+ *-----------------------------------------*/
+
+/**
+ * A picture that may be the site's logo, where it was found. `type` is what
+ * its address or its declared type says: `svg`, a raster, or `null` when
+ * neither says (a media library address with no extension); the ingest
+ * reads the answer's own type either way.
+ */
+export interface SiteImportLogoCandidate {
+  url: string
+  alt: string
+  source: 'header' | 'footer' | 'structured-data' | 'apple-touch-icon' | 'icon'
+  type: 'svg' | 'raster' | null
+}
+
+/** A logo's address as it is fetched: https, no fragment or tracking parameter. An SVG is a logo, unlike a photo. */
+export function siteImportLogoUrl(raw: string): string | null {
+  let url: URL
+  try {
+    url = new URL(String(raw ?? '').trim())
+  } catch {
+    return null
+  }
+  if (url.protocol === 'http:') url.protocol = 'https:'
+  if (url.protocol !== 'https:' || url.username || url.password) return null
+  if (url.port && url.port !== '443') return null
+  url.hash = ''
+  for (const key of [...url.searchParams.keys()]) {
+    if (TRACKING_PARAM.test(key)) url.searchParams.delete(key)
+  }
+  return url.toString()
+}
+
+function logoTypeOf(url: string, declared?: string | null): SiteImportLogoCandidate['type'] {
+  const type = (declared ?? '').toLowerCase()
+  if (type.includes('svg')) return 'svg'
+  if (/^image\/(?:png|jpe?g|webp|gif|x-icon|vnd\.microsoft\.icon)/.test(type)) return 'raster'
+  let path: string
+  try {
+    path = new URL(url).pathname.toLowerCase()
+  } catch {
+    return null
+  }
+  if (path.endsWith('.svg')) return 'svg'
+  if (/\.(?:png|jpe?g|webp|gif|ico)$/.test(path)) return 'raster'
+  return null
+}
+
+/**
+ * The pictures that may be the site's logo (AGL-4083), the likeliest first:
+ * the picture in the header's link home, any header picture that says it is
+ * the logo or the site's name, the footer's, the structured data's logo,
+ * then the largest touch icon and the largest icon. Each address once.
+ */
+export function siteImportLogoCandidates(
+  page: Pick<SiteImportPage, 'brand' | 'images' | 'icons' | 'siteName' | 'organization' | 'title'>,
+): SiteImportLogoCandidate[] {
+  const name = (page.siteName || page.organization?.name || '').trim().toLowerCase()
+  const says = (image: { url: string; alt: string }) => {
+    const alt = image.alt.trim().toLowerCase()
+    return /\blogo\b/i.test(image.alt) || /logo/i.test(image.url) || (!!name && (alt === name || alt === `${name} logo`))
+  }
+  const out: SiteImportLogoCandidate[] = []
+  const add = (raw: string, alt: string, source: SiteImportLogoCandidate['source'], declared?: string | null) => {
+    const url = siteImportLogoUrl(raw)
+    if (!url || out.some((entry) => entry.url === url)) return
+    out.push({ url, alt: alt.slice(0, 250), source, type: logoTypeOf(url, declared) })
+  }
+  if (page.brand?.logo && page.brand.region !== 'footer') add(page.brand.logo.url, page.brand.logo.alt, 'header')
+  for (const image of page.images) if (image.region === 'header' && says(image)) add(image.url, image.alt, 'header')
+  for (const image of page.images) if (image.region === 'footer' && says(image)) add(image.url, image.alt, 'footer')
+  if (page.organization?.logo) add(page.organization.logo, page.organization.name, 'structured-data')
+  const touch = page.icons.filter((icon) => icon.rel === 'apple-touch-icon').sort((a, b) => (b.size ?? 0) - (a.size ?? 0))[0]
+  if (touch) add(touch.url, '', 'apple-touch-icon', touch.type)
+  const icon = page.icons.filter((entry) => entry.rel === 'icon').sort((a, b) => (b.size ?? 0) - (a.size ?? 0))[0]
+  if (icon) add(icon.url, '', 'icon', icon.type)
+  return out
 }

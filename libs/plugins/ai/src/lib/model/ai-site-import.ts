@@ -40,10 +40,17 @@
  *   starts the next one but them.
  * - **The price.** An imported page is an AI page (`AI_MEASURED_IMPORT_CREDITS`,
  *   about 27 credits); a wave is quoted before it starts as its pages and,
- *   for the first, its header and footer.
+ *   for the first, its header and footer. Once the step says how each page
+ *   is built, a page copied as it is costs its listing and a page Aglyn AI
+ *   arranges its arrangement, and the quote names both (AGL-4083).
+ * - **Home first (AGL-4083).** The read's verdict (`aiSiteImportReadVerdict`)
+ *   stops an import whose home page could not be read before anything is
+ *   planned, quoted or spent: a site seen without its home page is not the
+ *   site. The person is told why and checks again.
  *=========================================*/
 
-import { aiCreditRangeOrdered, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
+import type { SiteImportBlock, SiteImportForm } from '../site-import/site-import-html'
+import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
 import type { AiJobItemLedger } from './ai-jobs.types'
 
 /** The job kind. */
@@ -68,11 +75,38 @@ export const AI_SITE_IMPORT_COLLECTION_MIN = 3
 /** The most photos brought in from one page. */
 export const AI_SITE_IMPORT_IMAGES_PER_PAGE = 8
 
-/** The most characters of one page's text a wave keeps for its model answer. */
+/**
+ * The most characters of one page's text a wave keeps for the page step's
+ * prompt, which reads no more than this; every word is kept on the read's
+ * `blocks` (AGL-4083).
+ */
 export const AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS = 6_000
 
-/** The most sections one imported page is planned with. */
-export const AI_SITE_IMPORT_MAX_SECTIONS = 6
+/** The most sections one imported page is planned with: one for every second-level heading (AGL-4083). */
+export const AI_SITE_IMPORT_MAX_SECTIONS = 24
+
+/** The most blocks of one page a wave's read keeps. */
+export const AI_SITE_IMPORT_READ_MAX_BLOCKS = 2_000
+
+/** The most characters of one page's blocks a wave's read keeps: a long policy is 40,000. */
+export const AI_SITE_IMPORT_READ_MAX_CHARS = 120_000
+
+/**
+ * The most characters of blocks the reads of one import hold at once: they
+ * ride the job document, which Firestore caps at 1 MiB, beside the
+ * inventory and the ledger. A wave's later page past it keeps what fits and
+ * says it was cut.
+ */
+export const AI_SITE_IMPORT_WAVE_READ_MAX_CHARS = 400_000
+
+/**
+ * A page with more words of its own than this is copied as it is, never
+ * arranged (AGL-4083): a policy, an article, a long story.
+ */
+export const AI_SITE_IMPORT_PROSE_WORDS = 900
+
+/** The answers bot protection and firewalls turn a crawler away with: asked to sign in, refused, or told to slow down. */
+export const AI_SITE_IMPORT_BLOCKED_STATUSES: ReadonlySet<number> = new Set([401, 403, 429])
 
 /** The most characters a section's name, a page's title or a label keeps. */
 export const AI_SITE_IMPORT_LABEL_MAX_CHARS = 60
@@ -85,6 +119,9 @@ export const AI_SITE_IMPORT_FRAME_SLOT = 'frame'
 
 /** The ceiling one imported page reserves: its answer pass and its listing pass, at 50 each. */
 export const AI_SITE_IMPORT_PAGE_CEILING_CREDITS = 100
+
+/** The ceiling a page copied as it is reserves: its listing pass alone. */
+export const AI_SITE_IMPORT_COPIED_CEILING_CREDITS = 50
 
 /** The ceiling the header and footer reserve: one answer at 50. */
 export const AI_SITE_IMPORT_FRAME_CEILING_CREDITS = 50
@@ -131,6 +168,8 @@ export type AiSiteImportLeftOutReason =
   | 'too-large'
   /** It sends visitors to another website. */
   | 'off-site'
+  /** The read stopped (its clock, its bytes, its page count) before it got to it (AGL-4083). */
+  | 'not-reached'
 
 export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason[] = [
   'plan-limit',
@@ -141,7 +180,11 @@ export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason
   'blocked',
   'too-large',
   'off-site',
+  'not-reached',
 ]
+
+/** The reasons that mean the page was there and AglynBot could not read it: the "could not be read" of what was found. */
+export const AI_SITE_IMPORT_UNREAD_REASONS: readonly AiSiteImportLeftOutReason[] = ['unreadable', 'blocked', 'too-large', 'not-reached']
 
 export interface AiSiteImportLeftOut {
   url: string
@@ -169,7 +212,24 @@ export interface AiSiteImportPageRead {
   sections: string[]
   /** Its photos' addresses, at most `AI_SITE_IMPORT_IMAGES_PER_PAGE`. */
   images: Array<{ url: string; alt: string }>
+  /**
+   * Every block of the page's main region, in order (AGL-4083): its words as
+   * written, its headings, lists, links and pictures, within
+   * `AI_SITE_IMPORT_READ_MAX_BLOCKS` and `AI_SITE_IMPORT_READ_MAX_CHARS`.
+   * Untrusted data: fenced wherever a prompt reads it. Emptied once the page
+   * is in; absent on a read made before it was kept.
+   */
+  blocks?: SiteImportBlock[]
+  /** Set when `blocks` had to stop short of the page, at its budget or the wave's. */
+  cut?: boolean
+  /** The words of the page's main region, as the old page has them. */
+  words?: number
+  /** The forms the page asks visitors to fill in, by their fields. */
+  forms?: SiteImportForm[]
 }
+
+/** How a page is built from its old page, as the step chose: its words copied as they are, or arranged by Aglyn AI. */
+export type AiSiteImportBuild = 'copied' | 'arranged'
 
 export interface AiSiteImportPage {
   /** The item ledger slot: `p0`, `p1`, … */
@@ -189,6 +249,10 @@ export interface AiSiteImportPage {
   read?: AiSiteImportPageRead | null
   /** Set when the wave's read found the page cannot be brought in after all. */
   refused?: AiSiteImportLeftOutReason | null
+  /** How the step builds the page (`aiSiteImportPageBuild`); absent until it chooses, and the page is priced as an AI page. */
+  build?: AiSiteImportBuild | null
+  /** What came through once the page is in: its words on the new page. */
+  brought?: { words: number } | null
   /** Filled once the page's photos are in the library. */
   photos?: {
     brought: number
@@ -239,6 +303,224 @@ export interface AiSiteImportState {
   frame: { draftId: string } | null
   /** The Trust & Safety row this import is logged under. */
   reviewId: string | null
+  /**
+   * "Start every remaining wave" (AGL-4083): each wave closes and the next
+   * starts with no review between them; the last wave's close is the stop.
+   * Off unless the person chose it.
+   */
+  autoContinue?: boolean
+  /** What the read found of the site as a whole; a stopping verdict plans nothing. */
+  verdict?: AiSiteImportReadVerdict | null
+}
+
+/*------------------------------------------
+ * The read's verdict: Home first (AGL-4083)
+ *-----------------------------------------*/
+
+/**
+ * - `home-blocked`: bot protection or a firewall turned AglynBot away from
+ *   the home page (401, 403 or 429).
+ * - `home-unreadable`: the home page could not be read for any other reason,
+ *   or read as an empty shell (a site that needs a browser to show its words).
+ * - `mostly-blocked`: the home page came in, but more than half the site's
+ *   addresses were turned away; the import goes on, and says so.
+ * - `ok`: anything else.
+ */
+export type AiSiteImportReadVerdictKind = 'ok' | 'home-blocked' | 'home-unreadable' | 'mostly-blocked'
+
+/** Why the home page did not come in. */
+export type AiSiteImportHomeProblem =
+  | 'blocked'
+  | 'http-error'
+  | 'unreachable'
+  | 'not-html'
+  | 'too-large'
+  | 'off-site'
+  | 'robots'
+  | 'login-form'
+  | 'not-reached'
+  | 'empty'
+
+export interface AiSiteImportReadVerdict {
+  kind: AiSiteImportReadVerdictKind
+  /** Addresses turned away by bot protection or a firewall, the home page among them. */
+  blocked: number
+  /** The site's addresses the read knew of: the sitemaps', or everything it asked for. */
+  total: number
+  /** What the home page answered, when it answered with an error. */
+  homeStatus: number | null
+  homeProblem: AiSiteImportHomeProblem | null
+  /** Whose edge turned the home page away, when it said. */
+  edge: 'vercel' | 'cloudflare' | null
+}
+
+/** A crawl as the verdict reads it; the crawler's `SiteImportInventory` is one. */
+export interface AiSiteImportReadInput {
+  pages: ReadonlyArray<{
+    path: string
+    foundBy: string
+    blocks: ReadonlyArray<{ kind: string; text?: string; inline?: boolean }>
+    images: readonly unknown[]
+  }>
+  skipped: ReadonlyArray<{ url: string; reason: string; status?: number; edge?: string | null }>
+  sitemapUrls: number
+}
+
+const pathOfUrl = (url: string): string => {
+  try {
+    return new URL(url).pathname.replace(/\/+$/, '') || '/'
+  } catch {
+    return ''
+  }
+}
+
+const wordsOf = (text: string) => (text.match(/[\p{L}\p{N}]+/gu) ?? []).length
+
+/** One verdict from what became of the home page and how much of the site was turned away. */
+function readVerdictOf(
+  home: { problem: AiSiteImportHomeProblem; status: number | null; edge: string | null } | null,
+  blocked: number,
+  total: number,
+): AiSiteImportReadVerdict {
+  const edge: AiSiteImportReadVerdict['edge'] = home?.edge === 'vercel' ? 'vercel' : home?.edge === 'cloudflare' ? 'cloudflare' : null
+  const base = { blocked, total, homeStatus: home?.status ?? null, homeProblem: home?.problem ?? null, edge }
+  if (home) return { kind: home.problem === 'blocked' ? 'home-blocked' : 'home-unreadable', ...base }
+  return { kind: total > 0 && blocked * 2 > total ? 'mostly-blocked' : 'ok', ...base }
+}
+
+/** What a crawler skip of the home page means for it. */
+function homeProblemOfSkip(reason: string, status: number | undefined): AiSiteImportHomeProblem {
+  switch (reason) {
+    case 'http-error':
+      return status !== undefined && AI_SITE_IMPORT_BLOCKED_STATUSES.has(status) ? 'blocked' : 'http-error'
+    case 'off-origin-redirect':
+      return 'off-site'
+    case 'not-html':
+    case 'too-large':
+    case 'robots':
+    case 'login-form':
+    case 'not-reached':
+      return reason
+    default:
+      return 'unreachable'
+  }
+}
+
+/**
+ * The read's verdict (AGL-4083), pure over the crawl: whether the home page
+ * came in, and how much of the site bot protection turned away. An import
+ * whose verdict stops (`aiSiteImportReadStops`) plans no wave, quotes
+ * nothing and spends nothing: the person is told why and checks again.
+ */
+export function aiSiteImportReadVerdict(crawled: AiSiteImportReadInput): AiSiteImportReadVerdict {
+  const blocked = crawled.skipped.filter(
+    (entry) => entry.reason === 'http-error' && entry.status !== undefined && AI_SITE_IMPORT_BLOCKED_STATUSES.has(entry.status),
+  ).length
+  const total = Math.max(crawled.sitemapUrls, crawled.pages.length + crawled.skipped.length)
+  const page = crawled.pages.find((entry) => entry.foundBy === 'home') ?? crawled.pages.find((entry) => (entry.path.replace(/\/+$/, '') || '/') === '/')
+  if (page) {
+    const words = page.blocks.reduce((sum, block) => sum + (block.kind === 'image' || block.inline ? 0 : wordsOf(block.text ?? '')), 0)
+    const empty = words < AI_SITE_IMPORT_MIN_WORDS && page.images.length === 0
+    return readVerdictOf(empty ? { problem: 'empty', status: null, edge: null } : null, blocked, total)
+  }
+  const skip = crawled.skipped.find((entry) => pathOfUrl(entry.url) === '/')
+  return readVerdictOf(
+    skip
+      ? { problem: homeProblemOfSkip(skip.reason, skip.status), status: skip.status ?? null, edge: skip.edge ?? null }
+      : { problem: 'not-reached', status: null, edge: null },
+    blocked,
+    total,
+  )
+}
+
+/** Whether a verdict stops the import before anything is planned: its home page is not in. */
+export function aiSiteImportReadStops(verdict: AiSiteImportReadVerdict | null | undefined): boolean {
+  return verdict?.kind === 'home-blocked' || verdict?.kind === 'home-unreadable'
+}
+
+/** The review an import that stopped at its read waits under: `blocked` or `unreadable`; `null` when it goes on. */
+export function aiSiteImportReadVerdictReason(verdict: AiSiteImportReadVerdict | null | undefined): 'blocked' | 'unreadable' | null {
+  if (verdict?.kind === 'home-blocked') return 'blocked'
+  if (verdict?.kind === 'home-unreadable') return 'unreadable'
+  return null
+}
+
+/** Where a site owner lets AglynBot through, on the edges that name themselves. */
+export const AI_SITE_IMPORT_EDGE_HINTS: Readonly<Record<'vercel' | 'cloudflare', string>> = {
+  vercel: 'Your site answers through Vercel: in its Firewall, under Rules, add a bypass rule for the user agent AglynBot.',
+  cloudflare:
+    'Your site answers through Cloudflare: under Security, WAF, add a custom rule that skips the checks when the user agent contains AglynBot.',
+}
+
+const NOTHING_SPENT = 'Nothing was brought in and no AI credits were used.'
+
+/** Why the home page could not be read, inside the sentence that says so. */
+function homeProblemText(verdict: AiSiteImportReadVerdict): string {
+  switch (verdict.homeProblem) {
+    case 'http-error':
+      return verdict.homeStatus ? `it answered with an error, ${verdict.homeStatus}` : 'it answered with an error'
+    case 'not-html':
+      return 'it did not answer with a web page'
+    case 'too-large':
+      return 'it is larger than a page can be to bring in'
+    case 'off-site':
+      return 'it sends visitors to another website'
+    case 'not-reached':
+      return 'the read ran out of time before it'
+    default:
+      return 'it did not answer'
+  }
+}
+
+/**
+ * What the person is told about the read (AGL-4083), in console words: why
+ * nothing was brought in and what to do, or that most of the site was turned
+ * away. `null` when there is nothing to say.
+ */
+export function aiSiteImportReadVerdictMessage(verdict: AiSiteImportReadVerdict | null | undefined, domain: string): string | null {
+  if (!verdict) return null
+  if (verdict.kind === 'home-blocked') {
+    const others = Math.max(0, verdict.blocked - 1)
+    const more = others ? `, and ${others.toLocaleString('en-US')} other ${others === 1 ? 'page' : 'pages'}` : ''
+    const lead = `Your site’s bot protection or firewall turned AglynBot away before it could read your home page${more}. ${NOTHING_SPENT} Allow AglynBot in your site’s bot or firewall settings, then choose Check again.`
+    return verdict.edge ? `${lead} ${AI_SITE_IMPORT_EDGE_HINTS[verdict.edge]}` : lead
+  }
+  if (verdict.kind === 'home-unreadable') {
+    switch (verdict.homeProblem) {
+      case 'robots':
+        return `Your site’s robots.txt asks AglynBot not to read your home page. ${NOTHING_SPENT} Allow AglynBot in your robots.txt, then choose Check again.`
+      case 'login-form':
+        return `Your home page asks for a password, and pages that do are never brought in. ${NOTHING_SPENT} Open your home page to visitors, then choose Check again.`
+      case 'empty':
+        return `No text could be read from your home page. If your site is built in a way that needs a browser to show its words, it cannot be brought in yet. ${NOTHING_SPENT}`
+      default:
+        return `Your home page could not be read (${homeProblemText(verdict)}). ${NOTHING_SPENT} Check that ${domain} is up and answers at https://${domain}/, then choose Check again.`
+    }
+  }
+  if (verdict.kind === 'mostly-blocked') {
+    return `${verdict.blocked.toLocaleString('en-US')} of ${verdict.total.toLocaleString('en-US')} pages were turned away by your site’s bot protection; see Not brought in.`
+  }
+  return null
+}
+
+/** The verdict an inventory reads from its own pages and skips, when the step did not hand it the crawl's. */
+function inventoryVerdict(input: Pick<AiSiteImportInventoryInput, 'pages' | 'skipped' | 'skippedOverflow'>): AiSiteImportReadVerdict {
+  const blocked = input.skipped.filter((entry) => entry.reason === 'blocked').length
+  const total = input.pages.length + input.skipped.length + Math.max(0, input.skippedOverflow ?? 0)
+  const page = input.pages.find((entry) => entry.foundBy === 'home') ?? input.pages.find((entry) => (entry.path.replace(/\/+$/, '') || '/') === '/')
+  if (page) {
+    const empty = page.words < AI_SITE_IMPORT_MIN_WORDS && page.images === 0
+    return readVerdictOf(empty ? { problem: 'empty', status: null, edge: null } : null, blocked, total)
+  }
+  const skip = input.skipped.find((entry) => pathOfUrl(entry.url) === '/')
+  const problem: AiSiteImportHomeProblem = !skip
+    ? 'not-reached'
+    : skip.reason === 'blocked'
+      ? 'blocked'
+      : skip.reason === 'robots' || skip.reason === 'login-form' || skip.reason === 'too-large' || skip.reason === 'off-site' || skip.reason === 'not-reached' || skip.reason === 'empty'
+        ? skip.reason
+        : 'unreachable'
+  return readVerdictOf({ problem, status: null, edge: null }, blocked, total)
 }
 
 /*------------------------------------------
@@ -381,6 +663,12 @@ export interface AiSiteImportInventoryInput {
   /** Skips the crawl only counted. */
   skippedOverflow?: number
   stoppedBy: string | null
+  /**
+   * The read's verdict from the crawl itself (`aiSiteImportReadVerdict`), with
+   * the status and edge the home page answered with; read from `pages` and
+   * `skipped` when absent.
+   */
+  verdict?: AiSiteImportReadVerdict | null
   /** The plan's page count; `null` for none. */
   pageLimit: number | null
   existingPages: number
@@ -396,12 +684,16 @@ export interface AiSiteImportInventoryInput {
  */
 export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSiteImportState {
   const wavePages = Math.max(1, Math.floor(input.wavePages ?? AI_SITE_IMPORT_WAVE_PAGES))
+  const limit = input.pageLimit === null || !Number.isFinite(input.pageLimit) ? null : Math.max(0, Math.floor(input.pageLimit))
   const leftOut: AiSiteImportLeftOut[] = []
   const leftOutCount: Partial<Record<AiSiteImportLeftOutReason, number>> = {}
   const leave = (entry: AiSiteImportLeftOut) => {
     leftOutCount[entry.reason] = (leftOutCount[entry.reason] ?? 0) + 1
     if (leftOut.length < AI_SITE_IMPORT_LEFT_OUT_LISTED) leftOut.push(entry)
   }
+  // The read asks for a wave's worth past the plan's room, so a page its page
+  // budget never reached is past the plan; any other stop is not the plan's.
+  const unreached: AiSiteImportLeftOutReason = input.stoppedBy === 'page-budget' && limit !== null ? 'plan-limit' : 'not-reached'
   for (const skipped of input.skipped) {
     let path = '/'
     try {
@@ -409,9 +701,32 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
     } catch {
       // A malformed address keeps the root as its path.
     }
-    leave({ url: skipped.url, path, title: '', reason: skipped.reason })
+    leave({ url: skipped.url, path, title: '', reason: skipped.reason === 'not-reached' ? unreached : skipped.reason })
   }
   if (input.skippedOverflow) leftOutCount['unreadable'] = (leftOutCount['unreadable'] ?? 0) + input.skippedOverflow
+
+  // Home first: a site read without its home page plans nothing at all.
+  const verdict = input.verdict ?? inventoryVerdict(input)
+  if (aiSiteImportReadStops(verdict)) {
+    return {
+      domain: input.domain,
+      siteName: clipLabel(input.siteName) || input.domain,
+      ownership: input.ownership,
+      readAt: input.readAt,
+      pageLimit: limit,
+      existingPages: Math.max(0, input.existingPages),
+      found: input.pages.length,
+      stoppedBy: input.stoppedBy,
+      groups: [],
+      pages: [],
+      waves: [],
+      leftOut,
+      leftOutCount,
+      frame: null,
+      reviewId: input.reviewId ?? null,
+      verdict,
+    }
+  }
 
   const readable = input.pages.filter((page) => {
     if (page.words >= AI_SITE_IMPORT_MIN_WORDS || page.images > 0) return true
@@ -419,7 +734,6 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
     return false
   })
   const { groups, groupOf } = aiSiteImportGroups(readable, input.menu)
-  const limit = input.pageLimit === null || !Number.isFinite(input.pageLimit) ? null : Math.max(0, Math.floor(input.pageLimit))
   let room = limit === null ? Number.POSITIVE_INFINITY : Math.max(0, limit - Math.max(0, input.existingPages))
   const pages: AiSiteImportPage[] = []
   const waves: AiSiteImportWave[] = []
@@ -484,6 +798,7 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
     leftOutCount,
     frame: waves[0]?.frame ? { draftId: input.mintId() } : null,
     reviewId: input.reviewId ?? null,
+    verdict,
   }
 }
 
@@ -535,7 +850,7 @@ export function aiSiteImportRunningWave(state: AiSiteImportState | null | undefi
 
 /** The next wave a person may start, else `null`. */
 export function aiSiteImportNextWave(state: AiSiteImportState | null | undefined): AiSiteImportWave | null {
-  if (!state || aiSiteImportRunningWave(state)) return null
+  if (!state || aiSiteImportRunningWave(state) || aiSiteImportReadStops(state.verdict)) return null
   return state.waves.find((wave) => wave.status === 'waiting') ?? null
 }
 
@@ -549,7 +864,8 @@ export function aiSiteImportNextWork(
   state: AiSiteImportState | null | undefined,
   items: readonly AiJobItemLedger[] | null | undefined,
 ): AiSiteImportWork {
-  if (!state) return { kind: 'inventory' }
+  // A read that stopped at its home page reads again: the person's Check again.
+  if (!state || aiSiteImportReadStops(state.verdict)) return { kind: 'inventory' }
   const running = aiSiteImportRunningWave(state)
   if (!running) {
     const next = aiSiteImportNextWave(state)
@@ -602,17 +918,56 @@ export function aiSiteImportWaveStarted(
   return aiSiteImportPagesRead(next, reads)
 }
 
-/** More of a running wave's pages, read now. */
+/** How many characters a block holds, as the job document stores it. */
+export function aiSiteImportBlockChars(block: SiteImportBlock): number {
+  if (block.kind === 'image') return block.url.length + block.alt.length
+  return block.text.length + (block.kind === 'link' ? block.href.length : 0)
+}
+
+/** A page's blocks in order, as many as fit `maxChars` and `maxBlocks`, and whether any had to go. */
+export function aiSiteImportCapBlocks(
+  blocks: readonly SiteImportBlock[],
+  maxChars: number,
+  maxBlocks: number = AI_SITE_IMPORT_READ_MAX_BLOCKS,
+): { blocks: SiteImportBlock[]; chars: number; cut: boolean } {
+  const kept: SiteImportBlock[] = []
+  let chars = 0
+  for (const block of blocks) {
+    const size = aiSiteImportBlockChars(block)
+    if (kept.length >= maxBlocks || chars + size > maxChars) return { blocks: kept, chars, cut: true }
+    kept.push(block)
+    chars += size
+  }
+  return { blocks: kept, chars, cut: false }
+}
+
+const readChars = (read: AiSiteImportPageRead | null | undefined) =>
+  (read?.blocks ?? []).reduce((total, block) => total + aiSiteImportBlockChars(block), 0)
+
+/**
+ * More of a running wave's pages, read now. Their blocks share
+ * `AI_SITE_IMPORT_WAVE_READ_MAX_CHARS` with every read still held: a page
+ * past it keeps what fits, in order, and is marked `cut`.
+ */
 export function aiSiteImportPagesRead(
   state: AiSiteImportState,
   reads: ReadonlyMap<string, AiSiteImportPageRead | AiSiteImportLeftOutReason>,
 ): AiSiteImportState {
+  let held = state.pages.filter((page) => !reads.has(page.slot)).reduce((total, page) => total + readChars(page.read), 0)
   let next = state
   for (const [slot, read] of reads) {
-    next =
-      typeof read === 'string'
-        ? withPage(next, slot, { refused: read, read: null })
-        : withPage(next, slot, { read, refused: null, title: clipLabel(read.title) || next.pages.find((page) => page.slot === slot)?.title || '' })
+    if (typeof read === 'string') {
+      next = withPage(next, slot, { refused: read, read: null })
+      continue
+    }
+    let kept = read
+    if (read.blocks) {
+      const room = Math.max(0, Math.min(AI_SITE_IMPORT_READ_MAX_CHARS, AI_SITE_IMPORT_WAVE_READ_MAX_CHARS - held))
+      const capped = aiSiteImportCapBlocks(read.blocks, room)
+      held += capped.chars
+      kept = { ...read, blocks: capped.blocks, ...(capped.cut || read.cut ? { cut: true } : {}) }
+    }
+    next = withPage(next, slot, { read: kept, refused: null, title: clipLabel(read.title) || next.pages.find((page) => page.slot === slot)?.title || '' })
   }
   return next
 }
@@ -626,17 +981,18 @@ export function aiSiteImportPhotosIn(
   return withPage(state, slot, { photos })
 }
 
-/** A page is in: its text is no longer kept. */
+/** A page is in: its text and its blocks are no longer kept. */
 export function aiSiteImportPageSettled(state: AiSiteImportState, slot: string): AiSiteImportState {
   const page = state.pages.find((entry) => entry.slot === slot)
   if (!page?.read) return state
-  return withPage(state, slot, { read: { ...page.read, text: '' } })
+  return withPage(state, slot, { read: { ...page.read, text: '', blocks: [] } })
 }
 
 /** A wave is in: waiting for its review, or done when no wave follows it. */
 export function aiSiteImportWaveClosed(state: AiSiteImportState, index: number, at: string): AiSiteImportState {
   const later = state.waves.some((wave) => wave.index > index && wave.status === 'waiting')
-  let next = withWave(state, index, { status: later ? 'review' : 'done', finishedAt: at })
+  // Start every remaining wave: no review between waves, the last one's close is the stop.
+  let next = withWave(state, index, { status: later && !state.autoContinue ? 'review' : 'done', finishedAt: at })
   // What the wave read is no longer needed by any model answer.
   for (const slot of state.waves.find((wave) => wave.index === index)?.slots ?? []) next = aiSiteImportPageSettled(next, slot)
   return next
@@ -648,7 +1004,7 @@ export function aiSiteImportWire(state: AiSiteImportState | null | undefined): A
   return {
     ...state,
     pages: state.pages.map((page) =>
-      page.read ? { ...page, read: { ...page.read, text: '', images: [] } } : page,
+      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [] } } : page,
     ),
   }
 }
@@ -658,18 +1014,59 @@ export function aiSiteImportWire(state: AiSiteImportState | null | undefined): A
  *-----------------------------------------*/
 
 /**
+ * How a page is built (AGL-4083), decided by code: every page of a collection
+ * (a blog, the legal pages, news) and any page longer than
+ * `AI_SITE_IMPORT_PROSE_WORDS` is copied as it is; the main pages are
+ * arranged by Aglyn AI, their words kept as written.
+ */
+export function aiSiteImportPageBuild(page: Pick<AiSiteImportPage, 'group' | 'words'>): AiSiteImportBuild {
+  return page.group !== 'main' || page.words > AI_SITE_IMPORT_PROSE_WORDS ? 'copied' : 'arranged'
+}
+
+const whole = (value: number | undefined) => Math.max(0, Math.floor(Number.isFinite(value) ? (value as number) : 0))
+
+/**
  * What bringing in this many pages costs, quoted before it starts (AGL-3976):
  * each page an AI page as measured, its ceiling its two passes, and the
- * site's header and footer once when the wave builds them.
+ * site's header and footer once when the wave builds them. Pages the step has
+ * chosen a build for (AGL-4083) are priced by it: `arranged` at the
+ * arrangement answer and its listing, `copied` at the listing alone.
  */
-export function aiSiteImportCreditRange(pages: number, options: { frame?: boolean } = {}): AiCreditRange {
-  const count = Math.max(0, Math.floor(Number.isFinite(pages) ? pages : 0))
-  const { page, frame } = AI_MEASURED_IMPORT_CREDITS
+export function aiSiteImportCreditRange(
+  pages: number,
+  options: { frame?: boolean; arranged?: number; copied?: number } = {},
+): AiCreditRange {
+  const count = whole(pages)
+  const arranged = whole(options.arranged)
+  const copied = whole(options.copied)
+  const measured = AI_MEASURED_IMPORT_CREDITS
   return aiCreditRangeOrdered({
-    likely: count * page.median + (options.frame ? frame.median : 0),
-    p90: count * page.p90 + (options.frame ? frame.p90 : 0),
-    ceiling: count * AI_SITE_IMPORT_PAGE_CEILING_CREDITS + (options.frame ? AI_SITE_IMPORT_FRAME_CEILING_CREDITS : 0),
+    likely:
+      count * measured.page.median + arranged * measured.arranged.median + copied * measured.copied.median + (options.frame ? measured.frame.median : 0),
+    p90: count * measured.page.p90 + arranged * measured.arranged.p90 + copied * measured.copied.p90 + (options.frame ? measured.frame.p90 : 0),
+    ceiling:
+      (count + arranged) * AI_SITE_IMPORT_PAGE_CEILING_CREDITS +
+      copied * AI_SITE_IMPORT_COPIED_CEILING_CREDITS +
+      (options.frame ? AI_SITE_IMPORT_FRAME_CEILING_CREDITS : 0),
   })
+}
+
+/** What a wave still owes, by how its pages are built, and whether its header and footer are owed. */
+export function aiSiteImportWaveOwed(
+  state: AiSiteImportState,
+  wave: AiSiteImportWave,
+  items?: readonly AiJobItemLedger[] | null,
+): { pages: number; arranged: number; copied: number; frame: boolean } {
+  const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
+  const counts = { pages: 0, arranged: 0, copied: 0, frame: wave.frame && !!state.frame && owed(AI_SITE_IMPORT_FRAME_SLOT) }
+  for (const slot of wave.slots) {
+    const page = state.pages.find((entry) => entry.slot === slot)
+    if (!owed(slot) || page?.refused) continue
+    if (page?.build === 'arranged') counts.arranged += 1
+    else if (page?.build === 'copied') counts.copied += 1
+    else counts.pages += 1
+  }
+  return counts
 }
 
 /** A wave's quote: the pages it has still to bring in, and its header and footer while they are owed. */
@@ -678,9 +1075,36 @@ export function aiSiteImportWaveCreditRange(
   wave: AiSiteImportWave,
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
-  const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
-  const pages = wave.slots.filter((slot) => owed(slot) && !state.pages.find((page) => page.slot === slot)?.refused).length
-  return aiSiteImportCreditRange(pages, { frame: wave.frame && !!state.frame && owed(AI_SITE_IMPORT_FRAME_SLOT) })
+  const owed = aiSiteImportWaveOwed(state, wave, items)
+  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, copied: owed.copied })
+}
+
+/** Every wave still waiting, quoted at once: "Start every remaining wave" (AGL-4083). */
+export function aiSiteImportRemainingCreditRange(
+  state: AiSiteImportState,
+  items?: readonly AiJobItemLedger[] | null,
+): AiCreditRange {
+  const total = { pages: 0, arranged: 0, copied: 0, frame: false }
+  for (const wave of state.waves) {
+    if (wave.status !== 'waiting') continue
+    const owed = aiSiteImportWaveOwed(state, wave, items)
+    total.pages += owed.pages
+    total.arranged += owed.arranged
+    total.copied += owed.copied
+    total.frame = total.frame || owed.frame
+  }
+  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, copied: total.copied })
+}
+
+/** "About 95 credits (up to 600): 7 pages arranged by Aglyn AI, 3 copied as they are"; the build is named once the step has chosen. */
+export function aiSiteImportQuoteText(
+  range: AiCreditRange,
+  owed: Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'arranged' | 'copied'>,
+): string {
+  const parts: string[] = []
+  if (owed.arranged) parts.push(`${aiSiteImportPagesText(owed.arranged)} arranged by Aglyn AI`)
+  if (owed.copied) parts.push(`${owed.arranged ? owed.copied.toLocaleString('en-US') : aiSiteImportPagesText(owed.copied)} copied as ${owed.copied === 1 ? 'it is' : 'they are'}`)
+  return parts.length ? `${aiCreditRangeText(range)}: ${parts.join(', ')}` : aiCreditRangeText(range)
 }
 
 /*------------------------------------------
@@ -692,12 +1116,14 @@ export const AI_SITE_IMPORT_LEFT_OUT_COPY: Readonly<Record<AiSiteImportLeftOutRe
   'plan-limit': 'Past your plan’s page count. Upgrade for more pages, then bring the rest in.',
   robots: 'The site’s robots.txt asks AglynBot not to read it.',
   'login-form': 'A sign-in page. Pages that ask for a password are never brought in.',
-  empty: 'Nothing to bring in: the page has no text or photos.',
+  empty:
+    'No text could be read from this page. If your site is built in a way that needs a browser to show its words, it cannot be brought in yet.',
   unreadable: 'It could not be read just now.',
   blocked:
     'The site’s bot protection or firewall turned AglynBot away. Allow AglynBot in your site’s bot or firewall settings, then bring the site in again.',
   'too-large': 'Larger than a page can be to bring in.',
   'off-site': 'It sends visitors to another website.',
+  'not-reached': 'Not reached: the read stopped before it got to this page.',
 }
 
 /** "3 pages" / "1 page". */
@@ -710,6 +1136,8 @@ export function aiSiteImportWaveMessage(
   state: AiSiteImportState,
   items: readonly AiJobItemLedger[] | null | undefined,
 ): string {
+  // A read that stopped at its home page says why, and what to do.
+  if (aiSiteImportReadStops(state.verdict)) return aiSiteImportReadVerdictMessage(state.verdict, state.domain) ?? ''
   const next = aiSiteImportNextWave(state)
   const reviewing = aiSiteImportReviewWave(state)
   if (!reviewing) {

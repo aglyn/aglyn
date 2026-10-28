@@ -31,11 +31,18 @@ import {
   AI_SITE_IMPORT_FRAME_SLOT,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_LEFT_OUT_REASONS,
+  AI_SITE_IMPORT_UNREAD_REASONS,
   aiSiteImportNextWave,
   aiSiteImportPagesText,
+  aiSiteImportQuoteText,
+  aiSiteImportReadStops,
+  aiSiteImportReadVerdictMessage,
+  aiSiteImportReadVerdictReason,
+  aiSiteImportRemainingCreditRange,
   aiSiteImportReviewWave,
   aiSiteImportRunningWave,
   aiSiteImportWaveCreditRange,
+  aiSiteImportWaveOwed,
   type AiSiteImportLeftOutReason,
   type AiSiteImportState,
   type AiSiteImportWave,
@@ -103,15 +110,39 @@ export type AiSiteImportPhase =
 
 export function aiSiteImportPhaseOf(job: Pick<AiJobSummary, 'status' | 'review' | 'siteImport'>): AiSiteImportPhase {
   const state = job.siteImport ?? null
+  // A read that stopped at its home page is held, and its Check again reads again (AGL-4083).
+  const stopped = aiSiteImportReadStops(state?.verdict)
   if (job.status === 'done') return 'done'
   if (job.status === 'failed' || job.status === 'canceled') return 'stopped'
   if (job.status === 'needs_input') return 'paused'
   if (job.status === 'needs_review') {
-    if (job.review?.reason !== 'wave' || !state) return 'held'
+    if (job.review?.reason !== 'wave' || !state || stopped) return 'held'
     return aiSiteImportReviewWave(state) ? 'review' : 'ready'
   }
-  if (!state) return 'reading'
+  if (!state || stopped) return 'reading'
   return aiSiteImportRunningWave(state) ? 'running' : 'starting'
+}
+
+/**
+ * How a hold that is the site's to fix reads (AGL-4083): its heading, its
+ * sentence and its button. A home page bot protection turned away, or one
+ * that could not be read, is checked again for free; `null` for any other
+ * hold, which keeps its own words.
+ */
+export function aiSiteImportHeldCopy(
+  job: Pick<AiJobSummary, 'review' | 'siteImport'>,
+): { heading: string; message: string; action: string } | null {
+  const state = job.siteImport ?? null
+  const fromState = aiSiteImportReadStops(state?.verdict) ? aiSiteImportReadVerdictReason(state?.verdict) : null
+  const reason = job.review?.reason === 'blocked' || job.review?.reason === 'unreadable' ? job.review.reason : fromState
+  if (!reason) return null
+  const message =
+    (fromState && state ? aiSiteImportReadVerdictMessage(state.verdict, state.domain) : null) ?? job.review?.message ?? ''
+  return {
+    heading: reason === 'blocked' ? 'AglynBot was turned away' : 'Your home page could not be read',
+    message,
+    action: 'Check again',
+  }
 }
 
 export type AiSiteImportRowState = 'waiting' | 'active' | 'done' | 'failed' | 'skipped'
@@ -130,6 +161,12 @@ export interface AiSiteImportRowView {
   photos: string | null
   /** The draft the row wrote, by its output id. */
   outputId: string | null
+  /** The page on the old site, to open beside the draft (AGL-4083). */
+  oldPage: string
+  /** "1,204 of 1,310 words", once the page is in and the step has counted them. */
+  words: string | null
+  /** "Copied as it is" or "Arranged by Aglyn AI", once the step has chosen. */
+  build: string | null
 }
 
 function rowState(row: AiJobItemLedger | undefined, active: boolean): AiSiteImportRowState {
@@ -140,13 +177,33 @@ function rowState(row: AiJobItemLedger | undefined, active: boolean): AiSiteImpo
   return active ? 'active' : 'waiting'
 }
 
-/** "3 photos added", "2 photos added, 1 already in your library". */
-export function aiSiteImportPhotosText(photos: { brought: number; reused: number } | null | undefined): string | null {
-  if (!photos || photos.brought + photos.reused === 0) return null
-  const added = photos.brought ? `${photos.brought} ${photos.brought === 1 ? 'photo' : 'photos'} added` : ''
-  const reused = photos.reused ? `${photos.reused} already in your media library` : ''
-  return [added, reused].filter(Boolean).join(', ')
+/**
+ * "3 photos added", "2 photos added, 1 already in your media library"; with
+ * photos that could not come in, against all it tried: "3 of 5 photos: 2
+ * added, 1 already in your media library, 2 could not be brought in".
+ */
+export function aiSiteImportPhotosText(
+  photos: { brought: number; reused: number; skipped?: number } | null | undefined,
+): string | null {
+  if (!photos) return null
+  const skipped = Math.max(0, photos.skipped ?? 0)
+  const into = photos.brought + photos.reused
+  if (into === 0 && skipped === 0) return null
+  if (!skipped) {
+    const added = photos.brought ? `${photos.brought} ${photos.brought === 1 ? 'photo' : 'photos'} added` : ''
+    const reused = photos.reused ? `${photos.reused} already in your media library` : ''
+    return [added, reused].filter(Boolean).join(', ')
+  }
+  const parts = [
+    photos.brought ? `${photos.brought} added` : '',
+    photos.reused ? `${photos.reused} already in your media library` : '',
+    `${skipped} could not be brought in`,
+  ].filter(Boolean)
+  const tried = into + skipped
+  return `${into} of ${tried} ${tried === 1 ? 'photo' : 'photos'}: ${parts.join(', ')}`
 }
+
+const BUILD_COPY = { copied: 'Copied as it is', arranged: 'Arranged by Aglyn AI' } as const
 
 /** One wave's rows, the header and footer first where the wave builds them. */
 export function aiSiteImportWaveRows(
@@ -174,6 +231,9 @@ export function aiSiteImportWaveRows(
       note: row?.failure?.message ?? row?.note ?? null,
       photos: null,
       outputId: row?.outputs[0] ?? null,
+      oldPage: `https://${state.domain}/`,
+      words: null,
+      build: null,
     })
   }
   for (const slot of wave.slots) {
@@ -189,14 +249,23 @@ export function aiSiteImportWaveRows(
       note: row?.failure?.message ?? row?.note ?? (page.refused ? AI_SITE_IMPORT_LEFT_OUT_COPY[page.refused] : null),
       photos: aiSiteImportPhotosText(page.photos),
       outputId: row?.outputs[0] ?? null,
+      oldPage: page.url,
+      words: page.brought ? `${page.brought.words.toLocaleString('en-US')} of ${page.words.toLocaleString('en-US')} words` : null,
+      build: page.build ? BUILD_COPY[page.build] : null,
     })
   }
   return rows
 }
 
-/** "About 189 credits (up to 650)" for the wave, as it stands. */
+/**
+ * "About 189 credits (up to 650)" for the wave, as it stands; once the step
+ * has chosen how its pages are built, it names them: "…: 7 pages arranged by
+ * Aglyn AI, 3 copied as they are" (AGL-4083).
+ */
 export function aiSiteImportWaveQuote(job: Pick<AiJobSummary, 'items' | 'siteImport'>, wave: AiSiteImportWave): string {
-  return aiCreditRangeText(aiSiteImportWaveCreditRange(job.siteImport as AiSiteImportState, wave, job.items ?? null))
+  const state = job.siteImport as AiSiteImportState
+  const range = aiSiteImportWaveCreditRange(state, wave, job.items ?? null)
+  return aiSiteImportQuoteText(range, aiSiteImportWaveOwed(state, wave, job.items ?? null))
 }
 
 /** What a wave cost, its pages' credits less what was given back. */
@@ -207,13 +276,44 @@ export function aiSiteImportWaveSpent(job: Pick<AiJobSummary, 'items'>, wave: Ai
     .reduce((total, row) => total + Math.max(0, (row.creditsSpent ?? 0) - (row.creditsRefunded ?? 0)), 0)
 }
 
-/** The read site in one sentence: "Found 21 pages on harbor-dental.com: Main pages (6) and Blog (14)." */
+/** Pages the site has that AglynBot could not read: turned away, unanswered, too large or never reached. */
+export function aiSiteImportUnreadCount(state: AiSiteImportState): number {
+  return AI_SITE_IMPORT_UNREAD_REASONS.reduce((total, reason) => total + (state.leftOutCount[reason] ?? 0), 0)
+}
+
+/**
+ * The read site in one sentence: "Found 21 pages on harbor-dental.com: Main
+ * pages (6) and Blog (14)." — and how many more could not be read (AGL-4083).
+ */
 export function aiSiteImportFoundText(state: AiSiteImportState): string {
   const groups = state.groups.map((group) => `${group.label} (${group.pages})`)
   const listed =
     groups.length <= 1 ? groups.join('') : `${groups.slice(0, -1).join(', ')} and ${groups[groups.length - 1]}`
   const found = `Found ${aiSiteImportPagesText(state.found)} on ${state.domain}`
-  return listed ? `${found}: ${listed}.` : `${found}.`
+  const lead = listed ? `${found}: ${listed}.` : `${found}.`
+  const unread = aiSiteImportUnreadCount(state)
+  return unread ? `${lead} ${unread.toLocaleString('en-US')} more could not be read; see Not brought in.` : lead
+}
+
+/** Why the read stopped short, when it did and left pages unread (AGL-4083). */
+export function aiSiteImportStopText(state: AiSiteImportState): string | null {
+  const unreached = state.leftOutCount['not-reached'] ?? 0
+  if (!unreached) return null
+  const first = `Only the first ${aiSiteImportPagesText(state.found)}`
+  const rest = 'the rest are listed under Not brought in as not reached.'
+  switch (state.stoppedBy) {
+    case 'time':
+      return `${first} could be read in the time allowed; ${rest}`
+    case 'total-bytes':
+      return `${first} could be read before the read reached its size limit; ${rest}`
+    default:
+      return `${first} could be read this time; ${rest}`
+  }
+}
+
+/** The read's warning when most of the site was turned away though its home page came in (AGL-4083). */
+export function aiSiteImportVerdictNote(state: AiSiteImportState): string | null {
+  return state.verdict?.kind === 'mostly-blocked' ? aiSiteImportReadVerdictMessage(state.verdict, state.domain) : null
 }
 
 /** The plan's page count against the site: "Your plan includes 25 pages and this site has 0, so 20 are brought in." */
@@ -224,7 +324,9 @@ export function aiSiteImportPlanText(state: AiSiteImportState): string {
     state.pageLimit === null
       ? 'Your plan has no page limit'
       : `Your plan includes ${aiSiteImportPagesText(state.pageLimit)} and this site has ${state.existingPages}`
-  return `${plan}, so ${aiSiteImportPagesText(kept)} ${kept === 1 ? 'is' : 'are'} brought in, in ${waves === 1 ? 'one wave' : `${waves} waves`}.`
+  const lead = `${plan}, so ${aiSiteImportPagesText(kept)} ${kept === 1 ? 'is' : 'are'} brought in, in ${waves === 1 ? 'one wave' : `${waves} waves`}.`
+  const stop = aiSiteImportStopText(state)
+  return stop ? `${lead} ${stop}` : lead
 }
 
 /** What was left out, by reason, most first. */
@@ -247,4 +349,22 @@ export function aiSiteImportStartAction(
   const wave = aiSiteImportNextWave(state)
   if (!state || !wave) return null
   return { wave, label: `Start ${wave.label}`, quote: aiSiteImportWaveQuote(job, wave) }
+}
+
+/**
+ * "Start every remaining wave" (AGL-4083), off by default: offered beside the
+ * next wave's button when more than one wave waits, quoted as all of them.
+ */
+export function aiSiteImportStartAllAction(
+  job: Pick<AiJobSummary, 'siteImport' | 'items'>,
+): { label: string; quote: string; waves: number } | null {
+  const state = job.siteImport ?? null
+  if (!state || !aiSiteImportNextWave(state)) return null
+  const waves = state.waves.filter((wave) => wave.status === 'waiting').length
+  if (waves < 2) return null
+  return {
+    label: 'Start every remaining wave',
+    quote: aiCreditRangeText(aiSiteImportRemainingCreditRange(state, job.items ?? null)),
+    waves,
+  }
 }

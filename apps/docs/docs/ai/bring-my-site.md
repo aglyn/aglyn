@@ -65,15 +65,46 @@ Choose **Read my site**. Aglyn then:
 
 - creates your new site, with nothing on it and nothing published;
 - reads your current site as **AglynBot**, starting with its robots.txt file and its
-  sitemap, and only on your own domain. Your current site is not changed.
+  sitemap, then your home page, then every other page, and only on your own domain.
+  Your current site is not changed.
 
-Reading uses no AI credits. When it is done, **Your site is read** shows:
+Reading uses no AI credits.
+
+**Your home page comes first.** If AglynBot cannot read your home page, nothing is
+planned and no AI credits are used. The import waits and says why:
+
+- **AglynBot was turned away** means your site's bot protection or firewall refused it.
+  See [When your site turns AglynBot away](#turned-away).
+- **Your home page could not be read** means your home page answered with an error or
+  did not answer. Check that your site is up, then choose **Check again**.
+
+**Check again** reads your site again, and uses no AI credits either.
+
+When it is done, **Your site is read** shows:
 
 - what was found, grouped as your **Main pages** and each **collection**, such as a
-  blog's posts;
+  blog's posts, and how many more pages could not be read;
 - how many pages your plan includes, how many will be brought in, and in how many waves;
-- each page's old address and its address on your new site;
+- if the read ran out of time before it reached every page, a line that says so;
+- each page's old address and its address on your new site, and **Old page**, which
+  opens the page on your current site in a new tab;
 - under **Not brought in**, every page that was left out and the reason.
+
+### Not brought in {#not-brought-in}
+
+Each page left out is listed under one of these reasons:
+
+- **Past your plan's page count.** **See plans** opens Billing.
+- **Turned away by your site's bot protection or firewall.** See
+  [When your site turns AglynBot away](#turned-away).
+- **Not reached.** The read stopped before it got to the page.
+- **No text could be read.** The page shows its words only once a browser runs it, so it
+  cannot be brought in yet.
+- **Could not be read just now**, **a sign-in page**, **robots.txt asks AglynBot not to
+  read it**, **larger than a page can be**, or **sends visitors to another website**.
+
+If more than half of your pages were turned away, **Your site is read** says so at the
+top. You can still start the first wave.
 
 ## Waves {#waves}
 
@@ -98,8 +129,10 @@ You are told when the wave is in.
 
 When a wave is in, its page says so, for example **Main pages is in**, and shows:
 
-- every page of the wave, with **Open draft**, its old and new address and how many photos
-  were added;
+- every page of the wave, with **Open draft**, its old and new address, and **Old page** to
+  compare it with the page on your current site;
+- how many of the page's photos came in, for example **3 of 5 photos**, with how many were
+  already in your media library and how many could not be brought in;
 - a page that could not be brought in, with the reason;
 - how many AI credits the wave used.
 
@@ -131,6 +164,8 @@ first. The same photo is stored only once, however many pages show it.
 - **The site could not be read.** If robots.txt could not be read, or no page answered,
   nothing is read. Choose **Read the site again** once your site is up. If your site's
   bot protection turned AglynBot away, see [When your site turns AglynBot away](#turned-away).
+- **AglynBot was turned away**, or **Your home page could not be read.** Nothing was
+  planned and no AI credits were used. Fix what the page names, then choose **Check again**.
 - **Out of AI credits.** The import pauses. Choose **Get more AI credits**, then **Resume**.
 
 Every import is also logged for the Trust & Safety team's review.
@@ -139,12 +174,21 @@ Every import is also logged for the Trust & Safety team's review.
 
 Many hosts protect a site with bot protection or a firewall that turns away visitors it
 takes for robots. If yours turns AglynBot away, the page is listed under **Not brought in**
-as turned away by your site's bot protection or firewall. If it turns away every page,
-nothing is read, and the import says so.
+as turned away by your site's bot protection or firewall.
 
-To bring those pages in:
+If it turns away your **home page**, nothing is planned and no AI credits are used. The
+import waits under **AglynBot was turned away**, and says how many other pages were turned
+away too. A site seen without its home page is not your site, so nothing is built from it.
+
+To let AglynBot in:
 
 1. Open your site's bot protection or firewall settings, wherever your host or your
-   domain's security service keeps them.
+   domain's security service keeps them. When the import can tell who answered, it names
+   them:
+   - **Vercel**: in your project's **Firewall**, under **Rules**, add a bypass rule for the
+     user agent **AglynBot**.
+   - **Cloudflare**: under **Security**, **WAF**, add a custom rule that skips the checks when
+     the user agent contains **AglynBot**.
 2. Allow **AglynBot**. It reads only your own domain, and only pages robots.txt lets it read.
-3. Bring the site in again. If nothing was read, choose **Read the site again**.
+3. Choose **Check again**. If the import had already planned its waves, bring the site in
+   again instead.

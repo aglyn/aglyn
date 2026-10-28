@@ -133,7 +133,8 @@ export const AI_ACTIVITY_FILTER_LABEL = 'AI'
  * plan is ready for review, or an answer broke a building rule on its re-ask
  * (AGL-2935), or the site is at an allowance its plan sets for what the job
  * writes (AGL-2909), or a site import's wave waits for its review or for the
- * site to be verified again (AGL-3976).
+ * site to be verified again (AGL-3976), or its home page could not be read
+ * (AGL-4083).
  */
 export type AiJobNeedsInputReason =
   | 'band'
@@ -150,6 +151,8 @@ export type AiJobNeedsInputReason =
   | 'limit'
   | 'wave'
   | 'ownership'
+  | 'blocked'
+  | 'unreadable'
   | 'input'
 
 export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
@@ -162,6 +165,9 @@ export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   // A site import (AGL-3976): its next wave waits to be started, or for the site to be verified again.
   wave: 'a wave of the site it brings in is ready for review',
   ownership: 'the site it brings in must be verified again',
+  // A site import whose home page could not be read (AGL-4083): nothing was planned or spent.
+  blocked: 'the site it brings in turned AglynBot away from its home page',
+  unreadable: 'the home page of the site it brings in could not be read',
   input: 'it needs an ID only the person can give',
   band: 'the included AI band is used up',
   cap: 'the overage ceiling was reached',

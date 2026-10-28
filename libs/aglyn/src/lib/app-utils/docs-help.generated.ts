@@ -593,7 +593,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#draft-versions', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   aiImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
-  aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#waves', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
+  aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#not-brought-in', '#waves', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#cancel-a-new-site', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
   aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
@@ -766,6 +766,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   aiImport: {
     '#prove-it-is-yours': 'Prove it is yours',
+    '#turned-away': 'When your site turns AglynBot away',
     '#waves': 'Waves',
     '#your-current-website': 'Your current website',
   },
