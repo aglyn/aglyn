@@ -36,6 +36,10 @@ import {
   signatureCsvRow,
   waiverDayStatus,
   waiverSignedText,
+  waiverBusinessContact,
+  waiverEsignConsentText,
+  WAIVER_ESIGN_CONSENT,
+  WAIVER_ESIGN_CONSENT_V1_TEXT,
   waiverStatusLabel,
   WAIVER_SIGNATURE_CSV_HEADER,
   type StoredWaiverSignature,
@@ -224,8 +228,56 @@ describe('a signing', () => {
     const text = waiverSignedText(DRAFT, { consent: true })
     expect(text.startsWith('Rider release\n\nVersion 3\n\nRisks')).toBe(true)
     expect(text).toContain('[x] I will wear my gear.')
-    expect(text.endsWith('I can ask the business for a paper copy instead.')).toBe(true)
+    expect(text.endsWith('Withdrawing doesn’t undo a signature I have already given.')).toBe(true)
     expect(waiverSignedText(DRAFT, { consent: false })).not.toContain('Electronic signature consent')
+    // The consent as the site's signers read it is the one signed.
+    const consentText = waiverEsignConsentText({ business: 'Ridgeline Moto', contact: 'hello@example.com' })
+    expect(waiverSignedText(DRAFT, { consent: true, consentText })).toContain(`Electronic signature consent: ${consentText}`)
+  })
+})
+
+describe('the e-signature consent, version 2 (AGL-4042)', () => {
+  const text = waiverEsignConsentText({ business: 'Ridgeline Moto', contact: 'hello@example.com or (555) 010-0100' })
+
+  it('is version 2, and version 1 is kept word for word for the signatures that agreed to it', () => {
+    expect(WAIVER_ESIGN_CONSENT.version).toBe(2)
+    expect(WAIVER_ESIGN_CONSENT_V1_TEXT).toBe(
+      'I agree to sign this waiver electronically and to receive it and my signed copy by email. ' +
+        'I intend my electronic signature to be my signature on this waiver. ' +
+        'I can ask the business for a paper copy instead.',
+    )
+  })
+
+  it('answers each disclosure: minors, scope, device, a copy by email only when one is given, paper, the copy, withdrawal and who to contact', () => {
+    for (const part of [
+      'for myself and for any minors I list',
+      'This agreement covers only this waiver and my signed copy of it.',
+      'a device with a current web browser',
+      'If I give an email address, Ridgeline Moto will email my signed copy to it as a PDF file',
+      'I can also download it when I finish signing',
+      'I can ask Ridgeline Moto to let me sign on paper instead',
+      'a paper copy at no charge',
+      'change the email address for my copy',
+      'withdraw this agreement for anything not yet sent to me',
+      'by contacting Ridgeline Moto at hello@example.com or (555) 010-0100.',
+      'Withdrawing doesn’t undo a signature I have already given.',
+    ]) {
+      expect([part, text.includes(part)]).toEqual([part, true])
+    }
+    expect(text).not.toContain('{')
+  })
+
+  it('reads plainly without a contact or a name', () => {
+    expect(waiverEsignConsentText({ business: 'Ridgeline Moto', contact: null })).toContain('by contacting Ridgeline Moto.')
+    expect(waiverEsignConsentText({ business: '', contact: '' })).toContain('I can ask the business to let me sign on paper instead')
+  })
+
+  it('takes the site’s contact from its listing, else its support email', () => {
+    expect(waiverBusinessContact({ seo: { entity: { email: 'hi@example.com', telephone: '+1-555-010-0100' } } })).toBe(
+      'hi@example.com or +1-555-010-0100',
+    )
+    expect(waiverBusinessContact({ business: { supportEmail: 'help@example.com' } })).toBe('help@example.com')
+    expect(waiverBusinessContact({})).toBeNull()
   })
 })
 

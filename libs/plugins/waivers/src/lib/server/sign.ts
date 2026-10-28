@@ -26,6 +26,8 @@ import {
 import { dayKeyIn, isDayKey, validThroughDayKey, waiverAdultAge, type WaiverTemplate } from '../model/waiver'
 import {
   WAIVER_ESIGN_CONSENT,
+  waiverBusinessContact,
+  waiverEsignConsentText,
   nameSearchTokens,
   normalizeSignInput,
   waiverSignedText,
@@ -178,7 +180,12 @@ async function afterSigning(
   }
   // A paper signer agreed to nothing electronic, so they get no email copy.
   const email = options.sendCopy
-    ? signedCopyEmail({ signature: stored, org: context.org, businessName: siteBusinessName(context.host) })
+    ? signedCopyEmail({
+        signature: stored,
+        org: context.org,
+        businessName: siteBusinessName(context.host),
+        contact: waiverBusinessContact(context.host as never),
+      })
     : null
   if (email) await sendWaiverEmail(email).catch(() => false)
   return stored
@@ -219,7 +226,13 @@ export async function recordSignature(
       }
     }
   }
-  const signedText = waiverSignedText(waiver, { consent: true })
+  // The consent exactly as this site's signing page shows it (v2, AGL-4042):
+  // its business name and contact, worked out here again, never sent in.
+  const consentText = waiverEsignConsentText({
+    business: siteBusinessName(context.host),
+    contact: waiverBusinessContact(context.host as never),
+  })
+  const signedText = waiverSignedText(waiver, { consent: true, consentText })
   const signature: StoredWaiverSignature = await withRetention(context, {
     id,
     orgId: context.orgId,
@@ -238,7 +251,7 @@ export async function recordSignature(
       input.signature.kind === 'drawn'
         ? { kind: 'drawn', strokes: input.signature.strokes, imagePath }
         : { kind: 'typed', text: input.signature.text },
-    consent: { agreed: true, text: WAIVER_ESIGN_CONSENT.text, version: WAIVER_ESIGN_CONSENT.version },
+    consent: { agreed: true, text: consentText, version: WAIVER_ESIGN_CONSENT.version },
     method: options.method,
     signedAtMs,
     dayKey,

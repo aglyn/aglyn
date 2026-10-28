@@ -18,12 +18,18 @@
 import { NO_CLIENT_ADDRESS_BUCKET, readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { consumeRateLimit } from '@aglyn/tenant-data-admin'
 import { validityLabel, waiverAdultAge, type WaiverTemplate } from '../model/waiver'
-import { WAIVER_ESIGN_CONSENT, signatureWindowLabel } from '../model/waiver-signature'
+import {
+  WAIVER_ESIGN_CONSENT,
+  signatureWindowLabel,
+  waiverBusinessContact,
+  waiverEsignConsentText,
+} from '../model/waiver-signature'
 import { waiverSiteOrigin, waiverSiteSignUrl } from '../model/waiver-share'
 import { isDocumentId, waiversRefs } from './db'
 import { json, publicSite, readJsonBody, refuse } from './gate'
 import { requestAudit } from './signature-routes'
 import { readSignableWaiver, recordSignature, siteBusinessName } from './sign'
+import { signedCopyPath } from './signed-copy'
 
 /*==========================================
  * THE SIGNER'S DOORS (AGL-4042), with no account: the store's own signing
@@ -53,9 +59,11 @@ export interface PublicWaiver {
 }
 
 export interface PublicWaiverAnswer {
-  site: { name: string }
+  /** The business, and how a signer reaches it (null when the site lists no contact). */
+  site: { name: string; contact: string | null }
   waiver: PublicWaiver
-  consent: { text: string; version: number }
+  /** The e-sign consent as this site's signers read it (v2, AGL-4042), under its heading. */
+  consent: { heading: string; text: string; version: number }
   adultAge: number
   /** The store's own signing page for this waiver, or `null` for a site with no public address. */
   signUrl: string | null
@@ -106,9 +114,14 @@ export async function publicWaiverRoute(request: Request): Promise<Response> {
   const found = await readSignableWaiver(site.orgId, hostId, waiverId)
   if (found.ok === false) return refuse(found.status, found.error)
   const answer: PublicWaiverAnswer = {
-    site: { name: siteBusinessName(site.host) },
+    // How a signer reaches the business, shown on the signing page (AGL-4042).
+    site: { name: siteBusinessName(site.host), contact: waiverBusinessContact(site.host as never) },
     waiver: publicWaiver(found.waiver),
-    consent: { text: WAIVER_ESIGN_CONSENT.text, version: WAIVER_ESIGN_CONSENT.version },
+    consent: {
+      heading: WAIVER_ESIGN_CONSENT.heading,
+      text: waiverEsignConsentText({ business: siteBusinessName(site.host), contact: waiverBusinessContact(site.host as never) }),
+      version: WAIVER_ESIGN_CONSENT.version,
+    },
     adultAge: waiverAdultAge(found.waiver),
     signUrl: siteSignUrl(site.host, found.waiver.id),
   }
@@ -147,6 +160,8 @@ export async function publicSignRoute(request: Request): Promise<Response> {
       people: [signature.signer.name, ...signature.minors.map((minor) => minor.name)],
       window: signatureWindowLabel(signature),
       emailed: Boolean(signature.signer.email),
+      // The signer's own copy to download (AGL-4042), for the next hour.
+      copyUrl: await signedCopyPath({ orgId: site.orgId, hostId, signature }).catch(() => null),
     },
     outcome.replayed ? 200 : 201,
   )

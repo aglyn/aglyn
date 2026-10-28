@@ -62,7 +62,9 @@ describe('the waiver at check-in', () => {
     request.mockResolvedValue({ signed: true, coveredNames: ['Jordan Lee'], label: 'Waiver signed' })
     await settled({ ...PROPS, unitsDue: 1 })
     expect(request).toHaveBeenCalledWith('waivers/status', {
-      query: { hostId: 'host-1', dayKey: '2026-10-24', email: 'jordan@example.com', name: 'Jordan Lee' },
+      // The contact rides along (AGL-4042): with no email match, the route
+      // matches by the birth date the site keeps on it.
+      query: { hostId: 'host-1', dayKey: '2026-10-24', email: 'jordan@example.com', contactId: 'contact-1', name: 'Jordan Lee' },
     })
     expect(screen.getByText('Waiver signed')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sign waiver' })).toBeNull()
