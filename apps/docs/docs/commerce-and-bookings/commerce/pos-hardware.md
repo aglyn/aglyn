@@ -258,6 +258,12 @@ refunded. The workspace deletion or the account closing goes ahead right away;
 it never waits for an order. Orders that have already shipped are not
 affected.
 
+You are told before you confirm. The **Delete organization** card, and the
+**Close your account?** dialog, list every order that will be canceled and
+refunded — its order number, what is in it and the amount — above the confirm.
+They don't stop you: keep the workspace or the account if you still want the
+order.
+
 ### Records of your purchases {#hardware-purchase-records}
 
 Aglyn is the seller of these readers, so it keeps a record of each sale for tax

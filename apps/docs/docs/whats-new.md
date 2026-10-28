@@ -630,6 +630,10 @@ for the how-to.
   tracking, and you're emailed as it ships and arrives, with the steps to add the
   reader to a register. If the workspace is deleted, or the account that placed
   an order is closed, before the order ships, it is canceled and refunded in full.
+- **[Told before you close](commerce-and-bookings/commerce/pos-hardware.md#hardware-orders-at-closure)** —
+  the **Delete organization** card and the **Close your account?** dialog list
+  every order that would be canceled and refunded, with its number, items and
+  amount, before you confirm.
 -->
 
 ## October 2026 — send a DoorDash courier for your local deliveries

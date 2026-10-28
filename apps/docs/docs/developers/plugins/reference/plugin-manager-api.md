@@ -1563,6 +1563,42 @@ missing registration a refusal: a registry alone cannot tell "nothing
 registered" from "nothing sold". `sales-sources-are-registered.spec.ts`
 runs the real registrars through the console's manifest.
 
+## Before a closure — `plugin-closure-notices`
+
+When a workspace is deleted or an account is closed, a plugin finishes its share
+through `plugin-org-erasure` and `plugin-user-erasure`. If that share changes
+something the person paid for or relies on — an order canceled and refunded, a
+booking released — say so BEFORE they confirm: register a notice source, and the
+console's **Delete organization** card and **Close your account?** dialog print
+your notices above the confirm.
+
+```ts
+import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
+
+// from your consoleServerDeclarations, the import lazy
+registerClosureNoticeSource({
+  notices: async (subject) => {
+    // subject: { kind: 'workspace', orgId } | { kind: 'account', uid }
+    const held = await readWhatTheClosureWillCancel(subject)
+    if (!held.length) return []
+    return [{
+      id: 'tickets-refunded', severity: 'warning',
+      title: `${held.length} tickets will be refunded`,
+      body: 'When the workspace is deleted, each is refunded in full.',
+      items: held.map((ticket) => ({ id: ticket.id, primary: ticket.event, amount: ticket.price })),
+    }]
+  },
+}, { pluginId: 'tickets' })
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerClosureNoticeSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readClosureNotices(subject)` | Every source's notices, warnings first, each with its `pluginId`. **Never throws**: a source that threw, or answered a notice with no words, no severity or no items, is listed in `unavailable`, and the screens say some details could not be checked. With nothing registered, it runs the app's boot step once and asks again. |
+| `GET /api/closure-notices?subject=workspace&orgId=…` or `?subject=account` | The console's route the screens call: the workspace's owner (or staff), or the signed-in person for their own account. |
+
+A notice is information, never a gate: nothing it answers holds a closure back.
+
 ## Earnings on the operator's revenue report — `plugin-revenue-sources`
 
 The staff revenue report states what the deployment actually kept. If your

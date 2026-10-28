@@ -46,6 +46,7 @@ import {
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { createAuthProvider } from '../utils/oauth-providers'
+import ClosureNotices from './closure-notices.component'
 
 /**
  * Close your own account (AGL-1140).
@@ -223,6 +224,13 @@ export function CloseAccountCard({ user, hasPassword }: CloseAccountCardProps) {
               {'This permanently deletes your account and everything on it. ' +
                 'It cannot be undone.'}
             </DialogContentText>
+
+            {/*
+              WHAT CLOSING IT WILL CHANGE, before the confirm (AGL-4038): each
+              plugin says what it will cancel or refund, in its own words. It
+              never holds the closure back.
+            */}
+            {open ? <ClosureNotices user={user} subject="account" /> : null}
 
             {blockers !== null && (
               <Alert severity="warning">
