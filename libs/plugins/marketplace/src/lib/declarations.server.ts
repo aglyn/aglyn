@@ -23,6 +23,7 @@ import {
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { registerPluginRevocationReader } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
+import { registerPluginSiteStarterSource } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
 
@@ -31,7 +32,8 @@ import { RATING_FIELD } from './model/rating-field'
  * reads at boot, before any surface loads.
  *
  * The `rating` field type's validator (AGL-434), the marketplace's share of
- * a workspace erasure, and its kill switch as another plugin reads it.
+ * a workspace erasure, its kill switch as another plugin reads it, and the
+ * site starters "Create site" offers (AGL-4049).
  *
  * The validator: A dataset field of this type
  * can be written by a path that never loads the marketplace — a visitor's
@@ -69,6 +71,23 @@ export function registerMarketplaceServerDeclarations(): void {
         const { marketplaceRevocationReader } = await import('./server/revocation-reader')
         return marketplaceRevocationReader.revocation(listingId)
       },
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  /*
+   * Site starters (AGL-4049): "Create site" searches the marketplace's
+   * `siteStarter` listings and creates a site from the one picked, through
+   * core's `core.site-starters` seam. Registering reads nothing; the Admin SDK
+   * arrives with the first search, not with the boot. The same plugin
+   * registering again replaces itself, so a re-run of these declarations is
+   * safe.
+   */
+  const starters = () => import('./server/site-starter-source').then((m) => m.marketplaceSiteStarterSource)
+  registerPluginSiteStarterSource(
+    {
+      search: async (input, viewer) => (await starters()).search(input, viewer),
+      resolve: async (choice, viewer) => (await starters()).resolve(choice, viewer),
+      installed: async (choice, viewer, site) => (await starters()).installed(choice, viewer, site),
     },
     { pluginId: BUNDLE_ID },
   )
