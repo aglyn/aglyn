@@ -32,6 +32,12 @@
  * (`canWriteHost`), through the resolver, through the site's projected stamp
  * and through the stamp's fallback; and every other key resolves the same
  * before and after the new keys were declared.
+ *
+ * A third key, shaped like a refund, replaces a gate that asked for an admin
+ * of the WHOLE workspace who is also the site's admin
+ * (`workspaceMembersOnly`): for the same members it answers exactly that
+ * gate, and someone added to one site as its admin holds it only when the
+ * site grants it.
  */
 
 import type { AglynOrgMember, HostAccessRole } from '../foundation'
@@ -43,7 +49,9 @@ import {
 import { registerPluginPermissions } from '../plugin-manager/plugin-permissions'
 import {
   applySiteRolePresets,
+  hostRolePermissionDefaults,
   hostStampedSitePermission,
+  hostStampedWorkspaceSitePermission,
   isSiteRolePresetPermission,
   narrowPermissionsToSite,
   projectHostMemberPermissions,
@@ -56,7 +64,7 @@ import {
 } from './host-permissions'
 import { ORG_PERMISSION_KEYS, ORG_PERMISSIONS, resolveOrgPermissions, type AglynOrgCustomRole } from './org-permissions'
 import { CORE_SITE_ROLE_PRESETS } from './org-role-grants'
-import { canPublishHost, canWriteHost, hostRoleFor, projectHostMemberRoles } from './organizations'
+import { canPublishHost, canWriteHost, hostRoleFor, isOrgWideMember, projectHostMemberRoles } from './organizations'
 
 const A = 'host-a'
 const B = 'host-b'
@@ -64,6 +72,8 @@ const SITES: Array<string | undefined> = [A, B, undefined]
 const TIER = { admin: true, editor: true, viewer: false } as const
 const CONTENT_WRITE: Record<HostAccessRole, boolean> = { admin: true, editor: true, author: true, viewer: false }
 const ORG_CONTENT_WRITE = { owner: true, admin: true, editor: true, viewer: false } as const
+const SITE_ADMIN: Record<HostAccessRole, boolean> = { admin: true, editor: false, author: false, viewer: false }
+const ORG_ADMIN = { owner: true, admin: true, editor: false, viewer: false } as const
 
 /** The keys under test: today's content-write gate, as two keys. */
 const STAYS: PluginOrgPermissionDeclaration[] = [
@@ -85,6 +95,15 @@ const STAYS: PluginOrgPermissionDeclaration[] = [
     hostRoleDefaults: { ...CONTENT_WRITE },
     presetFromSiteRole: true,
     follows: 'stays.manage',
+  },
+  {
+    key: 'stays.refund',
+    label: 'Refund stays',
+    description: 'Refund a stay.',
+    roleDefaults: { ...ORG_ADMIN },
+    hostRoleDefaults: { ...SITE_ADMIN },
+    presetFromSiteRole: true,
+    workspaceMembersOnly: true,
   },
 ]
 
@@ -207,7 +226,13 @@ const GATES: Record<string, (member: Partial<AglynOrgMember>, site: string) => b
   'site.manage': (member, site) => hostRoleFor(member, site) === 'admin',
   'stays.manage': (member, site) => canWriteHost(member, site),
   'stays.walkIn': (member, site) => canWriteHost(member, site),
+  // An admin of the whole workspace who is also this site's admin: the
+  // refund gate (AGL-2372), `orgWide && hostRole === admin`.
+  'stays.refund': (member, site) => isOrgWideMember(member) && hostRoleFor(member, site) === 'admin',
 }
+/** The preset table each key's stamp falls back to. */
+const presetOf = (key: string) =>
+  key.startsWith('site.') ? CORE_SITE_ROLE_PRESETS[key] : key === 'stays.refund' ? SITE_ADMIN : CONTENT_WRITE
 const GATE_KEYS = Object.keys(GATES)
 const gateAnswers = (member: Partial<AglynOrgMember>, site: string | undefined) =>
   Object.fromEntries(GATE_KEYS.map((key) => [key, site ? GATES[key](member, site) : false]))
@@ -215,8 +240,17 @@ const pick = (map: Record<string, boolean>) => Object.fromEntries(GATE_KEYS.map(
 
 describe('the catalog', () => {
   it('lists the new keys as site-role presets, after the older keys, beside the core’s site keys', () => {
-    expect(siteRolePresetPermissionKeys()).toEqual([...Object.keys(CORE_SITE_ROLE_PRESETS), 'stays.manage', 'stays.walkIn'])
-    expect([...ORG_PERMISSION_KEYS].filter((key) => !CATALOG_BEFORE.includes(key))).toEqual(['stays.manage', 'stays.walkIn'])
+    expect(siteRolePresetPermissionKeys()).toEqual([
+      ...Object.keys(CORE_SITE_ROLE_PRESETS),
+      'stays.manage',
+      'stays.walkIn',
+      'stays.refund',
+    ])
+    expect([...ORG_PERMISSION_KEYS].filter((key) => !CATALOG_BEFORE.includes(key))).toEqual([
+      'stays.manage',
+      'stays.walkIn',
+      'stays.refund',
+    ])
     expect(isSiteRolePresetPermission('stays.manage')).toBe(true)
     expect(isSiteRolePresetPermission('assist.use')).toBe(false)
     expect(isSiteRolePresetPermission('till.open')).toBe(false)
@@ -249,11 +283,18 @@ describe.each(FIXTURES)('%s', (_name, member) => {
       memberPermissions: projectHostMemberPermissions(members, site, customRoles),
     }
     const unstamped = { memberRoles: host.memberRoles }
+    // What the doors of a workspace-members-only key resolve fresh beside the stamp.
+    const membership = { orgWide: isOrgWideMember(member), hostRole: hostRoleFor(member, site) }
     for (const key of GATE_KEYS) {
-      const preset = key.startsWith('site.') ? CORE_SITE_ROLE_PRESETS[key] : CONTENT_WRITE
+      const preset = presetOf(key)
       const expected = GATES[key](member, site)
-      expect(hostStampedSitePermission(host, member.$id, key, preset)).toBe(expected)
-      expect(hostStampedSitePermission(unstamped, member.$id, key, preset)).toBe(expected)
+      if (key === 'stays.refund') {
+        expect(hostStampedWorkspaceSitePermission(host, member.$id, key, preset, membership)).toBe(expected)
+        expect(hostStampedWorkspaceSitePermission(unstamped, member.$id, key, preset, membership)).toBe(expected)
+      } else {
+        expect(hostStampedSitePermission(host, member.$id, key, preset)).toBe(expected)
+        expect(hostStampedSitePermission(unstamped, member.$id, key, preset)).toBe(expected)
+      }
       expect(resolveMemberHostPermissions({ member, customRole, hostId: site })[key]).toBe(expected)
     }
     // The stamp carries the keys for everyone who reaches the site, and for no one else.
@@ -267,7 +308,7 @@ describe.each(FIXTURES)('%s', (_name, member) => {
     const role = member.role as string
     const siteRole = role === 'owner' || role === 'admin' ? 'admin' : role === 'editor' || role === 'viewer' ? role : null
     for (const key of GATE_KEYS) {
-      const preset = key.startsWith('site.') ? CORE_SITE_ROLE_PRESETS[key] : CONTENT_WRITE
+      const preset = presetOf(key)
       // A custom role or an override that names the key decides; these fixtures name only older keys.
       expect(org[key]).toBe(siteRole ? preset[siteRole] === true : false)
     }
@@ -330,12 +371,47 @@ describe('the new keys can be granted and refused like any other (AGL-4047)', ()
     expect(resolveSiteRolePresetPermissions(member, B)).toMatchObject({ 'stays.manage': false, 'stays.walkIn': false })
   })
 
+  it('a key for members of the whole workspace only: a site’s admin collaborator holds it only when the site grants it', () => {
+    const contractor = { $id: 'u-c', role: 'viewer' as const, allHosts: false, hostAccess: { [A]: 'admin' as const } }
+    expect(resolveSiteRolePresetPermissions(contractor, A)['stays.refund']).toBe(false)
+    expect(resolveCollaboratorHostPermissions(contractor, A)?.['stays.refund']).toBe(false)
+    expect(hostRolePermissionDefaults('admin')['stays.refund']).toBe(false)
+    // `memberRoles` alone says Admin, as for an owner; the fresh resolution says collaborator.
+    expect(
+      hostStampedWorkspaceSitePermission({ memberRoles: { 'u-c': 'admin' } }, 'u-c', 'stays.refund', SITE_ADMIN, {
+        orgWide: false,
+        hostRole: 'admin',
+      }),
+    ).toBe(false)
+    const granted = { ...contractor, hostPermissions: { [A]: { 'stays.refund': true } } }
+    expect(resolveSiteRolePresetPermissions(granted, A)['stays.refund']).toBe(true)
+    expect(resolveMemberHostPermissions({ member: granted, hostId: A })['stays.refund']).toBe(true)
+    // A workspace admin keeps it everywhere, and a custom role or the site's toggle takes it.
+    const admin = { $id: 'u-a', role: 'admin' as const, allHosts: true }
+    expect(resolveSiteRolePresetPermissions(admin, A)['stays.refund']).toBe(true)
+    const role: AglynOrgCustomRole = { name: 'No refunds', permissions: { 'stays.refund': false } }
+    expect(resolveSiteRolePresetPermissions({ ...admin, roleId: 'no-refunds' }, A, role)['stays.refund']).toBe(false)
+    expect(
+      resolveSiteRolePresetPermissions({ ...admin, hostPermissions: { [B]: { 'stays.refund': false } } }, B)['stays.refund'],
+    ).toBe(false)
+    // The fallback asks the projection and the fresh role both, as the gate did.
+    const admins = { memberRoles: { 'u-a': 'admin' } }
+    expect(hostStampedWorkspaceSitePermission(admins, 'u-a', 'stays.refund', SITE_ADMIN, { orgWide: true, hostRole: 'editor' })).toBe(false)
+    expect(hostStampedWorkspaceSitePermission({ memberRoles: { 'u-a': 'editor' } }, 'u-a', 'stays.refund', SITE_ADMIN, { orgWide: true, hostRole: 'admin' })).toBe(false)
+    expect(hostStampedWorkspaceSitePermission(admins, 'u-a', 'stays.refund', SITE_ADMIN, { orgWide: true, hostRole: 'admin' })).toBe(true)
+    // The stamp decides either way.
+    const stamped = { memberRoles: { 'u-c': 'admin', 'u-a': 'admin' }, memberPermissions: { 'u-c': { 'stays.refund': true }, 'u-a': { 'stays.refund': false } } }
+    expect(hostStampedWorkspaceSitePermission(stamped, 'u-c', 'stays.refund', SITE_ADMIN, { orgWide: false, hostRole: 'admin' })).toBe(true)
+    expect(hostStampedWorkspaceSitePermission(stamped, 'u-a', 'stays.refund', SITE_ADMIN, { orgWide: true, hostRole: 'admin' })).toBe(false)
+  })
+
   it('applySiteRolePresets leaves a map alone with no site named', () => {
     const granted = { 'stays.manage': true, 'till.open': true }
     expect(applySiteRolePresets(granted, { role: 'viewer', allHosts: true }, undefined)).toBe(granted)
     expect(applySiteRolePresets(granted, { role: 'viewer', allHosts: true }, A)).toMatchObject({
       'stays.manage': false,
       'stays.walkIn': false,
+      'stays.refund': false,
       'site.edit': false,
       'till.open': true,
     })

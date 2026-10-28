@@ -35,6 +35,14 @@ export const OUTREACH_PLUGIN_ID = 'outreach'
 export const OUTREACH_USE_PERMISSION = 'outreach.use'
 
 /**
+ * "Manage everyone's Sequences" (AGL-4047): change, send from and pause a
+ * mailbox or sequence someone else connected, and set up link domains. It
+ * asked whether the member was the workspace's owner or an admin; its default
+ * is exactly those roles (owner on the admin tier).
+ */
+export const OUTREACH_MANAGE_ALL_PERMISSION = 'outreach.manageAll'
+
+/**
  * This plugin's declared permissions (AGL-435 registry). Registered by both
  * halves, so the console gate and a route's resolution agree.
  *
@@ -54,6 +62,15 @@ export const OUTREACH_PERMISSIONS: readonly PluginPermission[] = [
     label: 'Use Sequences',
     description:
       'Open Sequences, and work its email sequences and connected mailboxes.',
+    defaults: { admin: true, editor: false, viewer: false },
+    groupLabel: 'Sequences',
+  },
+  {
+    key: OUTREACH_MANAGE_ALL_PERMISSION,
+    pluginId: OUTREACH_PLUGIN_ID,
+    label: 'Manage everyone’s Sequences',
+    description:
+      'Change, send from and pause a mailbox or sequence someone else connected, and set up link domains.',
     defaults: { admin: true, editor: false, viewer: false },
     groupLabel: 'Sequences',
   },

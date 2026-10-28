@@ -24,6 +24,7 @@ import {
   getOrgDoc,
   isImpersonationSession,
   lockdownRefusal,
+  memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -98,9 +99,10 @@ async function handler(request: Request): Promise<Response> {
     // would hand somebody their own data while looking like it honoured the
     // request for another one.
     const membership = await resolveOrgMembership(decoded.uid, orgId)
-    const role = String((membership?.member as any)?.role ?? '')
     const staff = decoded['staff'] === true
-    if (!staff && (!membership || (role !== 'owner' && role !== 'admin'))) {
+    // "Export workspace data" (`org.export`, AGL-4047), whose default is the
+    // owner and admin this asked for.
+    if (!staff && (!membership || !(await memberHasOrgPermission(orgId, membership.member, 'org.export')))) {
       // 404, not 403: an org id a caller has no standing in should not be
       // confirmed to exist, which is the same posture the staff console takes.
       return Response.json({ error: 'Not found' }, { status: 404 })

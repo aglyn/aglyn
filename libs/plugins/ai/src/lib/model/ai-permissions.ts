@@ -92,6 +92,23 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
   },
 ]
 
+/**
+ * The AI plugin's workspace keys (AGL-4047), decided by the workspace role,
+ * the custom role and the member's own permissions, never per site.
+ * "Bring a site in" asked whether the member was the workspace's owner or an
+ * admin; its default is exactly those roles.
+ */
+export const AI_WORKSPACE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
+  {
+    key: 'ai.import',
+    label: 'Bring a site in',
+    description: 'Import an existing website into the workspace with Bring my site.',
+    roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
+    group: 'ai',
+    groupLabel: 'AI',
+  },
+]
+
 const HOST_ROLES: readonly HostAccessRole[] = ['admin', 'editor', 'author', 'viewer']
 
 /** What each host role grants of the AI keys, before any per-site toggle. */

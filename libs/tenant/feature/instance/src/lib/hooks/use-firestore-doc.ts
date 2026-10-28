@@ -70,6 +70,24 @@ export interface UseFirestoreDocResult<T> {
   serverDenied: boolean
 }
 
+/** Where a document read stands: still loading, failed, answered with nothing, or answered. */
+export type FirestoreDocPhase = 'loading' | 'error' | 'missing' | 'ready'
+
+/**
+ * Where a {@link useFirestoreDoc} read stands (AGL-4089), for a page that
+ * must not state a document's empty values as facts while it loads. A
+ * document is only `missing` once the SERVER says so: the cache answers
+ * "missing" first for a document it has never held, and while another tab
+ * holds the shared cache that answer can stand for half a minute.
+ */
+export function firestoreDocPhase(
+  read: Pick<UseFirestoreDocResult<unknown>, 'data' | 'status' | 'fromCache'>,
+): FirestoreDocPhase {
+  if (read.data) return 'ready'
+  if (read.status === 'error') return 'error'
+  return read.status === 'loading' || read.fromCache ? 'loading' : 'missing'
+}
+
 /**
  * Single-document counterpart to `useFirestoreCollection` — see that hook's
  * doc comment for why this exists instead of reactfire's

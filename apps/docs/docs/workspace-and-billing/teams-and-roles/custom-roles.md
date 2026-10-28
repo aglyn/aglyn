@@ -95,6 +95,21 @@ opens the register to sell and nothing else; allowing **Use the point of sale** 
 back the whole register, as far as their workspace role and custom role allow it.
 Everything else about them is still set on their Team page.
 
+### Workspace permissions {#workspace-permissions}
+
+Five more workspace actions have a permission each, so a custom role or a per-member
+override can hand one to someone outside the roles that held it, or take it away:
+
+| Permission | What it opens | Owner / Admin | Editor | Viewer |
+|---|---|---|---|---|
+| **Export workspace data** (`org.export`) | Download a copy of everything the workspace holds | Yes | No | No |
+| **Sending domains** (`org.sendingDomains`) | Add, verify and remove the domains the workspace's mail is sent from | Yes | No | No |
+| **Business profile** (`org.businessProfile`) | Change the services, audience and tone every site starts from | Yes | No | No |
+| **Edit the workspace media library** (`org.media`) | Upload, change, move and remove the files every site shares | Yes | Yes | No |
+| **Delete workspace records** (`org.eraseRecords`) | Delete records the whole workspace shares | Yes | Yes | No |
+
+Each starts with exactly the roles that could do it before, so nobody's access changed.
+
 ### Site permissions {#site-permissions}
 
 Four permissions decide what someone may do on a site:
@@ -102,9 +117,9 @@ Four permissions decide what someone may do on a site:
 | Permission | What it opens | Admin | Editor | Author | Viewer |
 |---|---|---|---|---|---|
 | **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live; edit alongside others in the Besigner, and open the edit bar on the live site | Yes | Yes | Yes | No |
-| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
+| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, change the site's fonts, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
 | **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns, and set up its webhooks | Yes | Yes | No | No |
-| **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings and security allow-lists, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
+| **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings (such as live chat) and security allow-lists, disconnect a Zap, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
 
 Each starts from the member's role on the site, the columns above, so nobody's access
 changed when they became permissions. Owners and admins are admins of every site, and
@@ -121,10 +136,19 @@ only, set them for that site in its **Users** card: choose **Permissions** besid
 |---|---|---|---|---|---|
 | **Manage orders** (`commerce.orders`) | Fulfill, cancel and print orders, resend receipts, build draft orders, take returns, and record shipments from a file | Yes | Yes | No | No |
 | **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
+| **Manage payment methods** (`commerce.paymentMethods`) | Turn the store's payment methods on and off (anyone with **Manage orders** sees them) | Yes | No | No | No |
+| **Connect shipping apps** (`commerce.shippingConnections`) | Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials (anyone with **Manage orders** sees whether they're connected) | Yes | No | No | No |
+| **Refund orders** (`commerce.refunds`) | Refund any order, online or at the register, with no register limit | Yes* | No | No | No |
+| **Approve refunds over the register's limit** (`commerce.posApprovals`) | Refund at the register above its limit, approve a cashier's refund over it with a PIN, and set or clear other staff members' PINs | Yes* | No | No | No |
+| **Manage order webhooks** (`commerce.webhooks`) | Add, change, test and remove order webhooks, roll their secrets and resend deliveries | Yes* | No | No | No |
 
-Like the site permissions, both start from the member's role on the site, so nobody's
+Like the site permissions, each starts from the member's role on the site, so nobody's
 access changed when they became permissions, and a custom role, a per-member override
-or the site's **Permissions** dialog can grant or deny either one.
+or the site's **Permissions** dialog can grant or deny any of them.
+
+\* Only for a member of the whole workspace. These three move money or the store's
+order data out of the business, so someone added to just one site as its admin doesn't
+hold them unless that site grants them in its **Permissions** dialog.
 
 ### Reservation permissions {#reservation-permissions}
 
@@ -145,6 +169,42 @@ and change guests** follows **Manage reservations** until a role or a member set
 and it can be allowed on its own: the staff at your check-in window can book walk-ins
 without changing anyone's booking. For someone added to one site only, set either one
 for that site in its **Users** card: choose **Permissions** beside them.
+
+### Booking permissions {#booking-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Take booking payments in person** (`bookings.payments`) | Take a booking's payment at the desk on a card reader | Yes | Yes | No | No |
+| **Refund bookings** (`bookings.refunds`) | Refund a paid booking, including **Cancel and refund** | Yes | No | No | No |
+
+Checking guests in and moving bookings follow **Edit site content**, as editing a
+booking always has. Like the site permissions, both start from the member's role on
+the site, so nobody's access changed when they became permissions, and a custom role,
+a per-member override or the site's **Permissions** dialog can grant or deny either one.
+
+### Funnel and campaign permissions {#funnel-and-campaign-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Manage funnels** (`funnels.manage`) | Create, change, activate and remove a site's funnels, and draft them with AI | Yes | Yes | No | No |
+| **Run email campaigns** (`marketing.campaigns`) | Draft, send, duplicate and manage email campaigns, and see who a send reached | Yes | Yes | No | No |
+
+Both start from the member's role on the site, so nobody's access changed when they became
+permissions. In the organization hub, with no site picked, **Run email campaigns** starts from
+the workspace role instead: owners, admins and editors of the whole workspace hold it. A custom
+role, a per-member override or the site's **Permissions** dialog can grant or deny either one.
+
+### Marketplace permissions on a site {#marketplace-site-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Install marketplace items into a site** (`marketplace.siteInstall`) | Install templates, themes, layouts, components, email designs and plugins from the marketplace into the site | Yes | Yes | No | No |
+| **Publish a site's items to the marketplace** (`marketplace.sitePublish`) | Publish the site's templates, themes, layouts, components and email designs to the marketplace | Yes | Yes | No | No |
+
+Each works beside the workspace's own marketplace permission (installing from the
+marketplace, publishing to it), which is still asked too. Both start from the member's role
+on the site, so nobody's access changed when they became permissions, and a custom role, a
+per-member override or the site's **Permissions** dialog can grant or deny either one.
 
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
@@ -169,6 +229,7 @@ Two keys decide who may spend the workspace's AI credits:
 |---|---|---|---|---|
 | **Use AI assistance** (`ai.use`) | The assistant, copy rewrites, and "generate a section" in the Besigner | Yes | Yes | No |
 | **Generate with AI** (`ai.generate`) | AI generation jobs and AI edits — pages, components, emails, campaigns, products, CRM, insights, workflows | Yes | Yes | No |
+| **Bring a site in** (`ai.import`) | Import an existing website into the workspace with Bring my site | Yes | No | No |
 
 Both are ordinary catalog keys: a custom role can grant or deny either, and a
 per-member override wins over the role. An editor given **Viewer** or **Author**

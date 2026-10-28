@@ -980,24 +980,12 @@ data class HostOrderCustomerRecord(
 data class HostOrderHardwareTermsAcceptance(
     val atMs: Double,
     val ip: String? = null,
-    val method: HostOrderHardwareTermsAcceptanceMethod,
+    val method: PosHardwareTermsMethod,
     val sections: String,
     val staffUid: String? = null,
     val userAgent: String? = null,
     val version: String,
 )
-
-/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
-@Serializable(with = HostOrderHardwareTermsAcceptanceMethodSerializer::class)
-enum class HostOrderHardwareTermsAcceptanceMethod(val raw: String) {
-    DISPLAY("display"),
-    NOTICE("notice"),
-    TABLET("tablet"),
-    UNKNOWN(""),
-}
-
-internal object HostOrderHardwareTermsAcceptanceMethodSerializer :
-    RawEnumSerializer<HostOrderHardwareTermsAcceptanceMethod>("com.aglyn.contracts.HostOrderHardwareTermsAcceptanceMethod", HostOrderHardwareTermsAcceptanceMethod.entries, HostOrderHardwareTermsAcceptanceMethod.UNKNOWN, { it.raw })
 
 @Serializable
 data class HostOrderHardwareTermsRequest(
@@ -2595,6 +2583,18 @@ data class PosDisplayStateTip(
     val baseCents: Double,
     val percentages: List<Double>,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosHardwareTermsMethodSerializer::class)
+enum class PosHardwareTermsMethod(val raw: String) {
+    DISPLAY("display"),
+    NOTICE("notice"),
+    TABLET("tablet"),
+    UNKNOWN(""),
+}
+
+internal object PosHardwareTermsMethodSerializer :
+    RawEnumSerializer<PosHardwareTermsMethod>("com.aglyn.contracts.PosHardwareTermsMethod", PosHardwareTermsMethod.entries, PosHardwareTermsMethod.UNKNOWN, { it.raw })
 
 @Serializable
 data class PosKioskCatalog(

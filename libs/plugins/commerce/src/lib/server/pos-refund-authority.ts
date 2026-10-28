@@ -16,6 +16,7 @@
  */
 
 import { posMoney } from '../model/commerce-pos-ops'
+import { commerceWorkspacePermissionRefusal } from '../model/workspace-site-permissions'
 import { posOpsSettings } from '../pos-ops-config'
 import {
   defaultPosOpsDeps,
@@ -27,14 +28,18 @@ import {
 /*==========================================
  * HOW MUCH THE REGISTER MAY REFUND (AGL-3609).
  *
- * A workspace admin refunds anything, as before. A member who works the
- * register refunds a POS sale up to the site's cashier refund limit
- * (`posRefundLimit`, $0 by default, so out of the box every register refund
- * needs a manager), and above it only with a MANAGER ASSERTION: a workspace
- * admin's PIN, entered at that register for that refund, minted for two
- * minutes and re-checked against the manager's role when it is used.
+ * "Refund orders" (`commerce.refunds`, AGL-4047) refunds anything, as a
+ * workspace admin always could. A member who works the register refunds a
+ * POS sale up to the site's cashier refund limit (`posRefundLimit`, $0 by
+ * default, so out of the box every register refund needs a manager), and
+ * above it only with "Approve refunds over the register's limit"
+ * (`commerce.posApprovals`) or a MANAGER ASSERTION: the PIN of someone who
+ * holds it, entered at that register for that refund, minted for two
+ * minutes and re-checked against their permissions when it is used. Both
+ * keys' preset is the gate they replaced: an admin of the whole workspace
+ * who is also the site's admin.
  *
- * Only a POS sale. An online order's refund stays a workspace admin's, so the
+ * Only a POS sale. An online order's refund stays "Refund orders", so the
  * register's limit is not a way to refund the storefront.
  *=========================================*/
 
@@ -51,7 +56,7 @@ export async function decidePosRefundAuthority(
     registerId: string
     refundCents: number
     limitCents: number
-    /** The member asking is a workspace admin, or a manager's PIN stands behind them. */
+    /** The member asking holds "Approve refunds over the register's limit" (AGL-4047). */
     isManager: boolean
     managerAssertion: unknown
   },
@@ -99,13 +104,15 @@ export async function posRegisterRefundAuthority(
     lineCents: number | null
     registerId: string
     managerAssertion: unknown
+    /** The member asking holds "Approve refunds over the register's limit" themselves (AGL-4047). */
+    isManager?: boolean
   },
   deps: PosOpsDeps = defaultPosOpsDeps(),
 ): Promise<PosRefundAuthority> {
   if (input.order.channel !== 'pos') {
     return {
       ok: false,
-      body: { error: 'Refunds of online orders require an admin of the whole workspace' },
+      body: { error: commerceWorkspacePermissionRefusal('commerce.refunds') },
     }
   }
   const remaining = Math.max(
@@ -129,7 +136,7 @@ export async function posRegisterRefundAuthority(
     registerId: input.registerId,
     refundCents: Math.min(asked, remaining),
     limitCents: settings.refundLimitCents,
-    isManager: false,
+    isManager: input.isManager === true,
     managerAssertion: input.managerAssertion,
   })
 }

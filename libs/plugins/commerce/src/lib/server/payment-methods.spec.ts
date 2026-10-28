@@ -399,3 +399,44 @@ describe('helpers', () => {
     expect(capabilitiesToRequest({}, { affirm: null }, {})).toContain('affirm_payments')
   })
 })
+
+describe('who reads and changes the card (AGL-4047)', () => {
+  // "Manage payment methods" is the change; "Manage orders" or it is the read.
+  // With no stamp, each answers as the site role did: Admin and Editor read,
+  // Admin alone changes. The site's stamp decides either way.
+  const stamped = (memberPermissions: Record<string, Record<string, boolean>>) =>
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), memberPermissions })
+
+  it('keeps today’s roles where no stamp names the keys', async () => {
+    seed({ 'owner-1': 'admin', 'editor-3': 'editor', 'author-4': 'author', 'viewer-5': 'viewer' })
+    expect((await (await call('owner-1')).json()).canEdit).toBe(true)
+    expect((await (await call('editor-3')).json()).canEdit).toBe(false)
+    expect((await call('author-4')).status).toBe(404)
+    expect((await call('viewer-5')).status).toBe(404)
+  })
+
+  it('lets an editor the stamp grants "Manage payment methods" save', async () => {
+    stamped({ 'editor-3': { 'commerce.paymentMethods': true } })
+    expect((await (await call('editor-3')).json()).canEdit).toBe(true)
+    const response = await call('editor-3', { method: 'POST', body: { methods: { klarna: false } } })
+    expect(response.status).toBe(200)
+  })
+
+  it('refuses an admin the stamp refuses it, in the permission’s words, and still lets them read', async () => {
+    stamped({ 'admin-2': { 'commerce.paymentMethods': false } })
+    expect((await (await call('admin-2')).json()).canEdit).toBe(false)
+    const response = await call('admin-2', { method: 'POST', body: { methods: { klarna: false } } })
+    expect(response.status).toBe(403)
+    expect((await response.json()).error).toBe(
+      'Your role does not include "Manage payment methods" — ask an organization admin',
+    )
+    expect(docs.get('hosts/host-1/settings/store')).toBeUndefined()
+  })
+
+  it('reads for an author granted "Manage orders", and not for an editor refused both', async () => {
+    seed({ 'author-4': 'author', 'editor-3': 'editor' })
+    stamped({ 'author-4': { 'commerce.orders': true }, 'editor-3': { 'commerce.orders': false } })
+    expect((await call('author-4')).status).toBe(200)
+    expect((await call('editor-3')).status).toBe(404)
+  })
+})

@@ -21,6 +21,7 @@ import type {
   PluginApiResponse,
 } from '@aglyn/aglyn/app-utils/api-plugins'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { pluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
@@ -51,12 +52,12 @@ import {
 import {
   FUNNEL_FEATURE,
   FUNNEL_JOURNEYS_COLLECTION,
-  FUNNEL_MANAGING_ROLES,
   FUNNEL_MAX_RANGE_DAYS,
   FUNNELS_COLLECTION,
   FUNNELS_MAX_PER_SITE,
   isFunnelDraft,
 } from '../model/funnels.types'
+import { FUNNELS_MANAGE_SITE_ROLE_PRESET } from '../model/funnels-permissions'
 import { FUNNEL_PLAN_REFUSAL, FUNNEL_ROLE_REFUSAL, FUNNEL_ROOM_REFUSAL } from './funnel-drafts'
 import { forgetFunnelHostState } from './funnel-host-state'
 import { readFunnelInventory } from './funnel-inventory.server'
@@ -164,7 +165,9 @@ export async function resolveSiteCaller(
     res.status(403).json({ error: 'You are not a member of this site' })
     return null
   }
-  if (options.manage && !staff && !FUNNEL_MANAGING_ROLES.has(String(role))) {
+  // "Manage funnels" (AGL-4047): the site's stamp, else the preset of the
+  // member's site role, the Admin and Editor this asked for before.
+  if (options.manage && !staff && !holdsStampedSiteKey(hostData, decoded.uid, 'funnels.manage', FUNNELS_MANAGE_SITE_ROLE_PRESET)) {
     res.status(403).json({ error: FUNNEL_ROLE_REFUSAL })
     return null
   }

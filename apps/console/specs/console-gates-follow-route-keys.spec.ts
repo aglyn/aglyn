@@ -155,3 +155,23 @@ describe('the site’s publish and settings controls ask the keys the rules chec
   })
 })
 
+describe('the workspace keys’ controls ask the keys their routes and rules check (AGL-4047)', () => {
+  it('the Business profile card asks "Business profile", as the rules do', () => {
+    const page = read('app/(app)/[orgSlug]/settings/(sections)/profile/page.tsx')
+    expect(page).toContain("can('org.businessProfile')")
+    expect(page).not.toMatch(/role === 'owner'|role === 'admin'/)
+    expect(read('../../cloud/firebase-firestore.deploy.rules')).toContain(
+      "memberKeyOr('org.businessProfile', ['owner', 'admin'])",
+    )
+  })
+
+  it.each([
+    ['app/api/orgs/export-data/route.ts', 'org.export'],
+    ['app/api/email/sending-domains/route.ts', 'org.sendingDomains'],
+    ['app/api/resources/erase/route.ts', 'org.eraseRecords'],
+    ['utils/server/media-scope.ts', 'org.media'],
+  ])('%s asks "%s" through memberHasOrgPermission', (route, key) => {
+    expect(read(route)).toMatch(new RegExp(`memberHasOrgPermission\\([^)]*'${key.replace('.', '\\.')}'`))
+  })
+})
+

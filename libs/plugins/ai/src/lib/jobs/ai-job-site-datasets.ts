@@ -103,7 +103,11 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    the datasets collection — with every rule the console's datasets route
  *    has: the member's role and `data.manage`, `release_data_store`,
  *    `dataStore` (Starter and up), `datasetsPerOrg` counted inside the create,
- *    `recordsPerDataset` and the storage band.
+ *    `recordsPerDataset` and the storage band. Each seeded record's
+ *    reference and filter index is that writer's to stamp, with the data
+ *    plugin's `datasetIntegrityFields` (`server/dataset-drafts.ts`), so this
+ *    file writes no record of its own: its `'records'` is a listing's kind and
+ *    its `values` a section group's.
  *  - PICTURED where the plan lists it the way a gallery is listed (Zach,
  *    2026-10-10: a ceramic artist's "Selected work" came back as text-only
  *    cards, where it had been an image-led gallery): a portfolio's pieces, a

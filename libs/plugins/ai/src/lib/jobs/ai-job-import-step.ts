@@ -60,7 +60,7 @@ import {
   listDomainOwnershipClaims,
   normalizeOwnershipDomain,
 } from '@aglyn/tenant-data-admin/server/domain-ownership'
-import { getOrgForUser } from '@aglyn/tenant-data-admin/server/organizations'
+import { getOrgForUser, memberHasOrgPermission } from '@aglyn/tenant-data-admin/server/organizations'
 import { consumeRateLimit } from '@aglyn/tenant-data-admin/server/rate-limit-store'
 import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import type { AiBuildPlanCreate, AiBuildPlanScreen } from '../model/ai-build-plan'
@@ -189,7 +189,8 @@ export const AI_SITE_IMPORT_COPY = {
   pageUnavailable: 'Pages cannot be built here right now.',
   pageNotWritten: 'This page could not be written from its old page. Its spend is given back.',
   plan: 'Bringing an existing site in is included on every paid plan.',
-  role: 'Only the workspace owner or an admin can bring a site in.',
+  /** Names "Bring a site in" (`ai.import`, AGL-4047), never a role. */
+  role: 'Your role does not include "Bring a site in" — ask an organization admin',
 } as const
 
 /*------------------------------------------
@@ -1030,7 +1031,8 @@ export function aiSiteImportStartAllUpdate(
 export interface AiSiteImportAdmissionDeps {
   releaseFlagOn?: (orgId: string) => Promise<boolean>
   ownership?: (orgId: string, domain: string) => Promise<AiSiteImportOwnership | null>
-  memberRole?: (uid: string, orgId: string) => Promise<string | null>
+  /** "Bring a site in" (`ai.import`, AGL-4047) for this member; specs hand in a double. */
+  holdsSiteImport?: (uid: string, orgId: string) => Promise<boolean>
 }
 
 /**
@@ -1042,15 +1044,21 @@ export interface AiSiteImportAdmissionDeps {
 export function createAiSiteImportAdmission(deps: AiSiteImportAdmissionDeps = {}): AiJobAdmission {
   const flagOn = deps.releaseFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_RELEASE_FLAG, orgId))
   const ownershipOf = deps.ownership ?? readOwnership
-  const memberRole =
-    deps.memberRole ??
-    (async (uid: string, orgId: string) => (await getOrgForUser(uid, orgId))?.member?.role ?? null)
+  const holdsSiteImport =
+    deps.holdsSiteImport ??
+    (async (uid: string, orgId: string) => {
+      const member = (await getOrgForUser(uid, orgId))?.member ?? null
+      return Boolean(member) && (await memberHasOrgPermission(orgId, member, 'ai.import'))
+    })
   return async (context) => {
     if (!(await flagOn(context.orgId))) return { status: 404, error: 'Not found' }
     if (!context.hostId && !context.siteToCome) return { status: 400, error: AI_SITE_IMPORT_COPY.noSite }
     if (resolveEffectivePlan(context.org as never) === 'free') return { status: 403, error: AI_SITE_IMPORT_COPY.plan }
-    const role = context.uid ? await memberRole(context.uid, context.orgId) : null
-    if (role !== 'owner' && role !== 'admin') return { status: 403, error: AI_SITE_IMPORT_COPY.role }
+    // "Bring a site in" (`ai.import`, AGL-4047), whose default is the owner
+    // and admin this asked for.
+    if (!context.uid || !(await holdsSiteImport(context.uid, context.orgId))) {
+      return { status: 403, error: AI_SITE_IMPORT_COPY.role }
+    }
     const { domain, error } = normalizeOwnershipDomain(String(context.inputs[AI_SITE_IMPORT_DOMAIN_INPUT] ?? ''))
     if (!domain) return { status: 400, error: error ?? AI_SITE_IMPORT_COPY.badDomain }
     const ownership = await ownershipOf(context.orgId, domain)

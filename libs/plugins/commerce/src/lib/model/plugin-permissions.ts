@@ -191,7 +191,12 @@ export function posPermissionRefusal(permission: PosPermission): string {
 export type ReservationPermission = 'commerce.reservations' | 'commerce.walkIns'
 
 /** Commerce's keys whose preset is the site role (AGL-4047). */
-export type CommerceSitePermission = ReservationPermission | 'commerce.orders' | 'commerce.giftCards'
+export type CommerceSitePermission =
+  | ReservationPermission
+  | 'commerce.orders'
+  | 'commerce.giftCards'
+  | 'commerce.paymentMethods'
+  | 'commerce.shippingConnections'
 
 /** Who held reservations on a site before they were keys: Admin, Editor and Author. */
 export const RESERVATION_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
@@ -214,6 +219,21 @@ export const ORDERS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> 
   author: false,
   viewer: false,
 }
+
+/**
+ * Who changed a site's payment methods and its shipping app connections
+ * before they were keys: the site's Admin alone (an Editor could see them, as
+ * whoever works the orders still can).
+ */
+export const STORE_SETTINGS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
+  admin: true,
+  editor: false,
+  author: false,
+  viewer: false,
+}
+
+/** The same, per workspace role: the answer with no site named. */
+export const STORE_SETTINGS_ORG_ROLE_PRESET = { owner: true, admin: true, editor: false, viewer: false } as const
 
 /**
  * The reservation keys as commerce declares them into the org permission
@@ -260,6 +280,28 @@ export const COMMERCE_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[
     description: 'Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.',
     roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
     hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.paymentMethods',
+    label: 'Manage payment methods',
+    description:
+      'Turn the store’s payment methods on and off. Anyone with "Manage orders" sees them. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...STORE_SETTINGS_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...STORE_SETTINGS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.shippingConnections',
+    label: 'Connect shipping apps',
+    description:
+      'Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials. Anyone with "Manage orders" sees whether they are connected. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...STORE_SETTINGS_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...STORE_SETTINGS_SITE_ROLE_PRESET },
     group: 'commerce',
     groupLabel: 'Commerce',
     presetFromSiteRole: true,

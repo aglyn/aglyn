@@ -222,6 +222,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     orgId: ORG_ID,
     member: { $id: UID, role: 'admin' },
   }),
+  // `org.media` (AGL-4047), answered by its preset: owner, admin and editor.
+  memberHasOrgPermission: async (
+    _orgId: string,
+    member: { role?: string },
+    permission: string,
+  ) =>
+    permission === 'org.media' &&
+    ['owner', 'admin', 'editor'].includes(String(member.role)),
 }))
 
 import { POST } from '../app/api/media/folders/route'

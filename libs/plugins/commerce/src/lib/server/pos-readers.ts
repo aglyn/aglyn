@@ -20,7 +20,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { authorizePosStaff, posRequestBody, type PosStaff } from './pos-auth'
 import { revokePosDisplays } from './pos-display'
 import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
-import { parsePosCellularConfig, posCellularView } from '../model/pos-cellular'
+import { parsePosCellularConfig, posCellularView, type PosCellularView } from '../model/pos-cellular'
 import { posStripe, posStripeErrorMessage, posStripeTestMode, posTerminalAvailable } from './pos-stripe'
 import {
   ensurePosTerminalLocation,
@@ -76,6 +76,24 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
+/**
+ * The 4G row for the card (AGL-4038), or nothing: with why this viewer may
+ * not turn it on, since it is charged to the workspace ("Manage billing"),
+ * asked only where the row shows.
+ */
+async function cellularFor(
+  staff: PosStaff,
+  terminal: Record<string, unknown> | undefined,
+  readers: ReadonlyArray<{ deviceType?: unknown }>,
+): Promise<{ cellular?: PosCellularView }> {
+  const config = parsePosCellularConfig(process.env)
+  if (!posCellularView(config, terminal, readers)) return {}
+  const { mayTurnOnPosCellular, POS_CELLULAR_BILLING_REFUSAL } = await import('./pos-cellular')
+  const turnOnBlocked = (await mayTurnOnPosCellular(staff.uid, staff.hostId)) ? null : POS_CELLULAR_BILLING_REFUSAL
+  const cellular = posCellularView(config, terminal, readers, { turnOnBlocked })
+  return cellular ? { cellular } : {}
+}
+
 function readersRef(hostId: string) {
   return firebaseAdmin.app().firestore().collection('hosts').doc(hostId).collection('terminalReaders')
 }
@@ -109,12 +127,7 @@ async function listReaders(staff: PosStaff, refresh: boolean) {
     locationReady: Boolean(config.get('stripeLocationId')),
     // 4G for the store's S710s (AGL-4038), only where it is offered and the
     // store has one; absent otherwise, so the card shows nothing of it.
-    ...(available
-      ? (() => {
-          const cellular = posCellularView(parsePosCellularConfig(process.env), config.data(), readers)
-          return cellular ? { cellular } : {}
-        })()
-      : {}),
+    ...(available ? await cellularFor(staff, config.data(), readers) : {}),
     readers: readers.map((reader: PosTerminalReader & { id: string }) => ({
       id: reader.id,
       label: reader.label,

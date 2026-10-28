@@ -28,23 +28,38 @@
 
 import {
   hostStampedSitePermission,
+  projectHostMemberPermissions,
+  resolveMemberHostPermissions,
   resolveSiteRolePresetPermissions,
   siteRolePresetPermissionKeys,
 } from '@aglyn/aglyn/app-utils/host-permissions'
 import { ORG_PERMISSIONS, resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
-import { canWriteHost, HOST_CONTENT_WRITE_ROLES } from '@aglyn/aglyn/app-utils/organizations'
+import {
+  canWriteHost,
+  HOST_CONTENT_WRITE_ROLES,
+  hostRoleFor,
+  isOrgWideMember,
+  projectHostMemberRoles,
+} from '@aglyn/aglyn/app-utils/organizations'
 import type { AglynOrgMember, HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { registerCommerceDeclarations } from '../declarations'
 import { WALK_IN_PERMISSION } from '../server/reservation-walk-in'
-import { holdsCommerceSiteKey } from '../server/commerce-site-keys'
+import { holdsCommerceSiteKey, holdsCommerceWorkspaceSiteKey } from '../server/commerce-site-keys'
 import {
   commerceSitePermissionRefusal,
   COMMERCE_SITE_PERMISSIONS,
   ORDERS_SITE_ROLE_PRESET,
   RESERVATION_SITE_ROLE_PRESET,
   reservationPermissionLabel,
+  STORE_SETTINGS_SITE_ROLE_PRESET,
+  type CommerceSitePermission,
   reservationPermissionRefusal,
 } from './plugin-permissions'
+import {
+  COMMERCE_WORKSPACE_SITE_PERMISSIONS,
+  commerceWorkspacePermissionRefusal,
+  WORKSPACE_ADMIN_SITE_ROLE_PRESET,
+} from './workspace-site-permissions'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true, firebaseAdmin: {} }))
 
@@ -80,6 +95,11 @@ describe('the reservation keys (AGL-4047)', () => {
       ...KEYS,
       'commerce.orders',
       'commerce.giftCards',
+      'commerce.paymentMethods',
+      'commerce.shippingConnections',
+      'commerce.refunds',
+      'commerce.posApprovals',
+      'commerce.webhooks',
     ])
     for (const key of KEYS) {
       const definition = ORG_PERMISSIONS.find((entry) => entry.key === key)
@@ -159,3 +179,122 @@ describe('the order and gift card keys (AGL-4047)', () => {
   })
 })
 
+describe('the payment method and shipping app keys (AGL-4047)', () => {
+  const SETTINGS_KEYS = ['commerce.paymentMethods', 'commerce.shippingConnections'] as const
+
+  it('keep the site Admin who alone changed them as their preset', () => {
+    expect(STORE_SETTINGS_SITE_ROLE_PRESET).toEqual({ admin: true, editor: false, author: false, viewer: false })
+    for (const key of SETTINGS_KEYS) {
+      const entry = COMMERCE_SITE_PERMISSIONS.find((candidate) => candidate.key === key)
+      expect(entry).toMatchObject({ presetFromSiteRole: true, hostRoleDefaults: STORE_SETTINGS_SITE_ROLE_PRESET })
+      expect(entry?.roleDefaults).toEqual({ owner: true, admin: true, editor: false, viewer: false })
+    }
+  })
+
+  it.each(HOST_ROLES)('a site %s holds them exactly when the routes let them change things', (role) => {
+    const collaborator: Partial<AglynOrgMember> = { role: 'viewer', allHosts: false, hostAccess: { [SITE]: role } }
+    for (const key of SETTINGS_KEYS) {
+      expect(resolveSiteRolePresetPermissions(collaborator, SITE)[key]).toBe(role === 'admin')
+      expect(holdsCommerceSiteKey({ memberRoles: { u: role } }, 'u', key)).toBe(role === 'admin')
+    }
+  })
+
+  it.each(['owner', 'admin', 'editor', 'viewer'] as const)('a workspace %s holds them as before', (role) => {
+    const member: Partial<AglynOrgMember> = { role, allHosts: true }
+    for (const key of SETTINGS_KEYS) {
+      expect(resolveSiteRolePresetPermissions(member, SITE)[key]).toBe(role === 'owner' || role === 'admin')
+      expect(resolveOrgPermissions(member, null)[key]).toBe(role === 'owner' || role === 'admin')
+    }
+  })
+
+  it('reading either card stays the Admin and Editor’s: "Manage orders" or the key', () => {
+    for (const role of HOST_ROLES) {
+      const host = { memberRoles: { u: role } }
+      const reads = (key: CommerceSitePermission) =>
+        holdsCommerceSiteKey(host, 'u', key) || holdsCommerceSiteKey(host, 'u', 'commerce.orders')
+      for (const key of SETTINGS_KEYS) expect([role, reads(key)]).toEqual([role, role === 'admin' || role === 'editor'])
+    }
+  })
+})
+
+describe('refunds, the register’s approvals and order webhooks: members of the whole workspace only (AGL-4047)', () => {
+  const KEYS = ['commerce.refunds', 'commerce.posApprovals', 'commerce.webhooks'] as const
+  /** The gate each replaced (AGL-2372): the site's Admin, a member of the whole workspace, Admin on the site now. */
+  const before = (member: Partial<AglynOrgMember>, site: string) =>
+    isOrgWideMember(member) && hostRoleFor(member, site) === 'admin'
+
+  const MEMBERS: Array<[string, Partial<AglynOrgMember> & { $id: string }]> = [
+    ['owner', { $id: 'owner', role: 'owner', allHosts: true }],
+    ['admin', { $id: 'admin', role: 'admin' }],
+    ['workspace editor', { $id: 'editor', role: 'editor', allHosts: true }],
+    ['editor made Admin here', { $id: 'ed-admin', role: 'editor', allHosts: true, hostAccess: { [SITE]: 'admin' } }],
+    ['viewer made Admin here', { $id: 'vw-admin', role: 'viewer', allHosts: true, hostAccess: { [SITE]: 'admin' } }],
+    ['admin narrowed to Editor here', { $id: 'ad-editor', role: 'admin', allHosts: true, hostAccess: { [SITE]: 'editor' } }],
+    ['legacy editor', { $id: 'legacy', role: 'editor' }],
+    ['workspace viewer', { $id: 'viewer', role: 'viewer', allHosts: true }],
+    ['collaborator, Admin here', { $id: 'co-admin', role: 'viewer', allHosts: false, hostAccess: { [SITE]: 'admin' } }],
+    ['collaborator, Editor here', { $id: 'co-editor', role: 'viewer', allHosts: false, hostAccess: { [SITE]: 'editor' } }],
+    ['collaborator elsewhere', { $id: 'co-other', role: 'viewer', allHosts: false, hostAccess: { other: 'admin' } }],
+  ]
+
+  it('declare the site Admin as their preset, for members of the whole workspace only', () => {
+    expect(WORKSPACE_ADMIN_SITE_ROLE_PRESET).toEqual({ admin: true, editor: false, author: false, viewer: false })
+    for (const key of KEYS) {
+      expect(COMMERCE_WORKSPACE_SITE_PERMISSIONS.find((entry) => entry.key === key)).toMatchObject({
+        presetFromSiteRole: true,
+        workspaceMembersOnly: true,
+        hostRoleDefaults: WORKSPACE_ADMIN_SITE_ROLE_PRESET,
+        roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
+      })
+      expect(ORG_PERMISSIONS.find((entry) => entry.key === key)).toMatchObject({
+        pluginId: 'commerce',
+        presetFromSiteRole: true,
+        workspaceMembersOnly: true,
+      })
+    }
+  })
+
+  it.each(MEMBERS)('a %s holds them exactly when the gate let them in, every way a door reads them', (_name, member) => {
+    const members = MEMBERS.map(([, fixture]) => fixture)
+    const stamped = {
+      memberRoles: projectHostMemberRoles(members, SITE),
+      memberPermissions: projectHostMemberPermissions(members, SITE, new Map()),
+    }
+    const unstamped = { memberRoles: stamped.memberRoles }
+    const membership = { orgWide: isOrgWideMember(member), hostRole: hostRoleFor(member, SITE) }
+    const expected = before(member, SITE)
+    for (const key of KEYS) {
+      expect([key, resolveSiteRolePresetPermissions(member, SITE)[key]]).toEqual([key, expected])
+      expect([key, resolveMemberHostPermissions({ member, hostId: SITE })[key]]).toEqual([key, expected])
+      expect([key, holdsCommerceWorkspaceSiteKey(stamped, member.$id, key, membership)]).toEqual([key, expected])
+      expect([key, holdsCommerceWorkspaceSiteKey(unstamped, member.$id, key, membership)]).toEqual([key, expected])
+    }
+  })
+
+  it('a site’s grant reaches a collaborator, and a role or the site takes them from a workspace admin', () => {
+    const contractor = { role: 'viewer' as const, allHosts: false, hostAccess: { [SITE]: 'admin' as const } }
+    expect(resolveSiteRolePresetPermissions({ ...contractor, hostPermissions: { [SITE]: { 'commerce.refunds': true } } }, SITE)).toMatchObject({
+      'commerce.refunds': true,
+      'commerce.posApprovals': false,
+      'commerce.webhooks': false,
+    })
+    const admin = { role: 'admin' as const, allHosts: true }
+    expect(resolveSiteRolePresetPermissions({ ...admin, permissions: { 'commerce.webhooks': false } }, SITE)).toMatchObject({
+      'commerce.refunds': true,
+      'commerce.posApprovals': true,
+      'commerce.webhooks': false,
+    })
+    const host = { memberRoles: { u: 'admin' }, memberPermissions: { u: { 'commerce.refunds': true } } }
+    expect(holdsCommerceWorkspaceSiteKey(host, 'u', 'commerce.refunds', { orgWide: false, hostRole: 'admin' })).toBe(true)
+    expect(holdsCommerceWorkspaceSiteKey(host, 'u', 'commerce.webhooks', { orgWide: false, hostRole: 'admin' })).toBe(false)
+  })
+
+  it('refuse in the permission’s words', () => {
+    expect(commerceWorkspacePermissionRefusal('commerce.refunds')).toBe(
+      'Your role does not include "Refund orders" — ask an organization admin',
+    )
+    expect(commerceWorkspacePermissionRefusal('commerce.webhooks')).toBe(
+      'Your role does not include "Manage order webhooks" — ask an organization admin',
+    )
+  })
+})

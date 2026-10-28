@@ -95,6 +95,16 @@ describe('refusal: the save door’s gates', () => {
     expect(await writer().refusal(request())).toEqual({ status: 403, error: FUNNEL_ROLE_REFUSAL })
   })
 
+  it('asks "Manage funnels", so the site’s stamp decides either way (AGL-4047)', async () => {
+    site('author', { memberPermissions: { u1: { 'funnels.manage': true } } })
+    expect(await writer().refusal(request())).toBeNull()
+    site('admin', { memberPermissions: { u1: { 'funnels.manage': false } } })
+    expect(await writer().refusal(request())).toEqual({
+      status: 403,
+      error: 'Your role does not include "Manage funnels" — ask an organization admin',
+    })
+  })
+
   it('refuses a plan without the analytics tier, and Free', async () => {
     expect(await writer().refusal(request({ org: { plan: 'starter' } }))).toEqual({ status: 403, error: FUNNEL_PLAN_REFUSAL })
     expect(await writer().refusal(request({ org: { plan: 'free' } }))).toEqual({ status: 403, error: FUNNEL_PLAN_REFUSAL })

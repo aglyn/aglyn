@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { OUTREACH_MANAGE_ALL_PERMISSION } from '../constants/bundle-common'
 import {
   isEmailVerified,
   isImpersonationSession,
@@ -158,6 +159,8 @@ export async function outreachRouteGate(
     staff,
     orgId,
     org,
-    isOrgAdmin: membership.isOwner,
+    // "Manage everyone's Sequences" (AGL-4047), whose default is the owner
+    // and admin `isOwner` named.
+    isOrgAdmin: membership.permissions[OUTREACH_MANAGE_ALL_PERMISSION] === true,
   }
 }

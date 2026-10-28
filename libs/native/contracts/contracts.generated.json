@@ -7339,6 +7339,9 @@
         "org.apiKeys",
         "org.privacy",
         "org.holds",
+        "org.export",
+        "org.sendingDomains",
+        "org.businessProfile",
         "billing.view",
         "billing.manage",
         "members.manage",
@@ -7349,14 +7352,25 @@
         "site.sensitive",
         "site.manage",
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "ai.import",
+        "funnels.manage",
+        "bookings.payments",
+        "bookings.refunds",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
         "commerce.giftCards",
+        "commerce.paymentMethods",
+        "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7364,13 +7378,19 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
+        "outreach.manageAll",
+        "marketing.campaigns",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
       ],
       "editor": [
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "site.edit",
@@ -7378,6 +7398,8 @@
         "site.sensitive",
         "ai.use",
         "ai.generate",
+        "funnels.manage",
+        "bookings.payments",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7389,6 +7411,9 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
+        "marketing.campaigns",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7398,6 +7423,9 @@
         "org.apiKeys",
         "org.privacy",
         "org.holds",
+        "org.export",
+        "org.sendingDomains",
+        "org.businessProfile",
         "billing.view",
         "billing.manage",
         "members.manage",
@@ -7408,14 +7436,25 @@
         "site.sensitive",
         "site.manage",
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "ai.import",
+        "funnels.manage",
+        "bookings.payments",
+        "bookings.refunds",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
         "commerce.giftCards",
+        "commerce.paymentMethods",
+        "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7423,7 +7462,11 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
+        "outreach.manageAll",
+        "marketing.campaigns",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7460,14 +7503,30 @@
         "label": "AI"
       },
       {
+        "id": "funnels",
+        "label": "Funnels"
+      },
+      {
+        "id": "bookings",
+        "label": "Bookings"
+      },
+      {
         "id": "commerce",
         "label": "Commerce",
         "pluginId": "commerce"
       },
       {
+        "id": "marketplace",
+        "label": "Marketplace"
+      },
+      {
         "id": "outreach",
         "label": "Sequences",
         "pluginId": "outreach"
+      },
+      {
+        "id": "marketing",
+        "label": "Marketing"
       },
       {
         "id": "accounting",
@@ -7512,6 +7571,24 @@
         "label": "Holds and reviews"
       },
       {
+        "description": "Download a copy of everything the workspace holds.",
+        "group": "organization",
+        "key": "org.export",
+        "label": "Export workspace data"
+      },
+      {
+        "description": "Add, verify and remove the domains the workspace’s mail is sent from.",
+        "group": "organization",
+        "key": "org.sendingDomains",
+        "label": "Sending domains"
+      },
+      {
+        "description": "Change the services, audience and tone every site starts from.",
+        "group": "organization",
+        "key": "org.businessProfile",
+        "label": "Business profile"
+      },
+      {
         "description": "See the plan, usage meters, and invoices.",
         "group": "billing",
         "key": "billing.view",
@@ -7549,7 +7626,7 @@
         "scope": "site"
       },
       {
-        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "description": "Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.",
         "group": "sites",
         "key": "site.publish",
         "label": "Publish site content",
@@ -7563,7 +7640,7 @@
         "scope": "site"
       },
       {
-        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
@@ -7574,6 +7651,18 @@
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
+      },
+      {
+        "description": "Upload, change, move and remove the files in the media library every site shares.",
+        "group": "datasets",
+        "key": "org.media",
+        "label": "Edit the workspace media library"
+      },
+      {
+        "description": "Delete records the whole workspace shares, such as dataset rows, contacts and lists.",
+        "group": "datasets",
+        "key": "org.eraseRecords",
+        "label": "Delete workspace records"
       },
       {
         "description": "Publish listings under the organization profile.",
@@ -7599,6 +7688,34 @@
         "group": "ai",
         "key": "ai.generate",
         "label": "Generate with AI",
+        "scope": "site"
+      },
+      {
+        "description": "Import an existing website into the workspace with Bring my site.",
+        "group": "ai",
+        "key": "ai.import",
+        "label": "Bring a site in",
+        "scope": "org"
+      },
+      {
+        "description": "Create, change and remove a site’s funnels, and draft them with AI. Follows the site role unless a role or member sets it.",
+        "group": "funnels",
+        "key": "funnels.manage",
+        "label": "Manage funnels",
+        "scope": "site"
+      },
+      {
+        "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.payments",
+        "label": "Take booking payments in person",
+        "scope": "site"
+      },
+      {
+        "description": "Refund a paid booking, in full or in part. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.refunds",
+        "label": "Refund bookings",
         "scope": "site"
       },
       {
@@ -7628,6 +7745,41 @@
         "group": "commerce",
         "key": "commerce.giftCards",
         "label": "Issue gift cards",
+        "scope": "site"
+      },
+      {
+        "description": "Turn the store’s payment methods on and off. Anyone with \"Manage orders\" sees them. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.paymentMethods",
+        "label": "Manage payment methods",
+        "scope": "site"
+      },
+      {
+        "description": "Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials. Anyone with \"Manage orders\" sees whether they are connected. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.shippingConnections",
+        "label": "Connect shipping apps",
+        "scope": "site"
+      },
+      {
+        "description": "Refund any order, online or at the register, in full or in part, with no register limit. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.refunds",
+        "label": "Refund orders",
+        "scope": "site"
+      },
+      {
+        "description": "Refund at the register above its refund limit, approve a cashier’s refund over it with a PIN, and set or clear other staff members’ PINs. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.posApprovals",
+        "label": "Approve refunds over the register’s limit",
+        "scope": "site"
+      },
+      {
+        "description": "Add, change, test and remove the store’s order webhooks, roll their secrets and resend deliveries. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.webhooks",
+        "label": "Manage order webhooks",
         "scope": "site"
       },
       {
@@ -7693,12 +7845,41 @@
         "scope": "org"
       },
       {
+        "description": "Install templates, themes, layouts, components, email designs and plugins from the marketplace into a site (with \"Install from the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.siteInstall",
+        "label": "Install marketplace items into a site",
+        "scope": "site"
+      },
+      {
+        "description": "Publish a site’s templates, themes, layouts, components and email designs to the marketplace (with \"Publish to the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.sitePublish",
+        "label": "Publish a site’s items to the marketplace",
+        "scope": "site"
+      },
+      {
         "description": "Open Sequences, and work its email sequences and connected mailboxes.",
         "group": "outreach",
         "key": "outreach.use",
         "label": "Use Sequences",
         "pluginId": "outreach",
         "scope": "org"
+      },
+      {
+        "description": "Change, send from and pause a mailbox or sequence someone else connected, and set up link domains.",
+        "group": "outreach",
+        "key": "outreach.manageAll",
+        "label": "Manage everyone’s Sequences",
+        "pluginId": "outreach",
+        "scope": "org"
+      },
+      {
+        "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
+        "group": "marketing",
+        "key": "marketing.campaigns",
+        "label": "Run email campaigns",
+        "scope": "site"
       },
       {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",

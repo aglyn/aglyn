@@ -196,6 +196,26 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     label: 'Holds and reviews',
     description: 'See what is held, flagged or locked on the workspace, and request a review.',
   },
+  // Workspace acts that asked for the owner or admin role (AGL-4047), each
+  // a key of its own whose default is exactly those roles.
+  {
+    key: 'org.export',
+    group: 'organization',
+    label: 'Export workspace data',
+    description: 'Download a copy of everything the workspace holds.',
+  },
+  {
+    key: 'org.sendingDomains',
+    group: 'organization',
+    label: 'Sending domains',
+    description: 'Add, verify and remove the domains the workspace’s mail is sent from.',
+  },
+  {
+    key: 'org.businessProfile',
+    group: 'organization',
+    label: 'Business profile',
+    description: 'Change the services, audience and tone every site starts from.',
+  },
   {
     key: 'billing.view',
     group: 'billing',
@@ -240,7 +260,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     group: 'sites',
     scope: 'site',
     label: 'Publish site content',
-    description: 'Make pages and content live, take them down or schedule them, and change redirects.',
+    description: 'Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.',
   },
   {
     key: 'site.sensitive',
@@ -254,13 +274,27 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     group: 'sites',
     scope: 'site',
     label: 'Manage site settings',
-    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.',
+    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.',
   },
   {
     key: 'data.manage',
     group: 'datasets',
     label: 'Manage data',
     description: 'Create, edit, and delete organization datasets.',
+  },
+  // Workspace content that asked for the owner, admin or editor role
+  // (AGL-4047), each a key whose default is exactly those roles.
+  {
+    key: 'org.media',
+    group: 'datasets',
+    label: 'Edit the workspace media library',
+    description: 'Upload, change, move and remove the files in the media library every site shares.',
+  },
+  {
+    key: 'org.eraseRecords',
+    group: 'datasets',
+    label: 'Delete workspace records',
+    description: 'Delete records the whole workspace shares, such as dataset rows, contacts and lists.',
   },
   {
     key: 'marketplace.publish',
@@ -307,7 +341,7 @@ const EDITOR_SITE_KEYS = Object.keys(CORE_SITE_ROLE_PRESETS).filter((key) => COR
 export const CORE_ORG_ROLE_GRANTS: Readonly<Record<OrgRoleName, readonly string[]>> = {
   owner: CORE_KEYS,
   admin: CORE_KEYS,
-  editor: ['data.manage', 'marketplace.publish', 'plugins.install', ...EDITOR_SITE_KEYS],
+  editor: ['data.manage', 'org.media', 'org.eraseRecords', 'marketplace.publish', 'plugins.install', ...EDITOR_SITE_KEYS],
   viewer: [],
 }
 

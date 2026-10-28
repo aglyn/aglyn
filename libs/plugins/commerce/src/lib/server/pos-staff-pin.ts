@@ -22,6 +22,7 @@ import {
   posPinProblem,
 } from '../model/commerce-pos-ops'
 import { holdsPosPermission } from '../model/plugin-permissions'
+import { commerceWorkspacePermissionRefusal } from '../model/workspace-site-permissions'
 import { hashMemberPassword, verifyMemberPassword } from './membership'
 import {
   authorizePosOps,
@@ -42,7 +43,8 @@ import {
  * STAFF PINS (AGL-3609): `POST /api/commerce/pos-staff-pin`.
  *
  *   status   whether the signed-in member has a PIN on this site
- *   set      a member sets their own PIN; a workspace admin may set or
+ *   set      a member sets their own PIN; whoever holds "Approve refunds over
+ *            the register's limit" (AGL-4047) may set or
  *            reset anyone's, which also lifts a lockout
  *   clear    the same, removing it
  *   roster   who can switch in at this register: members with a PIN
@@ -94,7 +96,7 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
       if (target !== staff.uid && !staff.isManager) {
         return {
           status: 403,
-          body: { error: "Only a workspace admin can set another member's PIN." },
+          body: { error: commerceWorkspacePermissionRefusal('commerce.posApprovals') },
         }
       }
       // Whoever works this site's register, by permission, not by site role
@@ -171,7 +173,7 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
         return {
           status: 423,
           body: {
-            error: 'Too many wrong PINs. Try again later, or ask a workspace admin to reset it.',
+            error: 'Too many wrong PINs. Try again later, or ask someone who can approve refunds over the register’s limit to reset it.',
             lockedUntilMs: claim.lockedUntilMs,
           },
         }
@@ -183,7 +185,7 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
           return {
             status: 423,
             body: {
-              error: 'Too many wrong PINs. Try again later, or ask a workspace admin to reset it.',
+              error: 'Too many wrong PINs. Try again later, or ask someone who can approve refunds over the register’s limit to reset it.',
               lockedUntilMs: now + POS_PIN_LOCKOUT_MS,
             },
           }
@@ -197,13 +199,12 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
       // The PIN is right; whether it still buys anything is today's
       // permissions, and for a manager's approval today's role.
       const host = await staff.hostRef.get()
-      const role = (host.get('memberRoles') ?? {})[memberUid]
       const membership = await deps.membership(memberUid, staff.hostId)
       // A cashier switched in by PIN rings sales, so they need the register's
       // sell key too (AGL-4047), not only the register.
       const allowed =
         purpose === 'manager'
-          ? isPosManager(role, membership)
+          ? isPosManager(host, memberUid, membership)
           : mayWorkRegister(membership) && holdsPosPermission(membership.permissions, 'posSell')
       if (!allowed) {
         return {
@@ -211,7 +212,7 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
           body: {
             error:
               purpose === 'manager'
-                ? 'Only a workspace admin can approve this.'
+                ? commerceWorkspacePermissionRefusal('commerce.posApprovals')
                 : 'That member cannot use the register.',
           },
         }

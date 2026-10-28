@@ -264,10 +264,22 @@ export interface AiPlanSiteOptions {
 }
 
 /**
+ * What a build's plan does with a request it cannot make (AGL-4087). Told
+ * only how many pages it may hold, a Free build asked for a home and a page
+ * that writes a review draft from a customer's choices planned the home
+ * alone, kept two sections sending visitors to the other page, and said
+ * nothing; the member confirmed a plan that had quietly dropped half of what
+ * they asked for.
+ */
+export const AI_PLAN_BUILD_LEFT_OUT_SENTENCE =
+  'Plan every page the request asks for. When it asks for something this build cannot make work, such as a page whose purpose is a feature the site has no way to do, or more pages than it holds, leave that out, name it in leftOut with why, and plan no section that sends visitors to it. leftOut is empty when the plan builds everything the request asks for.'
+
+/**
  * What a BUILD job's plan is told (AGL-3616): that one request becomes pages,
- * creations and items, how many pages it may hold, and the item operations
- * this site has with their arguments. On the job's own turn, never a cached
- * system block, because the operations are per site.
+ * creations and items, how many pages it may hold, what to do with what it
+ * cannot make (AGL-4087), and the item operations this site has with their
+ * arguments. On the job's own turn, never a cached system block, because the
+ * operations are per site.
  */
 export function aiPlanBuildLines(
   job: Pick<AiJob, 'kind'>,
@@ -279,6 +291,7 @@ export function aiPlanBuildLines(
   const pages = aiBuildPageLimit(capabilities?.freeTaste === true)
   return [
     `This is a build from one request: plan each page it asks for in screens (at most ${pages}), each new layout, form, component or email design in create, and anything else in items. Plan only what the request asks for; reuse what the site has.`,
+    AI_PLAN_BUILD_LEFT_OUT_SENTENCE,
     'A page section that shows a form or an item places it: put its new:<name> in that section\'s uses. An item built after another lists it in dependsOn.',
     // The layout language draws a section's repeated items (AGL-3660), so the
     // doctrine's "repeated items place a component" is not asked of a build.

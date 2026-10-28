@@ -309,6 +309,7 @@
         "console": "registerBookingsConsole",
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi",
+        "declarations": "registerBookingsDeclarations",
         "consoleServerDeclarations": "registerBookingsConsoleServerDeclarations",
         "tenantEmails": "bookingsTenantEmails"
       },
@@ -1112,6 +1113,7 @@
         "console": "registerMarketplaceConsole",
         "staff": "registerMarketplaceConsole",
         "consoleApi": "registerMarketplaceConsoleApi",
+        "declarations": "registerMarketplaceDeclarations",
         "serverDeclarations": "registerMarketplaceServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },
@@ -2260,6 +2262,7 @@
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
         "site": "registerMarketingPlugin",
+        "declarations": "registerMarketingDeclarations",
         "serverDeclarations": "registerMarketingServerDeclarations",
         "tenantEmails": "marketingTenantEmails"
       },
@@ -4165,6 +4168,7 @@
       "register": {
         "console": "registerFunnelsConsole",
         "consoleApi": "registerFunnelsConsoleApi",
+        "declarations": "registerFunnelsDeclarations",
         "serverDeclarations": "registerFunnelsServerDeclarations",
         "consoleServerDeclarations": "registerFunnelsConsoleServerDeclarations"
       },

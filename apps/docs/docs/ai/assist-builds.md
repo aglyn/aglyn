@@ -106,7 +106,10 @@ The card shows **Planning what to build on this site…** while the plan is made
 - **Reuses** something the site already has, and what for;
 - **Creates** something new, and why nothing you have will do;
 - **Builds the page** with its title, address, layout and sections;
-- any video player a page will carry, and what loading it costs your visitors.
+- any video player a page will carry, and what loading it costs your visitors;
+- **Leaves out** anything you asked for that this build can't make, such as a page whose
+  purpose is a feature your site doesn't have, and why. No page in the plan sends visitors
+  to it.
 
 Under the lines is the **Estimated cost**, such as *About 106 credits (up to 650)*: about
 what builds like it cost, and the most it can cost. What the build costs is what its steps

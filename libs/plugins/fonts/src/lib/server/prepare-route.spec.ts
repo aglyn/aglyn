@@ -111,6 +111,15 @@ describe('POST /api/fonts/prepare (AGL-3656)', () => {
     expect((await post(INTER)).status).toBe(200)
   })
 
+  it('asks "Publish site content", so the site’s stamp decides either way (AGL-4047)', async () => {
+    mockAuth.host = { memberRoles: { u1: 'editor' }, memberPermissions: { u1: { 'site.publish': false } } }
+    const refused = await post(INTER)
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).error).toBe('Your role does not include "Publish site content" — ask an organization admin')
+    mockAuth.host = { memberRoles: { u1: 'author' }, memberPermissions: { u1: { 'site.publish': true } } }
+    expect((await post(INTER)).status).toBe(200)
+  })
+
   it('needs a site that exists', async () => {
     expect((await post(INTER, '')).status).toBe(400)
     mockAuth.host = null

@@ -251,14 +251,14 @@ describe('search (AGL-4049)', () => {
   })
 
   it('lists the platform’s own starters first, then newest first', async () => {
-    listing('old-community', { createdAt: 10 })
-    listing('new-community', { createdAt: 30 })
+    listing('old-publisher', { createdAt: 10 })
+    listing('new-publisher', { createdAt: 30 })
     listing('official', { createdAt: 20, official: true })
     const found = await search()
     expect(found.map((row) => [row.listingId, row.official])).toEqual([
       ['official', true],
-      ['new-community', false],
-      ['old-community', false],
+      ['new-publisher', false],
+      ['old-publisher', false],
     ])
   })
 

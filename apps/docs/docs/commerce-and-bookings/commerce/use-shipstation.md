@@ -20,13 +20,14 @@ ShipStation API key: ShipStation calls Aglyn, not the other way around.
 
 The **ShipStation** card, on **Products → Shipping & delivery**, connects your store to
 ShipStation as a Custom Store, so ShipStation imports your paid orders and sends
-each shipment back. You need to be a site admin.
+each shipment back. You need the **Connect shipping apps** permission, which a site's
+admins have.
 
 1. In Aglyn, open **Products → Shipping & delivery** and find the **ShipStation** card.
 2. Select **Connect ShipStation**. The card shows the **URL to custom XML
    page**, a **username** and a **password**. Aglyn keeps the password
-   encrypted, and a site admin can select **Show** on the card to see it
-   again later.
+   encrypted, and anyone with **Connect shipping apps** can select **Show** on the card
+   to see it again later.
 3. In ShipStation, go to **Settings → Selling Channels → Store Setup**, select
    **Connect a Store or Marketplace** and choose **Custom Store**.
 4. Paste the URL, username and password from Aglyn.
@@ -86,8 +87,8 @@ untick **Notify customer** there.
 
 ## Make a new password or disconnect {#manage}
 
-- **Show** next to the password shows it again. Only a site admin can see it,
-  and each time it's shown is recorded in the site's activity.
+- **Show** next to the password shows it again. Only someone with **Connect shipping
+  apps** can see it, and each time it's shown is recorded in the site's activity.
 - **New password** on the ShipStation card makes a new password and ends the
   old one at once. Paste the new password into ShipStation's store settings.
 - **Disconnect** stops ShipStation reading your orders. Shipments it sends

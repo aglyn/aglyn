@@ -18,6 +18,7 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -99,8 +100,10 @@ const defaultDeps: WaiversGateDeps = {
     return found ? { orgId: found.orgId, org: (found.org as Record<string, unknown>) ?? null } : null
   },
   memberName: async (uid) => {
-    const user = await firebaseAdmin.app().auth().getUser(uid).catch(() => null)
-    return user?.displayName || user?.email || null
+    // Across every sign-in pool: staff who sign in through SSO live in a
+    // tenant pool the project-level lookup never sees (AGL-1122).
+    const found = await findUserByUidAcrossPools(uid).catch(() => null)
+    return found?.record.displayName || found?.record.email || null
   },
 }
 

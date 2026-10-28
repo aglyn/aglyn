@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite, type PluginApiHandler } from '@aglyn/aglyn/server'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
+import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { isMemberDocumentId, memberCredentialRef } from './member-credentials'
 
@@ -28,10 +29,12 @@ import { isMemberDocumentId, memberCredentialRef } from './member-credentials'
  * the site owner removed. The rules therefore refuse a client delete of any
  * member that has a credential document, and this route is the removal.
  *
- * Who may call it is who the rules let delete a profile before it: a site
- * role that writes content (`admin`, `editor` or `author` in the host's
- * `memberRoles`). A frozen site is refused by the dispatcher's lockdown gate
- * before this runs, the half the rules spelled `hostWritesFrozen`.
+ * Who may call it is who the rules let delete a profile before it: whoever
+ * holds "Edit site content" here (`site.edit`, AGL-4047), the key the rules'
+ * `canWriteHostContent` asks, whose preset is the site Admin, Editor and
+ * Author that wrote content before. A frozen site is refused by the
+ * dispatcher's lockdown gate before this runs, the half the rules spelled
+ * `hostWritesFrozen`.
  *
  * Removing the profile also ends every session the member holds:
  * `readActiveMemberSession` reads a missing profile as signed out.
@@ -75,9 +78,8 @@ export const membershipAdminRemoveHandler: PluginApiHandler = async (
     const firestore = app.firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!hostSnapshot.exists || !hostRoleCanWrite(memberRole)) {
-      return res.status(403).json({ error: 'Not permitted' })
+    if (!hostSnapshot.exists || !holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
+      return res.status(403).json({ error: siteKeyRefusal('site.edit') })
     }
 
     const batch = firestore.batch()

@@ -79,7 +79,7 @@ const when = (ms: number | undefined): string =>
  * Connect ShipStation (AGL-3613): the URL, username and password a merchant
  * pastes into ShipStation's Custom Store, the status names to map, a new
  * password and a disconnect. The password is kept sealed on the server and
- * a site admin can show it again; the card renders nothing on a deployment
+ * whoever holds "Connect shipping apps" can show it again; the card renders nothing on a deployment
  * that cannot seal one.
  */
 export function ShipStationCard(props: ShipStationCardProps) {
@@ -187,7 +187,8 @@ export function ShipStationCard(props: ShipStationCardProps) {
             {
               'Already labeling in ShipStation? Connect it as a Custom Store: ShipStation imports the ' +
               'orders you still have to ship, and each label you buy there marks the order shipped ' +
-              'here and emails your customer the tracking link. Only a site admin can connect it.'
+              'here and emails your customer the tracking link. Connecting it takes the "Connect shipping ' +
+              'apps" permission.'
             }
           </Typography>
         ) : (
@@ -223,7 +224,7 @@ export function ShipStationCard(props: ShipStationCardProps) {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" color="text.secondary">
-                        {'Hidden. Only a site admin can show it.'}
+                        {'Hidden. Showing it takes the "Connect shipping apps" permission.'}
                       </Typography>
                     </TableCell>
                     <TableCell align="right">

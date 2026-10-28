@@ -16,6 +16,7 @@
  */
 
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { resolveSiteTheme, themeOverridePatch } from '@aglyn/aglyn/app-utils/site-theme'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { HostTheme } from '@aglyn/shared-data-types'
@@ -59,7 +60,6 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 const refuse = (status: number, error: string) => Response.json({ error }, { status, headers: NO_STORE })
 
 /** Host roles that may change a site's theme. */
-const THEME_ROLES = new Set(['admin', 'editor'])
 
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -95,9 +95,10 @@ export async function fontsThemeRoute(request: Request): Promise<Response> {
   const snapshot = await hostRef.get()
   if (!snapshot.exists) return refuse(404, 'Unknown site')
   const staff = decoded['staff'] === true
-  const role = String((snapshot.get('memberRoles') as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && !THEME_ROLES.has(role)) {
-    return refuse(403, "Only a site admin or editor can change this site's fonts")
+  // "Publish site content" (AGL-4047): a font goes live with the theme, and
+  // the key's preset is the site Admin and Editor who changed fonts before.
+  if (!staff && !holdsSiteKey(snapshot, decoded.uid, 'site.publish')) {
+    return refuse(403, siteKeyRefusal('site.publish'))
   }
   const host = snapshot.data() as Record<string, any>
   const theme = (resolveSiteTheme(host) ?? {}) as HostTheme
