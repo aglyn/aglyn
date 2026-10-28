@@ -93,3 +93,48 @@ describe('console gates ask the key their route checks (AGL-4047)', () => {
     )
   })
 })
+
+/**
+ * A SITE KEY'S CONTROL ASKS THE KEY ITS ROUTE OR RULE CHECKS (AGL-4047).
+ *
+ * The reservation keys replaced a gate on the site role, and their preset is
+ * that role: the shell decides them for the site in view
+ * (`applySiteRolePresets`), the Reservations card's controls read them off
+ * the map the shell hands the plugin page, the walk-in and guests routes ask
+ * "Book walk-ins and change guests", and the rules' stays block asks "Manage
+ * reservations". A row per key, both halves asserted.
+ */
+const SITE_GATES: Array<{ key: string; surface: string; enforcer: string }> = [
+  {
+    key: 'commerce.walkIns',
+    surface: '../../libs/plugins/commerce/src/lib/components/commerce-console-page.tsx',
+    enforcer: '../../libs/plugins/commerce/src/lib/server/reservation-walk-in.ts',
+  },
+  {
+    key: 'commerce.reservations',
+    surface: '../../libs/plugins/commerce/src/lib/components/commerce-console-page.tsx',
+    enforcer: '../../cloud/firebase-firestore.deploy.rules',
+  },
+]
+
+describe('a site key’s control asks the key its route or rule checks (AGL-4047)', () => {
+  it.each(SITE_GATES)('$key: the console reads it where $enforcer checks it', ({ key, surface, enforcer }) => {
+    expect(read(surface)).toContain(`permissions?.['${key}']`)
+    expect(read(enforcer)).toContain(`'${key}'`)
+  })
+
+  it('the guests change asks the walk-in’s key, and the card disables its controls by both', () => {
+    expect(read('../../libs/plugins/commerce/src/lib/server/reservation-guests.ts')).toContain(
+      '{ permission: WALK_IN_PERMISSION }',
+    )
+    const card = read('../../libs/plugins/commerce/src/lib/components/console/reservations-card.component.tsx')
+    expect(card).toContain('disabled={!canManage')
+    expect(card).toContain('disabled={!canWalkIn')
+  })
+
+  it('the shell decides the site keys for the site in view, from the member’s access there', () => {
+    const shell = read('app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page.tsx')
+    expect(shell).toContain('applySiteRolePresets(')
+    expect(shell).toContain('isSiteRolePresetPermission(permission)')
+  })
+})

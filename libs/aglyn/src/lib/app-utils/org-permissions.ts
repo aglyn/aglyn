@@ -120,6 +120,15 @@ export interface OrgPermissionDefinition {
    * default for it. `narrowPermissionsToSite` applies it. Only a plugin's key.
    */
   narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
+  /**
+   * The key's preset is the member's role ON THE SITE a request names, for
+   * every member (AGL-4047): `hostRoleDefaults` read for the access they hold
+   * there, then their custom role, their own permissions and that site's
+   * toggle. `roleDefaults` is the answer with no site named.
+   * `resolveSiteRolePresetPermissions` decides it. Only a plugin's key, and
+   * only one with `hostRoleDefaults`.
+   */
+  presetFromSiteRole?: true
 }
 
 /**
@@ -285,6 +294,7 @@ function syncCatalog(): void {
       ...(declared.refines ? { refines: declared.refines } : {}),
       ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
       ...(declared.narrowsPerSite ? { narrowsPerSite: { ...declared.narrowsPerSite } } : {}),
+      ...(declared.presetFromSiteRole && declared.hostRoleDefaults ? { presetFromSiteRole: true as const } : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {

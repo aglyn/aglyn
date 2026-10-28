@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — walk-ins and stays are permissions
+
+- **[Reservation permissions](workspace-and-billing/teams-and-roles/custom-roles.md#reservation-permissions)** —
+  booking a walk-in, changing a stay's guests, and editing, checking in and
+  canceling stays now each have a permission, **Book walk-ins and change guests**
+  and **Manage reservations**. Everyone keeps the access their role on the site gave
+  them, and a custom role or a per-member override can now grant either one, so the
+  staff at your check-in window can book walk-ins without being editors.
+
 ## October 2026 — a waiver stays on the customer display until you close it
 
 - **[No timer on the customer display](commerce-and-bookings/commerce/waivers.md#on-the-customer-display)** —

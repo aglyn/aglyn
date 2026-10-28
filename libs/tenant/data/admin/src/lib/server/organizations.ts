@@ -46,6 +46,7 @@ import {
   resolveCollaboratorHostPermissions,
   narrowPermissionsToSite,
   siteMayNarrow,
+  applySiteRolePresets,
   siteNarrowingFor,
   type SiteNarrowing,
   scopeTokensForHost,
@@ -1090,15 +1091,20 @@ export async function memberHasPermissionOnHost(
     // On a site that narrows them (AGL-4047), the keys that follow the site
     // role for them (their own choice, their custom role's, or the built-in
     // default) are decided for it; everywhere else this is the workspace's
-    // verdict.
-    const narrowing = await resolveMemberSiteNarrowing(orgId, member, site)
-    return verdictFor(
-      permission,
-      narrowPermissionsToSite(await resolveMemberOrgPermissions(orgId, member), narrowing),
-      async () => narrowPermissionsToSite(await resolveMemberOrgPermissions(orgId, member), narrowing),
-    )
+    // verdict. A key whose preset is the site role is decided for the site
+    // named, from the access they hold there (`applySiteRolePresets`).
+    const customRole = await resolveMemberCustomRole(orgId, member)
+    const narrowing = siteMayNarrow(member, site) ? siteNarrowingFor(member, site, customRole) : null
+    const onSite = () =>
+      applySiteRolePresets(
+        narrowPermissionsToSite(resolveOrgPermissions(member, customRole), narrowing),
+        member,
+        site,
+        customRole,
+      )
+    return verdictFor(permission, onSite(), async () => onSite())
   }
-  return resolveCollaboratorHostPermissions(member, site)?.[permission] ?? false
+  return applySiteRolePresets(resolveCollaboratorHostPermissions(member, site) ?? {}, member, site)[permission] ?? false
 }
 
 /**

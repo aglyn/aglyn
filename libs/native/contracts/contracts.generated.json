@@ -7323,6 +7323,8 @@
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "commerce.reservations",
+        "commerce.walkIns",
         "managePos",
         "posSell",
         "posRefund",
@@ -7341,6 +7343,8 @@
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "commerce.reservations",
+        "commerce.walkIns",
         "managePos",
         "posSell",
         "posRefund",
@@ -7367,6 +7371,8 @@
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "commerce.reservations",
+        "commerce.walkIns",
         "managePos",
         "posSell",
         "posRefund",
@@ -7522,6 +7528,21 @@
         "group": "ai",
         "key": "ai.generate",
         "label": "Generate with AI",
+        "scope": "site"
+      },
+      {
+        "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.reservations",
+        "label": "Manage reservations",
+        "scope": "site"
+      },
+      {
+        "description": "Book a walk-in stay and change how many guests a stay is for. Follows \"Manage reservations\" unless a role or member sets it, and may be allowed without it.",
+        "follows": "commerce.reservations",
+        "group": "commerce",
+        "key": "commerce.walkIns",
+        "label": "Book walk-ins and change guests",
         "scope": "site"
       },
       {

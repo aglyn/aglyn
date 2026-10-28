@@ -482,9 +482,9 @@ At the check-in window, a resource set to **One check-in per guest** under
 To change the count after a stay is booked, choose **Guests** on the stay in
 the **Reservations** card, enter the new number and **Save**. It takes 1 up to
 what the resource **Sleeps**, while the stay is pending, confirmed or checked
-in. Changing it needs the admin, editor or author role on the site, the same
-as booking a walk-in, and the change is recorded in the site's activity with
-who made it.
+in. Changing it needs the **Book walk-ins and change guests** permission on the
+site, the same as booking a walk-in, and the change is recorded in the site's
+activity with who made it.
 
 ### Several identical units
 
@@ -512,10 +512,11 @@ take that many stays:
 - Two staff can't both hand out the last unit as walk-ins either, even from
   different devices: the second is told every unit is taken on at least one
   of those nights (or "Those dates are taken" for a single cabin).
-- Booking a walk-in needs the admin, editor or author role on the site, and a
-  plan that includes reservations, the same as a guest booking online. A
-  member without one of those roles is told which roles can, so they know to
-  ask an organization admin.
+- Booking a walk-in needs the **Book walk-ins and change guests** permission on
+  the site, and a plan that includes reservations, the same as a guest booking
+  online. A member without it is told which permission they need, so they know
+  to ask an organization admin. See
+  [Reservation permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#reservation-permissions).
 
 **Sleeps** is separate: it is how many guests one unit sleeps, shown for
 information. It never limits how many stays a night can take. Leave

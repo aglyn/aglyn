@@ -24,7 +24,11 @@ import {
   reservationAvailabilityQuery,
   reservationsOnPlan,
 } from './reservation-availability-query'
-import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './products-write'
+import {
+  RESERVATION_SITE_ROLE_PRESET,
+  reservationPermissionRefusal,
+} from '../model/plugin-permissions'
+import { bodyOf, gate, resolved, validId, type GatePermission, type ProductsWriteDeps } from './products-write'
 
 /*
  * `POST /api/commerce/reservations/walk-in` (AGL-4046): a staff walk-in,
@@ -38,12 +42,14 @@ import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './produ
  * storefront's `/api/commerce/reserve` uses, so the loser's transaction re-runs
  * on the winner's write and is refused.
  *
- * Who may call it is who the Firestore rules let write a reservation from the
- * console: a verified member with a content-write role on the site
- * (`canWriteHostContent`: admin, editor, author), or staff, while the site,
- * its org and the platform are not frozen. That is `products-write.ts`'s
- * `gate`, reused rather than restated, with a refusal that says what booking
- * a walk-in needs rather than talking about editing. The commerce plugin must
+ * Who may call it: a verified member who holds "Book walk-ins and change
+ * guests" (`commerce.walkIns`, AGL-4047) on the site, or staff, while the
+ * site, its org and the platform are not frozen. The key's preset is the
+ * site role that wrote a reservation before it was a key (Admin, Editor,
+ * Author), and it follows "Manage reservations" unless a role or member sets
+ * it, so nobody's access moved; a custom role can now grant it to the
+ * window's staff. That is `products-write.ts`'s `gate`, reused rather than
+ * restated, reading the key as the rules do. The commerce plugin must
  * also be on for the site, and the store's plan must take reservations: the
  * same `commerce` entitlement `/api/commerce/reserve` asks
  * (`reservationsOnPlan`), so a lapsed plan books through neither door.
@@ -59,12 +65,18 @@ export const WALK_IN_TAKEN_EVERY_UNIT =
 export const WALK_IN_PLUGIN_OFF = 'Reservations are not turned on for this site'
 export const WALK_IN_ID_CONFLICT = 'That walk-in id belongs to another stay'
 /**
- * A member whose role on the site cannot book a stay: the role it takes, in
- * plain words, and who can change it. Walk-ins follow the site role (there is
- * no separate permission for them), so the refusal names the roles.
+ * A member who does not hold "Book walk-ins and change guests" on the site
+ * (AGL-4047): the refusal names the permission and who can change it, never
+ * a role.
  */
-export const WALK_IN_ROLE_REFUSAL =
-  'Booking a walk-in needs the admin, editor or author role on this site — ask an organization admin'
+export const WALK_IN_PERMISSION_REFUSAL = reservationPermissionRefusal('commerce.walkIns')
+
+/** The key a walk-in and a guests change check, read as the rules read it. */
+export const WALK_IN_PERMISSION: GatePermission = {
+  key: 'commerce.walkIns',
+  presetFor: RESERVATION_SITE_ROLE_PRESET,
+  refusal: WALK_IN_PERMISSION_REFUSAL,
+}
 /** A store whose plan does not take reservations, worded as the plan refusals are. */
 export const WALK_IN_PLAN_REFUSAL = 'Reservations are not included in your plan — see Billing'
 
@@ -126,7 +138,7 @@ export function createReservationWalkInHandler(
       return res.status(400).json({ error: 'Missing walk-in details' })
     }
     try {
-      const door = await gate(req, res, hostId, deps, { roleRefusal: WALK_IN_ROLE_REFUSAL })
+      const door = await gate(req, res, hostId, deps, { permission: WALK_IN_PERMISSION })
       if (!door) return
       if (!isHostPluginEnabled(door.org as never, door.host.data() as never, BUNDLE_ID)) {
         return res.status(403).json({ error: WALK_IN_PLUGIN_OFF })

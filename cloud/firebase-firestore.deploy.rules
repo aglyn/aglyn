@@ -3136,6 +3136,34 @@ member.get('hostAccess', {}).get(hostId, '') in ['author', 'viewer'];
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function hostSiteRoleKey(hostId, permission, presetRoles) {
+let onSite = get(/databases/$(database)/documents/hosts/$(hostId)).data
+.get('memberPermissions', {}).get(request.auth.uid, {});
+return onSite.get(permission, null) is bool
+? onSite.get(permission, false) == true
+: hostMemberRole(hostId) in presetRoles;
+}
+
+
+
+
+
 function canReadRegisterSale(hostId) {
 return isSignedIn() && isHostMember(hostId) &&
 resource.data.get('channel', '') == 'pos' &&
@@ -4176,6 +4204,12 @@ subcollection != 'reviewTokens' &&
 
 
 
+
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -4200,7 +4234,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
-'waiverTitles']) &&
+'waiverTitles', 'reservations', 'resources']) &&
 
 
 
@@ -4371,7 +4405,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
-'waiverTitles'])));
+'waiverTitles', 'reservations', 'resources'])));
 
 
 
@@ -4430,7 +4464,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
-'checkIns', 'checkInDays', 'waiverTitles'])));
+'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources'])));
 }
 
 
@@ -4502,6 +4536,35 @@ request.resource.data.diff(resource.data).affectedKeys()
 match /redirects/{redirectId} {
 allow update, delete: if isStaff() ||
 (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /reservations/{path=**} {
+allow create, update, delete: if isStaff() ||
+(isVerified() && !hostWritesFrozen(hostId) &&
+hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
+}
+match /resources/{path=**} {
+allow create, update, delete: if isStaff() ||
+(isVerified() && !hostWritesFrozen(hostId) &&
+hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
 }
 
 
