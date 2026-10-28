@@ -34,6 +34,9 @@ import {
   DEFAULT_SITE_THEME,
 } from '@aglyn/aglyn/app-utils/default-site'
 import { starterLinksBySlug } from '@aglyn/aglyn/app-utils/site-starter-links'
+import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerPluginThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 
 type Data = Record<string, any>
@@ -173,6 +176,8 @@ function seedSite() {
 }
 
 beforeEach(() => {
+  resetPluginServicesForTests()
+  setRegisteringPluginId(undefined)
   state.docs.clear()
   state.writes = []
   state.canPublish = true
@@ -202,7 +207,13 @@ function makeRes() {
   return res
 }
 
-const BUILTIN = { kind: 'builtin', base: 'bootstrap', brand: { light: { primary: '#0a4' } }, fonts: null }
+/** A brand that reads on both of the default base's pages. */
+const BUILTIN = {
+  kind: 'builtin',
+  base: 'bootstrap',
+  brand: { light: { primary: '#1b5e20' }, dark: { primary: '#81c784' } },
+  fonts: null,
+}
 
 async function publish(body: Data = {}, headers: Data = { authorization: 'Bearer token' }) {
   const res = makeRes()
@@ -275,12 +286,12 @@ describe('a site publishes as a starter (AGL-4049)', () => {
 
   it('stores a built-in theme as the body named it', async () => {
     await publish({
-      theme: { kind: 'builtin', base: 'bootstrap', brand: { light: { primary: '#0a4' }, dark: { primary: '#6d6' } }, fonts: 'oswald' },
+      theme: { kind: 'builtin', base: 'bootstrap', brand: { light: { primary: '#1b5e20' }, dark: { primary: '#81c784' } }, fonts: 'oswald' },
     })
     expect(version()?.['starter'].theme).toEqual({
       kind: 'builtin',
       base: 'bootstrap',
-      brand: { light: { primary: '#0a4' }, dark: { primary: '#6d6' } },
+      brand: { light: { primary: '#1b5e20' }, dark: { primary: '#81c784' } },
       fonts: 'oswald',
     })
     expect(listing()).toMatchObject({ starterBase: 'bootstrap', starterFonts: 'oswald' })
@@ -430,6 +441,79 @@ describe('a site born from the default site publishes whole (AGL-4049)', () => {
     expect(res.statusCode).toBe(422)
     expect(res.body.error).toMatch(/beacon\.example/)
     expect(state.writes).toEqual([])
+  })
+})
+
+describe('a built-in starter theme is checked as the site will wear it (AGL-4049)', () => {
+  /**
+   * The theme a starter on a built-in base creates is that base with the
+   * brand and fonts over it (`siteStarterTheme`), so that composed theme is
+   * what the publish checks: a brand nobody can read on the page is refused
+   * here, where the publisher can pick another color, not discovered on
+   * every site created from it.
+   */
+  const brand = (light: Record<string, string>, dark?: Record<string, string>) => ({
+    theme: { kind: 'builtin', base: 'starter', brand: { light, ...(dark && { dark }) }, fonts: null },
+  })
+
+  it('refuses a primary that cannot be read on the page, naming the scheme and the fix', async () => {
+    const res = await publish(brand({ primary: '#ffff66' }))
+    expect(res.statusCode).toBe(422)
+    expect(res.body.error).toMatch(
+      /^The light primary color #ffff66 is 1\.\d:1 against the light page background, below 3:1, .* Choose a darker primary\.$/,
+    )
+    expect(res.body.errors).toEqual([
+      expect.objectContaining({ path: 'colorSchemes.light.primary.main' }),
+    ])
+    expect(state.writes).toEqual([])
+  })
+
+  it('refuses a dark scheme that inherits an unreadable light brand, and takes its own', async () => {
+    const navy = await publish(brand({ primary: '#1a237e' }))
+    expect(navy.statusCode).toBe(422)
+    expect(navy.body.error).toMatch(/^The dark primary color #1a237e .* or give the dark scheme its own brand colors/)
+    expect(state.writes).toEqual([])
+    const res = await publish(brand({ primary: '#1a237e' }, { primary: '#9fa8da' }))
+    expect(res.statusCode).toBe(200)
+    expect(version()?.['starter'].theme).toEqual({
+      kind: 'builtin',
+      base: 'starter',
+      brand: { light: { primary: '#1a237e' }, dark: { primary: '#9fa8da' } },
+      fonts: null,
+    })
+  })
+
+  it('composes over the registered built-in the base names, not the default', async () => {
+    // A built-in whose light page is near black: a brand that reads on the
+    // default's pale page does not read on this one.
+    registerPluginThemePresets(
+      [
+        {
+          id: 'theme-presets.bootstrap',
+          name: 'Night',
+          theme: {
+            colorSchemes: {
+              light: {
+                primary: { main: '#90caf9' },
+                background: { default: '#0b0b0b', paper: '#161616' },
+                text: { primary: '#f5f5f5', secondary: '#bdbdbd' },
+              },
+              dark: {
+                primary: { main: '#90caf9' },
+                background: { default: '#0b0b0b', paper: '#161616' },
+                text: { primary: '#f5f5f5', secondary: '#bdbdbd' },
+              },
+            },
+          },
+        } as any,
+      ],
+      { pluginId: 'themes' },
+    )
+    const res = await publish({ theme: { ...BUILTIN, brand: { light: { primary: '#1b5e20' } } } })
+    expect(res.statusCode).toBe(422)
+    expect(res.body.error).toMatch(/^The light primary color #1b5e20 .* Choose a lighter primary\.$/)
+    // The same brand on the default base, which this deployment also has.
+    expect((await publish({ theme: { ...BUILTIN, base: 'starter' } })).statusCode).toBe(200)
   })
 })
 
