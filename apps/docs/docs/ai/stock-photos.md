@@ -29,6 +29,15 @@ potter's bowl is never filled with a bowl of fruit or a bird at a feeder. When n
 the thing itself, the space gets a photo of your craft instead, such as *handmade ceramics*.
 One start never uses the same photo twice.
 
+Photos are searched for your kind of business first, as your **business type** describes
+it: a dirt bike repair shop's pictures show dirt bikes and motorcycles, never a bicycle or a
+race car, and a taco trailer that also takes catering requests shows tacos, not a buffet. A
+photo tagged with a brand, such as a car or motorcycle maker, is never used unless your
+business type names that brand. Brands are recognized by the words a photo is tagged with,
+so look over your pictures for a logo before you publish. A band of pictures that finds no
+fitting photo takes photos the start already copied for your site, and when there are none,
+the band is left out of the page rather than shown as captions with no pictures.
+
 When a photo cannot be copied into your library, for example because Pixabay is busy and
 asks to wait, the job waits and tries again. If it still cannot, the space takes another
 photo the same job already copied for your site, chosen to suit the space: one the page

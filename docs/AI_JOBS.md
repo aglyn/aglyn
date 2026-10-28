@@ -3303,6 +3303,44 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   works chose a photo, while production's library got none and logged nothing: a
   chosen photo that never reached the library is now logged and takes a starter
   (above).
+- **The trade, never a word of it (AGL-4065).** Six booth-kit starts of 2026-10-25
+  (a landscaper, a handyman, three motocross businesses, a taco trailer) shipped
+  off-trade photos, each traced to its query by the media doc's `stockPhoto.query`.
+  `aiStockSiteTerms` now reads two worlds: `domain` (every word the type names, what
+  a picture of a thing is held to) and `lead` (the listed crafts the business's own
+  clause names, their names and kin, and its own words no craft covers, never a word
+  in `LEAD_GENERIC` such as "race" or "team"). A hero's first tag and a hit of a
+  search that is not of a thing name the lead (`AiStockJudgement.world`): "race car"
+  no longer names "Amateur motocross race team". A business type named by two things
+  joined by "and" before a place of business is one clause (`businessClauses`):
+  "Motorcycle and dirt bike repair shop" is the business "dirt bike repair shop". Of
+  the listed crafts, the one named first leads, and a craft named only in a clause
+  opened by a customer's verb (`TRANSACTION_VERBS`: "takes catering requests") lends
+  kin and refusals but no searches; a trade of a world (`of`, the moto parts group)
+  is the craft, and the world it serves qualifies its pictures (`leadWord`: "dirt bike
+  parts"). `CRAFT_KIN` lists landscaping, handyman, motocross, moto parts and tacos,
+  with rivals (bicycles, cars, horses, scooters) and `shunLead`; a hit's words carry
+  stem pairs, so "dirt bike" is named whole and "bike" alone is not the world. What a
+  customer is asked to do (`TRANSACTION_STEMS`) is never a world. `MAKERS` turns
+  down a hit whose tags or page address name a vehicle or product maker the business
+  type does not name (wallpaper tags such as "iphone wallpaper" excepted); it reads
+  tags, so a logo no tag names is only seen in the live check. A sentence to the
+  reader, a job or an order is never a subject (`STOPWORDS`, `SENTENCE_WORDS`,
+  `GENERIC_OBJECTS`), "Potato and egg breakfast taco" is a taco, a part or gear is
+  searched only with its world (`WORLD_OBJECTS`), and a record's cover searches its
+  world first and is held to its object among the first tags. A listed world widens
+  only where the library answered none of the slot's own searches with any photo,
+  and an outdoor, vehicle, tool or food world (`aiStockWorldIsOutdoorOrTrade`) never
+  widens to an office's kinds. On the page, a gallery picture the library answered
+  with nothing fitting, or any cell of a band of pictures
+  (`aiLayoutPictureBandCells`), takes a job photo the page does not show yet; a band
+  of pictures left with no photo, or a section named as pictures that holds only
+  words, is left out whole (`aiLayoutDropEmptyPictureBands`). The replays are
+  `ai-stock-photo-agl4065-{terms,moto,trades,tacos}.spec.ts` and
+  `ai-layout-pictures-agl4065-gallery.spec.ts`, from the six sites' media records
+  (`fixtures/ai-stock-photo-agl4065-recordings.ts`; the search cache had expired, so
+  each list is what one search placed, tagged by its page address) and their stored
+  home pages (`fixtures/ai-site-agl4065-pages.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes
