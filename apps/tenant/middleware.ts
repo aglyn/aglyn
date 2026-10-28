@@ -38,6 +38,13 @@ import {
   ENTRY_PREVIEW_PARAM,
   ENTRY_PREVIEW_ROUTE_SEGMENT,
 } from '@aglyn/aglyn/app-utils/entry-preview-link'
+// Deep import for the same reason: preview's cookie names and its path test,
+// from a leaf with no imports of its own (AGL-4086).
+import {
+  isSitePreviewRequest,
+  SITE_PREVIEW_COOKIE,
+  SITE_PREVIEW_EDIT_HINT_COOKIE,
+} from '@aglyn/aglyn/app-utils/site-preview'
 // Deep import for the same reason: the leaving notice's path, from a leaf
 // with no imports of its own (AGL-3452).
 import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
@@ -320,6 +327,8 @@ const lockdownVerdicts = new Map<
     approvedFrameHosts: string[]
     runsMeasurement: boolean
     siteOrigins: string[]
+    preview: boolean
+    previewPaths: string[]
   }
 >()
 
@@ -353,6 +362,8 @@ async function hostVerdict(
   approvedFrameHosts: string[]
   runsMeasurement: boolean
   siteOrigins: string[]
+  preview: boolean
+  previewPaths: string[]
 }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
@@ -369,6 +380,8 @@ async function hostVerdict(
       approvedFrameHosts: cached.approvedFrameHosts,
       runsMeasurement: cached.runsMeasurement,
       siteOrigins: cached.siteOrigins,
+      preview: cached.preview,
+      previewPaths: cached.previewPaths,
     }
   }
   let blocked = false
@@ -442,6 +455,13 @@ async function hostVerdict(
   // Stale-retentive with the rest: a site's own addresses going missing during
   // an outage would refuse its own images.
   let siteOrigins: string[] = cached?.siteOrigins ?? []
+  // Preview (AGL-4086) is stale-retentive too, and it is safe in BOTH
+  // directions: it only decides whether a request carrying a team cookie is
+  // sent around the cache to be checked. What the PUBLIC sees is the loader's
+  // decision, from the host document, so a verdict outage can neither show a
+  // site in preview to a stranger nor hide a public one.
+  let preview: boolean = cached?.preview ?? false
+  let previewPaths: string[] = cached?.previewPaths ?? []
   try {
     // The body is read inside the deadline too: a verdict that never answers,
     // or answers with a body that never ends, is the outage case below — not
@@ -473,6 +493,8 @@ async function hostVerdict(
         approvedFrameHosts?: unknown
         runsMeasurement?: boolean
         siteOrigins?: unknown
+        preview?: unknown
+        previewPaths?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
@@ -514,6 +536,10 @@ async function hostVerdict(
           (entry): entry is string => typeof entry === 'string',
         )
       }
+      if (typeof data?.preview === 'boolean') preview = data.preview
+      if (Array.isArray(data?.previewPaths)) {
+        previewPaths = strings(data.previewPaths)
+      }
     }
   } catch {
     // Fail open on the lock and the cap, closed on the attribution.
@@ -532,6 +558,8 @@ async function hostVerdict(
     approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
+    preview,
+    previewPaths,
   })
   return {
     blocked,
@@ -546,7 +574,25 @@ async function hostVerdict(
     approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
+    preview,
+    previewPaths,
   }
+}
+
+/**
+ * Does this request carry a team cookie? (AGL-4086)
+ *
+ * PRESENCE ONLY. No secret lives at the edge: the preview route verifies the
+ * cookie in Node — the site-preview token against the site the request
+ * resolved to, the edit hint against the account and its role on this site —
+ * and a forged or stale one buys an uncached render of exactly what the
+ * public sees. The `x-revalidate-secret` rule is the same division.
+ */
+function carriesSitePreviewCookie(req: Parameters<NextMiddleware>[0]): boolean {
+  return Boolean(
+    req.cookies.get(SITE_PREVIEW_COOKIE)?.value ||
+      req.cookies.get(SITE_PREVIEW_EDIT_HINT_COOKIE)?.value,
+  )
 }
 
 /**
@@ -1166,7 +1212,7 @@ export const middleware: NextMiddleware = async (req, event) => {
    * A LIVE-SITE PREVIEW GOES TO A DIFFERENT ROUTE (AGL-3205).
    *
    * A request carrying `?aglyn_preview=…` is rewritten one segment deeper, to
-   * `app/[host]/[scheme]/aglyn-preview/[...slug]`, which is `force-dynamic`.
+   * `app/[host]/[scheme]/aglyn-preview/[[...slug]]`, which is `force-dynamic`.
    * The reader's address bar still says the post's real URL; what changes is
    * which Next route answers it, and that is the whole safety property:
    *
@@ -1189,7 +1235,27 @@ export const middleware: NextMiddleware = async (req, event) => {
    * character-for-character what it has always been.
    */
   const previewing = Boolean(req.nextUrl.searchParams.get(ENTRY_PREVIEW_PARAM))
-  const routePrefix = previewing ? `/${ENTRY_PREVIEW_ROUTE_SEGMENT}` : ''
+  /**
+   * A SITE IN PREVIEW, ASKED FOR BY ITS TEAM, GOES THERE TOO (AGL-4086).
+   *
+   * While a site — or the page at this address — is in preview, the public is
+   * answered from the cached catch-all, whose loader renders the 503 page or
+   * the "Coming soon" notice. A request that carries a team cookie is sent to
+   * the same uncached route an entry preview uses, which checks the cookie in
+   * Node and renders the whole site for the team, or the public answer for
+   * anyone it does not believe. The team's render is never written to a cache
+   * the public reads: the route is `force-dynamic` and this response says
+   * `no-store` below.
+   *
+   * Only while the verdict says preview. A public site's pages keep their
+   * cache for every visitor, team members included.
+   */
+  const teamPreview =
+    !previewing &&
+    isSitePreviewRequest(verdict, req.nextUrl.pathname) &&
+    carriesSitePreviewCookie(req)
+  const uncached = previewing || teamPreview
+  const routePrefix = uncached ? `/${ENTRY_PREVIEW_ROUTE_SEGMENT}` : ''
   const rewrite = `/${tenantHost}/${scheme}${routePrefix}${req.nextUrl.pathname}${req.nextUrl.search}`
   console.debug(
     'Tenant Host Switch=',
@@ -1294,7 +1360,7 @@ export const middleware: NextMiddleware = async (req, event) => {
   // `base-uri 'self'`, `frame-ancestors` — the six owner-widened directives,
   // and the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
-  if (previewing) {
+  if (uncached) {
     /**
      * Said out loud rather than inherited (AGL-3205).
      *

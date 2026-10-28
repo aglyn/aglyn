@@ -42,6 +42,8 @@ import {
 } from 'firebase/firestore'
 import { useCallback } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { SitePreviewSwitch } from '@aglyn/tenant-feature-instance/components/site-preview-switch'
+import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { unpublishScreenRoute } from '../constants/screen-publishing'
@@ -74,7 +76,7 @@ const ERROR_SLOT_COPY: Record<
   },
   unavailable: {
     label: '503 · Maintenance',
-    hint: 'Shown everywhere while maintenance mode is on',
+    hint: 'Shown everywhere while maintenance mode is on, and to visitors while the site is in preview',
   },
 }
 
@@ -261,7 +263,8 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
         anchor: '#the-error-screens',
         excerpt:
           'Assign a designed page per status code — the maintenance ' +
-          'toggle shows the 503 page everywhere while it is on.',
+          'toggle shows the 503 page everywhere while it is on, and ' +
+          'Preview shows it to visitors while your team sees the site.',
       })}
       contentGutterX
       contentGutterY
@@ -346,6 +349,34 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
             />
           }
           label="Maintenance mode — show the 503 page at every address"
+        />
+        {/*
+          Preview (AGL-4086), beside maintenance because the two answer the
+          same visitors the same way. The difference is the team: maintenance
+          shows the 503 page to everyone, preview keeps the whole site working
+          for the people building it. A server door, not a client write like
+          the switch above — making a site public is a launch.
+        */}
+        <SitePreviewSwitch
+          hostId={hostId}
+          inPreview={host === undefined ? null : isHostInPreview(host)}
+          user={user}
+          onChanged={(outcome, asked) => {
+            if (outcome.error) {
+              enqueueSnackbar(outcome.error, { variant: 'error' })
+              return
+            }
+            enqueueSnackbar(
+              asked
+                ? outcome.dropped
+                  ? 'Your site is in preview — only you and your team can see it'
+                  : 'Your site is in preview — live pages may take a few minutes to switch over'
+                : outcome.dropped
+                  ? 'Your site is public'
+                  : 'Your site is public — live pages may take a few minutes to come back',
+              { variant: asked ? 'info' : 'success', persist: false },
+            )
+          }}
         />
       </Stack>
     </CardDisplay>

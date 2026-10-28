@@ -3457,6 +3457,12 @@ allow update: if isStaff() ||
 
 
 
+
+'preview', 'publicSinceMs',
+
+
+
+
 'funnelRecording',
 
 
@@ -3549,9 +3555,13 @@ allow update: if isStaff() ||
 
 
 
+
+
+
+
 (canPublishHostContent(hostId) ||
 !request.resource.data.diff(resource.data).affectedKeys()
-.hasAny(['screens', 'defaultHomeScreenId'])) &&
+.hasAny(['screens', 'defaultHomeScreenId', 'previewScreens'])) &&
 routeRemovalAllowed());
 allow delete: if isStaff() ||
 (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&

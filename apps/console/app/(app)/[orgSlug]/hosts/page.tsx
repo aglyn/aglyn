@@ -71,6 +71,8 @@ import CreateHostDialog, {
   CreateSiteFromUrl,
 } from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
+import SiteVisitButton from '../../../../components/site-visit-button.component'
+import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
 import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import PlatformMarketingConsentPrompt from '../../../../components/marketing-consent-prompt.component'
@@ -272,8 +274,11 @@ function SiteCard(props: SiteCardProps) {
       help={docsHelp('consoleTour', { anchor: '#a-site-card' })}
       actions={
         <>
-          <AppLink
-            componentVariant="button"
+          <SiteVisitButton
+            hostId={host.$id}
+            // A site in preview (AGL-4086) is entered as the team, through
+            // a console-minted link, on whatever address it has.
+            inPreview={isHostInPreview(host as never)}
             // `?aglyn-edit` arms the admin bar without the
             // chord (AGL-1842): on a foreign CUSTOM domain no
             // hint can exist by construction — a console
@@ -287,11 +292,9 @@ function SiteCard(props: SiteCardProps) {
             // a self-hoster's Sites list linked every one of their
             // sites at OUR domain.
             href={`https://${hostDisplayDomain(hostAddress(host))}/?aglyn-edit`}
-            newTab
-            rel={'nofollow'}
           >
             {'Visit'}
-          </AppLink>
+          </SiteVisitButton>
           <AppLink
             componentVariant="button"
             href={buildRoute(Route.HOST_DASHBOARD, {

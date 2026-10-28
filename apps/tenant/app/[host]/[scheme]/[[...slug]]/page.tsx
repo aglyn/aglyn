@@ -257,6 +257,15 @@ function buildMetadata(props: Props): Metadata {
       robots: { index: false, follow: true },
     }
   }
+  // A site in preview (AGL-4086) is a site on its way to the public, so its
+  // head says what the holding page's does — and asks crawlers to follow
+  // nothing either, because nothing behind it is public yet.
+  if (props.sitePreview) {
+    return {
+      title: titleFor({ name: 'Coming soon' }),
+      robots: { index: false, follow: false },
+    }
+  }
   if (props.maintenanceFallback) {
     return {
       title: titleFor({ name: 'Temporarily unavailable' }),

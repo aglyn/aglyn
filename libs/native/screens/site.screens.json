@@ -130,7 +130,7 @@
             },
             {
               "title": "Error pages",
-              "subtitle": "404, members-only and maintenance pages",
+              "subtitle": "404, members-only and maintenance pages, and preview",
               "icon": "exclamationmark.triangle|error_outline",
               "screen": "core.site.errorPages"
             },
@@ -862,7 +862,7 @@
     {
       "id": "core.site.errorPages",
       "title": "Error pages",
-      "subtitle": "404, members-only and maintenance",
+      "subtitle": "404, members-only, maintenance and preview",
       "icon": "exclamationmark.triangle|error_outline",
       "scope": "site",
       "group": "site",
@@ -997,7 +997,7 @@
           "type": "form",
           "id": "unavailable",
           "title": "503 · Maintenance",
-          "footer": "Shown everywhere while maintenance mode is on.",
+          "footer": "Shown everywhere while maintenance mode is on, and to visitors while the site is in preview.",
           "when": "org.manager",
           "fields": [
             {
@@ -1026,6 +1026,30 @@
               "action": "error-screen",
               "slot": "unavailable",
               "id": "{form.id}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "preview",
+          "title": "Preview",
+          "footer": "Only you, your team and Aglyn support can see the site. Visitors see your 503 page, or \"Coming soon\", until you make it public.",
+          "when": "org.manager",
+          "fields": [
+            {
+              "key": "preview",
+              "label": "Preview — only you and your team can see the site",
+              "kind": "toggle",
+              "initial": "{data.site.preview|false}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/preview",
+            "body": {
+              "hostId": "{site.id}",
+              "preview": "{form.preview}"
             },
             "success": "Saved"
           }

@@ -53,6 +53,7 @@ import {
   type PluginSiteStarterSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import type { SiteStarterPayload } from '@aglyn/aglyn/app-utils/site-starter'
+import { sitePreviewForCreate } from '@aglyn/aglyn/app-utils/site-preview'
 import {
   readSiteStarterChoice,
   siteStarterPickRefusal,
@@ -381,6 +382,10 @@ async function handler(request: Request): Promise<Response> {
         member: orgMembership.member,
         staff: decoded['staff'] === true,
       }))
+    // "Start in preview" (AGL-4086): the person's choice when they made one,
+    // else in preview for a site brought in from somewhere else
+    // (`start: 'import'`) and public for every other start.
+    const preview = sitePreviewForCreate(body)
     const claim = await claimHostForOrg({
       firestore,
       orgId: orgMembership.orgId,
@@ -388,6 +393,7 @@ async function handler(request: Request): Promise<Response> {
       subdomain,
       org,
       starter: starterInstall ?? !guidedStart,
+      preview,
     })
     // Lost the subdomain to a concurrent create between the pre-check above
     // and the transaction's commit (AGL-2465). The console has no idempotency
@@ -480,6 +486,9 @@ async function handler(request: Request): Promise<Response> {
         // Born without the starter, for the guided start (AGL-3594): the
         // client lands on the site with `?start=site` to offer it (AGL-3596).
         guidedStart,
+        // Born in preview (AGL-4086), so the client does not report a site
+        // nobody can see as published.
+        preview,
         // The third org-creation door reports itself (AGL-2587). This route
         // auto-provisions a workspace for an account that holds none, and
         // nothing counted those: `org_created` is a browser event and the

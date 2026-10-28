@@ -5,10 +5,10 @@ import Foundation
 
 /// Whether a site is serving its pages, as the console's Sites list reports it.
 public struct HostStatus: Equatable, Sendable {
-  public enum Kind: Sendable { case live, draft, maintenance, suspended }
+  public enum Kind: Sendable { case live, draft, preview, maintenance, suspended }
 
   public let kind: Kind
-  /// `Live`, `Draft`, `Maintenance`, `Suspended`.
+  /// `Live`, `Draft`, `In preview`, `Maintenance`, `Suspended`.
   public let label: String
   /// Why, in one sentence.
   public let detail: String
@@ -37,6 +37,13 @@ public struct HostStatus: Equatable, Sendable {
     if host?["maintenance"] as? Bool == true {
       return HostStatus(
         kind: .maintenance, label: "Maintenance", detail: "Every path serves the maintenance page.",
+        publishedPages: published)
+    }
+    // A site in preview (AGL-4086) is not live to its visitors whatever it has published.
+    if host?["preview"] as? Bool == true {
+      return HostStatus(
+        kind: .preview, label: "In preview",
+        detail: "Only your team can see this site. Visitors see the 503 page or \"Coming soon\".",
         publishedPages: published)
     }
     if published > 0 {

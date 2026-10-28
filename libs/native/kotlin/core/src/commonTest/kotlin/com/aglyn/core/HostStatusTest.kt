@@ -32,6 +32,15 @@ class HostStatusTest {
   }
 
   @Test
+  fun aSiteInPreviewIsNotLive() {
+    val live = mapOf<String, Any?>("screens" to mapOf("home" to 1))
+    val status = HostStatus.describe(live + ("preview" to true), now)
+    assertEquals(HostStatusKind.PREVIEW, status.kind)
+    assertEquals("In preview", status.label)
+    assertEquals(HostStatusKind.MAINTENANCE, HostStatus.describe(live + mapOf("preview" to true, "maintenance" to true), now).kind)
+  }
+
+  @Test
   fun aSiteAddressIsOnThePlatformDomain() {
     assertEquals("shop.aglyn.app", siteAddress("shop"))
     assertNull(siteAddress(""))

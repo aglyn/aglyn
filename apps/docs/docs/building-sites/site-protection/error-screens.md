@@ -18,7 +18,7 @@ pages** for each status.
 | **404** | 404 · Not found | The URL doesn't match any page. |
 | **401** | 401 · Members only | A members-only page, requested by a signed-out visitor. |
 | **403** | 403 · Forbidden | Reserved for future access rules — nothing serves it yet. |
-| **503** | 503 · Maintenance | Shown on every page while [maintenance mode](maintenance-mode.md) is on. |
+| **503** | 503 · Maintenance | Shown on every page while [maintenance mode](maintenance-mode.md) is on, and to visitors while the site is in [preview](make-your-site-private.md#keep-it-to-your-team-with-preview). |
 
 ## Design one
 
