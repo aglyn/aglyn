@@ -19,6 +19,10 @@
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import {
+  sitePreviewStartsOn,
+  type SitePreviewStart,
+} from '@aglyn/aglyn/app-utils/site-preview'
 import type {
   ConsoleCreatedSite,
   ConsolePendingSite,
@@ -52,6 +56,7 @@ import {
   SITE_START_PARAM,
 } from './host-first-run-gate.component'
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
+import StartInPreviewSwitch from './start-in-preview-switch.component'
 import { useSiteAddress } from './site-address-fields.component'
 
 /** The zone "Create site" draws its start through (AGL-3761). */
@@ -163,6 +168,18 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   const [madeHere, setMadeHere] = useState(false)
   const address = useSiteAddress({ autoFocus: true })
   const orgSlug = currentOrg?.slug ?? null
+  /**
+   * "Start in preview" (AGL-4086): the person's choice, or `null` while they
+   * have not made one, so the start they take decides — on for a site brought
+   * in from somewhere else, off for every other.
+   */
+  const [previewChoice, setPreviewChoice] = useState<boolean | null>(null)
+  const previewFor = useCallback(
+    (start: SitePreviewStart) => previewChoice ?? sitePreviewStartsOn(start),
+    [previewChoice],
+  )
+  const previewForRef = useRef(previewFor)
+  previewForRef.current = previewFor
 
   // What the create would refuse anyway, said first.
   const usedSites = useMemo(() => {
@@ -219,7 +236,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   )
 
   const requestCreate = useCallback(
-    (start?: 'starter'): Promise<CreateOutcome> => {
+    (start?: 'starter' | 'import'): Promise<CreateOutcome> => {
       if (inFlight.current) return inFlight.current
       setMadeHere(true)
       const request = (async (): Promise<CreateOutcome> => {
@@ -232,8 +249,11 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
               subdomain: address.subdomain,
               // Create into the selected workspace (AGL-236).
               ...(currentOrg ? { orgId: currentOrg.$id } : {}),
-              // The starter, chosen before the site exists (AGL-3761).
+              // The starter, chosen before the site exists (AGL-3761), or a
+              // site brought in from somewhere else (AGL-4086).
               ...(start ? { start } : {}),
+              // Start in preview (AGL-4086), as the switch reads for this start.
+              preview: previewForRef.current(start ?? 'ai'),
               // A first site can provision the workspace too, which records
               // where a brand-new account came from (AGL-3706).
               ...firstTouchField(),
@@ -325,18 +345,25 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       dirty: address.dirty,
       created,
       ready: (shown: boolean) => setVerdict(shown),
-      create: async () => {
+      create: async (options?: { start?: 'import' }) => {
         if (createdRef.current) return createdRef.current
         if (!address.check()) {
           return { error: 'Name your site and choose its address first.', address: true }
         }
-        const outcome = await requestCreate()
+        const outcome = await requestCreate(options?.start)
         if ('error' in outcome) return outcome
         setCreated(outcome.site)
         return outcome.site
       },
+      previewControl: (start: SitePreviewStart) => (
+        <StartInPreviewSwitch
+          checked={previewFor(start)}
+          onChange={setPreviewChoice}
+          disabled={Boolean(created)}
+        />
+      ),
     }),
-    [address, created, requestCreate],
+    [address, created, requestCreate, previewFor],
   )
 
   // The starter site, or Skip. Before the site exists this creates it WITH
@@ -361,11 +388,18 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       return false
     }
     // The starter Home is published with the site: its first live page, as
-    // choosing the starter on a created site always reported.
-    trackEvent('site_published', { first_publish: true })
+    // choosing the starter on a created site always reported. Not for a site
+    // that starts in preview (AGL-4086): nobody but its team can see it, so it
+    // is reported when it is made public.
+    const inPreview = previewForRef.current('starter')
+    if (!inPreview) trackEvent('site_published', { first_publish: true })
     onClose()
     if (outcome.site.orgSlug) {
-      land(`${dashboardOf(outcome.site)}?${SITE_START_PARAM}=${SITE_START_LIVE_VALUE}`)
+      land(
+        inPreview
+          ? dashboardOf(outcome.site)
+          : `${dashboardOf(outcome.site)}?${SITE_START_PARAM}=${SITE_START_LIVE_VALUE}`,
+      )
     }
     return true
   }, [address, dashboardOf, enqueueSnackbar, land, onClose, requestCreate])
@@ -432,11 +466,19 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       <DialogTitle>{'Create a new site'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          {`Your site goes live on its ${TENANT_APEX} subdomain ` +
-            'immediately; connect a custom domain any time from Setup.'}
+          {previewFor('starter')
+            ? `Your site starts in preview on its ${TENANT_APEX} subdomain; ` +
+              'connect a custom domain any time from Setup.'
+            : `Your site goes live on its ${TENANT_APEX} subdomain ` +
+              'immediately; connect a custom domain any time from Setup.'}
         </Typography>
         {/* The dialog is narrow, so its fields stack. */}
         {address.stackedFields}
+        <StartInPreviewSwitch
+          checked={previewFor('starter')}
+          onChange={setPreviewChoice}
+          disabled={busy}
+        />
       </DialogContent>
       <DialogActions>
         <Button disabled={busy} onClick={onClose}>

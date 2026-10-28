@@ -44,6 +44,7 @@ import type { OrgPermissions } from '../app-utils/org-permissions'
 import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
+import type { SitePreviewStart } from '../app-utils/site-preview'
 import type { SiteStarterFacets, SiteStarterMode } from '../app-utils/site-starter'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
@@ -1324,8 +1325,23 @@ export interface ConsolePendingSite {
    * to begin. Resolves to the site, or to why it was not created; `address`
    * marks a refusal the person fixes in {@link fields}. A second call after a
    * success answers the same site and creates nothing.
+   *
+   * `start: 'import'` names a site brought in from somewhere else (AGL-4086),
+   * which starts in preview unless the person switched {@link previewControl}
+   * off.
    */
-  create: () => Promise<ConsoleCreatedSite | { error: string; address?: boolean }>
+  create: (options?: {
+    start?: 'import'
+  }) => Promise<ConsoleCreatedSite | { error: string; address?: boolean }>
+  /**
+   * "Start in preview" (AGL-4086), as the shell draws it: the switch that
+   * decides whether only the site's team can see it once it exists. The
+   * widget draws it beside the choice that creates the site, naming that
+   * start, because the start decides the default: on for `import`, off for
+   * every other. A choice the person made carries to whichever start they
+   * take. Optional, so an older shell simply does not offer it.
+   */
+  previewControl?: (start: SitePreviewStart) => ReactNode
   /** The site {@link create} made, once it has. */
   created: ConsoleCreatedSite | null
   /**

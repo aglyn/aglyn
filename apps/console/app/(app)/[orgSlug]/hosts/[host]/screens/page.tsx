@@ -145,6 +145,7 @@ import {
 } from '../../../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import createScreenDraft from '../../../../../../utils/create-screen-draft'
+import { updateHostDocument } from '../../../../../../utils/host-document-writes'
 import {
   ceilingedWindow,
   hostArtifactQuery,
@@ -329,6 +330,10 @@ function Screens(props) {
    * control that vanishes reads as a bug.
    */
   const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const pageFormSchema = useMemo(
+    () => buildPageFormSchema(canPublish),
+    [canPublish],
+  )
   const publishBlock = hostRoleLoaded
     ? 'Your role on this site can edit content but not publish it'
     : 'Checking your access…'
@@ -374,7 +379,10 @@ function Screens(props) {
       const dequeueLoading = queueLoading()
       const newId = createResourceUid()
       const newVersionId = createResourceUid()
-      const { slug: slugInput, ...fields } = values
+      // "Start in preview" (AGL-4086) is a fact about who sees the page, kept
+      // on the host rather than the screen, so it never reaches the screen's
+      // own fields.
+      const { slug: slugInput, startInPreview, ...fields } = values
 
       // A `/` typed INSIDE the value (AGL-2572). `normalizeScreenSlug`
       // reaches one segment by DELETING the separator, so a screen created
@@ -456,17 +464,31 @@ function Screens(props) {
         fields,
         slug: path ?? undefined,
       })
-        .then(() =>
+        .then(async () => {
+          // A page born in preview (AGL-4086): once published, only the
+          // site's team sees it until it is made public in its Page Access
+          // card. Written beside the routing map, which is what the tenant's
+          // middleware reads to route the team around the public answer.
+          if (startInPreview === true) {
+            await updateHostDocument(
+              firestore,
+              { user, hostId },
+              { [`previewScreens.${newId}`]: true },
+            )
+          }
           // SAY that it is a draft. An author who watched the old create put
           // a page on the live site has no way to see that this one did not,
           // and a state change nobody is told about is one they will assume
           // the old answer to. Mirrors the duplicate path's sentence.
           enqueueSnackbar(
-            `Created “${values?.displayName ?? 'page'}” — a draft until ` +
-              'you publish it',
+            startInPreview === true
+              ? `Created “${values?.displayName ?? 'page'}” — a draft until ` +
+                  'you publish it, and then only your team sees it until you make it public'
+              : `Created “${values?.displayName ?? 'page'}” — a draft until ` +
+                  'you publish it',
             { variant: 'success', persist: false },
-          ),
-        )
+          )
+        })
         .catch((error) => {
           console.error(error)
           setError({ ...error })
@@ -494,6 +516,7 @@ function Screens(props) {
       createHostResource,
       createHostVersion,
       logActivity,
+      user,
     ],
   )
 
@@ -1525,7 +1548,7 @@ function Screens(props) {
                 FormTemplate={AuthFormTemplateComponent}
                 componentMapper={simpleComponentMapper}
                 onSubmit={handleFormSubmit}
-                schema={formSchema}
+                schema={pageFormSchema}
                 subscription={{ values: true }}
                 clearOnUnmount
               />
@@ -1746,6 +1769,30 @@ function Screens(props) {
     </>
   )
 }
+/**
+ * The Create new page form. "Start in preview" (AGL-4086) is the page-level
+ * twin of the site's switch, and it is a publishing decision — who sees the
+ * page once it is live — so a role that cannot publish sees it off, with why.
+ */
+function buildPageFormSchema(canPublish: boolean) {
+  return {
+    fields: [
+      ...formSchema.fields,
+      {
+        component: 'switch',
+        name: 'startInPreview',
+        label: 'Start in preview',
+        isDisabled: !canPublish,
+        helperText: canPublish
+          ? 'Once you publish it, only you and your team can see the page until ' +
+            'you make it public in its Page Access card.'
+          : 'Your role on this site can edit content but not publish it, so it ' +
+            'cannot choose who sees the page.',
+      },
+    ],
+  }
+}
+
 const formSchema = {
   fields: [
     {

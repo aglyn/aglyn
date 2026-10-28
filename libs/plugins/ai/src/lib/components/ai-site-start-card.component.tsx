@@ -994,6 +994,9 @@ export function AiSiteStartCard({
               <Stack spacing={2} component="section" aria-label="Your site">
                 <SectionLabel>{'Your site'}</SectionLabel>
                 {pendingSite.fields}
+                {/* Start in preview (AGL-4086). Off for the starter and for
+                    Start with AI; Bring my site asks again, defaulting on. */}
+                {pendingSite.previewControl?.('ai')}
               </Stack>
             ) : null}
             {importing && orgId ? (
