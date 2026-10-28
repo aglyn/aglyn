@@ -1038,6 +1038,7 @@ data class HostProduct(
     val posQuickKey: Boolean? = null,
     val priceUsd: Double? = null,
     val relatedProductIds: List<String>? = null,
+    val sample: Boolean? = null,
     val sellOnline: Boolean? = null,
     val seo: HostProductSeo? = null,
     val shipping: ProductShippingFacts? = null,
