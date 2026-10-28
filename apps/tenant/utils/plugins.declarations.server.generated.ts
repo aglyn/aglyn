@@ -19,6 +19,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-bookings/declarations')).registerBookingsDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations')).registerCommerceDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations.server')).registerCommerceServerDeclarations()
+    ;(await import('@aglyn/plugins-marketplace/declarations')).registerMarketplaceDeclarations()
     ;(await import('@aglyn/plugins-marketplace/declarations.server')).registerMarketplaceServerDeclarations()
     ;(await import('@aglyn/plugins-crm/declarations')).registerCrmDeclarations()
     ;(await import('@aglyn/plugins-crm/declarations.server')).registerCrmServerDeclarations()

@@ -27,6 +27,13 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — installing and publishing on a site are permissions
+
+- **[Marketplace permissions on a site](workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-site-permissions)** —
+  installing marketplace items into a site and publishing a site's items to the marketplace
+  now each have a permission on the site. A site's admins and editors keep them, and a custom
+  role or a per-member override can grant or deny either one.
+
 ## October 2026 — funnels and email campaigns are permissions
 
 - **[Funnel and campaign permissions](workspace-and-billing/teams-and-roles/custom-roles.md#funnel-and-campaign-permissions)** —

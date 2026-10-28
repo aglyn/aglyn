@@ -194,6 +194,18 @@ permissions. In the organization hub, with no site picked, **Run email campaigns
 the workspace role instead: owners, admins and editors of the whole workspace hold it. A custom
 role, a per-member override or the site's **Permissions** dialog can grant or deny either one.
 
+### Marketplace permissions on a site {#marketplace-site-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Install marketplace items into a site** (`marketplace.siteInstall`) | Install templates, themes, layouts, components, email designs and plugins from the marketplace into the site | Yes | Yes | No | No |
+| **Publish a site's items to the marketplace** (`marketplace.sitePublish`) | Publish the site's templates, themes, layouts, components and email designs to the marketplace | Yes | Yes | No | No |
+
+Each works beside the workspace's own marketplace permission (installing from the
+marketplace, publishing to it), which is still asked too. Both start from the member's role
+on the site, so nobody's access changed when they became permissions, and a custom role, a
+per-member override or the site's **Permissions** dialog can grant or deny either one.
+
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
 Three settings sections have a permission each. Owners and admins hold all three by

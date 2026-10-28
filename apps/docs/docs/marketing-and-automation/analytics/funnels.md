@@ -155,7 +155,7 @@ Who it reaches:
   included; earlier ones are not.
 
 Aglyn checks for drop-offs every 15 minutes, so a follow-up can arrive up to a quarter of an
-hour after its wait. Drafting needs a site admin or editor and a plan that includes
+hour after its wait. Drafting needs **Manage funnels** and a plan that includes
 automations. Add an **Email from the site** step after the step you follow up on to see in the
 funnel how many people the follow-up brought back.
 

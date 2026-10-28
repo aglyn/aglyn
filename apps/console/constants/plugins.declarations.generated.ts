@@ -17,6 +17,7 @@ export function registerPluginDeclarations(): Promise<void> {
   done ??= (async () => {
     ;(await import('@aglyn/plugins-bookings/declarations')).registerBookingsDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations')).registerCommerceDeclarations()
+    ;(await import('@aglyn/plugins-marketplace/declarations')).registerMarketplaceDeclarations()
     ;(await import('@aglyn/plugins-crm/declarations')).registerCrmDeclarations()
     ;(await import('@aglyn/plugins-outreach/declarations.console')).registerOutreachConsoleDeclarations()
     ;(await import('@aglyn/plugins-accounting/declarations.console')).registerAccountingConsoleDeclarations()

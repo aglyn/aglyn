@@ -217,58 +217,6 @@
       "count": 1,
       "kind": "pending"
     },
-    "libs/plugins/marketplace/src/lib/server/install-email-starter.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-email-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-layout.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-plugin.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install-theme.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/install.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-email-starter.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-email-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-layout.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-template.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish-theme.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketplace/src/lib/server/publish.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/marketplace/src/lib/server/publisher-profile.ts": {
       "count": 1,
       "kind": "pending"

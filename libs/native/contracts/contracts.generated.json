@@ -7378,6 +7378,8 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
         "marketing.campaigns",
@@ -7409,6 +7411,8 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "marketing.campaigns",
         "manageWaivers",
         "collectWaivers"
@@ -7458,6 +7462,8 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
         "marketing.campaigns",
@@ -7508,6 +7514,10 @@
         "id": "commerce",
         "label": "Commerce",
         "pluginId": "commerce"
+      },
+      {
+        "id": "marketplace",
+        "label": "Marketplace"
       },
       {
         "id": "outreach",
@@ -7833,6 +7843,20 @@
         "label": "Buy point of sale hardware",
         "pluginId": "commerce",
         "scope": "org"
+      },
+      {
+        "description": "Install templates, themes, layouts, components, email designs and plugins from the marketplace into a site (with \"Install from the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.siteInstall",
+        "label": "Install marketplace items into a site",
+        "scope": "site"
+      },
+      {
+        "description": "Publish a site’s templates, themes, layouts, components and email designs to the marketplace (with \"Publish to the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.sitePublish",
+        "label": "Publish a site’s items to the marketplace",
+        "scope": "site"
       },
       {
         "description": "Open Sequences, and work its email sequences and connected mailboxes.",
