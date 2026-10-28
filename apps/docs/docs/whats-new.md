@@ -34,6 +34,13 @@ for the how-to.
   rider takes to read it, until you select **Close display** beside the customer or
   the rider is done. Once closed, the display can't sign under it again.
 
+## October 2026 — waivers matched by the birth date on a contact
+
+- **[A rider matched by their contact's birth date](commerce-and-bookings/commerce/waivers.md#how-a-rider-is-matched)** —
+  at check-in, when a customer's email matches no waiver and their contact record on
+  the site has a birthdate, their waiver is found by their name and that birth date,
+  without asking them. **Find by name** is still there for everyone else.
+
 ## October 2026 — waivers: clearer e-signature consent and a copy to download
 
 - **[Signing electronically](commerce-and-bookings/commerce/waivers.md#signing-electronically)** —

@@ -19,6 +19,8 @@
  */
 
 import { createHash } from 'crypto'
+import { registerPluginPersonRecords } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
 import { setWaiverDisplaySecretForTests } from './display-grant'
@@ -1165,5 +1167,76 @@ describe('e-sign consent v2 and the signer’s own copy (AGL-4042)', () => {
     expect(answer.copyUrl).toMatch(/^\/api\/waivers\/signed-copy\?/)
     expect((await call(signedCopyRoute, 'GET', { token: null, query: copyQuery(answer.copyUrl) })).status).toBe(200)
     expect(await signedCopyPath({ orgId: ORG, hostId: HOST, signature: { id: 'paper-1', method: 'paper' } })).toBeNull()
+  })
+})
+
+describe('matching a rider at check-in by the birth date on their CRM contact (AGL-4042)', () => {
+  const status = async (query: Record<string, string>) =>
+    (await (await call(statusRoute, 'GET', { token: 'tok-clerk', query: { dayKey: '2026-10-24', ...query } })).json()) as {
+      signed: boolean
+      matched: boolean
+      matchedBy: string | null
+      birthDateFrom?: string | null
+      searchName: string | null
+      label: string
+    }
+  const contact = (id: string, facets: Record<string, Record<string, unknown>>, name = 'Pat Lee') =>
+    db.docs.set(`orgs/${ORG}/contacts/${id}`, { name, facets })
+
+  // The plugin that keeps people, as core's seam reaches it: waivers never
+  // opens a contacts collection itself.
+  beforeAll(() => {
+    registerPluginPersonRecords({
+      find: async () => null,
+      read: async (request) =>
+        request.records.map((record) => {
+          const data = db.docs.get(`orgs/${request.orgId}/contacts/${record.id}`)
+          return record.kind === 'contact' && data ? { kind: 'contact', id: record.id, email: null, data } : null
+        }),
+    }, { pluginId: 'crm' })
+  })
+  afterAll(() => resetPluginServicesForTests())
+
+  beforeEach(async () => {
+    // Jordan Lee (born 1990-04-02) signs for themself and for Pat Lee (born 2014-09-30).
+    const waiver = await publishedWaiver()
+    await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })
+  })
+
+  it('matches by the name and birth date this site keeps on the contact, when no email matches', async () => {
+    contact('contact-pat', { [HOST]: { name: 'Pat Lee', birthdate: '2014-09-30' } })
+    expect(await status({ contactId: 'contact-pat' })).toMatchObject({
+      signed: true,
+      matched: true,
+      matchedBy: 'nameDob',
+      birthDateFrom: 'contact',
+      label: 'Waiver signed',
+    })
+    // An email that matches nothing still falls back to the contact's birth date.
+    expect(await status({ email: 'nobody@example.com', contactId: 'contact-pat', name: 'Pat Lee' })).toMatchObject({
+      matched: true,
+      matchedBy: 'nameDob',
+      birthDateFrom: 'contact',
+    })
+  })
+
+  it('leaves Find by name for a contact with no birth date, and never reads another site’s record of them', async () => {
+    contact('contact-none', { [HOST]: { name: 'Pat Lee' } })
+    expect(await status({ contactId: 'contact-none', name: 'Pat Lee' })).toMatchObject({
+      matched: false,
+      matchedBy: null,
+      searchName: 'Pat Lee',
+    })
+    // Only another site keeps the birth date: this site does not see it.
+    contact('contact-other', { [OTHER_HOST]: { name: 'Pat Lee', birthdate: '2014-09-30' } })
+    expect(await status({ contactId: 'contact-other', name: 'Pat Lee' })).toMatchObject({ matched: false, searchName: 'Pat Lee' })
+  })
+
+  it('takes a date of birth the caller gives over the contact’s', async () => {
+    contact('contact-pat', { [HOST]: { name: 'Pat Lee', birthdate: '2014-09-30' } })
+    expect(await status({ contactId: 'contact-pat', name: 'Pat Lee', dateOfBirth: '2000-01-01' })).toMatchObject({
+      matched: false,
+      matchedBy: null,
+    })
   })
 })
