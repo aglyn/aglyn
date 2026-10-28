@@ -111,7 +111,7 @@ export function aglynSitemapUrls(): string[] {
  */
 export function aglynSyntheticPage(path: string, bytes = AGLYN_AVERAGE_PAGE_BYTES): string {
   const name = path.split('/').filter(Boolean).pop() ?? 'home'
-  const head = `<!DOCTYPE html><html lang="en"><head><title>${name} | Aglyn</title><meta name="description" content="The ${name} page."></head><body><main><h1>${name}</h1><p>This is the ${name} page of the Aglyn website, recorded as a stand-in.</p></main>`
+  const head = `<!DOCTYPE html><html lang="en"><head><title>${name} | ${AGLYN_DOMAIN}</title><meta name="description" content="The ${name} page."></head><body><main><h1>${name}</h1><p>This is the ${name} page of ${AGLYN_DOMAIN}, recorded as a stand-in.</p></main>`
   const tail = '</body></html>'
   const pad = Math.max(0, bytes - head.length - tail.length - 7)
   return `${head}<!--${'x'.repeat(pad)}-->${tail}`

@@ -49,6 +49,7 @@
  *   site. The person is told why and checks again.
  *=========================================*/
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { SiteImportBlock, SiteImportForm } from '../site-import/site-import-html'
 import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
 import type { AiJobItemLedger } from './ai-jobs.types'
@@ -1102,7 +1103,7 @@ export function aiSiteImportQuoteText(
   owed: Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'arranged' | 'copied'>,
 ): string {
   const parts: string[] = []
-  if (owed.arranged) parts.push(`${aiSiteImportPagesText(owed.arranged)} arranged by Aglyn AI`)
+  if (owed.arranged) parts.push(`${aiSiteImportPagesText(owed.arranged)} arranged by ${PLATFORM_BRAND_NAME} AI`)
   if (owed.copied) parts.push(`${owed.arranged ? owed.copied.toLocaleString('en-US') : aiSiteImportPagesText(owed.copied)} copied as ${owed.copied === 1 ? 'it is' : 'they are'}`)
   return parts.length ? `${aiCreditRangeText(range)}: ${parts.join(', ')}` : aiCreditRangeText(range)
 }

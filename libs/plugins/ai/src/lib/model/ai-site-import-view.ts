@@ -25,6 +25,7 @@
  * specs hold them.
  *=========================================*/
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { aiCreditRangeText } from './ai-credit-estimate'
 import type { AiJobItemLedger, AiJobSummary } from './ai-jobs.types'
 import {
@@ -203,7 +204,7 @@ export function aiSiteImportPhotosText(
   return `${into} of ${tried} ${tried === 1 ? 'photo' : 'photos'}: ${parts.join(', ')}`
 }
 
-const BUILD_COPY = { copied: 'Copied as it is', arranged: 'Arranged by Aglyn AI' } as const
+const BUILD_COPY = { copied: 'Copied as it is', arranged: `Arranged by ${PLATFORM_BRAND_NAME} AI` } as const
 
 /** One wave's rows, the header and footer first where the wave builds them. */
 export function aiSiteImportWaveRows(
